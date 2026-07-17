@@ -40,6 +40,16 @@
     if (n >= 1000) return '$' + (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'K';
     return '$' + Math.round(n);
   }
+  function parseMetric(v) {
+    if (v == null || v === '') return null;
+    var n = Number(v);
+    return isNaN(n) || n <= 0 ? null : n;
+  }
+  function formatRoi(n) {
+    if (n == null) return '';
+    if (n >= 100) return Math.round(n) + '%';
+    return n.toFixed(n % 1 === 0 ? 0 : 2) + '%';
+  }
 
   function fetchHomeFeed(i) {
     i = i || 0;
@@ -89,35 +99,69 @@
 
   /* ---------- styles ---------- */
   var css = ''
-    + '.ivx-hf-video{grid-column:1/-1;background:#141414;border:1px solid rgba(255,215,0,.25);border-radius:16px;'
-    + 'overflow:hidden;display:flex;flex-direction:column}'
-    + '.ivx-hf-media{position:relative;background:#000;aspect-ratio:16/9;max-height:420px;overflow:hidden}'
+    + '.ivx-hf-video{grid-column:1/-1;position:relative;background:#000;border-radius:16px;overflow:hidden;'
+    + 'min-height:360px;max-height:520px;display:flex;flex-direction:column}'
+    + '.ivx-hf-media{position:absolute;inset:0;background:#000;overflow:hidden}'
     + '.ivx-hf-media img,.ivx-hf-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}'
-    + '.ivx-hf-tag{position:absolute;top:12px;left:12px;z-index:3;background:#FFD700;color:#000;border-radius:6px;'
-    + 'padding:4px 10px;font:800 11px/1 -apple-system,Segoe UI,sans-serif;text-transform:uppercase;letter-spacing:.5px}'
-    + '.ivx-hf-mute{position:absolute;bottom:12px;right:12px;z-index:3;background:rgba(0,0,0,.6);color:#fff;border:none;'
-    + 'border-radius:50%;width:36px;height:36px;font-size:16px;cursor:pointer}'
-    + '.ivx-hf-body{padding:16px;color:#fff;font-family:-apple-system,Segoe UI,sans-serif}'
-    + '.ivx-hf-name{font-weight:800;font-size:17px;margin-bottom:2px}'
-    + '.ivx-hf-loc{color:#9a9a9a;font-size:12.5px;margin-bottom:4px}'
-    + '.ivx-hf-phase{display:inline-block;color:#00C48C;background:rgba(34,197,94,.12);border-radius:5px;'
-    + 'padding:3px 8px;font:700 10.5px/1.2 -apple-system,sans-serif;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}'
-    + '.ivx-hf-stats{display:flex;gap:0;background:#1E1E1E;border-radius:10px;padding:10px 4px;margin-bottom:10px}'
-    + '.ivx-hf-stat{flex:1;text-align:center}'
-    + '.ivx-hf-stat .v{font-weight:800;font-size:14px}'
-    + '.ivx-hf-stat .l{color:#7a7a7a;font-size:9.5px;font-weight:600;text-transform:uppercase;margin-top:2px}'
-    + '.ivx-hf-prog{display:flex;align-items:center;gap:8px;margin-bottom:12px}'
-    + '.ivx-hf-prog .track{flex:1;height:6px;border-radius:3px;background:#1E1E1E;overflow:hidden}'
-    + '.ivx-hf-prog .fill{height:100%;border-radius:3px;background:#FFD700}'
-    + '.ivx-hf-prog .pct{color:#9a9a9a;font-size:11.5px;font-weight:700}'
-    + '.ivx-hf-btns{display:flex;gap:8px}'
-    + '.ivx-hf-btns a{flex:1;text-align:center;border-radius:10px;padding:12px 0;font:700 14px/1 -apple-system,Segoe UI,sans-serif;'
+    + '.ivx-hf-gradient{position:absolute;left:0;right:0;bottom:0;height:320px;'
+    + 'background:linear-gradient(to top,rgba(0,0,0,.82),rgba(0,0,0,.55),transparent);z-index:2;pointer-events:none}'
+    + '.ivx-hf-tag{position:absolute;top:12px;left:12px;z-index:5;background:#FFD700;color:#000;border-radius:5px;'
+    + 'padding:3px 8px;font:800 10px/1 -apple-system,Segoe UI,sans-serif;text-transform:uppercase;letter-spacing:.4px}'
+    + '.ivx-hf-mute{position:absolute;top:12px;right:12px;z-index:5;background:rgba(0,0,0,.35);color:#fff;border:none;'
+    + 'border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}'
+    + '.ivx-hf-rail{position:absolute;right:10px;bottom:96px;z-index:5;display:flex;flex-direction:column;gap:16px;align-items:center}'
+    + '.ivx-hf-act{background:none;border:none;color:#fff;cursor:pointer;text-align:center;padding:0;'
+    + 'filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}'
+    + '.ivx-hf-act .ic{width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}'
+    + '.ivx-hf-act .i{font-size:24px;line-height:1;display:block}'
+    + '.ivx-hf-act .c{font:700 11px/1 -apple-system,sans-serif;margin-top:3px;display:block}'
+    + '.ivx-hf-act.on .ic{color:#e0245e}'
+    + '.ivx-hf-act.saved .ic{color:#E6C200}'
+    + '.ivx-hf-info{position:absolute;left:14px;right:84px;bottom:26px;z-index:5;color:#fff;pointer-events:none}'
+    + '.ivx-hf-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}'
+    + '.ivx-hf-badge{display:inline-block;background:#FFD700;color:#000;border-radius:5px;padding:3px 8px;'
+    + 'font:800 10px/1 -apple-system,sans-serif;text-transform:uppercase;letter-spacing:.4px}'
+    + '.ivx-hf-badge.active{background:rgba(0,0,0,.55);border:1px solid #FFD700;color:#FFD700}'
+    + '.ivx-hf-name{font:800 22px/1.2 -apple-system,Segoe UI,sans-serif;text-shadow:0 1px 4px rgba(0,0,0,.7);margin-bottom:2px}'
+    + '.ivx-hf-loc{font:600 13px/1.3 -apple-system,sans-serif;color:rgba(255,255,255,.85);'
+    + 'text-shadow:0 1px 4px rgba(0,0,0,.7);margin-top:2px}'
+    + '.ivx-hf-subtitle{font:600 15px/1.3 -apple-system,sans-serif;color:rgba(255,255,255,.9);'
+    + 'text-shadow:0 1px 4px rgba(0,0,0,.7);margin-top:2px}'
+    + '.ivx-hf-stats{display:flex;gap:22px;margin-top:8px;flex-wrap:wrap}'
+    + '.ivx-hf-stat{text-align:center}'
+    + '.ivx-hf-stat .v{font:800 20px/1 -apple-system,sans-serif;color:#FFD700}'
+    + '.ivx-hf-stat .l{color:rgba(255,255,255,.75);font:600 10px/1 -apple-system,sans-serif;text-transform:uppercase;margin-top:4px}'
+    + '.ivx-hf-options{display:flex;gap:14px;margin-top:10px}'
+    + '.ivx-hf-opt{display:flex;flex-direction:column;align-items:center;gap:4px}'
+    + '.ivx-hf-opt .circ{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;'
+    + 'background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.25)}'
+    + '.ivx-hf-opt .circ.yellow{border-color:#FFD700;color:#FFD700}'
+    + '.ivx-hf-opt .circ.blue{border-color:#4A90D9;color:#4A90D9}'
+    + '.ivx-hf-opt .circ.green{border-color:#3CCF4E;color:#3CCF4E}'
+    + '.ivx-hf-opt .lab{font:600 10px/1 -apple-system,sans-serif;color:#fff}'
+    + '.ivx-hf-btns{display:flex;gap:10px;margin-top:14px;pointer-events:auto}'
+    + '.ivx-hf-btns a{flex:1;text-align:center;border-radius:999px;padding:13px 0;font:800 15px/1 -apple-system,Segoe UI,sans-serif;'
     + 'text-decoration:none;cursor:pointer}'
-    + '.ivx-hf-view{background:#1E1E1E;color:#fff;border:1px solid rgba(255,255,255,.12)}'
+    + '.ivx-hf-view{background:rgba(0,0,0,.45);color:#FFD700;border:2px solid #FFD700}'
     + '.ivx-hf-invest{background:#FFD700;color:#000}';
   var styleEl = document.createElement('style');
   styleEl.textContent = css;
   document.head.appendChild(styleEl);
+
+  /* SVG icons for the action rail and option circles */
+  var ICONS = {
+    heart: '&#9825;',
+    heartFilled: '&#10084;',
+    comment: '&#128172;',
+    bookmark: '&#128279;',
+    bookmarkFilled: '&#128278;',
+    share: '&#10148;',
+    mute: '&#128263;',
+    unmute: '&#128266;',
+    hex: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+    users: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+    home: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>'
+  };
 
   /* ---------- featured project video card ---------- */
   function buildVideoCard(v) {
@@ -127,43 +171,95 @@
     card.setAttribute('data-ivx-home-feed-video', v.id);
 
     var poster = v.poster_url || v.thumbnail_url || v.preview_blur_url || '';
-    var statBits = '';
-    if (deal.investment_amount) statBits += '<div class="ivx-hf-stat"><div class="v">' + money(deal.investment_amount) + '</div><div class="l">Investment</div></div>';
-    if (deal.expected_roi) statBits += '<div class="ivx-hf-stat"><div class="v" style="color:#00C48C">' + esc(deal.expected_roi) + '%</div><div class="l">ROI</div></div>';
-    if (deal.min_investment) statBits += '<div class="ivx-hf-stat"><div class="v">' + money(deal.min_investment) + '</div><div class="l">Minimum</div></div>';
-    var progressRow = '';
-    if (deal.progress_percent != null) {
-      var pct = Math.min(100, Math.max(0, Number(deal.progress_percent) || 0));
-      progressRow = '<div class="ivx-hf-prog"><div class="track"><div class="fill" style="width:' + pct + '%"></div></div>'
-        + '<span class="pct">' + pct + '%</span></div>';
+    var dealUrl = deal.url || 'https://ivxholding.com/?deal=' + encodeURIComponent(deal.id || v.id) + '#deals';
+    var title = deal.name || v.title || 'IVX Project';
+    var location = deal.city || '';
+    var roi = parseMetric(deal.expected_roi);
+    var minInvest = parseMetric(deal.min_investment);
+    var price = parseMetric(deal.price);
+    var minOwnership = (minInvest && price && price > 0) ? ((minInvest / price) * 100).toFixed(4) + '%' : null;
+    var dealType = (deal.deal_type || '').toLowerCase();
+    var isActive = (deal.status || v.status || 'published') === 'published';
+
+    var tokenized = { icon: ICONS.hex, label: 'Tokenized', cls: 'yellow' };
+    var jvDeals = { icon: ICONS.users, label: 'JV Deal', cls: 'blue' };
+    var buyers = { icon: ICONS.home, label: 'Buyer', cls: 'green' };
+    var options;
+    switch (dealType) {
+      case 'jv': case 'equity_split': case 'hybrid': options = [tokenized, jvDeals, buyers]; break;
+      case 'development': case 'new_construction': case 'rehab_construction': options = [jvDeals, tokenized, buyers]; break;
+      case 'profit_sharing': options = [tokenized, buyers, jvDeals]; break;
+      default: options = [tokenized, jvDeals, buyers];
     }
-    var dealUrl = deal.url || 'https://ivxholding.com/#deals';
+
+    var statsHtml = '';
+    if (price) statsHtml += '<div class="ivx-hf-stat"><div class="v">' + money(price) + '</div><div class="l">Investment</div></div>';
+    if (roi) statsHtml += '<div class="ivx-hf-stat"><div class="v">' + formatRoi(roi) + '</div><div class="l">ROI</div></div>';
+    if (minInvest) statsHtml += '<div class="ivx-hf-stat"><div class="v">' + money(minInvest) + '</div><div class="l">Minimum</div></div>';
+    if (!statsHtml && minOwnership) statsHtml += '<div class="ivx-hf-stat"><div class="v">' + esc(minOwnership) + '</div><div class="l">Min Ownership</div></div>';
+
+    var optionsHtml = options.map(function (opt) {
+      return '<div class="ivx-hf-opt"><div class="circ ' + opt.cls + '">' + opt.icon + '</div><div class="lab">' + esc(opt.label) + '</div></div>';
+    }).join('');
+
+    var hasDeal = !!(deal.id || v.id);
+    var ctaHtml = '';
+    if (hasDeal) {
+      ctaHtml = '<div class="ivx-hf-btns">'
+        + '<a class="ivx-hf-view" href="' + esc(dealUrl) + '">View Deal</a>'
+        + '<a class="ivx-hf-invest" href="' + esc(dealUrl) + '">Invest Now</a>'
+        + '</div>';
+    }
+
+    var badgesHtml = '';
+    if (hasDeal) badgesHtml += '<span class="ivx-hf-badge">Investment</span>';
+    if (isActive) badgesHtml += '<span class="ivx-hf-badge active">Active</span>';
 
     card.innerHTML = ''
       + '<div class="ivx-hf-media">'
       + '  <span class="ivx-hf-tag">Featured Project Video</span>'
-      + (poster ? '<img src="' + esc(poster) + '" alt="' + esc(deal.name || v.title || '') + '" loading="lazy"/>' : '')
+      + (poster ? '<img src="' + esc(poster) + '" alt="' + esc(title) + '" loading="lazy"/>' : '')
       + '  <video playsinline muted loop preload="none"' + (poster ? ' poster="' + esc(poster) + '"' : '') + ' style="opacity:0"></video>'
-      + '  <button class="ivx-hf-mute" aria-label="Unmute">&#128263;</button>'
+      + '  <button class="ivx-hf-mute" aria-label="Unmute">' + ICONS.mute + '</button>'
+      + '  <div class="ivx-hf-gradient"></div>'
       + '</div>'
-      + '<div class="ivx-hf-body">'
-      + '  <div class="ivx-hf-name">' + esc(deal.name || v.title || 'IVX Project') + '</div>'
-      + (deal.city ? '<div class="ivx-hf-loc">&#128205; ' + esc(deal.city) + '</div>' : '')
-      + (deal.phase ? '<span class="ivx-hf-phase">' + esc(deal.phase) + '</span>' : '')
-      + (statBits ? '<div class="ivx-hf-stats">' + statBits + '</div>' : '')
-      + progressRow
-      + '  <div class="ivx-hf-btns">'
-      + '    <a class="ivx-hf-view" href="' + esc(dealUrl) + '">View Deal</a>'
-      + '    <a class="ivx-hf-invest" href="https://chat.ivxholding.com/investor">Invest Now</a>'
-      + '  </div>'
+      + '<div class="ivx-hf-rail">'
+      + '  <button class="ivx-hf-act like' + (v.viewer_liked ? ' on' : '') + '"><span class="ic">' + (v.viewer_liked ? ICONS.heartFilled : ICONS.heart) + '</span><span class="c">' + fmt(v.like_count) + '</span></button>'
+      + '  <button class="ivx-hf-act cmt"><span class="ic">' + ICONS.comment + '</span><span class="c">' + fmt(v.comment_count) + '</span></button>'
+      + '  <button class="ivx-hf-act sav' + (v.viewer_saved ? ' saved' : '') + '"><span class="ic">' + (v.viewer_saved ? ICONS.bookmarkFilled : ICONS.bookmark) + '</span><span class="c">' + fmt(v.save_count) + '</span></button>'
+      + '  <button class="ivx-hf-act shr"><span class="ic">' + ICONS.share + '</span><span class="c">' + fmt(v.share_count) + '</span></button>'
+      + '</div>'
+      + '<div class="ivx-hf-info">'
+      + (badgesHtml ? '<div class="ivx-hf-badges">' + badgesHtml + '</div>' : '')
+      + '  <div class="ivx-hf-name">' + esc(title) + '</div>'
+      + (location ? '<div class="ivx-hf-loc">&#128205; ' + esc(location) + '</div>' : '')
+      + (statsHtml ? '<div class="ivx-hf-stats">' + statsHtml + '</div>' : '')
+      + (optionsHtml ? '<div class="ivx-hf-options">' + optionsHtml + '</div>' : '')
+      + ctaHtml
       + '</div>';
 
     var vid = card.querySelector('video');
     var img = card.querySelector('.ivx-hf-media img');
     var muteBtn = card.querySelector('.ivx-hf-mute');
+    var likeBtn = card.querySelector('.ivx-hf-act.like');
+    var saveBtn = card.querySelector('.ivx-hf-act.sav');
+    var shareBtn = card.querySelector('.ivx-hf-act.shr');
+
     muteBtn.addEventListener('click', function () {
       vid.muted = !vid.muted;
-      muteBtn.innerHTML = vid.muted ? '&#128263;' : '&#128266;';
+      muteBtn.innerHTML = vid.muted ? ICONS.mute : ICONS.unmute;
+    });
+    likeBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleLike(v, likeBtn);
+    });
+    saveBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleSave(v, saveBtn);
+    });
+    shareBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      shareVideo(v, shareBtn);
     });
 
     /* Lazy playback: attach the source ONLY when visible; images load first. */
@@ -180,6 +276,48 @@
       if (!vid.__ivxAttached) { vid.preload = 'metadata'; attachSource(vid, v.hls_url, v.video_url); }
     };
     return card;
+  }
+
+  function fmt(n) {
+    n = Number(n) || 0;
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  function toggleLike(v, btn) {
+    fetch('https://api.ivxholding.com/api/projects/' + encodeURIComponent(v.id) + '/like', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_id: localStorage.getItem('ivx_viewer_id') || 'guest-anon' })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      btn.classList.toggle('on', !!d.liked);
+      btn.querySelector('.ic').innerHTML = d.liked ? ICONS.heartFilled : ICONS.heart;
+      btn.querySelector('.c').textContent = fmt(d.like_count);
+    }).catch(function () {});
+  }
+
+  function toggleSave(v, btn) {
+    fetch('https://api.ivxholding.com/api/projects/' + encodeURIComponent(v.id) + '/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_id: localStorage.getItem('ivx_viewer_id') || 'guest-anon' })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      btn.classList.toggle('saved', !!d.saved);
+      btn.querySelector('.ic').innerHTML = d.saved ? ICONS.bookmarkFilled : ICONS.bookmark;
+      btn.querySelector('.c').textContent = fmt(d.save_count);
+    }).catch(function () {});
+  }
+
+  function shareVideo(v) {
+    var url = 'https://ivxholding.com/?video=' + encodeURIComponent(v.id);
+    if (navigator.share) {
+      navigator.share({ title: v.title || 'IVX Property Video', url: url }).catch(function () {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).catch(function () {});
+    }
+    fetch('https://api.ivxholding.com/api/projects/' + encodeURIComponent(v.id) + '/share', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_id: localStorage.getItem('ivx_viewer_id') || 'guest-anon', share_type: 'social', share_url: url })
+    }).catch(function () {});
   }
 
   var videoIO = null;

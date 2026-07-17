@@ -164,10 +164,10 @@
     + '.ivxr-row{display:flex;align-items:center;gap:8px}'
     + '.ivxr-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1}'
     + '.ivxr-tabs::-webkit-scrollbar{display:none}'
-    + '.ivxr-tab{flex:0 0 auto;background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:999px;padding:7px 14px;'
-    + 'font:600 13px/1 -apple-system,Segoe UI,sans-serif;cursor:pointer}'
-    + '.ivxr-tab.on{background:#fff;color:#000}'
-    + '.ivxr-ico{background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:50%;width:38px;height:38px;'
+    + '.ivxr-tab{flex:0 0 auto;background:rgba(0,0,0,.35);color:#fff;border:none;border-radius:999px;padding:7px 14px;'
+    + 'font:700 13px/1 -apple-system,Segoe UI,sans-serif;cursor:pointer;text-shadow:0 1px 3px rgba(0,0,0,.6)}'
+    + '.ivxr-tab.on{background:#fff;color:#000;text-shadow:none}'
+    + '.ivxr-ico{background:rgba(0,0,0,.35);color:#fff;border:none;border-radius:50%;width:38px;height:38px;'
     + 'font-size:19px;line-height:1;cursor:pointer;flex:0 0 auto;display:flex;align-items:center;justify-content:center}'
     + '.ivxr-stories{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 4px}'
     + '.ivxr-stories::-webkit-scrollbar{display:none}'
@@ -369,16 +369,28 @@
     hostIdx = hostIdx || 0;
     if (hostIdx >= API_CANDIDATES.length) return Promise.reject(new Error('all API hosts failed'));
     var base = API_CANDIDATES[hostIdx];
-    return fetch(base + path)
+    var url = base + path;
+    /* AbortController timeout so a hung request does not freeze the UI forever. */
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, 15000);
+    return fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
       .then(function (r) {
-        var ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!r.ok || ct.indexOf('json') === -1) throw new Error('bad response ' + r.status + ' ' + ct);
-        return r.json().then(function (data) {
+        clearTimeout(timeout);
+        if (!r.ok) throw new Error('bad status ' + r.status);
+        return r.text().then(function (text) {
+          /* Accept JSON even if the Content-Type header is missing or transformed. */
+          var data;
+          try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
           if (API !== base) API = base; /* promote working host */
           return data;
         });
       })
-      .catch(function () { return apiFetchJson(path, hostIdx + 1); });
+      .catch(function (err) {
+        clearTimeout(timeout);
+        /* Do not swallow abort of the final host; surface it. */
+        if (hostIdx >= API_CANDIDATES.length - 1) throw err;
+        return apiFetchJson(path, hostIdx + 1);
+      });
   }
 
   function showFeedError() {
@@ -400,11 +412,15 @@
     state.loading = true;
     var spin = document.createElement('div');
     spin.className = 'ivxr-spin';
-    if (!feedEl.children.length) feedEl.appendChild(spin);
+    var spinAdded = false;
+    if (!feedEl.children.length) { feedEl.appendChild(spin); spinAdded = true; }
     var currentPath = feedPath();
+    var removed = false;
+    function removeSpin() { if (!removed && spin.parentNode) { spin.parentNode.removeChild(spin); removed = true; } }
+
     apiFetchJson(currentPath)
       .then(function (data) {
-        if (spin.parentNode) spin.parentNode.removeChild(spin);
+        removeSpin();
         var vids = (data && data.videos) || [];
         // Fallback: if the dedicated Project Reels rail is empty, serve the unified
         // investor feed so the Reels surface never appears broken to visitors.
@@ -419,6 +435,11 @@
               });
               state.cursor = fbData && fbData.next_cursor;
               if (!state.cursor) state.done = true;
+              finishLoad();
+            })
+            .catch(function () {
+              showFeedError();
+              finishLoad();
             });
         }
         vids.forEach(function (v) {
@@ -428,21 +449,24 @@
         });
         state.cursor = data && data.next_cursor;
         if (!state.cursor) state.done = true;
+        finishLoad();
       })
       .catch(function () {
-        if (spin.parentNode) spin.parentNode.removeChild(spin);
+        removeSpin();
         showFeedError();
-      })
-      .then(function () {
-        state.loading = false;
-        if (!feedEl.children.length) {
-          var em = document.createElement('div');
-          em.className = 'ivxr-slide';
-          em.innerHTML = '<div class="ivxr-empty">No videos in this channel yet.<br/>Tag videos with audiences or upload a new one with &#65291;.</div>';
-          feedEl.appendChild(em);
-        }
-        observeSlides();
+        finishLoad();
       });
+
+    function finishLoad() {
+      state.loading = false;
+      if (!feedEl.children.length) {
+        var em = document.createElement('div');
+        em.className = 'ivxr-slide';
+        em.innerHTML = '<div class="ivxr-empty">No videos in this channel yet.<br/>Tag videos with audiences or upload a new one with &#65291;.</div>';
+        feedEl.appendChild(em);
+      }
+      observeSlides();
+    }
   }
 
   /* ---------- slide construction ---------- */
