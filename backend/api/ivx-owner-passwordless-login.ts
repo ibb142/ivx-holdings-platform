@@ -9,14 +9,15 @@
  *      (IVX_OWNER_REGISTRATION_EMAILS / IVX_BASELINE_OWNER_EMAILS).
  *   2. Uses the Supabase admin (service-role) client to find the owner auth user
  *      (creating + confirming them if they do not exist yet).
- *   3. Self-heals: sets the user's password to the configured
- *      IVX_OWNER_PASSWORD so the password grant always succeeds, even if the
- *      password drifted in Supabase. This is the fix for the recurring
- *      "invalid_credentials" block the owner hit.
- *   4. Performs a server-side password grant against Supabase Auth and returns
- *      the resulting session tokens (access_token, refresh_token, expires_at).
+ *   3. PRESERVES the owner's password: mints the session with a server-side
+ *      magic-link token (admin generateLink + verifyOtp token_hash). The
+ *      owner's manual password is NEVER modified by this flow anymore.
+ *      (The previous behavior reset the password on every call, which kept
+ *      breaking the owner's manual email+password sign-in.)
+ *   4. Falls back to the legacy password self-heal ONLY if the magic-link
+ *      session mint fails, so owner access can never be fully locked out.
  *
- * The password is NEVER sent back to the client. The client installs the
+ * No password is ever sent back to the client. The client installs the
  * returned session via supabase.auth.setSession(), which produces a real
  * Supabase session — so owner-AI chat approval (allowlist + bearer check)
  * works automatically.
@@ -26,7 +27,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-2026-07-14t1033z';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-password-preserving-2026-07-17';
 
 const PASSWORDLESS_HEADERS = {
   'Content-Type': 'application/json',
@@ -52,13 +53,9 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Generate a cryptographically random password for the self-heal flow. */
+/** Generate a cryptographically random password (only used when creating a brand-new auth user or in the legacy fallback). */
 function generateRandomPassword(): string {
   return randomBytes(32).toString('base64url') + '!A1';
-}
-
-function json(payload: Record<string, unknown>, status: number = 200): Response {
-  return new Response(JSON.stringify(payload), { status, headers: PASSWORDLESS_HEADERS });
 }
 
 function readEnv(name: string): string {
@@ -99,7 +96,12 @@ type OwnerSessionResponse = {
   expiresAtIso: string;
   userId: string;
   email: string;
+  /** Always false on the primary path now — the owner password is preserved. */
   passwordSelfHealed: boolean;
+  /** True when the owner's manual password was NOT modified by this login. */
+  passwordPreserved: boolean;
+  /** 'magiclink_token_hash' (primary, password untouched) or 'legacy_password_self_heal' (fallback). */
+  sessionMethod: string;
   authUserCreated: boolean;
   deploymentMarker: string;
   timestamp: string;
@@ -113,7 +115,63 @@ type OwnerSessionFailure = {
   timestamp: string;
 };
 
-/** Server-side password grant against the Supabase Auth token endpoint. */
+type MintedSession = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+};
+
+/**
+ * Mint a real Supabase session WITHOUT touching the owner's password:
+ * admin generateLink(magiclink) -> verifyOtp(token_hash) with the anon key.
+ */
+async function mintSessionViaMagicLink(
+  adminClient: SupabaseClient,
+  email: string,
+): Promise<{ ok: boolean; session?: MintedSession; errorMessage?: string }> {
+  const supabaseUrl = resolveSupabaseUrl();
+  const anonKey = resolveAnonKey();
+  if (!anonKey) {
+    return { ok: false, errorMessage: 'Supabase anon key is not configured on the backend.' };
+  }
+
+  let tokenHash = '';
+  try {
+    const { data, error } = await adminClient.auth.admin.generateLink({ type: 'magiclink', email });
+    if (error) {
+      return { ok: false, errorMessage: `generateLink failed: ${error.message}` };
+    }
+    const properties = data?.properties as { hashed_token?: string } | null | undefined;
+    tokenHash = typeof properties?.hashed_token === 'string' ? properties.hashed_token : '';
+    if (!tokenHash) {
+      return { ok: false, errorMessage: 'generateLink did not return a hashed_token.' };
+    }
+  } catch (error) {
+    return { ok: false, errorMessage: error instanceof Error ? error.message : 'generateLink threw.' };
+  }
+
+  try {
+    const anonClient = createClient(supabaseUrl, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await anonClient.auth.verifyOtp({ type: 'magiclink', token_hash: tokenHash });
+    if (error) {
+      return { ok: false, errorMessage: `verifyOtp failed: ${error.message}` };
+    }
+    const session = data?.session;
+    const accessToken = typeof session?.access_token === 'string' ? session.access_token : '';
+    const refreshToken = typeof session?.refresh_token === 'string' ? session.refresh_token : '';
+    const expiresAt = typeof session?.expires_at === 'number' ? session.expires_at : 0;
+    if (!accessToken || !refreshToken) {
+      return { ok: false, errorMessage: 'verifyOtp did not return access_token/refresh_token.' };
+    }
+    return { ok: true, session: { accessToken, refreshToken, expiresAt } };
+  } catch (error) {
+    return { ok: false, errorMessage: error instanceof Error ? error.message : 'verifyOtp threw.' };
+  }
+}
+
+/** Server-side password grant against the Supabase Auth token endpoint (legacy fallback only). */
 async function passwordGrant(supabaseUrl: string, email: string, password: string): Promise<{
   ok: boolean;
   accessToken?: string;
@@ -211,11 +269,6 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     return ownerOnlyJson(failure, 403);
   }
 
-  // Use the configured IVX_OWNER_PASSWORD if available, otherwise generate a
-  // random one at runtime. The admin API can set any password, so a static env
-  // var is not required — this makes the flow truly passwordless.
-  const ownerPassword = readEnv('IVX_OWNER_PASSWORD') || generateRandomPassword();
-
   const supabaseUrl = resolveSupabaseUrl();
   if (!supabaseUrl) {
     const failure: OwnerSessionFailure = {
@@ -271,14 +324,14 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     return ownerOnlyJson(failure, 502);
   }
 
-  let passwordSelfHealed = false;
-
   if (!authUserId) {
-    // Create the owner auth user with the configured password + confirmed email.
+    // Create the owner auth user with a random password + confirmed email.
+    // The random password is never disclosed; the owner sets their real
+    // password via owner-access-repair or "Forgot" flows.
     try {
       const { data, error } = await adminClient.auth.admin.createUser({
         email,
-        password: ownerPassword,
+        password: readEnv('IVX_OWNER_PASSWORD') || generateRandomPassword(),
         email_confirm: true,
         user_metadata: {
           accountType: 'owner',
@@ -305,7 +358,6 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
       }
       authUserId = data.user.id;
       authUserCreated = true;
-      passwordSelfHealed = true;
     } catch (error) {
       const failure: OwnerSessionFailure = {
         success: false,
@@ -317,38 +369,73 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
       return ownerOnlyJson(failure, 502);
     }
   } else {
-    // Self-heal: reset the password to the configured value so the password
-    // grant always succeeds, regardless of any drift in Supabase.
+    // Make sure the existing owner user is confirmed and not banned —
+    // WITHOUT changing their password.
     try {
-      const { error: updateError } = await adminClient.auth.admin.updateUserById(authUserId, {
-        password: ownerPassword,
+      await adminClient.auth.admin.updateUserById(authUserId, {
         email_confirm: true,
         ban_duration: 'none',
       });
-      if (updateError) {
-        const failure: OwnerSessionFailure = {
-          success: false,
-          message: `Self-healing password reset failed: ${updateError.message}`,
-          rootCause: 'admin_update_password_failed',
-          deploymentMarker: DEPLOYMENT_MARKER,
-          timestamp: nowIso(),
-        };
-        return ownerOnlyJson(failure, 502);
-      }
-      passwordSelfHealed = true;
-    } catch (error) {
+    } catch {
+      // Non-fatal: the magic-link mint below will surface any real blocker.
+    }
+  }
+
+  // PRIMARY PATH — mint a session with a magic-link token. Password untouched.
+  const minted = await mintSessionViaMagicLink(adminClient, email);
+  if (minted.ok && minted.session) {
+    const expiresAt = minted.session.expiresAt;
+    const successPayload: OwnerSessionResponse = {
+      success: true,
+      accessToken: minted.session.accessToken,
+      refreshToken: minted.session.refreshToken,
+      expiresAt,
+      expiresAtIso: expiresAt ? new Date(expiresAt * 1000).toISOString() : nowIso(),
+      userId: authUserId,
+      email,
+      passwordSelfHealed: false,
+      passwordPreserved: true,
+      sessionMethod: 'magiclink_token_hash',
+      authUserCreated,
+      deploymentMarker: DEPLOYMENT_MARKER,
+      timestamp: nowIso(),
+    };
+    return ownerOnlyJson(successPayload as unknown as Record<string, unknown>);
+  }
+
+  // LEGACY FALLBACK — only if the magic-link mint failed. This is the old
+  // self-heal behavior (resets the password), kept strictly as a last resort
+  // so the owner can never be locked out entirely.
+  const ownerPassword = readEnv('IVX_OWNER_PASSWORD') || generateRandomPassword();
+  let passwordSelfHealed = false;
+  try {
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(authUserId, {
+      password: ownerPassword,
+      email_confirm: true,
+      ban_duration: 'none',
+    });
+    if (updateError) {
       const failure: OwnerSessionFailure = {
         success: false,
-        message: error instanceof Error ? error.message : 'Failed to reset owner password.',
-        rootCause: 'admin_update_password_threw',
+        message: `Magic-link session mint failed (${minted.errorMessage ?? 'unknown'}) and fallback password reset failed: ${updateError.message}`,
+        rootCause: 'fallback_password_reset_failed',
         deploymentMarker: DEPLOYMENT_MARKER,
         timestamp: nowIso(),
       };
       return ownerOnlyJson(failure, 502);
     }
+    passwordSelfHealed = true;
+  } catch (error) {
+    const failure: OwnerSessionFailure = {
+      success: false,
+      message: error instanceof Error ? error.message : 'Fallback password reset threw.',
+      rootCause: 'fallback_password_reset_threw',
+      deploymentMarker: DEPLOYMENT_MARKER,
+      timestamp: nowIso(),
+    };
+    return ownerOnlyJson(failure, 502);
   }
 
-  // Perform the server-side password grant to mint a real session.
   const grant = await passwordGrant(supabaseUrl, email, ownerPassword);
   if (!grant.ok || !grant.accessToken || !grant.refreshToken) {
     const failure: OwnerSessionFailure = {
@@ -371,6 +458,8 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     userId: authUserId,
     email,
     passwordSelfHealed,
+    passwordPreserved: false,
+    sessionMethod: 'legacy_password_self_heal',
     authUserCreated,
     deploymentMarker: DEPLOYMENT_MARKER,
     timestamp: nowIso(),
