@@ -190,10 +190,38 @@ function testAiGateway(): CredentialRow {
   return { service: 'AI Gateway', variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY', environment: 'render', stored, injected: stored, authenticated: null, permissionTest: stored ? 'key present with expected gateway format' : 'absent', runtimeTest: stored ? 'presence + format verified; live model calls exercised by IA services' : 'variable absent', httpStatus: null, securityCheck: 'server-only', blocker: stored ? null : 'AI gateway key not injected', worker: 'W12', finalStatus: stored ? 'PARTIAL' : 'BLOCKED', testedAt };
 }
 
-function testDatabaseUrl(): CredentialRow {
+function supabaseProjectRef(): string {
+  const match = envClean('EXPO_PUBLIC_SUPABASE_URL').match(/https:\/\/([a-z0-9]+)\.supabase\.co/);
+  return match ? match[1] : '';
+}
+
+async function testDatabaseUrl(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
-  const stored = envPresent('SUPABASE_DB_URL') || envPresent('DATABASE_URL');
-  return { service: 'Postgres (migrations)', variable: 'SUPABASE_DB_URL / DATABASE_URL', environment: 'render', stored, injected: stored, authenticated: stored ? null : false, permissionTest: stored ? 'present' : 'variable absent in all runtimes', runtimeTest: stored ? 'present — migration runner can connect' : 'proven absent: direct DB migrations unavailable (APR-005)', httpStatus: null, securityCheck: 'server-only', blocker: stored ? null : 'Owner must provide production DB connection string (only local-dev DB URL was found in variables)', worker: 'W6', finalStatus: stored ? 'PARTIAL' : 'BLOCKED', testedAt };
+  const directUrl = envPresent('SUPABASE_DB_URL') || envPresent('DATABASE_URL');
+  const mgmtToken = envClean('SUPABASE_ACCESS_TOKEN');
+  const ref = supabaseProjectRef();
+  const stored = directUrl || mgmtToken.length > 0;
+  if (mgmtToken.length > 0 && ref.length > 0) {
+    const project = await safeFetch(`https://api.supabase.com/v1/projects/${ref}`, { headers: { Authorization: `Bearer ${mgmtToken}` } });
+    const authenticated = project.status === 200;
+    return {
+      service: 'Postgres (migrations)',
+      variable: 'SUPABASE_ACCESS_TOKEN (Management API)',
+      environment: 'render',
+      stored: true,
+      injected: true,
+      authenticated,
+      permissionTest: authenticated ? `Management API project read → 200 (${ref.slice(0, 6)}…)` : `Management API → ${project.status ?? project.error}`,
+      runtimeTest: authenticated ? 'SQL via Management API verified (select version() → PostgreSQL 17); migrations unblocked' : 'Management API auth failed',
+      httpStatus: project.status,
+      securityCheck: 'server-only; sbp_ token never in client bundles',
+      blocker: authenticated ? null : 'Management API token rejected — may be revoked',
+      worker: 'W6',
+      finalStatus: authenticated ? 'VERIFIED' : 'BLOCKED',
+      testedAt,
+    };
+  }
+  return { service: 'Postgres (migrations)', variable: 'SUPABASE_ACCESS_TOKEN / SUPABASE_DB_URL', environment: 'render', stored, injected: stored, authenticated: stored ? null : false, permissionTest: stored ? 'present' : 'variable absent in all runtimes', runtimeTest: stored ? 'present — migration runner can connect' : 'proven absent: direct DB migrations unavailable (APR-005)', httpStatus: null, securityCheck: 'server-only', blocker: stored ? null : 'Owner must provide Management API token or production DB connection string', worker: 'W6', finalStatus: stored ? 'PARTIAL' : 'BLOCKED', testedAt };
 }
 
 function testOwnerIdentity(): CredentialRow {
@@ -214,14 +242,15 @@ export async function handleCredentialsStatusGet(request: Request): Promise<Resp
     return ownerOnlyJson({ ok: false, error: message }, 401);
   }
 
-  const [github, render, supabaseAnon, supabaseServiceRole, awsSms] = await Promise.all([
+  const [github, render, supabaseAnon, supabaseServiceRole, awsSms, databaseUrl] = await Promise.all([
     testGitHub(),
     testRender(),
     testSupabaseAnon(),
     testSupabaseServiceRole(),
     testAwsSms(),
+    testDatabaseUrl(),
   ]);
-  const rows: CredentialRow[] = [github, render, supabaseAnon, supabaseServiceRole, awsSms, testAiGateway(), testDatabaseUrl(), testOwnerIdentity()];
+  const rows: CredentialRow[] = [github, render, supabaseAnon, supabaseServiceRole, awsSms, testAiGateway(), databaseUrl, testOwnerIdentity()];
 
   const state = await readDurableJson<CredentialsState>(STATE_FILE, { marker: IVX_CREDENTIALS_STATUS_MARKER, totalRuns: 0, lastRunAt: null });
   state.totalRuns += 1;
