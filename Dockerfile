@@ -61,6 +61,12 @@ COPY expo/deploy/scripts ./expo/deploy/scripts
 # threw MODULE_NOT_FOUND ('/app/expo/sync-github.mjs') and every sync 502'd.
 COPY expo/sync-github.mjs ./expo/sync-github.mjs
 COPY expo/sync-paths.mjs ./expo/sync-paths.mjs
+# Ship the SQL migration manifest files so the owner-only migration runner
+# (GET/POST /api/ivx/autonomous/migrations, backend/api/ivx-migration-runner.ts)
+# can checksum repo migrations against supabase_migrations.schema_migrations at
+# runtime. Without these the runner reported every migration as file_missing.
+COPY expo/supabase ./expo/supabase
+COPY expo/scripts ./expo/scripts
 # Ship the static landing/SEO files so the startup landing-SEO auto-deployer
 # (backend/services/ivx-landing-seo-autodeploy.ts) can push robots.txt /
 # sitemap.xml / capture.html to S3 with the correct content-types on boot,

@@ -157,7 +157,7 @@ END $$;
 -- This query shows database size for backup planning:
 SELECT
   schemaname AS schema,
-  pg_size_pretty(SUM(pg_total_relation_size(schemaname || '.' || tablename))) AS total_size
+  pg_size_pretty(SUM(pg_total_relation_size(quote_ident(schemaname) || '.' || quote_ident(tablename)))) AS total_size
 FROM pg_tables
 WHERE schemaname = 'public'
 GROUP BY schemaname;

@@ -15,6 +15,8 @@
  *   POST /api/ivx/autonomous/auth-guardian/alert  — owner SMS alert (AWS SNS)
  *   GET  /api/ivx/autonomous/qa                   — continuous QA scheduler status
  *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix
+ *   GET  /api/ivx/autonomous/migrations           — migration history vs repo manifest
+ *   POST /api/ivx/autonomous/migrations/run       — apply pending repo migrations (owner bearer)
  *
  * Side effect: starts the in-process continuous QA scheduler (health 5m,
  * auth 15m, full matrix 2h) on service boot.
@@ -39,6 +41,11 @@ import {
   credentialsStatusOptions,
   handleCredentialsStatusGet,
 } from './api/ivx-credentials-status';
+import {
+  migrationRunnerOptions,
+  handleMigrationStatusGet,
+  handleMigrationRunPost,
+} from './api/ivx-migration-runner';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -55,6 +62,11 @@ app.get('/api/ivx/autonomous/qa', async (context) => handleAutonomousQAGet(conte
 
 app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());
 app.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));
+
+app.options('/api/ivx/autonomous/migrations', () => migrationRunnerOptions());
+app.get('/api/ivx/autonomous/migrations', async (context) => handleMigrationStatusGet(context.req.raw));
+app.options('/api/ivx/autonomous/migrations/run', () => migrationRunnerOptions());
+app.post('/api/ivx/autonomous/migrations/run', async (context) => handleMigrationRunPost(context.req.raw));
 
 startAutonomousQAScheduler();
 

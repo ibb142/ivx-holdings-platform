@@ -21,6 +21,8 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { readDurableJson, writeDurableJson } from '../services/ivx-durable-store';
 import { sendSnsSms } from '../services/ivx-sns-sms';
+import { postQAReportToOwnerChat } from '../services/ivx-qa-chat-reporter';
+import { getMigrationSummary } from './ivx-migration-runner';
 import {
   runAuthProbes,
   reconcileIncidents,
@@ -177,16 +179,32 @@ async function authTick(kind: 'auth' | 'matrix'): Promise<void> {
     }
     state.lastAuthAt = at;
     state.authOk = ok;
+    const summary = ok
+      ? `${probes.length}/${probes.length} probes ok`
+      : `FAIL: ${probes.filter((probe) => !probe.ok).map((probe) => probe.id).join(', ')}${newlyOpened.length > 0 ? ` — opened ${newlyOpened.map((incident) => incident.incidentId).join(', ')}` : ''}`;
     pushRun(state, {
       kind,
       at,
       ok,
-      summary: ok
-        ? `${probes.length}/${probes.length} probes ok`
-        : `FAIL: ${probes.filter((probe) => !probe.ok).map((probe) => probe.id).join(', ')}${newlyOpened.length > 0 ? ` — opened ${newlyOpened.map((incident) => incident.incidentId).join(', ')}` : ''}`,
+      summary,
       probes: probes.map((probe) => ({ id: probe.id, ok: probe.ok, httpStatus: probe.httpStatus, latencyMs: probe.latencyMs })),
     });
     await writeDurableJson(QA_STATE_FILE, state);
+
+    // Every 2h matrix run also posts a verification report into the IVX
+    // Owner AI chat (owner mandate 2026-07-17): health, auth and live DB
+    // migration status — never a cached green.
+    if (kind === 'matrix') {
+      const migrations = await getMigrationSummary();
+      const runId = state.recentRuns[0]?.runId ?? `QA-${String(state.runCounter).padStart(5, '0')}`;
+      await postQAReportToOwnerChat({
+        runId,
+        healthOk: state.healthOk,
+        authOk: ok,
+        probesSummary: summary,
+        migrations,
+      });
+    }
   } catch (tickError) {
     console.error('[ivx-qa-scheduler] auth tick failed:', tickError instanceof Error ? tickError.message : tickError);
   }

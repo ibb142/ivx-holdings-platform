@@ -9,6 +9,7 @@
 -- ============================================================
 -- 0. BOOTSTRAP: Auto-deploy helper function
 -- ============================================================
+DROP FUNCTION IF EXISTS public.ivx_exec_sql(text);
 CREATE OR REPLACE FUNCTION ivx_exec_sql(sql_text TEXT) RETURNS VOID AS $fn$ BEGIN EXECUTE sql_text; END; $fn$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================
@@ -859,8 +860,8 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname='realtime_snapshots_auth_insert') THEN
     CREATE POLICY "realtime_snapshots_auth_insert" ON public.realtime_snapshots FOR INSERT TO authenticated WITH CHECK (true);
   END IF;
-END $;
-DO $ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.realtime_snapshots; EXCEPTION WHEN duplicate_object THEN NULL; END $;
+END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.realtime_snapshots; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION public.ivx_is_owner()
 RETURNS boolean
@@ -886,14 +887,14 @@ CREATE TABLE IF NOT EXISTS public.conversations (
   last_message_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-DO $ BEGIN
+DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname='conversations_auth_all' AND schemaname='public' AND tablename='conversations') THEN
     DROP POLICY "conversations_auth_all" ON public.conversations;
   END IF;
   CREATE POLICY "conversations_auth_all" ON public.conversations FOR ALL TO authenticated USING (id <> '8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'::uuid OR public.ivx_is_owner()) WITH CHECK (id <> '8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'::uuid OR public.ivx_is_owner());
-END $;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON public.conversations(last_message_at DESC);
-DO $ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations; EXCEPTION WHEN duplicate_object THEN NULL; END $;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 6i. conversation_participants
 CREATE TABLE IF NOT EXISTS public.conversation_participants (
@@ -904,15 +905,15 @@ CREATE TABLE IF NOT EXISTS public.conversation_participants (
   PRIMARY KEY (conversation_id, user_id)
 );
 ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
-DO $ BEGIN
+DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname='conversation_participants_auth_all' AND schemaname='public' AND tablename='conversation_participants') THEN
     DROP POLICY "conversation_participants_auth_all" ON public.conversation_participants;
   END IF;
   CREATE POLICY "conversation_participants_auth_all" ON public.conversation_participants FOR ALL TO authenticated USING (conversation_id <> '8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'::uuid OR public.ivx_is_owner()) WITH CHECK (conversation_id <> '8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'::uuid OR public.ivx_is_owner());
-END $;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_user ON public.conversation_participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_conversation ON public.conversation_participants(conversation_id);
-DO $ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.conversation_participants; EXCEPTION WHEN duplicate_object THEN NULL; END $;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.conversation_participants; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 6j. messages
 CREATE TABLE IF NOT EXISTS public.messages (
@@ -926,15 +927,15 @@ CREATE TABLE IF NOT EXISTS public.messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-DO $ BEGIN
+DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_policies WHERE policyname='messages_auth_all' AND schemaname='public' AND tablename='messages') THEN
     DROP POLICY "messages_auth_all" ON public.messages;
   END IF;
   CREATE POLICY "messages_auth_all" ON public.messages FOR ALL TO authenticated USING (conversation_id <> '8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'::uuid OR public.ivx_is_owner()) WITH CHECK (conversation_id <> '8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'::uuid OR public.ivx_is_owner());
-END $;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON public.messages(conversation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_sender_created ON public.messages(sender_id, created_at DESC);
-DO $ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.messages; EXCEPTION WHEN duplicate_object THEN NULL; END $;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.messages; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
 -- 7. KYC
@@ -2054,7 +2055,7 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname='chat_uploads_auth_insert') THEN
     CREATE POLICY "chat_uploads_auth_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id='chat-uploads');
   END IF;
-END $;
+END $$;
 
 -- ============================================================
 -- DONE

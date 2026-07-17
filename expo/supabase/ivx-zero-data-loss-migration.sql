@@ -29,9 +29,13 @@ CREATE INDEX IF NOT EXISTS idx_data_vault_vault_id   ON public.data_vault (vault
 
 -- Allow service role full access (RLS disabled for service role by default)
 ALTER TABLE public.data_vault ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "data_vault_service_role_all" ON public.data_vault
-  FOR ALL USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='data_vault' AND policyname='data_vault_service_role_all') THEN
+    CREATE POLICY "data_vault_service_role_all" ON public.data_vault
+      FOR ALL USING (auth.role() = 'service_role')
+      WITH CHECK (auth.role() = 'service_role');
+  END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 2. SNAPSHOT METADATA TABLE
@@ -51,9 +55,13 @@ CREATE TABLE IF NOT EXISTS public.snapshot_metadata (
 CREATE INDEX IF NOT EXISTS idx_snapshot_metadata_created_at ON public.snapshot_metadata (created_at DESC);
 
 ALTER TABLE public.snapshot_metadata ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "snapshot_metadata_service_role_all" ON public.snapshot_metadata
-  FOR ALL USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='snapshot_metadata' AND policyname='snapshot_metadata_service_role_all') THEN
+    CREATE POLICY "snapshot_metadata_service_role_all" ON public.snapshot_metadata
+      FOR ALL USING (auth.role() = 'service_role')
+      WITH CHECK (auth.role() = 'service_role');
+  END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 3. SOFT-DELETE COLUMNS
