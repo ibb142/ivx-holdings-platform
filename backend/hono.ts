@@ -632,6 +632,7 @@ import {
   handleUpdateOwnerActionStatus,
 } from './api/ivx-owner-action-requests';
 import { OPTIONS as autonomousOpsDashboardOptions, handleAutonomousOpsDashboardRequest } from './api/ivx-autonomous-ops-dashboard';
+import { autonomousJobLedgerOptions, handleAutonomousJobLedgerGet, handleAutonomousJobLedgerUpdate } from './api/ivx-autonomous-job-ledger';
 import {
   OPTIONS as agentAuditOptions,
   handleAgentAuditOverview,
@@ -5366,6 +5367,15 @@ app.post('/api/ivx/owner-action/:traceId/status', async (context) => handleUpdat
 // ============================================================================
 app.options('/api/ivx/autonomous-ops/dashboard', () => autonomousOpsDashboardOptions());
 app.get('/api/ivx/autonomous-ops/dashboard', async (context) => handleAutonomousOpsDashboardRequest(context.req.raw));
+
+// ============================================================================
+// IVX Autonomous Job Ledger — persistent W1–W12 worker/job/approval ledger
+// backing the IVX Command Center dashboard (owner-only)
+// ============================================================================
+app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
+app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
+app.options('/api/ivx/autonomous/ledger/update', () => autonomousJobLedgerOptions());
+app.post('/api/ivx/autonomous/ledger/update', async (context) => handleAutonomousJobLedgerUpdate(context.req.raw));
 
 // ============================================================================
 // IVX Landing Full Deploy — push all landing static files to S3 + invalidate CloudFront
