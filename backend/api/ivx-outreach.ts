@@ -82,8 +82,15 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 export async function handleOutreachListRequest(request: Request): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
-  const [messages, summary] = await Promise.all([listOutreachMessages(), summarizeOutreach()]);
-  return ownerOnlyJson({ ok: true, messages, summary });
+  const url = new URL(request.url);
+  const limitParam = parseInt(url.searchParams.get('limit') ?? '100', 10);
+  const offsetParam = parseInt(url.searchParams.get('offset') ?? '0', 10);
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 100;
+  const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? offsetParam : 0;
+  const [allMessages, summary] = await Promise.all([listOutreachMessages(), summarizeOutreach()]);
+  const total = allMessages.length;
+  const messages = allMessages.slice(offset, offset + limit);
+  return ownerOnlyJson({ ok: true, messages, summary, total, limit, offset, hasMore: offset + limit < total });
 }
 
 /** Preview a deterministic draft without persisting it. */
