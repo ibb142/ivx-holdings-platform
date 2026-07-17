@@ -22,3 +22,15 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+// Fix: Some Expo modules (e.g. expo-location) don't specify compileSdk,
+// which AGP 8.x requires. Force it via project configuration hook.
+subprojects { subproject ->
+  subproject.plugins.withId("com.android.library") {
+    subproject.android {
+      if (compileSdk == null || compileSdk == 0) {
+        compileSdk = 36
+      }
+    }
+  }
+}
