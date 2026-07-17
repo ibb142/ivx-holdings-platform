@@ -243,20 +243,65 @@ export async function handleAutonomousJobLedgerUpdate(request: Request): Promise
   }
 
   const ledger = await loadLedger();
-  const job = ledger.jobs.find((j) => j.jobId === jobId);
-  if (!job) {
-    return ownerOnlyJson({ ok: false, error: `Unknown jobId: ${jobId}` }, 404);
-  }
-
+  let job = ledger.jobs.find((j) => j.jobId === jobId);
   const at = nowIso();
-  const previousStatus = job.status;
-  if (nextStatus) {
-    job.status = nextStatus as LedgerJobStatus;
+
+  if (!job) {
+    // Owner-approved job creation: body.create === true registers a NEW job
+    // so the ledger can track work discovered after the baseline. Requires
+    // an explicit worker, title and a valid JOB-xxxx id.
+    const wantsCreate = body.create === true;
+    const workerId = typeof body.workerId === 'string' ? body.workerId.trim().toUpperCase() : '';
+    const title = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
+    const priority = typeof body.priority === 'string' && ['P0', 'P1', 'P2'].includes(body.priority.trim().toUpperCase())
+      ? body.priority.trim().toUpperCase()
+      : 'P1';
+    const evidence = typeof body.evidence === 'string' && body.evidence.trim() ? body.evidence.trim().slice(0, 500) : null;
+    const blocker = typeof body.blocker === 'string' && body.blocker.trim() ? body.blocker.trim().slice(0, 500) : null;
+    if (!wantsCreate) {
+      return ownerOnlyJson({ ok: false, error: `Unknown jobId: ${jobId}. Pass create:true with workerId+title to register a new job.` }, 404);
+    }
+    if (!/^JOB-\d{4}$/.test(jobId)) {
+      return ownerOnlyJson({ ok: false, error: 'New jobId must match JOB-xxxx (4 digits).' }, 400);
+    }
+    if (!ledger.workers.some((w) => w.id === workerId)) {
+      return ownerOnlyJson({ ok: false, error: `Unknown workerId: ${workerId || '(missing)'}` }, 400);
+    }
+    if (!title) {
+      return ownerOnlyJson({ ok: false, error: 'title is required to create a job.' }, 400);
+    }
+    const initialStatus = (nextStatus || 'QUEUED') as LedgerJobStatus;
+    job = {
+      jobId,
+      workerId,
+      title,
+      status: initialStatus,
+      priority: priority as LedgerJob['priority'],
+      evidence,
+      blocker,
+      createdAt: at,
+      updatedAt: at,
+      history: [{ at, from: null, to: initialStatus, note: note ?? 'Job registered via owner ledger update.' }],
+    };
+    ledger.jobs.push(job);
+    ledger.updatedAt = at;
+    ledger.version += 1;
+  } else {
+    const previousStatus = job.status;
+    if (nextStatus) {
+      job.status = nextStatus as LedgerJobStatus;
+    }
+    if (typeof body.evidence === 'string' && body.evidence.trim()) {
+      job.evidence = body.evidence.trim().slice(0, 500);
+    }
+    if (typeof body.blocker === 'string') {
+      job.blocker = body.blocker.trim() ? body.blocker.trim().slice(0, 500) : null;
+    }
+    job.updatedAt = at;
+    job.history.push({ at, from: previousStatus, to: job.status, note });
+    ledger.updatedAt = at;
+    ledger.version += 1;
   }
-  job.updatedAt = at;
-  job.history.push({ at, from: previousStatus, to: job.status, note });
-  ledger.updatedAt = at;
-  ledger.version += 1;
 
   try {
     await writeDurableJson(LEDGER_FILE, ledger);

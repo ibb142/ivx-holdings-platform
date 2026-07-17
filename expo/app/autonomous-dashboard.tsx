@@ -38,6 +38,7 @@ import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
+const GUARDIAN_URL = `${API_BASE}/api/ivx/autonomous/auth-guardian`;
 const POLL_INTERVAL_MS = 30_000;
 
 type LedgerWorker = { id: string; name: string; scope: string };
@@ -76,6 +77,62 @@ type LedgerCounts = {
   ownerActionRequired: number;
   queued: number;
   pendingApprovals: number;
+};
+
+type GuardianProbe = {
+  id: string;
+  name: string;
+  target: string;
+  ok: boolean;
+  httpStatus: number | null;
+  latencyMs: number;
+  detail: string;
+  checkedAt: string;
+};
+
+type GuardianIncident = {
+  incidentId: string;
+  probeId: string;
+  openedAt: string;
+  closedAt: string | null;
+  status: string;
+  detail: string;
+};
+
+type GuardianAlert = {
+  alertId: string;
+  severity: string;
+  area: string;
+  problem: string;
+  smsStatus: string;
+  messageId: string | null;
+  toMasked: string;
+  sentAt: string;
+  test: boolean;
+};
+
+type GuardianSmsProvider = {
+  provider?: string;
+  awsCredentialsConfigured?: boolean;
+  awsRegion?: string;
+  ownerPhoneResolved?: boolean;
+  ownerPhoneMasked?: string | null;
+  phoneSource?: string;
+  ready?: boolean;
+};
+
+type GuardianResponse = {
+  ok: boolean;
+  error?: string;
+  marker?: string;
+  generatedAt?: string;
+  totalRuns?: number;
+  overall?: string;
+  probes?: GuardianProbe[];
+  openIncidents?: GuardianIncident[];
+  recentIncidents?: GuardianIncident[];
+  smsProvider?: GuardianSmsProvider;
+  recentAlerts?: GuardianAlert[];
 };
 
 type LedgerResponse = {
@@ -125,6 +182,7 @@ export default function AutonomousDashboardScreen() {
   const [isUnauthorized, setIsUnauthorized] = useState<boolean>(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
+  const [guardian, setGuardian] = useState<GuardianResponse | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLedger = useCallback(async (silent: boolean) => {
@@ -154,6 +212,18 @@ export default function AutonomousDashboardScreen() {
       setIsUnauthorized(false);
       setData(json);
       setLastFetchedAt(new Date().toISOString());
+      try {
+        const guardianResponse = await fetch(GUARDIAN_URL, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (guardianResponse.ok) {
+          const guardianJson = (await guardianResponse.json()) as GuardianResponse;
+          if (guardianJson.ok) setGuardian(guardianJson);
+        }
+      } catch (guardianError) {
+        console.log('[AutonomousDashboard] guardian fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Network error loading ledger.';
       console.log('[AutonomousDashboard] fetch failed:', message);
@@ -267,6 +337,58 @@ export default function AutonomousDashboardScreen() {
                   <Text style={styles.approvalMeta}>Rollback: {approval.rollback}</Text>
                 </View>
               ))}
+            </View>
+          ) : null}
+
+          {guardian ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <ShieldCheck size={16} color={guardian.overall === 'HEALTHY' ? '#34D399' : '#F87171'} />
+                <Text style={styles.cardHeader}>Owner Authentication</Text>
+                <Text style={[styles.guardianBadge, { color: guardian.overall === 'HEALTHY' ? '#34D399' : '#F87171' }]}>
+                  {guardian.overall ?? '—'}
+                </Text>
+              </View>
+              <Text style={styles.guardianMeta}>
+                Auth Guardian · run #{guardian.totalRuns ?? 0} · {formatTime(guardian.generatedAt)}
+              </Text>
+              {(guardian.probes ?? []).map((probe) => (
+                <View key={probe.id} style={styles.probeRow}>
+                  <View style={[styles.statusDot, { backgroundColor: probe.ok ? '#34D399' : '#F87171' }]} />
+                  <View style={styles.probeTextWrap}>
+                    <Text style={styles.probeName}>{probe.name}</Text>
+                    <Text style={styles.probeDetail}>
+                      HTTP {probe.httpStatus ?? '—'} · {probe.latencyMs}ms · {probe.detail}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              {(guardian.openIncidents ?? []).length > 0 ? (
+                <View style={styles.incidentBox}>
+                  <Text style={styles.incidentHeader}>Open incidents</Text>
+                  {(guardian.openIncidents ?? []).map((incident) => (
+                    <Text key={incident.incidentId} style={styles.jobBlocker}>
+                      {incident.incidentId} · {incident.detail} · opened {formatTime(incident.openedAt)}
+                    </Text>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.jobEvidence}>No open authentication incidents.</Text>
+              )}
+              <View style={styles.smsBox}>
+                <Text style={styles.smsHeader}>
+                  SMS alerts ({guardian.smsProvider?.provider ?? 'aws_sns'}) — {guardian.smsProvider?.ready ? 'READY' : 'NOT READY'}
+                </Text>
+                <Text style={styles.probeDetail}>
+                  AWS creds: {guardian.smsProvider?.awsCredentialsConfigured ? 'configured' : 'MISSING on backend'} · phone: {guardian.smsProvider?.ownerPhoneMasked ?? '—'} ({guardian.smsProvider?.phoneSource ?? '—'})
+                </Text>
+                {(guardian.recentAlerts ?? []).slice(0, 3).map((alert) => (
+                  <Text key={alert.alertId} style={styles.probeDetail}>
+                    {alert.alertId} · {alert.severity} · {alert.smsStatus}
+                    {alert.messageId ? ` · id ${alert.messageId.slice(0, 8)}…` : ''} · {formatTime(alert.sentAt)}
+                  </Text>
+                ))}
+              </View>
             </View>
           ) : null}
 
@@ -419,4 +541,14 @@ const styles = StyleSheet.create({
   workerMeta: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
   emptyText: { color: '#64748B', fontSize: 13 },
   footerNote: { color: '#475569', fontSize: 11, textAlign: 'center' as const, marginTop: 4 },
+  guardianBadge: { fontSize: 12, fontWeight: '800' as const, marginLeft: 'auto' as const },
+  guardianMeta: { color: '#64748B', fontSize: 11, marginBottom: 8 },
+  probeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 5 },
+  probeTextWrap: { flex: 1 },
+  probeName: { color: '#E2E8F0', fontSize: 13, fontWeight: '600' as const },
+  probeDetail: { color: '#94A3B8', fontSize: 11, marginTop: 1 },
+  incidentBox: { marginTop: 8, gap: 3 },
+  incidentHeader: { color: '#F87171', fontSize: 12, fontWeight: '700' as const },
+  smsBox: { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingTop: 8, gap: 3 },
+  smsHeader: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' as const },
 });
