@@ -400,7 +400,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -nE \\\"owner-ai|owner_ai|/conversations|/messages|/attachments|/crm|/deals|/investors|/buyers|/members\\\" backend/hono.ts | grep -E \\\"\\\\.get\\\\(|\\\\.post\\\\(|\\\\.put\\\\(|\\\\.delete\\\\(\\\" | head -60\"}",
       "createdAt": 1784257221417,
-      "completedAt": 1784257223392
+      "completedAt": 1784257223392,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -430,7 +431,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nSUPA=\\\"https://kvclcdjmjghndxsngfzb.supabase.co\\\"\\nSERVICE_KEY=\\\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZmVyZW5jZSI6Imt2Y2xjZGptamdobmR4c25nZmpiIiwicm9sZSI6InNlcnZpY2UiLCJpYXQiOjE3MzkwMDAwMDB9.QXhGbKBVxVxB5w5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q\\\"\\n# Try service role key from env\\nimport os\\n# Read from .env file\\nenv = {}\\nwith open('expo/.env') as f:\\n    for line in f:\\n        line = line.strip()\\n        if '=' in line and not line.startswith('#'):\\n            k,v = line.split('=',1)\\n            env[k.strip()] = v.strip().strip('\\\"').strip(\\\"'\\\")\\n\\nkey = env.get('SUPABASE_SERVICE_ROLE_KEY','')\\nprint(f\\\"service key present: {bool(key)} len={len(key)}\\\")\\n\\ndef supa_query(table, select=\\\"id\\\", limit=1):\\n    url = f\\\"{SUPA}/rest/v1/{table}?select={select}&limit={limit}\\\"\\n    # Get count via headers\\n    url_count = f\\\"{SUPA}/rest/v1/{table}?select=id&limit=1\\\"\\n    req = urllib.request.Request(url_count, headers={\\n        \\\"apikey\\\": key,\\n        \\\"Authorization\\\": f\\\"Bearer {key}\\\",\\n        \\\"Prefer\\\": \\\"count=exact\\\",\\n        \\\"Range\\\": \\\"0-0\\\"\\n    })\\n    try:\\n        with urllib.request.urlopen(req, context=ctx, timeout=15) as r:\\n            range_header = r.headers.get('content-range','')\\n            total = range_header.split('/')[-1] if '/' in range_header else '?'\\n            return int(total) if total.isdigit() else total\\n    except Exception as e:\\n        return f\\\"ERROR: {e}\\\"\\n\\ntables = [\\n    (\\\"members\\\", \\\"Members\\\"),\\n    (\\\"investors\\\", \\\"Investors\\\"),\\n    (\\\"buyers\\\", \\\"Buyers\\\"),\\n    (\\\"deals\\\", \\\"Deals\\\"),\\n    (\\\"videos\\\", \\\"Project Videos\\\"),\\n    (\\\"conversations\\\", \\\"Conversations\\\"),\\n    (\\\"messages\\\", \\\"Messages\\\"),\\n    (\\\"crm_contacts\\\", \\\"CRM Contacts\\\"),\\n    (\\\"outreach_messages\\\", \\\"Outreach Messages\\\"),\\n    (\\\"lead_discovery\\\", \\\"Lead Discovery\\\"),\\n    (\\\"lead_capture\\\", \\\"Lead Capture\\\"),\\n]\\nprint(\\\"\\\\n=== BASELINE COUNTS ===\\\")\\nfor t,label in tables:\\n    count = supa_query(t)\\n    print(f\\\"  {label}: {count}\\\")\\nPYEOF\"}",
       "createdAt": 1784257233371,
-      "completedAt": 1784257263237
+      "completedAt": 1784257263237,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -448,7 +450,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl, time\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b\\\"\\n\\ndef req(method, path, auth=\\\"owner\\\", body=None):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\":\\n        headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    elif auth == \\\"none\\\":\\n        pass\\n    elif auth == \\\"invalid\\\":\\n        headers[\\\"Authorization\\\"] = \\\"Bearer invalid-token-12345\\\"\\n    data = json.dumps(body).encode() if body else None\\n    r = urllib.request.Request(url, data=data, headers=headers, method=method)\\n    t0 = time.time()\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=30) as resp:\\n            dt = time.time() - t0\\n            raw = resp.read().decode()\\n            try: j = json.loads(raw)\\n            except: j = raw[:200]\\n            return resp.status, dt, j\\n    except urllib.error.HTTPError as e:\\n        dt = time.time() - t0\\n        raw = e.read().decode()\\n        try: j = json.loads(raw)\\n        except: j = raw[:200]\\n        return e.code, dt, j\\n    except Exception as e:\\n        return 0, time.time()-t0, str(e)[:200]\\n\\n# Test core routes\\nroutes = [\\n    # Health & readiness\\n    (\\\"GET\\\", \\\"/health\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/readiness\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/version\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/version\\\", \\\"none\\\"),\\n    # Owner AI\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/proxy-status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/runtime\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/diagnostics\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/auth-diagnostic\\\", \\\"owner\\\"),\\n    # Developer proof\\n    (\\\"GET\\\", \\\"/api/ivx/ia-developer-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/developer-proof/latest\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/developer-proof/history\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/feature/senior-dev-proof\\\", \\\"owner\\\"),\\n    # Credentials & variables\\n    (\\\"GET\\\", \\\"/api/ivx/credentials\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/credentials/deployment\\\", \\\"owner\\\"),\\n    # Autonomous\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/lifecycle-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/handoff/readiness\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/readiness\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/capabilities\\\", \\\"owner\\\"),\\n    # Tool system\\n    (\\\"GET\\\", \\\"/api/ivx/tool-system/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/tool-system/tools\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/tool-system/catalog\\\", \\\"owner\\\"),\\n    # Video platform\\n    (\\\"GET\\\", \\\"/api/ivx/video-platform/home-feed?limit=4\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/video-platform/feed?limit=3&type=reel\\\", \\\"none\\\"),\\n    # Investors & CRM\\n    (\\\"GET\\\", \\\"/api/ivx/investors?limit=1\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/crm/dedup-audit\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/crm/vip\\\", \\\"owner\\\"),\\n    # Messages\\n    (\\\"GET\\\", \\\"/api/messages?limit=1\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/messages/search?q=test&limit=1\\\", \\\"owner\\\"),\\n    # Proof\\n    (\\\"GET\\\", \\\"/api/proof-test\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/chat-durability-proof\\\", \\\"owner\\\"),\\n    # Audit\\n    (\\\"GET\\\", \\\"/api/ivx/audit-report\\\", \\\"owner\\\"),\\n]\\n\\nprint(\\\"=== ROUTE TESTING ===\\\")\\nprint(f\\\"{'METHOD':<6} {'PATH':<55} {'AUTH':<8} {'STATUS':<7} {'LAT(ms)':<8} RESULT\\\")\\nprint(\\\"-\\\"*120)\\nresults = []\\nfor method, path, auth in routes:\\n    st, dt, j = req(method, path, auth)\\n    lat = f\\\"{dt*1000:.0f}\\\"\\n    # Extract key result\\n    if isinstance(j, dict):\\n        if 'status' in j: result = f\\\"status={j['status']}\\\"\\n        elif 'ok' in j: result = f\\\"ok={j['ok']}\\\"\\n        elif 'error' in j: result = f\\\"error={str(j['error'])[:40]}\\\"\\n        elif 'total' in j: result = f\\\"total={j['total']}\\\"\\n        elif 'health' in j: result = f\\\"healthy={j.get('health')}\\\"\\n        elif 'pattern' in j: result = f\\\"pattern={j['pattern']}\\\"\\n        elif 'commit' in j: result = f\\\"commit={str(j.get('commit',''))[:12]}\\\"\\n        elif 'data' in j: result = f\\\"data_len={len(j['data']) if isinstance(j.get('data'),list) else 'obj'}\\\"\\n        elif 'tools' in j: result = f\\\"tools={len(j['tools'])}\\\"\\n        elif 'capabilities' in j: result = f\\\"caps={len(j['capabilities'])}\\\"\\n        else: result = str(list(j.keys())[:5])[:60]\\n    else:\\n        result = str(j)[:60]\\n    status_str = str(st)\\n    print(f\\\"{method:<6} {path:<55} {auth:<8} {status_str:<7} {lat:<8} {result}\\\")\\n    results.append((method, path, auth, st, dt, result))\\n\\n# Summary\\npassed = sum(1 for r in results if r[3] and 200 <= r[3] < 400)\\nfailed = sum(1 for r in results if r[3] and (r[3] >= 400 or r[3] == 0))\\nprint(f\\\"\\\\nTotal: {len(results)} | Passed: {passed} | Failed: {failed}\\\")\\nPYEOF\"}",
       "createdAt": 1784257244069,
-      "completedAt": 1784257270255
+      "completedAt": 1784257270255,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -466,7 +469,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bunx tsc --noEmit --project expo/tsconfig.json 2>&1 | tail -5 && echo \\\"EXIT: $?\\\"\"}",
       "createdAt": 1784257259973,
-      "completedAt": 1784257291503
+      "completedAt": 1784257291503,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -484,7 +488,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bunx eslint expo/ --quiet 2>&1 | tail -5 && echo \\\"EXIT: $?\\\"\"}",
       "createdAt": 1784257260296,
-      "completedAt": 1784257292061
+      "completedAt": 1784257292061,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -502,7 +507,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bun test expo/ 2>&1 | tail -15 && echo \\\"EXIT: $?\\\"\"}",
       "createdAt": 1784257260327,
-      "completedAt": 1784257297987
+      "completedAt": 1784257297987,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -520,7 +526,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bun test backend/ 2>&1 | tail -20 && echo \\\"EXIT: $?\\\"\"}",
       "createdAt": 1784257260339,
-      "completedAt": 1784257303134
+      "completedAt": 1784257303134,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -550,7 +557,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"assertIVXOwnerOnly\\\\|ownerOnlyJson\\\\|IVX_OWNER_TOKEN\\\\|ownerToken\\\\|owner_token\\\\|checkOwnerAuth\\\\|verifyOwner\\\" backend/api/owner-only.ts | head -30\"}",
       "createdAt": 1784257313430,
-      "completedAt": 1784257313854
+      "completedAt": 1784257313854,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -567,7 +575,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/owner-only.ts\"}",
       "createdAt": 1784257313437,
-      "completedAt": 1784257313855
+      "completedAt": 1784257313855,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -585,7 +594,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"assertIVXOwnerOnly\\\\|ownerOnlyJson\\\\|IVX_OWNER_TOKEN\\\\|ownerToken\\\\|owner_token\\\\|checkOwnerAuth\\\\|verifyOwner\\\" backend/hono.ts | head -30\"}",
       "createdAt": 1784257313438,
-      "completedAt": 1784257313886
+      "completedAt": 1784257313886,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -603,7 +613,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -rn \\\"IVX_OWNER_TOKEN\\\\|owner_token\\\\|ownerToken\\\\|x-ivx-owner\\\\|x-owner-token\\\\|bearer.*owner\\\" backend/api/ backend/services/ --include=\\\"*.ts\\\" | grep -v test | grep -v node_modules | head -40\"}",
       "createdAt": 1784257313445,
-      "completedAt": 1784257313933
+      "completedAt": 1784257313933,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -633,7 +644,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"resolveIVXAuthenticatedRequest\\\\|IVX_OPEN_ACCESS_OWNER_TOKEN\\\\|IVX_OWNER_TOKEN\\\\|guardMode\\\\|bearerAccepted\\\\|checkBearer\\\\|verifyBearer\\\" expo/shared/ivx.ts 2>/dev/null | head -40 || grep -rn \\\"resolveIVXAuthenticatedRequest\\\\|IVX_OPEN_ACCESS_OWNER_TOKEN\\\" expo/shared/ --include=\\\"*.ts\\\" | head -20\"}",
       "createdAt": 1784257318395,
-      "completedAt": 1784257318893
+      "completedAt": 1784257318893,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -651,7 +663,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && find expo/shared/ -name \\\"*.ts\\\" | head -10 && echo \\\"---\\\" && grep -rn \\\"resolveIVXAuthenticatedRequest\\\" expo/shared/ --include=\\\"*.ts\\\" | head -10\"}",
       "createdAt": 1784257318822,
-      "completedAt": 1784257318922
+      "completedAt": 1784257318922,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -682,7 +695,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/shared/ivx/access-control.ts\", \"limit\": 120, \"offset\": 480}",
       "createdAt": 1784257323296,
-      "completedAt": 1784257323308
+      "completedAt": 1784257323308,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -700,7 +714,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"IVX_OPEN_ACCESS_OWNER_TOKEN\\\\|checkIVXOwnerBearer\\\\|verifyOwnerToken\\\\|ownerToken\\\\|OWNER_TOKEN\\\" expo/shared/ivx/access-control.ts | head -30\"}",
       "createdAt": 1784257323297,
-      "completedAt": 1784257323308
+      "completedAt": 1784257323308,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -730,7 +745,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b\\\"\\n\\ndef req(method, path, auth=\\\"owner\\\", body=None):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\": headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    elif auth == \\\"invalid\\\": headers[\\\"Authorization\\\"] = \\\"Bearer invalid-token-xyz\\\"\\n    data = json.dumps(body).encode() if body else None\\n    r = urllib.request.Request(url, data=data, headers=headers, method=method)\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=30) as resp:\\n            return resp.status, json.loads(resp.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: j = json.loads(e.read().decode())\\n        except: j = {\\\"raw\\\": str(e)}\\n        return e.code, j\\n    except Exception as e:\\n        return 0, {\\\"error\\\": str(e)}\\n\\n# Auth diagnostic\\nst, r = req(\\\"GET\\\", \\\"/api/ivx/owner-ai/auth-diagnostic\\\", \\\"owner\\\")\\nprint(f\\\"=== AUTH DIAGNOSTIC (owner token) === [{st}]\\\")\\nprint(json.dumps(r, indent=2)[:2000] if isinstance(r, dict) else str(r)[:2000])\\n\\nprint(\\\"\\\\n--- Invalid token ---\\\")\\nst2, r2 = req(\\\"GET\\\", \\\"/api/ivx/owner-ai/auth-diagnostic\\\", \\\"invalid\\\")\\nprint(f\\\"[{st2}] {json.dumps(r2, indent=2)[:500] if isinstance(r2,dict) else str(r2)[:500]}\\\")\\n\\nprint(\\\"\\\\n--- No token ---\\\")\\nst3, r3 = req(\\\"GET\\\", \\\"/api/ivx/owner-ai/auth-diagnostic\\\", \\\"none\\\")\\nprint(f\\\"[{st3}] {json.dumps(r3, indent=2)[:500] if isinstance(r3,dict) else str(r3)[:500]}\\\")\\n\\n# Check the 500 error on runtime\\nprint(\\\"\\\\n=== OWNER-AI RUNTIME (500) ===\\\")\\nst4, r4 = req(\\\"GET\\\", \\\"/api/ivx/owner-ai/runtime\\\", \\\"owner\\\")\\nprint(f\\\"[{st4}] {json.dumps(r4, indent=2)[:1000] if isinstance(r4,dict) else str(r4)[:1000]}\\\")\\n\\n# Check chat-durability-proof 500\\nprint(\\\"\\\\n=== CHAT DURABILITY PROOF (500) ===\\\")\\nst5, r5 = req(\\\"GET\\\", \\\"/api/ivx/owner-ai/chat-durability-proof\\\", \\\"owner\\\")\\nprint(f\\\"[{st5}] {json.dumps(r5, indent=2)[:1000] if isinstance(r5,dict) else str(r5)[:1000]}\\\")\\n\\n# Check credentials 403\\nprint(\\\"\\\\n=== CREDENTIALS (403) ===\\\")\\nst6, r6 = req(\\\"GET\\\", \\\"/api/ivx/credentials\\\", \\\"owner\\\")\\nprint(f\\\"[{st6}] {json.dumps(r6, indent=2)[:1000] if isinstance(r6,dict) else str(r6)[:1000]}\\\")\\nPYEOF\"}",
       "createdAt": 1784257339194,
-      "completedAt": 1784257349429
+      "completedAt": 1784257349429,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -748,7 +764,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleIVXOwnerAIDiagnosticsListRequest\\\\|assertIVXOwnerOnly\\\\|handleIVXOwnerAIRuntimeObservabilityRequest\\\" backend/api/ivx-owner-ai-diagnostics.ts backend/api/ivx-owner-ai-jobs.ts 2>/dev/null | head -30\"}",
       "createdAt": 1784257346510,
-      "completedAt": 1784257349455
+      "completedAt": 1784257349455,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -766,7 +783,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleIVXOwnerAIAuthDiagnosticGet\\\\|auth-diagnostic\\\" backend/api/ivx-owner-ai-auth-diagnostic.ts | head -20\"}",
       "createdAt": 1784257347706,
-      "completedAt": 1784257349481
+      "completedAt": 1784257349481,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -796,7 +814,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\n\\n# POST to auth-diagnostic with the owner token to decode it\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b\\\"\\nreq = urllib.request.Request(\\n    f\\\"{BASE}/api/ivx/owner-ai/auth-diagnostic\\\",\\n    data=json.dumps({}).encode(),\\n    headers={\\\"User-Agent\\\":\\\"IVX-QA\\\",\\\"Content-Type\\\":\\\"application/json\\\",\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\"},\\n    method=\\\"POST\\\"\\n)\\ntry:\\n    with urllib.request.urlopen(req, context=ctx, timeout=15) as r:\\n        d = json.loads(r.read().decode())\\n        print(\\\"=== POST auth-diagnostic with owner token ===\\\")\\n        print(json.dumps(d, indent=2)[:2000])\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"HTTP {e.code}: {e.read().decode()[:500]}\\\")\\nexcept Exception as e:\\n    print(f\\\"Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784257364253,
-      "completedAt": 1784257371555
+      "completedAt": 1784257371555,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -814,7 +833,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\n# Get Render service env vars\\nreq = urllib.request.Request(\\n    f\\\"https://api.render.com/v1/services/{SERVICE_ID}/env-vars\\\",\\n    headers={\\\"Authorization\\\": f\\\"Bearer {RENDER_KEY}\\\", \\\"Accept\\\": \\\"application/json\\\"},\\n    method=\\\"GET\\\"\\n)\\ntry:\\n    with urllib.request.urlopen(req, context=ctx, timeout=15) as r:\\n        vars = json.loads(r.read().decode())\\n        print(f\\\"=== Render env vars ({len(vars)} total) ===\\\")\\n        for v in vars:\\n            key = v.get('key','')\\n            val = v.get('value','')\\n            # Mask sensitive values\\n            if any(s in key.upper() for s in ['SECRET','KEY','TOKEN','PASSWORD','URL']):\\n                display = f\\\"{'set' if val else 'EMPTY'} (len={len(val) if val else 0})\\\"\\n            else:\\n                display = val[:50] if val else 'EMPTY'\\n            print(f\\\"  {key}: {display}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"HTTP {e.code}: {e.read().decode()[:500]}\\\")\\nexcept Exception as e:\\n    print(f\\\"Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784257366243,
-      "completedAt": 1784257371764
+      "completedAt": 1784257371764,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -844,7 +864,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\n# Try different Render API endpoints\\nfor endpoint in [\\n    f\\\"https://api.render.com/v1/services/{SERVICE_ID}/env-vars\\\",\\n    f\\\"https://api.render.com/v1/services/{SERVICE_ID}\\\",\\n]:\\n    req = urllib.request.Request(endpoint, headers={\\\"Authorization\\\": f\\\"Bearer {RENDER_KEY}\\\", \\\"Accept\\\": \\\"application/json\\\"}, method=\\\"GET\\\")\\n    try:\\n        with urllib.request.urlopen(req, context=ctx, timeout=15) as r:\\n            raw = r.read().decode()\\n            print(f\\\"=== {endpoint.split('/')[-1]} ===\\\")\\n            try:\\n                d = json.loads(raw)\\n                if isinstance(d, list):\\n                    for item in d:\\n                        k = item.get('key') or item.get('envVar') or item.get('name') or '?'\\n                        v = item.get('value') or item.get('envValue') or ''\\n                        masked = f\\\"len={len(v)}\\\" if v and any(s in str(k).upper() for s in ['SECRET','KEY','TOKEN','PASSWORD']) else v[:40]\\n                        print(f\\\"  {k}: {masked}\\\")\\n                elif isinstance(d, dict):\\n                    # Service details\\n                    print(f\\\"  service.name: {d.get('service',{}).get('name') or d.get('name','?')}\\\")\\n                    print(f\\\"  service.repo: {d.get('service',{}).get('repoUrl') or d.get('repo','?')}\\\")\\n                    print(f\\\"  service.branch: {d.get('service',{}).get('branch') or d.get('branch','?')}\\\")\\n                    print(f\\\"  service.status: {d.get('status','?')}\\\")\\n                    print(f\\\"  service.suspended: {d.get('suspended','?')}\\\")\\n                    print(f\\\"  keys: {list(d.keys())[:15]}\\\")\\n                else:\\n                    print(f\\\"  type: {type(d).__name__}, raw: {raw[:300]}\\\")\\n            except:\\n                print(f\\\"  raw: {raw[:500]}\\\")\\n    except urllib.error.HTTPError as e:\\n        print(f\\\"  HTTP {e.code}: {e.read().decode()[:300]}\\\")\\n    except Exception as e:\\n        print(f\\\"  Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784257386350,
-      "completedAt": 1784257397831
+      "completedAt": 1784257397831,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -862,7 +883,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleIVXOwnerAIRequest\\\\|IVX_OWNER_TOKEN\\\\|ownerServiceToken\\\\|getIVXOwnerServiceToken\\\\|checkBearer\\\\|resolveIVXAuth\\\" backend/api/ivx-owner-ai.ts | head -20\"}",
       "createdAt": 1784257393396,
-      "completedAt": 1784257397862
+      "completedAt": 1784257397862,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -880,7 +902,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"getIVXOwnerServiceToken\\\\|IVX_OWNER_TOKEN\\\\|ownerServiceToken\\\" expo/shared/ivx/access-control.ts | head -10\"}",
       "createdAt": 1784257396171,
-      "completedAt": 1784257397892
+      "completedAt": 1784257397892,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -898,7 +921,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleIVXOwnerAIProxyStatus\\\\|function GET\\\\|handleIVXOwnerAIToolRequest\\\" backend/api/ivx-owner-ai.ts | head -10\"}",
       "createdAt": 1784257397227,
-      "completedAt": 1784257397922
+      "completedAt": 1784257397922,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -928,7 +952,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl, time\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\n# Use the CORRECT token from Render env\\nTOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\n\\ndef req(method, path, auth=\\\"owner\\\", body=None):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\": headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    elif auth == \\\"invalid\\\": headers[\\\"Authorization\\\"] = \\\"Bearer invalid-token-xyz\\\"\\n    data = json.dumps(body).encode() if body else None\\n    r = urllib.request.Request(url, data=data, headers=headers, method=method)\\n    t0 = time.time()\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=30) as resp:\\n            dt = time.time() - t0\\n            raw = resp.read().decode()\\n            try: j = json.loads(raw)\\n            except: j = raw[:200]\\n            return resp.status, dt, j\\n    except urllib.error.HTTPError as e:\\n        dt = time.time() - t0\\n        raw = e.read().decode()\\n        try: j = json.loads(raw)\\n        except: j = raw[:200]\\n        return e.code, dt, j\\n    except Exception as e:\\n        return 0, time.time()-t0, str(e)[:200]\\n\\n# Test all IVX IA routes with correct token\\nroutes = [\\n    (\\\"GET\\\", \\\"/health\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/readiness\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/version\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/version\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/proxy-status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/runtime\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/diagnostics\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/auth-diagnostic\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/ia-developer-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/developer-proof/latest\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/developer-proof/history\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/feature/senior-dev-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/credentials\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/credentials/deployment\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/lifecycle-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/handoff/readiness\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/readiness\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/capabilities\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/tool-system/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/tool-system/tools\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/tool-system/catalog\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/video-platform/home-feed?limit=4\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/video-platform/feed?limit=3&type=reel\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/investors?limit=1\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/crm/dedup-audit\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/crm/vip\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/messages?limit=1\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/messages/search?q=test&limit=1\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/proof-test\\\", \\\"none\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/chat-durability-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/audit-report\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-audit/recent-conversations\\\", \\\"owner\\\"),\\n    # Senior developer routes\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/credentials\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/github\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/worker/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/worker/last-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/worker/ledger\\\", \\\"owner\\\"),\\n    # Live work\\n    (\\\"GET\\\", \\\"/api/ivx/live-work/feed\\\", \\\"owner\\\"),\\n    # Owner variables\\n    (\\\"GET\\\", \\\"/api/ivx/owner-variables/status\\\", \\\"owner\\\"),\\n    # Development control\\n    (\\\"GET\\\", \\\"/api/ivx/development-control\\\", \\\"owner\\\"),\\n    # Render diagnostic\\n    (\\\"GET\\\", \\\"/api/ivx/render/diagnostic\\\", \\\"owner\\\"),\\n    # Deployment tools\\n    (\\\"GET\\\", \\\"/api/ivx/deployment-tools\\\", \\\"owner\\\"),\\n]\\n\\nprint(\\\"=== ROUTE TESTING (correct production token) ===\\\")\\nprint(f\\\"{'METHOD':<6} {'PATH':<55} {'AUTH':<8} {'STATUS':<7} {'LAT(ms)':<8} RESULT\\\")\\nprint(\\\"-\\\"*120)\\nresults = []\\nfor method, path, auth in routes:\\n    st, dt, j = req(method, path, auth)\\n    lat = f\\\"{dt*1000:.0f}\\\"\\n    if isinstance(j, dict):\\n        if 'status' in j: result = f\\\"status={j['status']}\\\"\\n        elif 'ok' in j: result = f\\\"ok={j['ok']}\\\"\\n        elif 'error' in j: result = f\\\"error={str(j['error'])[:40]}\\\"\\n        elif 'total' in j: result = f\\\"total={j['total']}\\\"\\n        elif 'commit' in j: result = f\\\"commit={str(j.get('commit',''))[:12]}\\\"\\n        elif 'pattern' in j: result = f\\\"pattern={j['pattern']}\\\"\\n        elif 'data' in j: result = f\\\"data_len={len(j['data']) if isinstance(j.get('data'),list) else 'obj'}\\\"\\n        elif 'tools' in j: result = f\\\"tools={len(j['tools'])}\\\"\\n        elif 'capabilities' in j: result = f\\\"caps={len(j['capabilities'])}\\\"\\n        elif 'enabled' in j: result = f\\\"enabled={j['enabled']}\\\"\\n        elif 'ready' in j: result = f\\\"ready={j['ready']}\\\"\\n        elif 'health' in j: result = f\\\"health={j['health']}\\\"\\n        else: result = str(list(j.keys())[:5])[:60]\\n    else:\\n        result = str(j)[:60]\\n    print(f\\\"{method:<6} {path:<55} {auth:<8} {str(st):<7} {lat:<8} {result}\\\")\\n    results.append((method, path, auth, st, dt, result))\\n\\npassed = sum(1 for r in results if r[3] and 200 <= r[3] < 400)\\nfailed = sum(1 for r in results if r[3] and (r[3] >= 400 or r[3] == 0))\\nprint(f\\\"\\\\nTotal: {len(results)} | Passed: {passed} | Failed: {failed}\\\")\\nPYEOF\"}",
       "createdAt": 1784257408430,
-      "completedAt": 1784257448262
+      "completedAt": 1784257448262,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -958,7 +983,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -nE \\\"senior-developer|senior_dev|senior.dev\\\" backend/hono.ts | grep -E \\\"\\\\.get\\\\(|\\\\.post\\\\(\\\" | head -30\"}",
       "createdAt": 1784257454687,
-      "completedAt": 1784257456771
+      "completedAt": 1784257456771,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -976,7 +1002,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -nE \\\"render.diagnostic|render_diagnostic|render-diagnostic|deployment.tools|deployment-tools|deployment_tools\\\" backend/hono.ts | head -20\"}",
       "createdAt": 1784257455220,
-      "completedAt": 1784257456804
+      "completedAt": 1784257456804,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -994,7 +1021,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -nE \\\"render|deploy\\\" backend/hono.ts | grep -E \\\"\\\\.get\\\\(|\\\\.post\\\\(\\\" | head -30\"}",
       "createdAt": 1784257456475,
-      "completedAt": 1784257456834
+      "completedAt": 1784257456834,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -1029,7 +1057,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"IVX_OWNER_TOKEN=b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b\", \"newString\": \"IVX_OWNER_TOKEN=ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\"}], \"filePath\": \"expo/.env\"}",
       "createdAt": 1784257464471,
-      "completedAt": 1784257496484
+      "completedAt": 1784257496484,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1047,7 +1076,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl, time\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\n\\ndef req(method, path, auth=\\\"owner\\\", body=None):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\": headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    elif auth == \\\"invalid\\\": headers[\\\"Authorization\\\"] = \\\"Bearer invalid-token-xyz\\\"\\n    elif auth == \\\"nonowner\\\": headers[\\\"Authorization\\\"] = \\\"BearereyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test\\\"\\n    data = json.dumps(body).encode() if body else None\\n    r = urllib.request.Request(url, data=data, headers=headers, method=method)\\n    t0 = time.time()\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=30) as resp:\\n            dt = time.time() - t0\\n            raw = resp.read().decode()\\n            try: j = json.loads(raw)\\n            except: j = raw[:200]\\n            return resp.status, dt, j\\n    except urllib.error.HTTPError as e:\\n        dt = time.time() - t0\\n        raw = e.read().decode()\\n        try: j = json.loads(raw)\\n        except: j = raw[:200]\\n        return e.code, dt, j\\n    except Exception as e:\\n        return 0, time.time()-t0, str(e)[:200]\\n\\n# Test remaining routes with CORRECT paths\\nroutes = [\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/github-audit\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/credential-audit\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/provider-diagnostics\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/features\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/self-proof\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/self-proof/latest\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/autonomous-mode/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-dev/tools\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-dev/proofs\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-dev/evidence\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-dev/e2e\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-dev/execution-stream\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/render-diagnostic\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy/evidence\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy/health\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy-tools/brain\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy-tools/brain/health\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy-tools/github\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy-tools/render\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/developer-deploy/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/render-auto-deploy/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-variables/deployment-status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/env-debug/render\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/continuous\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/code-index/summary\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/code-graph/summary\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-scale/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/innovation/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/opportunity/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/intelligence/state\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/capital-network/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/lender-network/dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/bizdev/status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/control-room-status\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/independence\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-ops-dashboard\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner/review\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/capital-pipeline\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/outreach\\\", \\\"owner\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deal-packets\\\", \\\"owner\\\"),\\n]\\n\\nprint(\\\"=== REMAINING ROUTE TESTS ===\\\")\\nprint(f\\\"{'METHOD':<6} {'PATH':<55} {'STATUS':<7} {'LAT(ms)':<8} RESULT\\\")\\nprint(\\\"-\\\"*110)\\nresults = []\\nfor method, path, auth in routes:\\n    st, dt, j = req(method, path, auth)\\n    lat = f\\\"{dt*1000:.0f}\\\"\\n    if isinstance(j, dict):\\n        if 'ok' in j: result = f\\\"ok={j['ok']}\\\"\\n        elif 'error' in j: result = f\\\"error={str(j['error'])[:40]}\\\"\\n        elif 'status' in j: result = f\\\"status={j['status']}\\\"\\n        elif 'enabled' in j: result = f\\\"enabled={j['enabled']}\\\"\\n        elif 'ready' in j: result = f\\\"ready={j['ready']}\\\"\\n        elif 'total' in j: result = f\\\"total={j['total']}\\\"\\n        elif 'data' in j: result = f\\\"data={type(j['data']).__name__}\\\"\\n        else: result = str(list(j.keys())[:5])[:60]\\n    else:\\n        result = str(j)[:60]\\n    print(f\\\"{method:<6} {path:<55} {str(st):<7} {lat:<8} {result}\\\")\\n    results.append((method, path, st, result))\\n\\npassed = sum(1 for r in results if r[2] and 200 <= r[2] < 400)\\nfailed = sum(1 for r in results if r[2] and (r[2] >= 400 or r[2] == 0))\\nprint(f\\\"\\\\nTotal: {len(results)} | Passed: {passed} | Failed: {failed}\\\")\\n\\n# Auth tests\\nprint(\\\"\\\\n=== AUTH TESTS ===\\\")\\nauth_tests = [\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/runtime\\\", \\\"owner\\\", 200, \\\"Valid owner token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/runtime\\\", \\\"none\\\", 401, \\\"Missing token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/runtime\\\", \\\"invalid\\\", 401, \\\"Invalid token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/diagnostics\\\", \\\"owner\\\", 200, \\\"Valid owner token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/diagnostics\\\", \\\"none\\\", 401, \\\"Missing token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/diagnostics\\\", \\\"invalid\\\", 401, \\\"Invalid token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/credentials\\\", \\\"owner\\\", 200, \\\"Valid owner token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/credentials\\\", \\\"none\\\", 401, \\\"Missing token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/credentials\\\", \\\"invalid\\\", 401, \\\"Invalid token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/dashboard\\\", \\\"owner\\\", 200, \\\"Valid owner token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/dashboard\\\", \\\"none\\\", 401, \\\"Missing token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous-core/dashboard\\\", \\\"invalid\\\", 401, \\\"Invalid token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/status\\\", \\\"owner\\\", 200, \\\"Valid owner token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/status\\\", \\\"none\\\", 401, \\\"Missing token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/senior-developer/status\\\", \\\"invalid\\\", 401, \\\"Invalid token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy/status\\\", \\\"owner\\\", 200, \\\"Valid owner token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy/status\\\", \\\"none\\\", 401, \\\"Missing token\\\"),\\n    (\\\"GET\\\", \\\"/api/ivx/deploy/status\\\", \\\"invalid\\\", 401, \\\"Invalid token\\\"),\\n]\\nfor method, path, auth, expected, desc in auth_tests:\\n    st, dt, j = req(method, path, auth)\\n    ok = \\\"PASS\\\" if st == expected else \\\"FAIL\\\"\\n    print(f\\\"  [{ok}] {desc}: expected={expected} actual={st}\\\")\\nPYEOF\"}",
       "createdAt": 1784257466013,
-      "completedAt": 1784257521295
+      "completedAt": 1784257521295,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1065,7 +1095,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl, time\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\n\\ndef post(path, body, auth=\\\"owner\\\"):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\": headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    elif auth == \\\"invalid\\\": headers[\\\"Authorization\\\"] = \\\"Bearer invalid-token-xyz\\\"\\n    data = json.dumps(body).encode()\\n    r = urllib.request.Request(url, data=data, headers=headers, method=\\\"POST\\\")\\n    t0 = time.time()\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=60) as resp:\\n            dt = time.time() - t0\\n            raw = resp.read().decode()\\n            try: j = json.loads(raw)\\n            except: j = raw[:300]\\n            return resp.status, dt, j\\n    except urllib.error.HTTPError as e:\\n        dt = time.time() - t0\\n        raw = e.read().decode()\\n        try: j = json.loads(raw)\\n        except: j = raw[:300]\\n        return e.code, dt, j\\n    except Exception as e:\\n        return 0, time.time()-t0, str(e)[:300]\\n\\n# Intent classifier tests via Owner AI chat\\nintent_tests = [\\n    # Normal chat\\n    {\\\"prompt\\\": \\\"Hello\\\", \\\"expected_branch\\\": \\\"general_ai\\\", \\\"desc\\\": \\\"Normal: Hello\\\"},\\n    {\\\"prompt\\\": \\\"What is IVX Holdings?\\\", \\\"expected_branch\\\": \\\"general_ai\\\", \\\"desc\\\": \\\"Normal: What is IVX\\\"},\\n    # Developer\\n    {\\\"prompt\\\": \\\"Inspect the Home feed code\\\", \\\"expected_branch\\\": \\\"developer_executor\\\", \\\"desc\\\": \\\"Dev: Inspect Home feed\\\"},\\n    {\\\"prompt\\\": \\\"Run typecheck\\\", \\\"expected_branch\\\": \\\"developer_executor\\\", \\\"desc\\\": \\\"Dev: Run typecheck\\\"},\\n    {\\\"prompt\\\": \\\"Audit every connection\\\", \\\"expected_branch\\\": \\\"developer_executor\\\", \\\"desc\\\": \\\"Dev: Audit connections\\\"},\\n    # Business modules\\n    {\\\"prompt\\\": \\\"Review this deal\\\", \\\"expected_branch\\\": \\\"business_modules\\\", \\\"desc\\\": \\\"Business: Review deal\\\"},\\n    {\\\"prompt\\\": \\\"Inspect the landing page\\\", \\\"expected_branch\\\": \\\"business_modules\\\", \\\"desc\\\": \\\"Business: Landing inspection\\\"},\\n    # Ambiguous\\n    {\\\"prompt\\\": \\\"Fix this\\\", \\\"expected_branch\\\": \\\"ambiguous\\\", \\\"desc\\\": \\\"Ambiguous: Fix this\\\"},\\n    {\\\"prompt\\\": \\\"Check everything\\\", \\\"expected_branch\\\": \\\"ambiguous\\\", \\\"desc\\\": \\\"Ambiguous: Check everything\\\"},\\n]\\n\\nprint(\\\"=== INTENT CLASSIFIER TESTS (via Owner AI) ===\\\")\\nfor test in intent_tests:\\n    st, dt, j = post(\\\"/api/ivx/owner-ai\\\", {\\n        \\\"prompt\\\": test[\\\"prompt\\\"],\\n        \\\"conversationId\\\": \\\"qa-intent-test\\\",\\n        \\\"userId\\\": \\\"ivx-owner-qa\\\",\\n    })\\n    if isinstance(j, dict):\\n        branch = j.get(\\\"branch\\\") or j.get(\\\"intent\\\") or j.get(\\\"routerBranch\\\") or j.get(\\\"classifiedBranch\\\") or \\\"?\\\"\\n        answer_len = len(j.get(\\\"answer\\\", \\\"\\\")) if isinstance(j.get(\\\"answer\\\"), str) else 0\\n        model = j.get(\\\"model\\\", \\\"?\\\")\\n        status = j.get(\\\"status\\\", \\\"?\\\")\\n        request_id = j.get(\\\"requestId\\\", \\\"?\\\")\\n        print(f\\\"  [{st}] {test['desc']}: branch={branch} model={model[:30]} status={status} answer_len={answer_len} req={request_id[:20]}\\\")\\n    else:\\n        print(f\\\"  [{st}] {test['desc']}: {str(j)[:100]}\\\")\\n    time.sleep(0.5)  # Rate limit courtesy\\nPYEOF\"}",
       "createdAt": 1784257487198,
-      "completedAt": 1784257526543
+      "completedAt": 1784257526543,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -1094,7 +1125,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/.env\"}",
       "createdAt": 1784257534122,
-      "completedAt": 1784257542089
+      "completedAt": 1784257542089,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1112,7 +1144,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl, time\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\n\\ndef post(path, body, auth=\\\"owner\\\"):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\": headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    data = json.dumps(body).encode()\\n    r = urllib.request.Request(url, data=data, headers=headers, method=\\\"POST\\\")\\n    t0 = time.time()\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=60) as resp:\\n            dt = time.time() - t0\\n            raw = resp.read().decode()\\n            try: j = json.loads(raw)\\n            except: j = raw[:500]\\n            return resp.status, dt, j\\n    except urllib.error.HTTPError as e:\\n        dt = time.time() - t0\\n        raw = e.read().decode()\\n        try: j = json.loads(raw)\\n        except: j = raw[:500]\\n        return e.code, dt, j\\n    except Exception as e:\\n        return 0, time.time()-t0, str(e)[:500]\\n\\n# Test different owner-ai request formats\\nprint(\\\"=== OWNER AI REQUEST FORMAT TESTS ===\\\")\\nformats = [\\n    {\\\"prompt\\\": \\\"Hello\\\", \\\"conversationId\\\": \\\"qa-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"},\\n    {\\\"message\\\": \\\"Hello\\\", \\\"conversationId\\\": \\\"qa-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"},\\n    {\\\"text\\\": \\\"Hello\\\", \\\"conversationId\\\": \\\"qa-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"},\\n    {\\\"input\\\": \\\"Hello\\\", \\\"conversationId\\\": \\\"qa-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"},\\n    {\\\"query\\\": \\\"Hello\\\", \\\"conversationId\\\": \\\"qa-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"},\\n    {\\\"content\\\": \\\"Hello\\\", \\\"conversationId\\\": \\\"qa-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"},\\n    {\\\"prompt\\\": \\\"Hello\\\", \\\"conversation_id\\\": \\\"qa-test\\\", \\\"user_id\\\": \\\"ivx-owner-qa\\\"},\\n]\\nfor body in formats:\\n    st, dt, j = post(\\\"/api/ivx/owner-ai\\\", body)\\n    if isinstance(j, dict):\\n        err = j.get(\\\"error\\\") or j.get(\\\"message\\\") or j.get(\\\"detail\\\") or \\\"\\\"\\n        keys = list(j.keys())[:8]\\n        answer = j.get(\\\"answer\\\",\\\"\\\")[:80] if isinstance(j.get(\\\"answer\\\"),str) else \\\"\\\"\\n        print(f\\\"  [{st}] keys={str(keys)[:80]} error={str(err)[:60]} answer={answer[:60]}\\\")\\n    else:\\n        print(f\\\"  [{st}] {str(j)[:100]}\\\")\\n    time.sleep(0.3)\\nPYEOF\"}",
       "createdAt": 1784257534123,
-      "completedAt": 1784257544792
+      "completedAt": 1784257544792,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1130,7 +1163,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleIVXOwnerAIRequest\\\\b\\\" backend/api/ivx-owner-ai.ts | head -5 && echo \\\"---\\\" && sed -n '5566,5620p' backend/api/ivx-owner-ai.ts\"}",
       "createdAt": 1784257540674,
-      "completedAt": 1784257544820
+      "completedAt": 1784257544820,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1148,7 +1182,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleDeployStatus\\\\b\\\" backend/hono.ts | head -5 && grep -n \\\"function handleDeployStatus\\\\|function handleDeployHealth\\\\|function handleDeployEvidence\\\" backend/hono.ts | head -10\"}",
       "createdAt": 1784257541659,
-      "completedAt": 1784257544845
+      "completedAt": 1784257544845,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -1183,7 +1218,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"IVX_OWNER_TOKEN=b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b\", \"newString\": \"IVX_OWNER_TOKEN=ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\"}], \"filePath\": \"expo/.env\"}",
       "createdAt": 1784257557845,
-      "completedAt": 1784257574756
+      "completedAt": 1784257574756,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1201,7 +1237,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl, time\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\n\\ndef post(path, body, auth=\\\"owner\\\"):\\n    url = BASE + path\\n    headers = {\\\"User-Agent\\\": \\\"IVX-QA\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\\n    if auth == \\\"owner\\\": headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    data = json.dumps(body).encode()\\n    r = urllib.request.Request(url, data=data, headers=headers, method=\\\"POST\\\")\\n    t0 = time.time()\\n    try:\\n        with urllib.request.urlopen(r, context=ctx, timeout=60) as resp:\\n            dt = time.time() - t0\\n            raw = resp.read().decode()\\n            try: j = json.loads(raw)\\n            except: j = raw[:500]\\n            return resp.status, dt, j\\n    except urllib.error.HTTPError as e:\\n        dt = time.time() - t0\\n        raw = e.read().decode()\\n        try: j = json.loads(raw)\\n        except: j = raw[:500]\\n        return e.code, dt, j\\n    except Exception as e:\\n        return 0, time.time()-t0, str(e)[:500]\\n\\n# Intent classifier tests with correct {\\\"message\\\": \\\"...\\\"} format\\nintent_tests = [\\n    # Normal chat\\n    {\\\"message\\\": \\\"Hello\\\", \\\"desc\\\": \\\"Normal: Hello\\\", \\\"expected\\\": \\\"general_ai\\\"},\\n    {\\\"message\\\": \\\"What is IVX Holdings?\\\", \\\"desc\\\": \\\"Normal: What is IVX\\\", \\\"expected\\\": \\\"general_ai\\\"},\\n    {\\\"message\\\": \\\"Summarize this document\\\", \\\"desc\\\": \\\"Normal: Summarize document\\\", \\\"expected\\\": \\\"general_ai\\\"},\\n    # Developer\\n    {\\\"message\\\": \\\"Inspect the Home feed code\\\", \\\"desc\\\": \\\"Dev: Inspect Home feed\\\", \\\"expected\\\": \\\"developer_executor\\\"},\\n    {\\\"message\\\": \\\"Run typecheck\\\", \\\"desc\\\": \\\"Dev: Run typecheck\\\", \\\"expected\\\": \\\"developer_executor\\\"},\\n    {\\\"message\\\": \\\"Audit every connection\\\", \\\"desc\\\": \\\"Dev: Audit connections\\\", \\\"expected\\\": \\\"developer_executor\\\"},\\n    # Business modules\\n    {\\\"message\\\": \\\"Review this deal\\\", \\\"desc\\\": \\\"Business: Review deal\\\", \\\"expected\\\": \\\"business_modules\\\"},\\n    {\\\"message\\\": \\\"Inspect the landing page\\\", \\\"desc\\\": \\\"Business: Landing inspection\\\", \\\"expected\\\": \\\"business_modules\\\"},\\n    # Ambiguous\\n    {\\\"message\\\": \\\"Fix this\\\", \\\"desc\\\": \\\"Ambiguous: Fix this\\\", \\\"expected\\\": \\\"ambiguous\\\"},\\n    {\\\"message\\\": \\\"Check everything\\\", \\\"desc\\\": \\\"Ambiguous: Check everything\\\", \\\"expected\\\": \\\"ambiguous\\\"},\\n]\\n\\nprint(\\\"=== INTENT CLASSIFIER TESTS ===\\\")\\nprint(f\\\"{'DESC':<40} {'STATUS':<7} {'BRANCH':<25} {'MODEL':<25} {'ANS_LEN':<8} {'REQ_ID'}\\\")\\nprint(\\\"-\\\"*130)\\nfor test in intent_tests:\\n    body = {\\\"message\\\": test[\\\"message\\\"], \\\"conversationId\\\": \\\"qa-intent-test\\\", \\\"userId\\\": \\\"ivx-owner-qa\\\"}\\n    st, dt, j = post(\\\"/api/ivx/owner-ai\\\", body)\\n    if isinstance(j, dict):\\n        branch = j.get(\\\"branch\\\") or j.get(\\\"intent\\\") or j.get(\\\"routerBranch\\\") or j.get(\\\"classifiedBranch\\\") or \\\"unknown\\\"\\n        answer = j.get(\\\"answer\\\", \\\"\\\")\\n        answer_len = len(answer) if isinstance(answer, str) else 0\\n        model = j.get(\\\"model\\\", \\\"?\\\")\\n        status = j.get(\\\"status\\\", \\\"?\\\")\\n        request_id = j.get(\\\"requestId\\\", \\\"?\\\")\\n        conversation_id = j.get(\\\"conversationId\\\", \\\"?\\\")\\n        # Check for narrative-only fallback\\n        is_narrative = j.get(\\\"source\\\") == \\\"narrative\\\" or j.get(\\\"narrativeOnly\\\") == True\\n        narrative_flag = \\\" [NARRATIVE-ONLY!]\\\" if is_narrative else \\\"\\\"\\n        print(f\\\"{test['desc']:<40} {str(st):<7} {str(branch)[:25]:<25} {str(model)[:25]:<25} {answer_len:<8} {request_id[:20]}{narrative_flag}\\\")\\n    else:\\n        print(f\\\"{test['desc']:<40} {str(st):<7} {str(j)[:80]}\\\")\\n    time.sleep(1)  # Rate limit\\nPYEOF\"}",
       "createdAt": 1784257557846,
-      "completedAt": 1784257599802
+      "completedAt": 1784257599802,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1219,7 +1256,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleDeployStatus\\\\|handleDeployHealth\\\\|handleDeployEvidence\\\" backend/api/ivx-deployment-engine.ts | head -10\"}",
       "createdAt": 1784257572605,
-      "completedAt": 1784257599831
+      "completedAt": 1784257599831,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1237,7 +1275,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"function handleDeployStatus\\\\|function handleDeployHealth\\\\|function handleDeployEvidence\\\" backend/api/ivx-deployment-engine.ts backend/hono.ts 2>/dev/null | head -10\"}",
       "createdAt": 1784257572830,
-      "completedAt": 1784257599858
+      "completedAt": 1784257599858,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -1267,7 +1306,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport urllib.request, json, ssl\\nctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE\\nBASE=\\\"https://api.ivxholding.com\\\"\\nTOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\n\\ndef get(path):\\n    url = BASE + path\\n    req = urllib.request.Request(url, headers={\\\"User-Agent\\\":\\\"IVX-QA\\\",\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\"})\\n    try:\\n        with urllib.request.urlopen(req, context=ctx, timeout=30) as r:\\n            return r.status, json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: j = json.loads(e.read().decode())\\n        except: j = {\\\"raw\\\": str(e)}\\n        return e.code, j\\n    except Exception as e:\\n        return 0, {\\\"error\\\": str(e)}\\n\\n# Check provider diagnostics\\nst, r = get(\\\"/api/ivx/senior-developer/provider-diagnostics\\\")\\nprint(f\\\"=== PROVIDER DIAGNOSTICS [{st}] ===\\\")\\nif isinstance(r, dict):\\n    # Print key fields without exposing secrets\\n    for k,v in r.items():\\n        if k.lower() in ['secret','key','token','password','apikey']:\\n            print(f\\\"  {k}: [REDACTED]\\\")\\n        elif isinstance(v, dict):\\n            print(f\\\"  {k}:\\\")\\n            for k2,v2 in v.items():\\n                if k2.lower() in ['secret','key','token','password','apikey','value']:\\n                    print(f\\\"    {k2}: [REDACTED]\\\")\\n                else:\\n                    print(f\\\"    {k2}: {str(v2)[:100]}\\\")\\n        elif isinstance(v, list):\\n            print(f\\\"  {k}: [{len(v)} items]\\\")\\n            for item in v[:3]:\\n                if isinstance(item, dict):\\n                    print(f\\\"    {str({k3:str(v3)[:60] for k3,v3 in item.items() if k3.lower() not in ['secret','key','token','password']})[:120]}\\\")\\n        else:\\n            print(f\\\"  {k}: {str(v)[:100]}\\\")\\nelse:\\n    print(str(r)[:500])\\n\\n# Check credentials\\nprint(\\\"\\\\n=== CREDENTIALS STATUS ===\\\")\\nst2, r2 = get(\\\"/api/ivx/credentials\\\")\\nif isinstance(r2, dict):\\n    for k,v in r2.items():\\n        if isinstance(v, dict):\\n            safe = {k2: ('[SET]' if ('present' in str(v2).lower() or v2 is True) else v2) for k2,v2 in v.items() if k2.lower() not in ['secret','key','token','password','value','rawvalue']}\\n            print(f\\\"  {k}: {safe}\\\")\\n        elif isinstance(v, list):\\n            print(f\\\"  {k}: [{len(v)} items]\\\")\\n            for item in v[:5]:\\n                if isinstance(item, dict):\\n                    print(f\\\"    {str({k2:v2 for k2,v2 in item.items() if k2.lower() not in ['secret','key','token','password','value']})[:120]}\\\")\\n        else:\\n            print(f\\\"  {k}: {str(v)[:100]}\\\")\\n\\n# Check owner-ai status\\nprint(\\\"\\\\n=== OWNER-AI STATUS ===\\\")\\nst3, r3 = get(\\\"/api/ivx/owner-ai/status\\\")\\nif isinstance(r3, dict):\\n    for k,v in r3.items():\\n        if k.lower() in ['secret','key','token','password']: continue\\n        if isinstance(v, dict):\\n            print(f\\\"  {k}: {str(v)[:200]}\\\")\\n        elif isinstance(v, list):\\n            print(f\\\"  {k}: [{len(v)} items]\\\")\\n        else:\\n            print(f\\\"  {k}: {str(v)[:100]}\\\")\\nPYEOF\"}",
       "createdAt": 1784257608857,
-      "completedAt": 1784257627631
+      "completedAt": 1784257627631,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1285,7 +1325,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"ivx_provider_error_fallback\\\\|providerError\\\\|provider_error\\\\|providerFallback\\\" backend/api/ivx-owner-ai.ts | head -20\"}",
       "createdAt": 1784257625527,
-      "completedAt": 1784257627653
+      "completedAt": 1784257627653,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1303,7 +1344,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"requestIVXAIText\\\\|resolveIVXAIModel\\\\|getIVXAIEndpoint\\\\|getIVXAIConfiguration\\\" backend/ivx-ai-runtime.ts | head -20\"}",
       "createdAt": 1784257626434,
-      "completedAt": 1784257627683
+      "completedAt": 1784257627683,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
@@ -1334,7 +1376,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/ivx-ai-runtime.ts\", \"limit\": 80, \"offset\": 460}",
       "createdAt": 1784257638306,
-      "completedAt": 1784257638996
+      "completedAt": 1784257638996,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1352,7 +1395,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sed -n '8400,8460p' backend/api/ivx-owner-ai.ts\"}",
       "createdAt": 1784257638502,
-      "completedAt": 1784257639024
+      "completedAt": 1784257639024,
+      "compactedAt": 1784259946771
     },
     {
       "type": "tool",
@@ -1370,7 +1414,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && rork-agent logs runtime 2>&1 | tail -80\"}",
       "createdAt": 1784257638724,
-      "completedAt": 1784257640017
+      "completedAt": 1784257640017,
+      "compactedAt": 1784259946771
     },
     {
       "type": "reasoning",
