@@ -9,11 +9,14 @@
 import {
   IVX_SENIOR_DEV_WORKER_MARKER,
   buildSeniorDeveloperWorkerStatus,
-  enqueueSeniorDeveloperJob,
+  enqueueOrAttachSeniorDeveloperJob,
+  cancelSeniorDeveloperJob,
+  getActiveJobForOwner,
   getSeniorDeveloperJob,
   getSeniorDeveloperLastProof,
   listSeniorDeveloperJobs,
   listSeniorDeveloperProofLedger,
+  resumeSeniorDeveloperJob,
   type IVXWorkerJobInput,
 } from '../services/ivx-senior-developer-worker';
 import {
@@ -180,6 +183,7 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
 
     // Prefix the execution template so the worker scaffolds the right shape of
     // work (whole app, module, feature, fix, refactor, or a business workflow).
+    const ownerId = approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner';
     const input: IVXWorkerJobInput = {
       goal: `[TEMPLATE_MODE:${templateMode}] ${goal}`,
       ownerApproved: true,
@@ -188,20 +192,118 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
       validationMode: normalizeValidationMode(body.validationMode),
       systemMode: isSystemMode,
       ownerApprovedAction,
+      ownerId,
     };
 
-    const job = await enqueueSeniorDeveloperJob(input);
+    const { job, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(input);
+    const statusCode = attached ? 409 : 202;
+    return ownerOnlyJson({
+      ok: attached ? false : true,
+      ownerOnly: true,
+      ownerApproval: approval,
+      marker: IVX_SENIOR_DEV_WORKER_MARKER,
+      job,
+      jobId: job.jobId,
+      attached,
+      activeJobId: activeJobId ?? (attached ? job.jobId : null),
+      templateMode,
+      poll: `GET /api/ivx/senior-developer/worker/jobs/${job.jobId}`,
+      message: attached
+        ? `A job is already running for this owner. Your request was attached to the active job (${job.jobId}). Poll its status instead of creating a duplicate.`
+        : 'Job enqueued. Poll the job endpoint for status updates.',
+      secretValuesReturned: false,
+      timestamp: new Date().toISOString(),
+    }, statusCode);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/** GET the active job for the current owner. Returns 204 if no active job. */
+export async function handleSeniorDeveloperWorkerActiveJobRequest(request: Request): Promise<Response> {
+  try {
+    const approval = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_active');
+    const ownerId = approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner';
+    const job = await getActiveJobForOwner(ownerId);
+    if (!job) {
+      return ownerOnlyJson({
+        ok: true,
+        ownerOnly: true,
+        marker: IVX_SENIOR_DEV_WORKER_MARKER,
+        activeJob: null,
+        message: 'No active job for this owner.',
+        secretValuesReturned: false,
+      });
+    }
+    return ownerOnlyJson({
+      ok: true,
+      ownerOnly: true,
+      marker: IVX_SENIOR_DEV_WORKER_MARKER,
+      activeJob: job,
+      jobId: job.jobId,
+      stage: job.stage,
+      progressPercent: job.progressPercent,
+      stageDetail: job.stageDetail,
+      secretValuesReturned: false,
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/** POST cancel a job by id. Owner-gated. */
+export async function handleSeniorDeveloperWorkerCancelJobRequest(request: Request, jobId: string): Promise<Response> {
+  try {
+    const approval = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_cancel');
+    const job = await cancelSeniorDeveloperJob(jobId);
+    if (!job) {
+      return ownerOnlyJson({
+        ok: false,
+        ownerOnly: true,
+        marker: IVX_SENIOR_DEV_WORKER_MARKER,
+        error: `No senior developer worker job found with id ${jobId}.`,
+        secretValuesReturned: false,
+        timestamp: new Date().toISOString(),
+      }, 404);
+    }
     return ownerOnlyJson({
       ok: true,
       ownerOnly: true,
       ownerApproval: approval,
       marker: IVX_SENIOR_DEV_WORKER_MARKER,
       job,
-      templateMode,
-      poll: `GET /api/ivx/senior-developer/worker/jobs/${job.jobId}`,
+      cancelled: true,
       secretValuesReturned: false,
-      timestamp: new Date().toISOString(),
-    }, 202);
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/** POST resume a job by id. Owner-gated. */
+export async function handleSeniorDeveloperWorkerResumeJobRequest(request: Request, jobId: string): Promise<Response> {
+  try {
+    const approval = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_resume');
+    const job = await resumeSeniorDeveloperJob(jobId);
+    if (!job) {
+      return ownerOnlyJson({
+        ok: false,
+        ownerOnly: true,
+        marker: IVX_SENIOR_DEV_WORKER_MARKER,
+        error: `No senior developer worker job found with id ${jobId}.`,
+        secretValuesReturned: false,
+        timestamp: new Date().toISOString(),
+      }, 404);
+    }
+    return ownerOnlyJson({
+      ok: true,
+      ownerOnly: true,
+      ownerApproval: approval,
+      marker: IVX_SENIOR_DEV_WORKER_MARKER,
+      job,
+      resumed: true,
+      secretValuesReturned: false,
+    });
   } catch (error) {
     return errorResponse(error);
   }

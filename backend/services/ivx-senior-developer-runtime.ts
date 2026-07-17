@@ -368,6 +368,12 @@ export type IVXSeniorDeveloperRunInput = {
   validationMode?: 'focused' | 'typecheck';
   ownerApprovedAction?: IVXSeniorDeveloperApprovedActionContract;
   systemMode?: boolean;
+  /**
+   * Real-time phase callback invoked after each execution phase completes.
+   * Used by the worker queue to update Live Work with the current stage and
+   * progress percentage.
+   */
+  onPhase?: (phase: IVXSeniorDeveloperPhase, detail: string) => void;
 };
 
 const IGNORED_DIRECTORIES = ['.git', '.rork', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
@@ -1611,12 +1617,15 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
     logs.push({ sequence: logs.length + 1, at: nowIso(), phase, level, message, metadata });
   };
 
+  const onPhase = input.onPhase;
   log('queued', 'info', 'IVX senior developer task queued.', { jobId, goal });
+  onPhase?.('queued', 'Task queued.');
   const dispatch = dispatchTask({ goal, forceAgent: 'backend_developer', metadata: { marker: IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, jobId } });
 
   const repoBrain = await buildRepoBrain(projectRoot);
   setTaskStatus(taskTree, 33, 'completed');
   log('repo_brain_indexed', 'info', 'Repo brain indexed current app/backend source tree.', { indexedFileCount: repoBrain.indexedFileCount, keyFiles: repoBrain.keyFiles });
+  onPhase?.('repo_brain_indexed', 'Repo brain indexed source tree.');
 
   setTaskStatus(taskTree, 37, 'running');
   const memoryKey = `senior_developer:${jobId}`;
@@ -1624,13 +1633,16 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   const loadedMemory = readAgentMemory('cto_orchestrator', memoryKey);
   recordAudit('cto_orchestrator', 'senior_developer.plan', goal, dispatch.task.id, { jobId, blocks: [33, 34, 35, 36, 37], ownerApprovedAction: input.ownerApprovedAction ?? null });
   log('plan_created', 'info', 'Senior planner created one-goal execution plan.', { taskTree, ownerApprovedAction: input.ownerApprovedAction ?? null });
+  onPhase?.('plan_created', 'Execution plan created.');
 
   const patchProposal = await buildPatchProposal(projectRoot);
   setTaskStatus(taskTree, 34, patchProposal.status === 'blocked' ? 'blocked' : 'running');
   log('diff_proposed', patchProposal.status === 'blocked' ? 'warn' : 'info', 'Safe code diff prepared.', { status: patchProposal.status, operations: patchProposal.operations.map((operation) => ({ path: operation.path, summary: operation.summary })) });
+  onPhase?.('diff_proposed', 'Safe code diff prepared.');
 
   const patchApproved = input.systemMode === true || (input.approvePatch === true && input.patchConfirmationText === IVX_SAFE_PATCH_CONFIRM_TEXT);
   log('patch_approval_checked', patchApproved ? 'info' : 'warn', 'Patch owner approval gate checked.', { patchApproved, systemMode: input.systemMode, requiredConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT });
+  onPhase?.('patch_approval_checked', 'Patch approval gate checked.');
   if (!patchApproved && patchProposal.status === 'proposed') {
     setTaskStatus(taskTree, 34, 'blocked');
     failTask(dispatch.task.id, 'Patch approval missing.');
@@ -1692,14 +1704,17 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   };
   setTaskStatus(taskTree, 34, 'completed');
   log('patch_applied', 'info', 'Safe code patch applied by IVX code editor.', { changedFiles, patchApplied: patchProposal.status === 'proposed', newFeatureSlug: generatedFeature?.slug ?? null });
+  onPhase?.('patch_applied', `Code patch applied. Changed files: ${changedFiles.length}.`);
 
   setTaskStatus(taskTree, 35, 'running');
   log('validation_started', 'info', 'Validation runner started.', { mode: input.validationMode ?? 'focused' });
+  onPhase?.('validation_started', 'Validation runner started.');
   const validationFiles = changedFiles.length > 0 ? changedFiles : ['backend/services/agents/multi-agent-framework.ts'];
   const validations = await runValidations(projectRoot, input.validationMode ?? 'focused', validationFiles);
   const validationsOk = validations.length > 0 && validations.every((validation) => validation.ok);
   setTaskStatus(taskTree, 35, validationsOk ? 'completed' : 'failed');
   log('validation_completed', validationsOk ? 'info' : 'error', 'Validation runner completed.', { validations: validations.map((validation) => ({ command: validation.command, ok: validation.ok, durationMs: validation.durationMs, error: validation.error })) });
+  onPhase?.('validation_completed', validationsOk ? 'Validation passed.' : 'Validation failed.');
 
   // Only commit/deploy when there is a REAL code change. Force-committing an
   // unchanged file would push an empty no-op commit and redeploy production on
@@ -1719,10 +1734,12 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
       });
   setTaskStatus(taskTree, 36, !hasRealChange || gitDeployOperator.status === 'executed' ? 'completed' : gitDeployOperator.status === 'failed' ? 'failed' : 'blocked');
   log('git_deploy_operator_checked', gitDeployOperator.status === 'executed' ? 'info' : 'warn', hasRealChange ? 'Git/deploy operator gate checked.' : 'No code change this pass — git/deploy operator skipped.', gitDeployOperator as unknown as Record<string, unknown>);
+  onPhase?.('git_deploy_operator_checked', gitDeployOperator.status === 'executed' ? 'Git/deploy operator executed.' : 'Git/deploy operator checked.');
 
   const productionVerification = await verifyProductionHealth();
   const changedRouteVerification = await verifyChangedRouteLive();
   log('production_verified', productionVerification.ok && changedRouteVerification.ok ? 'info' : 'warn', 'Production health and changed-route verification attempted.', { health: productionVerification, changedRoute: changedRouteVerification });
+  onPhase?.('production_verified', productionVerification.ok ? 'Production health verified.' : 'Production health verification failed.');
 
   const endToEndProductionComplete = hasRealChange && gitDeployOperator.status === 'executed' && productionVerification.ok && changedRouteVerification.ok;
   const localCodingOk = validationsOk && (patchProposal.status === 'not_needed' || changedFiles.length > 0);

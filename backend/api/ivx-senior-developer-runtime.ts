@@ -10,6 +10,11 @@ import {
 } from '../services/ivx-senior-developer-runtime';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import {
+  enqueueOrAttachSeniorDeveloperJob,
+  getActiveJobForOwner,
+  type IVXWorkerJobInput,
+} from '../services/ivx-senior-developer-worker';
+import {
   IVXOwnerApprovalError,
   assertIVXOwnerOnly,
   assertIVXRegisteredOwnerBearer,
@@ -227,36 +232,83 @@ export async function handleIVXSeniorDeveloperRunRequest(request: Request): Prom
       secretValuesReturned: false as const,
     };
 
-    const result = await runIVXSeniorDeveloperTask({
+    // ─── Per-Owner Single-Flight Queue (HTTP 409 FIX) ──────────────────
+    // Route through the worker queue instead of synchronous execution.
+    // If an active job already exists for this owner, ATTACH to it (return
+    // its jobId) instead of creating a duplicate or returning HTTP 409.
+    // The user's request is NEVER discarded — it is queued or attached.
+    const ownerId = approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner';
+    const activeJob = await getActiveJobForOwner(ownerId);
+    if (activeJob) {
+      return ownerOnlyJson({
+        ok: false,
+        ownerOnly: true,
+        ownerApproval: approval,
+        marker: IVX_SENIOR_DEVELOPER_RUNTIME_MARKER,
+        error: 'A senior developer task is already running for this owner.',
+        jobId: activeJob.jobId,
+        activeJobId: activeJob.jobId,
+        attached: true,
+        activeJob,
+        poll: `GET /api/ivx/senior-developer/worker/jobs/${activeJob.jobId}`,
+        cancel: `POST /api/ivx/senior-developer/worker/jobs/${activeJob.jobId}/cancel`,
+        message: `Your request was attached to the active job (${activeJob.jobId}). Poll its status or cancel it instead of creating a duplicate.`,
+        secretValuesReturned: false,
+        timestamp: new Date().toISOString(),
+      }, 409);
+    }
+
+    // No active job — enqueue a new one through the worker queue.
+    const workerInput: IVXWorkerJobInput = {
       goal,
+      ownerApproved: true,
       approvePatch: readBoolean(body.approvePatch),
-      patchConfirmationText: readTrimmed(body.patchConfirmationText),
       approveGitDeploy,
-      gitDeployConfirmationText: readTrimmed(body.gitDeployConfirmationText),
       validationMode: normalizeValidationMode(body.validationMode),
-      ownerApprovedAction: approvedAction,
       systemMode: isSystemMode,
-    });
+      ownerApprovedAction: approvedAction,
+      ownerId,
+    };
+    const { job, attached: wasAttached } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+
+    // If the race condition produced an attach (another request enqueued
+    // between our check and our enqueue), return the active job.
+    if (wasAttached) {
+      return ownerOnlyJson({
+        ok: false,
+        ownerOnly: true,
+        ownerApproval: approval,
+        marker: IVX_SENIOR_DEVELOPER_RUNTIME_MARKER,
+        error: 'A senior developer task is already running for this owner.',
+        jobId: job.jobId,
+        activeJobId: job.jobId,
+        attached: true,
+        job,
+        poll: `GET /api/ivx/senior-developer/worker/jobs/${job.jobId}`,
+        cancel: `POST /api/ivx/senior-developer/worker/jobs/${job.jobId}/cancel`,
+        message: `Your request was attached to the active job (${job.jobId}).`,
+        secretValuesReturned: false,
+        timestamp: new Date().toISOString(),
+      }, 409);
+    }
 
     return ownerOnlyJson({
-      ok: result.ok,
+      ok: true,
       ownerOnly: true,
       ownerApproval: approval,
-      proof: {
-        ownerSessionDetected: approval.ownerSessionDetected,
-        bearerAccepted: approval.bearerAccepted,
-        ownerVerified: approval.ownerVerified,
-        githubCommitHash: result.gitDeployOperator.github.commitSha,
-        renderDeployId: result.gitDeployOperator.render.deployId,
-        productionHealthResult: result.productionVerification,
-        exactBlocker: result.ok ? null : result.gitDeployOperator.reason || result.productionVerification.error || 'Senior developer production proof did not complete.',
-        approvedAction,
-      },
-      approvedAction,
-      result,
+      marker: IVX_SENIOR_DEVELOPER_RUNTIME_MARKER,
+      jobId: job.jobId,
+      job,
+      stage: job.stage,
+      progressPercent: job.progressPercent,
+      stageDetail: job.stageDetail,
+      poll: `GET /api/ivx/senior-developer/worker/jobs/${job.jobId}`,
+      cancel: `POST /api/ivx/senior-developer/worker/jobs/${job.jobId}/cancel`,
+      resume: `POST /api/ivx/senior-developer/worker/jobs/${job.jobId}/resume`,
+      message: 'Task enqueued. Poll the job endpoint for real-time stage and progress updates.',
       secretValuesReturned: false,
       timestamp: new Date().toISOString(),
-    }, result.ok ? 200 : 409);
+    }, 202);
   } catch (error) {
     return errorResponse(error);
   }

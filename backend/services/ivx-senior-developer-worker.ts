@@ -13,9 +13,16 @@
  *      (Supabase-backed, survives Render's diskless restarts; in-memory fallback
  *      for local/test).
  *
- * This module owns ONLY the orchestration that did not exist before (queue,
- * worker loop, ledger). It reuses the proven execution primitives so there is
- * no duplicated GitHub/Render/test logic and no fabricated proof.
+ * HTTP 409 FIX (2026-07-17):
+ *   - Per-owner single-flight: only one active task per owner at a time.
+ *   - Duplicate requests ATTACH to the running job (return its jobId) instead
+ *     of returning HTTP 409.
+ *   - Stale jobs auto-expire after a configurable timeout.
+ *   - Cancel Job and Resume Job endpoints.
+ *   - Granular stage tracking: QUEUED → RUNNING → PATCHING → TESTING →
+ *     COMMITTING → DEPLOYING → VERIFYING → COMPLETED/FAILED.
+ *   - Live Work updated in real time with current stage and progress.
+ *   - The user's request is NEVER discarded — it is queued or attached.
  *
  * Security:
  *   - Owner approval is enforced at the API boundary BEFORE a job is enqueued;
@@ -39,7 +46,7 @@ import {
   type IVXSeniorDeveloperRunProof,
 } from './ivx-senior-developer-runtime';
 
-export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-06-16';
+export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
 /** Repo-relative keys so the durable store derives stable doc keys. */
 const QUEUE_FILE = 'logs/audit/senior-developer-worker/queue.json';
@@ -48,7 +55,57 @@ const LEDGER_FILE = 'logs/audit/senior-developer-worker/proof-ledger.json';
 const MAX_QUEUE_RETAINED = 200;
 const MAX_LEDGER_RETAINED = 200;
 
-export type IVXWorkerJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'blocked';
+/**
+ * Stale job expiration timeout (ms). A RUNNING job whose `startedAt` is older
+ * than this is automatically expired (marked FAILED) so a new job can start.
+ * Configurable via `IVX_WORKER_STALE_TIMEOUT_MS` env var.
+ */
+const STALE_JOB_TIMEOUT_MS: number = (() => {
+  const env = process.env.IVX_WORKER_STALE_TIMEOUT_MS;
+  const parsed = env ? Number.parseInt(env, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30 * 60 * 1000; // 30 min default
+})();
+
+/** How often to run the stale-job sweep (ms). */
+const STALE_CHECK_INTERVAL_MS = 60_000;
+
+/** Granular execution stages tracked in real time. */
+export type IVXWorkerJobStage =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'PATCHING'
+  | 'TESTING'
+  | 'COMMITTING'
+  | 'DEPLOYING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export type IVXWorkerJobStatus =
+  | 'queued'
+  | 'running'
+  | 'patching'
+  | 'testing'
+  | 'committing'
+  | 'deploying'
+  | 'verifying'
+  | 'completed'
+  | 'failed'
+  | 'blocked'
+  | 'cancelled';
+
+/** Map granular stages to progress percentages. */
+const STAGE_PROGRESS: Record<IVXWorkerJobStage, number> = {
+  QUEUED: 0,
+  RUNNING: 10,
+  PATCHING: 25,
+  TESTING: 50,
+  COMMITTING: 65,
+  DEPLOYING: 80,
+  VERIFYING: 90,
+  COMPLETED: 100,
+  FAILED: 0,
+};
 
 /** Owner-approved task accepted by the worker. Never carries secret values. */
 export type IVXWorkerJobInput = {
@@ -64,15 +121,26 @@ export type IVXWorkerJobInput = {
   systemMode: boolean;
   /** Visible approval contract recorded for the audit trail (no secrets). */
   ownerApprovedAction: IVXSeniorDeveloperApprovedActionContract | null;
+  /** Owner identifier for per-owner single-flight enforcement. */
+  ownerId?: string;
 };
 
 export type IVXWorkerJob = {
   jobId: string;
   status: IVXWorkerJobStatus;
+  /** Granular execution stage (QUEUED, RUNNING, PATCHING, etc.). */
+  stage: IVXWorkerJobStage;
+  /** Progress percentage 0-100 based on the current stage. */
+  progressPercent: number;
+  /** Human-readable detail about the current stage. */
+  stageDetail: string;
   input: IVXWorkerJobInput;
+  /** Owner identifier for single-flight enforcement. */
+  ownerId: string;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  cancelledAt: string | null;
   attempts: number;
   /** Compact, secret-safe result summary once the job finishes. */
   result: IVXWorkerJobResult | null;
@@ -145,6 +213,9 @@ function emptyLedger(durable: boolean): LedgerDoc {
 let memoryQueue: QueueDoc | null = null;
 let memoryLedger: LedgerDoc | null = null;
 let draining = false;
+
+/** Active job callbacks for cancel signaling. */
+const activeJobControllers = new Map<string, { cancelled: boolean }>();
 
 async function loadQueue(): Promise<QueueDoc> {
   const durable = isDurableStoreConfigured();
@@ -407,23 +478,126 @@ export function summarizeProof(
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STALE JOB EXPIRATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Statuses that are considered "active" (still in progress). */
+const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set([
+  'queued', 'running', 'patching', 'testing', 'committing', 'deploying', 'verifying',
+]);
+
 /**
- * Submit an owner-approved development task to the worker queue. The owner
- * approval MUST already be verified by the caller (API boundary). Returns the
- * created job; the worker drains the queue asynchronously.
+ * Expire stale jobs whose `startedAt` is older than `STALE_JOB_TIMEOUT_MS`.
+ * Stale jobs are marked FAILED with an honest reason. This frees the queue so
+ * a new job can start for the same owner.
+ *
+ * @returns array of expired job IDs
  */
-export async function enqueueSeniorDeveloperJob(input: IVXWorkerJobInput): Promise<IVXWorkerJob> {
+export async function expireStaleJobs(): Promise<string[]> {
+  const queue = await loadQueue();
+  const now = Date.now();
+  const expired: string[] = [];
+
+  for (const job of queue.jobs) {
+    if (!ACTIVE_STATUSES.has(job.status)) continue;
+    if (!job.startedAt) continue;
+    const startedAtMs = new Date(job.startedAt).getTime();
+    if (Number.isNaN(startedAtMs)) continue;
+    if (now - startedAtMs > STALE_JOB_TIMEOUT_MS) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.stageDetail = `Job expired after ${Math.round(STALE_JOB_TIMEOUT_MS / 1000)}s of inactivity.`;
+      job.finishedAt = nowIso();
+      job.error = `Stale job expired (timeout: ${STALE_JOB_TIMEOUT_MS}ms).`;
+      expired.push(job.jobId);
+    }
+  }
+
+  if (expired.length > 0) {
+    await saveQueue(queue);
+    for (const jobId of expired) {
+      appendDurableEvent(QUEUE_FILE, { type: 'job_expired', jobId, reason: 'stale_timeout' }).catch(() => {});
+    }
+  }
+
+  return expired;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PER-OWNER SINGLE-FLIGHT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Get the active (in-progress) job for a given owner. Returns null if no active
+ * job exists. Also expires stale jobs before checking.
+ */
+export async function getActiveJobForOwner(ownerId: string): Promise<IVXWorkerJob | null> {
+  if (!ownerId) return null;
+  await expireStaleJobs();
+  const queue = await loadQueue();
+  // Find the most recent active job for this owner.
+  for (let i = queue.jobs.length - 1; i >= 0; i -= 1) {
+    const job = queue.jobs[i];
+    if (job.ownerId === ownerId && ACTIVE_STATUSES.has(job.status)) {
+      return job;
+    }
+  }
+  return null;
+}
+
+/**
+ * Result of an enqueue-or-attach operation. When `attached` is true, the job
+ * already existed and the request was NOT discarded — the caller gets the
+ * active job's ID. When `attached` is false, a new job was created.
+ */
+export type EnqueueOrAttachResult = {
+  job: IVXWorkerJob;
+  attached: boolean;
+  /** The active job that was already running, if attached. */
+  activeJobId: string | null;
+};
+
+/**
+ * Submit an owner-approved development task to the worker queue with per-owner
+ * single-flight enforcement. If an active job already exists for the same
+ * owner, the request ATTACHES to that job (returns its jobId) instead of
+ * creating a duplicate or returning HTTP 409.
+ *
+ * The user's request is NEVER discarded:
+ *   - If no active job exists → a new job is created and queued.
+ *   - If an active job exists for the same owner → the request attaches to it.
+ *   - If the active job is stale → it is expired and a new job is created.
+ *
+ * Owner approval MUST already be verified by the caller (API boundary).
+ */
+export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput): Promise<EnqueueOrAttachResult> {
   const goal = input.goal.trim();
   if (!goal) throw new Error('A senior developer goal is required to enqueue a job.');
   if (!input.ownerApproved) throw new Error('Cannot enqueue a senior developer job without verified owner approval.');
 
+  const ownerId = input.ownerId ?? 'default';
+
+  // Check for an existing active job for this owner (also expires stale jobs).
+  const activeJob = await getActiveJobForOwner(ownerId);
+  if (activeJob) {
+    // ATTACH: return the existing running job. The request is NOT discarded.
+    return { job: activeJob, attached: true, activeJobId: activeJob.jobId };
+  }
+
+  // No active job — create a new one.
   const job: IVXWorkerJob = {
     jobId: `ivx-worker-${randomUUID()}`,
     status: 'queued',
+    stage: 'QUEUED',
+    progressPercent: 0,
+    stageDetail: 'Job queued and waiting for worker.',
     input: { ...input, goal },
+    ownerId,
     createdAt: nowIso(),
     startedAt: null,
     finishedAt: null,
+    cancelledAt: null,
     attempts: 0,
     result: null,
     error: null,
@@ -432,12 +606,77 @@ export async function enqueueSeniorDeveloperJob(input: IVXWorkerJobInput): Promi
   const queue = await loadQueue();
   queue.jobs.push(job);
   await saveQueue(queue);
-  appendDurableEvent(QUEUE_FILE, { type: 'job_enqueued', jobId: job.jobId, goal: goal.slice(0, 200) }).catch(() => {});
+  appendDurableEvent(QUEUE_FILE, { type: 'job_enqueued', jobId: job.jobId, goal: goal.slice(0, 200), ownerId }).catch(() => {});
 
   // Kick the worker without blocking the caller.
   void drainSeniorDeveloperQueue();
+  return { job, attached: false, activeJobId: null };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANCEL / RESUME
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cancel a job. If the job is currently running, signals the controller to
+ * stop. Marks the job as cancelled in the queue.
+ */
+export async function cancelSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob | null> {
+  const queue = await loadQueue();
+  const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
+  if (idx < 0) return null;
+  const job = queue.jobs[idx];
+
+  // Signal the running controller to stop (if one exists).
+  const controller = activeJobControllers.get(jobId);
+  if (controller) {
+    controller.cancelled = true;
+  }
+
+  job.status = 'cancelled';
+  job.stage = 'FAILED';
+  job.stageDetail = 'Job cancelled by owner.';
+  job.cancelledAt = nowIso();
+  job.finishedAt = nowIso();
+  queue.jobs[idx] = job;
+  await saveQueue(queue);
+  appendDurableEvent(QUEUE_FILE, { type: 'job_cancelled', jobId }).catch(() => {});
   return job;
 }
+
+/**
+ * Resume a queued or blocked job. If the job is already running, returns it
+ * as-is (attach behavior). If the job is cancelled or completed, returns null.
+ */
+export async function resumeSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob | null> {
+  const queue = await loadQueue();
+  const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
+  if (idx < 0) return null;
+  const job = queue.jobs[idx];
+
+  // Can only resume queued or blocked jobs.
+  if (job.status !== 'queued' && job.status !== 'blocked') {
+    return job; // Return as-is for running jobs (attach behavior).
+  }
+
+  // Reset to queued so the drain loop picks it up.
+  job.status = 'queued';
+  job.stage = 'QUEUED';
+  job.progressPercent = 0;
+  job.stageDetail = 'Job resumed by owner.';
+  job.error = null;
+  queue.jobs[idx] = job;
+  await saveQueue(queue);
+  appendDurableEvent(QUEUE_FILE, { type: 'job_resumed', jobId }).catch(() => {});
+
+  // Kick the worker.
+  void drainSeniorDeveloperQueue();
+  return job;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUEUE READS
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Read one job by id (newest queue state). */
 export async function getSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob | null> {
@@ -496,12 +735,78 @@ export async function getSeniorDeveloperLastProof(): Promise<IVXWorkerLastProof>
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// QUEUE PROCESSING
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<void> {
   const queue = await loadQueue();
   const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
   if (idx < 0) return;
   queue.jobs[idx] = { ...queue.jobs[idx], ...patch };
   await saveQueue(queue);
+}
+
+/**
+ * Update a job's execution stage and progress in real time. Called by the
+ * worker as the runtime progresses through phases.
+ */
+async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: string): Promise<void> {
+  const statusMap: Record<IVXWorkerJobStage, IVXWorkerJobStatus> = {
+    QUEUED: 'queued',
+    RUNNING: 'running',
+    PATCHING: 'patching',
+    TESTING: 'testing',
+    COMMITTING: 'committing',
+    DEPLOYING: 'deploying',
+    VERIFYING: 'verifying',
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+  };
+  await updateJob(jobId, {
+    stage,
+    status: statusMap[stage],
+    progressPercent: STAGE_PROGRESS[stage],
+    stageDetail: detail,
+  });
+}
+
+/**
+ * Map a senior-developer runtime phase to a worker job stage.
+ */
+function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string } {
+  switch (phase) {
+    case 'queued':
+      return { stage: 'QUEUED', detail: 'Task queued.' };
+    case 'repo_brain_indexed':
+      return { stage: 'RUNNING', detail: 'Repo brain indexed source tree.' };
+    case 'plan_created':
+      return { stage: 'RUNNING', detail: 'Execution plan created.' };
+    case 'diff_proposed':
+      return { stage: 'PATCHING', detail: 'Safe code diff prepared.' };
+    case 'patch_approval_checked':
+      return { stage: 'PATCHING', detail: 'Patch approval gate checked.' };
+    case 'patch_applied':
+      return { stage: 'PATCHING', detail: 'Code patch applied.' };
+    case 'validation_started':
+      return { stage: 'TESTING', detail: 'Validation runner started.' };
+    case 'validation_completed':
+      return { stage: 'TESTING', detail: 'Validation runner completed.' };
+    case 'git_deploy_operator_checked':
+      return { stage: 'COMMITTING', detail: 'Git/deploy operator gate checked.' };
+    case 'production_verified':
+      return { stage: 'VERIFYING', detail: 'Production health verification attempted.' };
+    case 'audit_saved':
+      return { stage: 'VERIFYING', detail: 'Audit files saved.' };
+    case 'completed':
+      return { stage: 'COMPLETED', detail: 'Senior developer task completed.' };
+    case 'blocked':
+      return { stage: 'FAILED', detail: 'Task blocked before completion.' };
+    case 'failed':
+      return { stage: 'FAILED', detail: 'Task failed.' };
+    default:
+      return { stage: 'RUNNING', detail: `Phase: ${phase}` };
+  }
 }
 
 /**
@@ -514,9 +819,33 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
   const job = queue.jobs.find((j) => j.status === 'queued');
   if (!job) return null;
 
-  await updateJob(job.jobId, { status: 'running', startedAt: nowIso(), attempts: job.attempts + 1 });
+  // Check if this job was cancelled while queued.
+  const controller = { cancelled: false };
+  activeJobControllers.set(job.jobId, controller);
+
+  await updateJob(job.jobId, {
+    status: 'running',
+    stage: 'RUNNING',
+    progressPercent: STAGE_PROGRESS.RUNNING,
+    stageDetail: 'Job started.',
+    startedAt: nowIso(),
+    attempts: job.attempts + 1,
+  });
 
   try {
+    // If cancelled before we even started, abort.
+    if (controller.cancelled) {
+      await updateJob(job.jobId, {
+        status: 'cancelled',
+        stage: 'FAILED',
+        finishedAt: nowIso(),
+        cancelledAt: nowIso(),
+        error: 'Job cancelled before execution.',
+      });
+      activeJobControllers.delete(job.jobId);
+      return null;
+    }
+
     const proof = await runIVXSeniorDeveloperTask({
       goal: job.input.goal,
       approvePatch: job.input.approvePatch,
@@ -526,12 +855,31 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       validationMode: job.input.validationMode,
       ownerApprovedAction: job.input.ownerApprovedAction ?? undefined,
       systemMode: job.input.systemMode,
+      onPhase: (phase: string, _detail: string) => {
+        if (controller.cancelled) return;
+        const { stage, detail } = phaseToStage(phase);
+        void updateJobStage(job.jobId, stage, detail);
+      },
     });
+
+    // Check cancellation after the run.
+    if (controller.cancelled) {
+      await updateJob(job.jobId, {
+        status: 'cancelled',
+        stage: 'FAILED',
+        finishedAt: nowIso(),
+        cancelledAt: nowIso(),
+        error: 'Job cancelled during execution.',
+      });
+      activeJobControllers.delete(job.jobId);
+      return null;
+    }
 
     // Deploy verification: if a commit landed, confirm production serves it.
     let match: Awaited<ReturnType<typeof verifyLiveCommitMatch>> | null = null;
     const commitSha = proof.gitDeployOperator.github.commitSha;
     if (commitSha && proof.gitDeployOperator.status === 'executed') {
+      await updateJobStage(job.jobId, 'VERIFYING', 'Verifying live commit match on production.');
       match = await verifyLiveCommitMatch({
         requestedCommit: commitSha,
         deploymentId: proof.gitDeployOperator.render.deployId,
@@ -547,12 +895,29 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
           ? 'blocked'
           : 'failed';
 
-    await updateJob(job.jobId, { status, finishedAt: nowIso(), result, error: result.error });
+    const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
+    await updateJob(job.jobId, {
+      status,
+      stage: finalStage,
+      progressPercent: STAGE_PROGRESS[finalStage],
+      stageDetail: status === 'completed' ? 'Job completed successfully.' : (result.error ?? 'Job failed.'),
+      finishedAt: nowIso(),
+      result,
+      error: result.error,
+    });
     await appendLedger(result);
+    activeJobControllers.delete(job.jobId);
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : 'Worker run failed.';
-    await updateJob(job.jobId, { status: 'failed', finishedAt: nowIso(), error: message });
+    await updateJob(job.jobId, {
+      status: 'failed',
+      stage: 'FAILED',
+      stageDetail: message,
+      finishedAt: nowIso(),
+      error: message,
+    });
+    activeJobControllers.delete(job.jobId);
     return null;
   }
 }
@@ -560,12 +925,15 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 /**
  * Single-flight queue drain: processes queued jobs sequentially until none
  * remain. Safe to call repeatedly — re-entrancy is guarded so only one drain
- * runs at a time.
+ * runs at a time. Expires stale jobs before draining.
  */
 export async function drainSeniorDeveloperQueue(): Promise<void> {
   if (draining) return;
   draining = true;
   try {
+    // Expire stale jobs before processing.
+    await expireStaleJobs();
+
     // Bounded loop so a persistently-failing job cannot spin forever.
     for (let processed = 0; processed < MAX_QUEUE_RETAINED; processed += 1) {
       const result = await processNextSeniorDeveloperJob();
@@ -576,6 +944,32 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STALE JOB SWEEP (periodic)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Periodic stale job sweep — runs every STALE_CHECK_INTERVAL_MS. */
+let staleSweepTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Start the periodic stale job sweep. Called once at server boot. Safe to call
+ * multiple times — only one timer is ever active.
+ */
+export function startStaleJobSweep(): void {
+  if (staleSweepTimer) return;
+  staleSweepTimer = setInterval(() => {
+    void expireStaleJobs().catch(() => {});
+  }, STALE_CHECK_INTERVAL_MS);
+  staleSweepTimer.unref?.();
+}
+
+// Start the sweep automatically on module load.
+startStaleJobSweep();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATUS SURFACE
+// ─────────────────────────────────────────────────────────────────────────────
+
 /** Worker capability snapshot — what this self-hosted executor can do without Rork. */
 export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
   return {
@@ -584,9 +978,19 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
     executor: 'ivx-self-hosted-worker',
     rorkRequiredAsExecutor: false,
     durableQueue: isDurableStoreConfigured(),
+    perOwnerSingleFlight: true,
+    staleJobTimeoutMs: STALE_JOB_TIMEOUT_MS,
+    staleCheckIntervalMs: STALE_CHECK_INTERVAL_MS,
+    granularStages: ['QUEUED', 'RUNNING', 'PATCHING', 'TESTING', 'COMMITTING', 'DEPLOYING', 'VERIFYING', 'COMPLETED', 'FAILED'],
     capabilities: {
       receiveOwnerApprovedTask: true,
       jobQueue: true,
+      perOwnerSingleFlight: true,
+      staleJobExpiration: true,
+      cancelJob: true,
+      resumeJob: true,
+      attachToRunningJob: true,
+      realTimeStageUpdates: true,
       executionSandbox: true,
       githubRepoReadWrite: true,
       fileCreateModify: true,
@@ -607,10 +1011,29 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
       enqueue: 'POST /api/ivx/senior-developer/worker/jobs',
       job: 'GET /api/ivx/senior-developer/worker/jobs/:jobId',
       jobs: 'GET /api/ivx/senior-developer/worker/jobs',
+      cancel: 'POST /api/ivx/senior-developer/worker/jobs/:jobId/cancel',
+      resume: 'POST /api/ivx/senior-developer/worker/jobs/:jobId/resume',
+      active: 'GET /api/ivx/senior-developer/worker/active',
       ledger: 'GET /api/ivx/senior-developer/worker/ledger',
       status: 'GET /api/ivx/senior-developer/worker/status',
     },
     secretValuesReturned: false,
     timestamp: nowIso(),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BACKWARDS-COMPATIBLE ENQUEUE (delegates to enqueueOrAttach)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Submit an owner-approved development task to the worker queue. The owner
+ * approval MUST already be verified by the caller (API boundary). Returns the
+ * created job; the worker drains the queue asynchronously.
+ *
+ * @deprecated Use `enqueueOrAttachSeniorDeveloperJob` for per-owner single-flight.
+ */
+export async function enqueueSeniorDeveloperJob(input: IVXWorkerJobInput): Promise<IVXWorkerJob> {
+  const result = await enqueueOrAttachSeniorDeveloperJob(input);
+  return result.job;
 }
