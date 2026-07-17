@@ -3,7 +3,7 @@ import { handleIVXOwnerAccessRepairRequest } from './api/ivx-owner-registration'
 
 const MISMATCHED_URL = 'https://biikwnqdhsdzyxecekht.supabase.co';
 const ALLOWED_EMAIL = 'owner-mismatch-test@ivx.example.com';
-const TEST_PASSWORD = 'X146corp@1x146corp$S$1';
+const TEST_PASSWORD = 'Regression-Fixture-Passw0rd-1';
 
 // A fake JWT whose payload claims service_role for the REAL production project.
 // The guard only decodes the payload; it does not verify the signature, so a

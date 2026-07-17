@@ -5,12 +5,12 @@
  * Also query the members table with different selects to find the 400 cause.
  */
 const SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzE5NDAyNywiZXhwIjoyMDg4NzcwMDI3fQ.TaTRyViK-8sv3R_g1Me08sEjnyMskGXKF0u-I-PTaQ8';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
 const BACKEND = 'https://api.ivxholding.com';
-const OWNER_TOKEN = 'b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b';
-const OWNER_EMAIL = 'Iperez4242@gmail.com';
-const OWNER_PASSWORD = 'X146corp@1x146corp$$1';
+const OWNER_TOKEN = process.env.IVX_OWNER_TOKEN || '';
+const OWNER_EMAIL = process.env.IVX_OWNER_EMAIL || '';
+const OWNER_PASSWORD = process.env.IVX_OWNER_PASSWORD || '';
 
 const svcHeaders = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Accept: 'application/json' };
 
