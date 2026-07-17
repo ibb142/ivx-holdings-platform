@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Root of the IVX Command Center — five dashboard tabs on a dark ops theme.
+/// Root of the IVX Command Center — six dashboard tabs on a dark ops theme.
 struct ContentView: View {
     @State private var viewModel = DashboardViewModel()
 
@@ -24,6 +24,11 @@ struct ContentView: View {
             HealthView(viewModel: viewModel)
                 .tabItem {
                     Label("Health", systemImage: "waveform.path.ecg")
+                }
+
+            OwnerAuthView(viewModel: viewModel)
+                .tabItem {
+                    Label("Auth", systemImage: "lock.shield")
                 }
 
             ApprovalsView(viewModel: viewModel)

@@ -39,6 +39,7 @@ import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
 const GUARDIAN_URL = `${API_BASE}/api/ivx/autonomous/auth-guardian`;
+const QA_URL = `${API_BASE}/api/ivx/autonomous/qa`;
 const POLL_INTERVAL_MS = 30_000;
 
 type LedgerWorker = { id: string; name: string; scope: string };
@@ -135,6 +136,29 @@ type GuardianResponse = {
   recentAlerts?: GuardianAlert[];
 };
 
+type QARunEntry = {
+  runId: string;
+  kind: string;
+  at: string;
+  ok: boolean;
+  summary: string;
+};
+
+type QAResponse = {
+  ok: boolean;
+  error?: string;
+  marker?: string;
+  schedulerRunning?: boolean;
+  cadence?: { healthMinutes?: number; authMinutes?: number; matrixHours?: number };
+  lastHealthAt?: string | null;
+  lastAuthAt?: string | null;
+  lastMatrixAt?: string | null;
+  healthOk?: boolean | null;
+  authOk?: boolean | null;
+  totalRuns?: number;
+  recentRuns?: QARunEntry[];
+};
+
 type LedgerResponse = {
   ok: boolean;
   error?: string;
@@ -183,6 +207,7 @@ export default function AutonomousDashboardScreen() {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
   const [guardian, setGuardian] = useState<GuardianResponse | null>(null);
+  const [qa, setQa] = useState<QAResponse | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLedger = useCallback(async (silent: boolean) => {
@@ -213,16 +238,20 @@ export default function AutonomousDashboardScreen() {
       setData(json);
       setLastFetchedAt(new Date().toISOString());
       try {
-        const guardianResponse = await fetch(GUARDIAN_URL, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const [guardianResponse, qaResponse] = await Promise.all([
+          fetch(GUARDIAN_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+          fetch(QA_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+        ]);
         if (guardianResponse.ok) {
           const guardianJson = (await guardianResponse.json()) as GuardianResponse;
           if (guardianJson.ok) setGuardian(guardianJson);
         }
+        if (qaResponse.ok) {
+          const qaJson = (await qaResponse.json()) as QAResponse;
+          if (qaJson.ok) setQa(qaJson);
+        }
       } catch (guardianError) {
-        console.log('[AutonomousDashboard] guardian fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
+        console.log('[AutonomousDashboard] guardian/qa fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Network error loading ledger.';
@@ -392,6 +421,40 @@ export default function AutonomousDashboardScreen() {
             </View>
           ) : null}
 
+          {qa ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Activity size={16} color={qa.schedulerRunning ? '#34D399' : '#F87171'} />
+                <Text style={styles.cardHeader}>Continuous QA</Text>
+                <Text style={[styles.guardianBadge, { color: qa.schedulerRunning ? '#34D399' : '#F87171' }]}>
+                  {qa.schedulerRunning ? 'RUNNING 24/7' : 'STOPPED'}
+                </Text>
+              </View>
+              <Text style={styles.guardianMeta}>
+                Health every {qa.cadence?.healthMinutes ?? 5}m · auth every {qa.cadence?.authMinutes ?? 15}m · full matrix every {qa.cadence?.matrixHours ?? 2}h · {qa.totalRuns ?? 0} runs
+              </Text>
+              <View style={styles.qaStatusRow}>
+                <View style={styles.qaStatusItem}>
+                  <View style={[styles.statusDot, { backgroundColor: qa.healthOk === false ? '#F87171' : qa.healthOk ? '#34D399' : '#64748B' }]} />
+                  <Text style={styles.probeDetail}>Health {formatTime(qa.lastHealthAt)}</Text>
+                </View>
+                <View style={styles.qaStatusItem}>
+                  <View style={[styles.statusDot, { backgroundColor: qa.authOk === false ? '#F87171' : qa.authOk ? '#34D399' : '#64748B' }]} />
+                  <Text style={styles.probeDetail}>Auth matrix {formatTime(qa.lastMatrixAt)}</Text>
+                </View>
+              </View>
+              {(qa.recentRuns ?? []).slice(0, 6).map((run) => (
+                <View key={run.runId} style={styles.probeRow}>
+                  <View style={[styles.statusDot, { backgroundColor: run.ok ? '#34D399' : '#F87171' }]} />
+                  <View style={styles.probeTextWrap}>
+                    <Text style={styles.probeName}>{run.runId} · {run.kind}</Text>
+                    <Text style={styles.probeDetail}>{formatTime(run.at)} · {run.summary}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <ListChecks size={16} color="#60A5FA" />
@@ -551,4 +614,6 @@ const styles = StyleSheet.create({
   incidentHeader: { color: '#F87171', fontSize: 12, fontWeight: '700' as const },
   smsBox: { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingTop: 8, gap: 3 },
   smsHeader: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' as const },
+  qaStatusRow: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 14, marginBottom: 6 },
+  qaStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
