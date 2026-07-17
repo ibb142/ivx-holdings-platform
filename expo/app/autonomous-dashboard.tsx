@@ -40,6 +40,7 @@ const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxho
 const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
 const GUARDIAN_URL = `${API_BASE}/api/ivx/autonomous/auth-guardian`;
 const QA_URL = `${API_BASE}/api/ivx/autonomous/qa`;
+const CREDENTIALS_URL = `${API_BASE}/api/ivx/autonomous/credentials`;
 const POLL_INTERVAL_MS = 30_000;
 
 type LedgerWorker = { id: string; name: string; scope: string };
@@ -159,6 +160,33 @@ type QAResponse = {
   recentRuns?: QARunEntry[];
 };
 
+type CredentialRow = {
+  service: string;
+  variable: string;
+  environment: string;
+  stored: boolean;
+  injected: boolean;
+  authenticated: boolean | null;
+  permissionTest: string;
+  runtimeTest: string;
+  httpStatus: number | null;
+  securityCheck: string;
+  blocker: string | null;
+  worker: string;
+  finalStatus: string;
+  testedAt: string;
+};
+
+type CredentialsResponse = {
+  ok: boolean;
+  error?: string;
+  marker?: string;
+  generatedAt?: string;
+  totalRuns?: number;
+  totals?: { total: number; verified: number; partial: number; blocked: number };
+  credentials?: CredentialRow[];
+};
+
 type LedgerResponse = {
   ok: boolean;
   error?: string;
@@ -208,6 +236,7 @@ export default function AutonomousDashboardScreen() {
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
   const [guardian, setGuardian] = useState<GuardianResponse | null>(null);
   const [qa, setQa] = useState<QAResponse | null>(null);
+  const [creds, setCreds] = useState<CredentialsResponse | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLedger = useCallback(async (silent: boolean) => {
@@ -238,9 +267,10 @@ export default function AutonomousDashboardScreen() {
       setData(json);
       setLastFetchedAt(new Date().toISOString());
       try {
-        const [guardianResponse, qaResponse] = await Promise.all([
+        const [guardianResponse, qaResponse, credsResponse] = await Promise.all([
           fetch(GUARDIAN_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
           fetch(QA_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+          fetch(CREDENTIALS_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
         ]);
         if (guardianResponse.ok) {
           const guardianJson = (await guardianResponse.json()) as GuardianResponse;
@@ -249,6 +279,10 @@ export default function AutonomousDashboardScreen() {
         if (qaResponse.ok) {
           const qaJson = (await qaResponse.json()) as QAResponse;
           if (qaJson.ok) setQa(qaJson);
+        }
+        if (credsResponse.ok) {
+          const credsJson = (await credsResponse.json()) as CredentialsResponse;
+          if (credsJson.ok) setCreds(credsJson);
         }
       } catch (guardianError) {
         console.log('[AutonomousDashboard] guardian/qa fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
@@ -449,6 +483,38 @@ export default function AutonomousDashboardScreen() {
                   <View style={styles.probeTextWrap}>
                     <Text style={styles.probeName}>{run.runId} · {run.kind}</Text>
                     <Text style={styles.probeDetail}>{formatTime(run.at)} · {run.summary}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {creds ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Lock size={16} color={creds.totals && creds.totals.blocked > 0 ? '#F97316' : '#34D399'} />
+                <Text style={styles.cardHeader}>Credentials &amp; Integrations</Text>
+                <Text style={[styles.guardianBadge, { color: creds.totals && creds.totals.blocked > 0 ? '#F97316' : '#34D399' }]}>
+                  {creds.totals ? `${creds.totals.verified}/${creds.totals.total} VERIFIED` : '—'}
+                </Text>
+              </View>
+              <Text style={styles.guardianMeta}>
+                Live binding tests · run #{creds.totalRuns ?? 0} · {formatTime(creds.generatedAt)} · no secret values shown
+              </Text>
+              {(creds.credentials ?? []).map((row) => (
+                <View key={`${row.service}-${row.variable}`} style={styles.probeRow}>
+                  <View
+                    style={[styles.statusDot, {
+                      backgroundColor:
+                        row.finalStatus === 'VERIFIED' ? '#34D399' : row.finalStatus === 'PARTIAL' ? '#FBBF24' : '#F87171',
+                    }]}
+                  />
+                  <View style={styles.probeTextWrap}>
+                    <Text style={styles.probeName}>{row.service} · {row.finalStatus} · {row.worker}</Text>
+                    <Text style={styles.probeDetail}>{row.variable} · {row.environment} · stored {row.stored ? 'yes' : 'NO'} · injected {row.injected ? 'yes' : 'NO'}</Text>
+                    <Text style={styles.probeDetail}>{row.runtimeTest}</Text>
+                    <Text style={styles.probeDetail}>{row.permissionTest}</Text>
+                    {row.blocker ? <Text style={styles.jobBlocker}>Blocker: {row.blocker}</Text> : null}
                   </View>
                 </View>
               ))}

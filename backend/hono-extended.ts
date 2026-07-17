@@ -14,6 +14,7 @@
  *   GET  /api/ivx/autonomous/auth-guardian        — Owner Auth Guardian live probes
  *   POST /api/ivx/autonomous/auth-guardian/alert  — owner SMS alert (AWS SNS)
  *   GET  /api/ivx/autonomous/qa                   — continuous QA scheduler status
+ *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix
  *
  * Side effect: starts the in-process continuous QA scheduler (health 5m,
  * auth 15m, full matrix 2h) on service boot.
@@ -34,6 +35,10 @@ import {
   autonomousQAOptions,
   handleAutonomousQAGet,
 } from './api/ivx-auth-qa-scheduler';
+import {
+  credentialsStatusOptions,
+  handleCredentialsStatusGet,
+} from './api/ivx-credentials-status';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -47,6 +52,9 @@ app.post('/api/ivx/autonomous/auth-guardian/alert', async (context) => handleOwn
 
 app.options('/api/ivx/autonomous/qa', () => autonomousQAOptions());
 app.get('/api/ivx/autonomous/qa', async (context) => handleAutonomousQAGet(context.req.raw));
+
+app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());
+app.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));
 
 startAutonomousQAScheduler();
 
