@@ -1,0 +1,422 @@
+/**
+ * IVX Autonomous Dashboard — live W1–W12 job ledger (owner-only).
+ *
+ * Reads REAL production data from:
+ *   GET https://api.ivxholding.com/api/ivx/autonomous/ledger
+ *
+ * No seed data: every job shown carries a stable job ID, status history with
+ * timestamps, evidence, and blockers straight from the durable backend ledger.
+ * Auto-refreshes via controlled polling (30s) + pull-to-refresh.
+ */
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter } from 'expo-router';
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Cpu,
+  ListChecks,
+  Lock,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react-native';
+import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+
+const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
+const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
+const POLL_INTERVAL_MS = 30_000;
+
+type LedgerWorker = { id: string; name: string; scope: string };
+
+type LedgerHistoryEntry = { at: string; from: string | null; to: string; note: string | null };
+
+type LedgerJob = {
+  jobId: string;
+  workerId: string;
+  title: string;
+  status: string;
+  priority: string;
+  evidence: string | null;
+  blocker: string | null;
+  createdAt: string;
+  updatedAt: string;
+  history: LedgerHistoryEntry[];
+};
+
+type LedgerApproval = {
+  approvalId: string;
+  workerId: string;
+  title: string;
+  risk: string;
+  rollback: string;
+  status: string;
+  createdAt: string;
+};
+
+type LedgerCounts = {
+  workers: number;
+  jobs: number;
+  verified: number;
+  running: number;
+  blocked: number;
+  ownerActionRequired: number;
+  queued: number;
+  pendingApprovals: number;
+};
+
+type LedgerResponse = {
+  ok: boolean;
+  error?: string;
+  marker?: string;
+  generatedAt?: string;
+  version?: number;
+  updatedAt?: string;
+  counts?: LedgerCounts;
+  workers?: LedgerWorker[];
+  jobs?: LedgerJob[];
+  approvals?: LedgerApproval[];
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  VERIFIED: '#34D399',
+  DONE: '#34D399',
+  RUNNING: '#FBBF24',
+  QUEUED: '#94A3B8',
+  BLOCKED: '#F87171',
+  OWNER_ACTION_REQUIRED: '#F97316',
+};
+
+const STATUS_ORDER: string[] = ['RUNNING', 'BLOCKED', 'OWNER_ACTION_REQUIRED', 'QUEUED', 'VERIFIED', 'DONE'];
+
+function statusColor(status: string): string {
+  return STATUS_COLORS[status] ?? '#94A3B8';
+}
+
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`;
+  } catch {
+    return iso;
+  }
+}
+
+export default function AutonomousDashboardScreen() {
+  const router = useRouter();
+  const [data, setData] = useState<LedgerResponse | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isUnauthorized, setIsUnauthorized] = useState<boolean>(false);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchLedger = useCallback(async (silent: boolean) => {
+    if (!silent) setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const token = await getIVXAccessToken();
+      if (!token) {
+        setIsUnauthorized(true);
+        setErrorMessage('Owner session required. Sign in as the owner to view the autonomous ledger.');
+        return;
+      }
+      const response = await fetch(LEDGER_URL, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.status === 401 || response.status === 403) {
+        setIsUnauthorized(true);
+        setErrorMessage('Access denied: this dashboard is restricted to the IVX owner.');
+        return;
+      }
+      const json = (await response.json()) as LedgerResponse;
+      if (!json.ok) {
+        setErrorMessage(json.error ?? `Ledger request failed (HTTP ${response.status}).`);
+        return;
+      }
+      setIsUnauthorized(false);
+      setData(json);
+      setLastFetchedAt(new Date().toISOString());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Network error loading ledger.';
+      console.log('[AutonomousDashboard] fetch failed:', message);
+      setErrorMessage(message);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLedger(false);
+    pollRef.current = setInterval(() => fetchLedger(true), POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchLedger]);
+
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchLedger(true);
+  }, [fetchLedger]);
+
+  const counts = data?.counts;
+  const jobs = data?.jobs ?? [];
+  const workers = data?.workers ?? [];
+  const approvals = (data?.approvals ?? []).filter((a) => a.status === 'PENDING');
+  const sortedJobs = [...jobs].sort((a, b) => {
+    const sa = STATUS_ORDER.indexOf(a.status);
+    const sb = STATUS_ORDER.indexOf(b.status);
+    if (sa !== sb) return sa - sb;
+    return a.jobId.localeCompare(b.jobId);
+  });
+  const completionPercent = counts && counts.jobs > 0 ? Math.round((counts.verified / counts.jobs) * 100) : 0;
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} testID="autonomous-dashboard-back">
+          <ArrowLeft size={22} color="#E2E8F0" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle}>Autonomous Dashboard</Text>
+          <Text style={styles.headerSubtitle}>
+            Live ledger · v{data?.version ?? '—'} · {formatTime(lastFetchedAt)}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} testID="autonomous-dashboard-refresh">
+          <RefreshCw size={18} color="#FBBF24" />
+        </TouchableOpacity>
+      </View>
+
+      {isLoading ? (
+        <View style={styles.centerFill}>
+          <ActivityIndicator size="large" color="#FBBF24" />
+          <Text style={styles.loadingText}>Loading live job ledger…</Text>
+        </View>
+      ) : isUnauthorized ? (
+        <View style={styles.centerFill}>
+          <Lock size={40} color="#F87171" />
+          <Text style={styles.errorTitle}>Owner access required</Text>
+          <Text style={styles.errorBody}>{errorMessage}</Text>
+        </View>
+      ) : errorMessage && !data ? (
+        <View style={styles.centerFill}>
+          <AlertTriangle size={40} color="#F87171" />
+          <Text style={styles.errorTitle}>Could not load ledger</Text>
+          <Text style={styles.errorBody}>{errorMessage}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchLedger(false)}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#FBBF24" />}
+        >
+          {counts ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Activity size={16} color="#FBBF24" />
+                <Text style={styles.cardHeader}>Overview</Text>
+              </View>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${completionPercent}%` }]} />
+              </View>
+              <Text style={styles.progressLabel}>{completionPercent}% verified ({counts.verified}/{counts.jobs} jobs)</Text>
+              <View style={styles.statGrid}>
+                <StatPill label="Running" value={counts.running} color="#FBBF24" />
+                <StatPill label="Blocked" value={counts.blocked} color="#F87171" />
+                <StatPill label="Owner action" value={counts.ownerActionRequired} color="#F97316" />
+                <StatPill label="Queued" value={counts.queued} color="#94A3B8" />
+                <StatPill label="Workers" value={counts.workers} color="#60A5FA" />
+                <StatPill label="Approvals" value={counts.pendingApprovals} color="#F97316" />
+              </View>
+            </View>
+          ) : null}
+
+          {approvals.length > 0 ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <ShieldCheck size={16} color="#F97316" />
+                <Text style={styles.cardHeader}>Approvals waiting ({approvals.length})</Text>
+              </View>
+              {approvals.map((approval) => (
+                <View key={approval.approvalId} style={styles.approvalRow}>
+                  <Text style={styles.approvalTitle}>{approval.approvalId} · {approval.title}</Text>
+                  <Text style={styles.approvalMeta}>Risk: {approval.risk}</Text>
+                  <Text style={styles.approvalMeta}>Rollback: {approval.rollback}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <ListChecks size={16} color="#60A5FA" />
+              <Text style={styles.cardHeader}>Jobs ({sortedJobs.length})</Text>
+            </View>
+            {sortedJobs.length === 0 ? (
+              <Text style={styles.emptyText}>No jobs in the ledger yet.</Text>
+            ) : (
+              sortedJobs.map((job) => {
+                const expanded = expandedJobId === job.jobId;
+                return (
+                  <TouchableOpacity
+                    key={job.jobId}
+                    style={styles.jobRow}
+                    onPress={() => setExpandedJobId(expanded ? null : job.jobId)}
+                    testID={`job-${job.jobId}`}
+                  >
+                    <View style={styles.jobTopRow}>
+                      <View style={[styles.statusDot, { backgroundColor: statusColor(job.status) }]} />
+                      <Text style={styles.jobId}>{job.jobId}</Text>
+                      <Text style={[styles.jobStatus, { color: statusColor(job.status) }]}>{job.status}</Text>
+                      <Text style={styles.jobPriority}>{job.priority}</Text>
+                      <Text style={styles.jobWorker}>{job.workerId}</Text>
+                      {expanded ? <ChevronDown size={14} color="#64748B" /> : <ChevronRight size={14} color="#64748B" />}
+                    </View>
+                    <Text style={styles.jobTitle}>{job.title}</Text>
+                    {expanded ? (
+                      <View style={styles.jobDetail}>
+                        {job.evidence ? <Text style={styles.jobEvidence}>Evidence: {job.evidence}</Text> : null}
+                        {job.blocker ? <Text style={styles.jobBlocker}>Blocker: {job.blocker}</Text> : null}
+                        <Text style={styles.jobMeta}>Updated: {formatTime(job.updatedAt)}</Text>
+                        {job.history.map((entry, index) => (
+                          <View key={`${job.jobId}-h${index}`} style={styles.historyRow}>
+                            <Clock size={11} color="#64748B" />
+                            <Text style={styles.historyText}>
+                              {formatTime(entry.at)} · {entry.from ?? 'START'} → {entry.to}
+                              {entry.note ? ` · ${entry.note}` : ''}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Cpu size={16} color="#34D399" />
+              <Text style={styles.cardHeader}>Workers ({workers.length})</Text>
+            </View>
+            {workers.map((worker) => {
+              const workerJobs = jobs.filter((j) => j.workerId === worker.id);
+              const active = workerJobs.find((j) => j.status === 'RUNNING');
+              return (
+                <View key={worker.id} style={styles.workerRow}>
+                  <View style={styles.workerTopRow}>
+                    <Text style={styles.workerId}>{worker.id}</Text>
+                    <Text style={styles.workerName}>{worker.name}</Text>
+                    {active ? <CheckCircle2 size={13} color="#FBBF24" /> : null}
+                  </View>
+                  <Text style={styles.workerScope}>{worker.scope}</Text>
+                  <Text style={styles.workerMeta}>
+                    {workerJobs.length} jobs · {workerJobs.filter((j) => j.status === 'VERIFIED' || j.status === 'DONE').length} verified
+                    {active ? ` · running: ${active.jobId}` : ''}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
+          <Text style={styles.footerNote}>
+            Source: {data?.marker ?? '—'} · durable backend ledger · auto-refresh every 30s
+          </Text>
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+}
+
+function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <View style={styles.statPill}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#0B1220' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1E293B',
+  },
+  backButton: { padding: 6, marginRight: 6 },
+  headerTitleWrap: { flex: 1 },
+  headerTitle: { color: '#F1F5F9', fontSize: 18, fontWeight: '700' as const },
+  headerSubtitle: { color: '#64748B', fontSize: 11, marginTop: 2 },
+  refreshButton: { padding: 8 },
+  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 10 },
+  loadingText: { color: '#94A3B8', fontSize: 14 },
+  errorTitle: { color: '#F1F5F9', fontSize: 17, fontWeight: '700' as const },
+  errorBody: { color: '#94A3B8', fontSize: 13, textAlign: 'center' as const },
+  retryButton: { marginTop: 8, backgroundColor: '#FBBF24', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 },
+  retryText: { color: '#0B1220', fontWeight: '700' as const },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 40, gap: 14 },
+  card: { backgroundColor: '#111A2C', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#1E293B' },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  cardHeader: { color: '#E2E8F0', fontSize: 15, fontWeight: '700' as const },
+  progressTrack: { height: 8, backgroundColor: '#1E293B', borderRadius: 4, overflow: 'hidden' as const },
+  progressFill: { height: 8, backgroundColor: '#34D399', borderRadius: 4 },
+  progressLabel: { color: '#94A3B8', fontSize: 12, marginTop: 6, marginBottom: 10 },
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 8 },
+  statPill: { backgroundColor: '#0B1220', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, minWidth: 92, alignItems: 'center' },
+  statValue: { fontSize: 18, fontWeight: '800' as const },
+  statLabel: { color: '#64748B', fontSize: 11, marginTop: 2 },
+  approvalRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingVertical: 8, gap: 2 },
+  approvalTitle: { color: '#F1F5F9', fontSize: 13, fontWeight: '600' as const },
+  approvalMeta: { color: '#94A3B8', fontSize: 11 },
+  jobRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingVertical: 10 },
+  jobTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  jobId: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' as const },
+  jobStatus: { fontSize: 11, fontWeight: '700' as const },
+  jobPriority: { color: '#64748B', fontSize: 11, fontWeight: '600' as const },
+  jobWorker: { color: '#60A5FA', fontSize: 11, flex: 1, textAlign: 'right' as const },
+  jobTitle: { color: '#CBD5E1', fontSize: 13, marginTop: 4 },
+  jobDetail: { marginTop: 8, gap: 4 },
+  jobEvidence: { color: '#34D399', fontSize: 12 },
+  jobBlocker: { color: '#F87171', fontSize: 12 },
+  jobMeta: { color: '#64748B', fontSize: 11 },
+  historyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 2 },
+  historyText: { color: '#94A3B8', fontSize: 11, flex: 1 },
+  workerRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingVertical: 8 },
+  workerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  workerId: { color: '#FBBF24', fontSize: 12, fontWeight: '800' as const },
+  workerName: { color: '#E2E8F0', fontSize: 13, fontWeight: '600' as const, flex: 1 },
+  workerScope: { color: '#64748B', fontSize: 11, marginTop: 2 },
+  workerMeta: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
+  emptyText: { color: '#64748B', fontSize: 13 },
+  footerNote: { color: '#475569', fontSize: 11, textAlign: 'center' as const, marginTop: 4 },
+});
