@@ -53,6 +53,9 @@ import { purchaseJVInvestment } from '@/lib/investment-service';
 import { fetchJVDealById } from '@/lib/jv-storage';
 import type { PoolTier } from '@/types/jv';
 import { sanitizeDealPhotosForDeal } from '@/constants/deal-photos';
+import { resolveCanonicalDealIdentity } from '@/lib/deal-identity';
+import { buildTimelineSummary, type TimelineSummary, type TimelineStage, getTimelineStatusColor, formatTimelineDate } from '@/lib/timeline-stages';
+import { HardHat, CheckCircle2, AlertCircle, Circle, ChevronDown } from 'lucide-react-native';
 
 
 type PaymentMethod = 'wallet' | 'bank' | 'wire';
@@ -345,6 +348,40 @@ export default function JVInvestScreen() {
   const sharePrice1h = Number((shareEntryPrice * (1 + (resolvedTrustMarket.priceChange1h / 100))).toFixed(2));
   const sharePrice2h = Number((shareEntryPrice * (1 + (resolvedTrustMarket.priceChange2h / 100))).toFixed(2));
   const timelineLabel = formatTrustTimelineLabel(resolvedTrustMarket);
+
+  // ── Build timeline summary for deal detail parity with card ──
+  const dealTimelineSummary = useMemo((): TimelineSummary => {
+    return buildTimelineSummary(
+      resolvedTrustMarket.timelineMin,
+      resolvedTrustMarket.timelineMax,
+      'months',
+      (dealQuery.data as any)?.timeline_stages ?? null,
+      deal?.startDate ?? null,
+    );
+  }, [resolvedTrustMarket.timelineMin, resolvedTrustMarket.timelineMax, deal?.startDate, dealQuery.data]);
+
+  // ── Developer name for parity with card ──
+  const developerName = useMemo(() => {
+    if (!dealQuery.data) return 'IVX Holdings LLC';
+    const identity = resolveCanonicalDealIdentity(dealQuery.data as unknown as Record<string, unknown>);
+    return identity.developerName || 'IVX Holdings LLC';
+  }, [dealQuery.data]);
+
+  // ── Investment summary values for parity with card ──
+  const detailSalePrice = liveSalePrice;
+  const detailTotalInvestment = investmentRaise;
+  const detailROI = deal?.expectedROI ?? 0;
+  const detailMinOwnership = useMemo(() => {
+    const snap = buildOwnershipSnapshot(minInvestment, liveSalePrice);
+    return snap.ownershipPercent;
+  }, [minInvestment, liveSalePrice]);
+
+  const [detailTimelineExpanded, setDetailTimelineExpanded] = useState(false);
+
+  const toggleDetailTimeline = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDetailTimelineExpanded(prev => !prev);
+  }, []);
 
   const totalRaised = useMemo(() => {
     if (!deal?.poolTiers) return 0;
@@ -662,6 +699,144 @@ export default function JVInvestScreen() {
                   <Users size={13} color={Colors.info} />
                   <Text style={styles.dealStatValue}>{timelineLabel}</Text>
                 </View>
+              </View>
+
+              {/* ── Investment Summary Panel (parity with card) ── */}
+              <View style={styles.detailSummaryPanel} testID="detail-summary-panel">
+                <View style={styles.detailSummaryItem}>
+                  <Text style={styles.detailSummaryLabel}>SALE PRICE</Text>
+                  <Text style={styles.detailSummaryValue}>{detailSalePrice > 0 ? formatCurrencyWithDecimals(detailSalePrice) : 'Not available'}</Text>
+                </View>
+                <View style={styles.detailSummaryDivider} />
+                <View style={styles.detailSummaryItem}>
+                  <Text style={styles.detailSummaryLabel}>TOTAL INVESTMENT</Text>
+                  <Text style={styles.detailSummaryValue}>{detailTotalInvestment > 0 ? formatCurrencyWithDecimals(detailTotalInvestment) : 'Not available'}</Text>
+                </View>
+                <View style={styles.detailSummaryDivider} />
+                <View style={styles.detailSummaryItem}>
+                  <Text style={styles.detailSummaryLabel}>ROI</Text>
+                  <Text style={[styles.detailSummaryValue, { color: Colors.success }]}>{detailROI > 0 ? `${detailROI}%` : 'Not available'}</Text>
+                </View>
+                <View style={styles.detailSummaryDivider} />
+                <View style={styles.detailSummaryItem}>
+                  <Text style={styles.detailSummaryLabel}>TIMELINE</Text>
+                  <Text style={styles.detailSummaryValue}>{timelineLabel || 'Timeline pending verification'}</Text>
+                </View>
+              </View>
+
+              {/* ── Minimum Investment / Ownership (parity with card) ── */}
+              <View style={styles.detailMinInvestRow} testID="detail-min-invest-row">
+                <View style={styles.detailMinInvestItem}>
+                  <Text style={styles.detailMinInvestLabel}>MINIMUM INVESTMENT</Text>
+                  <Text style={styles.detailMinInvestValue}>{minInvestment > 0 ? `From ${formatCurrencyWithDecimals(minInvestment)}` : 'Not available'}</Text>
+                </View>
+                <View style={styles.detailMinInvestDivider} />
+                <View style={styles.detailMinInvestItem}>
+                  <Text style={styles.detailMinInvestLabel}>MINIMUM OWNERSHIP</Text>
+                  <Text style={styles.detailMinInvestValue} testID="detail-min-ownership">{detailMinOwnership > 0 ? `${detailMinOwnership.toFixed(4)}%` : 'Not available'}</Text>
+                </View>
+              </View>
+
+              {/* ── Developer (parity with card) ── */}
+              <View style={styles.detailDeveloperRow} testID="detail-developer-row">
+                <HardHat size={13} color={Colors.primary} />
+                <Text style={styles.detailDeveloperText} numberOfLines={1}>
+                  Developed by <Text style={styles.detailDeveloperBold}>{developerName}</Text>
+                </Text>
+              </View>
+
+              {/* ── Timeline Summary (parity with card) ── */}
+              <View style={styles.detailTimelineBox} testID="detail-timeline-box">
+                <View style={styles.detailTimelineHeader}>
+                  <Clock size={13} color={Colors.warning} />
+                  <Text style={styles.detailTimelineTitle}>Project Timeline</Text>
+                </View>
+                <View style={styles.detailTimelineRow}>
+                  <View style={styles.detailTimelineItem}>
+                    <Text style={styles.detailTimelineLabel}>Current Stage</Text>
+                    <Text style={styles.detailTimelineValue}>{dealTimelineSummary.currentStage || 'Pending'}</Text>
+                  </View>
+                  <View style={styles.detailTimelineItem}>
+                    <Text style={styles.detailTimelineLabel}>Progress</Text>
+                    <Text style={styles.detailTimelineValue}>{dealTimelineSummary.completionPercentage}%</Text>
+                  </View>
+                  <View style={styles.detailTimelineItem}>
+                    <Text style={styles.detailTimelineLabel}>Est. Completion</Text>
+                    <Text style={styles.detailTimelineValue}>{dealTimelineSummary.estimatedCompletionDate ? formatTimelineDate(dealTimelineSummary.estimatedCompletionDate) : 'Not available'}</Text>
+                  </View>
+                </View>
+                <View style={styles.detailProgressBarContainer}>
+                  <View style={[styles.detailProgressBarFill, { width: `${Math.min(100, Math.max(0, dealTimelineSummary.completionPercentage))}%` }]} />
+                </View>
+
+                {/* Full timeline stages (expandable) */}
+                {dealTimelineSummary.stages.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.detailTimelineToggle}
+                    onPress={toggleDetailTimeline}
+                    activeOpacity={0.85}
+                    testID="detail-timeline-toggle"
+                  >
+                    <Text style={styles.detailTimelineToggleText}>
+                      {detailTimelineExpanded ? 'Hide Stages' : 'View All Stages'}
+                    </Text>
+                    <ChevronDown
+                      size={16}
+                      color={Colors.textSecondary}
+                      style={detailTimelineExpanded ? { transform: [{ rotate: '180deg' }] } : undefined}
+                    />
+                  </TouchableOpacity>
+                )}
+
+                {detailTimelineExpanded && dealTimelineSummary.stages.length > 0 && (
+                  <View style={styles.detailStagesContainer} testID="detail-stages-container">
+                    {dealTimelineSummary.stages.map((stage: TimelineStage, idx: number) => (
+                      <View key={stage.id} style={styles.detailStageRow}>
+                        <View style={styles.detailStageIconCol}>
+                          {stage.status === 'COMPLETE' ? (
+                            <CheckCircle2 size={16} color={getTimelineStatusColor('COMPLETE')} />
+                          ) : stage.status === 'ACTIVE' ? (
+                            <AlertCircle size={16} color={getTimelineStatusColor('ACTIVE')} />
+                          ) : stage.status === 'DELAYED' ? (
+                            <AlertCircle size={16} color={getTimelineStatusColor('DELAYED')} />
+                          ) : (
+                            <Circle size={16} color={getTimelineStatusColor('UPCOMING')} />
+                          )}
+                          {idx < dealTimelineSummary.stages.length - 1 && (
+                            <View style={styles.detailStageConnector} />
+                          )}
+                        </View>
+                        <View style={styles.detailStageContent}>
+                          <Text style={styles.detailStageName}>{stage.name}</Text>
+                          <View style={styles.detailStageStatusRow}>
+                            <View style={[styles.detailStageStatusBadge, { backgroundColor: getTimelineStatusColor(stage.status) + '22' }]}>
+                              <Text style={[styles.detailStageStatusText, { color: getTimelineStatusColor(stage.status) }]}>
+                                {stage.status}
+                              </Text>
+                            </View>
+                            {stage.percentComplete > 0 && stage.status !== 'COMPLETE' && (
+                              <Text style={styles.detailStagePercent}>{stage.percentComplete}%</Text>
+                            )}
+                          </View>
+                          <Text style={stage.startDate ? styles.detailStageDate : styles.detailStageDatePending}>
+                            Start: {formatTimelineDate(stage.startDate)}
+                          </Text>
+                          <Text style={stage.estimatedCompletionDate ? styles.detailStageDate : styles.detailStageDatePending}>
+                            Est. Completion: {formatTimelineDate(stage.estimatedCompletionDate)}
+                          </Text>
+                          {stage.actualCompletionDate && (
+                            <Text style={styles.detailStageDateActual}>
+                              Completed: {formatTimelineDate(stage.actualCompletionDate)}
+                            </Text>
+                          )}
+                          {stage.note && (
+                            <Text style={styles.detailStageNote}>{stage.note}</Text>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
               <View style={styles.marketSnapshot}>
                 <View style={styles.marketSnapshotCard}>
@@ -1902,5 +2077,225 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
+  },
+  // ── Investment summary panel (parity with card) ──
+  detailSummaryPanel: {
+    flexDirection: 'row' as const,
+    backgroundColor: Colors.backgroundTertiary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  detailSummaryItem: {
+    flex: 1,
+    alignItems: 'center' as const,
+    paddingHorizontal: 4,
+  },
+  detailSummaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: Colors.surfaceBorder,
+  },
+  detailSummaryLabel: {
+    color: Colors.textTertiary,
+    fontSize: 8,
+    fontWeight: '700' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  detailSummaryValue: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '800' as const,
+  },
+  // ── Minimum investment row ──
+  detailMinInvestRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center',
+    backgroundColor: Colors.backgroundTertiary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginTop: 10,
+  },
+  detailMinInvestItem: {
+    flex: 1,
+    alignItems: 'center' as const,
+  },
+  detailMinInvestDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: Colors.surfaceBorder,
+  },
+  detailMinInvestLabel: {
+    color: Colors.textTertiary,
+    fontSize: 9,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  detailMinInvestValue: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '800' as const,
+  },
+  // ── Developer row ──
+  detailDeveloperRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  detailDeveloperText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    flex: 1,
+  },
+  detailDeveloperBold: {
+    color: Colors.text,
+    fontWeight: '700' as const,
+  },
+  // ── Timeline box ──
+  detailTimelineBox: {
+    backgroundColor: Colors.backgroundTertiary,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+  },
+  detailTimelineHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  detailTimelineTitle: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '700' as const,
+  },
+  detailTimelineRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  detailTimelineItem: {
+    flex: 1,
+  },
+  detailTimelineLabel: {
+    color: Colors.textTertiary,
+    fontSize: 9,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  detailTimelineValue: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  detailProgressBarContainer: {
+    height: 4,
+    backgroundColor: Colors.surfaceBorder,
+    borderRadius: 2,
+    overflow: 'hidden' as const,
+  },
+  detailProgressBarFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
+  },
+  detailTimelineToggle: {
+    flexDirection: 'row' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 6,
+  },
+  detailTimelineToggleText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  // ── Timeline stages ──
+  detailStagesContainer: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceBorder,
+    paddingTop: 12,
+  },
+  detailStageRow: {
+    flexDirection: 'row' as const,
+    minHeight: 60,
+  },
+  detailStageIconCol: {
+    alignItems: 'center' as const,
+    marginRight: 12,
+    width: 20,
+  },
+  detailStageConnector: {
+    position: 'absolute' as const,
+    top: 20,
+    bottom: -4,
+    left: 8,
+    width: 1.5,
+    backgroundColor: Colors.surfaceBorder,
+  },
+  detailStageContent: {
+    flex: 1,
+    paddingBottom: 16,
+  },
+  detailStageName: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  detailStageStatusRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  detailStageStatusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  detailStageStatusText: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    letterSpacing: 0.4,
+  },
+  detailStagePercent: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600' as const,
+  },
+  detailStageDate: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  detailStageDatePending: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    marginTop: 2,
+    fontStyle: 'italic' as const,
+  },
+  detailStageDateActual: {
+    color: Colors.success,
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '600' as const,
+  },
+  detailStageNote: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic' as const,
   },
 });

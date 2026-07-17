@@ -4,6 +4,7 @@ import { formatCurrencyCompact, formatCurrencyWithDecimals } from '@/lib/formatt
 import { buildOwnershipSnapshot } from '@/lib/ownership-math';
 import { extractExplicitDealSalePrice, resolveDealTrustMarket } from '@/lib/parse-deal';
 import type { ParsedJVDeal, DealTrustInfo } from '@/lib/parse-deal';
+import { buildTimelineSummary, type TimelineSummary } from '@/lib/timeline-stages';
 
 export interface PublishedDealCardModel {
   id: string;
@@ -40,6 +41,7 @@ export interface PublishedDealCardModel {
   fractionalSharePrice: number;
   ownershipPercentAtMinimum: number;
   ownershipText: string;
+  timelineSummary: TimelineSummary;
 }
 
 export const CANONICAL_MIN_INVESTMENT = 50;
@@ -264,6 +266,13 @@ export function mapDealToCardModel(deal: Record<string, unknown>): PublishedDeal
     fractionalSharePrice: trustMarket.fractionalSharePrice,
     ownershipPercentAtMinimum: ownershipSnapshot.ownershipPercent,
     ownershipText: rawTrustInfo?.ownershipLabel || ownershipSnapshot.ownershipText,
+    timelineSummary: buildTimelineSummary(
+      trustMarket.timelineMin,
+      trustMarket.timelineMax,
+      trustMarket.timelineUnit,
+      (deal.timeline_stages as any) ?? null,
+      str(deal.created_at) || str(deal.createdAt) || str(deal.publishedAt) || str(deal.published_at) || null,
+    ),
   };
 }
 
@@ -414,6 +423,53 @@ export function generateLandingDealHtml(card: PublishedDealCardModel): string {
           <div class="live-deal-developer-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v3h4v-3h3v3h4c.6 0 1-.4 1-1v-3"/><path d="M2 18V8c0-.6.4-1 1-1h18c.6 0 1 .4 1 1v10"/><path d="M9 7V4c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v3"/></svg></div>
           <span class="live-deal-developer-text">Developed by <span class="live-deal-developer-name">${escapeHtml(card.developerName)}</span></span>
         </div>
+        ${card.timelineSummary ? `<div class="live-deal-divider"></div>
+        <div class="live-deal-timeline-box" style="background:rgba(36,36,36,0.6);border-radius:12px;padding:12px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style="color:#fff;font-size:13px;font-weight:700;">Project Timeline</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <div style="flex:1;">
+              <div style="color:#555;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Current Stage</div>
+              <div style="color:#fff;font-size:12px;font-weight:700;">${escapeHtml(card.timelineSummary.currentStage || 'Pending')}</div>
+            </div>
+            <div style="flex:1;">
+              <div style="color:#555;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Progress</div>
+              <div style="color:#fff;font-size:12px;font-weight:700;">${card.timelineSummary.completionPercentage}%</div>
+            </div>
+            <div style="flex:1;">
+              <div style="color:#555;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Est. Completion</div>
+              <div style="color:#fff;font-size:12px;font-weight:700;">${card.timelineSummary.estimatedCompletionDate ? new Date(card.timelineSummary.estimatedCompletionDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Not available'}</div>
+            </div>
+          </div>
+          <div style="height:4px;background:#2A2A2A;border-radius:2px;overflow:hidden;">
+            <div style="height:100%;width:${Math.min(100,Math.max(0,card.timelineSummary.completionPercentage))}%;background:#FFD700;border-radius:2px;"></div>
+          </div>
+          ${card.timelineSummary.stages.length > 0 ? `<details style="margin-top:10px;">
+            <summary style="cursor:pointer;color:#909090;font-size:12px;font-weight:600;list-style:none;display:flex;align-items:center;gap:6px;">View All Stages</summary>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2A2A2A;">
+              ${card.timelineSummary.stages.map((s) => {
+                const sc = s.status === 'COMPLETE' ? '#00C48C' : s.status === 'ACTIVE' ? '#FFD700' : s.status === 'DELAYED' ? '#F59E0B' : '#555555';
+                const fmtD = (d: string | null) => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Not available';
+                return `<div style="display:flex;gap:12px;margin-bottom:16px;">
+                  <div style="width:16px;flex-shrink:0;">${s.status === 'COMPLETE' ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+sc+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+sc+'" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>'}</div>
+                  <div style="flex:1;">
+                    <div style="color:#fff;font-size:13px;font-weight:600;margin-bottom:4px;">${escapeHtml(s.name)}</div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                      <span style="background:${sc}22;color:${sc};font-size:9px;font-weight:700;letter-spacing:0.4px;padding:2px 6px;border-radius:6px;">${s.status}</span>
+                      ${s.percentComplete > 0 && s.status !== 'COMPLETE' ? `<span style="color:#909090;font-size:11px;font-weight:600;">${s.percentComplete}%</span>` : ''}
+                    </div>
+                    <div style="color:#909090;font-size:11px;margin-top:2px;">Start: ${fmtD(s.startDate)}</div>
+                    <div style="color:#909090;font-size:11px;">Est. Completion: ${fmtD(s.estimatedCompletionDate)}</div>
+                    ${s.actualCompletionDate ? `<div style="color:#00C48C;font-size:11px;font-weight:600;">Completed: ${fmtD(s.actualCompletionDate)}</div>` : ''}
+                    ${s.note ? `<div style="color:#555;font-size:11px;font-style:italic;margin-top:4px;">${escapeHtml(s.note)}</div>` : ''}
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </details>` : ''}
+        </div>` : ''}
         <div class="live-deal-trust-indicators">
           ${trustBadgesHtml}
         </div>
@@ -653,5 +709,9 @@ export function generateCanonicalDealJson(card: PublishedDealCardModel): Record<
     country: card.country,
     trust_verified: card.trustVerified,
     trust_indicators: card.trustIndicators,
+    timeline_stages: card.timelineSummary?.stages ?? [],
+    current_timeline_stage: card.timelineSummary?.currentStage ?? null,
+    project_completion_percent: card.timelineSummary?.completionPercentage ?? 0,
+    estimated_completion_date: card.timelineSummary?.estimatedCompletionDate ?? null,
   };
 }
