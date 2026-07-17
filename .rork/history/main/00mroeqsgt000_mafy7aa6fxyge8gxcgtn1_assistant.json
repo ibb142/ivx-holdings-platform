@@ -60,7 +60,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"KEY=\\\"vck_2JyW0SZHqgkuWB3jFw0P88kZO3YtiZ9RtJZL1ziTj7INQyOpNZ2mIP6p\\\"\\nRENDER_API_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== Updating OPENAI_API_KEY on Render ===\\\"\\ncurl -s -w \\\"\\\\nHTTP_STATUS: %{http_code}\\\\n\\\" -X PUT \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-vars/OPENAI_API_KEY\\\" \\\\\\n  -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -H \\\"Accept: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"value\\\\\\\":\\\\\\\"$KEY\\\\\\\"}\\\" 2>&1\\n\\necho \\\"\\\"\\necho \\\"=== Updating AI_GATEWAY_API_KEY on Render ===\\\"\\ncurl -s -w \\\"\\\\nHTTP_STATUS: %{http_code}\\\\n\\\" -X PUT \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-vars/AI_GATEWAY_API_KEY\\\" \\\\\\n  -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -H \\\"Accept: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"value\\\\\\\":\\\\\\\"$KEY\\\\\\\"}\\\" 2>&1\"}",
       "createdAt": 1784260439440,
-      "completedAt": 1784260441865
+      "completedAt": 1784260441865,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -90,7 +91,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"RENDER_API_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== Triggering deploy via clearCache + deploy ===\\\"\\ncurl -s -w \\\"\\\\nHTTP_STATUS: %{http_code}\\\\n\\\" -X POST \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/deploys\\\" \\\\\\n  -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -H \\\"Accept: application/json\\\" \\\\\\n  -d '{\\\"clearCache\\\":\\\"clear\\\"}' 2>&1\"}",
       "createdAt": 1784260445809,
-      "completedAt": 1784260447658
+      "completedAt": 1784260447658,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -120,7 +122,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"RENDER_API_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nDEPLOY_ID=\\\"dep-d9cqenr7uimc73erpu8g\\\"\\n\\necho \\\"=== Waiting for deploy to go live (checking every 15s, max ~3 min) ===\\\"\\nfor i in $(seq 1 12); do\\n  sleep 15\\n  STATUS=$(curl -s \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys/$DEPLOY_ID\\\" \\\\\\n    -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n    -H \\\"Accept: application/json\\\" | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print(d.get('status','?'), d.get('finishedAt',''))\\\" 2>/dev/null)\\n  echo \\\"  Check $i: $STATUS\\\"\\n  if echo \\\"$STATUS\\\" | grep -q \\\"live\\\\|deactivated\\\\|build_failed\\\\|update_failed\\\\|canceled\\\"; then\\n    break\\n  fi\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== Final deploy status ===\\\"\\ncurl -s \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys/$DEPLOY_ID\\\" \\\\\\n  -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n  -H \\\"Accept: application/json\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint(f\\\\\\\"  deployId: {d.get('id')}\\\\\\\")\\nprint(f\\\\\\\"  status: {d.get('status')}\\\\\\\")\\nprint(f\\\\\\\"  commit: {d.get('commit',{}).get('id')}\\\\\\\")\\nprint(f\\\\\\\"  createdAt: {d.get('createdAt')}\\\\\\\")\\nprint(f\\\\\\\"  finishedAt: {d.get('finishedAt')}\\\\\\\")\\n\\\" 2>/dev/null\"}",
       "createdAt": 1784260458486,
-      "completedAt": 1784260522824
+      "completedAt": 1784260522824,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -150,7 +153,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"RENDER_API_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nDEPLOY_ID=\\\"dep-d9cqenr7uimc73erpu8g\\\"\\n\\n# Check deploy status\\nSTATUS=$(curl -s \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys/$DEPLOY_ID\\\" \\\\\\n  -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n  -H \\\"Accept: application/json\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint(d.get('status','?'))\\nprint(d.get('finishedAt',''))\\n\\\" 2>/dev/null)\\necho \\\"Current deploy status: $STATUS\\\"\\n\\n# If still building, wait a bit more\\nif echo \\\"$STATUS\\\" | grep -q \\\"in_progress\\\\|build\\\"; then\\n  echo \\\"Still building, waiting 30s more...\\\"\\n  sleep 30\\n  STATUS=$(curl -s \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys/$DEPLOY_ID\\\" \\\\\\n    -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n    -H \\\"Accept: application/json\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint(d.get('status','?'))\\nprint(d.get('finishedAt',''))\\n\\\" 2>/dev/null)\\n  echo \\\"After wait: $STATUS\\\"\\nfi\"}",
       "createdAt": 1784260525724,
-      "completedAt": 1784260558389
+      "completedAt": 1784260558389,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -180,7 +184,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"RENDER_API_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nDEPLOY_ID=\\\"dep-d9cqenr7uimc73erpu8g\\\"\\n\\nfor i in $(seq 1 6); do\\n  sleep 15\\n  RAW=$(curl -s \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys/$DEPLOY_ID\\\" \\\\\\n    -H \\\"Authorization: Bearer $RENDER_API_KEY\\\" \\\\\\n    -H \\\"Accept: application/json\\\" 2>/dev/null)\\n  STATUS=$(echo \\\"$RAW\\\" | python3 -c \\\"import json,sys; print(json.load(sys.stdin).get('status','?'))\\\" 2>/dev/null)\\n  echo \\\"  Check $i ($(( i * 15 ))s): $STATUS\\\"\\n  if echo \\\"$STATUS\\\" | grep -qE \\\"live|build_failed|update_failed|canceled|deactivated\\\"; then\\n    break\\n  fi\\ndone\\necho \\\"Final: $STATUS\\\"\"}",
       "createdAt": 1784260563823,
-      "completedAt": 1784260580310
+      "completedAt": 1784260580310,
+      "compactedAt": 1784262502949
     },
     {
       "type": "text",
@@ -203,7 +208,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"OWNER_TOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\nBASE=\\\"https://ivx-holdings-platform.onrender.com\\\"\\n\\necho \\\"=== STEP 1: Verify health endpoint shows new key ===\\\"\\ncurl -s \\\"$BASE/health\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nqa = d.get('ivxSeniorDeveloperFinalQA', {})\\nprovider = d.get('aiProvider', d.get('provider', {}))\\nprint('  providerReady:', qa.get('providerReady', 'N/A'))\\nprint('  credentialValid:', qa.get('credentialValid', 'N/A'))\\nprint('  keyPrefix:', qa.get('keyPrefix', provider.get('keyPrefix', 'N/A')))\\nprint('  provider:', qa.get('provider', provider.get('provider', 'N/A')))\\nprint('  model:', qa.get('model', provider.get('model', 'N/A')))\\nprint('  commit:', d.get('commit','N/A')[:12])\\nprint('  bootTime:', d.get('bootTime', 'N/A'))\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== STEP 2: Test GPT-4o chat through Owner AI endpoint ===\\\"\\nRESULT=$(curl -s -w \\\"\\\\n---HTTP_STATUS: %{http_code}\\\" -X POST \\\"$BASE/api/ivx/owner-ai\\\" \\\\\\n  -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\":\\\"Summarize what IVX Holdings does in one sentence\\\",\\\"conversationId\\\":\\\"qa-key-test-001\\\",\\\"userId\\\":\\\"owner-qa\\\"}' 2>&1)\\n\\nHTTP_CODE=$(echo \\\"$RESULT\\\" | grep \\\"HTTP_STATUS:\\\" | sed 's/.*HTTP_STATUS: //')\\nBODY=$(echo \\\"$RESULT\\\" | grep -v \\\"HTTP_STATUS:\\\")\\necho \\\"  HTTP Status: $HTTP_CODE\\\"\\necho \\\"$BODY\\\" | python3 -c \\\"\\nimport json,sys\\ntry:\\n    d=json.load(sys.stdin)\\n    reply = d.get('reply', d.get('response', d.get('message', d.get('content', ''))))\\n    source = d.get('source', d.get('provider', ''))\\n    model = d.get('model', '')\\n    fallback = d.get('fallback', d.get('error', ''))\\n    print('  source:', source)\\n    print('  model:', model)\\n    if fallback:\\n        print('  fallback/error:', str(fallback)[:200])\\n    if reply:\\n        print('  reply:', str(reply)[:300])\\n    else:\\n        print('  raw keys:', list(d.keys())[:10])\\n        print('  raw (truncated):', json.dumps(d)[:400])\\nexcept Exception as e:\\n    print('  parse error:', e)\\n    print('  raw:', sys.stdin.read()[:400])\\n\\\" 2>/dev/null\"}",
       "createdAt": 1784260581640,
-      "completedAt": 1784260597087
+      "completedAt": 1784260597087,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -233,7 +239,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"OWNER_TOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\nBASE=\\\"https://ivx-holdings-platform.onrender.com\\\"\\n\\necho \\\"=== Health endpoint raw (key fields) ===\\\"\\ncurl -s \\\"$BASE/health\\\" | python3 -c \\\"\\nimport json,sys\\nraw = sys.stdin.read()\\nd = json.loads(raw)\\nqa = d.get('ivxSeniorDeveloperFinalQA', {})\\nprint('  ivxSeniorDeveloperFinalQA:', json.dumps(qa, indent=2)[:600])\\nai = d.get('aiProvider', {})\\nprint('  aiProvider:', json.dumps(ai, indent=2)[:400])\\nprint('  commit:', str(d.get('commit',''))[:12])\\nprint('  bootTime:', d.get('bootTime'))\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== Owner AI GPT-4o test: 'Summarize what IVX Holdings does in one sentence' ===\\\"\\ncurl -s -X POST \\\"$BASE/api/ivx/owner-ai\\\" \\\\\\n  -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\":\\\"Summarize what IVX Holdings does in one sentence\\\",\\\"conversationId\\\":\\\"qa-key-test-002\\\",\\\"userId\\\":\\\"owner-qa\\\"}' \\\\\\n  -o /tmp/owner-ai-response.json 2>&1\\necho \\\"  Saved to /tmp/owner-ai-response.json\\\"\\npython3 -c \\\"\\nimport json\\nwith open('/tmp/owner-ai-response.json') as f:\\n    raw = f.read()\\n# Try strict parse\\ntry:\\n    d = json.loads(raw)\\n    reply = d.get('reply', d.get('response', d.get('message', d.get('content', ''))))\\n    source = d.get('source', d.get('provider', ''))\\n    model = d.get('model', '')\\n    fallback = d.get('fallback', d.get('error', ''))\\n    print('  source:', source)\\n    print('  model:', model)\\n    if fallback:\\n        print('  fallback/error:', str(fallback)[:200])\\n    if reply:\\n        print('  reply (first 300 chars):', str(reply)[:300])\\n    else:\\n        print('  keys:', list(d.keys())[:15])\\nexcept Exception as e:\\n    print('  strict parse failed:', e)\\n    # Try cleaning control chars\\n    import re\\n    clean = re.sub(r'[\\\\x00-\\\\x1f\\\\x7f]', ' ', raw)\\n    try:\\n        d = json.loads(clean)\\n        reply = d.get('reply', d.get('response', d.get('message', d.get('content', ''))))\\n        source = d.get('source', d.get('provider', ''))\\n        model = d.get('model', '')\\n        print('  source:', source)\\n        print('  model:', model)\\n        if reply:\\n            print('  reply (first 300 chars):', str(reply)[:300])\\n    except Exception as e2:\\n        print('  cleaned parse also failed:', e2)\\n        print('  raw (first 500):', raw[:500])\\n\\\" 2>/dev/null\"}",
       "createdAt": 1784260601734,
-      "completedAt": 1784260611172
+      "completedAt": 1784260611172,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -263,7 +270,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 -c \\\"\\nimport json\\nwith open('/tmp/owner-ai-response.json') as f:\\n    raw = f.read()\\nimport re\\nclean = re.sub(r'[\\\\x00-\\\\x1f\\\\x7f]', ' ', raw)\\nd = json.loads(clean)\\nprint('=== GPT-4o RESPONSE DETAILS ===')\\nprint('  status:', d.get('status'))\\nprint('  source:', d.get('source'))\\nprint('  model:', d.get('model'))\\nprint('  provider:', d.get('provider'))\\nprint('  endpoint:', d.get('endpoint'))\\nprint('  fallbackUsed:', d.get('fallbackUsed'))\\nprint('  selectedIntent:', d.get('selectedIntent'))\\nprint('  selectedTool:', d.get('selectedTool'))\\nprint('  assistantPersisted:', d.get('assistantPersisted'))\\nprint('  deploymentMarker:', d.get('deploymentMarker'))\\nprint()\\nanswer = d.get('answer', '')\\nprint('  ANSWER (GPT-4o):', answer[:500])\\n\\\"\"}",
       "createdAt": 1784260622673,
-      "completedAt": 1784260624046
+      "completedAt": 1784260624046,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -293,7 +301,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"OWNER_TOKEN=\\\"ivx_owner_8f49cc9eafde7cfe46c24788352783a666d64faf90bf4a7771f0a0a230fa5336\\\"\\nBASE=\\\"https://ivx-holdings-platform.onrender.com\\\"\\n\\ntest_query() {\\n  local msg=\\\"$1\\\"\\n  local label=\\\"$2\\\"\\n  local conv=\\\"qa-reg-$(date +%s%N | cut -c1-13)\\\"\\n  \\n  RESULT=$(curl -s -X POST \\\"$BASE/api/ivx/owner-ai\\\" \\\\\\n    -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\\\\n    -H \\\"Content-Type: application/json\\\" \\\\\\n    -d \\\"{\\\\\\\"message\\\\\\\":\\\\\\\"$msg\\\\\\\",\\\\\\\"conversationId\\\\\\\":\\\\\\\"$conv\\\\\\\",\\\\\\\"userId\\\\\\\":\\\\\\\"owner-qa\\\\\\\"}\\\" 2>&1)\\n  \\n  echo \\\"$RESULT\\\" | python3 -c \\\"\\nimport json,sys,re\\nraw = sys.stdin.read()\\nclean = re.sub(r'[\\\\x00-\\\\x1f\\\\x7f]', ' ', raw)\\ntry:\\n    d = json.loads(clean)\\n    status = d.get('status','?')\\n    source = d.get('source','?')\\n    model = d.get('model','?')\\n    fallback = d.get('fallbackUsed', False)\\n    answer = str(d.get('answer',''))[:120]\\n    print(f'  $label: status={status} source={source} model={model} fallback={fallback}')\\n    print(f'    answer: {answer}')\\nexcept Exception as e:\\n    print(f'  $label: PARSE ERROR: {e}')\\n\\\" 2>/dev/null\\n}\\n\\necho \\\"=== FULL GPT-4o REGRESSION SUITE ===\\\"\\necho \\\"\\\"\\necho \\\"--- Previously FAILING queries (were ivx_provider_error_fallback) ---\\\"\\ntest_query \\\"Summarize this document for me\\\" \\\"1. Summarize doc\\\"\\ntest_query \\\"Review this deal and tell me the risks\\\" \\\"2. Review deal\\\"\\ntest_query \\\"Run typecheck on the current codebase\\\" \\\"3. Run typecheck\\\"\\ntest_query \\\"Analyze the investment potential of Jacksonville FL\\\" \\\"4. Analyze investment\\\"\\ntest_query \\\"What are the current market trends for real estate?\\\" \\\"5. Market trends\\\"\\n\\necho \\\"\\\"\\necho \\\"--- Normal identity queries (were already passing) ---\\\"\\ntest_query \\\"What is IVX Holdings?\\\" \\\"6. IVX identity\\\"\\ntest_query \\\"Hello\\\" \\\"7. Greeting\\\"\\n\\necho \\\"\\\"\\necho \\\"--- Developer queries (local runtime, no AI needed) ---\\\"\\ntest_query \\\"Fix this API route\\\" \\\"8. Fix API route\\\"\\ntest_query \\\"Inspect the current codebase structure\\\" \\\"9. Inspect code\\\"\"}",
       "createdAt": 1784260627272,
-      "completedAt": 1784260664243
+      "completedAt": 1784260664243,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",

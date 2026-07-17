@@ -109,7 +109,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-investor-crm-store.ts\", \"offset\": 80, \"limit\": 200}",
       "createdAt": 1784250193072,
-      "completedAt": 1784250194087
+      "completedAt": 1784250194087,
+      "compactedAt": 1784262502949
     },
     {
       "type": "tool",
@@ -206,7 +207,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-investor-crm.ts\", \"limit\": 300}",
       "createdAt": 1784250207163,
-      "completedAt": 1784250207180
+      "completedAt": 1784250207180,
+      "compactedAt": 1784262502949
     },
     {
       "type": "tool",
@@ -357,7 +359,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== 5. LOCAL SANDBOX: data store existence and sizes ===\\\" && find backend/logs/audit -type f -exec ls -lh {} \\\\; | sort -k5 -h && echo \\\"---\\\" && find logs/audit -type f -exec ls -lh {} \\\\; | sort -k5 -h 2>/dev/null | head -30\"}",
       "createdAt": 1784250227125,
-      "completedAt": 1784250229814
+      "completedAt": 1784250229814,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -401,7 +404,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"ls -la .env* 2>/dev/null && echo \\\"---\\\" && cat .env.example 2>/dev/null | head -40\"}",
       "createdAt": 1784250238033,
-      "completedAt": 1784250249513
+      "completedAt": 1784250249513,
+      "compactedAt": 1784262502949
     },
     {
       "type": "tool",
@@ -419,7 +423,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"export OWNER_TOKEN=\\\"$(cat /tmp/owner_token.txt)\\\" && echo \\\"=== 7. FULL CRM PAGINATED DOWNLOAD + VARIANCE CHECK ===\\\" && python3 - <<'PY'\\nimport json, urllib.request, urllib.error, os, time\\nfrom collections import Counter\\nowner_token = os.environ['OWNER_TOKEN']\\nbase = 'https://api.ivxholding.com/api/ivx/investors'\\nall_records = []\\noffset = 0\\nlimit = 200\\nhas_more = True\\npage = 0\\nwhile has_more and page < 10:\\n    url = f'{base}?limit={limit}&offset={offset}'\\n    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {owner_token}'})\\n    try:\\n        with urllib.request.urlopen(req, timeout=30) as r:\\n            d = json.loads(r.read().decode())\\n        records = d.get('investors', [])\\n        total = d.get('total')\\n        has_more = d.get('hasMore', False)\\n        all_records.extend(records)\\n        print(f'Page {page+1}: offset={offset} returned={len(records)} total={total} hasMore={has_more}')\\n        offset += len(records)\\n        page += 1\\n        if not records:\\n            break\\n    except Exception as e:\\n        print(f'ERROR page {page+1}: {e}')\\n        break\\n\\nprint()\\nprint(f'Downloaded records: {len(all_records)}')\\nids = [r['id'] for r in all_records]\\nunique_ids = set(ids)\\nprint(f'Distinct IDs: {len(unique_ids)}')\\nprint(f'Duplicate IDs in download: {len(ids) - len(unique_ids)}')\\n\\npt = Counter(r.get('partyType') for r in all_records)\\nprint(f'Party types: {dict(pt)}')\\n\\nsec = sum(1 for r in all_records if 'sec.gov' in (r.get('sourceDetail','') or '').lower())\\nprint(f'SEC-sourced: {sec} / {len(all_records)}')\\n\\n# Check for sample that actually resolves\\nprint()\\nprint('First 5 records with SEC URLs:')\\nfor r in all_records[:5]:\\n    sd = r.get('sourceDetail','') or ''\\n    print(f\\\"  {r.get('id')[:20]} | {r.get('name','')[:45]} | {r.get('partyType')} | {sd[:80]}\\\")\\nPY\"}",
       "createdAt": 1784250238035,
-      "completedAt": 1784250254215
+      "completedAt": 1784250254215,
+      "compactedAt": 1784262502949
     },
     {
       "type": "tool",
@@ -463,7 +468,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"find . -name \\\".env*\\\" -type f -not -path \\\"*/node_modules/*\\\" -not -path \\\"*/.git/*\\\" | xargs -I{} sh -c 'echo \\\"=== {} ===\\\" && head -5 {}' 2>/dev/null | head -40\"}",
       "createdAt": 1784250268113,
-      "completedAt": 1784250283542
+      "completedAt": 1784250283542,
+      "compactedAt": 1784262502949
     },
     {
       "type": "tool",
@@ -654,7 +660,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== 11. SUPABASE DURABLE STORE: actual database query ===\\\" && python3 - <<'PY'\\nimport json, urllib.request, os\\nurl = os.environ.get('SUPABASE_URL', os.environ.get('EXPO_PUBLIC_SUPABASE_URL', ''))\\nkey = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')\\nprint('SUPABASE_URL:', url[:60] if url else 'NOT SET')\\nprint('SERVICE_ROLE_KEY present:', bool(key), 'len', len(key))\\nif not url or not key:\\n    print('ERROR: missing Supabase credentials')\\n    exit(1)\\nheaders = {\\n    'apikey': key,\\n    'Authorization': 'Bearer ' + key,\\n    'Accept': 'application/json',\\n    'Content-Type': 'application/json'\\n}\\n# Query durable documents\\nfor doc_key in ['investor-crm/investors.json', 'scheduler/state.json', 'lead-capture/leads.json', 'capital-pipeline/pipeline.json']:\\n    try:\\n        req = urllib.request.Request(\\n            url + '/rest/v1/ivx_durable_documents?select=*&doc_key=eq.' + doc_key,\\n            headers=headers\\n        )\\n        with urllib.request.urlopen(req, timeout=20) as r:\\n            data = json.loads(r.read().decode())\\n        if data:\\n            value = data[0].get('value', [])\\n            print('%s: row_count=1, value_len=%d, updated_at=%s' % (doc_key, len(value), data[0].get('updated_at')))\\n            if doc_key == 'investor-crm/investors.json' and isinstance(value, list):\\n                from collections import Counter\\n                pt = Counter(r.get('partyType') for r in value)\\n                print('  CRM breakdown: %s' % dict(pt))\\n        else:\\n            print('%s: NO ROW FOUND' % doc_key)\\n    except Exception as e:\\n        print('%s: ERROR %s' % (doc_key, e))\\nPY\"}",
       "createdAt": 1784250327987,
-      "completedAt": 1784250360004
+      "completedAt": 1784250360004,
+      "compactedAt": 1784262502949
     },
     {
       "type": "reasoning",
@@ -679,7 +686,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -r \\\"sqkghqfcruqflqcvzqqa\\\" . --include=\\\"*.env*\\\" --include=\\\"*.ts\\\" --include=\\\"*.js\\\" --include=\\\"*.json\\\" --include=\\\"*.yml\\\" --include=\\\"*.yaml\\\" 2>/dev/null | head -10\"}",
       "createdAt": 1784250439636,
-      "completedAt": 1784250439658
+      "completedAt": 1784250439658,
+      "compactedAt": 1784262502949
     },
     {
       "type": "tool",
