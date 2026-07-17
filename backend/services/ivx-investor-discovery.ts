@@ -16,8 +16,8 @@
  * invented.
  *
  * Two discovery classes (per the owner's request):
- *   - `buyers`    → high-value raises (default min offering $10,000,000) — the
- *                   entities and principals actively deploying large capital.
+ *   - `buyers`    → high-value raises (default min offering $100K) — the
+ *                   entities and principals actively deploying capital.
  *   - `jv_deals`  → any real investor entity (no minimum) filing Reg D offerings,
  *                   useful for JV / co-invest sourcing.
  *
@@ -107,7 +107,7 @@ export type InvestorDiscoveryOptions = {
   /** Free-text query (e.g. "real estate", "multifamily", a sponsor name). */
   query?: string;
   discoveryClass?: InvestorDiscoveryClass;
-  /** Minimum total offering amount (USD). Defaults to $10M for `buyers`, $0 for `jv_deals`. */
+  /** Minimum total offering amount (USD). Defaults to $100K for `buyers`, $0 for `jv_deals`. */
   minOfferingUsd?: number;
   /** Max filings to fully parse (bounded for SEC fair-access). */
   limit?: number;
@@ -277,6 +277,7 @@ function defaultMinOffering(discoveryClass: InvestorDiscoveryClass): number {
   // The $1M floor rejected ~99.9% of filings (1 in 800), and after the first
   // run that 1 filing was already in the pipeline, so every subsequent run
   // saved 0. $100K keeps ~15-20% of filings (real capital, not noise).
+  // Scoring still rewards larger offerings.
   return discoveryClass === 'buyers' ? 100_000 : 0;
 }
 
@@ -292,7 +293,7 @@ export async function discoverInvestors(options: InvestorDiscoveryOptions = {}):
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch as FetchLike);
   const delayMs = options.delayMs ?? DETAIL_FETCH_DELAY_MS;
   const excludeUrls = options.excludeUrls ?? new Set<string>();
-  // Page deeper (up to 30 pages × 100 = 3,000 hits) so a run can skip the
+  // Page deeper (up to 30 pages x 100 = 3,000 hits) so a run can skip the
   // already-seen top hits and still reach fresh, unseen filings. The previous
   // cap of 8 pages (800 hits) often exhausted before finding new records after
   // the pipeline accumulated prior discoveries.
@@ -318,11 +319,14 @@ export async function discoverInvestors(options: InvestorDiscoveryOptions = {}):
     return { ...base, error: 'No fetch implementation available in this runtime.' };
   }
 
-  // EDGAR full-text search returns up to 100 hits per page, sorted by relevance.
-  // Without paging, every run re-returns the SAME top hits, which then get
-  // deduped against the pipeline and collapse to 0. We page through results,
-  // skipping filings already in the pipeline (excludeUrls) BEFORE fetching, so
-  // each run reaches fresh, unseen filings.
+  // EDGAR full-text search returns up to 100 hits per page. We sort by date
+  // descending so every run surfaces the FRESHEST filings first instead of the
+  // same top-relevance hits (which were already consumed in prior runs and
+  // dedupe to 0). We page through results, skipping filings already in the
+  // pipeline (excludeUrls) BEFORE fetching, so each run reaches fresh, unseen
+  // filings. No date-range filter is applied because some specific queries
+  // (e.g. "private equity real estate") return only a handful of total filings
+  // across all years, and narrowing to 2024+ would exclude them entirely.
   const PAGE_SIZE = 100;
   const investors: DiscoveredInvestor[] = [];
   let scanned = 0;
@@ -334,10 +338,7 @@ export async function discoverInvestors(options: InvestorDiscoveryOptions = {}):
     const from = page * PAGE_SIZE;
     let hits: EdgarHit[] = [];
     try {
-      // Sort by date descending so every run surfaces the FRESHEST filings first
-    // instead of the same top-relevance hits (which were already consumed in
-    // prior runs and dedupe to 0). date_bucket:“desc” is EDGAR's date sort.
-    const searchUrl = `${EDGAR_FULLTEXT_URL}?q=${encodeURIComponent(`"${query}"`)}&forms=D&from=${from}&dateRange=custom&startdt=2024-01-01&enddt=2026-12-31&sort=date_bucket:desc`;
+      const searchUrl = `${EDGAR_FULLTEXT_URL}?q=${encodeURIComponent(`"${query}"`)}&forms=D&from=${from}&sort=date_bucket:desc`;
       const res = await timeoutFetch(fetchImpl, searchUrl);
       if (!res.ok) {
         if (page === 0) firstPageError = `SEC EDGAR search returned HTTP ${res.status}.`;

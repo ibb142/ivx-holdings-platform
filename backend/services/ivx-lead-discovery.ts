@@ -395,6 +395,8 @@ export type DiscoverLeadsOptions = {
   minOfferingUsd?: number;
   /** Max leads to stage from this run. 1–30. */
   limit?: number;
+  /** Max EDGAR search pages to walk (100 hits each). Defaults to 30. */
+  maxPages?: number;
 };
 
 /**
@@ -419,6 +421,7 @@ export async function discoverLeads(options: DiscoverLeadsOptions = {}): Promise
     minOfferingUsd: options.minOfferingUsd,
     limit,
     excludeUrls: seenUrls,
+    maxPages: options.maxPages,
   });
 
   const base: LeadDiscoveryRun = {
