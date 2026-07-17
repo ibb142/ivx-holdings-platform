@@ -30,7 +30,7 @@ const PROBE_TIMEOUT_MS = 8000;
 const MAX_INCIDENTS = 50;
 const MAX_ALERT_LOG = 50;
 
-type ProbeResult = {
+export type ProbeResult = {
   id: string;
   name: string;
   target: string;
@@ -41,7 +41,7 @@ type ProbeResult = {
   checkedAt: string;
 };
 
-type GuardianIncident = {
+export type GuardianIncident = {
   incidentId: string;
   probeId: string;
   openedAt: string;
@@ -50,7 +50,7 @@ type GuardianIncident = {
   detail: string;
 };
 
-type AlertLogEntry = {
+export type AlertLogEntry = {
   alertId: string;
   severity: string;
   area: string;
@@ -63,7 +63,7 @@ type AlertLogEntry = {
   test: boolean;
 };
 
-type GuardianState = {
+export type GuardianState = {
   incidents: GuardianIncident[];
   alerts: AlertLogEntry[];
   incidentCounter: number;
@@ -72,7 +72,9 @@ type GuardianState = {
   totalRuns: number;
 };
 
-const EMPTY_STATE: GuardianState = {
+export const GUARDIAN_STATE_FILE_PATH = GUARDIAN_STATE_FILE;
+
+export const EMPTY_GUARDIAN_STATE: GuardianState = {
   incidents: [],
   alerts: [],
   incidentCounter: 0,
@@ -80,6 +82,7 @@ const EMPTY_STATE: GuardianState = {
   lastRunAt: null,
   totalRuns: 0,
 };
+const EMPTY_STATE = EMPTY_GUARDIAN_STATE;
 
 /** Static authentication architecture map — component → route/file/function. */
 const AUTH_MAP: { component: string; platform: string; route: string; sourceFile: string; functionRef: string }[] = [
@@ -106,11 +109,11 @@ function readEnv(name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function resolveAlertPhone(): string {
+export function resolveAlertPhone(): string {
   return normalizePhoneToE164(readEnv('IVX_OWNER_RECOVERY_PHONE') || OWNER_ALERT_PHONE_FALLBACK);
 }
 
-function maskPhone(phone: string): string {
+export function maskPhone(phone: string): string {
   return phone.length >= 6 ? `${phone.slice(0, 2)}***${phone.slice(-4)}` : '***';
 }
 
@@ -128,7 +131,7 @@ async function timedFetch(url: string, init?: RequestInit): Promise<{ status: nu
 }
 
 /** Run the live production authentication probes. Never throws. */
-async function runAuthProbes(): Promise<ProbeResult[]> {
+export async function runAuthProbes(): Promise<ProbeResult[]> {
   const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
   const checkedAt = nowIso();
 
@@ -193,21 +196,24 @@ async function runAuthProbes(): Promise<ProbeResult[]> {
   ];
 }
 
-/** Reconcile probe results against open incidents (auto open/close). */
-function reconcileIncidents(state: GuardianState, probes: ProbeResult[]): void {
+/** Reconcile probe results against open incidents (auto open/close). Returns incidents newly opened this run. */
+export function reconcileIncidents(state: GuardianState, probes: ProbeResult[]): GuardianIncident[] {
+  const newlyOpened: GuardianIncident[] = [];
   const at = nowIso();
   for (const probe of probes) {
     const open = state.incidents.find((i) => i.probeId === probe.id && i.status === 'OPEN');
     if (!probe.ok && !open) {
       state.incidentCounter += 1;
-      state.incidents.unshift({
+      const incident: GuardianIncident = {
         incidentId: `INC-${String(state.incidentCounter).padStart(4, '0')}`,
         probeId: probe.id,
         openedAt: at,
         closedAt: null,
         status: 'OPEN',
         detail: `${probe.name}: ${probe.detail}`,
-      });
+      };
+      state.incidents.unshift(incident);
+      newlyOpened.push(incident);
     } else if (probe.ok && open) {
       open.status = 'CLOSED';
       open.closedAt = at;
@@ -215,10 +221,11 @@ function reconcileIncidents(state: GuardianState, probes: ProbeResult[]): void {
     }
   }
   state.incidents = state.incidents.slice(0, MAX_INCIDENTS);
+  return newlyOpened;
 }
 
 /** SMS provider runtime verification — booleans only, no secret values. */
-function smsProviderStatus(): Record<string, unknown> {
+export function smsProviderStatus(): Record<string, unknown> {
   const awsCredentials = Boolean(readEnv('AWS_ACCESS_KEY_ID') && readEnv('AWS_SECRET_ACCESS_KEY'));
   const phone = resolveAlertPhone();
   return {
