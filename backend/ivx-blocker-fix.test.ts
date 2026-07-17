@@ -64,15 +64,16 @@ describe('Blocker #1 — Property Details coercion regression', () => {
   });
 });
 
-describe('Blocker #2 — Auth guard 500 -> 403 (allowlist not configured)', () => {
-  it('returns 403 (not 500) when IVX_OWNER_REGISTRATION_EMAILS is not configured', () => {
+describe('Blocker #2 — Auth guard rejects non-owner (allowlist enforcement)', () => {
+  it('returns 403 (not 500) when a non-owner email is used and env allowlist is empty', () => {
     const fakeContext = makeFakeContext({
       userId: 'user-1',
-      email: 'iperez4242@gmail.com',
+      email: 'nonowner@example.com',
       accessToken: 'eyJ.fake.jwt',
       source: 'profiles',
     });
-    // Pass undefined -> empty allowlist -> status must be 403, not 500
+    // Pass undefined -> env allowlist empty, but baseline owner emails are
+    // merged in. A non-owner email must still get 403, not 500 or 200.
     const evaluation = evaluateIVXRegisteredOwnerBearerContext(
       fakeContext,
       'test-action',
@@ -80,7 +81,7 @@ describe('Blocker #2 — Auth guard 500 -> 403 (allowlist not configured)', () =
     );
     expect(evaluation.approved).toBe(false);
     expect(evaluation.status).toBe(403);
-    expect(evaluation.blocker).toContain('IVX_OWNER_REGISTRATION_EMAILS');
+    expect(evaluation.proof.ownerEmailMatched).toBe(false);
   });
 
   it('returns 401 when bearer is not a Supabase JWT (dev token)', () => {

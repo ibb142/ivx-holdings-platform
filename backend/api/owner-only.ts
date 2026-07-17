@@ -1,5 +1,6 @@
 import {
   IVX_OPEN_ACCESS_OWNER_TOKEN,
+  getIVXOwnerEmailAllowlist,
   readIVXTrimmedString,
   resolveIVXAuthenticatedRequest,
   type IVXAuthenticatedRequestContext,
@@ -194,7 +195,13 @@ export function evaluateIVXRegisteredOwnerBearerContext(
   action: string,
   ownerRegistrationEmailsValue: unknown = process.env.IVX_OWNER_REGISTRATION_EMAILS,
 ): IVXOwnerMutationApprovalEvaluation {
-  const allowlist = parseOwnerEmailAllowlist(ownerRegistrationEmailsValue);
+  // Merge the env-sourced allowlist with the hardcoded baseline owner emails
+  // (IVX_BASELINE_OWNER_EMAILS) so a valid Supabase owner session is always
+  // recognized even when IVX_OWNER_REGISTRATION_EMAILS is missing or empty on
+  // the live Render runtime.
+  const envAllowlist = parseOwnerEmailAllowlist(ownerRegistrationEmailsValue);
+  const baselineAllowlist = getIVXOwnerEmailAllowlist();
+  const allowlist = Array.from(new Set([...envAllowlist, ...baselineAllowlist]));
   const allowlistConfigured = allowlist.length > 0;
   const email = normalizeOwnerEmail(context.email);
   const tokenLooksLikeSupabaseJwt = context.accessToken.split('.').length === 3;
