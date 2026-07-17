@@ -145,6 +145,35 @@ private fun CountTile(label: String, value: String, modifier: Modifier = Modifie
 }
 
 @Composable
+private fun ActionCard(label: String, subtitle: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    androidx.compose.material3.Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = IVXSurfaceVariant),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(label, color = IVXOnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(subtitle, color = IVXOnSurfaceMuted, style = MaterialTheme.typography.bodySmall)
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(color.copy(alpha = 0.15f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(">", color = color, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun BigMetricCard(label: String, value: String, color: androidx.compose.ui.graphics.Color) {
     Column(
         modifier = Modifier
