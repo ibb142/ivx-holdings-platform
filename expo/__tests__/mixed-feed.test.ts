@@ -140,7 +140,7 @@ describe('Mixed Feed Card Routing', () => {
     it('has minimum investment metric', () => {
       const content = readFile('components/InvestmentCard.tsx');
       expect(content).toContain('minimumInvestment');
-      expect(content).toContain('MIN INVEST');
+      expect(content).toContain('MINIMUM INVESTMENT');
     });
 
     it('has category chips', () => {
@@ -256,9 +256,11 @@ describe('Mixed Feed Card Routing', () => {
       expect(content).toContain('CanonicalInvestmentReelCard');
     });
 
-    it('Landing uses CanonicalInvestmentReelCard', () => {
+    it('Landing uses InvestmentCard for deal parity', () => {
       const content = readFile('app/landing.tsx');
-      expect(content).toContain('CanonicalInvestmentReelCard');
+      expect(content).toContain('InvestmentCard');
+      expect(content).toContain('buildTimelineSummary');
+      expect(content).not.toContain('CanonicalInvestmentReelCard');
     });
   });
 

@@ -67,9 +67,11 @@ describe('Canonical Reel Card Migration', () => {
       expect(content).toContain("CanonicalInvestmentReelCard");
     });
 
-    it('Landing imports CanonicalInvestmentReelCard', () => {
+    it('Landing imports InvestmentCard for deal parity', () => {
       const content = readFile('app/landing.tsx');
-      expect(content).toContain("CanonicalInvestmentReelCard");
+      expect(content).toContain("InvestmentCard");
+      expect(content).toContain("buildTimelineSummary");
+      expect(content).toContain("InvestmentCardData");
     });
 
     it('Invest tab imports CanonicalInvestmentReelCard', () => {

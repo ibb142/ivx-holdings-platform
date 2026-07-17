@@ -58,10 +58,12 @@ import { fetchCanonicalDeals } from '@/lib/canonical-deals';
 import type { PublishedDealCardModel } from '@/lib/published-deal-card-model';
 import type { ParsedJVDeal } from '@/lib/parse-deal';
 import InvestorIntakeForm from '@/components/InvestorIntakeForm';
-import CanonicalInvestmentReelCard, {
-  publishedCardToReelData,
-  type CanonicalReelData,
-} from '@/components/CanonicalInvestmentReelCard';
+import InvestmentCard, { type InvestmentCardData } from '@/components/InvestmentCard';
+import { resolveDealTrustMarket, resolveDealPhotos } from '@/lib/parse-deal';
+import { buildOwnershipSnapshot } from '@/lib/ownership-math';
+import { resolveCanonicalDealIdentity } from '@/lib/deal-identity';
+import { buildTimelineSummary, type TimelineSummary } from '@/lib/timeline-stages';
+import { canonicalCardToParsedDeal } from '@/lib/canonical-deals';
 import InvestorSupportChat, { type HumanSupportRequestResult } from '@/components/InvestorSupportChat';
 import {
   diagnoseDealPhotos,
@@ -457,31 +459,69 @@ function LandingDealsShowcase({ scrollToForm }: { scrollToForm: () => void }) {
           >
             {deals.map((deal, idx) => {
               const sharedDeal = buildLandingShowcaseDeal(deal);
+              const rawDeal = canonicalCardToParsedDeal(deal) as unknown as Record<string, unknown>;
 
-              const reelData = publishedCardToReelData(deal, deal.resolvedPhotos);
+              const trustMarket = resolveDealTrustMarket(rawDeal);
+              const ownershipSnapshot = buildOwnershipSnapshot(trustMarket.minInvestment, trustMarket.salePrice);
+              const identity = resolveCanonicalDealIdentity(rawDeal);
+              const timelineSummary: TimelineSummary | null = buildTimelineSummary(
+                trustMarket.timelineMin,
+                trustMarket.timelineMax,
+                trustMarket.timelineUnit,
+                (rawDeal.timeline_stages as any) ?? null,
+                deal.publishedAt ?? null,
+              );
+
+              const salePrice = trustMarket.explicitSalePrice ?? trustMarket.salePrice ?? null;
+              const totalInvestment = deal.totalInvestment ?? null;
+              const minInvestment = deal.minInvestment ?? trustMarket.minInvestment ?? null;
+
+              const cardData: InvestmentCardData = {
+                dealId: deal.id,
+                title: deal.title ?? identity.title ?? 'IVX Investment',
+                location: deal.addressShort ?? deal.city ?? null,
+                photos: deal.resolvedPhotos.slice(0, 8),
+                roi: deal.expectedROI ?? null,
+                minimumInvestment: minInvestment,
+                status: deal.status ?? 'published',
+                category: deal.dealType ?? null,
+                dealUrl: `https://ivxholding.com/invest/${deal.id}`,
+                likeCount: 0,
+                commentCount: 0,
+                saveCount: 0,
+                shareCount: 0,
+                isLiked: false,
+                isSaved: false,
+                salePrice: salePrice && salePrice > 0 ? salePrice : null,
+                totalInvestment: totalInvestment && totalInvestment > 0 ? totalInvestment : null,
+                timelineMin: trustMarket.timelineMin ?? null,
+                timelineMax: trustMarket.timelineMax ?? null,
+                timelineUnit: trustMarket.timelineUnit ?? null,
+                minimumOwnershipPercent: ownershipSnapshot.ownershipPercent > 0 ? ownershipSnapshot.ownershipPercent : null,
+                fractionalStartAmount: minInvestment ?? trustMarket.fractionalSharePrice ?? null,
+                developerName: identity.developerName ?? deal.developerName ?? null,
+                developerLogo: null,
+                investmentDetails: deal.descriptionShort ?? null,
+                timelineSummary,
+              };
+
               return (
                 <View key={deal.id || `deal-${idx}`} style={{ width: cardWidth, marginRight: idx < deals.length - 1 ? 14 : 0 }} testID={`landing-deal-card-${deal.id || idx}`}>
-                  <CanonicalInvestmentReelCard
-                    data={reelData}
-                    mode="feed"
-                    isActive={false}
-                    shouldMountVideo={false}
-                    isMuted={true}
-                    feedHeight={cardWidth}
-                    onToggleMute={() => {}}
-                    onLike={() => {}}
-                    onComment={() => {}}
-                    onSave={() => {}}
-                    onShare={async (d: CanonicalReelData) => {
-                      try { await Share.share({ message: `${d.title} — ${d.dealUrl}` }); } catch {}
-                    }}
+                  <InvestmentCard
+                    data={cardData}
                     onOpenDeal={(d) => {
                       router.push(`/jv-invest?jvId=${d.dealId}` as any);
                     }}
                     onInvest={() => {
                       scrollToForm();
                     }}
-                    testIDPrefix="landing-reel"
+                    onLike={() => {}}
+                    onComment={() => {}}
+                    onSave={() => {}}
+                    onShare={async (d: InvestmentCardData) => {
+                      try { await Share.share({ message: `${d.title} — ${d.dealUrl}` }); } catch {}
+                    }}
+                    testIDPrefix="landing-card"
                   />
                 </View>
               );
