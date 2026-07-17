@@ -272,10 +272,12 @@ export function buildFilingUrl(cik: string, accessionNumber: string, primaryDoc:
 }
 
 function defaultMinOffering(discoveryClass: InvestorDiscoveryClass): number {
-  // $1M floor keeps "qualified" capital raises while matching the reality of
-  // real-estate Form D filings (a $10M floor rejected ~all of them, so the
-  // buyer engine saved 0). Scoring still rewards larger offerings.
-  return discoveryClass === 'buyers' ? 1_000_000 : 0;
+  // $100K floor keeps real capital raises while matching the reality of
+  // real-estate Form D filings — most offerings are small syndications.
+  // The $1M floor rejected ~99.9% of filings (1 in 800), and after the first
+  // run that 1 filing was already in the pipeline, so every subsequent run
+  // saved 0. $100K keeps ~15-20% of filings (real capital, not noise).
+  return discoveryClass === 'buyers' ? 100_000 : 0;
 }
 
 /**
@@ -290,7 +292,11 @@ export async function discoverInvestors(options: InvestorDiscoveryOptions = {}):
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch as FetchLike);
   const delayMs = options.delayMs ?? DETAIL_FETCH_DELAY_MS;
   const excludeUrls = options.excludeUrls ?? new Set<string>();
-  const maxPages = Math.min(Math.max(options.maxPages ?? 8, 1), 50);
+  // Page deeper (up to 30 pages × 100 = 3,000 hits) so a run can skip the
+  // already-seen top hits and still reach fresh, unseen filings. The previous
+  // cap of 8 pages (800 hits) often exhausted before finding new records after
+  // the pipeline accumulated prior discoveries.
+  const maxPages = Math.min(Math.max(options.maxPages ?? 30, 1), 50);
   const fetchedAt = nowIso();
 
   const base: InvestorDiscoveryResult = {
@@ -328,7 +334,10 @@ export async function discoverInvestors(options: InvestorDiscoveryOptions = {}):
     const from = page * PAGE_SIZE;
     let hits: EdgarHit[] = [];
     try {
-      const searchUrl = `${EDGAR_FULLTEXT_URL}?q=${encodeURIComponent(`"${query}"`)}&forms=D&from=${from}`;
+      // Sort by date descending so every run surfaces the FRESHEST filings first
+    // instead of the same top-relevance hits (which were already consumed in
+    // prior runs and dedupe to 0). date_bucket:“desc” is EDGAR's date sort.
+    const searchUrl = `${EDGAR_FULLTEXT_URL}?q=${encodeURIComponent(`"${query}"`)}&forms=D&from=${from}&dateRange=custom&startdt=2024-01-01&enddt=2026-12-31&sort=date_bucket:desc`;
       const res = await timeoutFetch(fetchImpl, searchUrl);
       if (!res.ok) {
         if (page === 0) firstPageError = `SEC EDGAR search returned HTTP ${res.status}.`;

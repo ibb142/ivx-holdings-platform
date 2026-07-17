@@ -125,18 +125,18 @@ describe('discoverInvestors', () => {
       if (url.includes('1035443')) {
         return new Response(SAMPLE_FORM_D, { status: 200 });
       }
-      // Small offering — should be filtered out for the buyers class ($10M+).
+      // Small offering — should be filtered out for the buyers class ($100K+).
       const small = SAMPLE_FORM_D
         .replace('ALEXANDRIA REAL ESTATE EQUITIES, INC.', 'SMALL FUND LLC')
-        .replace('<totalOfferingAmount>50000000</totalOfferingAmount>', '<totalOfferingAmount>250000</totalOfferingAmount>');
+        .replace('<totalOfferingAmount>50000000</totalOfferingAmount>', '<totalOfferingAmount>50000</totalOfferingAmount>');
       return new Response(small, { status: 200 });
     };
   }
 
-  it('returns real entities and filters to $10M+ for the buyers class', async () => {
+  it('returns real entities and filters to $100K+ for the buyers class', async () => {
     const result = await discoverInvestors({ discoveryClass: 'buyers', fetchImpl: makeFetch(), delayMs: 0 });
     expect(result.ok).toBe(true);
-    expect(result.minOfferingUsd).toBe(1_000_000);
+    expect(result.minOfferingUsd).toBe(100_000);
     expect(result.investors).toHaveLength(1);
     expect(result.investors[0].entityName).toBe('ALEXANDRIA REAL ESTATE EQUITIES, INC.');
     expect(result.investors[0].totalOfferingAmountUsd).toBe(50000000);
