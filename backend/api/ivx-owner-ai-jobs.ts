@@ -20,7 +20,13 @@ function readTrimmed(value: unknown): string {
 export const OPTIONS = (): Response => ownerOnlyOptions();
 
 export async function handleIVXAIJobStartRequest(request: Request): Promise<Response> {
-  const owner = await assertIVXOwnerOnly(request);
+  let owner;
+  try {
+    owner = await assertIVXOwnerOnly(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'IVX owner authentication required.';
+    return ownerOnlyJson({ ok: false, error: message }, 401);
+  }
   if (!owner.userId) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
 
   let body: Record<string, unknown> = {};
@@ -68,7 +74,13 @@ export async function handleIVXAIJobStartRequest(request: Request): Promise<Resp
 }
 
 export async function handleIVXAIJobStatusRequest(request: Request, jobId: string): Promise<Response> {
-  const owner = await assertIVXOwnerOnly(request);
+  let owner;
+  try {
+    owner = await assertIVXOwnerOnly(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'IVX owner authentication required.';
+    return ownerOnlyJson({ ok: false, error: message }, 401);
+  }
   if (!owner.userId) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
 
   const job = getAIJob(jobId);
@@ -90,13 +102,25 @@ export async function handleIVXAIJobStatusRequest(request: Request, jobId: strin
 }
 
 export async function handleIVXAIJobsListRequest(request: Request): Promise<Response> {
-  const owner = await assertIVXOwnerOnly(request);
+  let owner;
+  try {
+    owner = await assertIVXOwnerOnly(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'IVX owner authentication required.';
+    return ownerOnlyJson({ ok: false, error: message }, 401);
+  }
   if (!owner.userId) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
   return ownerOnlyJson({ ok: true, jobs: listAIJobs(20) });
 }
 
 export async function handleIVXAIRuntimeObservabilityRequest(request: Request): Promise<Response> {
-  const owner = await assertIVXOwnerOnly(request);
+  let owner;
+  try {
+    owner = await assertIVXOwnerOnly(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'IVX owner authentication required.';
+    return ownerOnlyJson({ ok: false, error: message }, 401);
+  }
   if (!owner.userId) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
 
   return ownerOnlyJson({
