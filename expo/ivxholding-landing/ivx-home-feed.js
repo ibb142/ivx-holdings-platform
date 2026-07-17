@@ -267,6 +267,26 @@
         applyHomeFeedLayout();
         var grid = document.getElementById('properties-grid');
         if (!grid) return;
+
+        // Robust race-condition fix: cards may be rendered AFTER the home feed API
+        // returns (main landing script is async). Poll for up to 6s, then observe.
+        var pollAttempts = 0;
+        var maxPoll = 24;
+        var pollTimer = null;
+        function pollForCards() {
+          if (!grid || applying) return;
+          var cards = grid.querySelectorAll('.live-deal-card:not([data-ivx-home-feed-video])');
+          if (cards.length > 0) {
+            applyHomeFeedLayout();
+            if (pollTimer) clearInterval(pollTimer);
+            return;
+          }
+          pollAttempts += 1;
+          if (pollAttempts >= maxPoll && pollTimer) clearInterval(pollTimer);
+        }
+        pollTimer = setInterval(pollForCards, 250);
+        setTimeout(function () { if (pollTimer) clearInterval(pollTimer); }, 6500);
+
         var mo = new MutationObserver(function () {
           if (applying) return;
           clearTimeout(boot.__t);

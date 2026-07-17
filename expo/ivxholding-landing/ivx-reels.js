@@ -381,10 +381,26 @@
     var spin = document.createElement('div');
     spin.className = 'ivxr-spin';
     if (!feedEl.children.length) feedEl.appendChild(spin);
-    apiFetchJson(feedPath())
+    var currentPath = feedPath();
+    apiFetchJson(currentPath)
       .then(function (data) {
         if (spin.parentNode) spin.parentNode.removeChild(spin);
         var vids = (data && data.videos) || [];
+        // Fallback: if the dedicated Project Reels rail is empty, serve the unified
+        // investor feed so the Reels surface never appears broken to visitors.
+        if (state.channel === '__reels' && vids.length === 0 && !state.cursor) {
+          return apiFetchJson('/api/ivx/video-platform/feed?limit=6&viewer_id=' + encodeURIComponent(VIEWER))
+            .then(function (fbData) {
+              var fbVids = (fbData && fbData.videos) || [];
+              fbVids.forEach(function (v) {
+                if (state.videos[v.id]) return;
+                state.videos[v.id] = v;
+                feedEl.appendChild(buildSlide(v, false));
+              });
+              state.cursor = fbData && fbData.next_cursor;
+              if (!state.cursor) state.done = true;
+            });
+        }
         vids.forEach(function (v) {
           if (state.videos[v.id]) return;
           state.videos[v.id] = v;
@@ -392,6 +408,13 @@
         });
         state.cursor = data && data.next_cursor;
         if (!state.cursor) state.done = true;
+      })
+      .catch(function () {
+        if (spin.parentNode) spin.parentNode.removeChild(spin);
+        showFeedError();
+      })
+      .then(function () {
+        state.loading = false;
         if (!feedEl.children.length) {
           var em = document.createElement('div');
           em.className = 'ivxr-slide';
@@ -399,12 +422,7 @@
           feedEl.appendChild(em);
         }
         observeSlides();
-      })
-      .catch(function () {
-        if (spin.parentNode) spin.parentNode.removeChild(spin);
-        showFeedError();
-      })
-      .then(function () { state.loading = false; });
+      });
   }
 
   /* ---------- slide construction ---------- */

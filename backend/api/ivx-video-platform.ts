@@ -393,7 +393,9 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     const featured = canonicalSort(rankable.filter((r) => r.meta.video_type !== 'reel' && r.meta.is_featured), ctx);
 
     // Unified investor-first composition: 3 deal videos → 1 featured investor video → repeat.
-    const composed = reelsOnly ? reels : composeUnifiedFeed(dealVideos, featured);
+    // Fallback: if the dedicated Reels rail is empty, serve the unified investor feed so
+    // the Reels surface never appears broken to visitors.
+    const composed = reelsOnly ? (reels.length > 0 ? reels : composeUnifiedFeed(dealVideos, featured)) : composeUnifiedFeed(dealVideos, featured);
 
     // Viewer state (liked / saved) for the page being returned.
     const page = composed.slice(offset, offset + limit);
