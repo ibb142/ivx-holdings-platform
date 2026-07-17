@@ -28,7 +28,7 @@ enum ApprovalState: String {
     }
 }
 
-/// A dedicated autonomous workstream (Worker 1–8).
+/// A dedicated autonomous workstream (Worker 1–12).
 struct Worker: Identifiable {
     let id: String
     let code: String
