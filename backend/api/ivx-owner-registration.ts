@@ -1221,6 +1221,32 @@ export async function handleIVXOwnerAccessRepairRequest(request: Request): Promi
       }, 400);
     }
 
+    // SECURITY LOCKDOWN (2026-07-17): this unauthenticated endpoint must never
+    // set an owner password supplied by a client. The mobile "self-heal" that
+    // used it has been removed; it allowed any typed password to become the
+    // real owner password (account-takeover vector, broke wrong-password
+    // rejection). Re-enabling requires the explicit server-side env opt-in
+    // IVX_ALLOW_CLIENT_PASSWORD_REPAIR=true, which production must NOT set.
+    const clientPasswordRepairEnabled = (process.env.IVX_ALLOW_CLIENT_PASSWORD_REPAIR ?? '').trim().toLowerCase() === 'true';
+    if (!clientPasswordRepairEnabled) {
+      return json({
+        success: false,
+        ok: false,
+        route: 'POST /api/ivx/owner-access-repair',
+        backendVersion: OWNER_ACCESS_REPAIR_BACKEND_VERSION,
+        message: 'Setting the owner password through this endpoint is permanently disabled for security. Use the official password reset email flow (Forgot password on the login screen) to choose a new password.',
+        passwordUpdatedFromClientRequest: false,
+        passwordUpdatedFromRuntimeSecret: false,
+        passwordUpdateSource: 'none',
+        passwordLoginEnabled: false,
+        ownerNewPasswordRuntimeSecretUsed: false,
+        clientPasswordRepairDisabled: true,
+        deploymentMarker: DEPLOYMENT_MARKER,
+        secretValuesReturned: false,
+        timestamp,
+      }, 410);
+    }
+
     const ownerPasswordToApply = requestedOwnerPassword;
     const passwordUpdateSource = 'client_request' as const;
     const firstName = readTrimmed(body.firstName) || (authUser ? getUserName(authUser, 'firstName', 'Owner') : 'Owner');

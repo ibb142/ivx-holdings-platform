@@ -64,7 +64,7 @@ const notShort = projectAnswer.length > 100 && investmentAnswer.length > 100;
 
 // ── 2. LIVE: hit the Render backend if reachable ────────────────────────
 const BACKEND_URL = 'https://api.ivxholding.com';
-const OWNER_TOKEN = 'b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b';
+const OWNER_TOKEN = process.env.IVX_OWNER_TOKEN || '';
 /** @type {{prompt:string,status:number,source:string,answerPreview:string,pass:boolean,reason:string}[]} */
 const liveResults = [];
 let backendReachable = false;

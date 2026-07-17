@@ -3,9 +3,9 @@
  * No fabrication. Queries live Supabase + live Render backend + live landing page.
  */
 const SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzE5NDAyNywiZXhwIjoyMDg4NzcwMDI3fQ.TaTRyViK-8sv3R_g1Me08sEjnyMskGXKF0u-I-PTaQ8';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const BACKEND = 'https://api.ivxholding.com';
-const OWNER_TOKEN = 'b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b';
+const OWNER_TOKEN = process.env.IVX_OWNER_TOKEN || '';
 const LANDING = 'https://ivxholding.com';
 
 const headers = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Accept: 'application/json' };

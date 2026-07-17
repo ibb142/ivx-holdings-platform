@@ -1778,70 +1778,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         credentials.passwordLength,
       );
 
-      // Owner self-healing fallback: if the owner email fails with invalid
-      // credentials, call the backend repair endpoint to set the exact typed
-      // password as the Supabase password, then retry sign-in once. This makes
-      // owner login bulletproof against stale/mismatched backend passwords.
+      // SECURITY: The former "owner self-healing fallback" that submitted the
+      // typed password to the backend repair endpoint has been removed. It let
+      // ANY typed password become the owner password, which broke wrong-password
+      // rejection and was a critical account-takeover vector. Password sign-in
+      // now calls supabase.auth.signInWithPassword only. Recovery goes through
+      // the official password reset email flow.
       if (!signInResult.ok && isOwnerAdminEmail(normalizedEmail)) {
-        const errorCode = typeof signInResult.error === 'object' && signInResult.error && 'code' in signInResult.error
-          ? String((signInResult.error as { code?: string }).code ?? '')
-          : '';
-        const isInvalidCredentials = errorCode === 'invalid_credentials' || (signInResult.error?.message ?? '').toLowerCase().includes('invalid login credentials');
-        if (isInvalidCredentials) {
-          console.log('[Auth] Owner password rejected by Supabase; attempting repair with typed password:', normalizedEmail);
-          let repaired = false;
-          for (const baseUrl of getOwnerRegistrationApiBaseUrls()) {
-            try {
-              const repairEndpoint = `${baseUrl}/api/ivx/owner-access-repair`;
-              const repairResponse = await fetchWithOwnerRegistrationTimeout(repairEndpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ email: normalizedEmail, newPassword: password, sendPasswordReset: false }),
-              });
-              const repairText = await repairResponse.text();
-              let repairParsed: Record<string, unknown> = {};
-              try { repairParsed = repairText ? (JSON.parse(repairText) as Record<string, unknown>) : {}; } catch {}
-              if (repairParsed.success === true) {
-                repaired = true;
-                console.log('[Auth] Owner password repaired successfully; retrying sign-in:', normalizedEmail);
-                break;
-              }
-            } catch (repairError) {
-              console.log('[Auth] Owner repair attempt failed:', repairError instanceof Error ? repairError.message : 'unknown');
-            }
-          }
-          if (repaired) {
-            const retryResult = await signInWithEmailPassword(freshClient, email, password);
-            if (retryResult.ok && retryResult.session) {
-              console.log('[Auth] Owner sign-in succeeded after repair:', normalizedEmail);
-              manualOwnerLoginRef.current = true;
-              const challengeRequired = await requireTwoFactorIfNeeded(retryResult.session, 'password sign-in after repair');
-              if (challengeRequired) {
-                return {
-                  success: false,
-                  requiresTwoFactor: true,
-                  message: 'Enter the 6-digit code from your authenticator app to finish signing in.',
-                };
-              }
-              const handledSession = await handleSession(retryResult.session);
-              if (!handledSession.accepted) {
-                return {
-                  success: false,
-                  message: handledSession.blockedReason ?? getAdminAccessLockMessage(),
-                  failureReason: 'admin_access_locked',
-                };
-              }
-              try {
-                const tzProfile = await autoDetectAndSaveTimezone();
-                console.log('[Auth] Timezone auto-detected on login:', tzProfile.timezone, 'offset:', tzProfile.utc_offset);
-              } catch (tzError) {
-                console.log('[Auth] Timezone auto-detect failed (non-blocking):', (tzError as Error)?.message);
-              }
-              return { success: true, message: 'Login successful' };
-            }
-            console.log('[Auth] Owner sign-in still failed after repair:', normalizedEmail);
-          }
-        }
+        console.log('[Auth] Owner password rejected by Supabase. Self-heal is disabled; use the official password reset flow.');
       }
 
       if (!signInResult.ok) {

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 
-const OWNER_TOKEN = 'b8d6f01528fe515ead5390d3c408ea79b2b34c3f39eefebc004efdc02734284b';
+const OWNER_TOKEN = process.env.IVX_OWNER_TOKEN || '';
 const API = 'https://api.ivxholding.com';
 const OUT = 'screenshots/live-deploy-2026-07-06';
 
