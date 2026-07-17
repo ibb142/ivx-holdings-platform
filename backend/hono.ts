@@ -2708,7 +2708,7 @@ app.get('/health', async (context) => {
       githubReady: seniorDeveloperRuntime.github?.canReadRepo === true,
       renderReady: seniorDeveloperRuntime.render?.canDeploy === true,
       deployedSha: LIVE_COMMIT_SHA,
-      qaRunId: 'qa-18c7a64a-10d',
+      qaRunId: 'qa-b400e2f1',
       checkedAt: nowIso(),
     },
     service: 'ivx-owner-ai-backend',
