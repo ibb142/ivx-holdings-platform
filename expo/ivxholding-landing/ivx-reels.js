@@ -239,7 +239,27 @@
     + '.ivxr-kpis{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}'
     + '.ivxr-kpi{flex:1;min-width:90px;background:#242424;border-radius:12px;padding:10px}'
     + '.ivxr-kpi .v{font:800 18px/1 -apple-system,sans-serif;color:#E6C200}'
-    + '.ivxr-kpi .l{font:500 10.5px/1 -apple-system,sans-serif;color:#999;margin-top:5px;text-transform:uppercase}';
+    + '.ivxr-kpi .l{font:500 10.5px/1 -apple-system,sans-serif;color:#999;margin-top:5px;text-transform:uppercase}'
+    + '.ivxr-invest-card{position:absolute;left:14px;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;background:rgba(20,20,20,.92);border-radius:16px;padding:14px 16px 16px;box-shadow:0 8px 32px rgba(0,0,0,.5);color:#fff}'
+    + '.ivxr-invest-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px}'
+    + '.ivxr-invest-title{font:800 18px/1.2 -apple-system,Segoe UI,sans-serif;color:#fff}'
+    + '.ivxr-invest-active{font:800 10px/1 -apple-system,sans-serif;color:#E6C200;border:1px solid #E6C200;border-radius:5px;padding:3px 8px;text-transform:uppercase;letter-spacing:.4px}'
+    + '.ivxr-invest-loc{font:500 13px/1.3 -apple-system,sans-serif;color:rgba(255,255,255,.85);margin-top:3px}'
+    + '.ivxr-invest-metrics{display:flex;gap:22px;margin-top:10px}'
+    + '.ivxr-invest-metric{text-align:center}'
+    + '.ivxr-invest-metric .v{font:800 22px/1 -apple-system,sans-serif;color:#E6C200}'
+    + '.ivxr-invest-metric .l{font:500 10px/1 -apple-system,sans-serif;color:rgba(255,255,255,.7);margin-top:5px;text-transform:uppercase;letter-spacing:.3px}'
+    + '.ivxr-invest-options{display:flex;gap:18px;margin-top:12px}'
+    + '.ivxr-invest-opt{display:flex;flex-direction:column;align-items:center;gap:4px}'
+    + '.ivxr-invest-opt .circ{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.25)}'
+    + '.ivxr-invest-opt .circ.yellow{border-color:#E6C200;color:#E6C200}'
+    + '.ivxr-invest-opt .circ.blue{border-color:#4A90D9;color:#4A90D9}'
+    + '.ivxr-invest-opt .circ.green{border-color:#3CCF4E;color:#3CCF4E}'
+    + '.ivxr-invest-opt .lab{font:600 10px/1 -apple-system,sans-serif;color:#fff}'
+    + '.ivxr-invest-ctas{display:flex;gap:10px;margin-top:14px}'
+    + '.ivxr-invest-cta{flex:1;text-align:center;padding:12px 0;border-radius:999px;font:700 15px/1 -apple-system,Segoe UI,sans-serif;cursor:pointer}'
+    + '.ivxr-invest-cta.view{background:rgba(0,0,0,.45);border:1.5px solid #E6C200;color:#E6C200}'
+    + '.ivxr-invest-cta.invest{background:#E6C200;color:#000}';
   var styleEl = document.createElement('style');
   styleEl.textContent = css;
   document.head.appendChild(styleEl);
@@ -433,6 +453,90 @@
     return String(n);
   }
 
+  function parseMetric(v) {
+    if (v == null || v === '') return null;
+    var n = Number(v);
+    return isNaN(n) || n <= 0 ? null : n;
+  }
+
+  function formatRoi(n) {
+    if (n == null) return '';
+    if (n >= 100) return Math.round(n) + '%';
+    return n.toFixed(n % 1 === 0 ? 0 : 2) + '%';
+  }
+
+  function formatCurrencyCompact(n) {
+    if (n == null) return '';
+    if (n >= 1000000) return '$' + (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
+    if (n >= 1000) return '$' + (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'K';
+    return '$' + Math.round(n).toLocaleString();
+  }
+
+  function parseReelTitle(v) {
+    var raw = v.title || (v.deal && v.deal.title) || 'IVX Property Video';
+    var title = raw;
+    var subtitle = 'Property Tour';
+    var location = null;
+    var locMatch = raw.match(/(.+?)\s*[—–]\s*([^,]+,\s*[A-Z]{2})/);
+    if (locMatch) {
+      title = locMatch[1].trim();
+      location = locMatch[2].trim();
+    } else {
+      var tourMatch = raw.match(/(.+?)\s*[—–]\s*(.+)/);
+      if (tourMatch) {
+        title = tourMatch[1].trim();
+        var tour = tourMatch[2].trim();
+        if (/^\d+/.test(tour)) {
+          location = tour;
+          subtitle = 'Property Tour';
+        } else if (/^\$/.test(tour)) {
+          subtitle = tour;
+        } else {
+          subtitle = tour;
+        }
+      }
+    }
+    if (!location && v.deal) {
+      var d = v.deal;
+      if (d.city && d.state) location = d.city + ', ' + d.state;
+      else if (d.location) location = d.location;
+      else if (d.address) location = d.address;
+    }
+    if (!location && v.city && v.state) location = v.city + ', ' + v.state;
+    return { title: title, subtitle: subtitle, location: location };
+  }
+
+  function computeMinOwnership(minInvest, price) {
+    var min = parseMetric(minInvest);
+    var p = parseMetric(price);
+    if (!min || !p || p <= 0) return null;
+    return ((min / p) * 100).toFixed(4) + '%';
+  }
+
+  function buildInvestmentOptions(dealType) {
+    var t = (dealType || '').toLowerCase();
+    var hex = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>';
+    var users = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>';
+    var home = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>';
+    var tokenized = { icon: hex, label: 'Tokenized', cls: 'yellow' };
+    var jvDeals = { icon: users, label: 'JV Deal', cls: 'blue' };
+    var buyers = { icon: home, label: 'Buyer', cls: 'green' };
+    switch (t) {
+      case 'jv':
+      case 'equity_split':
+      case 'hybrid':
+        return [tokenized, jvDeals, buyers];
+      case 'development':
+      case 'new_construction':
+      case 'rehab_construction':
+        return [jvDeals, tokenized, buyers];
+      case 'profit_sharing':
+        return [tokenized, buyers, jvDeals];
+      default:
+        return [tokenized, jvDeals, buyers];
+    }
+  }
+
   function buildSlide(v, isLive) {
     var slide = document.createElement('div');
     slide.className = 'ivxr-slide' + (v.orientation === 'portrait' ? ' portrait' : '');
@@ -477,37 +581,67 @@
     heart.innerHTML = '&#10084;';
     slide.appendChild(heart);
 
-    var meta = document.createElement('div');
-    meta.className = 'ivxr-meta';
-    var badges = '';
-    if (isLive) badges += '<span class="ivxr-badge live">LIVE</span>';
-    if (v.is_featured) badges += '<span class="ivxr-badge" style="background:#E6C200;color:#000">FEATURED</span>';
-    if (v.video_type === 'reel') badges += '<span class="ivxr-badge" style="background:rgba(255,255,255,.22)">PROJECT REEL</span>';
-    (v.audiences || []).forEach(function (a) { badges += '<span class="ivxr-badge">' + (a === 'jv' ? 'JV Deal' : a) + '</span>'; });
-    var dealRow = '';
-    if (v.deal) {
-      var bits = [];
-      if (v.deal.price) bits.push('$' + Number(v.deal.price).toLocaleString());
-      if (v.deal.expected_roi) bits.push(escapeHtml(String(v.deal.expected_roi)).indexOf('%') === -1 ? escapeHtml(String(v.deal.expected_roi)) + '% ROI' : escapeHtml(String(v.deal.expected_roi)) + ' ROI');
-      if (v.deal.min_investment) bits.push('Min $' + Number(v.deal.min_investment).toLocaleString());
-      dealRow = '<div class="s" style="margin-top:4px;font-weight:700;color:#ffd700">' + bits.join(' &middot; ') + '</div>';
+    var parsed = parseReelTitle(v);
+    var deal = v.deal || null;
+    var hasDeal = !!deal && !!deal.id;
+    var roi = parseMetric(deal && deal.expected_roi);
+    var minInvest = parseMetric(deal && deal.min_investment);
+    var minOwnership = computeMinOwnership(deal && deal.min_investment, deal && deal.price);
+    var status = (deal && deal.status) || (v && v.status) || 'published';
+    var isActive = status === 'published' || status === 'active';
+    var dealType = ((deal && deal.deal_type) || (v && v.deal_type) || '').toLowerCase();
+    var investmentOptions = buildInvestmentOptions(dealType);
+
+    var card = document.createElement('div');
+    card.className = 'ivxr-invest-card';
+    var cardHtml = '';
+    cardHtml += '<div class="ivxr-invest-head">'
+      + '<div class="ivxr-invest-title">' + escapeHtml(parsed.title) + '</div>'
+      + (isActive ? '<div class="ivxr-invest-active">ACTIVE</div>' : '')
+      + '</div>';
+    if (parsed.location) cardHtml += '<div class="ivxr-invest-loc">' + escapeHtml(parsed.location) + '</div>';
+    if (hasDeal && (roi || minInvest || minOwnership)) {
+      cardHtml += '<div class="ivxr-invest-metrics">';
+      if (roi) cardHtml += '<div class="ivxr-invest-metric"><div class="v">' + escapeHtml(formatRoi(roi)) + '</div><div class="l">ROI</div></div>';
+      if (minInvest) cardHtml += '<div class="ivxr-invest-metric"><div class="v">' + escapeHtml(formatCurrencyCompact(minInvest)) + '</div><div class="l">MIN INVEST</div></div>';
+      if (minOwnership) cardHtml += '<div class="ivxr-invest-metric"><div class="v">' + escapeHtml(minOwnership) + '</div><div class="l">MIN OWNERSHIP</div></div>';
+      cardHtml += '</div>';
     }
-    meta.innerHTML = '<div class="t">' + escapeHtml(v.title || 'IVX Property Video') + '</div>'
-      + '<div class="s">' + badges + fmtCount(v.view_count) + ' views &middot; ivxholding.com</div>'
-      + dealRow;
-    if (v.deal && v.deal.url) {
-      var cta = document.createElement('button');
-      cta.textContent = 'Tap to view deal →';
-      cta.style.cssText = 'margin-top:8px;background:linear-gradient(135deg,#E6C200,#E6C200);color:#000;border:none;'
-        + 'border-radius:999px;padding:10px 18px;font:700 14px/1 -apple-system,Segoe UI,sans-serif;cursor:pointer;pointer-events:auto';
-      cta.addEventListener('click', function (e) {
+    if (investmentOptions.length) {
+      cardHtml += '<div class="ivxr-invest-options">' + investmentOptions.map(function (opt) {
+        return '<div class="ivxr-invest-opt"><div class="circ ' + opt.cls + '">' + opt.icon + '</div><div class="lab">' + escapeHtml(opt.label) + '</div></div>';
+      }).join('') + '</div>';
+    }
+    if (hasDeal) {
+      var dealUrl = deal.url || 'https://ivxholding.com/invest/' + encodeURIComponent(deal.id);
+      cardHtml += '<div class="ivxr-invest-ctas">'
+        + '<button class="ivxr-invest-cta view" data-r="view-deal">View Deal</button>'
+        + '<button class="ivxr-invest-cta invest" data-r="invest-now">Invest Now</button>'
+        + '</div>';
+    }
+    card.innerHTML = cardHtml;
+    if (hasDeal) {
+      card.querySelector('[data-r="view-deal"]').addEventListener('click', function (e) {
         e.stopPropagation();
-        track({ type: 'deal_cta_tap', video_id: v.id });
-        window.open(v.deal.url, '_blank');
+        track({ type: 'deal_cta_tap', video_id: v.id, cta: 'view_deal' });
+        window.open(deal.url || 'https://ivxholding.com/invest/' + encodeURIComponent(deal.id), '_blank');
       });
-      meta.appendChild(cta);
+      card.querySelector('[data-r="invest-now"]').addEventListener('click', function (e) {
+        e.stopPropagation();
+        track({ type: 'deal_cta_tap', video_id: v.id, cta: 'invest_now' });
+        window.open(deal.url || 'https://ivxholding.com/invest/' + encodeURIComponent(deal.id), '_blank');
+      });
     }
-    slide.appendChild(meta);
+    slide.appendChild(card);
+
+    /* Optional subtle property subtitle/tour label above the card */
+    if (parsed.subtitle && !hasDeal) {
+      var tourLabel = document.createElement('div');
+      tourLabel.className = 'ivxr-meta';
+      tourLabel.style.cssText = 'bottom:calc(140px + env(safe-area-inset-bottom));right:84px;left:14px;';
+      tourLabel.innerHTML = '<div class="s">' + escapeHtml(parsed.subtitle) + '</div>';
+      slide.appendChild(tourLabel);
+    }
 
     if (!isLive) {
       var rail = document.createElement('div');
@@ -515,24 +649,19 @@
       rail.innerHTML = ''
         + '<button class="ivxr-act like' + (v.viewer_liked ? ' on' : '') + '"><span class="i">' + (v.viewer_liked ? '&#10084;' : '&#9825;') + '</span><span class="c">' + fmtCount(v.like_count) + '</span></button>'
         + '<button class="ivxr-act cmt"><span class="i">&#128172;</span><span class="c">' + fmtCount(v.comment_count) + '</span></button>'
-        + '<button class="ivxr-act shr"><span class="i">&#10148;</span><span class="c">' + fmtCount(v.share_count) + '</span></button>'
         + '<button class="ivxr-act sav' + (v.viewer_saved ? ' saved' : '') + '"><span class="i">' + (v.viewer_saved ? '&#128278;' : '&#128279;') + '</span><span class="c">' + fmtCount(v.save_count) + '</span></button>'
-        + '<button class="ivxr-follow' + (v.viewer_following_creator ? ' on' : '') + '">' + (v.viewer_following_creator ? 'Following' : 'Follow') + '</button>'
-        + '<button class="ivxr-act rpt"><span class="i">&#8943;</span></button>';
+        + '<button class="ivxr-act shr"><span class="i">&#10148;</span><span class="c">' + fmtCount(v.share_count) + '</span></button>'
+        + '<button class="ivxr-act mute" data-r="mute"><span class="i">' + (state.muted ? '&#128263;' : '&#128266;') + '</span></button>';
       slide.appendChild(rail);
       wireRail(rail, slide, v, heart);
+      var railMute = rail.querySelector('[data-r="mute"]');
+      railMute.addEventListener('click', function (e) {
+        e.stopPropagation();
+        state.muted = !state.muted;
+        vid.muted = state.muted;
+        railMute.querySelector('.i').innerHTML = state.muted ? '&#128263;' : '&#128266;';
+      });
     }
-
-    var muteBtn = document.createElement('button');
-    muteBtn.className = 'ivxr-mute';
-    muteBtn.innerHTML = '&#128263;';
-    muteBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      state.muted = !state.muted;
-      vid.muted = state.muted;
-      muteBtn.innerHTML = state.muted ? '&#128263;' : '&#128266;';
-    });
-    slide.appendChild(muteBtn);
 
     var prog = document.createElement('div');
     prog.className = 'ivxr-prog';
