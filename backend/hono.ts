@@ -5475,6 +5475,34 @@ app.get('/api/ivx/enterprise/capacity', async (context) => {
     return context.json({ ok: false, error: msg.slice(0, 320), marker: 'ivx-enterprise-api-2026-07-14', timestamp: new Date().toISOString() }, isAuth ? 401 : 500);
   }
 });
+// ── IVX Senior Developer Certification App (Isolated) ──
+// Completely isolated from IVX production. Separate in-memory database,
+// separate auth, no access to Supabase or production business data.
+// Mounted at /api/cert-app/* and /cert-app (frontend).
+let certAppInstance: import('hono').Hono | null = null;
+async function getCertApp(): Promise<import('hono').Hono> {
+  if (!certAppInstance) {
+    const { createCertApp } = await import('./cert-app/server');
+    certAppInstance = createCertApp();
+  }
+  return certAppInstance;
+}
+app.get('/api/cert-app/health', async (c) => (await getCertApp()).request(c.req.raw));
+app.get('/api/cert-app/readiness', async (c) => (await getCertApp()).request(c.req.raw));
+app.post('/api/cert-app/auth/login', async (c) => (await getCertApp()).request(c.req.raw));
+app.get('/api/cert-app/items', async (c) => (await getCertApp()).request(c.req.raw));
+app.post('/api/cert-app/items', async (c) => (await getCertApp()).request(c.req.raw));
+app.get('/api/cert-app/items/:id', async (c) => (await getCertApp()).request(c.req.raw));
+app.put('/api/cert-app/items/:id', async (c) => (await getCertApp()).request(c.req.raw));
+app.delete('/api/cert-app/items/:id', async (c) => (await getCertApp()).request(c.req.raw));
+// Serve the cert-app frontend
+app.get('/cert-app', async (c) => {
+  const { readFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const html = await readFile(path.resolve(import.meta.dir, 'cert-app', 'frontend', 'index.html'), 'utf-8');
+  return c.html(html);
+});
+
 // Public enterprise health (no auth required)
 app.get('/api/ivx/enterprise/health', () => handleEnterpriseHealthRequest());
 app.options('/api/ivx/enterprise/health', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));

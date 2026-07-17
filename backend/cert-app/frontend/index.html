@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IVX Senior Developer Certification App</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-hover: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 800px; margin: 0 auto; padding: 16px; }
+    header { background: var(--surface); padding: 16px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+    header h1 { font-size: 1.25rem; }
+    header .version { color: var(--text-muted); font-size: 0.875rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+    .card:hover { background: var(--surface-hover); }
+    .card h3 { margin-bottom: 8px; }
+    .card .meta { color: var(--text-muted); font-size: 0.8125rem; margin-bottom: 8px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .badge.draft { background: var(--warning); color: #000; }
+    .badge.active { background: var(--success); color: #000; }
+    .badge.archived { background: var(--text-muted); color: #000; }
+    .btn { padding: 8px 16px; border: none; border-radius: var(--radius); cursor: pointer; font-size: 0.875rem; font-weight: 500; transition: background 0.2s; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-danger { background: var(--error); color: white; }
+    .btn-sm { padding: 4px 12px; font-size: 0.8125rem; }
+    input, textarea, select { width: 100%; padding: 8px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.875rem; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--primary); }
+    label { display: block; margin-bottom: 4px; font-size: 0.8125rem; color: var(--text-muted); }
+    .form-group { margin-bottom: 16px; }
+    .empty { text-align: center; padding: 48px 16px; color: var(--text-muted); }
+    .loading { text-align: center; padding: 24px; color: var(--text-muted); }
+    .error { background: rgba(239,68,68,0.1); border: 1px solid var(--error); color: var(--error); padding: 12px; border-radius: var(--radius); margin-bottom: 16px; }
+    .pagination { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+    .login-form { max-width: 400px; margin: 48px auto; }
+    .nav { display: flex; gap: 12px; margin-bottom: 24px; }
+    .nav a { color: var(--primary); text-decoration: none; font-size: 0.875rem; }
+    .nav a:hover { text-decoration: underline; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    @media (max-width: 600px) { .container { padding: 8px; } .card { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const API_BASE = '/api/cert-app';
+    let authToken = localStorage.getItem('cert_token') || '';
+    let currentPage = 1;
+    let view = 'list';
+    let editingId = null;
+
+    async function api(path, opts = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+      if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+      const res = await fetch(API_BASE + path, { ...opts, headers });
+      const data = await res.json().catch(() => ({ ok: false, error: 'Invalid response' }));
+      return { status: res.status, data };
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      if (!authToken) { renderLogin(app); return; }
+      if (view === 'list') renderList(app);
+      else if (view === 'detail') renderDetail(app);
+      else if (view === 'form') renderForm(app);
+    }
+
+    function renderLogin(app) {
+      app.innerHTML = `
+        <div class="container">
+          <header><h1>IVX Certification App</h1><div class="version">v1.0.0 — Login</div></header>
+          <div class="card login-form">
+            <div class="form-group"><label>Email</label><input id="login-email" type="email" value="cert@ivx-cert.local" /></div>
+            <div class="form-group"><label>Password</label><input id="login-pass" type="password" value="cert-app-password" /></div>
+            <div id="login-error"></div>
+            <button class="btn btn-primary" id="login-btn" style="width:100%">Login</button>
+          </div>
+        </div>`;
+      document.getElementById('login-btn').onclick = async () => {
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-pass').value;
+        const { data } = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+        if (data.ok && data.token) { authToken = data.token; localStorage.setItem('cert_token', authToken); render(); }
+        else { document.getElementById('login-error').innerHTML = '<div class="error">' + (data.error || 'Login failed') + '</div>'; }
+      };
+    }
+
+    async function renderList(app) {
+      app.innerHTML = '<div class="container"><div class="loading">Loading...</div></div>';
+      const { data } = await api('/items?page=' + currentPage + '&limit=10');
+      if (!data.ok) { app.innerHTML = '<div class="container"><div class="error">' + (data.error || 'Failed to load') + '</div></div>'; return; }
+      const items = data.data || [];
+      const pg = data.pagination || {};
+      let html = '<div class="container"><header><h1>IVX Certification App</h1><div class="version">v1.0.0 — Items</div></header>';
+      html += '<div class="nav"><a href="#" id="new-btn">+ New Item</a><a href="#" id="logout-btn">Logout</a></div>';
+      if (items.length === 0) {
+        html += '<div class="card empty"><p>No items found. Create your first item.</p></div>';
+      } else {
+        for (const item of items) {
+          html += `<div class="card" data-id="${item.id}">
+            <h3>${escapeHtml(item.title)}</h3>
+            <div class="meta">ID: ${item.id} • Created: ${item.createdAt.slice(0,10)} <span class="badge ${item.status}">${item.status}</span></div>
+            <p style="color:var(--text-muted);font-size:0.875rem">${escapeHtml(item.description || 'No description')}</p>
+            <div class="actions">
+              <button class="btn btn-primary btn-sm view-btn" data-id="${item.id}">View</button>
+              <button class="btn btn-sm edit-btn" data-id="${item.id}" style="background:var(--surface-hover)">Edit</button>
+              <button class="btn btn-danger btn-sm delete-btn" data-id="${item.id}">Delete</button>
+            </div>
+          </div>`;
+        }
+        if (pg.totalPages > 1) {
+          html += '<div class="pagination">';
+          for (let i = 1; i <= pg.totalPages; i++) {
+            html += `<button class="btn ${i === currentPage ? 'btn-primary' : ''} btn-sm page-btn" data-page="${i}">${i}</button>`;
+          }
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+      app.innerHTML = html;
+      document.getElementById('new-btn').onclick = (e) => { e.preventDefault(); editingId = null; view = 'form'; render(); };
+      document.getElementById('logout-btn').onclick = (e) => { e.preventDefault(); authToken = ''; localStorage.removeItem('cert_token'); render(); };
+      document.querySelectorAll('.view-btn').forEach(b => b.onclick = () => { editingId = b.dataset.id; view = 'detail'; render(); });
+      document.querySelectorAll('.edit-btn').forEach(b => b.onclick = () => { editingId = b.dataset.id; view = 'form'; render(); });
+      document.querySelectorAll('.delete-btn').forEach(b => b.onclick = async () => {
+        if (confirm('Delete this item?')) { await api('/items/' + b.dataset.id, { method: 'DELETE' }); render(); }
+      });
+      document.querySelectorAll('.page-btn').forEach(b => b.onclick = () => { currentPage = parseInt(b.dataset.page); render(); });
+    }
+
+    async function renderDetail(app) {
+      app.innerHTML = '<div class="container"><div class="loading">Loading...</div></div>';
+      const { data } = await api('/items/' + editingId);
+      if (!data.ok || !data.data) { app.innerHTML = '<div class="container"><div class="error">Item not found</div></div>'; return; }
+      const item = data.data;
+      app.innerHTML = `<div class="container">
+        <header><h1>${escapeHtml(item.title)}</h1><div class="version">Detail View</div></header>
+        <div class="nav"><a href="#" id="back-btn">← Back to list</a><a href="#" id="edit-btn">Edit</a></div>
+        <div class="card">
+          <div class="meta">ID: ${item.id}</div>
+          <div class="meta">Status: <span class="badge ${item.status}">${item.status}</span></div>
+          <div class="meta">Created: ${item.createdAt}</div>
+          <div class="meta">Updated: ${item.updatedAt}</div>
+          <p style="margin-top:12px">${escapeHtml(item.description || 'No description')}</p>
+        </div>
+      </div>`;
+      document.getElementById('back-btn').onclick = (e) => { e.preventDefault(); view = 'list'; render(); };
+      document.getElementById('edit-btn').onclick = (e) => { e.preventDefault(); view = 'form'; render(); };
+    }
+
+    async function renderForm(app) {
+      let item = null;
+      if (editingId) {
+        const { data } = await api('/items/' + editingId);
+        if (data.ok) item = data.data;
+      }
+      app.innerHTML = `<div class="container">
+        <header><h1>${editingId ? 'Edit Item' : 'New Item'}</h1><div class="version">Form</div></header>
+        <div class="nav"><a href="#" id="back-btn">← Back to list</a></div>
+        <div class="card">
+          <div class="form-group"><label>Title</label><input id="form-title" type="text" value="${item ? escapeHtml(item.title) : ''}" /></div>
+          <div class="form-group"><label>Description</label><textarea id="form-desc" rows="4">${item ? escapeHtml(item.description) : ''}</textarea></div>
+          <div class="form-group"><label>Status</label><select id="form-status">
+            <option value="draft" ${item?.status === 'draft' ? 'selected' : ''}>Draft</option>
+            <option value="active" ${item?.status === 'active' ? 'selected' : ''}>Active</option>
+            <option value="archived" ${item?.status === 'archived' ? 'selected' : ''}>Archived</option>
+          </select></div>
+          <div id="form-error"></div>
+          <button class="btn btn-primary" id="save-btn">${editingId ? 'Update' : 'Create'}</button>
+        </div>
+      </div>`;
+      document.getElementById('back-btn').onclick = (e) => { e.preventDefault(); view = 'list'; render(); };
+      document.getElementById('save-btn').onclick = async () => {
+        const body = { title: document.getElementById('form-title').value, description: document.getElementById('form-desc').value, status: document.getElementById('form-status').value };
+        const { data } = editingId
+          ? await api('/items/' + editingId, { method: 'PUT', body: JSON.stringify(body) })
+          : await api('/items', { method: 'POST', body: JSON.stringify(body) });
+        if (data.ok) { view = 'list'; render(); }
+        else { document.getElementById('form-error').innerHTML = '<div class="error">' + (data.error || 'Save failed') + '</div>'; }
+      };
+    }
+
+    function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
+    render();
+  </script>
+</body>
+</html>
