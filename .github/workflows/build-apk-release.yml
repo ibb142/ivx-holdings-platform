@@ -1,0 +1,111 @@
+name: Build IVX Android APK Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseTag:
+        description: 'Release tag (e.g. v1.4.6-build38)'
+        required: false
+        default: 'v1.4.6-build38'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build signed release APK and publish GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: expo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Regenerate native Android project
+        env:
+          CI: '1'
+          EXPO_NO_TELEMETRY: '1'
+        run: bunx expo prebuild --platform android --clean --no-install
+
+      - name: Build universal release APK
+        run: cd android && ./gradlew :app:assembleRelease --no-daemon -x lint
+
+      - name: Verify APK version metadata
+        run: |
+          AAPT="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)"
+          "$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | head -2
+          BADGING="$("$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | head -1)"
+          echo "$BADGING" | grep -q "versionCode='38'" || { echo "::error::versionCode is not 38"; exit 1; }
+          echo "$BADGING" | grep -q "versionName='1.4.6'" || { echo "::error::versionName is not 1.4.6"; exit 1; }
+          echo "$BADGING" | grep -q "name='com.ivxholdings.app'" || { echo "::error::unexpected package id"; exit 1; }
+
+      - name: Scan bundle for secret-bearing JWTs
+        run: |
+          mkdir -p /tmp/apkscan
+          unzip -o -q android/app/build/outputs/apk/release/app-release.apk -d /tmp/apkscan
+          python3 - <<'PY'
+          import base64, re, sys
+          data = open('/tmp/apkscan/assets/index.android.bundle', 'rb').read().decode('utf-8', 'ignore')
+          bad = []
+          for jwt in set(re.findall(r'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}', data)):
+              payload = jwt.split('.')[1]
+              payload += '=' * (-len(payload) % 4)
+              try:
+                  decoded = base64.urlsafe_b64decode(payload).decode('utf-8', 'ignore')
+              except Exception:
+                  continue
+              if '"role":"service_role"' in decoded or '"role": "service_role"' in decoded:
+                  bad.append('service_role JWT found in bundle')
+              if '"sub"' in decoded and '"session_id"' in decoded:
+                  bad.append('user session JWT found in bundle')
+          if bad:
+              print('SECRET SCAN FAILED:', bad)
+              sys.exit(1)
+          print('Secret scan passed: no service-role or session JWTs in bundle.')
+          PY
+
+      - name: Compute checksum and rename artifact
+        id: checksum
+        run: |
+          TAG="${{ github.event.inputs.releaseTag || 'v1.4.6-build38' }}"
+          APK_NAME="ivx-holdings-${TAG}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          SHA256="$(sha256sum "$APK_NAME" | awk '{print $1}')"
+          SIZE="$(stat -c%s "$APK_NAME")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "APK $APK_NAME size=$SIZE sha256=$SHA256"
+
+      - name: Create owner-controlled GitHub Release with APK asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.checksum.outputs.tag }}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create "$TAG" "${{ steps.checksum.outputs.apk_name }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "IVX Holdings ${TAG} (auth security release)" \
+            --notes "Source commit: $GITHUB_SHA
+          Package: com.ivxholdings.app
+          Version: 1.4.6 (versionCode 38)
+          SHA-256: ${{ steps.checksum.outputs.sha256 }}
+          Size: ${{ steps.checksum.outputs.size }} bytes
+          Built by GitHub Actions run ${GITHUB_RUN_ID}."
+          echo "Release URL: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          echo "Direct APK URL: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/${{ steps.checksum.outputs.apk_name }}"
