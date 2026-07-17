@@ -392,10 +392,9 @@ export default function VideosScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Top bar */}
+      {/* Top filter chips — matches the owner-approved reels screenshot */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topRow}>
-          <Text style={styles.headerTitle}>IVX Reels</Text>
           <View style={styles.tabs}>
             {CHANNELS.map((ch) => (
               <TouchableOpacity
@@ -403,9 +402,10 @@ export default function VideosScreen() {
                 style={[styles.tab, channel === ch.id && styles.tabActive]}
                 onPress={() => setChannel(ch.id)}
                 testID={`reels-channel-${ch.id}`}
+                activeOpacity={0.85}
               >
                 <Text style={[styles.tabText, channel === ch.id && styles.tabTextActive]}>
-                  {ch.label}{counts[ch.id] > 0 ? ` ${counts[ch.id]}` : ''}
+                  {ch.label} {counts[ch.id]}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -521,20 +521,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  headerTitle: {
-    color: GOLD,
-    fontSize: 20,
-    fontWeight: '900' as const,
-    letterSpacing: -0.3,
-    textShadowColor: 'rgba(0,0,0,0.7)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
   closeBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -543,10 +534,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   tab: {
     flexShrink: 0,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 999,
     paddingVertical: 7,
     paddingHorizontal: 14,
@@ -557,10 +549,14 @@ const styles = StyleSheet.create({
   tabText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700' as const,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   tabTextActive: {
     color: '#000',
+    textShadowColor: 'transparent',
   },
   loading: {
     flex: 1,

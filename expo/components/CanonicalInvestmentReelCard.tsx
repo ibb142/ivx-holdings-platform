@@ -344,7 +344,7 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
 
   // Rail position: account for safe area in reel mode, fixed offset in feed mode
   const railBottom = isReel ? insets.bottom + 96 : 96;
-  const infoBottom = isReel ? insets.bottom + 32 : 32;
+  const infoBottom = isReel ? insets.bottom + 26 : 26;
 
   const renderMedia = () => {
     if (data.mediaType === 'video' && data.mediaUrl) {
@@ -457,18 +457,21 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
         </View>
       )}
 
-      {/* Right action rail */}
+      {/* Right action rail — Instagram-style outline icons with counts */}
       <View style={[styles.rail, { bottom: railBottom }]}>
         <TouchableOpacity
           style={styles.railBtn}
           onPress={handleLikePress}
           testID={`${testIDPrefix}-like-${data.reelId}`}
+          activeOpacity={0.8}
         >
-          <Heart
-            size={isReel ? 30 : 26}
-            color={liked ? Colors.error : '#fff'}
-            fill={liked ? Colors.error : 'transparent'}
-          />
+          <View style={styles.railIconCircle}>
+            <Heart
+              size={isReel ? 28 : 24}
+              color={liked ? Colors.error : '#fff'}
+              strokeWidth={1.5}
+            />
+          </View>
           <Text style={styles.railCount}>{formatCount(likeCount)}</Text>
         </TouchableOpacity>
 
@@ -476,8 +479,11 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           style={styles.railBtn}
           onPress={handleCommentPress}
           testID={`${testIDPrefix}-comment-${data.reelId}`}
+          activeOpacity={0.8}
         >
-          <MessageCircle size={isReel ? 30 : 26} color="#fff" />
+          <View style={styles.railIconCircle}>
+            <MessageCircle size={isReel ? 28 : 24} color="#fff" strokeWidth={1.5} />
+          </View>
           <Text style={styles.railCount}>{formatCount(data.commentCount)}</Text>
         </TouchableOpacity>
 
@@ -485,12 +491,15 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           style={styles.railBtn}
           onPress={handleSavePress}
           testID={`${testIDPrefix}-save-${data.reelId}`}
+          activeOpacity={0.8}
         >
-          <Bookmark
-            size={isReel ? 30 : 26}
-            color={saved ? Colors.primary : '#fff'}
-            fill={saved ? Colors.primary : 'transparent'}
-          />
+          <View style={styles.railIconCircle}>
+            <Bookmark
+              size={isReel ? 28 : 24}
+              color={saved ? Colors.primary : '#fff'}
+              strokeWidth={1.5}
+            />
+          </View>
           <Text style={styles.railCount}>{formatCount(saveCount)}</Text>
         </TouchableOpacity>
 
@@ -498,8 +507,11 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           style={styles.railBtn}
           onPress={handleSharePress}
           testID={`${testIDPrefix}-share-${data.reelId}`}
+          activeOpacity={0.8}
         >
-          <Share2 size={isReel ? 30 : 26} color="#fff" />
+          <View style={styles.railIconCircle}>
+            <Share2 size={isReel ? 28 : 24} color="#fff" strokeWidth={1.5} />
+          </View>
           <Text style={styles.railCount}>{formatCount(data.shareCount)}</Text>
         </TouchableOpacity>
 
@@ -508,8 +520,11 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
             style={styles.railBtn}
             onPress={onToggleMute}
             testID={`${testIDPrefix}-mute-${data.reelId}`}
+            activeOpacity={0.8}
           >
-            {isMuted ? <VolumeX size={26} color="#fff" /> : <Volume2 size={26} color="#fff" />}
+            <View style={styles.railIconCircle}>
+              {isMuted ? <VolumeX size={24} color="#fff" strokeWidth={1.5} /> : <Volume2 size={24} color="#fff" strokeWidth={1.5} />}
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -860,21 +875,29 @@ const styles = StyleSheet.create({
   },
   rail: {
     position: 'absolute' as const,
-    right: 8,
+    right: 10,
     zIndex: 20,
     flexDirection: 'column' as const,
     alignItems: 'center' as const,
-    gap: 18,
+    gap: 16,
   },
   railBtn: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  railIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
   railCount: {
     color: '#fff',
     fontSize: 11,
-    fontWeight: '600' as const,
-    marginTop: 4,
+    fontWeight: '700' as const,
+    marginTop: 3,
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
@@ -889,8 +912,8 @@ const styles = StyleSheet.create({
     position: 'absolute' as const,
     left: 0,
     right: 0,
-    bottom: -32,
-    height: 280,
+    bottom: -40,
+    height: 320,
     zIndex: -1,
   },
   badgeRow: {
@@ -927,15 +950,15 @@ const styles = StyleSheet.create({
   },
   infoTitle: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800' as const,
     textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   infoSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 15,
     fontWeight: '600' as const,
     marginTop: 2,
     textShadowColor: 'rgba(0,0,0,0.7)',
@@ -961,14 +984,14 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: Colors.primary,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800' as const,
   },
   metricLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10.5,
-    fontWeight: '500' as const,
-    marginTop: 5,
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 10,
+    fontWeight: '600' as const,
+    marginTop: 4,
     textTransform: 'uppercase' as const,
   },
   optionsRow: {
@@ -980,9 +1003,9 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
   },
   optionIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1.5,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -1004,28 +1027,28 @@ const styles = StyleSheet.create({
   },
   viewDealBtn: {
     flex: 1,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: Colors.primary,
     borderRadius: 999,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center' as const,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   viewDealText: {
     color: Colors.primary,
     fontSize: 15,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
   },
   investNowBtn: {
     flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 999,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center' as const,
   },
   investNowText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
   },
 });
