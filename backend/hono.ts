@@ -535,6 +535,23 @@ import {
   handleOutreachDeleteRequest,
 } from './api/ivx-outreach';
 import {
+  OPTIONS as realDataOptions,
+  handleRealDataSeparationRequest,
+  handleInvestorAuditRequest,
+  handleFinancialLedgerSummaryRequest,
+  handleFinancialLedgerCreateRequest,
+  handleFinancialLedgerGetRequest,
+  handleFinancialLedgerReconcileRequest,
+  handleFinancialLedgerDeleteRequest,
+  handleOutreachGuardrailsRequest,
+  handleOutreachGuardrailsDncAddRequest,
+  handleOutreachGuardrailsDncRemoveRequest,
+  handleOutreachGuardrailsBounceRequest,
+  handleOutreachGuardrailsUnsubscribeRequest,
+  handleOutreachGuardrailsEvaluateRequest,
+  handleAiArchitectureMapRequest,
+} from './api/ivx-real-data';
+import {
   OPTIONS as leadScoringOptions,
   handleLeadScoringRequest,
 } from './api/ivx-lead-scoring';
@@ -3465,6 +3482,24 @@ app.options('/api/ivx/outreach/:messageId/engagement', () => outreachOptions());
 app.post('/api/ivx/outreach/:messageId/engagement', async (context) => handleOutreachEngagementRequest(context.req.raw, context.req.param('messageId')));
 app.options('/api/ivx/outreach/:messageId/delete', () => outreachOptions());
 app.post('/api/ivx/outreach/:messageId/delete', async (context) => handleOutreachDeleteRequest(context.req.raw, context.req.param('messageId')));
+
+// ── IVX Real-Data Recovery (Block 1-13 mandate) ───────────────────────────────
+app.options('/api/ivx/real-data/*', () => realDataOptions());
+app.options('/api/ivx/real-data', () => realDataOptions());
+app.get('/api/ivx/real-data/separation', async (context) => handleRealDataSeparationRequest(context.req.raw));
+app.get('/api/ivx/real-data/investor-audit', async (context) => handleInvestorAuditRequest(context.req.raw));
+app.get('/api/ivx/real-data/financial-ledger', async (context) => handleFinancialLedgerSummaryRequest(context.req.raw));
+app.post('/api/ivx/real-data/financial-ledger', async (context) => handleFinancialLedgerCreateRequest(context.req.raw));
+app.get('/api/ivx/real-data/financial-ledger/:id', async (context) => handleFinancialLedgerGetRequest(context.req.raw, context.req.param('id')));
+app.post('/api/ivx/real-data/financial-ledger/:id/reconcile', async (context) => handleFinancialLedgerReconcileRequest(context.req.raw, context.req.param('id')));
+app.post('/api/ivx/real-data/financial-ledger/:id/delete', async (context) => handleFinancialLedgerDeleteRequest(context.req.raw, context.req.param('id')));
+app.get('/api/ivx/real-data/outreach-guardrails', async (context) => handleOutreachGuardrailsRequest(context.req.raw));
+app.post('/api/ivx/real-data/outreach-guardrails/dnc', async (context) => handleOutreachGuardrailsDncAddRequest(context.req.raw));
+app.post('/api/ivx/real-data/outreach-guardrails/dnc/remove', async (context) => handleOutreachGuardrailsDncRemoveRequest(context.req.raw));
+app.post('/api/ivx/real-data/outreach-guardrails/bounce', async (context) => handleOutreachGuardrailsBounceRequest(context.req.raw));
+app.post('/api/ivx/real-data/outreach-guardrails/unsubscribe', async (context) => handleOutreachGuardrailsUnsubscribeRequest(context.req.raw));
+app.post('/api/ivx/real-data/outreach-guardrails/evaluate', async (context) => handleOutreachGuardrailsEvaluateRequest(context.req.raw));
+app.get('/api/ivx/real-data/architecture-map', async (context) => handleAiArchitectureMapRequest(context.req.raw));
 
 app.options('/api/ivx/lead-scoring', () => leadScoringOptions());
 app.get('/api/ivx/lead-scoring', async (context) => handleLeadScoringRequest(context.req.raw));
