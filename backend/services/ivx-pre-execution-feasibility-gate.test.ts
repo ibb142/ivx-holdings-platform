@@ -12,6 +12,8 @@ import {
   snapshotBlockerMemory,
   isRepeatedBlocker,
   maskCredential,
+  resolveGithubRepoIdentity,
+  IVX_AUTHORIZED_GITHUB_REPO,
   IVX_PRE_EXECUTION_FEASIBILITY_GATE_MARKER,
   BLOCKER_REPEAT_THRESHOLD,
   type BlockerCode,
@@ -498,6 +500,7 @@ describe('IVX Pre-Execution Feasibility Gate', () => {
       'GITHUB_TOKEN_MISSING',
       'GITHUB_TOKEN_REVOKED',
       'GITHUB_REPO_INVALID',
+      'GITHUB_REPO_UNAUTHORIZED',
       'RENDER_KEY_MISSING',
       'RENDER_SERVICE_ID_INVALID',
       'SUPABASE_ANON_KEY_MISMATCH',
@@ -515,6 +518,89 @@ describe('IVX Pre-Execution Feasibility Gate', () => {
         expect(action).toMatch(/[a-z]/i); // contains letters
       });
     }
+  });
+
+  describe('GitHub repository identity resolution (canonical variables)', () => {
+    const AUTHORIZED = 'ibb142/rork-global-real-estate-invest';
+
+    it('resolves from GITHUB_REPO ("owner/repo")', () => {
+      const id = resolveGithubRepoIdentity({ GITHUB_REPO: AUTHORIZED });
+      expect(id.slug).toBe(AUTHORIZED);
+      expect(id.sourceVar).toBe('GITHUB_REPO');
+      expect(id.authorized).toBe(true);
+    });
+
+    it('resolves from GITHUB_REPOSITORY', () => {
+      const id = resolveGithubRepoIdentity({ GITHUB_REPOSITORY: AUTHORIZED });
+      expect(id.slug).toBe(AUTHORIZED);
+      expect(id.sourceVar).toBe('GITHUB_REPOSITORY');
+      expect(id.authorized).toBe(true);
+    });
+
+    it('combines GITHUB_OWNER with a bare GITHUB_REPO name', () => {
+      const id = resolveGithubRepoIdentity({ GITHUB_OWNER: 'ibb142', GITHUB_REPO: 'rork-global-real-estate-invest' });
+      expect(id.slug).toBe(AUTHORIZED);
+      expect(id.sourceVar).toBe('GITHUB_OWNER+GITHUB_REPO');
+      expect(id.authorized).toBe(true);
+    });
+
+    it('derives from GITHUB_REPO_URL (with and without .git)', () => {
+      const a = resolveGithubRepoIdentity({ GITHUB_REPO_URL: `https://github.com/${AUTHORIZED}.git` });
+      expect(a.slug).toBe(AUTHORIZED);
+      expect(a.sourceVar).toBe('GITHUB_REPO_URL');
+      expect(a.authorized).toBe(true);
+      const b = resolveGithubRepoIdentity({ GITHUB_REPO_URL: `https://github.com/${AUTHORIZED}` });
+      expect(b.slug).toBe(AUTHORIZED);
+    });
+
+    it('returns empty identity when nothing is set', () => {
+      const id = resolveGithubRepoIdentity({});
+      expect(id.slug).toBe('');
+      expect(id.sourceVar).toBeNull();
+      expect(id.authorized).toBe(false);
+      expect(id.authorizedRepo).toBe(IVX_AUTHORIZED_GITHUB_REPO);
+    });
+
+    it('marks a foreign repository as unauthorized', () => {
+      const id = resolveGithubRepoIdentity({ GITHUB_REPO: 'someone-else/obsolete-vercel-clone' });
+      expect(id.slug).toBe('someone-else/obsolete-vercel-clone');
+      expect(id.authorized).toBe(false);
+    });
+
+    it('honors IVX_AUTHORIZED_GITHUB_REPO override', () => {
+      const id = resolveGithubRepoIdentity({ GITHUB_REPO: 'org/other', IVX_AUTHORIZED_GITHUB_REPO: 'org/other' });
+      expect(id.authorized).toBe(true);
+    });
+
+    it('blocks push_github with GITHUB_REPO_UNAUTHORIZED for a foreign repo', async () => {
+      const env = { ...FULL_ENV, GITHUB_REPO: 'someone-else/obsolete-vercel-clone' };
+      const result = await runPreExecutionFeasibilityGate({
+        prompt: 'push this commit to github',
+        taskId: TASK_ID,
+        ownerSessionPresent: true,
+        probes: ALL_ACCEPT_PROBES,
+        env,
+        skipLiveProbes: true,
+      });
+      expect(result.state).toBe('BLOCKED');
+      if (result.state !== 'BLOCKED') return;
+      expect(result.blockerCode).toBe('GITHUB_REPO_UNAUTHORIZED');
+      expect(result.exactBlocker).toContain('someone-else/obsolete-vercel-clone');
+      expect(result.exactBlocker).toContain(IVX_AUTHORIZED_GITHUB_REPO);
+    });
+
+    it('passes push_github when the resolved repo is the authorized production repo (via URL)', async () => {
+      const env = { ...FULL_ENV, GITHUB_REPO: '', GITHUB_REPO_URL: `https://github.com/${AUTHORIZED}.git` };
+      const result = await runPreExecutionFeasibilityGate({
+        prompt: 'push this commit to github',
+        taskId: TASK_ID,
+        ownerSessionPresent: true,
+        probes: ALL_ACCEPT_PROBES,
+        env,
+        skipLiveProbes: true,
+      });
+      expect(result.state).toBe('READY');
+    });
   });
 
   describe('Live acceptance test prompts (spec section 8)', () => {

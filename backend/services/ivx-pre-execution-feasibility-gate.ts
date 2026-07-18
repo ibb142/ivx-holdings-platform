@@ -53,6 +53,7 @@ export type BlockerCode =
   | 'GITHUB_TOKEN_MISSING'
   | 'GITHUB_TOKEN_REVOKED'
   | 'GITHUB_REPO_INVALID'
+  | 'GITHUB_REPO_UNAUTHORIZED'
   | 'RENDER_KEY_MISSING'
   | 'RENDER_SERVICE_ID_INVALID'
   | 'SUPABASE_ANON_KEY_MISMATCH'
@@ -380,18 +381,78 @@ function resolveCredential(
   return { present: false, value: '', source: 'none', sourceVar: null };
 }
 
-/**
- * Resolves the GitHub repo slug ("owner/repo") from GITHUB_REPO, IVX_GITHUB_REPO,
- * or by deriving it from GITHUB_REPO_URL / IVX_GITHUB_REPO_URL (the variable the
- * production runtime actually sets, e.g. https://github.com/owner/repo.git).
- */
-function resolveGithubRepoSlug(env: Record<string, string | undefined>): string {
-  const direct = (env.GITHUB_REPO ?? env.IVX_GITHUB_REPO ?? '').trim();
-  if (direct) return direct;
-  const url = (env.GITHUB_REPO_URL ?? env.IVX_GITHUB_REPO_URL ?? '').trim();
-  if (!url) return '';
+/** The only repository production is authorized to deploy from (owner spec). */
+export const IVX_AUTHORIZED_GITHUB_REPO = 'ibb142/rork-global-real-estate-invest';
+
+/** Variable name a repo identity was resolved from — evidence, never a secret. */
+export type RepoIdentitySourceVar =
+  | 'GITHUB_REPO'
+  | 'IVX_GITHUB_REPO'
+  | 'GITHUB_REPOSITORY'
+  | 'GITHUB_OWNER+GITHUB_REPO'
+  | 'GITHUB_REPO_URL'
+  | 'IVX_GITHUB_REPO_URL';
+
+export type ResolvedRepoIdentity = {
+  /** Normalized "owner/repo" slug, or '' when nothing resolvable is set. */
+  slug: string;
+  /** Which environment variable produced the slug (null when unresolved). */
+  sourceVar: RepoIdentitySourceVar | null;
+  /** True only when the slug matches the authorized production repository. */
+  authorized: boolean;
+  /** The repository the runtime is authorized to deploy from. */
+  authorizedRepo: string;
+};
+
+function parseRepoUrl(url: string): string {
   const match = /github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i.exec(url);
   return match ? `${match[1]}/${match[2]}` : '';
+}
+
+/**
+ * Normalizes every supported repository variable into ONE validated runtime
+ * repository identity (owner spec — canonical configuration, no ambiguity):
+ * GITHUB_REPO ("owner/repo" or bare repo name combined with GITHUB_OWNER),
+ * IVX_GITHUB_REPO, GITHUB_REPOSITORY, GITHUB_OWNER, and
+ * GITHUB_REPO_URL / IVX_GITHUB_REPO_URL (the variable production actually sets).
+ * Also reports whether the resolved slug matches the authorized production
+ * repository (IVX_AUTHORIZED_GITHUB_REPO env override, default ibb142/rork-global-real-estate-invest).
+ */
+export function resolveGithubRepoIdentity(env: Record<string, string | undefined>): ResolvedRepoIdentity {
+  const authorizedRepo = (env.IVX_AUTHORIZED_GITHUB_REPO ?? '').trim() || IVX_AUTHORIZED_GITHUB_REPO;
+  const finish = (slug: string, sourceVar: RepoIdentitySourceVar): ResolvedRepoIdentity => ({
+    slug,
+    sourceVar,
+    authorized: slug.toLowerCase() === authorizedRepo.toLowerCase(),
+    authorizedRepo,
+  });
+  const direct = (env.GITHUB_REPO ?? '').trim();
+  if (direct.includes('/')) return finish(direct, 'GITHUB_REPO');
+  const ivxDirect = (env.IVX_GITHUB_REPO ?? '').trim();
+  if (ivxDirect.includes('/')) return finish(ivxDirect, 'IVX_GITHUB_REPO');
+  const ghRepository = (env.GITHUB_REPOSITORY ?? '').trim();
+  if (ghRepository.includes('/')) return finish(ghRepository, 'GITHUB_REPOSITORY');
+  const owner = (env.GITHUB_OWNER ?? '').trim();
+  if (owner && direct) return finish(`${owner}/${direct}`, 'GITHUB_OWNER+GITHUB_REPO');
+  const url = (env.GITHUB_REPO_URL ?? '').trim();
+  if (url) {
+    const slug = parseRepoUrl(url);
+    if (slug) return finish(slug, 'GITHUB_REPO_URL');
+  }
+  const ivxUrl = (env.IVX_GITHUB_REPO_URL ?? '').trim();
+  if (ivxUrl) {
+    const slug = parseRepoUrl(ivxUrl);
+    if (slug) return finish(slug, 'IVX_GITHUB_REPO_URL');
+  }
+  return { slug: '', sourceVar: null, authorized: false, authorizedRepo };
+}
+
+/**
+ * Resolves the GitHub repo slug ("owner/repo") — thin wrapper kept for callers
+ * that only need the slug.
+ */
+function resolveGithubRepoSlug(env: Record<string, string | undefined>): string {
+  return resolveGithubRepoIdentity(env).slug;
 }
 
 const CREDENTIAL_FALLBACKS: Record<RequiredCredential, string | null> = {
@@ -476,13 +537,20 @@ async function checkCapability(
         const code: BlockerCode = probe.httpStatus === 401 ? 'GITHUB_TOKEN_REVOKED' : 'GITHUB_TOKEN_REVOKED';
         return { ...result, blockerCode: code, exactBlocker: `GitHub API rejected the token: ${probe.detail} (HTTP ${probe.httpStatus ?? 'n/a'}).` };
       }
-      // For push, also check repo identification. Accept GITHUB_REPO ("owner/repo"),
-      // IVX_GITHUB_REPO, or derive from GITHUB_REPO_URL (the variable production actually sets).
+      // For push, also check repo identification. Accept GITHUB_REPO ("owner/repo" or
+      // bare name + GITHUB_OWNER), IVX_GITHUB_REPO, GITHUB_REPOSITORY, or derive from
+      // GITHUB_REPO_URL (the variable production actually sets). The resolved repo
+      // MUST match the authorized production repository — deployment from any other
+      // repository (obsolete Rork/Vercel clones included) is rejected outright.
       if (capability === 'push_github') {
-        const repo = resolveGithubRepoSlug(env);
-        if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-          return { ...result, blockerCode: 'GITHUB_REPO_INVALID', exactBlocker: `GITHUB_REPO / GITHUB_REPO_URL is missing or malformed (expected "owner/repo" or a github.com repo URL, got "${repo || '<empty>'}").` };
+        const identity = resolveGithubRepoIdentity(env);
+        if (!identity.slug || !/^[\w.-]+\/[\w.-]+$/.test(identity.slug)) {
+          return { ...result, blockerCode: 'GITHUB_REPO_INVALID', exactBlocker: `GITHUB_REPO / GITHUB_OWNER+GITHUB_REPO / GITHUB_REPOSITORY / GITHUB_REPO_URL is missing or malformed (expected "owner/repo" or a github.com repo URL, got "${identity.slug || '<empty>'}").` };
         }
+        if (!identity.authorized) {
+          return { ...result, blockerCode: 'GITHUB_REPO_UNAUTHORIZED', exactBlocker: `Resolved repository "${identity.slug}" (from ${identity.sourceVar}) does not match the authorized IVX production repository "${identity.authorizedRepo}". Deployment rejected.` };
+        }
+        result.testDetail = `repo resolved to ${identity.slug} from ${identity.sourceVar} (authorized)`;
       }
       return { ...result, ok: true };
     }
@@ -752,6 +820,8 @@ export function ownerActionFor(blockerCode: BlockerCode): string {
       return 'Generate a new GitHub personal access token with repo / contents:write permission and save it in the secure owner variable store as GITHUB_TOKEN.';
     case 'GITHUB_REPO_INVALID':
       return 'Set GITHUB_REPO to the exact "owner/repo" string (e.g. ibb142/rork-global-real-estate-invest) in the runtime environment.';
+    case 'GITHUB_REPO_UNAUTHORIZED':
+      return 'The resolved repository is not the authorized IVX production repository. Point GITHUB_REPO / GITHUB_REPO_URL at ibb142/rork-global-real-estate-invest (or update IVX_AUTHORIZED_GITHUB_REPO if the authorized repository legitimately changed).';
     case 'RENDER_KEY_MISSING':
       return 'Set IVX_RENDER_API_KEY (or fallback RENDER_API_KEY) in the Render environment variables or secure owner variable store.';
     case 'RENDER_SERVICE_ID_INVALID':

@@ -178,7 +178,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 <<'EOF'\\nimport json, subprocess, datetime\\nSRK=open('/tmp/srk').read().strip()\\nconv='8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'\\nnow=datetime.datetime.now(datetime.timezone.utc).strftime('%H:%M:%SZ')\\npayload={'conversation_id':conv,'sender_id':'9b280e15-f9fd-459f-bf2d-530b1ed84cb1','text':f'[QA {now}] Chat write-path verification ping (Expo-only cleanup). Will be verified by read-back.'}\\np=subprocess.run(['curl','-s','-w','HTTP %{http_code}','--max-time','20','-X','POST','-H',f'apikey: {SRK}','-H',f'Authorization: Bearer {SRK}','-H','Content-Type: application/json','-H','Prefer: return=representation','-d',json.dumps(payload),'https://kvclcdjmjghndxsngfzb.supabase.co/rest/v1/messages'],capture_output=True,text=True)\\nout=p.stdout\\nprint('chat send:', out[-8:])\\ntry:\\n    row=json.loads(out[:out.rfind('HTTP')])[0]\\n    print('read-back id:', row['id'], '| created:', row['created_at'])\\nexcept Exception as e: print('parse:', out[:200])\\nEOF\"}",
       "createdAt": 1784341916339,
-      "completedAt": 1784341922477
+      "completedAt": 1784341922477,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -196,7 +197,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 55 bunx tsc --noEmit 2>&1 | tail -5; echo \\\"tsc exit: $?\\\"\"}",
       "createdAt": 1784341922202,
-      "completedAt": 1784341944322
+      "completedAt": 1784341944322,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -221,7 +223,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 55 bunx tsc --noEmit > /tmp/tsc.log 2>&1; code=$?; echo \\\"tsc real exit: $code\\\"; grep -c \\\"error TS\\\" /tmp/tsc.log; echo \\\"-- errors outside node_modules:\\\"; grep \\\"error TS\\\" /tmp/tsc.log | grep -v node_modules | head -5; grep \\\"error TS\\\" /tmp/tsc.log | grep -cv node_modules\"}",
       "createdAt": 1784341956715,
-      "completedAt": 1784341977875
+      "completedAt": 1784341977875,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -246,7 +249,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 55 bun install --ignore-scripts 2>&1 | tail -3; echo \\\"install exit: $?\\\"\"}",
       "createdAt": 1784341989844,
-      "completedAt": 1784341990809
+      "completedAt": 1784341990809,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -271,7 +275,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 55 bunx tsc --noEmit > /tmp/tsc.log 2>&1; code=$?; echo \\\"tsc exit: $code\\\"; total=$(grep -c \\\"error TS\\\" /tmp/tsc.log); app=$(grep \\\"error TS\\\" /tmp/tsc.log | grep -cv node_modules); echo \\\"total errors: $total | app-code errors: $app\\\"; grep \\\"error TS\\\" /tmp/tsc.log | grep -v node_modules | head -8\"}",
       "createdAt": 1784341997150,
-      "completedAt": 1784342052564
+      "completedAt": 1784342052564,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -296,7 +301,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && nohup bunx tsc --noEmit > /tmp/tsc-full.log 2>&1 & echo \\\"tsc started, pid $!\\\"\"}",
       "createdAt": 1784342062052,
-      "completedAt": 1784342062055
+      "completedAt": 1784342062055,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -314,7 +320,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:300]\\nr=q(\\\"\\\"\\\"\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email, completed_at)\\nVALUES ('kotlin_freeze','completed',\\n 'JOB-0032 EXPO-ONLY MANDATE 2026-07-18: freeze standalone Kotlin app (android-ivx-holdings), single Expo RN codebase for Android/iOS/Web, backup tag before changes, production flows verified',\\n jsonb_build_object(\\n  'decision','Kotlin app android-ivx-holdings FROZEN (not deleted, owner order). Zero further builds/edits. Local 9MB test APK build output discarded (was never the product).',\\n  'preserved','expo/android/ native folder (EAS-required: MainActivity.kt, MainApplication.kt, build.gradle, settings.gradle) — untouched. Entire expo/ codebase untouched.',\\n  'backupTag','backup-pre-expo-only-20260718 @ f82e5a5d2f044e15209b1f8bdb8b0aab868b0440',\\n  'singleCodebase','expo/ = only IVX mobile app (Android+iOS+Web)',\\n  'productionVerify','owner login OK (iperez4242@gmail.com), members 4, investors 875, buyers 0, jv_deals 3, reels 5, notifications 4, chat send 201 + read-back id 15402a34-0c81-4d18-b13c-449f6599fc01, API healthy f82e5a5d, web 200',\\n  'expoTypecheck','running (result recorded in follow-up)',\\n  'apkStatus','v1.4.5-build37 verified artifact remains official; new Expo build from f82e5a5d blocked on EAS credentials (APR-003)',\\n  'aabStatus','blocked on EAS credentials + Play upload key (owner action)'\\n ),\\n 'RM-0001','kotlin_frozen','admin@ivxholding.com', now());\\nUPDATE ivx_ia_tasks SET notes = coalesce(notes,'') || ' | 2026-07-18: SOURCE = expo/ app ONLY (Kotlin android-ivx-holdings frozen by owner order, JOB-0032).'\\nWHERE task_key IN ('IVX-ANDROID-APK-FINAL','IVX-ANDROID-AAB-FINAL','IVX-IOS-BUILD-FINAL');\\nSELECT 'ok' done;\\n\\\"\\\"\\\")\\nprint('LEDGER JOB-0032:', json.dumps(r)[:300])\\nEOF\"}",
       "createdAt": 1784342062055,
-      "completedAt": 1784342076730
+      "completedAt": 1784342076730,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -332,7 +339,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && echo \\\"== EAS credential check (honest blocker verification) ==\\\"; env | grep -iE \\\"^(EXPO_TOKEN|EAS)\\\" | sed 's/=.*/=<set>/' ; echo \\\"EXPO_TOKEN present: $([ -n \\\"$EXPO_TOKEN\\\" ] && echo YES || echo NO)\\\"; timeout 25 bunx eas-cli whoami 2>&1 | tail -2\"}",
       "createdAt": 1784342076189,
-      "completedAt": 1784342079952
+      "completedAt": 1784342079952,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -357,7 +365,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:300]\\nr=q(\\\"\\\"\\\"\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email, completed_at)\\nVALUES ('kotlin_freeze','completed',\\n 'JOB-0032 EXPO-ONLY MANDATE 2026-07-18: freeze standalone Kotlin app (android-ivx-holdings), single Expo RN codebase for Android/iOS/Web, backup tag before changes, production flows verified',\\n jsonb_build_object(\\n  'decision','Kotlin app android-ivx-holdings FROZEN (not deleted, owner order). Zero further builds/edits. Local 9MB test APK build output discarded (was never the product).',\\n  'preserved','expo/android/ native folder (EAS-required: MainActivity.kt, MainApplication.kt, build.gradle, settings.gradle) — untouched. Entire expo/ codebase untouched.',\\n  'backupTag','backup-pre-expo-only-20260718 @ f82e5a5d2f044e15209b1f8bdb8b0aab868b0440',\\n  'singleCodebase','expo/ = only IVX mobile app (Android+iOS+Web)',\\n  'productionVerify','owner login OK (iperez4242@gmail.com), members 4, investors 875, buyers 0, jv_deals 3, reels 5, notifications 4, chat send 201 + read-back id 15402a34-0c81-4d18-b13c-449f6599fc01, API healthy f82e5a5d, web 200',\\n  'easCheck','eas-cli whoami = Not logged in; EXPO_TOKEN absent — new APK/AAB build blocked on owner EAS credentials (APR-003)',\\n  'apkStatus','v1.4.5-build37 verified artifact remains official',\\n  'aabStatus','blocked on EAS credentials + Play upload key (owner action)'\\n ),\\n 'RM-0001','kotlin_frozen','admin@ivxholding.com', now());\\nUPDATE ivx_ia_tasks SET notes = coalesce(notes,'') || ' | 2026-07-18: SOURCE = expo/ app ONLY (Kotlin android-ivx-holdings frozen by owner order, JOB-0032).'\\nWHERE task_id IN ('IVX-ANDROID-APK-FINAL','IVX-ANDROID-AAB-FINAL','IVX-IOS-BUILD-FINAL');\\nSELECT 'ok' done;\\n\\\"\\\"\\\")\\nprint('LEDGER JOB-0032:', json.dumps(r)[:300])\\nEOF\"}",
       "createdAt": 1784342086489,
-      "completedAt": 1784342097450
+      "completedAt": 1784342097450,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -375,7 +384,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 40; if kill -0 9899 2>/dev/null; then echo \\\"tsc still running\\\"; else code=$(wait 9899 2>/dev/null; echo done); total=$(grep -c \\\"error TS\\\" /tmp/tsc-full.log 2>/dev/null || echo 0); app=$(grep \\\"error TS\\\" /tmp/tsc-full.log 2>/dev/null | grep -cv node_modules || echo 0); echo \\\"tsc FINISHED | total errors: $total | app-code errors: $app\\\"; grep \\\"error TS\\\" /tmp/tsc-full.log 2>/dev/null | grep -v node_modules | head -5; fi\"}",
       "createdAt": 1784342097077,
-      "completedAt": 1784342139548
+      "completedAt": 1784342139548,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -400,7 +410,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:300]\\nprint('cols:', q(\\\"SELECT column_name FROM information_schema.columns WHERE table_name='ivx_ia_tasks' ORDER BY ordinal_position\\\"))\\nEOF\"}",
       "createdAt": 1784342147208,
-      "completedAt": 1784342149440
+      "completedAt": 1784342149440,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -425,7 +436,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:300]\\nr=q(\\\"\\\"\\\"\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email, completed_at)\\nVALUES ('kotlin_freeze','completed',\\n 'JOB-0032 EXPO-ONLY MANDATE 2026-07-18: freeze standalone Kotlin app (android-ivx-holdings), single Expo RN codebase for Android/iOS/Web, backup tag before changes, production flows verified',\\n jsonb_build_object(\\n  'decision','Kotlin app android-ivx-holdings FROZEN (not deleted, owner order). Zero further builds/edits. Local 9MB test APK build output discarded (was never the product).',\\n  'preserved','expo/android/ native folder (EAS-required: MainActivity.kt, MainApplication.kt, build.gradle, settings.gradle) — untouched. Entire expo/ codebase untouched.',\\n  'backupTag','backup-pre-expo-only-20260718 @ f82e5a5d2f044e15209b1f8bdb8b0aab868b0440',\\n  'singleCodebase','expo/ = only IVX mobile app (Android+iOS+Web)',\\n  'productionVerify','owner login OK, members 4, investors 875, buyers 0, jv_deals 3, reels 5, notifications 4, chat send 201 + read-back 15402a34, API healthy f82e5a5d, web 200',\\n  'expoTypecheck','tsc --noEmit PASS: 0 errors (full run completed 02:39Z)',\\n  'easCheck','eas-cli whoami = Not logged in; EXPO_TOKEN absent — new APK/AAB blocked on owner EAS credentials (APR-003)',\\n  'apkStatus','v1.4.5-build37 verified artifact remains official',\\n  'aabStatus','blocked on EAS credentials + Play upload key (owner action)'\\n ),\\n 'RM-0001','kotlin_frozen','admin@ivxholding.com', now());\\nUPDATE ivx_ia_tasks SET detail = coalesce(detail,'') || ' | 2026-07-18: SOURCE = expo/ app ONLY (Kotlin android-ivx-holdings frozen by owner order, JOB-0032).', updated_at = now()\\nWHERE task_id IN ('IVX-ANDROID-APK-FINAL','IVX-ANDROID-AAB-FINAL','IVX-IOS-BUILD-FINAL');\\nSELECT task_id, status FROM ivx_ia_tasks WHERE task_id IN ('IVX-ANDROID-APK-FINAL','IVX-ANDROID-AAB-FINAL','IVX-IOS-BUILD-FINAL');\\n\\\"\\\"\\\")\\nprint('LEDGER JOB-0032 + tasks:', json.dumps(r)[:400])\\nEOF\"}",
       "createdAt": 1784342158065,
-      "completedAt": 1784342169722
+      "completedAt": 1784342169722,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -448,7 +460,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md\", \"edits\": [{\"oldString\": \"## Order of work\\n- Record Kotlin retirement + correct the task ledger so Android tasks point at the Expo app.\\n- Re-check build credentials and either start the real Expo Android build or report the exact blocker.\\n- Proceed with Senior Developer activation and the first 12 App Factory agents.\", \"newString\": \"## Order of work\\n- [x] Record Kotlin retirement + correct the task ledger so Android tasks point at the Expo app. (JOB-0032; Kotlin FROZEN per owner order — not deleted; backup tag backup-pre-expo-only-20260718)\\n- [x] Re-check build credentials and either start the real Expo Android build or report the exact blocker. (Blocker verified: eas-cli \\\"Not logged in\\\", EXPO_TOKEN absent — owner EAS credentials required. Expo typecheck PASS 0 errors.)\\n- [ ] Proceed with Senior Developer activation and the first 12 App Factory agents.\"}]}",
       "createdAt": 1784342169261,
-      "completedAt": 1784342173091
+      "completedAt": 1784342173091,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -472,7 +485,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md\"}",
       "createdAt": 1784342179130,
-      "completedAt": 1784342179133
+      "completedAt": 1784342179133,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -502,7 +516,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md\", \"edits\": [{\"oldString\": \"## Order of work\\n- Record Kotlin retirement + correct the task ledger so Android tasks point at the Expo app.\\n- Re-check build credentials and either start the real Expo Android build or report the exact blocker.\\n- Proceed with Senior Developer activation and the first 12 App Factory agents.\", \"newString\": \"## Order of work\\n- [x] Record Kotlin retirement + correct the task ledger so Android tasks point at the Expo app. (Kotlin FROZEN per owner order — not deleted; ledger JOB-0032; backup tag backup-pre-expo-only-20260718 @ f82e5a5d)\\n- [x] Re-check build credentials and either start the real Expo Android build or report the exact blocker. (Exact blocker: eas-cli \\\"Not logged in\\\", EXPO_TOKEN absent — owner EAS credentials required. Expo typecheck PASS: 0 errors.)\\n- [ ] Proceed with Senior Developer activation and the first 12 App Factory agents.\"}]}",
       "createdAt": 1784342186646,
-      "completedAt": 1784342189248
+      "completedAt": 1784342189248,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -520,7 +535,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 <<'EOF'\\nimport json, subprocess, datetime\\nSRK=open('/tmp/srk').read().strip()\\nconv='8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'\\nnow=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')\\nbody=f\\\"\\\"\\\"EXPO-ONLY MANDATE — EXECUTION REPORT ({now})\\n1. BACKUP FIRST: tag backup-pre-expo-only-20260718 @ f82e5a5d2f044e15209b1f8bdb8b0aab868b0440 created and verified on GitHub BEFORE any change.\\n2. KOTLIN AUDIT: standalone Kotlin app = android-ivx-holdings/ (46 Kotlin/Gradle files, also present in GitHub repo). Expo-required native folder = expo/android/ (MainActivity.kt, MainApplication.kt, build.gradle, settings.gradle) — PRESERVED, untouched. No other Kotlin files exist in the workspace.\\n3. KOTLIN STATUS: FROZEN per owner order (NOT deleted). Zero builds/edits from now. Local 9 MB test build output discarded (gitignored artifact, never the product). Files removed from repo: NONE.\\n4. SINGLE CODEBASE CONFIRMED: expo/ = the only IVX mobile application (Android + iOS + Web).\\n5. PRODUCTION VERIFY (live, 02:32Z): owner login OK (iperez4242@gmail.com, session valid) | members 4 | investors 875 | buyers 0 (honest) | jv_deals 3 | reels 5 | notifications 4 rows (prefs 0 — feature present, not user-configured) | chat send HTTP 201 + read-back id 15402a34-0c81-4d18-b13c-449f6599fc01 | API /health healthy @ f82e5a5d | web 200.\\n6. EXPO BUILD VALIDATION: bun install OK (1,339 packages), tsc --noEmit FULL PASS — 0 errors (completed 02:39Z).\\n7. APK: official artifact remains v1.4.5-build37 (84,842,092 B, GitHub release, verified). NEW APK/AAB from f82e5a5d: BLOCKED — verified live: eas-cli whoami = \\\"Not logged in\\\", EXPO_TOKEN absent. Owner action: provide EAS access (APR-003). ETA ~30 min after credentials.\\n8. AAB: same blocker + Play upload key. iOS/TestFlight: same + Apple Developer credentials.\\n9. LEDGER: JOB-0032 (kotlin_freeze) completed; tasks IVX-ANDROID-APK-FINAL / AAB / IOS updated to SOURCE = expo/ only.\\nCommit SHA (unchanged, no code deleted): f82e5a5d2f044e15209b1f8bdb8b0aab868b0440. Next: Senior Developer activation + first 12 App Factory agents.\\\"\\\"\\\"\\npayload={'conversation_id':conv,'sender_id':'9b280e15-f9fd-459f-bf2d-530b1ed84cb1','text':body}\\np=subprocess.run(['curl','-s','-o','/dev/null','-w','%{http_code}','--max-time','20','-X','POST','-H',f'apikey: {SRK}','-H',f'Authorization: Bearer {SRK}','-H','Content-Type: application/json','-H','Prefer: return=minimal','-d',json.dumps(payload),'https://kvclcdjmjghndxsngfzb.supabase.co/rest/v1/messages'],capture_output=True,text=True)\\nprint('exec report posted -> HTTP', p.stdout)\\nEOF\"}",
       "createdAt": 1784342189245,
-      "completedAt": 1784342206320
+      "completedAt": 1784342206320,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -550,7 +566,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:300]\\nprint('agent cols:', q(\\\"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='ivx_ia_agents' ORDER BY ordinal_position\\\"))\\nprint()\\nprint('agents:', q(\\\"SELECT agent_id, name, role, status FROM ivx_ia_agents ORDER BY agent_id\\\"))\\nEOF\"}",
       "createdAt": 1784342218732,
-      "completedAt": 1784342221855
+      "completedAt": 1784342221855,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -575,7 +592,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:300]\\nprint('agents:', json.dumps(q(\\\"SELECT agent_id, name, status FROM ivx_ia_agents ORDER BY agent_id\\\"), indent=0)[:1200])\\nEOF\"}",
       "createdAt": 1784342234957,
-      "completedAt": 1784342236514
+      "completedAt": 1784342236514,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -600,7 +618,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','55','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:400]\\nr=q(\\\"\\\"\\\"\\n-- 1. Senior Developer permanent engineering lead\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status)\\nVALUES ('SD-0001','IVX IA Senior Developer (Engineering Lead)',\\n 'Permanent autonomous engineering lead. Owns the single Expo RN codebase (Android/iOS/Web), reviews all factory agent output, enforces typecheck/QA gates before any release, reports only verified evidence.',\\n '[\\\"read_code\\\",\\\"run_typecheck\\\",\\\"run_qa\\\",\\\"review_factory_output\\\",\\\"propose_commits_via_guarded_pipeline\\\",\\\"no_direct_prod_deploy\\\"]'::jsonb,\\n '[\\\"typecheck_pass_rate\\\",\\\"verified_releases\\\",\\\"factory_agents_reviewed\\\",\\\"zero_fabricated_evidence\\\"]'::jsonb,\\n 'ACTIVE')\\nON CONFLICT (agent_id) DO UPDATE SET status='ACTIVE', updated_at=now();\\n-- 2. First 12 App Factory agents (NOT verified yet -> PENDING_OWNER_APPROVAL)\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status) VALUES\\n ('AF-001','Factory Product Spec Agent','Turn owner briefs into build-ready product specs for factory apps.','[\\\"read_code\\\",\\\"write_specs\\\"]'::jsonb,'[\\\"specs_approved\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-002','Factory UI/UX Agent','Design mobile-native screens and flows for factory apps.','[\\\"write_designs\\\"]'::jsonb,'[\\\"designs_approved\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-003','Factory Frontend Agent','Implement React Native screens from approved designs.','[\\\"write_code_feature_branch\\\"]'::jsonb,'[\\\"screens_delivered\\\",\\\"typecheck_pass\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-004','Factory Backend Agent','Implement API endpoints and business logic on feature branches.','[\\\"write_code_feature_branch\\\"]'::jsonb,'[\\\"endpoints_delivered\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-005','Factory Database Agent','Design schemas, migrations and RLS policies.','[\\\"propose_migrations\\\"]'::jsonb,'[\\\"migrations_clean\\\",\\\"rls_coverage\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-006','Factory QA Agent','Write and run tests; block releases on failures.','[\\\"run_tests\\\"]'::jsonb,'[\\\"defects_caught\\\",\\\"coverage\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-007','Factory Security Agent','Security review of every factory change; secrets and RLS audits.','[\\\"read_code\\\",\\\"security_audit\\\"]'::jsonb,'[\\\"vulns_found\\\",\\\"audits_completed\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-008','Factory DevOps Agent','CI, staging deploys and release packaging via guarded pipeline only.','[\\\"staging_deploy_only\\\"]'::jsonb,'[\\\"green_builds\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-009','Factory Docs Agent','Produce user and developer documentation for factory apps.','[\\\"write_docs\\\"]'::jsonb,'[\\\"docs_delivered\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-010','Factory Release Agent','Assemble release candidates; hand off to RM-0001 gate.','[\\\"prepare_rc\\\"]'::jsonb,'[\\\"rcs_prepared\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-011','Factory Analytics Agent','Instrument and report real usage metrics for factory apps.','[\\\"read_analytics\\\"]'::jsonb,'[\\\"reports_delivered\\\"]'::jsonb,'PENDING_OWNER_APPROVAL'),\\n ('AF-012','Factory Support Agent','Triage user feedback and file verified bug reports.','[\\\"read_feedback\\\",\\\"file_bugs\\\"]'::jsonb,'[\\\"tickets_triaged\\\"]'::jsonb,'PENDING_OWNER_APPROVAL')\\nON CONFLICT (agent_id) DO NOTHING;\\n-- 3. Heartbeat table + dashboard view\\nCREATE TABLE IF NOT EXISTS ivx_agent_heartbeats (\\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\\n  agent_id text NOT NULL REFERENCES ivx_ia_agents(agent_id),\\n  current_task text,\\n  evidence text,\\n  business_assignment text,\\n  started_at timestamptz NOT NULL DEFAULT now(),\\n  target_completion timestamptz,\\n  beat_at timestamptz NOT NULL DEFAULT now()\\n);\\nALTER TABLE ivx_agent_heartbeats ENABLE ROW LEVEL SECURITY;\\nCREATE OR REPLACE VIEW ivx_factory_dashboard AS\\nSELECT a.agent_id, a.name AS agent_name, a.status,\\n       h.started_at AS start_time, h.target_completion, h.current_task,\\n       h.beat_at AS last_heartbeat, h.evidence, h.business_assignment\\nFROM ivx_ia_agents a\\nLEFT JOIN LATERAL (\\n  SELECT * FROM ivx_agent_heartbeats hb WHERE hb.agent_id = a.agent_id ORDER BY hb.beat_at DESC LIMIT 1\\n) h ON true;\\nSELECT 'ok' done;\\n\\\"\\\"\\\")\\nprint('REGISTRY+DASHBOARD:', json.dumps(r)[:300])\\nEOF\"}",
       "createdAt": 1784342268639,
-      "completedAt": 1784342290358
+      "completedAt": 1784342290358,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -625,7 +644,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','55','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:400]\\nr=q(\\\"\\\"\\\"\\n-- Seed heartbeats (honest: SD-0001 active with real completed work; AF agents awaiting security+QA verification)\\nINSERT INTO ivx_agent_heartbeats (agent_id, current_task, evidence, business_assignment, target_completion)\\nVALUES\\n ('SD-0001','Engineering lead duties: Expo codebase gatekeeper; ran full tsc --noEmit (0 errors, 02:39Z); enforcing single-codebase rule (JOB-0032)','Expo typecheck PASS 0 errors; JOB-0032 ledger; backup tag backup-pre-expo-only-20260718','IVX Expo app (Android/iOS/Web) engineering leadership', now() + interval '30 days'),\\n ('AF-001','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: product spec', now() + interval '7 days'),\\n ('AF-002','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: UI/UX design', now() + interval '7 days'),\\n ('AF-003','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: frontend build', now() + interval '10 days'),\\n ('AF-004','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: backend build', now() + interval '10 days'),\\n ('AF-005','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: database schema + RLS', now() + interval '7 days'),\\n ('AF-006','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: test suite', now() + interval '10 days'),\\n ('AF-007','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Factory-wide security review', now() + interval '7 days'),\\n ('AF-008','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: CI + staging deploys', now() + interval '10 days'),\\n ('AF-009','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: documentation', now() + interval '12 days'),\\n ('AF-010','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: release candidate to RM-0001', now() + interval '14 days'),\\n ('AF-011','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: usage analytics', now() + interval '14 days'),\\n ('AF-012','Awaiting security + QA verification before activation','Registered 2026-07-18; no work performed yet (honest)','Pilot app: feedback triage', now() + interval '14 days');\\n-- Verification tasks (one per factory agent) + pilot app task\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status)\\nSELECT 'AF-VERIFY-'||lpad((row_number() over (order by agent_id))::text,3,'0'), agent_id,\\n 'Security + QA verification of '||agent_id,\\n 'Agent must pass IA-12 security review and IA-03 QA gate, then perform one real supervised work item before status ACTIVE. Owner constraint: no agent marked complete until actively performing verified real work.',\\n 'P1','QUEUED'\\nFROM ivx_ia_agents WHERE agent_id LIKE 'AF-0%'\\nON CONFLICT (task_id) DO NOTHING;\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status)\\nVALUES ('AF-PILOT-001','SD-0001','Pilot application built from scratch by the AI Factory',\\n 'First factory-built app. Scope to be specified by AF-001 after verification; SD-0001 leads; releases gated by RM-0001. Starts only after the 12 factory agents pass security+QA.',\\n 'P2','QUEUED')\\nON CONFLICT (task_id) DO NOTHING;\\n-- Ledger\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email, completed_at)\\nVALUES ('factory_bootstrap','completed',\\n 'JOB-0033 PHASE 2: activate SD-0001 engineering lead; register first 12 App Factory agents; create live dashboard view; queue pilot app',\\n jsonb_build_object(\\n  'sd0001','ACTIVE — real work evidence: full Expo typecheck 0 errors, JOB-0032 enforcement',\\n  'factoryAgents','AF-001..AF-012 registered PENDING_OWNER_APPROVAL (honest — zero work performed yet)',\\n  'verificationTasks','AF-VERIFY-001..012 QUEUED (security IA-12 + QA IA-03 gates required before ACTIVE)',\\n  'dashboard','view ivx_factory_dashboard (agent, status, start, target, current task, last heartbeat, evidence, assignment) + table ivx_agent_heartbeats (RLS enabled)',\\n  'pilotApp','AF-PILOT-001 QUEUED — starts after factory verification'\\n ),\\n 'RM-0001','factory_bootstrapped','admin@ivxholding.com', now());\\nSELECT count(*) agents_total FROM ivx_ia_agents;\\n\\\"\\\"\\\")\\nprint('SEED+TASKS+LEDGER:', json.dumps(r)[:300])\\nEOF\"}",
       "createdAt": 1784342297837,
-      "completedAt": 1784342319921
+      "completedAt": 1784342319921,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -650,7 +670,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:400]\\nrows=q(\\\"SELECT agent_id, agent_name, status, to_char(last_heartbeat,'HH24:MI:SSZ') hb, business_assignment FROM ivx_factory_dashboard WHERE agent_id LIKE 'AF-%' OR agent_id='SD-0001' ORDER BY agent_id\\\")\\nfor r in rows: print(r['agent_id'], '|', r['status'], '|', r['hb'], '|', (r['business_assignment'] or '')[:40])\\ntasks=q(\\\"SELECT count(*) FILTER (WHERE task_id LIKE 'AF-VERIFY-%') verify_tasks, count(*) FILTER (WHERE task_id='AF-PILOT-001') pilot FROM ivx_ia_tasks\\\")\\nprint('tasks:', tasks)\\nEOF\"}",
       "createdAt": 1784342325272,
-      "completedAt": 1784342330530
+      "completedAt": 1784342330530,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
@@ -680,7 +701,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md\", \"edits\": [{\"oldString\": \"- [ ] Proceed with Senior Developer activation and the first 12 App Factory agents.\", \"newString\": \"- [x] Proceed with Senior Developer activation and the first 12 App Factory agents. (SD-0001 ACTIVE with real work evidence; AF-001..AF-012 registered PENDING_OWNER_APPROVAL; live dashboard view ivx_factory_dashboard verified; AF-VERIFY-001..012 + AF-PILOT-001 queued; ledger JOB-0033)\"}]}",
       "createdAt": 1784342338998,
-      "completedAt": 1784342340096
+      "completedAt": 1784342340096,
+      "compactedAt": 1784377683555
     },
     {
       "type": "tool",
@@ -698,7 +720,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 <<'EOF'\\nimport json, subprocess, datetime\\nSRK=open('/tmp/srk').read().strip()\\nconv='8f5a9c42-1cb5-4f81-b2d8-6f3a0a8b9d41'\\nnow=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')\\nbody=f\\\"\\\"\\\"PHASE 2 — SENIOR DEVELOPER + APP FACTORY BOOTSTRAP ({now})\\nSD-0001 (IVX IA Senior Developer, Engineering Lead): ACTIVE — permanent autonomous engineering lead of the single Expo codebase. Real work already on record: full tsc typecheck 0 errors (02:39Z), single-codebase enforcement (JOB-0032). Permissions exclude direct production deploys (RM-0001 gate stays sole release authority).\\nAPP FACTORY (first 12): AF-001..AF-012 registered — Product Spec, UI/UX, Frontend, Backend, Database, QA, Security, DevOps, Docs, Release, Analytics, Support. STATUS: PENDING_OWNER_APPROVAL — honest, none has performed work yet. Per owner constraint, each activates ONLY after passing IA-12 security review + IA-03 QA gate + one supervised real work item (tasks AF-VERIFY-001..012 QUEUED). Each already has a business assignment on the dashboard.\\nLIVE DASHBOARD: view ivx_factory_dashboard (agent name, status, start time, target completion, current task, last heartbeat, evidence, business assignment) over ivx_agent_heartbeats (RLS enabled). Verified query returns SD-0001 + 12 factory agents with heartbeats 02:38:39Z.\\nPILOT APP: task AF-PILOT-001 QUEUED under SD-0001 — first factory-built application; starts after factory verification; releases gated by RM-0001.\\nREGISTRY: 27 agents total. Ledger: JOB-0033 completed. Next 2h report on schedule.\\\"\\\"\\\"\\npayload={'conversation_id':conv,'sender_id':'9b280e15-f9fd-459f-bf2d-530b1ed84cb1','text':body}\\np=subprocess.run(['curl','-s','-o','/dev/null','-w','%{http_code}','--max-time','20','-X','POST','-H',f'apikey: {SRK}','-H',f'Authorization: Bearer {SRK}','-H','Content-Type: application/json','-H','Prefer: return=minimal','-d',json.dumps(payload),'https://kvclcdjmjghndxsngfzb.supabase.co/rest/v1/messages'],capture_output=True,text=True)\\nprint('exec report posted -> HTTP', p.stdout)\\nEOF\"}",
       "createdAt": 1784342340092,
-      "completedAt": 1784342351970
+      "completedAt": 1784342351970,
+      "compactedAt": 1784377683555
     },
     {
       "type": "reasoning",
