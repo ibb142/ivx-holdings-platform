@@ -13,28 +13,28 @@ android {
         applicationId = "com.rork.ivxholdings"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 38
+        versionName = "1.4.6"
+    }
+
+    signingConfigs {
+        create("rorkPlayUpload") {
+            storeFile = file("/home/user/rork-app/android-ivx-holdings/app/play-upload-key.jks")
+            storePassword = "rork-play-upload"
+            keyAlias = "upload"
+            keyPassword = "rork-play-upload"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("rorkPlayUpload")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a")
-            isUniversalApk = true
         }
     }
 
