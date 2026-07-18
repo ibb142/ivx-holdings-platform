@@ -43,7 +43,7 @@ function errorResponse(error: unknown): Response {
     return ownerOnlyJson({ status: 'error', error: error.message, approval: error.proof }, error.status);
   }
   const msg = error instanceof Error ? error.message : 'IVX engineering OS route failed.';
-  const status = /bearer|unauthorized|forbidden|token/i.test(msg) ? 401 : 500;
+  const status = /bearer|unauthorized|forbidden|token|auth guard|session/i.test(msg) ? 401 : 500;
   return ownerOnlyJson({ status: 'error', error: msg }, status);
 }
 
