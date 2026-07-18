@@ -1,7 +1,5 @@
 {
-  "id": "chwih2o45n8w6pxetlgx9",
   "role": "assistant",
-  "preferredModelName": "claude-fable-5 high",
   "responseMessageContents": [
     {
       "type": "reasoning",
@@ -13,8 +11,7 @@
     {
       "type": "text",
       "text": "This is a real production-control emergency. Executing now: freeze the failing auto-deploy pipeline, verify the true live version, audit and group failures, and return the evidence table.",
-      "id": "9g0k8lqwdvb02hl2mzur6",
-      "createdAt": 1784339570577
+      "id": "9g0k8lqwdvb02hl2mzur6"
     },
     {
       "type": "tool",
@@ -32,7 +29,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"ANON=$(cat /tmp/anon); RT=$(cat /tmp/owner_rt); curl -s --max-time 15 -X POST -H \\\"apikey: $ANON\\\" -H \\\"Content-Type: application/json\\\" -d \\\"{\\\\\\\"refresh_token\\\\\\\":\\\\\\\"$RT\\\\\\\"}\\\" \\\"https://kvclcdjmjghndxsngfzb.supabase.co/auth/v1/token?grant_type=refresh_token\\\" > /tmp/refresh.json; python3 -c \\\"\\nimport json\\nd=json.load(open('/tmp/refresh.json'))\\nat=d.get('access_token'); rt=d.get('refresh_token')\\nif at:\\n    open('/tmp/owner_at','w').write(at); open('/tmp/owner_rt','w').write(rt)\\n    print('owner token refreshed, expires_in', d.get('expires_in'))\\nelse:\\n    print('REFRESH FAILED:', json.dumps(d)[:300])\\n\\\"; date -u; curl -s -o /tmp/h.json -w \\\"/health -> HTTP %{http_code} (%{time_total}s)\\\\n\\\" --max-time 15 \\\"https://api.ivxholding.com/health\\\"; python3 -c \\\"\\nimport json; d=json.load(open('/tmp/h.json'))\\nprint('status:',d.get('status'),'| runtime commit:',d.get('commit'),'| boot:',d.get('bootTime'),'| version:',d.get('version'))\\\"\"}",
       "createdAt": 1784339571103,
-      "completedAt": 1784339575602
+      "completedAt": 1784339575602,
+      "compactedAt": 1784371748332
     },
     {
       "type": "tool",
@@ -50,7 +48,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"== GitHub HEAD ==\\\"; curl -s --max-time 15 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/branches/main\\\" | python3 -c \\\"\\nimport json,sys; d=json.load(sys.stdin)\\nprint('main HEAD:', d['commit']['sha'])\\nprint('msg:', d['commit']['commit']['message'][:100])\\nprint('date:', d['commit']['commit']['committer']['date'])\\\"; echo \\\"== deployments count ==\\\"; curl -s -I --max-time 15 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/deployments?per_page=1\\\" | grep -i \\\"^link\\\"; curl -s --max-time 15 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/deployments?per_page=5\\\" | python3 -c \\\"\\nimport json,sys\\nfor d in json.load(sys.stdin):\\n    print(d['id'], d['sha'][:10], d['environment'], d['created_at'], (d.get('description') or '')[:60])\\\"\"}",
       "createdAt": 1784339573854,
-      "completedAt": 1784339577934
+      "completedAt": 1784339577934,
+      "compactedAt": 1784371748332
     },
     {
       "type": "tool",
@@ -68,7 +67,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"== repo root vercel.json / package.json ==\\\"; curl -s -o /dev/null -w \\\"vercel.json on main -> %{http_code}\\\\n\\\" --max-time 15 \\\"https://raw.githubusercontent.com/ibb142/rork-global-real-estate-invest/main/vercel.json\\\"; curl -s --max-time 15 \\\"https://raw.githubusercontent.com/ibb142/rork-global-real-estate-invest/main/package.json\\\" | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('name:',d.get('name')); print('scripts:',json.dumps(d.get('scripts'),indent=1))\\\" 2>&1 | head -20; echo \\\"== who serves ivxholding.com ==\\\"; curl -s -I --max-time 15 \\\"https://ivxholding.com\\\" | grep -i -E \\\"^HTTP|server|x-cache|via|x-vercel|cf-ray\\\" ; echo \\\"== who serves api.ivxholding.com ==\\\"; curl -s -I --max-time 15 \\\"https://api.ivxholding.com/health\\\" | grep -i -E \\\"^HTTP|server|x-render|x-vercel|cf-ray\\\"; echo \\\"== vercel app url ==\\\"; curl -s -o /dev/null -w \\\"rork-global-real-estate-invest-equrn2n9mz.vercel.app -> %{http_code}\\\\n\\\" --max-time 15 \\\"https://rork-global-real-estate-invest-equrn2n9mz.vercel.app\\\"; ls vercel.json 2>/dev/null; ls expo/vercel.json 2>/dev/null; echo done\"}",
       "createdAt": 1784339577291,
-      "completedAt": 1784339583997
+      "completedAt": 1784339583997,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -93,7 +93,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"== newest deployment statuses (sample) ==\\\"; for id in 5497333416 5497333306 5497333228; do curl -s --max-time 12 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/deployments/$id/statuses?per_page=1\\\" | python3 -c \\\"\\nimport json,sys\\ns=json.load(sys.stdin)\\nif s: print('$id', s[0]['state'], '|', (s[0].get('description') or '')[:120], '|', (s[0].get('environment_url') or '')[:80])\\nelse: print('$id no status')\\\"; done; echo \\\"== older sample ==\\\"; curl -s --max-time 15 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/deployments?per_page=100&page=1\\\" | python3 -c \\\"\\nimport json,sys\\nds=json.load(sys.stdin)\\nenvs={}\\nfor d in ds: envs[d['environment']]=envs.get(d['environment'],0)+1\\nprint('newest 100 by env:', envs)\\nprint('oldest in page:', ds[-1]['created_at'], '| newest:', ds[0]['created_at'])\\\"\"}",
       "createdAt": 1784339619557,
-      "completedAt": 1784339622028
+      "completedAt": 1784339622028,
+      "compactedAt": 1784371748332
     },
     {
       "type": "tool",
@@ -111,7 +112,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"AT=$(cat /tmp/owner_at); curl -s --max-time 15 -H \\\"Authorization: Bearer $AT\\\" \\\"https://api.ivxholding.com/api/ivx/developer-deploy/status\\\" | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print(json.dumps(d)[:1200])\\\"\"}",
       "createdAt": 1784339621101,
-      "completedAt": 1784339622978
+      "completedAt": 1784339622978,
+      "compactedAt": 1784371748332
     },
     {
       "type": "tool",
@@ -129,7 +131,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); echo \\\"== backups ==\\\"; curl -s --max-time 20 -H \\\"Authorization: Bearer $SBP\\\" \\\"https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/backups\\\" | head -c 800; echo; echo \\\"== migrations/schema ==\\\"; python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:400]\\nprint('migrations:', q(\\\"SELECT count(*)::int n, max(version) latest FROM supabase_migrations.schema_migrations\\\"))\\nprint('rls tables:', q(\\\"SELECT count(*)::int rls_on FROM pg_tables t JOIN pg_class c ON c.relname=t.tablename WHERE t.schemaname='public' AND c.relrowsecurity\\\"))\\nprint('db size:', q(\\\"SELECT pg_size_pretty(pg_database_size(current_database())) sz\\\"))\\nEOF\"}",
       "createdAt": 1784339622477,
-      "completedAt": 1784339629127
+      "completedAt": 1784339629127,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -154,7 +157,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"AT=$(cat /tmp/owner_at); python3 - \\\"$AT\\\" <<'EOF'\\nimport json, subprocess, sys\\nAT=sys.argv[1]\\ncontent=json.dumps({\\n  \\\"$schema\\\": \\\"https://openapi.vercel.sh/vercel.json\\\",\\n  \\\"git\\\": {\\\"deploymentEnabled\\\": False}\\n}, indent=2)\\nbody={\\n  \\\"action\\\":\\\"github_commit_file\\\",\\n  \\\"confirm\\\":True,\\n  \\\"confirmText\\\":\\\"CONFIRM_IVX_GITHUB_WRITE\\\",\\n  \\\"path\\\":\\\"vercel.json\\\",\\n  \\\"content\\\":content,\\n  \\\"message\\\":\\\"chore(freeze): disable Vercel git auto-deployments — emergency production freeze (owner mandate 2026-07-18)\\\"\\n}\\np=subprocess.run(['curl','-s','--max-time','40','-X','POST','-H',f'Authorization: Bearer {AT}','-H','Content-Type: application/json','-d',json.dumps(body),'https://api.ivxholding.com/api/ivx/developer-deploy/action'],capture_output=True,text=True)\\nprint('FREEZE COMMIT RESULT:', p.stdout[:800])\\nEOF\"}",
       "createdAt": 1784339654245,
-      "completedAt": 1784339656558
+      "completedAt": 1784339656558,
+      "compactedAt": 1784371748332
     },
     {
       "type": "tool",
@@ -172,7 +176,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nprint('agents cols:', q(\\\"SELECT column_name FROM information_schema.columns WHERE table_name='ivx_ia_agents' AND table_schema='public' ORDER BY ordinal_position\\\"))\\nprint('tasks cols:', q(\\\"SELECT column_name FROM information_schema.columns WHERE table_name='ivx_ia_tasks' AND table_schema='public' ORDER BY ordinal_position\\\"))\\nprint('jobs cols:', q(\\\"SELECT column_name FROM information_schema.columns WHERE table_name='ivx_agent_jobs' AND table_schema='public' ORDER BY ordinal_position\\\"))\\nEOF\"}",
       "createdAt": 1784339656210,
-      "completedAt": 1784339661588
+      "completedAt": 1784339661588,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -205,7 +210,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"safe repository file path\", \"path\": \"backend\"}",
       "createdAt": 1784339672685,
-      "completedAt": 1784339672739
+      "completedAt": 1784339672739,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -230,7 +236,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sed -n 150,240p backend/api/ivx-developer-deploy-control.ts\"}",
       "createdAt": 1784339681385,
-      "completedAt": 1784339681388
+      "completedAt": 1784339681388,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -255,7 +262,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n \\\"runGithubCommitFile\\\\|input\\\\s*=\\\\|readRecord(body\\\\|const body\\\" backend/api/ivx-developer-deploy-control.ts | head -30; echo ---; grep -n \\\"confirmText\\\\|CONFIRM_IVX_GITHUB_WRITE\\\" backend/api/ivx-developer-deploy-control.ts | head\"}",
       "createdAt": 1784339696080,
-      "completedAt": 1784339696084
+      "completedAt": 1784339696084,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -280,7 +288,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"AT=$(cat /tmp/owner_at); python3 - \\\"$AT\\\" <<'EOF'\\nimport json, subprocess, sys\\nAT=sys.argv[1]\\ncontent=json.dumps({\\n  \\\"$schema\\\": \\\"https://openapi.vercel.sh/vercel.json\\\",\\n  \\\"git\\\": {\\\"deploymentEnabled\\\": False}\\n}, indent=2)\\nbody={\\n  \\\"action\\\":\\\"github_commit_file\\\",\\n  \\\"confirm\\\":True,\\n  \\\"confirmText\\\":\\\"CONFIRM_IVX_GITHUB_WRITE\\\",\\n  \\\"input\\\":{\\n    \\\"path\\\":\\\"vercel.json\\\",\\n    \\\"content\\\":content,\\n    \\\"message\\\":\\\"chore(freeze): disable Vercel git auto-deployments - emergency production freeze (owner mandate 2026-07-18)\\\"\\n  }\\n}\\np=subprocess.run(['curl','-s','--max-time','45','-X','POST','-H',f'Authorization: Bearer {AT}','-H','Content-Type: application/json','-d',json.dumps(body),'https://api.ivxholding.com/api/ivx/developer-deploy/action'],capture_output=True,text=True)\\nprint('FREEZE COMMIT RESULT:', p.stdout[:900])\\nEOF\"}",
       "createdAt": 1784339704699,
-      "completedAt": 1784339708192
+      "completedAt": 1784339708192,
+      "compactedAt": 1784371748332
     },
     {
       "type": "tool",
@@ -298,7 +307,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nr=q(\\\"\\\"\\\"\\nBEGIN;\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status)\\nVALUES ('RM-0001','IVX Release Manager AI',\\n 'Sole authority to prepare and gate production releases. Enforces: feature branch -> tests -> review -> staging QA -> release candidate -> owner approval -> single production deploy -> live verification. No agent may bypass this gate.',\\n 'release_gate_only,no_direct_prod_deploy,no_money_movement,no_pii_export',\\n 'gate_pass_rate,failed_deploy_count,rollback_readiness',\\n 'ACTIVE')\\nON CONFLICT (agent_id) DO UPDATE SET status='ACTIVE', updated_at=now();\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status, blocker)\\nVALUES\\n('IVX-ANDROID-APK-FINAL','RM-0001','Final Android APK from verified release commit','Build APK from verified release SHA with production config (api.ivxholding.com, Supabase kvclcdjmjghndxsngfzb), no dev banners, owner login + members/investors/buyers/deals/reels/chat + session persistence verified, physical-device install test, checksum + direct link evidence required.','P0','PENDING_AFTER_WEB_STABILIZATION','Web production stabilization in progress; then requires keystore/EAS access (APR-003)'),\\n('IVX-ANDROID-AAB-FINAL','RM-0001','Final Android AAB for Play Store','AAB from same verified release commit. Blocked: release keystore/EAS not available in runtime (APR-003). ETA ~30min after access.','P1','BLOCKED_OWNER_ACCESS','Missing: EXPO_TOKEN/EAS or release keystore (APR-003, owner)'),\\n('IVX-IOS-BUILD-FINAL','RM-0001','Final iOS build to TestFlight','IPA from same verified release commit. Blocked: Apple Developer credentials + EAS/macOS signing not available (owner). ETA ~1-2h after access.','P1','BLOCKED_OWNER_ACCESS','Missing: Apple Developer account credentials + EAS iOS signing (owner)')\\nON CONFLICT (task_id) DO UPDATE SET status=EXCLUDED.status, blocker=EXCLUDED.blocker, updated_at=now();\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email)\\nVALUES ('production_freeze','VERIFIED',\\n 'JOB-0030 EMERGENCY PRODUCTION FREEZE 2026-07-18: pause failing Vercel auto-deploys (3 obsolete Vercel git integrations, ~1148 failed deployment events), preserve live release sha 7326cf2b, authoritative platforms Render(API)+CloudFront/S3(web), rollback pointer 5f9aacb1',\\n 'Freeze via vercel.json git.deploymentEnabled=false committed to main through guarded owner pipeline. Release manager RM-0001 registered. Tasks IVX-ANDROID-APK-FINAL / IVX-ANDROID-AAB-FINAL / IVX-IOS-BUILD-FINAL created. DB backup id 1139327446 COMPLETED 2026-07-17T12:23:36Z. Migrations 11 clean (latest 20260717000011).',\\n 'RM-0001','freeze_active','admin@ivxholding.com');\\nCOMMIT;\\nSELECT task_id, status FROM ivx_ia_tasks WHERE task_id LIKE 'IVX-%';\\n\\\"\\\"\\\")\\nprint('SQL RESULT:', json.dumps(r)[:600])\\nEOF\"}",
       "createdAt": 1784339707069,
-      "completedAt": 1784339724297
+      "completedAt": 1784339724297,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -343,7 +353,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nr=q(\\\"\\\"\\\"\\nBEGIN;\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status)\\nVALUES ('RM-0001','IVX Release Manager AI',\\n 'Sole authority to prepare and gate production releases. Enforces: feature branch -> tests -> review -> staging QA -> release candidate -> owner approval -> single production deploy -> live verification. No agent may bypass this gate.',\\n '[\\\"release_gate_only\\\",\\\"no_direct_prod_deploy\\\",\\\"no_money_movement\\\",\\\"no_pii_export\\\"]'::jsonb,\\n '[\\\"gate_pass_rate\\\",\\\"failed_deploy_count\\\",\\\"rollback_readiness\\\"]'::jsonb,\\n 'ACTIVE')\\nON CONFLICT (agent_id) DO UPDATE SET status='ACTIVE', updated_at=now();\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status, blocker)\\nVALUES\\n('IVX-ANDROID-APK-FINAL','RM-0001','Final Android APK from verified release commit','Build APK from verified release SHA with production config (api.ivxholding.com, Supabase kvclcdjmjghndxsngfzb), no dev banners, owner login + members/investors/buyers/deals/reels/chat + session persistence verified, physical-device install test, checksum + direct link evidence required.','P0','PENDING_AFTER_WEB_STABILIZATION','Web production stabilization in progress; then requires keystore/EAS access (APR-003)'),\\n('IVX-ANDROID-AAB-FINAL','RM-0001','Final Android AAB for Play Store','AAB from same verified release commit. Blocked: release keystore/EAS not available in runtime (APR-003). ETA ~30min after access.','P1','BLOCKED_OWNER_ACCESS','Missing: EXPO_TOKEN/EAS or release keystore (APR-003, owner)'),\\n('IVX-IOS-BUILD-FINAL','RM-0001','Final iOS build to TestFlight','IPA from same verified release commit. Blocked: Apple Developer credentials + EAS/macOS signing not available (owner). ETA ~1-2h after access.','P1','BLOCKED_OWNER_ACCESS','Missing: Apple Developer account credentials + EAS iOS signing (owner)')\\nON CONFLICT (task_id) DO UPDATE SET status=EXCLUDED.status, blocker=EXCLUDED.blocker, updated_at=now();\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email)\\nVALUES ('production_freeze','VERIFIED',\\n 'JOB-0030 EMERGENCY PRODUCTION FREEZE 2026-07-18: pause failing Vercel auto-deploys (3 obsolete Vercel git integrations, ~1148 failed deployment events), preserve live release sha 7326cf2b, authoritative platforms Render(API)+CloudFront/S3(web), rollback pointer 5f9aacb1',\\n 'Freeze via vercel.json git.deploymentEnabled=false committed to main (commit f82e5a5d) through guarded owner pipeline. Release manager RM-0001 registered. Tasks IVX-ANDROID-APK-FINAL / IVX-ANDROID-AAB-FINAL / IVX-IOS-BUILD-FINAL created. DB backup id 1139327446 COMPLETED 2026-07-17T12:23:36Z. Migrations 11 clean (latest 20260717000011).',\\n 'RM-0001','freeze_active','admin@ivxholding.com');\\nCOMMIT;\\n\\\"\\\"\\\")\\nprint('SQL:', json.dumps(r)[:300])\\nprint('tasks:', q(\\\"SELECT task_id, status FROM ivx_ia_tasks WHERE task_id LIKE 'IVX-%' ORDER BY task_id\\\"))\\nprint('agent:', q(\\\"SELECT agent_id, status FROM ivx_ia_agents WHERE agent_id='RM-0001'\\\"))\\nEOF\"}",
       "createdAt": 1784339756007,
-      "completedAt": 1784339772375
+      "completedAt": 1784339772375,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -368,7 +379,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nprint(q(\\\"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname IN ('ivx_ia_tasks_status_check','ivx_ia_tasks_priority_check','ivx_ia_agents_status_check')\\\"))\\nEOF\"}",
       "createdAt": 1784339777787,
-      "completedAt": 1784339780610
+      "completedAt": 1784339780610,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -393,7 +405,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nr=q(\\\"\\\"\\\"\\nBEGIN;\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status)\\nVALUES ('RM-0001','IVX Release Manager AI',\\n 'Sole authority to prepare and gate production releases. Enforces: feature branch -> tests -> review -> staging QA -> release candidate -> owner approval -> single production deploy -> live verification. No agent may bypass this gate.',\\n '[\\\"release_gate_only\\\",\\\"no_direct_prod_deploy\\\",\\\"no_money_movement\\\",\\\"no_pii_export\\\"]'::jsonb,\\n '[\\\"gate_pass_rate\\\",\\\"failed_deploy_count\\\",\\\"rollback_readiness\\\"]'::jsonb,\\n 'ACTIVE')\\nON CONFLICT (agent_id) DO UPDATE SET status='ACTIVE', updated_at=now();\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status, blocker)\\nVALUES\\n('IVX-ANDROID-APK-FINAL','RM-0001','Final Android APK from verified release commit','Build APK from verified release SHA with production config (api.ivxholding.com, Supabase kvclcdjmjghndxsngfzb), no dev banners, owner login + members/investors/buyers/deals/reels/chat + session persistence verified, physical-device install test, checksum + direct link evidence required. Queued until web production stabilization is confirmed.','P0','BLOCKED','Web production stabilization first; then requires keystore/EAS signing access (APR-003, owner)'),\\n('IVX-ANDROID-AAB-FINAL','RM-0001','Final Android AAB for Play Store','AAB from same verified release commit. ETA ~30min after signing access granted.','P1','OWNER_ACTION_REQUIRED','Missing: EXPO_TOKEN/EAS or release keystore in runtime (APR-003, owner)'),\\n('IVX-IOS-BUILD-FINAL','RM-0001','Final iOS build to TestFlight','IPA from same verified release commit. ETA ~1-2h after access granted.','P1','OWNER_ACTION_REQUIRED','Missing: Apple Developer credentials + EAS iOS signing (owner)')\\nON CONFLICT (task_id) DO UPDATE SET status=EXCLUDED.status, blocker=EXCLUDED.blocker, updated_at=now();\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email)\\nVALUES ('production_freeze','VERIFIED',\\n 'JOB-0030 EMERGENCY PRODUCTION FREEZE 2026-07-18: pause failing Vercel auto-deploys (3 obsolete Vercel git integrations, ~1148 failed deployment events), preserve live release sha 7326cf2b, authoritative platforms Render(API)+CloudFront/S3(web), rollback pointer 5f9aacb1',\\n 'Freeze via vercel.json git.deploymentEnabled=false committed to main (commit f82e5a5d) through guarded owner pipeline. Release manager RM-0001 registered. Tasks IVX-ANDROID-APK-FINAL / IVX-ANDROID-AAB-FINAL / IVX-IOS-BUILD-FINAL created. DB backup id 1139327446 COMPLETED 2026-07-17T12:23:36Z. Migrations 11 clean (latest 20260717000011).',\\n 'RM-0001','freeze_active','admin@ivxholding.com');\\nCOMMIT;\\n\\\"\\\"\\\")\\nprint('SQL:', json.dumps(r)[:300])\\nprint('tasks:', q(\\\"SELECT task_id, status, priority FROM ivx_ia_tasks WHERE task_id LIKE 'IVX-%' ORDER BY task_id\\\"))\\nprint('agent:', q(\\\"SELECT agent_id, name, status FROM ivx_ia_agents WHERE agent_id='RM-0001'\\\"))\\nEOF\"}",
       "createdAt": 1784339792870,
-      "completedAt": 1784339807310
+      "completedAt": 1784339807310,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -418,7 +431,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nr=q(\\\"\\\"\\\"\\nBEGIN;\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status)\\nVALUES ('RM-0001','IVX Release Manager AI',\\n 'Sole authority to prepare and gate production releases. Enforces: feature branch -> tests -> review -> staging QA -> release candidate -> owner approval -> single production deploy -> live verification. No agent may bypass this gate.',\\n '[\\\"release_gate_only\\\",\\\"no_direct_prod_deploy\\\",\\\"no_money_movement\\\",\\\"no_pii_export\\\"]'::jsonb,\\n '[\\\"gate_pass_rate\\\",\\\"failed_deploy_count\\\",\\\"rollback_readiness\\\"]'::jsonb,\\n 'ACTIVE')\\nON CONFLICT (agent_id) DO UPDATE SET status='ACTIVE', updated_at=now();\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status, blocker)\\nVALUES\\n('IVX-ANDROID-APK-FINAL','RM-0001','Final Android APK from verified release commit','Build APK from verified release SHA with production config (api.ivxholding.com, Supabase kvclcdjmjghndxsngfzb), no dev banners, owner login + members/investors/buyers/deals/reels/chat + session persistence verified, physical-device install test, checksum + direct link evidence required. Queued until web production stabilization is confirmed.','P0','BLOCKED','Web production stabilization first; then requires keystore/EAS signing access (APR-003, owner)'),\\n('IVX-ANDROID-AAB-FINAL','RM-0001','Final Android AAB for Play Store','AAB from same verified release commit. ETA ~30min after signing access granted.','P1','OWNER_ACTION_REQUIRED','Missing: EXPO_TOKEN/EAS or release keystore in runtime (APR-003, owner)'),\\n('IVX-IOS-BUILD-FINAL','RM-0001','Final iOS build to TestFlight','IPA from same verified release commit. ETA ~1-2h after access granted.','P1','OWNER_ACTION_REQUIRED','Missing: Apple Developer credentials + EAS iOS signing (owner)')\\nON CONFLICT (task_id) DO UPDATE SET status=EXCLUDED.status, blocker=EXCLUDED.blocker, updated_at=now();\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email)\\nVALUES ('production_freeze','VERIFIED',\\n 'JOB-0030 EMERGENCY PRODUCTION FREEZE 2026-07-18: pause failing Vercel auto-deploys (3 obsolete Vercel git integrations, ~1148 failed deployment events), preserve live release sha 7326cf2b, authoritative platforms Render(API)+CloudFront/S3(web), rollback pointer 5f9aacb1',\\n jsonb_build_object(\\n   'freezeMechanism','vercel.json git.deploymentEnabled=false committed to main',\\n   'freezeCommit','f82e5a5d2f044e15209b1f8bdb8b0aab868b0440',\\n   'releaseManager','RM-0001',\\n   'tasks', jsonb_build_array('IVX-ANDROID-APK-FINAL','IVX-ANDROID-AAB-FINAL','IVX-IOS-BUILD-FINAL'),\\n   'dbBackup','id 1139327446 COMPLETED 2026-07-17T12:23:36Z',\\n   'migrations','11 clean, latest 20260717000011'\\n ),\\n 'RM-0001','freeze_active','admin@ivxholding.com');\\nCOMMIT;\\n\\\"\\\"\\\")\\nprint('SQL:', json.dumps(r)[:300])\\nprint('tasks:', q(\\\"SELECT task_id, status, priority FROM ivx_ia_tasks WHERE task_id LIKE 'IVX-%' ORDER BY task_id\\\"))\\nprint('agent:', q(\\\"SELECT agent_id, name, status FROM ivx_ia_agents WHERE agent_id='RM-0001'\\\"))\\nEOF\"}",
       "createdAt": 1784339816238,
-      "completedAt": 1784339832625
+      "completedAt": 1784339832625,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -443,7 +457,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nprint(q(\\\"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='ivx_agent_jobs_status_check'\\\"))\\nEOF\"}",
       "createdAt": 1784339840819,
-      "completedAt": 1784339843831
+      "completedAt": 1784339843831,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -468,7 +483,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"SBP=$(cat /tmp/sbp_token); python3 - \\\"$SBP\\\" <<'EOF'\\nimport json, subprocess, sys\\nSBP=sys.argv[1]\\ndef q(sql):\\n    p=subprocess.run(['curl','-s','--max-time','50','-X','POST','-H',f'Authorization: Bearer {SBP}','-H','Content-Type: application/json','-d',json.dumps({'query':sql}),'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query'],capture_output=True,text=True)\\n    try: return json.loads(p.stdout)\\n    except Exception: return p.stdout[:500]\\nr=q(\\\"\\\"\\\"\\nBEGIN;\\nINSERT INTO ivx_ia_agents (agent_id, name, mission, permissions, kpis, status)\\nVALUES ('RM-0001','IVX Release Manager AI',\\n 'Sole authority to prepare and gate production releases. Enforces: feature branch -> tests -> review -> staging QA -> release candidate -> owner approval -> single production deploy -> live verification. No agent may bypass this gate.',\\n '[\\\"release_gate_only\\\",\\\"no_direct_prod_deploy\\\",\\\"no_money_movement\\\",\\\"no_pii_export\\\"]'::jsonb,\\n '[\\\"gate_pass_rate\\\",\\\"failed_deploy_count\\\",\\\"rollback_readiness\\\"]'::jsonb,\\n 'ACTIVE')\\nON CONFLICT (agent_id) DO UPDATE SET status='ACTIVE', updated_at=now();\\nINSERT INTO ivx_ia_tasks (task_id, agent_id, title, detail, priority, status, blocker)\\nVALUES\\n('IVX-ANDROID-APK-FINAL','RM-0001','Final Android APK from verified release commit','Build APK from verified release SHA with production config (api.ivxholding.com, Supabase kvclcdjmjghndxsngfzb), no dev banners, owner login + members/investors/buyers/deals/reels/chat + session persistence verified, physical-device install test, checksum + direct link evidence required. Queued until web production stabilization is confirmed.','P0','BLOCKED','Web production stabilization first; then requires keystore/EAS signing access (APR-003, owner)'),\\n('IVX-ANDROID-AAB-FINAL','RM-0001','Final Android AAB for Play Store','AAB from same verified release commit. ETA ~30min after signing access granted.','P1','OWNER_ACTION_REQUIRED','Missing: EXPO_TOKEN/EAS or release keystore in runtime (APR-003, owner)'),\\n('IVX-IOS-BUILD-FINAL','RM-0001','Final iOS build to TestFlight','IPA from same verified release commit. ETA ~1-2h after access granted.','P1','OWNER_ACTION_REQUIRED','Missing: Apple Developer credentials + EAS iOS signing (owner)')\\nON CONFLICT (task_id) DO UPDATE SET status=EXCLUDED.status, blocker=EXCLUDED.blocker, updated_at=now();\\nINSERT INTO ivx_agent_jobs (type, status, prompt, result, agent_name, current_step, created_by_email, completed_at)\\nVALUES ('production_freeze','completed',\\n 'JOB-0030 EMERGENCY PRODUCTION FREEZE 2026-07-18: pause failing Vercel auto-deploys (3 obsolete Vercel git integrations, ~1148 failed deployment events), preserve live release sha 7326cf2b, authoritative platforms Render(API)+CloudFront/S3(web), rollback pointer 5f9aacb1',\\n jsonb_build_object(\\n   'freezeMechanism','vercel.json git.deploymentEnabled=false committed to main',\\n   'freezeCommit','f82e5a5d2f044e15209b1f8bdb8b0aab868b0440',\\n   'releaseManager','RM-0001',\\n   'tasks', jsonb_build_array('IVX-ANDROID-APK-FINAL','IVX-ANDROID-AAB-FINAL','IVX-IOS-BUILD-FINAL'),\\n   'dbBackup','id 1139327446 COMPLETED 2026-07-17T12:23:36Z',\\n   'migrations','11 clean, latest 20260717000011'\\n ),\\n 'RM-0001','freeze_active','admin@ivxholding.com', now());\\nCOMMIT;\\n\\\"\\\"\\\")\\nprint('SQL:', json.dumps(r)[:300])\\nprint('tasks:', q(\\\"SELECT task_id, status, priority FROM ivx_ia_tasks WHERE task_id LIKE 'IVX-%' ORDER BY task_id\\\"))\\nprint('agent:', q(\\\"SELECT agent_id, name, status FROM ivx_ia_agents WHERE agent_id='RM-0001'\\\"))\\nEOF\"}",
       "createdAt": 1784339850349,
-      "completedAt": 1784339866774
+      "completedAt": 1784339866774,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -493,7 +509,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"== deployments since freeze commit (f82e5a5d @ 01:55:08Z) ==\\\"; curl -s --max-time 15 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/deployments?per_page=8\\\" | python3 -c \\\"\\nimport json,sys\\nfor d in json.load(sys.stdin):\\n    print(d['created_at'], d['sha'][:10], d['environment'])\\\"; echo; echo \\\"== main HEAD now ==\\\"; curl -s --max-time 15 \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/branches/main\\\" | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print(d['commit']['sha'], '|', d['commit']['commit']['message'][:80])\\\"; echo \\\"== vercel.json live on main ==\\\"; curl -s --max-time 15 \\\"https://raw.githubusercontent.com/ibb142/rork-global-real-estate-invest/main/vercel.json\\\"; echo; echo \\\"== production health ==\\\"; curl -s --max-time 15 \\\"https://api.ivxholding.com/health\\\" | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('status:',d.get('status'),'| commit:',d.get('commit'),'| boot:',d.get('bootTime'))\\\"\"}",
       "createdAt": 1784339874353,
-      "completedAt": 1784339878222
+      "completedAt": 1784339878222,
+      "compactedAt": 1784371748332
     },
     {
       "type": "reasoning",
@@ -505,10 +522,11 @@
     {
       "type": "text",
       "text": "✅ **EMERGENCY STABILIZATION COMPLETE — FREEZE ACTIVE AND VERIFIED**\n\n| # | Deliverable | Result (real, verified) |\n|---|---|---|\n| 1 | **Failed deploys frozen** | **1,148 deployment events** across **3 obsolete Vercel integrations** (`rork-global-real-estate-invest`, `ibb142-…`, `…-642s` — each commit triggered 3 builds, all `failure`). **Freeze mechanism:** `vercel.json` → `\"git\": { \"deploymentEnabled\": false }` committed to `main` via the guarded owner pipeline (commit `f82e5a5d`, 01:55:08Z). **Verified: zero new Vercel deployments after the freeze commit.** |\n| 2 | **Real live version** | API: `https://api.ivxholding.com/health` → `healthy`, runtime SHA `f82e5a5d` == GitHub `main` HEAD (**parity PASS**, boot 01:56:31Z). Tag `v1.4.5-build37`, rollback pointer `5f9aacb1`. |\n| 3 | **True production platform** | **Vercel serves NOTHING** — its production URL returns 404. Real stack: **API = Render** (`x-render-origin-server: Render`), **Web = S3 + CloudFront** (`server: AmazonS3`, 200 OK). The 1,148 failures had **zero user impact** — they were noise from dead integrations. |\n| 4 | **Root-cause groups** | **One class: platform misconfiguration** — 3 Vercel Git integrations auto-building a non-web monorepo root (no `build` script, no `vercel.json`). Sampled newest failures all show identical `failure` state. Not code regressions. |\n| 5 | **Release manager** | **`RM-0001` — IVX Release Manager AI — ACTIVE** (registered in `ivx_ia_agents`). Permissions: release-gate only, no direct prod deploy. Pipeline enforced: branch → tests → review → staging QA → RC → owner approval → single deploy → live verify. Ledger: **JOB-0030** (`production_freeze`, completed). |\n| 6 | **DB / backup status** | Daily physical backups ON — latest **COMPLETED** backup id `1139327446` (2026-07-17 12:23Z). Migrations: **11/11 clean** (latest `20260717000011`). RLS on 188 tables. DB 122 MB. PITR: off (plan-level). |\n| 7 | **Mobile build tasks** | Created under RM-0001: `IVX-ANDROID-APK-FINAL` (**P0, BLOCKED** — queued after web stabilization + needs signing), `IVX-ANDROID-AAB-FINAL` + `IVX-IOS-BUILD-FINAL` (**OWNER_ACTION_REQUIRED** — need EAS/keystore + Apple Developer credentials, APR-003). |\n\n**One honest blocker:** a protected `release/*` branch could not be created — the runtime `GITHUB_TOKEN` lacks ref-creation scope (APR-004). The release is pinned instead via tag `v1.4.5-build37` + verified SHA parity. Grant a token with `repo` ref scope and I'll create the protected release branch immediately.\n\n**Recommended follow-up (your side, 2 min):** delete the 3 dead Vercel projects in the Vercel dashboard — the freeze stops their builds, but removing them clears the noise permanently.",
-      "id": "5257mkfmiqie9zm4j81xj",
-      "createdAt": 1784339900772
+      "id": "5257mkfmiqie9zm4j81xj"
     }
   ],
+  "id": "chwih2o45n8w6pxetlgx9",
+  "preferredModelName": "claude-fable-5 high",
   "snapshotId": "chwih2o45n8w6pxetlgx9",
   "finishStats": {
     "contextTokens": 78169,
