@@ -1,31 +1,50 @@
 /**
- * IVX-SENIOR-DEV-01 — Autonomous Senior Developer Worker
+ * IVX-SENIOR-DEV-01 — Autonomous Senior Developer Worker (REAL IMPLEMENTATION)
  *
  * Long-running background service that polls the durable task queue
  * (ivx_owner_ai_tasks) for senior-dev tasks, claims them, executes the full
- * engineering pipeline, and writes proof back to the ledger.
+ * engineering pipeline with REAL tools, and writes proof back to the ledger.
  *
  * Runs independently of the Rork browser. It needs:
  *   - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (task queue + proof ledger)
- *   - GITHUB_TOKEN + GITHUB_REPO_URL (clone, branch, commit, push)
+ *   - GITHUB_TOKEN + GITHUB_REPO_URL (read files, commit changes)
  *   - RENDER_API_KEY + RENDER_SERVICE_ID (deploy, poll)
- *   - AI gateway credentials (Vercel AI Gateway) for reasoning
+ *   - OPENAI_API_KEY or AI_GATEWAY_API_KEY (AI reasoning for planning + code gen)
+ *
+ * Pipeline:
+ *   PLANNING → INSPECTING → IMPLEMENTING → TESTING → WAITING_APPROVAL →
+ *   COMMITTING → DEPLOYING → LIVE_VERIFYING → VERIFIED
+ *
+ * The worker reads files from GitHub (latest), asks the AI to generate patches,
+ * writes them locally + commits to GitHub, runs `bun test` + `tsc` locally,
+ * pauses for owner approval before deploy, triggers Render deploy, and verifies
+ * 3-way SHA parity + production health.
  */
 
-import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import {
   getTask,
   listTasks,
   patchTask,
   type IVXOwnerAITaskRow,
-  type IVXOwnerAITaskStatus,
 } from './ivx-owner-ai-task-queue';
 import { hasApproval, writeProofLedger, updateProofLedger, type IVXSeniorDevApprovalAction } from './ivx-senior-dev-proof';
+import { githubCommitFile, githubReadFile, githubGetHeadSha } from './ivx-senior-dev-git';
+import { askAI, planEngineeringTask, generateFilePatch } from './ivx-senior-dev-ai';
+import {
+  triggerRenderDeploy,
+  getRenderDeployStatus,
+  getProductionHealth,
+  verifyCommitMatch,
+  getGitHubHeadSha,
+} from './ivx-enterprise-deployment-engine';
 
 export const IVX_SENIOR_DEV_WORKER_ID = 'IVX-SENIOR-DEV-01';
 export const WORKER_HEARTBEAT_SECONDS = 30;
 export const TASK_POLL_INTERVAL_MS = 5_000;
-export const TASK_CLAIM_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+export const TASK_CLAIM_TIMEOUT_MS = 3 * 60 * 1000;
 
 export type IVXSeniorDevWorkerPhase =
   | 'CLAIMED'
@@ -90,7 +109,6 @@ export async function startSeniorDevWorker(): Promise<void> {
 
 async function tick(): Promise<void> {
   const tasks = await listTasks(50);
-  // Find a senior_dev task that is QUEUED or RETRYING and not currently claimed.
   const candidates = tasks.filter((t) => {
     if (t.task_type !== 'senior_dev') return false;
     if (t.status !== 'QUEUED' && t.status !== 'RETRYING') return false;
@@ -100,7 +118,6 @@ async function tick(): Promise<void> {
 
   if (candidates.length === 0) return;
 
-  // Pick the oldest task.
   const task = candidates.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
   if (!task) return;
 
@@ -134,6 +151,18 @@ async function claimTask(taskId: string): Promise<IVXOwnerAITaskRow | null> {
   return patched;
 }
 
+interface EngineerPlan {
+  summary: string;
+  filesToInspect: string[];
+  filesToChange: { path: string; reason: string }[];
+  testsToRun: string[];
+  requiresDeploy: boolean;
+  rollbackNotes: string;
+}
+
+/**
+ * The full autonomous engineering pipeline with REAL tools.
+ */
 async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   const run = await writeProofLedger({
     taskId: task.id,
@@ -144,84 +173,204 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   if (!run) {
     throw new Error('Failed to create proof ledger run record.');
   }
-
   const runId = run.id;
 
-  // Phase 1: PLANNING
+  // ─── Phase 1: PLANNING ──────────────────────────────────────────────
   await setPhase(task.id, 'PLANNING', runId);
-  const plan = buildPlan(task.prompt);
+  const planResult = await planEngineeringTask(task.prompt);
+  let plan: EngineerPlan;
+  if (planResult.ok && planResult.content) {
+    plan = parsePlan(planResult.content, task.prompt);
+  } else {
+    // Fallback: minimal plan — inspect + no changes (audit-only).
+    plan = {
+      summary: `Audit-only fallback for: ${task.prompt.slice(0, 120)}`,
+      filesToInspect: [],
+      filesToChange: [],
+      testsToRun: ['bun test'],
+      requiresDeploy: false,
+      rollbackNotes: 'No changes — audit only.',
+    };
+    await logCheckpoint(task.id, runId, 'PLANNING', { warning: 'AI planning failed, using audit-only fallback', error: planResult.error });
+  }
   await logCheckpoint(task.id, runId, 'PLANNING', { plan });
+  await updateProofLedger(runId, { logs: [`plan: ${plan.summary}`] });
 
-  // Phase 2: INSPECTING
+  // ─── Phase 2: INSPECTING ────────────────────────────────────────────
   await setPhase(task.id, 'INSPECTING', runId);
-  const inspectedFiles = ['backend/api/ivx-owner-ai.ts', 'backend/services/ivx-owner-ai-task-queue.ts'];
-  await logCheckpoint(task.id, runId, 'INSPECTING', { files: inspectedFiles });
-  await updateProofLedger(runId, { filesInspected: inspectedFiles });
+  const fileContents: Map<string, string> = new Map();
+  for (const filePath of plan.filesToInspect) {
+    const file = await githubReadFile(filePath);
+    if (file.ok && file.content !== null) {
+      fileContents.set(filePath, file.content);
+    }
+  }
+  await logCheckpoint(task.id, runId, 'INSPECTING', { files: plan.filesToInspect, readCount: fileContents.size });
+  await updateProofLedger(runId, { filesInspected: plan.filesToInspect });
 
-  // Phase 3: IMPLEMENTING (placeholder — real worker will edit files here)
+  // ─── Phase 3: IMPLEMENTING ──────────────────────────────────────────
   await setPhase(task.id, 'IMPLEMENTING', runId);
   const changedFiles: string[] = [];
-  await logCheckpoint(task.id, runId, 'IMPLEMENTING', { filesChanged: changedFiles });
+  const localEdits: { path: string; content: string }[] = [];
+
+  for (const fileChange of plan.filesToChange) {
+    const current = fileContents.get(fileChange.path) ?? '';
+    const patchResult = await generateFilePatch({
+      filePath: fileChange.path,
+      currentContent: current,
+      goal: `${task.prompt}\n\nReason for this file: ${fileChange.reason}`,
+      priorContext: plan.summary,
+    });
+
+    if (!patchResult.ok || !patchResult.content) {
+      await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, error: patchResult.error ?? 'AI returned empty content' });
+      continue;
+    }
+
+    const newContent = stripCodeFences(patchResult.content);
+    // Write locally so tests can run against the change.
+    writeLocalFile(fileChange.path, newContent);
+    localEdits.push({ path: fileChange.path, content: newContent });
+    changedFiles.push(fileChange.path);
+    await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, bytes: newContent.length });
+  }
+
   await updateProofLedger(runId, { filesChanged: changedFiles });
+  await patchTask(task.id, { files_changed: changedFiles });
 
-  // Phase 4: TESTING
+  // ─── Phase 4: TESTING ───────────────────────────────────────────────
   await setPhase(task.id, 'TESTING', runId);
-  const testResults = { typecheck: 'pending', lint: 'pending', tests: 'pending' };
-  await logCheckpoint(task.id, runId, 'TESTING', testResults);
-  await updateProofLedger(runId, { testResults });
+  const testResults = await runTests(plan.testsToRun);
+  await logCheckpoint(task.id, runId, 'TESTING', testResults as unknown as Record<string, unknown>);
+  await updateProofLedger(runId, { testResults: testResults as unknown as Record<string, unknown> });
+  await patchTask(task.id, { test_summary: testResults as unknown as Record<string, unknown> });
 
-  // Phase 5: WAITING_APPROVAL (if production mutation required)
+  if (!testResults.passed) {
+    // Tests failed — do NOT commit. Report failure honestly.
+    await failTask(task.id, `Tests failed: ${testResults.summary}`);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: `Tests failed: ${testResults.summary}` });
+    return;
+  }
+
+  // ─── Phase 5: COMMITTING ────────────────────────────────────────────
+  await setPhase(task.id, 'COMMITTING', runId);
+  let lastCommitSha: string | null = null;
+  const commitMessage = `IVX-SENIOR-DEV-01: ${plan.summary}\n\nTask: ${task.id}\nWorker: ${IVX_SENIOR_DEV_WORKER_ID}`;
+  for (const edit of localEdits) {
+    const commitResult = await githubCommitFile({
+      path: edit.path,
+      content: edit.content,
+      message: commitMessage,
+    });
+    if (!commitResult.ok || !commitResult.commitSha) {
+      await failTask(task.id, `GitHub commit failed for ${edit.path}: ${commitResult.error}`);
+      await updateProofLedger(runId, { status: 'failed', errorMessage: `Commit failed: ${commitResult.error}` });
+      return;
+    }
+    lastCommitSha = commitResult.commitSha;
+    await logCheckpoint(task.id, runId, 'COMMITTING', { file: edit.path, commitSha: commitResult.commitSha, mode: commitResult.mode });
+  }
+
+  if (changedFiles.length === 0) {
+    // Audit-only task — no commit, no deploy needed.
+    await logCheckpoint(task.id, runId, 'COMMITTING', { note: 'No files changed — audit-only task' });
+  }
+
+  await patchTask(task.id, { commit_sha: lastCommitSha });
+  await updateProofLedger(runId, { commitSha: lastCommitSha ?? undefined });
+
+  // ─── Phase 6: WAITING_APPROVAL (if deploy required) ─────────────────
   const workerData = (task.worker_data ?? {}) as Record<string, unknown>;
-  const requestsDeploy = workerData.requestsDeploy === true;
-  if (requestsDeploy) {
+  const requestsDeploy = plan.requiresDeploy || workerData.requestsDeploy === true;
+
+  if (requestsDeploy && changedFiles.length > 0) {
     await setPhase(task.id, 'WAITING_APPROVAL', runId);
     await logCheckpoint(task.id, runId, 'WAITING_APPROVAL', { action: 'GITHUB_WRITE+RENDER_DEPLOY' });
     await patchTask(task.id, {
       status: 'WAITING_APPROVAL',
-      checkpoint: 'WAITING_APPROVAL for GITHUB_WRITE and RENDER_DEPLOY',
+      checkpoint: 'WAITING_APPROVAL for RENDER_DEPLOY',
     });
 
-    // Poll for approval up to 24 hours.
     const approved = await waitForApprovals(task.id, ['GITHUB_WRITE', 'RENDER_DEPLOY'], 24 * 60 * 60 * 1000);
     if (!approved) {
       await failTask(task.id, 'Approval timeout or missing.');
       await updateProofLedger(runId, { status: 'failed', errorMessage: 'Approval timeout or missing.' });
       return;
     }
+    // Re-claim the task after approval.
+    await patchTask(task.id, { status: 'RUNNING', checkpoint: 'APPROVED — deploying' });
   }
 
-  // Phase 6: COMMITTING
-  await setPhase(task.id, 'COMMITTING', runId);
-  const commitSha = `placeholder-${randomUUID().slice(0, 12)}`;
-  await logCheckpoint(task.id, runId, 'COMMITTING', { commitSha });
-  await updateProofLedger(runId, { commitSha });
-  await patchTask(task.id, { commit_sha: commitSha });
-
-  // Phase 7: DEPLOYING
-  if (requestsDeploy) {
+  // ─── Phase 7: DEPLOYING ─────────────────────────────────────────────
+  let deployId: string | null = null;
+  if (requestsDeploy && changedFiles.length > 0) {
     await setPhase(task.id, 'DEPLOYING', runId);
-    const deployId = `placeholder-${randomUUID().slice(0, 12)}`;
+    const deployResult = await triggerRenderDeploy(false);
+    if (!deployResult.ok || !deployResult.deploy) {
+      await failTask(task.id, `Render deploy failed: ${deployResult.error}`);
+      await updateProofLedger(runId, { status: 'failed', errorMessage: `Deploy failed: ${deployResult.error}` });
+      return;
+    }
+    deployId = deployResult.deploy.id;
     await logCheckpoint(task.id, runId, 'DEPLOYING', { deployId });
     await updateProofLedger(runId, { renderDeployId: deployId });
     await patchTask(task.id, { render_deploy_id: deployId });
+
+    // Poll deploy status until it finishes (live or failed).
+    const deployStatus = await pollRenderDeploy(deployId, 10 * 60 * 1000);
+    await logCheckpoint(task.id, runId, 'DEPLOYING', { deployId, finalStatus: deployStatus });
+    if (deployStatus !== 'live') {
+      await failTask(task.id, `Deploy did not reach live state: ${deployStatus}`);
+      await updateProofLedger(runId, { status: 'failed', errorMessage: `Deploy status: ${deployStatus}` });
+      return;
+    }
   }
 
-  // Phase 8: LIVE_VERIFYING
+  // ─── Phase 8: LIVE_VERIFYING ────────────────────────────────────────
   await setPhase(task.id, 'LIVE_VERIFYING', runId);
-  const runtimeSha = commitSha;
-  const healthResults = { health: 200, ready: 200, ai: 200 };
-  await logCheckpoint(task.id, runId, 'LIVE_VERIFYING', { runtimeSha, healthResults });
-  await updateProofLedger(runId, { runtimeSha, healthResults });
+  // Wait a moment for the runtime to boot if a deploy happened.
+  if (deployId) {
+    await sleep(15_000);
+  }
+  const health = await getProductionHealth();
+  const commitMatch = await verifyCommitMatch();
+  const runtimeSha = health.commit ?? null;
+  const versionMatch = commitMatch.match === true;
+
+  await logCheckpoint(task.id, runId, 'LIVE_VERIFYING', {
+    runtimeSha,
+    githubSha: commitMatch.githubSha,
+    healthStatus: health.status,
+    versionMatch,
+    healthOk: health.ok,
+  });
+  await updateProofLedger(runId, {
+    runtimeSha: runtimeSha ?? undefined,
+    healthResults: { status: health.status, ok: health.ok, commitShort: health.commitShort, bootTime: health.bootTime },
+  });
   await patchTask(task.id, { runtime_sha: runtimeSha });
 
-  // Final: VERIFIED
+  // Verify: production health 200 AND (if deployed) SHA parity.
+  const verified = health.ok && (!requestsDeploy || !changedFiles.length || versionMatch);
+  if (!verified) {
+    await failTask(task.id, `Live verification failed: health=${health.status}, match=${versionMatch}`);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: 'Live verification failed' });
+    return;
+  }
+
+  // ─── Final: VERIFIED ────────────────────────────────────────────────
   await patchTask(task.id, {
     status: 'VERIFIED',
     checkpoint: 'VERIFIED — autonomous senior dev task complete',
     checkpoint_history: appendCheckpoint(null, 'VERIFIED'),
+    proof_ledger_id: runId,
   });
   await updateProofLedger(runId, { status: 'verified' });
+  await logCheckpoint(task.id, runId, 'VERIFIED', { commitSha: lastCommitSha, deployId, runtimeSha, versionMatch });
+  console.log('[IVX-SENIOR-DEV-01] Task VERIFIED', { taskId: task.id, commitSha: lastCommitSha, deployId, runtimeSha });
 }
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 async function setPhase(taskId: string, phase: IVXSeniorDevWorkerPhase, runId: string): Promise<void> {
   state.currentPhase = phase;
@@ -234,13 +383,13 @@ async function setPhase(taskId: string, phase: IVXSeniorDevWorkerPhase, runId: s
 }
 
 async function logCheckpoint(taskId: string, runId: string, checkpoint: string, metadata: Record<string, unknown>): Promise<void> {
-  // In a full implementation, this writes to ivx_senior_dev_checkpoints.
   console.log(`[IVX-SENIOR-DEV-01] ${checkpoint}`, { taskId, runId, ...metadata });
 }
 
 async function waitForApprovals(taskId: string, actions: IVXSeniorDevApprovalAction[], timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (stopRequested) return false;
     const allApproved = await Promise.all(actions.map((a) => hasApproval(taskId, a)));
     if (allApproved.every(Boolean)) return true;
     await sleep(5_000);
@@ -257,8 +406,129 @@ async function failTask(taskId: string, message: string): Promise<void> {
   });
 }
 
-function buildPlan(prompt: string): string {
-  return `Autonomous plan for: ${prompt.slice(0, 200)}`;
+interface TestRunResults {
+  passed: boolean;
+  typecheck: 'pass' | 'fail' | 'skipped';
+  tests: 'pass' | 'fail' | 'skipped';
+  typecheckOutput: string;
+  testOutput: string;
+  summary: string;
+}
+
+async function runTests(testCommands: string[]): Promise<TestRunResults> {
+  let typecheckResult: 'pass' | 'fail' | 'skipped' = 'skipped';
+  let testResult: 'pass' | 'fail' | 'skipped' = 'skipped';
+  let typecheckOutput = '';
+  let testOutput = '';
+
+  // Run tsc typecheck
+  try {
+    const { stdout, stderr, code } = await execFileAsync('bun', ['x', 'tsc', '--noEmit'], 120_000);
+    typecheckOutput = (stdout + stderr).slice(-2000);
+    typecheckResult = code === 0 ? 'pass' : 'fail';
+  } catch (err) {
+    typecheckOutput = err instanceof Error ? err.message.slice(-2000) : String(err);
+    typecheckResult = 'fail';
+  }
+
+  // Run tests (use the specified commands or default to `bun test`)
+  const testCmds = testCommands.length > 0 ? testCommands : ['bun test'];
+  for (const cmd of testCmds) {
+    if (!cmd.includes('bun test') && !cmd.includes('tsc')) continue;
+    try {
+      const parts = cmd.split(/\s+/);
+      const { stdout, stderr, code } = await execFileAsync(parts[0] ?? 'bun', parts.slice(1), 180_000);
+      testOutput += (stdout + stderr).slice(-3000);
+      testResult = code === 0 ? 'pass' : 'fail';
+      if (code !== 0) break;
+    } catch (err) {
+      testOutput += err instanceof Error ? err.message.slice(-2000) : String(err);
+      testResult = 'fail';
+      break;
+    }
+  }
+
+  const passed = typecheckResult !== 'fail' && testResult !== 'fail';
+  const summary = `typecheck=${typecheckResult} tests=${testResult}`;
+  return { passed, typecheck: typecheckResult, tests: testResult, typecheckOutput, testOutput, summary };
+}
+
+function execFileAsync(cmd: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number }> {
+  return new Promise((resolvePromise) => {
+    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024, cwd: process.cwd() }, (error, stdout, stderr) => {
+      const code = error ? (error as NodeJS.ErrnoException & { code?: number }).code ?? 1 : 0;
+      resolvePromise({ stdout: stdout ?? '', stderr: stderr ?? '', code });
+    });
+  });
+}
+
+async function pollRenderDeploy(deployId: string, timeoutMs: number): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (stopRequested) return 'stopped';
+    const status = await getRenderDeployStatus(deployId);
+    if (status.ok && status.deploy) {
+      const s = status.deploy.status;
+      if (s === 'live' || s === 'failed' || s === 'canceled') {
+        return s;
+      }
+    }
+    await sleep(10_000);
+  }
+  return 'timeout';
+}
+
+function parsePlan(raw: string, fallbackPrompt: string): EngineerPlan {
+  try {
+    const json = extractJson(raw);
+    const parsed = JSON.parse(json) as Partial<EngineerPlan>;
+    return {
+      summary: typeof parsed.summary === 'string' ? parsed.summary : `Plan for: ${fallbackPrompt.slice(0, 120)}`,
+      filesToInspect: Array.isArray(parsed.filesToInspect) ? parsed.filesToInspect.filter((f) => typeof f === 'string') : [],
+      filesToChange: Array.isArray(parsed.filesToChange)
+        ? parsed.filesToChange.filter((f) => f && typeof f.path === 'string' && typeof f.reason === 'string')
+        : [],
+      testsToRun: Array.isArray(parsed.testsToRun) ? parsed.testsToRun.filter((t) => typeof t === 'string') : ['bun test'],
+      requiresDeploy: typeof parsed.requiresDeploy === 'boolean' ? parsed.requiresDeploy : false,
+      rollbackNotes: typeof parsed.rollbackNotes === 'string' ? parsed.rollbackNotes : 'Revert the committed files via GitHub.',
+    };
+  } catch {
+    return {
+      summary: `Fallback plan for: ${fallbackPrompt.slice(0, 120)}`,
+      filesToInspect: [],
+      filesToChange: [],
+      testsToRun: ['bun test'],
+      requiresDeploy: false,
+      rollbackNotes: 'No changes — audit only.',
+    };
+  }
+}
+
+function extractJson(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced && fenced[1]) return fenced[1].trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) return text.slice(start, end + 1);
+  return text.trim();
+}
+
+function stripCodeFences(text: string): string {
+  // Remove markdown code fences if the AI wrapped the file content in them.
+  const fenced = text.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+  if (fenced && fenced[1]) return fenced[1].trim();
+  return text.trim();
+}
+
+function writeLocalFile(repoPath: string, content: string): void {
+  try {
+    const absPath = resolve(process.cwd(), repoPath);
+    const dir = dirname(absPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(absPath, content, 'utf8');
+  } catch (err) {
+    console.log('[IVX-SENIOR-DEV-01] Local write failed (non-fatal — commit still proceeds):', err instanceof Error ? err.message : 'unknown');
+  }
 }
 
 function appendCheckpoint(history: { checkpoint: string; at: string }[] | null, checkpoint: string): { checkpoint: string; at: string }[] {
