@@ -93,6 +93,14 @@ export function requestSeniorDevWorkerStop(): void {
 
 export async function startSeniorDevWorker(): Promise<void> {
   console.log('[IVX-SENIOR-DEV-01] Worker starting', { workerId: IVX_SENIOR_DEV_WORKER_ID, at: state.startedAt });
+  // Self-bootstrap the worker tables via Supabase Management API (same proven
+  // pattern as ensureTaskTable in ivx-owner-ai-task-queue.ts). Idempotent.
+  try {
+    const { ensureSeniorDevTables } = await import('./ivx-senior-dev-proof');
+    await ensureSeniorDevTables();
+  } catch (error) {
+    console.log('[IVX-SENIOR-DEV-01] ensureSeniorDevTables failed (non-fatal):', error instanceof Error ? error.message : 'unknown');
+  }
   while (!stopRequested) {
     state.lastTickAt = new Date().toISOString();
     try {

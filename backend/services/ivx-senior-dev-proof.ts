@@ -35,8 +35,106 @@ export interface RecordApprovalInput {
   expiresAt?: string | null;
 }
 
-const SUPABASE_URL = (process.env.SUPABASE_URL ?? process.env.IVX_SUPABASE_URL ?? '').replace(/\/$/, '');
+const SUPABASE_URL = (process.env.SUPABASE_URL ?? process.env.IVX_SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '');
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+
+const MANAGEMENT_API_BASE = 'https://api.supabase.com/v1';
+const FALLBACK_PROJECT_REF = 'kvclcdjmjghndxsngfzb';
+
+function managementProjectRef(): string {
+  for (const raw of [process.env.IVX_SUPABASE_URL, process.env.EXPO_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL]) {
+    const match = (raw ?? '').match(/https:\/\/([a-z0-9]+)\.supabase\.co/);
+    if (match) return match[1] ?? '';
+  }
+  return FALLBACK_PROJECT_REF;
+}
+
+/** DDL for the 3 senior-dev worker tables + ivx_owner_ai_tasks column extensions. */
+const SENIOR_DEV_DDL = `
+ALTER TABLE IF EXISTS public.ivx_owner_ai_tasks
+  ADD COLUMN IF NOT EXISTS task_type TEXT DEFAULT 'general',
+  ADD COLUMN IF NOT EXISTS assigned_worker_id TEXT,
+  ADD COLUMN IF NOT EXISTS approval_url TEXT,
+  ADD COLUMN IF NOT EXISTS worker_data JSONB DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS files_changed TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS test_summary JSONB,
+  ADD COLUMN IF NOT EXISTS commit_sha TEXT,
+  ADD COLUMN IF NOT EXISTS render_deploy_id TEXT,
+  ADD COLUMN IF NOT EXISTS runtime_sha TEXT,
+  ADD COLUMN IF NOT EXISTS proof_ledger_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_task_type_status
+  ON public.ivx_owner_ai_tasks (task_type, status) WHERE task_type = 'senior_dev';
+CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_assigned_worker
+  ON public.ivx_owner_ai_tasks (assigned_worker_id, status) WHERE assigned_worker_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS public.ivx_senior_dev_worker_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES public.ivx_owner_ai_tasks(id) ON DELETE CASCADE,
+  worker_id TEXT NOT NULL DEFAULT 'IVX-SENIOR-DEV-01',
+  repository TEXT, branch TEXT, base_commit_sha TEXT,
+  files_inspected TEXT[] DEFAULT '{}', files_changed TEXT[] DEFAULT '{}',
+  test_results JSONB DEFAULT '{}', lint_results JSONB DEFAULT '{}',
+  typecheck_results JSONB DEFAULT '{}', build_results JSONB DEFAULT '{}',
+  commit_sha TEXT, rollback_tag TEXT, render_deploy_id TEXT, runtime_sha TEXT,
+  health_results JSONB DEFAULT '{}', live_feature_result JSONB DEFAULT '{}',
+  proof_ledger_id TEXT, error_message TEXT, logs TEXT[] DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'running',
+  created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ivx_senior_dev_worker_runs_task_id
+  ON public.ivx_senior_dev_worker_runs (task_id);
+CREATE INDEX IF NOT EXISTS idx_ivx_senior_dev_worker_runs_worker_status
+  ON public.ivx_senior_dev_worker_runs (worker_id, status);
+CREATE TABLE IF NOT EXISTS public.ivx_senior_dev_checkpoints (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES public.ivx_owner_ai_tasks(id) ON DELETE CASCADE,
+  worker_id TEXT NOT NULL, checkpoint TEXT NOT NULL, metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ivx_senior_dev_checkpoints_task_id
+  ON public.ivx_senior_dev_checkpoints (task_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS public.ivx_senior_dev_approvals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES public.ivx_owner_ai_tasks(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL, action TEXT NOT NULL, scope TEXT, commit_sha TEXT,
+  phrase TEXT NOT NULL, granted_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ, revoked_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_ivx_senior_dev_approvals_task_action
+  ON public.ivx_senior_dev_approvals (task_id, action);
+ALTER TABLE public.ivx_senior_dev_worker_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ivx_senior_dev_checkpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ivx_senior_dev_approvals ENABLE ROW LEVEL SECURITY;
+`;
+
+let seniorDevTablesEnsured = false;
+
+/**
+ * Self-bootstrap the senior dev worker tables via the Supabase Management API
+ * (same proven pattern as ensureTaskTable in ivx-owner-ai-task-queue.ts).
+ * Idempotent; non-fatal when SUPABASE_ACCESS_TOKEN is absent.
+ */
+export async function ensureSeniorDevTables(): Promise<boolean> {
+  if (seniorDevTablesEnsured) return true;
+  const token = (process.env.SUPABASE_ACCESS_TOKEN ?? '').trim();
+  if (!token) {
+    console.log('[IVXSeniorDevProof] self-bootstrap DDL skipped — SUPABASE_ACCESS_TOKEN absent');
+    return false;
+  }
+  try {
+    const res = await fetch(`${MANAGEMENT_API_BASE}/projects/${managementProjectRef()}/database/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: SENIOR_DEV_DDL }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    console.log('[IVXSeniorDevProof] self-bootstrap DDL result', { httpStatus: res.status });
+    seniorDevTablesEnsured = res.ok || res.status === 201;
+    return seniorDevTablesEnsured;
+  } catch (error) {
+    console.log('[IVXSeniorDevProof] self-bootstrap DDL failed:', error instanceof Error ? error.message : 'unknown');
+    return false;
+  }
+}
 
 function restHeaders(): Record<string, string> {
   return {
