@@ -240,7 +240,7 @@
     + '.ivxr-kpi{flex:1;min-width:90px;background:#242424;border-radius:12px;padding:10px}'
     + '.ivxr-kpi .v{font:800 18px/1 -apple-system,sans-serif;color:#E6C200}'
     + '.ivxr-kpi .l{font:500 10.5px/1 -apple-system,sans-serif;color:#999;margin-top:5px;text-transform:uppercase}'
-    + '.ivxr-invest-card{position:absolute;left:14px;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;background:rgba(20,20,20,.92);border-radius:16px;padding:14px 16px 16px;box-shadow:0 8px 32px rgba(0,0,0,.5);color:#fff}'
+    + '.ivxr-invest-card{position:absolute;left:0;right:0;bottom:0;z-index:20;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.35) 30%,rgba(0,0,0,.72) 100%);border-radius:0;padding:36px 84px calc(18px + env(safe-area-inset-bottom)) 14px;box-shadow:none;color:#fff}'
     + '.ivxr-invest-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px}'
     + '.ivxr-invest-title{font:800 18px/1.2 -apple-system,Segoe UI,sans-serif;color:#fff}'
     + '.ivxr-invest-active{font:800 10px/1 -apple-system,sans-serif;color:#E6C200;border:1px solid #E6C200;border-radius:5px;padding:3px 8px;text-transform:uppercase;letter-spacing:.4px}'

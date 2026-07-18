@@ -136,10 +136,13 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
   openQuickBuy: (deal: JVAgreement) => void;
 }) {
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [muted, setMuted] = React.useState<boolean>(true);
   const padH = isXs ? 16 : 20;
-  const feedHeight = Math.min(screenWidth - padH * 2, 520);
+  // Instagram Reels sizing: vertical 9:16 card (width * 16/9), capped so it
+  // always fits within the viewport like the Instagram feed player.
+  const reelWidth = screenWidth - padH * 2;
+  const feedHeight = Math.min(Math.round(reelWidth * (16 / 9)), Math.round(screenHeight * 0.82));
 
   const homeFeedQuery = useQuery({
     queryKey: ['ivx-home-feed'],

@@ -1,14 +1,16 @@
 /**
- * Owner-only APK/AAB distribution presign endpoint.
+ * Owner-only distribution presign endpoint (APK/AAB releases + landing assets).
  *
- * Mints a short-lived (15 min) presigned S3 PUT URL restricted to the
- * `apk/` prefix of the public download bucket so a build agent can upload
- * a release artifact WITHOUT AWS credentials ever leaving the runtime.
+ * Mints a short-lived (15 min) presigned S3 PUT URL restricted to either the
+ * `apk/` prefix (release artifacts) or an explicit whitelist of top-level
+ * landing-page files, so a build agent can upload WITHOUT AWS credentials
+ * ever leaving the runtime.
  *
  * Guards:
  *  - Registered owner bearer required (assertIVXRegisteredOwnerBearer)
- *  - Explicit confirmation phrase CONFIRM_IVX_APK_UPLOAD (409 without it)
- *  - Key restricted to apk/<safe-name>.(apk|aab)
+ *  - Explicit per-class confirmation phrase (409 without it):
+ *      apk/<name>.(apk|aab)      -> CONFIRM_IVX_APK_UPLOAD
+ *      landing whitelist file    -> CONFIRM_IVX_LANDING_UPLOAD
  *  - Secrets are never returned; only the signed URL is.
  */
 import { createHash, createHmac } from 'node:crypto';
@@ -17,7 +19,10 @@ import { getRawOwnerVariableValue } from './ivx-owner-variables';
 import { IVXOwnerApprovalError, assertIVXRegisteredOwnerBearer, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
 const IVX_APK_UPLOAD_CONFIRM_PHRASE = 'CONFIRM_IVX_APK_UPLOAD';
+const IVX_LANDING_UPLOAD_CONFIRM_PHRASE = 'CONFIRM_IVX_LANDING_UPLOAD';
 const IVX_APK_KEY_PATTERN = /^apk\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(apk|aab)$/;
+/** Top-level landing-page assets only — no prefixes, no traversal, tight extension set. */
+const IVX_LANDING_KEY_PATTERN = /^(index\.html|robots\.txt|sitemap\.xml|ivx-[a-z0-9-]{1,60}\.(js|json)|landing-support-chat\.(js|css))$/;
 const IVX_APK_PRESIGN_EXPIRES_SECONDS = 900;
 const IVX_APK_BUCKET_DEFAULT = 'ivxholding.com';
 
@@ -99,6 +104,10 @@ export function isValidIVXApkDistributionKey(key: string): boolean {
   return IVX_APK_KEY_PATTERN.test(key);
 }
 
+export function isValidIVXLandingDistributionKey(key: string): boolean {
+  return IVX_LANDING_KEY_PATTERN.test(key);
+}
+
 type PresignRequestBody = {
   key?: string;
   confirm?: boolean;
@@ -123,21 +132,24 @@ export async function handleIVXApkPresignUploadRequest(request: Request): Promis
     // handled below via validation
   }
 
-  if (body.confirm !== true || (body.confirmText ?? '').trim() !== IVX_APK_UPLOAD_CONFIRM_PHRASE) {
-    return ownerOnlyJson({
-      status: 'error',
-      error: 'confirmationRequired',
-      detail: `Pass confirm:true and confirmText:"${IVX_APK_UPLOAD_CONFIRM_PHRASE}" to mint an APK upload URL.`,
-    }, 409);
-  }
-
   const key = (body.key ?? '').trim();
-  if (!isValidIVXApkDistributionKey(key)) {
+  const isApkKey = isValidIVXApkDistributionKey(key);
+  const isLandingKey = !isApkKey && isValidIVXLandingDistributionKey(key);
+  if (!isApkKey && !isLandingKey) {
     return ownerOnlyJson({
       status: 'error',
       error: 'INVALID_KEY',
-      detail: 'Key must match apk/<name>.apk or apk/<name>.aab (letters, digits, dot, dash, underscore).',
+      detail: 'Key must match apk/<name>.(apk|aab) or a whitelisted top-level landing file (index.html, robots.txt, sitemap.xml, ivx-*.js/json, landing-support-chat.js/css).',
     }, 400);
+  }
+
+  const requiredPhrase = isApkKey ? IVX_APK_UPLOAD_CONFIRM_PHRASE : IVX_LANDING_UPLOAD_CONFIRM_PHRASE;
+  if (body.confirm !== true || (body.confirmText ?? '').trim() !== requiredPhrase) {
+    return ownerOnlyJson({
+      status: 'error',
+      error: 'confirmationRequired',
+      detail: `Pass confirm:true and confirmText:"${requiredPhrase}" to mint an upload URL for this key.`,
+    }, 409);
   }
 
   const region = readEnv('AWS_REGION') || 'us-east-1';

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { buildIVXS3PresignedPutUrl, isValidIVXApkDistributionKey } from './ivx-apk-distribution';
+import { buildIVXS3PresignedPutUrl, isValidIVXApkDistributionKey, isValidIVXLandingDistributionKey } from './ivx-apk-distribution';
 
 describe('isValidIVXApkDistributionKey', () => {
   test('accepts apk and aab keys under apk/ prefix', () => {
@@ -14,6 +14,29 @@ describe('isValidIVXApkDistributionKey', () => {
     expect(isValidIVXApkDistributionKey('apk/app.exe')).toBe(false);
     expect(isValidIVXApkDistributionKey('apk/a b.apk')).toBe(false);
     expect(isValidIVXApkDistributionKey('app.apk')).toBe(false);
+  });
+});
+
+describe('isValidIVXLandingDistributionKey', () => {
+  test('accepts whitelisted top-level landing files only', () => {
+    expect(isValidIVXLandingDistributionKey('index.html')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('robots.txt')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('sitemap.xml')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('ivx-reels.js')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('ivx-home-feed.js')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('ivx-config.json')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('landing-support-chat.js')).toBe(true);
+    expect(isValidIVXLandingDistributionKey('landing-support-chat.css')).toBe(true);
+  });
+
+  test('rejects traversal, prefixes, apk keys, and non-whitelisted names', () => {
+    expect(isValidIVXLandingDistributionKey('../index.html')).toBe(false);
+    expect(isValidIVXLandingDistributionKey('assets/ivx-reels.js')).toBe(false);
+    expect(isValidIVXLandingDistributionKey('apk/ivx-holdings-v1.4.8.apk')).toBe(false);
+    expect(isValidIVXLandingDistributionKey('evil.js')).toBe(false);
+    expect(isValidIVXLandingDistributionKey('ivx-reels.html')).toBe(false);
+    expect(isValidIVXLandingDistributionKey('ivx-REELS.js')).toBe(false);
+    expect(isValidIVXLandingDistributionKey('')).toBe(false);
   });
 });
 
