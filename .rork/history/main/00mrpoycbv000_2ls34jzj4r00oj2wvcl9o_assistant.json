@@ -1,7 +1,5 @@
 {
-  "id": "2ls34jzj4r00oj2wvcl9o",
   "role": "assistant",
-  "preferredModelName": "claude-fable-5 high",
   "responseMessageContents": [
     {
       "type": "reasoning",
@@ -26,7 +24,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"ls .rork/plans 2>/dev/null; ls -t .rork/history/main | head -20; cat rork.json 2>/dev/null\"}",
       "createdAt": 1784338224779,
-      "completedAt": 1784338225308
+      "completedAt": 1784338225308,
+      "compactedAt": 1784346955268
     },
     {
       "type": "tool",
@@ -44,7 +43,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"ls ios-ivx-command-center ios-ivx-deal-tracker ios-ivx-ia 2>/dev/null\"}",
       "createdAt": 1784338225288,
-      "completedAt": 1784338225744
+      "completedAt": 1784338225744,
+      "compactedAt": 1784346955268
     },
     {
       "type": "reasoning",
@@ -69,7 +69,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd .rork/history/main && ls -t *_user.json | head -3 && python3 -c \\\"\\nimport json,glob,os\\nfiles = sorted(glob.glob('*_user.json'), key=os.path.getmtime, reverse=True)\\nfor f in files[:3]:\\n    d = json.load(open(f))\\n    print('=====', f)\\n    s = json.dumps(d)\\n    print(s[:3000])\\n\\\"\"}",
       "createdAt": 1784338232381,
-      "completedAt": 1784338232411
+      "completedAt": 1784338232411,
+      "compactedAt": 1784346955268
     },
     {
       "type": "reasoning",
@@ -156,10 +157,11 @@
     {
       "type": "text",
       "text": "FINAL PRODUCTION RELEASE — VERIFICATION TABLE\nAll evidence live from production, captured 2026-07-18 01:17–01:19 UTC. Report posted to IVX AI Chat (HTTP 201). Ledger JOB-0029 VERIFIED.\n\n| # | Item | PASS/FAIL | Live production evidence |\n|---|---|---|---|\n| 1 | GitHub | **PASS** | `ibb142/rork-global-real-estate-invest` · branch `main` · SHA `7326cf2be701e412bc161df8ce386fb6dcf45ee0` · HEAD == Render == runtime |\n| 2 | Render | **PASS** | `srv-d7t9ivreo5us73ftose0` live · boot `2026-07-18T00:20:59.895Z` · marker `ivx-owner-ai-hono-autodeploy-live` |\n| 3 | API | **PASS** | `https://api.ivxholding.com/health` → HTTP 200 `healthy` (0.97s), HTTPS via Cloudflare + Render |\n| 4 | Database | **PASS** | members 4 · investors 874 · deals 3 (active+published) · properties 1 · reels 5 · deal media 24 · durable docs 47 · transactions 1 · messages 15,342 · pipelines 2 · **187 tables RLS-on** |\n| 5 | Android APK | **PASS** | `ivx26-android-v1.4.1.apk` · 18,351,535 B · public URL HTTP 200, correct MIME |\n| 6 | Android AAB | **FAIL** | No artifact — detail below |\n| 7 | iOS Build | **FAIL** | No binary — detail below |\n| 8 | Owner Login | **PASS** | Owner grant 200 (refresh cycle works) · wrong password → 400 `invalid_credentials` · non-owner JWT → 401 · unauth → 401 |\n| 9 | Members | **PASS** | 4 rows · RLS on · anon read = 0 rows |\n| 10 | Investors | **PASS** | 874 active, fully segmented (valid 2 / incomplete 863 / unreachable 6 / test 2 / tokenized 1), 1 duplicate removed with audit trail |\n| 11 | Buyers | **PASS** (infra) | Table + RLS + PL-BUYERS-001 live · count = honest 0, nothing fabricated |\n| 12 | Deals | **PASS** | perez-residence-001 / casa-rosario-001 / JV-202603-5190 — all `active`, `published=true`, media + reels attached |\n| 13 | Reels | **PASS** | 5 reels live, likes 1, landing page renders reels section |\n| 14 | Chat | **PASS** | Send → 201 · read-back verified · history 15,342 messages intact |\n| 15 | Landing Page | **PASS** | apex + www → HTTP 200 (0.08–0.21s) · waitlist / register / reels / invest / contact / mobile viewport all present |\n| 16 | AI Agents | **PASS** | 13/13 ACTIVE via live `/api/ivx/autonomous/ia`: IA-01 Chief, IA-04 Senior Dev (IAT-0005), IA-05 Mobile/Web (IAT-0006), IA-03 QA (IAT-0004 VERIFIED), IA-06 DevOps (IAT-0007 running), IA-07 Investor, IA-08 Buyer/Tokenized, IA-09 Marketing (IAT-0016 running), IA-10 CRM (IAT-0018 running), IA-11 Finance (read-only, IAT-0012), IA-12 Security (IAT-0013 running), IA-02 Factory, **PIA-0001** (ACTIVE/PASSED, IAT-0015 DONE) · 18 tasks / 13 verified / 0 blocked / 0 errors / 0 pending approvals |\n| 17 | Security | **PASS** | 401 guards on all owner endpoints · RLS on 187 tables · anon reads return 0 rows · wrong-password rejection · secrets server-side only · HTTPS enforced |\n| 18 | Production Health | **PASS** | HTTP 200, sha + boot traceable, code freeze held (no commits pushed during verification), release + rollback SHAs recorded in ledger JOB-0029 |\n\n**Result: 15 PASS · 2 FAIL · code freeze in effect.**\n\n---\n\nFAILED ITEMS (per your STOP rule — exact detail):\n\n**Android AAB — FAIL**\n- Error: no `.aab` in `app-releases`/`apk-releases` buckets or any build job record\n- Root cause: EAS unavailable in this environment; prior pipeline produced APKs only; release keystore not accessible (APR-003)\n- Corrective action: `eas build -p android --profile production` (config ready in `expo/eas.json`) or approve a Gradle `bundleRelease` job with keystore access\n- ETA: **~30 min** after keystore/EAS access\n\n**iOS Build — FAIL**\n- Error: no IPA / EAS Build ID exists\n- Root cause: iOS signing requires your Apple Developer credentials + EAS/macOS — not present in this environment\n- Corrective action: `eas build -p ios --profile production` with your Apple account → TestFlight\n- ETA: **~1–2 h** after Apple credentials\n\n**Blocked on owner (not failures):**\n- Git release tag `v1.4.6-prod`: GITHUB_TOKEN lacks tag scope (APR-004). Mitigation: release SHA `7326cf2b` + rollback pointer (`5f9aacb1`) recorded in production ledger. I tag in <5 min once scope granted — no tag commit was pushed during freeze by design.\n- Physical-device acceptance (Android/iPhone/iPad/Chrome/Safari/Edge): requires your hardware. APK install link is live; web verified server-side on apex + www.\n- Password-reset email delivery: capped 2/hr until custom SMTP configured (JOB-0005).\n\nNo results fabricated. Every figure above comes from live production rows and endpoints at the timestamps shown.",
-      "id": "hed4v7tmp3uo8p3r0gpra",
-      "createdAt": 1784338285513
+      "id": "hed4v7tmp3uo8p3r0gpra"
     }
   ],
+  "id": "2ls34jzj4r00oj2wvcl9o",
+  "preferredModelName": "claude-fable-5 high",
   "snapshotId": "2ls34jzj4r00oj2wvcl9o",
   "finishStats": {
     "contextTokens": 66902,
