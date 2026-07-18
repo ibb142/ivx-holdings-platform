@@ -17,6 +17,9 @@
  *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix
  *   GET  /api/ivx/autonomous/migrations           — migration history vs repo manifest
  *   POST /api/ivx/autonomous/migrations/run       — apply pending repo migrations (owner bearer)
+ *   GET  /api/ivx/autonomous/ia                   — 12-IA operating model state (roster/queue/factory/locks)
+ *   POST /api/ivx/autonomous/ia/task              — create/update an IA task (owner bearer)
+ *   POST /api/ivx/autonomous/ia/lock              — acquire/release a critical-file lock (owner bearer)
  *
  * Side effect: starts the in-process continuous QA scheduler (health 5m,
  * auth 15m, full matrix 2h) on service boot.
@@ -46,6 +49,12 @@ import {
   handleMigrationStatusGet,
   handleMigrationRunPost,
 } from './api/ivx-migration-runner';
+import {
+  iaOrchestratorOptions,
+  handleIAStatusGet,
+  handleIATaskPost,
+  handleIALockPost,
+} from './api/ivx-ia-orchestrator';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -67,6 +76,13 @@ app.options('/api/ivx/autonomous/migrations', () => migrationRunnerOptions());
 app.get('/api/ivx/autonomous/migrations', async (context) => handleMigrationStatusGet(context.req.raw));
 app.options('/api/ivx/autonomous/migrations/run', () => migrationRunnerOptions());
 app.post('/api/ivx/autonomous/migrations/run', async (context) => handleMigrationRunPost(context.req.raw));
+
+app.options('/api/ivx/autonomous/ia', () => iaOrchestratorOptions());
+app.get('/api/ivx/autonomous/ia', async (context) => handleIAStatusGet(context.req.raw));
+app.options('/api/ivx/autonomous/ia/task', () => iaOrchestratorOptions());
+app.post('/api/ivx/autonomous/ia/task', async (context) => handleIATaskPost(context.req.raw));
+app.options('/api/ivx/autonomous/ia/lock', () => iaOrchestratorOptions());
+app.post('/api/ivx/autonomous/ia/lock', async (context) => handleIALockPost(context.req.raw));
 
 startAutonomousQAScheduler();
 

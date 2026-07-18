@@ -23,6 +23,7 @@ import { readDurableJson, writeDurableJson } from '../services/ivx-durable-store
 import { sendSnsSms } from '../services/ivx-sns-sms';
 import { postQAReportToOwnerChat } from '../services/ivx-qa-chat-reporter';
 import { getMigrationSummary } from './ivx-migration-runner';
+import { getIAOperatingSummary } from './ivx-ia-orchestrator';
 import {
   runAuthProbes,
   reconcileIncidents,
@@ -196,6 +197,7 @@ async function authTick(kind: 'auth' | 'matrix'): Promise<void> {
     // migration status — never a cached green.
     if (kind === 'matrix') {
       const migrations = await getMigrationSummary();
+      const iaSummaryLines = await getIAOperatingSummary();
       const runId = state.recentRuns[0]?.runId ?? `QA-${String(state.runCounter).padStart(5, '0')}`;
       await postQAReportToOwnerChat({
         runId,
@@ -203,6 +205,7 @@ async function authTick(kind: 'auth' | 'matrix'): Promise<void> {
         authOk: ok,
         probesSummary: summary,
         migrations,
+        extraLines: iaSummaryLines,
       });
     }
   } catch (tickError) {
