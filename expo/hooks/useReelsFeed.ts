@@ -44,10 +44,14 @@ export function useReelsFeed(): ReelsFeedState {
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
   const loadedIds = useRef<Set<string>>(new Set());
+  const offsetRef = useRef<number>(0);
 
   const feedQuery = useQuery<FeedVideo[], Error>({
     queryKey: ['ivx-reels-feed'],
-    queryFn: () => fetchFeedPage(PAGE_SIZE),
+    queryFn: () => {
+      offsetRef.current = 0;
+      return fetchFeedPage(PAGE_SIZE);
+    },
     staleTime: 60_000,
     retry: 2,
   });
@@ -66,24 +70,32 @@ export function useReelsFeed(): ReelsFeedState {
       return true;
     });
     for (const v of deduped) loadedIds.current.add(v.id);
+    offsetRef.current = deduped.length;
+    setHasMore(deduped.length >= PAGE_SIZE);
     setAllVideos(deduped);
   }, [queryData, feedQuery.isLoading, allVideos.length]);
 
   const loadMore = useCallback(() => {
     if (isFetchingMore || !hasMore || feedQuery.isLoading) return;
-    // The backend supports cursor pagination via next_cursor.
-    // For now, we use the limit-based feed since the platform feed
-    // already returns up to 24 items. When the cursor endpoint is
-    // available, this will fetch the next page.
     setIsFetchingMore(true);
-    void fetchFeedPage(PAGE_SIZE * 3)
+    const currentOffset = offsetRef.current;
+    void fetchVideoFeed(PAGE_SIZE, currentOffset)
       .then((more) => {
         const newItems = more.filter((v) => !loadedIds.current.has(v.id));
         if (newItems.length === 0) {
           setHasMore(false);
         } else {
           for (const v of newItems) loadedIds.current.add(v.id);
-          setAllVideos((prev) => [...prev, ...newItems]);
+          offsetRef.current = currentOffset + newItems.length;
+          setAllVideos((prev) => {
+            const combined = [...prev];
+            for (const v of newItems) {
+              if (!combined.some((existing) => existing.id === v.id)) {
+                combined.push(v);
+              }
+            }
+            return combined;
+          });
         }
       })
       .catch(() => {
@@ -96,6 +108,7 @@ export function useReelsFeed(): ReelsFeedState {
 
   const refresh = useCallback(() => {
     loadedIds.current.clear();
+    offsetRef.current = 0;
     setAllVideos([]);
     setHasMore(true);
     void feedQuery.refetch();
