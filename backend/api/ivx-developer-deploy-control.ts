@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import { buildIVXCredentialRequestManifestSnapshot, IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES } from '../config/ivx-credential-request-manifest';
 import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
@@ -210,11 +211,39 @@ function sanitizeRepoPath(value: unknown): string {
   return repoPath;
 }
 
+/**
+ * Decodes guarded commit content. Supports plain UTF-8 (default) and
+ * contentEncoding="gzip-base64" for large source files that edge protection
+ * would otherwise block when sent as plain text (payload arrives compressed).
+ */
+function decodeCommitContent(input: Record<string, unknown>): string {
+  const raw = readTrimmed(input.content);
+  const encoding = readTrimmed(input.contentEncoding).toLowerCase();
+  if (!raw || !encoding) {
+    return raw;
+  }
+  if (encoding === 'gzip-base64') {
+    const decoded = gunzipSync(Buffer.from(raw, 'base64')).toString('utf8');
+    if (!decoded.trim()) {
+      throw new Error('Decoded gzip-base64 commit content is empty.');
+    }
+    return decoded;
+  }
+  if (encoding === 'base64') {
+    const decoded = Buffer.from(raw, 'base64').toString('utf8');
+    if (!decoded.trim()) {
+      throw new Error('Decoded base64 commit content is empty.');
+    }
+    return decoded;
+  }
+  throw new Error('Unsupported contentEncoding. Use "gzip-base64", "base64", or omit for plain UTF-8.');
+}
+
 async function runGithubCommitFile(input: Record<string, unknown>): Promise<Record<string, unknown>> {
   const repoInfo = await getGithubRepoInfo(input);
   const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
   const repoPath = sanitizeRepoPath(input.path);
-  const content = readTrimmed(input.content);
+  const content = decodeCommitContent(input);
   const message = readTrimmed(input.message) || `IVX Owner AI update ${repoPath}`;
   if (!content) {
     throw new Error('File content is required for GitHub commit action.');

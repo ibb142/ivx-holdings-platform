@@ -380,6 +380,20 @@ function resolveCredential(
   return { present: false, value: '', source: 'none', sourceVar: null };
 }
 
+/**
+ * Resolves the GitHub repo slug ("owner/repo") from GITHUB_REPO, IVX_GITHUB_REPO,
+ * or by deriving it from GITHUB_REPO_URL / IVX_GITHUB_REPO_URL (the variable the
+ * production runtime actually sets, e.g. https://github.com/owner/repo.git).
+ */
+function resolveGithubRepoSlug(env: Record<string, string | undefined>): string {
+  const direct = (env.GITHUB_REPO ?? env.IVX_GITHUB_REPO ?? '').trim();
+  if (direct) return direct;
+  const url = (env.GITHUB_REPO_URL ?? env.IVX_GITHUB_REPO_URL ?? '').trim();
+  if (!url) return '';
+  const match = /github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i.exec(url);
+  return match ? `${match[1]}/${match[2]}` : '';
+}
+
 const CREDENTIAL_FALLBACKS: Record<RequiredCredential, string | null> = {
   IVX_GITHUB_TOKEN: 'GITHUB_TOKEN',
   IVX_RENDER_API_KEY: 'RENDER_API_KEY',
@@ -462,11 +476,12 @@ async function checkCapability(
         const code: BlockerCode = probe.httpStatus === 401 ? 'GITHUB_TOKEN_REVOKED' : 'GITHUB_TOKEN_REVOKED';
         return { ...result, blockerCode: code, exactBlocker: `GitHub API rejected the token: ${probe.detail} (HTTP ${probe.httpStatus ?? 'n/a'}).` };
       }
-      // For push, also check GITHUB_REPO shape.
+      // For push, also check repo identification. Accept GITHUB_REPO ("owner/repo"),
+      // IVX_GITHUB_REPO, or derive from GITHUB_REPO_URL (the variable production actually sets).
       if (capability === 'push_github') {
-        const repo = (env.GITHUB_REPO ?? env.IVX_GITHUB_REPO ?? '').trim();
+        const repo = resolveGithubRepoSlug(env);
         if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-          return { ...result, blockerCode: 'GITHUB_REPO_INVALID', exactBlocker: `GITHUB_REPO is missing or malformed (expected "owner/repo", got "${repo || '<empty>'}").` };
+          return { ...result, blockerCode: 'GITHUB_REPO_INVALID', exactBlocker: `GITHUB_REPO / GITHUB_REPO_URL is missing or malformed (expected "owner/repo" or a github.com repo URL, got "${repo || '<empty>'}").` };
         }
       }
       return { ...result, ok: true };
