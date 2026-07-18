@@ -25,6 +25,6 @@ Permanently retire the separate Kotlin Android project and continue all Phase 2 
 - Two-hour executive reports continue with verified evidence only.
 
 ## Order of work
-- Record Kotlin retirement + correct the task ledger so Android tasks point at the Expo app.
-- Re-check build credentials and either start the real Expo Android build or report the exact blocker.
-- Proceed with Senior Developer activation and the first 12 App Factory agents.
+- [x] Record Kotlin retirement + correct the task ledger so Android tasks point at the Expo app. (Kotlin FROZEN per owner order — not deleted; ledger JOB-0032; backup tag backup-pre-expo-only-20260718 @ f82e5a5d)
+- [x] Re-check build credentials and either start the real Expo Android build or report the exact blocker. (Exact blocker: eas-cli "Not logged in", EXPO_TOKEN absent — owner EAS credentials required. Expo typecheck PASS: 0 errors.)
+- [x] Proceed with Senior Developer activation and the first 12 App Factory agents. (SD-0001 ACTIVE with real work evidence; AF-001..AF-012 registered PENDING_OWNER_APPROVAL; live dashboard view ivx_factory_dashboard verified; AF-VERIFY-001..012 + AF-PILOT-001 queued; ledger JOB-0033)
