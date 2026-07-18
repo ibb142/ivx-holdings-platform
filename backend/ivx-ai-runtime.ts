@@ -1,4 +1,4 @@
-import { generateText, streamText, createGateway } from 'ai';
+import { generateText, streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { acquireAIQueueSlot, classifyRequestLane, type IVXAIQueueLane } from './services/ivx-ai-queue';
 import { estimatePromptTokens, recordProviderTelemetry } from './services/ivx-provider-telemetry';
@@ -246,14 +246,29 @@ function ensureIVXAIGatewayEnvironment(): void {
       'IVX AI runtime is not configured. Set OPENAI_API_KEY on the backend host.',
     );
   }
-  // Bridge OPENAI_API_KEY → AI_GATEWAY_API_KEY so createGateway() can find the
-  // key via its expected env var. Without this, createGateway sends no auth
-  // header and the Vercel AI Gateway returns "Unauthenticated. Configure
-  // AI_GATEWAY_API_KEY" even though the key is present in OPENAI_API_KEY.
-  if (isVercelGatewayKey(apiKey) && !process.env.AI_GATEWAY_API_KEY) {
-    process.env.AI_GATEWAY_API_KEY = apiKey;
-  }
+  // 2026-07-18 emergency repair: the Vercel AI Gateway SDK (createGateway) was
+  // removed from this runtime. The API key is now passed EXPLICITLY to a direct
+  // OpenAI-compatible client for every request — no env-var bridging, no hidden
+  // credential resolution, no gateway SDK dependency.
 }
+
+/** Failure classes that are safe to retry against the SAME provider with backoff. */
+const TRANSIENT_RETRY_CLASSES: ReadonlySet<string> = new Set(['network', 'server_error', 'rate_limit']);
+
+/** Max primary attempts per request: 1 initial + 2 exponential-backoff retries. */
+const MAX_PRIMARY_ATTEMPTS = 3;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * In-flight request deduplication (idempotency protection).
+ * Concurrent requests with the same module+requestId share one provider call
+ * and one response — duplicate sends from the client can never produce
+ * duplicate provider executions or duplicate answers.
+ */
+const inFlightAIRequests = new Map<string, Promise<IVXAITextResult>>();
 
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -483,6 +498,36 @@ export async function requestIVXAIText(input: {
   files?: IVXAIFileAttachment[];
   maxOutputTokens?: number;
 }): Promise<IVXAITextResult> {
+  const dedupKey = readTrimmed(input.requestId) ? `${String(input.module)}::${readTrimmed(input.requestId)}` : null;
+  if (dedupKey) {
+    const existing = inFlightAIRequests.get(dedupKey);
+    if (existing) {
+      console.log('[IVXAI] Duplicate in-flight request deduplicated (idempotency guard):', {
+        module: input.module,
+        requestId: input.requestId ?? null,
+      });
+      return existing;
+    }
+  }
+  const pending = requestIVXAITextInternal(input);
+  if (dedupKey) {
+    inFlightAIRequests.set(dedupKey, pending);
+    pending.catch(() => undefined).finally(() => inFlightAIRequests.delete(dedupKey));
+  }
+  return pending;
+}
+
+async function requestIVXAITextInternal(input: {
+  module: IVXAIModule;
+  requestId?: string | null;
+  model?: string | null;
+  system?: string | null;
+  prompt?: string | null;
+  messages?: IVXAITextMessage[];
+  images?: IVXAIImageAttachment[];
+  files?: IVXAIFileAttachment[];
+  maxOutputTokens?: number;
+}): Promise<IVXAITextResult> {
   const model = resolveIVXAIModel(input.model);
   const endpoint = getIVXAIEndpoint(model);
   const messages = normalizeMessages(input.messages);
@@ -534,91 +579,113 @@ export async function requestIVXAIText(input: {
   let successfulBaseUrl = baseUrlCandidates[0];
   let retryCount = 0;
 
-  // === PROVIDER STATE MACHINE ===
-  // Replace the old broken retry loop that tried the same expired key
-  // against multiple endpoints. Now we attempt the primary provider ONCE.
-  // If it fails with auth (401/403), we mark it FAILED and try ONE fallback
-  // with a DIFFERENT key. No endless loops.
+  // === PROVIDER STATE MACHINE + BOUNDED RETRY ===
+  // 2026-07-18 emergency repair:
+  //  - Direct OpenAI-compatible client for BOTH key types. The Vercel AI
+  //    Gateway SDK (createGateway) is removed — it resolved credentials via
+  //    env vars and produced opaque "Unauthenticated" / "Gateway request
+  //    failed" errors. The key is now injected explicitly per request.
+  //  - Transient failures (network / 5xx / 429) retry against the SAME
+  //    provider with exponential backoff (max 3 attempts). Auth failures
+  //    (401/403) never retry the same key — they mark the provider FAILED
+  //    and route to the controlled different-key fallback.
+  //  - The failure latch is no longer permanent: the state machine re-opens
+  //    a half-open probe after the recovery cooldown (see
+  //    ivx-provider-state-machine.ts), so the runtime self-heals.
   if (shouldTryPrimary()) {
     const baseURL = baseUrlCandidates[0];
     ensureIVXAIGatewayEnvironment();
-    try {
-      const apiKey = getIVXAIGatewayApiKey();
-      const isVercelKey = isVercelGatewayKey(apiKey);
-      const gatewayProvider = isVercelKey
-        ? createGateway({ apiKey })
-        : createOpenAI({ apiKey, baseURL });
-      const callTimeoutMs = adaptiveTimeoutMs;
-      if (images.length > 0 || files.length > 0) {
-        const baseMessages = messages.length > 0
-          ? messages.slice(0, -1)
-          : [];
-        const lastTextMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-        const userText = readTrimmed(
-          (lastTextMessage && lastTextMessage.role === 'user' ? lastTextMessage.content : '') || prompt
-        ) || 'Describe the attached file(s).';
-        const multimodalUser = {
-          role: 'user' as const,
-          content: [
-            { type: 'text' as const, text: userText },
-            ...images.map((img) => ({ type: 'image' as const, image: img.url })),
-            ...files.map((file) => ({ type: 'file' as const, data: file.data, mediaType: file.mediaType })),
-          ],
-        };
-        const finalMessages = lastTextMessage && lastTextMessage.role === 'user'
-          ? [...baseMessages, multimodalUser]
-          : [...messages, multimodalUser];
-        result = await runWithHardTimeout('IVX AI gateway (multimodal)', generateText({
-          model: gatewayProvider(model),
-          system: system.length > 0 ? system : undefined,
-          maxOutputTokens: input.maxOutputTokens,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          messages: finalMessages as any,
-        }), callTimeoutMs);
-      } else {
-        result = messages.length > 0
-          ? await runWithHardTimeout('IVX AI gateway (messages)', generateText({
-              model: gatewayProvider(model),
-              system: system.length > 0 ? system : undefined,
-              maxOutputTokens: input.maxOutputTokens,
-              messages,
-            }), callTimeoutMs)
-          : await runWithHardTimeout('IVX AI gateway (prompt)', generateText({
-              model: gatewayProvider(model),
-              system: system.length > 0 ? system : undefined,
-              maxOutputTokens: input.maxOutputTokens,
-              prompt,
-            }), callTimeoutMs);
-      }
-      successfulBaseUrl = baseURL;
-      markProviderReady(
-        isVercelKey ? 'vercel_ai_gateway' : 'openai_direct',
-        model,
-      );
-    } catch (error) {
-      retryCount += 1;
-      const failure = extractGatewayFailureContext(error);
-      lastError = error;
-      lastFailure = failure;
-      const traceId = generateTraceId();
-      const failureClass = classifyProviderFailure(error);
+    const apiKey = getIVXAIGatewayApiKey();
+    const isVercelKey = isVercelGatewayKey(apiKey);
+    const gatewayProvider = createOpenAI({ apiKey, baseURL });
+    const callTimeoutMs = adaptiveTimeoutMs;
+    for (let attempt = 1; attempt <= MAX_PRIMARY_ATTEMPTS && !result; attempt += 1) {
+      try {
+        if (images.length > 0 || files.length > 0) {
+          const baseMessages = messages.length > 0
+            ? messages.slice(0, -1)
+            : [];
+          const lastTextMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+          const userText = readTrimmed(
+            (lastTextMessage && lastTextMessage.role === 'user' ? lastTextMessage.content : '') || prompt
+          ) || 'Describe the attached file(s).';
+          const multimodalUser = {
+            role: 'user' as const,
+            content: [
+              { type: 'text' as const, text: userText },
+              ...images.map((img) => ({ type: 'image' as const, image: img.url })),
+              ...files.map((file) => ({ type: 'file' as const, data: file.data, mediaType: file.mediaType })),
+            ],
+          };
+          const finalMessages = lastTextMessage && lastTextMessage.role === 'user'
+            ? [...baseMessages, multimodalUser]
+            : [...messages, multimodalUser];
+          result = await runWithHardTimeout('IVX AI direct (multimodal)', generateText({
+            model: gatewayProvider(model),
+            system: system.length > 0 ? system : undefined,
+            maxOutputTokens: input.maxOutputTokens,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            messages: finalMessages as any,
+          }), callTimeoutMs);
+        } else {
+          result = messages.length > 0
+            ? await runWithHardTimeout('IVX AI direct (messages)', generateText({
+                model: gatewayProvider(model),
+                system: system.length > 0 ? system : undefined,
+                maxOutputTokens: input.maxOutputTokens,
+                messages,
+              }), callTimeoutMs)
+            : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
+                model: gatewayProvider(model),
+                system: system.length > 0 ? system : undefined,
+                maxOutputTokens: input.maxOutputTokens,
+                prompt,
+              }), callTimeoutMs);
+        }
+        successfulBaseUrl = baseURL;
+        markProviderReady(
+          isVercelKey ? 'vercel_ai_gateway' : 'openai_direct',
+          model,
+        );
+      } catch (error) {
+        retryCount += 1;
+        const failure = extractGatewayFailureContext(error);
+        lastError = error;
+        lastFailure = failure;
+        const traceId = generateTraceId();
+        const failureClass = classifyProviderFailure(error);
+        const isAuthFailure = failureClass === 'auth' || failure.status === 401 || failure.status === 403;
 
-      // Mark provider as FAILED for auth errors — do not retry the same key
-      if (failureClass === 'auth' || failure.status === 401 || failure.status === 403) {
-        markProviderFailed(failure.status ?? 0, error instanceof Error ? error.message : 'auth failure', traceId);
-      }
+        // Mark provider as FAILED for auth errors — never retry the same key
+        if (isAuthFailure) {
+          markProviderFailed(failure.status ?? 0, error instanceof Error ? error.message : 'auth failure', traceId);
+        }
 
-      console.error('[IVXAI] Primary provider failed:', {
-        module: input.module,
-        requestId: input.requestId ?? null,
-        model,
-        endpoint: successfulBaseUrl,
-        status: failure.status,
-        failureClass,
-        error: error instanceof Error ? error.message : 'Gateway request failed',
-        errorName: error instanceof Error ? error.name : null,
-        traceId,
-      });
+        const willRetry = !isAuthFailure
+          && attempt < MAX_PRIMARY_ATTEMPTS
+          && TRANSIENT_RETRY_CLASSES.has(failureClass);
+
+        console.error('[IVXAI] Primary provider attempt failed:', {
+          module: input.module,
+          requestId: input.requestId ?? null,
+          model,
+          endpoint: baseURL,
+          attempt,
+          maxAttempts: MAX_PRIMARY_ATTEMPTS,
+          willRetry,
+          status: failure.status,
+          failureClass,
+          error: error instanceof Error ? error.message : 'Gateway request failed',
+          errorName: error instanceof Error ? error.name : null,
+          traceId,
+        });
+
+        if (!willRetry) {
+          break;
+        }
+        // Exponential backoff: 600ms, then 1200ms.
+        await sleepMs(600 * 2 ** (attempt - 1));
+      }
     }
   } else {
     // Primary already marked as FAILED — skip directly to fallback
@@ -851,10 +918,8 @@ export async function* streamIVXAIText(input: {
 
   try {
     const apiKey = getIVXAIGatewayApiKey();
-    const isVercelKey = isVercelGatewayKey(apiKey);
-    const gatewayProvider = isVercelKey
-      ? createGateway({ apiKey })
-      : createOpenAI({ apiKey, baseURL });
+    // Direct OpenAI-compatible client for both key types (no gateway SDK).
+    const gatewayProvider = createOpenAI({ apiKey, baseURL });
     const streamResult = streamText({
       model: gatewayProvider(model),
       system: system.length > 0 ? system : undefined,

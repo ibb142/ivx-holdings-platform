@@ -6,11 +6,17 @@
  *
  *   1. Validate provider once at startup.
  *   2. Mark invalid provider as unavailable after a confirmed 401/403.
- *   3. Never retry the same expired key.
+ *   3. Never retry the same expired key (within the recovery cooldown).
  *   4. Maximum one controlled fallback attempt (with a DIFFERENT key).
  *   5. Return one clear failure with trace ID if all approved providers fail.
  *   6. Never loop endlessly through providers.
  *   7. Never expose credential values.
+ *   8. RECOVERY (2026-07-18 emergency repair): failure states are NOT permanent.
+ *      A latched PROVIDER_FAILED / AI_UNAVAILABLE state re-opens to a single
+ *      half-open probe after IVX_AI_PROVIDER_RECOVERY_COOLDOWN_MS (default 60s),
+ *      so a transient outage or a since-rotated credential can never brick the
+ *      runtime until reboot. Root cause of the 2026-07-18 production outage:
+ *      markAIUnavailable() latched permanently while the loaded key was valid.
  *
  * States:
  *   PROVIDER_VALIDATING → PROVIDER_READY | PROVIDER_FAILED
@@ -55,6 +61,19 @@ const state: IVXProviderHealth = {
   error: null,
 };
 
+/** Wall-clock ms when the current failure state was latched. Null when healthy. */
+let failureLatchedAtMs: number | null = null;
+
+const RECOVERY_COOLDOWN_MS = (() => {
+  const raw = Number.parseInt(
+    typeof process.env.IVX_AI_PROVIDER_RECOVERY_COOLDOWN_MS === 'string'
+      ? process.env.IVX_AI_PROVIDER_RECOVERY_COOLDOWN_MS.trim()
+      : '',
+    10,
+  );
+  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+})();
+
 let cachedAdapterVersion: string | null = null;
 
 function getAdapterVersion(): string {
@@ -80,6 +99,7 @@ function nowIso(): string {
  */
 export function markProviderFailed(httpStatus: number, error: string, traceId: string): void {
   state.state = 'PROVIDER_FAILED';
+  failureLatchedAtMs = Date.now();
   state.credentialValid = false;
   state.lastHttpStatus = httpStatus;
   state.lastValidationTime = nowIso();
@@ -98,6 +118,7 @@ export function markProviderFailed(httpStatus: number, error: string, traceId: s
  */
 export function markProviderReady(provider: string, model: string): void {
   state.state = 'PROVIDER_READY';
+  failureLatchedAtMs = null;
   state.provider = provider;
   state.model = model;
   state.credentialLoaded = true;
@@ -113,6 +134,7 @@ export function markProviderReady(provider: string, model: string): void {
  */
 export function markFallbackReady(provider: string, model: string): void {
   state.state = 'FALLBACK_READY';
+  failureLatchedAtMs = null;
   state.fallbackUsed = true;
   state.fallbackEnabled = true;
   state.lastHttpStatus = 200;
@@ -125,6 +147,7 @@ export function markFallbackReady(provider: string, model: string): void {
  */
 export function markAIUnavailable(traceId: string, error: string): void {
   state.state = 'AI_UNAVAILABLE';
+  failureLatchedAtMs = Date.now();
   state.traceId = traceId;
   state.error = error;
   state.lastValidationTime = nowIso();
@@ -145,10 +168,31 @@ export function initProviderStateMachine(provider: string, model: string, creden
 }
 
 /**
- * Returns true if the primary provider should be attempted (not already marked failed).
+ * Returns true if the primary provider should be attempted.
+ *
+ * Failure states (PROVIDER_FAILED / AI_UNAVAILABLE) block the primary only
+ * for the recovery cooldown window. After the cooldown, the circuit re-opens
+ * half-way: the state moves back to PROVIDER_VALIDATING and exactly one probe
+ * attempt is allowed. Success re-latches PROVIDER_READY; failure re-latches
+ * the failure state and restarts the cooldown. Recovery is only offered when
+ * a credential is actually loaded.
  */
 export function shouldTryPrimary(): boolean {
-  return state.state !== 'PROVIDER_FAILED' && state.state !== 'AI_UNAVAILABLE';
+  if (state.state !== 'PROVIDER_FAILED' && state.state !== 'AI_UNAVAILABLE') {
+    return true;
+  }
+  if (!state.credentialLoaded) {
+    return false;
+  }
+  if (failureLatchedAtMs !== null && Date.now() - failureLatchedAtMs >= RECOVERY_COOLDOWN_MS) {
+    state.state = 'PROVIDER_VALIDATING';
+    failureLatchedAtMs = null;
+    console.log('[IVXProviderStateMachine] Recovery cooldown elapsed — re-opening primary provider for a half-open probe attempt', {
+      cooldownMs: RECOVERY_COOLDOWN_MS,
+    });
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -170,6 +214,7 @@ export function getProviderHealth(): IVXProviderHealth {
  * Reset the state machine (for testing).
  */
 export function resetProviderStateMachine(): void {
+  failureLatchedAtMs = null;
   state.state = 'PROVIDER_VALIDATING';
   state.provider = 'unknown';
   state.model = 'unknown';
