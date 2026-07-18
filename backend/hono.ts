@@ -748,6 +748,7 @@ import { OPTIONS as agentTestTokenOptions, handleIVXAgentTestRunRequest, handleI
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
+import { OPTIONS as branchPrProofOptions, handleIVXBranchPrProofRequest, handleIVXBranchPrProofStatusRequest } from './api/ivx-branch-pr-proof';
 import { OPTIONS as seniorDeveloperWorkerOptions, handleSeniorDeveloperWorkerEnqueueRequest, handleSeniorDeveloperWorkerJobRequest, handleSeniorDeveloperWorkerJobsRequest, handleSeniorDeveloperWorkerLastProofRequest, handleSeniorDeveloperWorkerLedgerRequest, handleSeniorDeveloperWorkerStatusRequest, handleSeniorDeveloperWorkerActiveJobRequest, handleSeniorDeveloperWorkerCancelJobRequest, handleSeniorDeveloperWorkerResumeJobRequest } from './api/ivx-senior-developer-worker';
 import {
   OPTIONS as seniorDevBuildOptions,
@@ -3590,6 +3591,9 @@ app.options('/api/ivx/senior-developer/credential-audit', () => seniorDeveloperO
 app.get('/api/ivx/senior-developer/credential-audit', async (context) => handleIVXSeniorDeveloperCredentialAuditRequest(context.req.raw));
 app.options('/api/ivx/senior-developer/run', () => seniorDeveloperOptions());
 app.post('/api/ivx/senior-developer/run', async (context) => handleIVXSeniorDeveloperRunRequest(context.req.raw));
+app.options('/api/ivx/senior-developer/branch-pr-proof', () => branchPrProofOptions());
+app.get('/api/ivx/senior-developer/branch-pr-proof', async (context) => handleIVXBranchPrProofStatusRequest(context.req.raw));
+app.post('/api/ivx/senior-developer/branch-pr-proof', async (context) => handleIVXBranchPrProofRequest(context.req.raw));
 
 // === Phase 5: Owner-only AI Provider Diagnostics ===
 // Shows provider state, model, adapter version, credential loaded/valid,

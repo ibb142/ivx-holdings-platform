@@ -37,6 +37,7 @@ import {
   readDurableJson,
   writeDurableJson,
 } from './ivx-durable-store';
+import { checkEmergencyStop } from './ivx-emergency-stop-gate';
 import {
   IVX_GIT_DEPLOY_CONFIRM_TEXT,
   IVX_SAFE_PATCH_CONFIRM_TEXT,
@@ -576,6 +577,14 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
   if (!goal) throw new Error('A senior developer goal is required to enqueue a job.');
   if (!input.ownerApproved) throw new Error('Cannot enqueue a senior developer job without verified owner approval.');
 
+  // FINAL MANDATE Phase 1: owner emergency stop halts all agent work at the enqueue boundary.
+  const emergencyStop = await checkEmergencyStop();
+  if (emergencyStop.active) {
+    throw new Error(
+      `EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged (${emergencyStop.reason ?? 'no reason recorded'}); job enqueue refused.`,
+    );
+  }
+
   const ownerId = input.ownerId ?? 'default';
 
   // Check for an existing active job for this owner (also expires stale jobs).
@@ -818,6 +827,19 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
   const queue = await loadQueue();
   const job = queue.jobs.find((j) => j.status === 'queued');
   if (!job) return null;
+
+  // FINAL MANDATE Phase 1: owner emergency stop halts queued jobs before execution.
+  const emergencyStop = await checkEmergencyStop();
+  if (emergencyStop.active) {
+    await updateJob(job.jobId, {
+      status: 'blocked',
+      stage: 'FAILED',
+      stageDetail: `Emergency stop active — job blocked before execution (${emergencyStop.reason ?? 'no reason recorded'}).`,
+      finishedAt: nowIso(),
+      error: 'EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged; job refused at start boundary.',
+    });
+    return null;
+  }
 
   // Check if this job was cancelled while queued.
   const controller = { cancelled: false };
