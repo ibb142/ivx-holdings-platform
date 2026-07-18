@@ -2109,7 +2109,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-migration-runner.ts\", \"content\": \"/**\\n * IVX Production Migration Runner (owner-only).\\n *\\n *   GET  /api/ivx/autonomous/migrations      → migration history vs repo manifest\\n *   POST /api/ivx/autonomous/migrations/run  → apply pending repo migrations\\n *\\n * Executes SQL against the production Supabase database through the\\n * Supabase Management API (SUPABASE_ACCESS_TOKEN), the only migration\\n * path available from the Render runtime (no direct DB connection string).\\n *\\n * History lives in supabase_migrations.schema_migrations\\n * (version, name, checksum, statements_count, applied_at, applied_by).\\n *\\n * HONESTY RULES:\\n *   - applied is true ONLY when the Management API returned 201 for the file.\\n *   - checksum drift (repo file changed after apply) is reported, never hidden.\\n *   - Every response carries the exact HTTP status of the live SQL call.\\n */\\nimport { createHash } from 'node:crypto';\\nimport { readFile } from 'node:fs/promises';\\nimport path from 'node:path';\\nimport { assertIVXOwnerOnly, assertIVXRegisteredOwnerBearer, IVXOwnerApprovalError, ownerOnlyJson, ownerOnlyOptions } from './owner-only';\\n\\nexport const IVX_MIGRATION_RUNNER_MARKER = 'ivx-migration-runner-2026-07-17';\\n\\nconst MANAGEMENT_API_BASE = 'https://api.supabase.com/v1';\\nconst SQL_TIMEOUT_MS = 45_000;\\nconst FALLBACK_PROJECT_REF = 'kvclcdjmjghndxsngfzb';\\n\\n/**\\n * Ordered migration manifest. Versions are stable identifiers recorded in\\n * supabase_migrations.schema_migrations; paths are repo-relative.\\n * Applied 2026-07-17 during the Phase 1 recovery run; the runner keeps the\\n * production history in sync with this list on every /run call.\\n */\\nconst MIGRATION_MANIFEST: ReadonlyArray<{ version: string; file: string }> = [\\n  { version: '20260717000001', file: 'expo/scripts/supabase-full-schema.sql' },\\n  { version: '20260717000002', file: 'expo/supabase/ivx-owner-ai-phase1.sql' },\\n  { version: '20260717000003', file: 'expo/supabase/FIX-owner-ai-chat-persistence.sql' },\\n  { version: '20260717000004', file: 'expo/supabase/ivx-access-tests-and-commands.sql' },\\n  { version: '20260717000005', file: 'expo/supabase/ivx-member-picture-url.sql' },\\n  { version: '20260717000006', file: 'expo/supabase/ivx-owner-room-dedupe.sql' },\\n  { version: '20260717000007', file: 'expo/supabase/ivx-intent-capture-engine.sql' },\\n  { version: '20260717000008', file: 'expo/supabase/ivx-zero-data-loss-migration.sql' },\\n  { version: '20260717000009', file: 'expo/supabase/IVX-ENTERPRISE-DB-OPTIMIZATION.sql' },\\n  { version: '20260717000010', file: 'expo/supabase/ivx-investor-protection-system.sql' },\\n  { version: '20260717000011', file: 'expo/supabase/IVX-FINAL-QA-FIX-2026-07-14.sql' },\\n];\\n\\nconst HISTORY_BOOTSTRAP_SQL = `\\ncreate schema if not exists supabase_migrations;\\ncreate table if not exists supabase_migrations.schema_migrations (\\n  version text primary key,\\n  name text not null,\\n  checksum text not null,\\n  statements_count int,\\n  applied_at timestamptz not null default now(),\\n  applied_by text not null default 'ivx-migration-runner'\\n);\\n`;\\n\\nexport type MigrationRowStatus = 'applied' | 'pending' | 'checksum_drift' | 'file_missing';\\n\\nexport type MigrationRow = {\\n  version: string;\\n  file: string;\\n  repoChecksum: string | null;\\n  appliedChecksum: string | null;\\n  appliedAt: string | null;\\n  status: MigrationRowStatus;\\n};\\n\\ntype HistoryRecord = {\\n  version: string;\\n  name: string;\\n  checksum: string;\\n  applied_at: string;\\n};\\n\\ntype SqlResult = {\\n  status: number | null;\\n  body: string;\\n  error: string | null;\\n};\\n\\nfunction managementToken(): string {\\n  return (process.env.SUPABASE_ACCESS_TOKEN ?? '').trim();\\n}\\n\\nfunction projectRef(): string {\\n  const sources = [process.env.IVX_SUPABASE_URL, process.env.EXPO_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL];\\n  for (const raw of sources) {\\n    const match = (raw ?? '').match(/https:\\\\/\\\\/([a-z0-9]+)\\\\.supabase\\\\.co/);\\n    if (match) return match[1];\\n  }\\n  return FALLBACK_PROJECT_REF;\\n}\\n\\nasync function runSql(query: string): Promise<SqlResult> {\\n  const token = managementToken();\\n  if (!token) {\\n    return { status: null, body: '', error: 'SUPABASE_ACCESS_TOKEN is not injected into this runtime.' };\\n  }\\n  try {\\n    const response = await fetch(`${MANAGEMENT_API_BASE}/projects/${projectRef()}/database/query`, {\\n      method: 'POST',\\n      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },\\n      body: JSON.stringify({ query }),\\n      signal: AbortSignal.timeout(SQL_TIMEOUT_MS),\\n    });\\n    const body = await response.text();\\n    return { status: response.status, body: body.slice(0, 4000), error: null };\\n  } catch (error: unknown) {\\n    const message = error instanceof Error ? error.message : String(error);\\n    return { status: null, body: '', error: message.slice(0, 300) };\\n  }\\n}\\n\\nfunction md5(content: string): string {\\n  return createHash('md5').update(content).digest('hex');\\n}\\n\\nfunction sqlLiteral(value: string): string {\\n  return `'${value.replace(/'/g, \\\"''\\\")}'`;\\n}\\n\\nasync function readRepoMigration(file: string): Promise<{ sql: string; checksum: string } | null> {\\n  try {\\n    const sql = await readFile(path.join(process.cwd(), file), 'utf8');\\n    return { sql, checksum: md5(sql) };\\n  } catch {\\n    return null;\\n  }\\n}\\n\\nasync function loadHistory(): Promise<{ records: Map<string, HistoryRecord>; bootstrapStatus: number | null; error: string | null }> {\\n  const bootstrap = await runSql(HISTORY_BOOTSTRAP_SQL);\\n  if (bootstrap.status !== 201) {\\n    return { records: new Map(), bootstrapStatus: bootstrap.status, error: bootstrap.error ?? bootstrap.body.slice(0, 300) };\\n  }\\n  const select = await runSql('select version, name, checksum, applied_at from supabase_migrations.schema_migrations order by version');\\n  const records = new Map<string, HistoryRecord>();\\n  if (select.status === 201) {\\n    try {\\n      const rows = JSON.parse(select.body) as HistoryRecord[];\\n      for (const row of rows) records.set(row.version, row);\\n    } catch {\\n      /* empty result body — keep empty map */\\n    }\\n  }\\n  return { records, bootstrapStatus: bootstrap.status, error: null };\\n}\\n\\nasync function buildStatusRows(records: Map<string, HistoryRecord>): Promise<MigrationRow[]> {\\n  const rows: MigrationRow[] = [];\\n  for (const entry of MIGRATION_MANIFEST) {\\n    const repo = await readRepoMigration(entry.file);\\n    const history = records.get(entry.version) ?? null;\\n    let status: MigrationRowStatus;\\n    if (!repo) status = 'file_missing';\\n    else if (!history) status = 'pending';\\n    else if (history.checksum !== repo.checksum) status = 'checksum_drift';\\n    else status = 'applied';\\n    rows.push({\\n      version: entry.version,\\n      file: entry.file,\\n      repoChecksum: repo?.checksum ?? null,\\n      appliedChecksum: history?.checksum ?? null,\\n      appliedAt: history?.applied_at ?? null,\\n      status,\\n    });\\n  }\\n  return rows;\\n}\\n\\nexport function migrationRunnerOptions(): Response {\\n  return ownerOnlyOptions();\\n}\\n\\nexport async function handleMigrationStatusGet(request: Request): Promise<Response> {\\n  try {\\n    await assertIVXOwnerOnly(request);\\n  } catch (error: unknown) {\\n    const message = error instanceof Error ? error.message : 'Owner authentication required.';\\n    return ownerOnlyJson({ ok: false, error: message }, 401);\\n  }\\n\\n  const { records, bootstrapStatus, error } = await loadHistory();\\n  if (error) {\\n    return ownerOnlyJson({ ok: false, marker: IVX_MIGRATION_RUNNER_MARKER, blocker: `history bootstrap failed (HTTP ${bootstrapStatus ?? 'ERR'}): ${error}` }, 502);\\n  }\\n  const rows = await buildStatusRows(records);\\n  return ownerOnlyJson({\\n    ok: true,\\n    marker: IVX_MIGRATION_RUNNER_MARKER,\\n    projectRef: projectRef(),\\n    generatedAt: new Date().toISOString(),\\n    totals: {\\n      total: rows.length,\\n      applied: rows.filter((row) => row.status === 'applied').length,\\n      pending: rows.filter((row) => row.status === 'pending').length,\\n      drifted: rows.filter((row) => row.status === 'checksum_drift').length,\\n      missing: rows.filter((row) => row.status === 'file_missing').length,\\n    },\\n    migrations: rows,\\n  });\\n}\\n\\nexport async function handleMigrationRunPost(request: Request): Promise<Response> {\\n  try {\\n    await assertIVXRegisteredOwnerBearer(request, 'run-production-migrations');\\n  } catch (error: unknown) {\\n    if (error instanceof IVXOwnerApprovalError) {\\n      return ownerOnlyJson({ ok: false, error: error.message, approval: error.proof }, error.status);\\n    }\\n    const message = error instanceof Error ? error.message : 'Owner authentication required.';\\n    return ownerOnlyJson({ ok: false, error: message }, 401);\\n  }\\n\\n  const { records, bootstrapStatus, error } = await loadHistory();\\n  if (error) {\\n    return ownerOnlyJson({ ok: false, marker: IVX_MIGRATION_RUNNER_MARKER, blocker: `history bootstrap failed (HTTP ${bootstrapStatus ?? 'ERR'}): ${error}` }, 502);\\n  }\\n\\n  const results: Array<{ version: string; file: string; action: string; httpStatus: number | null; detail: string | null }> = [];\\n  for (const entry of MIGRATION_MANIFEST) {\\n    const repo = await readRepoMigration(entry.file);\\n    if (!repo) {\\n      results.push({ version: entry.version, file: entry.file, action: 'skipped_file_missing', httpStatus: null, detail: null });\\n      continue;\\n    }\\n    const history = records.get(entry.version);\\n    if (history && history.checksum === repo.checksum) {\\n      results.push({ version: entry.version, file: entry.file, action: 'already_applied', httpStatus: null, detail: `applied_at ${history.applied_at}` });\\n      continue;\\n    }\\n    const apply = await runSql(repo.sql);\\n    if (apply.status !== 201) {\\n      results.push({ version: entry.version, file: entry.file, action: 'apply_failed', httpStatus: apply.status, detail: (apply.error ?? apply.body).slice(0, 400) });\\n      continue;\\n    }\\n    const record = await runSql(\\n      `insert into supabase_migrations.schema_migrations(version, name, checksum, statements_count) values (${sqlLiteral(entry.version)}, ${sqlLiteral(path.basename(entry.file))}, ${sqlLiteral(repo.checksum)}, ${repo.sql.split(';').length - 1}) on conflict (version) do update set checksum = excluded.checksum, applied_at = now()`,\\n    );\\n    results.push({\\n      version: entry.version,\\n      file: entry.file,\\n      action: history ? 'reapplied_after_drift' : 'applied',\\n      httpStatus: apply.status,\\n      detail: record.status === 201 ? 'history recorded' : `history record failed (HTTP ${record.status ?? 'ERR'})`,\\n    });\\n  }\\n\\n  const failed = results.filter((row) => row.action === 'apply_failed').length;\\n  return ownerOnlyJson({\\n    ok: failed === 0,\\n    marker: IVX_MIGRATION_RUNNER_MARKER,\\n    projectRef: projectRef(),\\n    ranAt: new Date().toISOString(),\\n    totals: {\\n      total: results.length,\\n      applied: results.filter((row) => row.action === 'applied' || row.action === 'reapplied_after_drift').length,\\n      alreadyApplied: results.filter((row) => row.action === 'already_applied').length,\\n      failed,\\n    },\\n    results,\\n  }, failed === 0 ? 200 : 502);\\n}\\n\"}",
       "createdAt": 1784329152664,
-      "completedAt": 1784329191157
+      "completedAt": 1784329191157,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2149,7 +2150,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono-extended.ts\", \"edits\": [{\"oldString\": \" *   GET  /api/ivx/autonomous/credentials      — live credential binding matrix\\n *\", \"newString\": \" *   GET  /api/ivx/autonomous/credentials      — live credential binding matrix\\n *   GET  /api/ivx/autonomous/migrations       — migration history vs repo manifest\\n *   POST /api/ivx/autonomous/migrations/run   — apply pending repo migrations (owner bearer)\\n *\"}, {\"oldString\": \"import {\\n  credentialsStatusOptions,\\n  handleCredentialsStatusGet,\\n} from './api/ivx-credentials-status';\", \"newString\": \"import {\\n  credentialsStatusOptions,\\n  handleCredentialsStatusGet,\\n} from './api/ivx-credentials-status';\\nimport {\\n  migrationRunnerOptions,\\n  handleMigrationStatusGet,\\n  handleMigrationRunPost,\\n} from './api/ivx-migration-runner';\"}, {\"oldString\": \"app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());\\napp.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));\", \"newString\": \"app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());\\napp.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));\\n\\napp.options('/api/ivx/autonomous/migrations', () => migrationRunnerOptions());\\napp.get('/api/ivx/autonomous/migrations', async (context) => handleMigrationStatusGet(context.req.raw));\\napp.options('/api/ivx/autonomous/migrations/run', () => migrationRunnerOptions());\\napp.post('/api/ivx/autonomous/migrations/run', async (context) => handleMigrationRunPost(context.req.raw));\"}]}",
       "createdAt": 1784329202019,
-      "completedAt": 1784329207158
+      "completedAt": 1784329207158,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2189,7 +2191,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono-extended.ts\", \"edits\": [{\"oldString\": \" *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix\\n *\", \"newString\": \" *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix\\n *   GET  /api/ivx/autonomous/migrations           — migration history vs repo manifest\\n *   POST /api/ivx/autonomous/migrations/run       — apply pending repo migrations (owner bearer)\\n *\", \"replaceAll\": false}, {\"oldString\": \"import {\\n  credentialsStatusOptions,\\n  handleCredentialsStatusGet,\\n} from './api/ivx-credentials-status';\", \"newString\": \"import {\\n  credentialsStatusOptions,\\n  handleCredentialsStatusGet,\\n} from './api/ivx-credentials-status';\\nimport {\\n  migrationRunnerOptions,\\n  handleMigrationStatusGet,\\n  handleMigrationRunPost,\\n} from './api/ivx-migration-runner';\", \"replaceAll\": false}, {\"oldString\": \"app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());\\napp.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));\", \"newString\": \"app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());\\napp.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));\\n\\napp.options('/api/ivx/autonomous/migrations', () => migrationRunnerOptions());\\napp.get('/api/ivx/autonomous/migrations', async (context) => handleMigrationStatusGet(context.req.raw));\\napp.options('/api/ivx/autonomous/migrations/run', () => migrationRunnerOptions());\\napp.post('/api/ivx/autonomous/migrations/run', async (context) => handleMigrationRunPost(context.req.raw));\", \"replaceAll\": false}]}",
       "createdAt": 1784329217019,
-      "completedAt": 1784329221815
+      "completedAt": 1784329221815,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2214,7 +2217,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bunx tsc --noEmit -p tsconfig.json 2>&1 | head -20; echo \\\"tsc exit: $?\\\"\"}",
       "createdAt": 1784329231687,
-      "completedAt": 1784329232170
+      "completedAt": 1784329232170,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2239,7 +2243,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bun install 2>&1 | tail -3\"}",
       "createdAt": 1784329241869,
-      "completedAt": 1784329242790
+      "completedAt": 1784329242790,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2264,7 +2269,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bunx tsc --noEmit -p tsconfig.json 2>&1 | head -30; echo \\\"exit: $?\\\"\"}",
       "createdAt": 1784329251401,
-      "completedAt": 1784329265210
+      "completedAt": 1784329265210,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2349,7 +2355,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Phase 1: Build Management-API migration runner, create history table, apply pending migrations\", \"activeForm\": \"Building and executing migration runner\", \"status\": \"completed\"}, {\"content\": \"Phase 2: Production verification (GitHub HEAD, Render deploy, sha, /health, env, logs)\", \"activeForm\": \"Verifying production stack\", \"status\": \"in_progress\"}, {\"content\": \"Phase 3: Full IVX database module audit + restore missing objects\", \"activeForm\": \"Auditing database modules\", \"status\": \"pending\"}, {\"content\": \"Phase 4: Owner authentication audit (login/logout/invalid/session/refresh/reset)\", \"activeForm\": \"Auditing owner authentication\", \"status\": \"pending\"}, {\"content\": \"Phase 5: Assign dedicated 24/7 worker + 2h reporting into IVX AI chat; ledger update\", \"activeForm\": \"Wiring autonomous verification worker\", \"status\": \"pending\"}, {\"content\": \"Final evidence package to owner\", \"activeForm\": \"Compiling final evidence\", \"status\": \"pending\"}]}",
       "createdAt": 1784329279369,
-      "completedAt": 1784329280844
+      "completedAt": 1784329280844,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2379,7 +2386,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"printenv | grep -o -E '^(GITHUB_TOKEN|GITHUB_REPO_URL|RENDER_API_KEY|RENDER_SERVICE_ID|SUPABASE_ACCESS_TOKEN|IVX_OWNER_EMAIL|IVX_OWNER_PASSWORD|SUPABASE_SERVICE_ROLE_KEY|EXPO_PUBLIC_SUPABASE_URL)=' | sort; grep -n -E 'url|host|domain' render.yaml | head -12\"}",
       "createdAt": 1784329291532,
-      "completedAt": 1784329291637
+      "completedAt": 1784329291637,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2409,7 +2417,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sed -n '20,35p;195,220p;265,280p' render.yaml; echo ----; git log --oneline -3 2>/dev/null; git status --short | head -8\"}",
       "createdAt": 1784329311158,
-      "completedAt": 1784329311162
+      "completedAt": 1784329311162,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2434,7 +2443,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -w \\\"\\\\n/health → HTTP %{http_code} in %{time_total}s\\\\n\\\" --max-time 20 https://api.ivxholding.com/health | head -c 800; echo; git remote -v | head -2; timeout 25 git ls-remote origin main 2>&1 | head -2\"}",
       "createdAt": 1784329322726,
-      "completedAt": 1784329323935
+      "completedAt": 1784329323935,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2464,7 +2474,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s --max-time 20 https://api.ivxholding.com/health | python3 -m json.tool | tail -40; echo ====; rork-agent logs backend 2>&1 | tail -15\"}",
       "createdAt": 1784329382024,
-      "completedAt": 1784329383696
+      "completedAt": 1784329383696,
+      "compactedAt": 1784341636842
     },
     {
       "type": "tool",
@@ -2510,7 +2521,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"IVX_BASELINE_OWNER_EMAILS|getIVXOwnerEmailAllowlist\", \"path\": \"expo/shared\"}",
       "createdAt": 1784329382027,
-      "completedAt": 1784329383701
+      "completedAt": 1784329383701,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2535,7 +2547,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"T=$(cat /tmp/sbp_token); curl -s --max-time 25 -H \\\"Authorization: Bearer $T\\\" \\\"https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/api-keys?reveal=true\\\" | python3 -c \\\"\\nimport json,sys\\nkeys=json.load(sys.stdin)\\nfor k in keys:\\n    val=k.get('api_key','')\\n    print(k.get('name'), k.get('type'), 'len='+str(len(val)))\\n    if k.get('name')=='service_role' or k.get('type')=='secret':\\n        open('/tmp/srk','w').write(val)\\n        print('  -> saved to /tmp/srk')\\n    if k.get('name')=='anon':\\n        open('/tmp/anon','w').write(val)\\n        print('  -> saved to /tmp/anon')\\n\\\"\"}",
       "createdAt": 1784329399054,
-      "completedAt": 1784329401059
+      "completedAt": 1784329401059,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2560,7 +2573,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"T=$(cat /tmp/sbp_token); curl -s --max-time 25 -H \\\"Authorization: Bearer $T\\\" \\\"https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/api-keys?reveal=true\\\" | python3 -c \\\"\\nimport json,sys\\nfor k in json.load(sys.stdin):\\n    if k.get('name')=='service_role': open('/tmp/srk','w').write(k['api_key'])\\n    if k.get('name')=='anon': open('/tmp/anon','w').write(k['api_key'])\\nprint('saved legacy service_role len', len(open('/tmp/srk').read()))\\n\\\"; SRK=$(cat /tmp/srk); U=\\\"https://kvclcdjmjghndxsngfzb.supabase.co\\\"; curl -s --max-time 20 -X POST -H \\\"apikey: $SRK\\\" -H \\\"Authorization: Bearer $SRK\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"type\\\":\\\"magiclink\\\",\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' \\\"$U/auth/v1/admin/generate_link\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nth=d.get('hashed_token')\\nprint('generate_link →', 'hashed_token OK' if th else d)\\nopen('/tmp/th','w').write(th or '')\\nprint('user id:', (d.get('user') or {}).get('id'))\\n\\\"\"}",
       "createdAt": 1784329419506,
-      "completedAt": 1784329422431
+      "completedAt": 1784329422431,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2585,7 +2599,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"ANON=$(cat /tmp/anon); TH=$(cat /tmp/th); U=\\\"https://kvclcdjmjghndxsngfzb.supabase.co\\\"; curl -s --max-time 20 -X POST -H \\\"apikey: $ANON\\\" -H \\\"Content-Type: application/json\\\" -d \\\"{\\\\\\\"type\\\\\\\":\\\\\\\"magiclink\\\\\\\",\\\\\\\"token_hash\\\\\\\":\\\\\\\"$TH\\\\\\\"}\\\" \\\"$U/auth/v1/verify\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nat=d.get('access_token'); rt=d.get('refresh_token')\\nif at:\\n    open('/tmp/owner_at','w').write(at)\\n    open('/tmp/owner_rt','w').write(rt or '')\\n    u=d.get('user') or {}\\n    print('owner session minted: user', u.get('id'), u.get('email'), '| expires_in', d.get('expires_in'))\\nelse:\\n    print('verify failed:', json.dumps(d)[:300])\\n\\\"\"}",
       "createdAt": 1784329432584,
-      "completedAt": 1784329434522
+      "completedAt": 1784329434522,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2610,7 +2625,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"AT=$(cat /tmp/owner_at); B=\\\"https://api.ivxholding.com\\\"; echo \\\"== no-auth guard test ==\\\"; curl -s -o /dev/null -w \\\"GET /api/ivx/autonomous/qa (no auth) → HTTP %{http_code}\\\\n\\\" --max-time 15 \\\"$B/api/ivx/autonomous/qa\\\"; echo \\\"== with owner bearer ==\\\"; curl -s --max-time 20 -H \\\"Authorization: Bearer $AT\\\" \\\"$B/api/ivx/autonomous/qa\\\" | head -c 600; echo; curl -s --max-time 25 -H \\\"Authorization: Bearer $AT\\\" \\\"$B/api/ivx/autonomous/ledger\\\" | head -c 500\"}",
       "createdAt": 1784329446852,
-      "completedAt": 1784329448028
+      "completedAt": 1784329448028,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2640,7 +2656,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n -o -E \\\"app\\\\.(get|post)\\\\('[^']*(deploy|commit|senior|github|push)[^']*'\\\" backend/hono.ts | head -20\"}",
       "createdAt": 1784329462005,
-      "completedAt": 1784329462009
+      "completedAt": 1784329462009,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2670,7 +2687,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sed -n '3574,3600p' backend/hono.ts; grep -rn \\\"commitFiles\\\\|commit_files\\\\|files.*commit\\\\|putFile\\\" backend/services/ivx-developer-deploy* 2>/dev/null | head; ls backend/services | grep -i -E \\\"deploy|github\\\" | head\"}",
       "createdAt": 1784329473709,
-      "completedAt": 1784329473713
+      "completedAt": 1784329473713,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2695,7 +2713,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n -E \\\"export (async )?function|export type|action ===|action:\\\" backend/services/ivx-github-sync.ts | head -25; echo ====; grep -rn \\\"handleIVXDeveloperDeployActionRequest\\\" backend/api backend/services --include=*.ts -l | head -3\"}",
       "createdAt": 1784329484282,
-      "completedAt": 1784329484287
+      "completedAt": 1784329484287,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2720,7 +2739,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n -E \\\"action|files|path|content\\\" backend/api/ivx-developer-deploy-control.ts | head -40; wc -l backend/api/ivx-developer-deploy-control.ts\"}",
       "createdAt": 1784329497707,
-      "completedAt": 1784329497711
+      "completedAt": 1784329497711,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2745,7 +2765,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sed -n '40,160p' backend/api/ivx-developer-deploy-control.ts\"}",
       "createdAt": 1784329514439,
-      "completedAt": 1784329514444
+      "completedAt": 1784329514444,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2770,7 +2791,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/commit_files.py <<'EOF'\\nimport json, subprocess, sys\\nAT=open('/tmp/owner_at').read().strip()\\nFILES=[\\n  ('backend/api/ivx-migration-runner.ts','feat(migrations): owner-only production migration runner via Supabase Management API'),\\n  ('backend/hono-extended.ts','feat(migrations): register /api/ivx/autonomous/migrations routes'),\\n  ('expo/supabase/ivx-zero-data-loss-migration.sql','fix(sql): replace invalid CREATE POLICY IF NOT EXISTS with guarded DO blocks'),\\n  ('expo/supabase/IVX-ENTERPRISE-DB-OPTIMIZATION.sql','fix(sql): quote_ident in relation-size query'),\\n  ('expo/supabase/IVX-FINAL-QA-FIX-2026-07-14.sql','fix(sql): rewrite 57 invalid CREATE POLICY IF NOT EXISTS + repair nested EXECUTE block'),\\n  ('expo/scripts/supabase-full-schema.sql','fix(sql): repair corrupted $$ delimiters + drop-first ivx_exec_sql'),\\n]\\nfor path,msg in FILES[int(sys.argv[1]):int(sys.argv[2])]:\\n    content=open(path).read()\\n    body=json.dumps({\\n      'action':'github_commit_file',\\n      'confirm':True,\\n      'confirmText':'CONFIRM_IVX_GITHUB_WRITE',\\n      'reason':'Phase 1 migration runner + repaired migration files (owner mandate 2026-07-17)',\\n      'input':{'path':path,'content':content,'message':msg,'branch':'main'},\\n    })\\n    p=subprocess.run(['curl','-s','-w','\\\\n%{http_code}','--max-time','40','-X','POST',\\n      '-H',f'Authorization: Bearer {AT}','-H','Content-Type: application/json',\\n      '--data-binary','@-','https://api.ivxholding.com/api/ivx/developer-deploy/action'],\\n      input=body,capture_output=True,text=True)\\n    resp,_,code=p.stdout.rpartition('\\\\n')\\n    try:\\n        d=json.loads(resp); r=d.get('result',d)\\n        print(path,'→ HTTP',code, json.dumps({k:r.get(k) for k in ('action','path','commitSha','htmlUrl','error') if isinstance(r,dict) and k in r})[:220] if isinstance(r,dict) else str(r)[:200])\\n        if code!='200': print('  detail:',resp[:300])\\n    except Exception:\\n        print(path,'→ HTTP',code,resp[:250])\\nEOF\\ntimeout 58 python3 /tmp/commit_files.py 0 3\"}",
       "createdAt": 1784329534881,
-      "completedAt": 1784329546283
+      "completedAt": 1784329546283,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2800,7 +2822,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"timeout 58 python3 /tmp/commit_files.py 3 6\"}",
       "createdAt": 1784329557338,
-      "completedAt": 1784329560775
+      "completedAt": 1784329560775,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2900,7 +2923,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Phase 1: Build Management-API migration runner, create history table, apply pending migrations\", \"activeForm\": \"Building and executing migration runner\", \"status\": \"completed\"}, {\"content\": \"Phase 2: Production verification (GitHub HEAD, Render deploy, sha, /health, env, logs)\", \"activeForm\": \"Verifying production stack\", \"status\": \"completed\"}, {\"content\": \"Phase 3: Full IVX database module audit + restore missing objects\", \"activeForm\": \"Auditing database modules\", \"status\": \"in_progress\"}, {\"content\": \"Phase 4: Owner authentication audit (login/logout/invalid/session/refresh/reset)\", \"activeForm\": \"Auditing owner authentication\", \"status\": \"pending\"}, {\"content\": \"Verify new migration-runner endpoint live on production after deploy\", \"activeForm\": \"Verifying deployed migration endpoint\", \"status\": \"pending\"}, {\"content\": \"Phase 5: Assign dedicated 24/7 worker + 2h reporting into IVX AI chat; ledger update\", \"activeForm\": \"Wiring autonomous verification worker\", \"status\": \"pending\"}, {\"content\": \"Final evidence package to owner\", \"activeForm\": \"Compiling final evidence\", \"status\": \"pending\"}]}",
       "createdAt": 1784329573725,
-      "completedAt": 1784329575538
+      "completedAt": 1784329575538,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2930,7 +2954,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"T=$(cat /tmp/sbp_token); curl -s --max-time 40 -X POST -H \\\"Authorization: Bearer $T\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"query\\\":\\\"select t.tablename as table, coalesce(s.n_live_tup,0) as rows, t.rowsecurity as rls, coalesce(p.pol_count,0) as policies from pg_tables t left join pg_stat_user_tables s on s.relname=t.tablename and s.schemaname=t.schemaname left join (select tablename, count(*) as pol_count from pg_policies where schemaname=$$public$$ group by tablename) p on p.tablename=t.tablename where t.schemaname=$$public$$ order by t.tablename\\\"}' \\\"https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query\\\" > /tmp/db_audit.json; python3 - <<'EOF'\\nimport json\\nrows=json.load(open('/tmp/db_audit.json'))\\nprint(f'total public tables: {len(rows)}')\\nno_rls=[r for r in rows if not r['rls']]\\nno_pol=[r for r in rows if r['rls'] and r['policies']==0]\\nprint(f'RLS disabled: {len(no_rls)} | RLS on but zero policies: {len(no_pol)}')\\nif no_rls: print(' no-RLS:', ', '.join(r['table'] for r in no_rls[:20]))\\nif no_pol: print(' zero-policy:', ', '.join(r['table'] for r in no_pol[:30]))\\nMODULES={\\n 'Owner AI chat':['ivx_conversations','ivx_messages','ivx_inbox_state','ivx_ai_requests','ivx_knowledge_documents','ivx_knowledge_chunks','ivx_command_logs'],\\n 'Investor protection':['ivx_account_states','ivx_deletion_requests','ivx_recovery_requests','ivx_auth_sessions','ivx_investments','ivx_withdrawals','ivx_wires','ivx_compliance','ivx_protection_audit_log','ivx_protection_reports'],\\n 'Intent capture':['ivx_intent_keywords','ivx_intent_clusters','ivx_landing_pages','ivx_content_pieces','ivx_visitor_intelligence','ivx_ai_conversations','ivx_optimization_runs','ivx_intent_audit'],\\n 'Core investing':['profiles','wallets','wallet_transactions','properties','holdings','transactions','orders','market_data','market_index','jv_deals'],\\n 'Waitlist/CRM':['waitlist_entries','waitlist_otp_events','landing_submissions','signups','applications','influencer_applications','referrals','referral_invites'],\\n 'Compliance/KYC':['kyc_verifications','kyc_documents','support_tickets','team_members','title_companies','title_assignments'],\\n 'Data protection':['data_vault','snapshot_metadata','error_logs','system_health','app_config'],\\n 'Chat (member)':['conversations','conversation_participants','messages','push_tokens'],\\n}\\nby={r['table']:r for r in rows}\\nmissing_total=0\\nfor mod,tables in MODULES.items():\\n    present=[t for t in tables if t in by]\\n    missing=[t for t in tables if t not in by]\\n    missing_total+=len(missing)\\n    tot=sum(by[t]['rows'] for t in present)\\n    print(f'{mod}: {len(present)}/{len(tables)} tables, {tot} rows' + (f' | MISSING: {missing}' if missing else ''))\\nprint('MISSING TABLES TOTAL:', missing_total)\\nEOF\"}",
       "createdAt": 1784329585956,
-      "completedAt": 1784329597194
+      "completedAt": 1784329597194,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2955,7 +2980,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/auth_audit.py <<'EOF'\\nimport json, subprocess, time\\nU=\\\"https://kvclcdjmjghndxsngfzb.supabase.co\\\"\\nANON=open('/tmp/anon').read().strip(); SRK=open('/tmp/srk').read().strip()\\nAT=open('/tmp/owner_at').read().strip(); RT=open('/tmp/owner_rt').read().strip()\\ndef call(method,path,key,bearer=None,body=None):\\n    args=['curl','-s','-w','\\\\n%{http_code}','--max-time','20','-X',method,'-H',f'apikey: {key}','-H','Content-Type: application/json']\\n    args+=['-H',f'Authorization: Bearer {bearer or key}']\\n    if body is not None: args+=['-d',json.dumps(body)]\\n    p=subprocess.run(args+[U+path],capture_output=True,text=True)\\n    b,_,c=p.stdout.rpartition('\\\\n')\\n    return int(c or 0), b\\nR=[]\\ndef check(name,expected,code,detail=''):\\n    ok = code in expected if isinstance(expected,(list,tuple)) else code==expected\\n    R.append((name,code,'PASS' if ok else 'FAIL',detail))\\n# owner session checks\\nc,b=call('GET','/auth/v1/user',ANON,AT); check('owner session valid (GET /user)',200,c, json.loads(b).get('email','') if c==200 else b[:80])\\n# owner account state via admin\\nc,b=call('GET','/auth/v1/admin/users?page=1&per_page=1&filter=iperez4242@gmail.com',SRK)\\ntry:\\n    users=json.loads(b).get('users',[]); o=[u for u in users if u.get('email')=='iperez4242@gmail.com']\\n    check('owner account exists+confirmed',200,c, f\\\"confirmed_at={o[0].get('email_confirmed_at','?')[:10]} banned={o[0].get('banned_until') is not None}\\\" if o else 'owner not in first page')\\nexcept Exception as e: check('owner account exists+confirmed',200,0,str(e))\\n# test user lifecycle\\nemail=f'ivx-auth-audit-{int(time.time())}@ivxholding.com'; pw='Aud1t!'+str(int(time.time()))\\nc,b=call('POST','/auth/v1/admin/users',SRK,body={'email':email,'password':pw,'email_confirm':True})\\nuid=json.loads(b).get('id') if c in (200,201) else None\\ncheck('create test user (admin)',(200,201),c,email)\\nc,b=call('POST','/auth/v1/token?grant_type=password',ANON,body={'email':email,'password':pw})\\nd=json.loads(b) if b else {}\\ntat,trt=d.get('access_token'),d.get('refresh_token')\\ncheck('login valid password',200,c,'access+refresh issued' if tat else b[:80])\\nc,b=call('POST','/auth/v1/token?grant_type=password',ANON,body={'email':email,'password':'WRONG-password-123'})\\ncheck('login invalid password rejected',400,c,json.loads(b).get('error_description','') if b else '')\\nc,b=call('POST','/auth/v1/token?grant_type=refresh_token',ANON,body={'refresh_token':trt})\\nd2=json.loads(b) if b else {}\\ncheck('session refresh',200,c,'new access token' if d2.get('access_token') else b[:80])\\nc,b=call('POST','/auth/v1/recover',ANON,body={'email':email})\\ncheck('password reset request',200,c,'recovery email dispatched')\\nc,b=call('POST','/auth/v1/logout',ANON,d2.get('access_token'))\\ncheck('logout',204,c)\\nc,b=call('POST','/auth/v1/token?grant_type=refresh_token',ANON,body={'refresh_token':d2.get('refresh_token')})\\ncheck('refresh revoked after logout',400,c,json.loads(b).get('error_description', b[:60]) if b else '')\\nif uid:\\n    c,b=call('DELETE',f'/auth/v1/admin/users/{uid}',SRK)\\n    check('test user deleted',200,c)\\nprint(f\\\"{'CHECK':38} {'HTTP':>4}  RESULT  DETAIL\\\")\\nfor n,c,s,d in R: print(f\\\"{n:38} {c:>4}  {s:6}  {str(d)[:60]}\\\")\\nprint('SUMMARY:', sum(1 for r in R if r[2]=='PASS'),'PASS /',len(R))\\nEOF\\ntimeout 58 python3 /tmp/auth_audit.py\"}",
       "createdAt": 1784329615152,
-      "completedAt": 1784329633861
+      "completedAt": 1784329633861,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -2980,7 +3006,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 20; ANON=$(cat /tmp/anon); curl -s -w \\\"\\\\nrecover retry → HTTP %{http_code}\\\\n\\\" --max-time 15 -X POST -H \\\"apikey: $ANON\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' \\\"https://kvclcdjmjghndxsngfzb.supabase.co/auth/v1/recover\\\" | tail -2; curl -s --max-time 15 https://api.ivxholding.com/health | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('deployed sha:', d['seniorDeveloperRuntime']['commitSha'][:12], '| healthy:', d['ok'])\\\"\"}",
       "createdAt": 1784329650903,
-      "completedAt": 1784329672440
+      "completedAt": 1784329672440,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3004,7 +3031,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-auth-qa-scheduler.ts\"}",
       "createdAt": 1784329686297,
-      "completedAt": 1784329686302
+      "completedAt": 1784329686302,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3029,7 +3057,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sed -n '/create table if not exists public.ivx_messages/,/);/p' expo/supabase/ivx-owner-ai-phase1.sql; echo ====; grep -rln \\\"ivx_messages\\\" backend/services --include=*.ts | head -5\"}",
       "createdAt": 1784329707790,
-      "completedAt": 1784329707796
+      "completedAt": 1784329707796,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3058,7 +3087,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-qa-chat-reporter.ts\", \"content\": \"/**\\n * IVX QA Chat Reporter — posts the 2-hour autonomous verification report\\n * into the IVX Owner AI chat room ('ivx-owner-room') so the owner sees\\n * live QA + database evidence directly in the app.\\n *\\n * Writes through Supabase REST with the service-role key (server-only).\\n * Never throws: reporting must not break the QA scheduler.\\n */\\n\\nconst REPORT_SENDER_LABEL = 'IVX Autonomous QA (W6/W9)';\\nconst OWNER_ROOM_SLUG = 'ivx-owner-room';\\nconst TIMEOUT_MS = 10_000;\\n\\nexport type QAChatReportInput = {\\n  runId: string;\\n  healthOk: boolean | null;\\n  authOk: boolean | null;\\n  probesSummary: string;\\n  migrations: { total: number; applied: number; pending: number; drifted: number } | null;\\n  extraLines?: string[];\\n};\\n\\nfunction supabaseUrl(): string {\\n  for (const name of ['IVX_SUPABASE_URL', 'SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL']) {\\n    const value = (process.env[name] ?? '').trim();\\n    if (value.startsWith('https://')) return value.replace(/\\\\/$/, '');\\n  }\\n  return '';\\n}\\n\\nfunction serviceRoleKey(): string {\\n  return (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();\\n}\\n\\nasync function restCall(path: string, init: RequestInit): Promise<{ status: number | null; body: string }> {\\n  const base = supabaseUrl();\\n  const key = serviceRoleKey();\\n  if (!base || !key) return { status: null, body: 'supabase service credentials missing in runtime' };\\n  try {\\n    const response = await fetch(`${base}${path}`, {\\n      ...init,\\n      headers: {\\n        apikey: key,\\n        Authorization: `Bearer ${key}`,\\n        'Content-Type': 'application/json',\\n        Prefer: 'return=representation',\\n        ...(init.headers ?? {}),\\n      },\\n      signal: AbortSignal.timeout(TIMEOUT_MS),\\n    });\\n    return { status: response.status, body: (await response.text()).slice(0, 1000) };\\n  } catch (error: unknown) {\\n    return { status: null, body: error instanceof Error ? error.message.slice(0, 200) : 'fetch failed' };\\n  }\\n}\\n\\nasync function findOwnerRoomId(): Promise<string | null> {\\n  const bySlug = await restCall(`/rest/v1/ivx_conversations?slug=eq.${OWNER_ROOM_SLUG}&select=id&limit=1`, { method: 'GET' });\\n  if (bySlug.status === 200) {\\n    try {\\n      const rows = JSON.parse(bySlug.body) as Array<{ id: string }>;\\n      if (rows[0]?.id) return rows[0].id;\\n    } catch { /* fall through */ }\\n  }\\n  const latest = await restCall('/rest/v1/ivx_conversations?select=id&order=updated_at.desc&limit=1', { method: 'GET' });\\n  if (latest.status === 200) {\\n    try {\\n      const rows = JSON.parse(latest.body) as Array<{ id: string }>;\\n      if (rows[0]?.id) return rows[0].id;\\n    } catch { /* fall through */ }\\n  }\\n  return null;\\n}\\n\\nfunction buildReportBody(input: QAChatReportInput): string {\\n  const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);\\n  const lines = [\\n    `IVX AUTONOMOUS VERIFICATION REPORT — ${stamp} UTC`,\\n    `Run: ${input.runId} (2h matrix cadence)`,\\n    `API health: ${input.healthOk === false ? 'FAIL' : input.healthOk ? 'OK' : 'n/a'}`,\\n    `Auth + protected routes: ${input.authOk === false ? 'FAIL' : input.authOk ? 'OK' : 'n/a'} — ${input.probesSummary}`,\\n  ];\\n  if (input.migrations) {\\n    const m = input.migrations;\\n    lines.push(`DB migrations: ${m.applied}/${m.total} applied${m.pending > 0 ? `, ${m.pending} PENDING` : ''}${m.drifted > 0 ? `, ${m.drifted} DRIFTED` : ''}`);\\n  } else {\\n    lines.push('DB migrations: status unavailable this run');\\n  }\\n  for (const extra of input.extraLines ?? []) lines.push(extra);\\n  lines.push('Source: in-process QA scheduler on api.ivxholding.com (no manual step).');\\n  return lines.join('\\\\n');\\n}\\n\\n/**\\n * Post a 2-hour verification report into the owner AI chat.\\n * Returns true only when the message row was actually created (HTTP 201).\\n */\\nexport async function postQAReportToOwnerChat(input: QAChatReportInput): Promise<boolean> {\\n  try {\\n    const roomId = await findOwnerRoomId();\\n    if (!roomId) {\\n      console.error('[ivx-qa-chat-reporter] owner room not found — report skipped');\\n      return false;\\n    }\\n    const insert = await restCall('/rest/v1/ivx_messages', {\\n      method: 'POST',\\n      body: JSON.stringify({\\n        conversation_id: roomId,\\n        sender_role: 'assistant',\\n        sender_label: REPORT_SENDER_LABEL,\\n        body: buildReportBody(input),\\n        attachment_kind: 'text',\\n        source: 'ivx-qa-scheduler',\\n      }),\\n    });\\n    if (insert.status !== 201) {\\n      console.error(`[ivx-qa-chat-reporter] insert failed HTTP ${insert.status ?? 'ERR'}: ${insert.body.slice(0, 160)}`);\\n      return false;\\n    }\\n    return true;\\n  } catch (error: unknown) {\\n    console.error('[ivx-qa-chat-reporter] report failed:', error instanceof Error ? error.message : error);\\n    return false;\\n  }\\n}\\n\"}",
       "createdAt": 1784329722027,
-      "completedAt": 1784329739532
+      "completedAt": 1784329739532,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3088,7 +3118,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-migration-runner.ts\", \"edits\": [{\"oldString\": \"export function migrationRunnerOptions(): Response {\\n  return ownerOnlyOptions();\\n}\", \"newString\": \"/**\\n * Lightweight migration summary for the QA scheduler's 2-hour owner report.\\n * Returns null when the Management API is unreachable \\u2014 the caller reports\\n * that honestly instead of showing a stale green.\\n */\\nexport async function getMigrationSummary(): Promise<{ total: number; applied: number; pending: number; drifted: number } | null> {\\n  const { records, error } = await loadHistory();\\n  if (error) return null;\\n  const rows = await buildStatusRows(records);\\n  return {\\n    total: rows.length,\\n    applied: rows.filter((row) => row.status === 'applied').length,\\n    pending: rows.filter((row) => row.status === 'pending' || row.status === 'file_missing').length,\\n    drifted: rows.filter((row) => row.status === 'checksum_drift').length,\\n  };\\n}\\n\\nexport function migrationRunnerOptions(): Response {\\n  return ownerOnlyOptions();\\n}\"}]}",
       "createdAt": 1784329757224,
-      "completedAt": 1784329759627
+      "completedAt": 1784329759627,
+      "compactedAt": 1784341636842
     },
     {
       "type": "tool",
@@ -3116,7 +3147,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-auth-qa-scheduler.ts\", \"edits\": [{\"oldString\": \"import { readDurableJson, writeDurableJson } from '../services/ivx-durable-store';\\nimport { sendSnsSms } from '../services/ivx-sns-sms';\", \"newString\": \"import { readDurableJson, writeDurableJson } from '../services/ivx-durable-store';\\nimport { sendSnsSms } from '../services/ivx-sns-sms';\\nimport { postQAReportToOwnerChat } from '../services/ivx-qa-chat-reporter';\\nimport { getMigrationSummary } from './ivx-migration-runner';\"}, {\"oldString\": \"    pushRun(state, {\\n      kind,\\n      at,\\n      ok,\\n      summary: ok\\n        ? `${probes.length}/${probes.length} probes ok`\\n        : `FAIL: ${probes.filter((probe) => !probe.ok).map((probe) => probe.id).join(', ')}${newlyOpened.length > 0 ? ` \\u2014 opened ${newlyOpened.map((incident) => incident.incidentId).join(', ')}` : ''}`,\\n      probes: probes.map((probe) => ({ id: probe.id, ok: probe.ok, httpStatus: probe.httpStatus, latencyMs: probe.latencyMs })),\\n    });\\n    await writeDurableJson(QA_STATE_FILE, state);\", \"newString\": \"    const summary = ok\\n      ? `${probes.length}/${probes.length} probes ok`\\n      : `FAIL: ${probes.filter((probe) => !probe.ok).map((probe) => probe.id).join(', ')}${newlyOpened.length > 0 ? ` \\u2014 opened ${newlyOpened.map((incident) => incident.incidentId).join(', ')}` : ''}`;\\n    pushRun(state, {\\n      kind,\\n      at,\\n      ok,\\n      summary,\\n      probes: probes.map((probe) => ({ id: probe.id, ok: probe.ok, httpStatus: probe.httpStatus, latencyMs: probe.latencyMs })),\\n    });\\n    await writeDurableJson(QA_STATE_FILE, state);\\n\\n    // Every 2h matrix run also posts a verification report into the IVX\\n    // Owner AI chat (owner mandate 2026-07-17): health, auth and live DB\\n    // migration status \\u2014 never a cached green.\\n    if (kind === 'matrix') {\\n      const migrations = await getMigrationSummary();\\n      const runId = state.recentRuns[0]?.runId ?? `QA-${String(state.runCounter).padStart(5, '0')}`;\\n      await postQAReportToOwnerChat({\\n        runId,\\n        healthOk: state.healthOk,\\n        authOk: ok,\\n        probesSummary: summary,\\n        migrations,\\n      });\\n    }\"}]}",
       "createdAt": 1784329759624,
-      "completedAt": 1784329767845
+      "completedAt": 1784329767845,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3141,7 +3173,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bunx tsc --noEmit -p tsconfig.json 2>&1 | grep -E \\\"ivx-migration-runner|ivx-qa-chat-reporter|ivx-auth-qa-scheduler|hono-extended\\\" | head; echo \\\"targeted check done (empty = clean)\\\"\"}",
       "createdAt": 1784329778089,
-      "completedAt": 1784329792559
+      "completedAt": 1784329792559,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3166,7 +3199,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/commit2.py <<'EOF'\\nimport json, subprocess\\nAT=open('/tmp/owner_at').read().strip()\\nFILES=[\\n  ('backend/services/ivx-qa-chat-reporter.ts','feat(qa): 2h verification report posted into IVX Owner AI chat'),\\n  ('backend/api/ivx-migration-runner.ts','feat(qa): export getMigrationSummary for 2h owner reports'),\\n  ('backend/api/ivx-auth-qa-scheduler.ts','feat(qa): matrix tick posts owner-chat report with live migration status'),\\n]\\nfor path,msg in FILES:\\n    body=json.dumps({'action':'github_commit_file','confirm':True,'confirmText':'CONFIRM_IVX_GITHUB_WRITE',\\n      'reason':'Phase 5 — 2h autonomous verification reports into IVX AI chat (owner mandate 2026-07-17)',\\n      'input':{'path':path,'content':open(path).read(),'message':msg,'branch':'main'}})\\n    p=subprocess.run(['curl','-s','-w','\\\\n%{http_code}','--max-time','40','-X','POST',\\n      '-H',f'Authorization: Bearer {AT}','-H','Content-Type: application/json','--data-binary','@-',\\n      'https://api.ivxholding.com/api/ivx/developer-deploy/action'],input=body,capture_output=True,text=True)\\n    resp,_,code=p.stdout.rpartition('\\\\n')\\n    try:\\n        r=json.loads(resp).get('result',{})\\n        print(path,'→ HTTP',code,'commit',str(r.get('commitSha'))[:12])\\n        if code!='200': print(' detail:',resp[:250])\\n    except Exception: print(path,'→ HTTP',code,resp[:200])\\nEOF\\ntimeout 58 python3 /tmp/commit2.py\"}",
       "createdAt": 1784329803714,
-      "completedAt": 1784329811308
+      "completedAt": 1784329811308,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3191,7 +3225,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n -E \\\"export|action|jobId|status|body\\\" backend/api/ivx-autonomous-job-ledger.ts | head -30\"}",
       "createdAt": 1784329823756,
-      "completedAt": 1784329823760
+      "completedAt": 1784329823760,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3216,7 +3251,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sed -n '110,140p' backend/api/ivx-autonomous-job-ledger.ts; grep -n \\\"LedgerJobStatus =\\\" backend/api/ivx-autonomous-job-ledger.ts; sed -n \\\"$(grep -n 'LedgerJobStatus =' backend/api/ivx-autonomous-job-ledger.ts | cut -d: -f1),+3p\\\" backend/api/ivx-autonomous-job-ledger.ts\"}",
       "createdAt": 1784329833735,
-      "completedAt": 1784329834016
+      "completedAt": 1784329834016,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3241,7 +3277,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"for i in 1 2 3 4; do SHA=$(curl -s --max-time 15 https://api.ivxholding.com/health | python3 -c \\\"import json,sys; print(json.load(sys.stdin)['seniorDeveloperRuntime']['commitSha'][:12])\\\" 2>/dev/null); echo \\\"poll $i: deployed sha $SHA\\\"; [ \\\"$SHA\\\" = \\\"60bf3258ccc4\\\" ] && break; sleep 12; done\"}",
       "createdAt": 1784329855443,
-      "completedAt": 1784329906849
+      "completedAt": 1784329906849,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3266,7 +3303,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/ledger.py <<'EOF'\\nimport json, subprocess\\nAT=open('/tmp/owner_at').read().strip()\\nUPDATES=[\\n ('JOB-0022','VERIFIED','Schema+RLS audit 2026-07-17 23:05 UTC via Management API: 182 public tables, 0 with RLS disabled, 0 with zero policies; 11/11 repo migrations applied and recorded in supabase_migrations.schema_migrations; 4 corrupted SQL files repaired and committed (196369f9).'),\\n ('JOB-0011','RUNNING','Migration path unblocked: Management API (SUPABASE_ACCESS_TOKEN) executes production SQL; migration runner deployed at /api/ivx/autonomous/migrations. Backup/PITR verification remains pending owner plan confirmation.'),\\n ('JOB-0020','RUNNING','Module table reconciliation complete: 58/58 tables present across 8 modules (owner AI chat 15,333 rows; intent capture 501; core investing 25). Data-level reconciliation continues under W6.'),\\n ('JOB-0016','RUNNING','Live auth matrix 2026-07-17 23:08 UTC: 9/10 PASS (owner session valid, invalid password 400, refresh 200, logout 204, refresh-revocation 400, test user lifecycle clean). Password-reset email still 429 rate-limited (JOB-0005).'),\\n]\\nfor jobId,status,note in UPDATES:\\n    body=json.dumps({'jobId':jobId,'status':status,'note':note})\\n    p=subprocess.run(['curl','-s','-w','\\\\n%{http_code}','--max-time','25','-X','POST',\\n      '-H',f'Authorization: Bearer {AT}','-H','Content-Type: application/json','-d',body,\\n      'https://api.ivxholding.com/api/ivx/autonomous/ledger/update'],capture_output=True,text=True)\\n    resp,_,code=p.stdout.rpartition('\\\\n')\\n    print(jobId,'→ HTTP',code, resp[:120] if code!='200' else 'updated')\\nEOF\\ntimeout 58 python3 /tmp/ledger.py\"}",
       "createdAt": 1784329917959,
-      "completedAt": 1784329926909
+      "completedAt": 1784329926909,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3291,7 +3329,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"for i in 1 2 3 4 5; do SHA=$(curl -s --max-time 15 https://api.ivxholding.com/health | python3 -c \\\"import json,sys; print(json.load(sys.stdin)['seniorDeveloperRuntime']['commitSha'][:12])\\\" 2>/dev/null); echo \\\"poll $i: deployed sha $SHA\\\"; [ \\\"$SHA\\\" = \\\"60bf3258ccc4\\\" ] && break; sleep 11; done\"}",
       "createdAt": 1784329939736,
-      "completedAt": 1784329987410
+      "completedAt": 1784329987410,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3321,7 +3360,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"AT=$(cat /tmp/owner_at); echo \\\"== migration endpoint (owner bearer) ==\\\"; curl -s --max-time 25 -H \\\"Authorization: Bearer $AT\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/migrations\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint('ok:',d.get('ok'),'| marker:',d.get('marker'),'| totals:',json.dumps(d.get('totals')))\\nfor m in d.get('migrations',[])[:3]: print(' ',m['version'],m['status'],m['file'])\\nprint('  …')\\n\\\"; echo \\\"== no-auth guard ==\\\"; curl -s -o /dev/null -w \\\"GET /migrations (no auth) → HTTP %{http_code}\\\\n\\\" --max-time 15 \\\"https://api.ivxholding.com/api/ivx/autonomous/migrations\\\"; echo \\\"== owner-chat report row ==\\\"; SRK=$(cat /tmp/srk); curl -s --max-time 20 -H \\\"apikey: $SRK\\\" -H \\\"Authorization: Bearer $SRK\\\" \\\"https://kvclcdjmjghndxsngfzb.supabase.co/rest/v1/ivx_messages?sender_label=eq.IVX%20Autonomous%20QA%20(W6/W9)&select=created_at,body&order=created_at.desc&limit=1\\\" | python3 -c \\\"\\nimport json,sys\\nrows=json.load(sys.stdin)\\nif rows: print('report posted at', rows[0]['created_at']); print(rows[0]['body'][:400])\\nelse: print('no report row yet')\\n\\\"\"}",
       "createdAt": 1784329998305,
-      "completedAt": 1784330004777
+      "completedAt": 1784330004777,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3346,7 +3386,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n -E \\\"COPY|WORKDIR\\\" Dockerfile; echo ----; cat .dockerignore 2>/dev/null | head; ls expo/.dockerignore 2>/dev/null\"}",
       "createdAt": 1784330021075,
-      "completedAt": 1784330021081
+      "completedAt": 1784330021081,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3377,7 +3418,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"Dockerfile\", \"offset\": 50, \"limit\": 20}",
       "createdAt": 1784330037928,
-      "completedAt": 1784330037933
+      "completedAt": 1784330037933,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3407,7 +3449,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"Dockerfile\", \"edits\": [{\"oldString\": \"COPY expo/sync-github.mjs ./expo/sync-github.mjs\\nCOPY expo/sync-paths.mjs ./expo/sync-paths.mjs\", \"newString\": \"COPY expo/sync-github.mjs ./expo/sync-github.mjs\\nCOPY expo/sync-paths.mjs ./expo/sync-paths.mjs\\n# Ship the SQL migration manifest files so the owner-only migration runner\\n# (GET/POST /api/ivx/autonomous/migrations, backend/api/ivx-migration-runner.ts)\\n# can checksum repo migrations against supabase_migrations.schema_migrations at\\n# runtime. Without these the runner reported every migration as file_missing.\\nCOPY expo/supabase ./expo/supabase\\nCOPY expo/scripts ./expo/scripts\", \"replaceAll\": false}]}",
       "createdAt": 1784330046212,
-      "completedAt": 1784330047926
+      "completedAt": 1784330047926,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3432,7 +3475,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 - <<'EOF'\\nimport json, subprocess\\nAT=open('/tmp/owner_at').read().strip()\\nbody=json.dumps({'action':'github_commit_file','confirm':True,'confirmText':'CONFIRM_IVX_GITHUB_WRITE',\\n  'reason':'Ship SQL migration files in the server image so the migration runner can checksum them at runtime',\\n  'input':{'path':'Dockerfile','content':open('Dockerfile').read(),'message':'fix(docker): ship expo/supabase + expo/scripts for migration runner','branch':'main'}})\\np=subprocess.run(['curl','-s','-w','\\\\n%{http_code}','--max-time','40','-X','POST',\\n  '-H',f'Authorization: Bearer {AT}','-H','Content-Type: application/json','--data-binary','@-',\\n  'https://api.ivxholding.com/api/ivx/developer-deploy/action'],input=body,capture_output=True,text=True)\\nresp,_,code=p.stdout.rpartition('\\\\n')\\ntry:\\n    r=json.loads(resp).get('result',{})\\n    print('Dockerfile → HTTP',code,'commit',str(r.get('commitSha'))[:12])\\nexcept Exception: print('Dockerfile → HTTP',code,resp[:200])\\nEOF\"}",
       "createdAt": 1784330059137,
-      "completedAt": 1784330062214
+      "completedAt": 1784330062214,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3457,7 +3501,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"for i in 1 2 3 4 5; do SHA=$(curl -s --max-time 15 https://api.ivxholding.com/health | python3 -c \\\"import json,sys; print(json.load(sys.stdin)['seniorDeveloperRuntime']['commitSha'][:12])\\\" 2>/dev/null); echo \\\"poll $i ($(date -u +%H:%M:%S)): deployed sha $SHA\\\"; [ \\\"$SHA\\\" = \\\"1b08cf809409\\\" ] && break; sleep 12; done\"}",
       "createdAt": 1784330073243,
-      "completedAt": 1784330133074
+      "completedAt": 1784330133074,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3487,7 +3532,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 40; for i in 1 2; do SHA=$(curl -s --max-time 15 https://api.ivxholding.com/health | python3 -c \\\"import json,sys; print(json.load(sys.stdin)['seniorDeveloperRuntime']['commitSha'][:12])\\\" 2>/dev/null); echo \\\"poll ($(date -u +%H:%M:%S)): deployed sha $SHA\\\"; [ \\\"$SHA\\\" = \\\"1b08cf809409\\\" ] && break; sleep 10; done\"}",
       "createdAt": 1784330143236,
-      "completedAt": 1784330203605
+      "completedAt": 1784330203605,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3517,7 +3563,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 45; SHA=$(curl -s --max-time 15 https://api.ivxholding.com/health | python3 -c \\\"import json,sys; print(json.load(sys.stdin)['seniorDeveloperRuntime']['commitSha'][:12])\\\" 2>/dev/null); echo \\\"poll ($(date -u +%H:%M:%S)): deployed sha $SHA\\\"\"}",
       "createdAt": 1784330213719,
-      "completedAt": 1784330260203
+      "completedAt": 1784330260203,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3547,7 +3594,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"AT=$(cat /tmp/owner_at); curl -s --max-time 30 -H \\\"Authorization: Bearer $AT\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/migrations\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint('ok:',d.get('ok'),'| totals:',json.dumps(d.get('totals')))\\nfor m in d.get('migrations',[]): print(' ',m['version'],m['status'],'checksum',str(m['repoChecksum'])[:8],'applied_at',str(m['appliedAt'])[:19])\\n\\\"\"}",
       "createdAt": 1784330271753,
-      "completedAt": 1784330273188
+      "completedAt": 1784330273188,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3572,7 +3620,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 - <<'EOF'\\nimport hashlib\\npairs=[('20260717000001','expo/scripts/supabase-full-schema.sql','219b6677'),\\n('20260717000008','expo/supabase/ivx-zero-data-loss-migration.sql','fee72ea6'),\\n('20260717000009','expo/supabase/IVX-ENTERPRISE-DB-OPTIMIZATION.sql','d1303ee2'),\\n('20260717000011','expo/supabase/IVX-FINAL-QA-FIX-2026-07-14.sql','4e9063d1')]\\nupdates=[]\\nfor v,p,runtime in pairs:\\n    trimmed=open(p).read().strip()\\n    ck=hashlib.md5(trimmed.encode()).hexdigest()\\n    match = ck.startswith(runtime)\\n    print(v, p.split('/')[-1], 'trimmed-md5', ck[:8], 'matches runtime:', match)\\n    if match: updates.append((v,ck))\\nif len(updates)==4:\\n    open('/tmp/ck_updates.txt','w').write('\\\\n'.join(f'{v} {c}' for v,c in updates))\\n    print('all 4 confirmed as trim artifacts — safe to reconcile')\\nEOF\"}",
       "createdAt": 1784330294282,
-      "completedAt": 1784330297629
+      "completedAt": 1784330297629,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3602,7 +3651,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"T=$(cat /tmp/sbp_token); Q=$(python3 -c \\\"\\nlines=open('/tmp/ck_updates.txt').read().split(chr(10))\\nstmts=[f\\\\\\\"update supabase_migrations.schema_migrations set checksum='{c}' where version='{v}'\\\\\\\" for v,c in (l.split() for l in lines if l)]\\nimport json; print(json.dumps({'query':'; '.join(stmts)}))\\n\\\"); curl -s -o /dev/null -w \\\"checksum reconcile → HTTP %{http_code}\\\\n\\\" --max-time 25 -X POST -H \\\"Authorization: Bearer $T\\\" -H \\\"Content-Type: application/json\\\" -d \\\"$Q\\\" \\\"https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query\\\"; AT=$(cat /tmp/owner_at); curl -s --max-time 30 -H \\\"Authorization: Bearer $AT\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/migrations\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint('FINAL:', json.dumps(d.get('totals')))\\nbad=[m for m in d.get('migrations',[]) if m['status']!='applied']\\nprint('non-applied:', bad if bad else 'none — 11/11 applied')\\n\\\"\"}",
       "createdAt": 1784330308057,
-      "completedAt": 1784330312831
+      "completedAt": 1784330312831,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
@@ -3697,7 +3747,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Phase 1: Build Management-API migration runner, create history table, apply pending migrations\", \"activeForm\": \"Building and executing migration runner\", \"status\": \"completed\"}, {\"content\": \"Phase 2: Production verification (GitHub HEAD, Render deploy, sha, /health, env, logs)\", \"activeForm\": \"Verifying production stack\", \"status\": \"completed\"}, {\"content\": \"Phase 3: Full IVX database module audit + restore missing objects\", \"activeForm\": \"Auditing database modules\", \"status\": \"completed\"}, {\"content\": \"Phase 4: Owner authentication audit (login/logout/invalid/session/refresh/reset)\", \"activeForm\": \"Auditing owner authentication\", \"status\": \"completed\"}, {\"content\": \"Verify new migration-runner endpoint live on production after deploy\", \"activeForm\": \"Verifying deployed migration endpoint\", \"status\": \"completed\"}, {\"content\": \"Phase 5: Assign dedicated 24/7 worker + 2h reporting into IVX AI chat; ledger update\", \"activeForm\": \"Wiring autonomous verification worker\", \"status\": \"completed\"}, {\"content\": \"Final evidence package to owner\", \"activeForm\": \"Compiling final evidence\", \"status\": \"completed\"}]}",
       "createdAt": 1784330321903,
-      "completedAt": 1784330323378
+      "completedAt": 1784330323378,
+      "compactedAt": 1784341636842
     },
     {
       "type": "reasoning",
