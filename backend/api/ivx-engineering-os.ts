@@ -21,10 +21,12 @@ import {
   IVX_ENGINEERING_PIPELINE,
   IVX_ENGINEERING_TEAMS,
   IVX_RELEASE_MANAGER_TEAM_ID,
+  activateEngineeringOS,
   advanceEngineeringTask,
   approveEngineeringTask,
   createEngineeringTask,
   generateAndPostEngineeringReport,
+  getEngineeringActivation,
   getLatestEngineeringReport,
   listEngineeringTasks,
   listEngineeringTeams,
@@ -34,6 +36,7 @@ import {
 } from '../services/ivx-engineering-os';
 
 export const IVX_ENGINEERING_APPROVAL_PHRASE = 'CONFIRM_IVX_PRODUCTION_APPROVAL';
+export const IVX_ENGINEERING_ACTIVATION_PHRASE = 'CONFIRM_IVX_ENGINEERING_OS_ACTIVATION';
 
 function errorResponse(error: unknown): Response {
   if (error instanceof IVXOwnerApprovalError) {
@@ -92,11 +95,12 @@ export async function handleEngineeringTeamsSync(request: Request): Promise<Resp
 export async function handleEngineeringStatus(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
-    const tasks = await listEngineeringTasks(200);
+    const [tasks, activation] = await Promise.all([listEngineeringTasks(200), getEngineeringActivation()]);
     const countBy = (status: string): number => tasks.filter((t) => t.status === status).length;
     return ownerOnlyJson({
       status: 'ok',
       marker: IVX_ENGINEERING_OS_MARKER,
+      activation,
       pipeline: IVX_ENGINEERING_PIPELINE,
       rules: {
         releaseManagerOnlyDeploy: IVX_RELEASE_MANAGER_TEAM_ID,
@@ -213,6 +217,37 @@ export async function handleEngineeringTaskApprove(request: Request): Promise<Re
       approvedBy: context.email ?? 'owner',
     });
     return ownerOnlyJson({ status: result.ok ? 'ok' : 'error', task: result.task, error: result.error }, result.ok ? 200 : 400);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/**
+ * POST /api/ivx/engineering-os/activate — owner-approved Phase 1 activation.
+ * Flips all 12 teams to ACTIVE. Requires confirm:true + the exact activation
+ * phrase; otherwise responds 409 confirmationRequired (sensitive-action pattern).
+ */
+export async function handleEngineeringActivate(request: Request): Promise<Response> {
+  try {
+    const { context } = await assertIVXRegisteredOwnerBearer(request, 'engineering_os_activate');
+    const body = await readBody(request);
+    if (body.confirm !== true || readString(body.confirmText) !== IVX_ENGINEERING_ACTIVATION_PHRASE) {
+      return ownerOnlyJson({
+        status: 'error',
+        confirmationRequired: true,
+        error: `Engineering OS activation requires confirm:true and confirmText:"${IVX_ENGINEERING_ACTIVATION_PHRASE}".`,
+      }, 409);
+    }
+    const result = await activateEngineeringOS({ approvedBy: context.email ?? 'owner' });
+    const activation = await getEngineeringActivation();
+    return ownerOnlyJson({
+      status: result.ok ? 'ok' : 'error',
+      activatedTeams: result.activatedTeams,
+      alreadyActive: result.alreadyActive,
+      approvedBy: result.approvedBy,
+      activation,
+      error: result.error,
+    }, result.ok ? 200 : 502);
   } catch (error) {
     return errorResponse(error);
   }

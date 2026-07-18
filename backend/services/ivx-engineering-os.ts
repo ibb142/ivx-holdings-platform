@@ -32,6 +32,12 @@ export type IVXEngineeringTeamId =
   | 'TEAM-01' | 'TEAM-02' | 'TEAM-03' | 'TEAM-04' | 'TEAM-05' | 'TEAM-06'
   | 'TEAM-07' | 'TEAM-08' | 'TEAM-09' | 'TEAM-10' | 'TEAM-11' | 'TEAM-12';
 
+/**
+ * Team lifecycle: REGISTERED_STANDBY (honest initial state) → ACTIVE (owner
+ * explicitly approved activation — Phase 1 owner mandate 2026-07-18).
+ */
+export type IVXEngineeringTeamStatus = 'REGISTERED_STANDBY' | 'ACTIVE';
+
 export type IVXEngineeringTeam = {
   teamId: IVXEngineeringTeamId;
   name: string;
@@ -43,7 +49,7 @@ export type IVXEngineeringTeam = {
   canTag: boolean;
   canDeploy: boolean;
   /** Honest initial state — no team is "verified working" until it has proof. */
-  status: 'REGISTERED_STANDBY';
+  status: IVXEngineeringTeamStatus;
 };
 
 export const IVX_RELEASE_MANAGER_TEAM_ID: IVXEngineeringTeamId = 'TEAM-12';
@@ -287,8 +293,21 @@ export type IVXEngineeringTaskRow = {
   updated_at: string;
 };
 
-/** Upserts the 12-team registry into ivx_engineering_teams. */
+/**
+ * Pure sync-status rule: an owner-activated team must NEVER be silently
+ * demoted back to standby by a registry re-sync. Only 'ACTIVE' is preserved;
+ * anything else resets to the honest initial state.
+ */
+export function resolveTeamStatusOnSync(existingStatus: unknown): IVXEngineeringTeamStatus {
+  return existingStatus === 'ACTIVE' ? 'ACTIVE' : 'REGISTERED_STANDBY';
+}
+
+/** Upserts the 12-team registry into ivx_engineering_teams (preserving owner activation). */
 export async function syncEngineeringTeams(): Promise<{ ok: boolean; upserted: number; error: string | null }> {
+  const existing = await listEngineeringTeams();
+  const statusByTeamId = new Map<string, unknown>(
+    existing.map((row) => [String(row.team_id ?? ''), row.status]),
+  );
   const rows = IVX_ENGINEERING_TEAMS.map((entry) => ({
     team_id: entry.teamId,
     name: entry.name,
@@ -298,7 +317,7 @@ export async function syncEngineeringTeams(): Promise<{ ok: boolean; upserted: n
     can_merge: entry.canMerge,
     can_tag: entry.canTag,
     can_deploy: entry.canDeploy,
-    status: entry.status,
+    status: resolveTeamStatusOnSync(statusByTeamId.get(entry.teamId)),
   }));
   const result = await restCall('/rest/v1/ivx_engineering_teams?on_conflict=team_id', {
     method: 'POST',
@@ -314,6 +333,55 @@ export async function syncEngineeringTeams(): Promise<{ ok: boolean; upserted: n
 export async function listEngineeringTeams(): Promise<Array<Record<string, unknown>>> {
   const result = await restCall('/rest/v1/ivx_engineering_teams?select=*&order=team_id.asc', { method: 'GET' });
   return result.status === 200 ? parseRows<Record<string, unknown>>(result.body) : [];
+}
+
+export type IVXEngineeringActivationState = {
+  active: boolean;
+  activeTeams: number;
+  totalTeams: number;
+};
+
+/** Derives the live activation state from the teams table (no separate flag to drift). */
+export async function getEngineeringActivation(): Promise<IVXEngineeringActivationState> {
+  const teams = await listEngineeringTeams();
+  const activeTeams = teams.filter((row) => row.status === 'ACTIVE').length;
+  return {
+    active: teams.length === IVX_ENGINEERING_TEAMS.length && activeTeams === teams.length && teams.length > 0,
+    activeTeams,
+    totalTeams: teams.length,
+  };
+}
+
+/**
+ * Owner-approved activation (Phase 1 mandate): flips all 12 teams to ACTIVE.
+ * Idempotent — re-activation reports alreadyActive instead of failing.
+ */
+export async function activateEngineeringOS(input: { approvedBy: string }): Promise<{
+  ok: boolean;
+  activatedTeams: number;
+  alreadyActive: boolean;
+  approvedBy: string;
+  error: string | null;
+}> {
+  const before = await getEngineeringActivation();
+  if (before.active) {
+    return { ok: true, activatedTeams: before.activeTeams, alreadyActive: true, approvedBy: input.approvedBy, error: null };
+  }
+  const sync = await syncEngineeringTeams();
+  if (!sync.ok) {
+    return { ok: false, activatedTeams: 0, alreadyActive: false, approvedBy: input.approvedBy, error: sync.error };
+  }
+  const teamIds = IVX_ENGINEERING_TEAMS.map((entry) => entry.teamId).join(',');
+  const result = await restCall(`/rest/v1/ivx_engineering_teams?team_id=in.(${teamIds})`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'ACTIVE' }),
+  });
+  if (result.status !== 200) {
+    return { ok: false, activatedTeams: 0, alreadyActive: false, approvedBy: input.approvedBy, error: `HTTP ${result.status ?? 'ERR'}: ${result.body.slice(0, 200)}` };
+  }
+  const activated = parseRows<Record<string, unknown>>(result.body).length;
+  console.log('[ivx-engineering-os] ACTIVATED by owner approval', { approvedBy: input.approvedBy, activated });
+  return { ok: true, activatedTeams: activated, alreadyActive: false, approvedBy: input.approvedBy, error: null };
 }
 
 export async function listEngineeringTasks(limit: number = 100): Promise<IVXEngineeringTaskRow[]> {

@@ -222,8 +222,8 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
 /** GET the active job for the current owner. Returns 204 if no active job. */
 export async function handleSeniorDeveloperWorkerActiveJobRequest(request: Request): Promise<Response> {
   try {
-    const approval = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_active');
-    const ownerId = approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner';
+    const { context, approval } = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_active');
+    const ownerId = approval.ownerSessionDetected && context.userId ? context.userId : 'owner';
     const job = await getActiveJobForOwner(ownerId);
     if (!job) {
       return ownerOnlyJson({

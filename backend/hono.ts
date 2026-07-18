@@ -997,6 +997,7 @@ import {
   handleEngineeringTaskAdvance,
   handleEngineeringTaskEvidence,
   handleEngineeringTaskApprove,
+  handleEngineeringActivate,
   handleEngineeringReportLatest,
   handleEngineeringReportRun,
 } from './api/ivx-engineering-os';
@@ -2701,8 +2702,12 @@ app.get('/health', async (context) => {
     commitSha: LIVE_COMMIT_SHA,
     checkedAt: nowIso(),
   };
+  let sdGithubReady = false;
+  let sdRenderReady = false;
   try {
     const credAudit = await auditIVXProductionCredentialRuntime();
+    sdGithubReady = credAudit.github.canReadRepo === true;
+    sdRenderReady = credAudit.render.canDeploy === true;
     seniorDeveloperRuntime = {
       enabled: true,
       variablesValidated: credAudit.ok,
@@ -2794,8 +2799,8 @@ app.get('/health', async (context) => {
       variablesValidated: seniorDeveloperRuntime.variablesValidated === true,
       aiProviderReady: aiStartup.ok,
       liveWorkReady: true,
-      githubReady: seniorDeveloperRuntime.github?.canReadRepo === true,
-      renderReady: seniorDeveloperRuntime.render?.canDeploy === true,
+      githubReady: sdGithubReady,
+      renderReady: sdRenderReady,
       deployedSha: LIVE_COMMIT_SHA,
       qaRunId: 'qa-b400e2f1',
       checkedAt: nowIso(),
@@ -4201,6 +4206,7 @@ const engineeringOsPostRoutes: Array<[string, (request: Request) => Promise<Resp
   ['/api/ivx/engineering-os/tasks/advance', handleEngineeringTaskAdvance],
   ['/api/ivx/engineering-os/tasks/evidence', handleEngineeringTaskEvidence],
   ['/api/ivx/engineering-os/tasks/approve', handleEngineeringTaskApprove],
+  ['/api/ivx/engineering-os/activate', handleEngineeringActivate],
   ['/api/ivx/engineering-os/report/run', handleEngineeringReportRun],
 ];
 for (const [routePath, handler] of engineeringOsGetRoutes) {
@@ -5641,11 +5647,12 @@ app.get('/api/ivx/enterprise/capacity', async (context) => {
 // Completely isolated from IVX production. Separate in-memory database,
 // separate auth, no access to Supabase or production business data.
 // Mounted at /api/cert-app/* and /cert-app (frontend).
-let certAppInstance: import('hono').Hono | null = null;
-async function getCertApp(): Promise<import('hono').Hono> {
+type CertAppLike = { request: (input: Request) => Response | Promise<Response> };
+let certAppInstance: CertAppLike | null = null;
+async function getCertApp(): Promise<CertAppLike> {
   if (!certAppInstance) {
     const { createCertApp } = await import('./cert-app/server');
-    certAppInstance = createCertApp();
+    certAppInstance = createCertApp() as unknown as CertAppLike;
   }
   return certAppInstance;
 }

@@ -623,8 +623,6 @@ io.on('connection', (socket) => {
   }
 
   const typedSocket = socket as unknown as SocketLike;
-
-  const typedSocket = socket as unknown as SocketLike;
   // Enterprise: reduce log verbosity at scale (log every 100th connection)
   if (totalConnections % 100 === 0 || totalConnections <= 10) {
     console.log('[ChatAPI] Connection milestone', {

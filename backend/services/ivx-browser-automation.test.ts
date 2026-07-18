@@ -6,7 +6,14 @@
  * service logic (availability caching, flow transcripts, error handling,
  * screenshot save) without a real browser or filesystem.
  */
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as fsPromisesNamespace from 'node:fs/promises';
+
+// Snapshot the REAL fs functions eagerly, BEFORE mock.module() below runs.
+// (mock.module retroactively rewires the live namespace binding, so restoring
+// from the namespace itself would restore the mock — the snapshot keeps the
+// original function references.)
+const realFsSnapshot: Record<string, unknown> = { ...fsPromisesNamespace };
 
 // --- Mock playwright-core ---------------------------------------------------
 const fakePage = {
@@ -53,6 +60,13 @@ mock.module('node:fs/promises', () => ({
   readFile: async () => '',
   existsSync: () => true,
 }));
+
+// CRITICAL: bun module mocks are process-global and leak into every test file
+// that runs after this one (they made unrelated stores write nothing and read
+// empty strings). Restore the REAL node:fs/promises when this file finishes.
+afterAll(() => {
+  mock.module('node:fs/promises', () => realFsSnapshot);
+});
 
 // Import the service AFTER mocks are registered.
 const {

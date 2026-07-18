@@ -157,8 +157,12 @@ describe('IVX IA chat room ⇄ autonomous mode sync', () => {
 
   it('a safe "audit" task reaches the executor stage in BOTH surfaces (no approval gate)', async () => {
     // "Audit the code and fix bugs" is a safe audit+fix → APPROVED_WITHOUT_ASKING.
+    // credentialStatuses injected (same as the sibling autonomous-mode tests) so
+    // the test is hermetic — without it, a live credential probe runs and the
+    // executor is legitimately SKIPPED as blocked in sandboxes without creds.
     const report = await runSeniorDeveloperAutonomousMode('Audit the code and fix bugs now', {
       executor: SAFE_EXECUTOR,
+      credentialStatuses: { GITHUB_TOKEN: 'present', RENDER_API_KEY: 'present' },
       taskId: 'sync-test-audit',
     });
     // Safe action → never WAITING_OWNER; reaches the executor stage.

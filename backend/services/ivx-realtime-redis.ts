@@ -49,12 +49,15 @@ export async function attachRedisAdapter(io: SocketIOServer): Promise<boolean> {
   }
 
   try {
-    const { createAdapter } = await import('@socket.io/redis-adapter');
-    const { createClient } = await import('redis');
-    const pubClient = createClient({ url: config.redisUrl });
+    type RedisClientLike = { connect: () => Promise<unknown>; duplicate: () => RedisClientLike };
+    const adapterModuleName = '@socket.io/redis-adapter' as string;
+    const redisModuleName = 'redis' as string;
+    const adapterModule = (await import(adapterModuleName)) as { createAdapter: (pub: unknown, sub: unknown) => unknown };
+    const redisModule = (await import(redisModuleName)) as { createClient: (options: { url: string }) => RedisClientLike };
+    const pubClient = redisModule.createClient({ url: config.redisUrl });
     const subClient = pubClient.duplicate();
     await Promise.all([pubClient.connect(), subClient.connect()]);
-    io.adapter(createAdapter(pubClient, subClient));
+    (io as unknown as { adapter: (adapter: unknown) => void }).adapter(adapterModule.createAdapter(pubClient, subClient));
     console.log('[IVX Realtime] Redis adapter attached', {
       marker: ADAPTER_MARKER,
       instanceId: config.instanceId,

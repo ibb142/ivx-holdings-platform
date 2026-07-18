@@ -12,6 +12,7 @@ import {
   evaluateStageTransition,
   evaluateVerifiedEvidence,
   formatEngineeringReport,
+  resolveTeamStatusOnSync,
   statusForStage,
 } from './ivx-engineering-os';
 
@@ -47,6 +48,21 @@ describe('team registry', () => {
     for (const team of IVX_ENGINEERING_TEAMS) {
       expect(team.status).toBe('REGISTERED_STANDBY');
     }
+  });
+});
+
+describe('activation status preservation (owner Phase 1 approval)', () => {
+  test('a registry re-sync NEVER demotes an owner-activated team', () => {
+    expect(resolveTeamStatusOnSync('ACTIVE')).toBe('ACTIVE');
+  });
+
+  test('standby, missing, or corrupted statuses reset to the honest initial state', () => {
+    expect(resolveTeamStatusOnSync('REGISTERED_STANDBY')).toBe('REGISTERED_STANDBY');
+    expect(resolveTeamStatusOnSync(undefined)).toBe('REGISTERED_STANDBY');
+    expect(resolveTeamStatusOnSync(null)).toBe('REGISTERED_STANDBY');
+    expect(resolveTeamStatusOnSync('active')).toBe('REGISTERED_STANDBY');
+    expect(resolveTeamStatusOnSync(42)).toBe('REGISTERED_STANDBY');
+    expect(resolveTeamStatusOnSync('VERIFIED')).toBe('REGISTERED_STANDBY');
   });
 });
 
