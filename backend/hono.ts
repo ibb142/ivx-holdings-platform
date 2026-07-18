@@ -967,6 +967,20 @@ import {
 } from './api/ivx-role-agents';
 import { startRoleAgentScheduler } from './services/agents/role-agents';
 import {
+  OPTIONS as engineeringOsOptions,
+  handleEngineeringTeams,
+  handleEngineeringTeamsSync,
+  handleEngineeringStatus,
+  handleEngineeringTasksList,
+  handleEngineeringTaskCreate,
+  handleEngineeringTaskAdvance,
+  handleEngineeringTaskEvidence,
+  handleEngineeringTaskApprove,
+  handleEngineeringReportLatest,
+  handleEngineeringReportRun,
+} from './api/ivx-engineering-os';
+import { startEngineeringReportTicker } from './services/ivx-engineering-os';
+import {
   OPTIONS as parallelAgentsOptions,
   handleParallelDispatch,
   handleParallelList,
@@ -4056,6 +4070,30 @@ for (const [routePath, handler] of roleAgentPostRoutes) {
   app.post(routePath, async (context) => handler(context.req.raw));
 }
 
+// IVX Engineering OS — 24/7 engineering mapping (owner-only)
+const engineeringOsGetRoutes: Array<[string, (request: Request) => Promise<Response>]> = [
+  ['/api/ivx/engineering-os/teams', handleEngineeringTeams],
+  ['/api/ivx/engineering-os/status', handleEngineeringStatus],
+  ['/api/ivx/engineering-os/tasks', handleEngineeringTasksList],
+  ['/api/ivx/engineering-os/report', handleEngineeringReportLatest],
+];
+const engineeringOsPostRoutes: Array<[string, (request: Request) => Promise<Response>]> = [
+  ['/api/ivx/engineering-os/teams/sync', handleEngineeringTeamsSync],
+  ['/api/ivx/engineering-os/tasks/create', handleEngineeringTaskCreate],
+  ['/api/ivx/engineering-os/tasks/advance', handleEngineeringTaskAdvance],
+  ['/api/ivx/engineering-os/tasks/evidence', handleEngineeringTaskEvidence],
+  ['/api/ivx/engineering-os/tasks/approve', handleEngineeringTaskApprove],
+  ['/api/ivx/engineering-os/report/run', handleEngineeringReportRun],
+];
+for (const [routePath, handler] of engineeringOsGetRoutes) {
+  app.options(routePath, () => engineeringOsOptions());
+  app.get(routePath, async (context) => handler(context.req.raw));
+}
+for (const [routePath, handler] of engineeringOsPostRoutes) {
+  app.options(routePath, () => engineeringOsOptions());
+  app.post(routePath, async (context) => handler(context.req.raw));
+}
+
 // Block 26: Agent Self-Execution Test (owner-only)
 app.options('/api/ivx/agents/self-execute', () => selfExecOptions());
 app.post('/api/ivx/agents/self-execute', async (context) => handleSelfExecRun(context.req.raw));
@@ -5336,6 +5374,7 @@ try { startContinuousExecutionScheduler(); } catch (err) { console.warn('[IVXOwn
 try { startAutonomousScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startScaleLoopScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] scale loop scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startRoleAgentScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] role-agent run loop failed to start:', err instanceof Error ? err.message : err); }
+try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI-Hono] engineering OS 2h report ticker failed to start:', err instanceof Error ? err.message : err); }
 try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
 try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
 
