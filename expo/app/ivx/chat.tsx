@@ -51,6 +51,7 @@ import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { safeSetString } from '@/lib/safe-clipboard';
 import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput } from '@/shared/ivx';
 import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
+import { runDurableOwnerAIFallback, resumePendingDurableTasks, shouldAttemptDurableFallback } from '@/src/modules/ivx-owner-ai/services/ivxDurableTaskService';
 import { ivxAIWatchdog, type WatchdogTraceHandle } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
 import { IVXWatchdogBanner, IVXWatchdogDrawer } from '@/components/IVXWatchdogPanel';
 import { IVXStagedTimeoutBanner, type TimeoutEvidence } from '@/components/IVXStagedTimeoutBanner';
@@ -947,6 +948,30 @@ export default function IVXOwnerChatRoute() {
   useEffect(() => {
     console.log('[IVXOwnerChatRoute] Owner session gate disabled; composer ready for all users.');
   }, [ownerId, user?.email]);
+
+  // P0 durable-task restore (503-recovery mandate Phase 4): after an app
+  // restart, re-poll any pending durable tasks so recovered answers are
+  // restored instead of lost.
+  useEffect(() => {
+    let mounted = true;
+    void resumePendingDurableTasks((task) => {
+      if (!mounted || !task.answer) return;
+      if (task.status !== 'VERIFIED' && task.status !== 'COMPLETED') return;
+      const restoredId = createTransientMessageId('ivx-owner-ai-durable-restored');
+      setTransientAssistantMessages((current) => [
+        ...current.filter((message) => message.id !== restoredId),
+        buildVisibleAssistantTransient({
+          id: restoredId,
+          conversationId: 'ivx-owner-room',
+          body: `${task.answer}\n\n♻️ Restored from durable task ${task.taskId} after app restart.`,
+        }),
+      ]);
+    }).catch((restoreErr) => {
+      console.log('[IVXOwnerChatRoute] durable_restore_failed_safely:', restoreErr instanceof Error ? restoreErr.message : 'unknown');
+    });
+    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Diagnostics overlay removed — moved to protected /admin/diagnostics route.
   // The button in the control room now navigates to /admin/diagnostics instead.
@@ -2606,6 +2631,59 @@ export default function IVXOwnerChatRoute() {
           diagnostics,
           serviceUnavailable,
         });
+        // P0 DURABLE FALLBACK (503-recovery mandate): a transient 5xx/timeout/
+        // network failure must never lose the owner request. Hand the message
+        // to the persisted server-side task queue and poll it to completion —
+        // the owner never retypes anything.
+        if (shouldAttemptDurableFallback(diagnostics, failureMessage)) {
+          const durableBubbleId = createTransientMessageId('ivx-owner-ai-durable');
+          emittedBubbleIds.add(durableBubbleId);
+          const updateDurableBubble = (body: string) => {
+            try {
+              setTransientAssistantMessages((current) => [
+                ...current.filter((message) => message.id !== durableBubbleId),
+                buildVisibleAssistantTransient({
+                  id: durableBubbleId,
+                  conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
+                  body,
+                }),
+              ]);
+            } catch (bubbleErr) {
+              console.log('[IVXOwnerChatRoute] durable_bubble_set_threw_safely_continuing:', bubbleErr instanceof Error ? bubbleErr.message : 'unknown');
+            }
+          };
+          updateDurableBubble(`♻️ Auto-recovery started — your message is saved server-side and will be answered without retyping.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
+          void (async () => {
+            const durableResult = await runDurableOwnerAIFallback({
+              message: text,
+              conversationId: conversationQuery.data?.id ?? null,
+              traceId: watchdogTraceId ?? null,
+              onStatus: (task) => {
+                if (task.terminal || task.status === 'COMPLETED') return;
+                updateDurableBubble(`♻️ Auto-recovery in progress — Task ${task.taskId}\nStatus: ${task.status} · Checkpoint: ${task.checkpoint} · Retries: ${task.retryCount}\nYour message is safe; no need to retype it.`);
+              },
+            });
+            if (durableResult.ok && durableResult.answer) {
+              updateDurableBubble(durableResult.answer);
+              setRuntimeDebugSnapshot((current) => ({
+                ...current,
+                requestStage: 'response_ok',
+                failureClass: 'none',
+                httpStatus: '200',
+                responsePreview: (durableResult.answer ?? '').slice(0, 160),
+                failureDetail: `Recovered automatically via durable task ${durableResult.taskId}.`,
+                hasVisibleResponseText: true,
+                lastVerifiedAt: new Date().toISOString(),
+              }));
+              setAiBackendReachable(true);
+              setAiHealthDetail('active');
+            } else if (durableResult.taskId) {
+              updateDurableBubble(`Auto-recovery did not finish. Task ${durableResult.taskId} · Status: ${durableResult.status ?? 'UNKNOWN'}\nLast checkpoint: ${durableResult.checkpoint ?? 'n/a'}\nYour message is preserved server-side — you can retry or cancel it.`);
+            } else {
+              updateDurableBubble(`Auto-recovery could not start (${durableResult.error ?? 'unknown reason'}). Your message stays visible above — tap send to retry.`);
+            }
+          })();
+        }
       } finally {
         clearTimeout(watchdogTimer);
         setAiReplyPending(false);
