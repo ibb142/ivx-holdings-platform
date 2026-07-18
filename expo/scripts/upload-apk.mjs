@@ -85,7 +85,7 @@ async function uploadToS3() {
       'x-amz-date': amzDate,
       'x-amz-content-sha256': payloadHash,
       'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Disposition': 'attachment; filename="ivx-holdings-v1.4.5.apk"',
+      'Content-Disposition': `attachment; filename="${S3_KEY.split('/').pop()}"`,
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
     body: fileData,

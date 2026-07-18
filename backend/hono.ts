@@ -689,6 +689,7 @@ import { independenceRoutes } from './api/ivx-independence';
 import { chatDurabilityProofOptions, handleChatDurabilityProofRequest } from './api/chat-durability-proof';
 import { handleProjectDashboardRequest, projectDashboardOptions } from './api/ivx-project-dashboard';
 import { OPTIONS as renderDiagnosticOptions, handleIVXRenderDiagnosticRequest } from './api/ivx-render-diagnostic';
+import { OPTIONS as apkDistributionOptions, handleIVXApkPresignUploadRequest } from './api/ivx-apk-distribution';
 import { OPTIONS as renderDeployLatestOptions, handleIVXRenderDeployLatestRequest } from './api/ivx-render-deploy-latest';
 import {
   OPTIONS as deployEngineOptions,
@@ -4068,6 +4069,11 @@ app.post('/api/ivx/agent-jobs/test-run', async (context) => handleIVXAgentTestRu
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
 app.options('/api/ivx/render-diagnostic', () => renderDiagnosticOptions());
 app.get('/api/ivx/render-diagnostic', async (context) => handleIVXRenderDiagnosticRequest(context.req.raw));
+
+// Owner-only APK/AAB distribution — mints a short-lived presigned S3 PUT URL
+// (apk/ prefix only) so build artifacts upload without secrets leaving the runtime.
+app.options('/api/ivx/apk/presign-upload', () => apkDistributionOptions());
+app.post('/api/ivx/apk/presign-upload', async (context) => handleIVXApkPresignUploadRequest(context.req.raw));
 app.options('/api/ivx/render-deploy-latest', () => renderDeployLatestOptions());
 app.post('/api/ivx/render-deploy-latest', async (context) => handleIVXRenderDeployLatestRequest(context.req.raw));
 
