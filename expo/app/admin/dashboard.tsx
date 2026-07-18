@@ -29,6 +29,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Zap,
+  Layers,
+  Calendar,
+  Cpu,
   Mail,
   Phone,
   Globe,
@@ -560,6 +563,54 @@ export default function AdminDashboardScreen() {
             <AlertCircle size={16} color={Colors.warning} />
             <Text style={styles.metricValue}>{stats?.pendingTransactions ?? 0}</Text>
             <Text style={styles.metricLabel}>Pending Tx</Text>
+          </View>
+        </View>
+
+        {/* IVX Operating Map — live dashboards */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitle}>
+              <Activity size={16} color={Colors.accent} />
+              <Text style={styles.sectionTitleText}>IVX Operating Map</Text>
+            </View>
+          </View>
+          <View style={styles.kpiGrid}>
+            <TouchableOpacity
+              style={styles.kpiCard}
+              onPress={() => router.push('/module-command-center' as any)}
+            >
+              <Layers size={18} color={Colors.primary} />
+              <Text style={styles.kpiName}>Module Command Center</Text>
+              <Text style={styles.kpiValue}>200</Text>
+              <Text style={styles.kpiName}>modules mapped live</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.kpiCard}
+              onPress={() => router.push('/autonomous-engineering-calendar' as any)}
+            >
+              <Calendar size={18} color={Colors.accent} />
+              <Text style={styles.kpiName}>Engineering Calendar</Text>
+              <Text style={styles.kpiValue}>24/7</Text>
+              <Text style={styles.kpiName}>autonomous schedule</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.kpiCard}
+              onPress={() => router.push('/live-work-panel' as any)}
+            >
+              <Zap size={18} color={Colors.warning} />
+              <Text style={styles.kpiName}>Live Work Panel</Text>
+              <Text style={styles.kpiValue}>LIVE</Text>
+              <Text style={styles.kpiName}>real execution feed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.kpiCard}
+              onPress={() => router.push('/autonomous-dashboard' as any)}
+            >
+              <Cpu size={18} color={Colors.positive} />
+              <Text style={styles.kpiName}>Autonomous Dashboard</Text>
+              <Text style={styles.kpiValue}>W1-12</Text>
+              <Text style={styles.kpiName}>job ledger + QA</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
