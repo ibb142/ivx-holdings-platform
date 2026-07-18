@@ -1095,6 +1095,11 @@ import {
 } from './api/ivx-multimodal';
 import { handleOwnerAudioTranscribe, ownerTranscriptionOptions } from './api/owner-transcription';
 import {
+  handleSeniorDevWorkerApprove,
+  handleSeniorDevWorkerStatus,
+  handleSeniorDevWorkerSubmit,
+} from './api/ivx-senior-dev-worker';
+import {
   handleVideoJobCreate,
   handleVideoJobGet,
   handleVideoJobList,
@@ -3108,6 +3113,9 @@ app.post('/ivx/owner-ai', async (context) => instrumentedOwnerAIRoute(context.re
 app.post('/api/ivx/owner-ai', async (context) => instrumentedOwnerAIRoute(context.req.raw, '/api/ivx/owner-ai'));
 app.post('/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(context.req.raw));
 app.post('/api/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(context.req.raw));
+app.post('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDevWorkerSubmit(context.req.raw));
+app.get('/api/ivx/senior-developer/worker/jobs/:taskId', async (context) => handleSeniorDevWorkerStatus(context.req.raw, context.req.param('taskId')));
+app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));
 app.options('/api/ivx/owner-ai/proxy-status', () => ownerAIOptions());
 app.get('/api/ivx/owner-ai/proxy-status', () => handleIVXOwnerAIProxyStatus());
 app.options('/api/ivx/owner-ai/status', () => ownerAIOptions());

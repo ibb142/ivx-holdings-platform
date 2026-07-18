@@ -19,9 +19,18 @@ export type IVXOwnerAITaskStatus =
   | 'RECEIVED'
   | 'PERSISTED'
   | 'QUEUED'
+  | 'CLAIMED'
   | 'RUNNING'
   | 'WAITING_APPROVAL'
   | 'RETRYING'
+  | 'PLANNING'
+  | 'INSPECTING'
+  | 'IMPLEMENTING'
+  | 'TESTING'
+  | 'COMMITTING'
+  | 'DEPLOYING'
+  | 'LIVE_VERIFYING'
+  | 'ROLLING_BACK'
   | 'COMPLETED'
   | 'VERIFIED'
   | 'FAILED'
@@ -60,6 +69,15 @@ export interface IVXOwnerAITaskRow {
   durations: Record<string, number>;
   chaos: { failures_remaining: number; simulated_status: number } | null;
   dead_letter: boolean;
+  task_type: string | null;
+  assigned_worker_id: string | null;
+  worker_data: Record<string, unknown> | null;
+  files_changed: string[] | null;
+  test_summary: Record<string, unknown> | null;
+  commit_sha: string | null;
+  render_deploy_id: string | null;
+  runtime_sha: string | null;
+  proof_ledger_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -208,7 +226,7 @@ function appendCheckpoint(history: { checkpoint: string; at: string }[] | null |
   return list;
 }
 
-async function patchTask(id: string, patch: Record<string, unknown>, extraFilter: string = ''): Promise<IVXOwnerAITaskRow | null> {
+export async function patchTask(id: string, patch: Record<string, unknown>, extraFilter: string = ''): Promise<IVXOwnerAITaskRow | null> {
   const res = await restFetch(`${TASKS_TABLE}?id=eq.${encodeURIComponent(id)}${extraFilter}`, {
     method: 'PATCH',
     headers: restHeaders({ Prefer: 'return=representation' }),

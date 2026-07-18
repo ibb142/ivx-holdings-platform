@@ -3041,11 +3041,13 @@ export default function IVXOwnerChatRoute() {
       }
       if (!isConfirmReply && isSeniorDeveloperBuildRequest(effectiveText)) {
         const draft = buildSeniorDeveloperJobDraft(effectiveText);
-        pendingBuildDraftRef.current = draft;
         await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
         setLastSendAt(new Date().toISOString());
         wdSenior?.pass('AI_TRIGGER_DECISION', 'branch=senior_developer_build');
-        await persistSupportMessage(buildSeniorDeveloperApprovalCard(draft), 'system');
+        // Submit directly to the autonomous senior developer worker.
+        // The worker will execute audits/diagnosis/code edits/tests autonomously
+        // and pause at WAITING_APPROVAL before any production mutation.
+        void runSeniorDeveloperWorkerFromChat(draft);
         wdSenior?.complete('SUCCESS');
         return;
       }

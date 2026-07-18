@@ -11,6 +11,7 @@
  * Entry point: node tsx backend/worker.ts
  */
 import { createClient } from '@supabase/supabase-js';
+import { startSeniorDevWorker } from './services/ivx-senior-dev-worker';
 
 const WORKER_MARKER = 'ivx-worker-2026-07-14';
 const POLL_INTERVAL_MS = 10_000;
@@ -109,6 +110,17 @@ async function main(): Promise<void> {
 
   let healthCounter = 0;
   let cleanupCounter = 0;
+
+  // Start the autonomous senior developer worker in the background.
+  // It runs independently of the main poll loop and survives Rork browser closure.
+  if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
+    startSeniorDevWorker().catch((error) => {
+      console.error('[IVX Worker] Senior dev worker failed to start', {
+        marker: WORKER_MARKER,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 
   while (state.running) {
     try {
