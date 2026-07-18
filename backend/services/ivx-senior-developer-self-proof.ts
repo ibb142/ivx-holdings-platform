@@ -90,6 +90,8 @@ export type IVXSeniorDeveloperSelfProof = {
 
 export type IVXSeniorDeveloperSelfProofResponse = IVXSeniorDeveloperSelfProof & {
   cached: boolean;
+  /** True when the cooldown window has elapsed — the proof is historical, not active. */
+  stale?: boolean;
   cooldownMs: number;
   nextEligibleAt: string | null;
 };
@@ -273,14 +275,20 @@ export async function runSeniorDeveloperSelfProof(options: { force?: boolean } =
   }
 }
 
-/** Read-only: return the last persisted self-proof without triggering a new run. */
+/** Read-only: return the last persisted self-proof without triggering a new run.
+ *  A proof whose cooldown window has elapsed is marked `stale: true` so callers can
+ *  distinguish a live/in-window result from historical data. Stale proofs are still
+ *  served (this is a read-only endpoint), but consumers should not treat a stale
+ *  non-ok proof as an active failure. */
 export async function getLatestSeniorDeveloperSelfProof(): Promise<IVXSeniorDeveloperSelfProofResponse | null> {
   const latest = await readLatest();
   if (!latest) return null;
   const lastRanMs = Date.parse(latest.ranAt);
+  const withinCooldown = Number.isFinite(lastRanMs) && Date.now() - lastRanMs < SELF_PROOF_COOLDOWN_MS;
   return {
     ...latest,
     cached: true,
+    stale: !withinCooldown,
     cooldownMs: SELF_PROOF_COOLDOWN_MS,
     nextEligibleAt: Number.isFinite(lastRanMs) ? new Date(lastRanMs + SELF_PROOF_COOLDOWN_MS).toISOString() : null,
   };

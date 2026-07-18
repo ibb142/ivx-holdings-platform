@@ -3859,7 +3859,11 @@ app.get('/api/ivx/senior-developer/self-proof/latest', async (context) => {
       timestamp: new Date().toISOString(),
     }, 404);
   }
-  return context.json(latest, latest.ok ? 200 : 409);
+  // A stale proof (cooldown elapsed) is historical data, not an active failure —
+  // serve it as 200 so callers don't read a long-expired run as a live incident.
+  // Only an in-window non-ok proof is treated as an active 409.
+  const stale = (latest as { stale?: boolean }).stale === true;
+  return context.json(latest, latest.ok || stale ? 200 : 409);
 });
 app.options('/api/ivx/senior-dev-proof', () => seniorDevToolsOptions());
 app.get('/api/ivx/senior-dev-proof', async (context) => {

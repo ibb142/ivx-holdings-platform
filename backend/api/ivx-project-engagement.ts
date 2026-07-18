@@ -389,8 +389,9 @@ export async function handleProjectAnalyticsGet(c: Context): Promise<Response> {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
+    // Columns match the upsert path below (invest_clicks/detail_views), not event_type/count.
     const { data } = await sb.from('project_analytics')
-      .select('id,project_id,date,event_type,count')
+      .select('id,project_id,date,invest_clicks,detail_views')
       .eq('project_id', projectId)
       .gte('date', since.toISOString().split('T')[0])
       .order('date', { ascending: false });
