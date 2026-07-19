@@ -82,8 +82,14 @@ import {
   type IVXOwnerRequestContext,
 } from './owner-only';
 import { runIVXSeniorDeveloperTask, IVX_SAFE_PATCH_CONFIRM_TEXT, IVX_GIT_DEPLOY_CONFIRM_TEXT, auditIVXProductionCredentialRuntime, type IVXSeniorDeveloperRunProof } from '../services/ivx-senior-developer-runtime';
-import { buildSeniorDeveloperExecutionAnswer } from '../services/ivx-senior-developer-answer-format';
+import { buildSeniorDeveloperExecutionAnswer, buildSeniorDeveloperWorkerJobAnswer } from '../services/ivx-senior-developer-answer-format';
 import { enforceDeveloperExecutionAnswer } from '../services/ivx-developer-execution-guard';
+import {
+  enqueueOrAttachSeniorDeveloperJob,
+  getSeniorDeveloperJob,
+  type IVXWorkerJob,
+  type IVXWorkerJobInput,
+} from '../services/ivx-senior-developer-worker';
 import {
   runSeniorDeveloperAutonomousMode,
   renderFinalAutonomousReport,
@@ -7156,8 +7162,21 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, body.devTestModeActive === true));
     }
 
-    // --- Self-Developer Execution: real senior developer runtime ---
-    if (plannerDecision.route === 'self_developer') {
+    // --- Self-Developer Execution: real senior developer runtime via the persistent worker queue ---
+    // CHAT ↔ WORKER SYNC: trigger on EITHER the legacy planner's self_developer
+    // route OR the unified 5-branch router's developer_executor branch. The
+    // unified router (routeIVXChatIntent) classifies audit/verify/smoke-test/
+    // build/fix/deploy/QA/recovery/database/production-verification prompts as
+    // developer_executor even when the legacy keyword planner does not map them
+    // to self_developer. Without this OR, those prompts fall through to the
+    // narrative GPT path — which is exactly the bug this fix closes.
+    if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor') {
+      // When the unified router selected developer_executor but the legacy
+      // planner did not, log the routing reconciliation so the audit trail is
+      // explicit about which classifier fired the execution branch.
+      if (plannerDecision.route !== 'self_developer' && unifiedRoute.branch === 'developer_executor') {
+        console.log('[IVXOwnerAIBackend] chat→worker: unified router fired developer_executor (legacy planner route=' + plannerDecision.route + ', intent=' + unifiedRoute.intent + ')');
+      }
       // Owner Execution Mode: non-destructive owner commands execute end-to-end
       // (patch → test → commit → deploy → verify) without an approval prompt.
       // Guarded actions (delete data, prod schema, secrets, billing, security,
@@ -7171,48 +7190,85 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       // actual system/autonomous runs; never set it here to avoid forcing fake feature
       // generation.
       const autoExecuteEndToEnd = executionDecision.autoExecute || !executionDecision.requiresApproval;
-      const proof = await runIVXSeniorDeveloperTask({
+
+      // ── CHAT ↔ AUTONOMOUS WORKER SYNC ────────────────────────────────────
+      // Route the chat request through the PERSISTENT worker queue instead of
+      // calling runIVXSeniorDeveloperTask inline. This is the fix for the
+      // long-standing gap where the chat path ran real work but created NO
+      // persistent job: now every developer-execution request from IVX IA
+      // Chat creates exactly one durable job (taskId, dashboard sync, restart
+      // survival, no duplicates via per-owner single-flight).
+      //
+      // The worker's drain loop calls the SAME runIVXSeniorDeveloperTask
+      // pipeline with phase callbacks that update the job stage in real time.
+      // We enqueue, then bounded-poll until the job reaches a terminal state,
+      // then render the strict execution answer from the persisted result.
+      const workerOwnerId = ownerContext.userId ?? 'owner';
+      const workerInput: IVXWorkerJobInput = {
         goal: prompt,
-        systemMode: false,
+        ownerApproved: true,
         approvePatch: autoExecuteEndToEnd,
-        patchConfirmationText: autoExecuteEndToEnd ? IVX_SAFE_PATCH_CONFIRM_TEXT : '',
         approveGitDeploy: autoExecuteEndToEnd,
-        gitDeployConfirmationText: autoExecuteEndToEnd ? IVX_GIT_DEPLOY_CONFIRM_TEXT : '',
         validationMode: 'focused',
+        systemMode: false,
+        ownerApprovedAction: {
+          proposedPlan: prompt.slice(0, 500),
+          filesAffected: [],
+          riskLevel: executionDecision.requiresApproval ? 'high' : 'medium',
+          rollbackOption: autoExecuteEndToEnd ? 'git revert + render_trigger_deploy' : '',
+          rollbackAvailable: autoExecuteEndToEnd,
+          auditLog: [
+            `source=ivx_ia_chat`,
+            `conversationId=${conversation.id}`,
+            `requestId=${requestId}`,
+            `ownerId=${workerOwnerId}`,
+            `requiresApproval=${executionDecision.requiresApproval}`,
+            `approvalCategories=${executionDecision.approvalCategories.join(',')}`,
+          ],
+          secretValuesReturned: false as const,
+        },
+        ownerId: workerOwnerId,
+      };
+
+      const { job: enqueuedJob, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+      const taskId = enqueuedJob.jobId;
+      console.log('[IVXOwnerAIBackend] chat→worker enqueue:', {
+        taskId,
+        attached,
+        activeJobId,
+        ownerId: workerOwnerId,
+        conversationId: conversation.id,
       });
-      const jobId = proof.jobId;
+
+      // Bounded poll for terminal state. The worker drains the queue async on
+      // the same process; we poll the in-memory/durable job until it reaches a
+      // terminal state or the safety timeout fires. Hard cap prevents an
+      // unbounded chat request.
+      const POLL_INTERVAL_MS = 1500;
+      const POLL_TIMEOUT_MS = 55_000; // stay under the HTTP 60s budget
+      const pollDeadline = Date.now() + POLL_TIMEOUT_MS;
+      let finalJob: IVXWorkerJob = enqueuedJob;
+      const isTerminal = (st: IVXWorkerJob['status']): boolean =>
+        st === 'completed' || st === 'failed' || st === 'blocked' || st === 'cancelled';
+      while (!isTerminal(finalJob.status) && Date.now() < pollDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        const fresh = await getSeniorDeveloperJob(taskId);
+        if (fresh) finalJob = fresh;
+      }
+
       // Final enforcement: the answer MUST be a real developer-execution response.
-      // If it is ever narrative-only or makes an unproven claim, the guard blocks it.
+      // Rendered from the persistent worker job's result (live progress if still
+      // running, real evidence if terminal). If still non-terminal at timeout,
+      // the chat returns the live progress block — the owner can poll the
+      // statusUrl. Never fabricate a VERIFIED claim.
       const enforcedExecution = enforceDeveloperExecutionAnswer(
-        buildSeniorDeveloperExecutionAnswer(proof, executionDecision),
+        buildSeniorDeveloperWorkerJobAnswer(finalJob, executionDecision),
       );
       if (enforcedExecution.enforced) {
         console.log('[IVXOwnerAIBackend] Developer-execution guard blocked a non-compliant answer:', enforcedExecution.result.violations);
       }
-      // ── SYNC: IVX IA chat room → Senior Developer Autonomous Mode ─────────
-      // Run the same autonomous pipeline the dedicated
-      // /api/ivx/senior-developer/autonomous-mode/run endpoint runs, then
-      // append the strict TASK_ID/STATE/.../NEXT_ACTION report so the chat
-      // room and the autonomous-mode endpoint return IDENTICAL proof.
-      let autonomousReport: FinalAutonomousReport | null = null;
-      try {
-        autonomousReport = await runSeniorDeveloperAutonomousMode(prompt, {
-          conversationId: conversation.id,
-        });
-        console.log('[IVXOwnerAIBackend] Autonomous-mode sync report:', {
-          taskId: autonomousReport.TASK_ID,
-          state: autonomousReport.STATE,
-          filesChanged: autonomousReport.FILES_CHANGED.length,
-          githubSha: autonomousReport.GITHUB_SHA,
-          renderDeployId: autonomousReport.RENDER_DEPLOY_ID,
-        });
-      } catch (error) {
-        console.log('[IVXOwnerAIBackend] Autonomous-mode sync failed (non-blocking):', error instanceof Error ? error.message : 'unknown');
-      }
-      const autonomousBlock = autonomousReport
-        ? `\n\n${renderFinalAutonomousReport(autonomousReport)}`
-        : '';
-      const answer = assertVisibleOwnerAIAnswer(`${enforcedExecution.answer}${autonomousBlock}`);
+      const jobId = taskId;
+      const answer = assertVisibleOwnerAIAnswer(enforcedExecution.answer);
       let assistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
       if (persistAssistantMessage && !assistantMessageId) {
         try {
@@ -7255,14 +7311,14 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       // carries its own honest TEST RESULT, TYPECHECK RESULT, STATUS and PROOF
       // lines. Do NOT prepend a blanket "VERIFIED" badge — that would make an
       // honest LOCAL ONLY / BLOCKED report look verified, which is the fake
-      // narrative the owner reported. The trace is recorded with the raw proof
-      // so the real execution status is preserved in the audit log.
+      // narrative the owner reported. The trace is recorded with the raw job
+      // state so the real execution status is preserved in the audit log.
       await recordExecutionTrace({
         toolName: 'ivx_self_developer_runtime',
         requestId,
         taskId: jobId,
         conversationId: conversation.id,
-        rawOutput: proof ?? { jobId, status: 'completed' },
+        rawOutput: finalJob.result ?? { jobId, status: finalJob.status, stage: finalJob.stage },
         rawOutputRef: `logs/audit/${jobId}.json`,
         linkedClaim: answer,
       });
