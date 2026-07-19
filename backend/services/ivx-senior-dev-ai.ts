@@ -122,13 +122,26 @@ export async function planEngineeringTask(taskPrompt: string, repoFileTree: stri
 /**
  * Ask the AI to generate a file patch given the current file content + goal.
  * Returns the full new file content (not a diff) for simplicity and reliability.
+ *
+ * CRITICAL: the prompt enforces SURGICAL minimal edits. The AI must change ONLY
+ * the lines required by the goal and preserve every other line verbatim. This is
+ * the root-cause fix for the prior failures where the AI rewrote whole large
+ * files (breaking tsc/tests on 4 consecutive tasks). Re-writing a 600-line file
+ * to fix a one-line defect guarantees type/test drift.
  */
 export async function generateFilePatch(input: { filePath: string; currentContent: string; goal: string; priorContext?: string }): Promise<AIReasoningResult> {
   const systemPrompt = [
     'You are an autonomous senior developer editing a file in a TypeScript + React Native (Expo) + Hono backend monorepo.',
     'Return the COMPLETE new file content only — no prose, no markdown fences, no explanations.',
-    'Preserve all existing imports and structure unless the goal explicitly requires changing them.',
-    'Follow the existing code style (TypeScript strict, explicit types).',
+    '',
+    'SURGICAL EDIT RULES (CRITICAL — violating these breaks the build):',
+    '1. Change ONLY the lines required by the goal. Every other line MUST be preserved VERBATIM (same whitespace, same imports, same order).',
+    '2. Do NOT reformat, reorder, rename, or "improve" code that is unrelated to the goal.',
+    '3. Do NOT add or remove imports unless the goal explicitly requires it.',
+    '4. Do NOT rewrite functions you are not asked to touch.',
+    '5. If the goal is to ADD a new file (current content empty), write only the minimal new file — do not stub unrelated helpers.',
+    '6. Prefer the SMALLEST possible change. A one-line fix must produce a one-line diff, not a 200-line rewrite.',
+    '7. Follow the existing code style (TypeScript strict, explicit types).',
   ].join('\n');
   const userPrompt = [
     `File: ${input.filePath}`,
