@@ -36,22 +36,25 @@ import { useEarn, PROFIT_TIERS } from '@/lib/earn-context';
 import { formatCurrencyWithDecimals, formatAmountInput, parseAmountInput } from '@/lib/formatters';
 
 export default function IPXEarnScreen() {
-  const {
-    totalDeposited,
-    totalEarnings,
-    totalBalance,
-    projectedMonthly,
-    projectedYearly,
-    apyRate,
-    currentTier,
-    nextTier,
-    currentQuarterProfit,
-    quarterProgress,
-    allTiers,
-    payouts,
-    deposit,
-    withdraw,
-  } = useEarn();
+  // Safe access with fallbacks — useEarn() returns undefined if EarnProvider
+  // is ever absent (hot-reload race, route above provider boundary). Without
+  // the fallback, destructuring throws "Cannot read property 'totalDeposited'
+  // of undefined", which is the exact portfolio crash the owner reported.
+  const earnCtx = useEarn() ?? null;
+  const totalDeposited = earnCtx?.totalDeposited ?? 0;
+  const totalEarnings = earnCtx?.totalEarnings ?? 0;
+  const totalBalance = earnCtx?.totalBalance ?? 0;
+  const projectedMonthly = earnCtx?.projectedMonthly ?? 0;
+  const projectedYearly = earnCtx?.projectedYearly ?? 0;
+  const apyRate = earnCtx?.apyRate ?? 0.10;
+  const currentTier = earnCtx?.currentTier ?? PROFIT_TIERS[0];
+  const nextTier = earnCtx?.nextTier ?? null;
+  const currentQuarterProfit = earnCtx?.currentQuarterProfit ?? 0;
+  const quarterProgress = earnCtx?.quarterProgress ?? 0;
+  const allTiers = earnCtx?.allTiers ?? PROFIT_TIERS;
+  const payouts = earnCtx?.payouts ?? [];
+  const deposit = earnCtx?.deposit ?? (async () => ({ success: false, error: 'Earn account unavailable' }));
+  const withdraw = earnCtx?.withdraw ?? (async () => ({ success: false, error: 'Earn account unavailable' }));
 
   const apyPercent = Math.round(apyRate * 100);
   const maxApyPercent = Math.round(PROFIT_TIERS[PROFIT_TIERS.length - 1].apyRate * 100);

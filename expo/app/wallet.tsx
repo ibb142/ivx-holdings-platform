@@ -54,7 +54,14 @@ import { useAnalytics } from '@/lib/analytics-context';
 
 export default function WalletScreen() {
   const router = useRouter();
-  const { totalBalance: earnBalance, apyRate } = useEarn();
+  // Safe destructuring with fallbacks — useEarn() returns undefined if the
+  // EarnProvider is ever absent (e.g. a hot-reload race or a route rendered
+  // above the provider boundary). Without the fallback, destructuring throws
+  // "Cannot read property 'totalBalance' of undefined", which is the exact
+  // portfolio crash the owner reported.
+  const earnCtx = useEarn() ?? null;
+  const earnBalance = earnCtx?.totalBalance ?? 0;
+  const apyRate = earnCtx?.apyRate ?? 0.10;
   const { trackScreen, trackTransaction: trackAnalyticsTx } = useAnalytics();
 
   React.useEffect(() => {

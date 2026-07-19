@@ -17,6 +17,8 @@ import { I18nProvider } from "@/lib/i18n-context";
 import { AuthProvider } from "@/lib/auth-context";
 import { AnalyticsProvider } from "@/lib/analytics-context";
 import { IPXProvider } from "@/lib/ipx-context";
+import { WalletProvider } from "@/lib/wallet-context";
+import { EarnProvider } from "@/lib/earn-context";
 import { EmailProvider } from "@/lib/email-context";
 
 const queryClient = new QueryClient();
@@ -188,8 +190,12 @@ export default function RootLayout() {
                     <AnalyticsProvider>
                       <ProviderBoundary name="IPX">
                         <IPXProvider>
-                          <ProviderBoundary name="Email">
-                            <EmailProvider>
+                          <ProviderBoundary name="Wallet">
+                            <WalletProvider>
+                              <ProviderBoundary name="Earn">
+                                <EarnProvider>
+                                  <ProviderBoundary name="Email">
+                                    <EmailProvider>
                               <ProviderMountProbe>
                                 <StatusBar style="light" />
                                 <Stack
@@ -208,7 +214,11 @@ export default function RootLayout() {
                                   <Stack.Screen name="modal" options={{ presentation: "modal" }} />
                                 </Stack>
                               </ProviderMountProbe>
-                            </EmailProvider>
+                                    </EmailProvider>
+                                  </ProviderBoundary>
+                                </EarnProvider>
+                              </ProviderBoundary>
+                            </WalletProvider>
                           </ProviderBoundary>
                         </IPXProvider>
                       </ProviderBoundary>
