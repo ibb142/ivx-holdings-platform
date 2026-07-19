@@ -396,3 +396,27 @@ describe('buildIVXOwnerAIPlannerDecision — fallback policy never canned', () =
     }
   });
 });
+
+describe('buildIVXOwnerAIPlannerDecision — enterprise senior-developer chat fix + deploy routes to execution', () => {
+  test('the exact screenshot prompt routes to self developer, not a public-deploy confirmation', () => {
+    const prompt = 'Can you audit this chat 1 remove chat loading end to end now, 2 why my chat despairing fix this now and deploy live show me proof verified too';
+    const decision = buildIVXOwnerAIPlannerDecision(prompt);
+    expect(decision.route).toBe('self_developer');
+    expect(decision.semanticIntent).toBe('self_developer_execution');
+    expect(decision.useTools).toBe(true);
+    expect(decision.toolHints).toContain('run_ivx_senior_developer_task');
+  });
+
+  test('related chat-fix + deploy phrasings all route to self developer', () => {
+    const prompts = [
+      'audit this chat, remove chat loading and deploy live with proof',
+      'why is my chat disappearing fix this now and deploy verified',
+      'remove the chat loading spinner end to end and show me proof',
+    ];
+    for (const prompt of prompts) {
+      const decision = buildIVXOwnerAIPlannerDecision(prompt);
+      expect(decision.route).toBe('self_developer');
+      expect(decision.semanticIntent).toBe('self_developer_execution');
+    }
+  });
+});

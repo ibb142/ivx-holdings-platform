@@ -737,6 +737,17 @@ function resolveOwnerDevelopmentActionIntent(value: unknown): OwnerDevelopmentAc
     return null;
   }
 
+  // Enterprise Senior Developer override: chat/UI/loading/disappearing bug fix + live deploy/proof.
+  // The same override exists in the backend owner-ai endpoint; keeping the local classifier in sync
+  // prevents the app from showing the old public-deploy confirmation when the owner is actually
+  // requesting an end-to-end senior-developer execution task.
+  const hasChatOrUiTarget = /\b(chat|owner\s+room|owner\s+ai|message\s+list|message\s+bubble|composer|screen|ui|component|loading|loader|spinner|delay|lag|freeze|stutter|flicker|glitch|disappear|disappearing|despairing|vanish|missing|not\s+showing|not\s+displayed)\b/.test(text);
+  const hasFixOrAuditVerb = /\b(audit|fix|repair|patch|remove|delete|hide|eliminate|clear|clean\s*up|get\s+rid\s+of|implement|build|update|change|improve|optimize|solve|resolve|debug)\b/.test(text);
+  const asksForProofOrLiveDeploy = /\b(deploy|live|production|verify|verified|proof|prove|show\s+me|evidence|now|immediately|asap|today|end[-\s]?to[-\s]?end)\b/.test(text);
+  if (hasChatOrUiTarget && hasFixOrAuditVerb && asksForProofOrLiveDeploy) {
+    return 'implementation_task';
+  }
+
   if (/\b(deploy|publish|release|push)\b.{0,48}\b(live|public|prod|production)\b|\b(live|public|prod|production)\b.{0,48}\b(deploy|publish|release|push)\b|^deploy\s+this\s+live\s+now\b/.test(text)) {
     return 'public_deploy';
   }

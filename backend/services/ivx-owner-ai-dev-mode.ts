@@ -42,14 +42,15 @@ export function detectSeniorDeveloperModeStatusRequest(message: string): boolean
     'you are developer',
     'switch to senior developer',
     'switch to developer',
+    'enterprise senior developer',
   ];
   return statusPhrases.some((p) => text.includes(p));
 }
 
 export function buildSeniorDeveloperModeStatusAnswer(): string {
   return [
-    'YES — IVX Senior Developer mode is live and owner-gated.',
-    'CAPABILITIES: repo inspection, safe code patch, test/build runner, GitHub commit/push, Render deploy, production health verify, proof ledger.',
+    'YES — IVX Enterprise Senior Developer mode is live and owner-gated.',
+    'CAPABILITIES: end-to-end repo inspection, safe code patch, test/build runner, GitHub commit/push, Render deploy, production health verify, proof ledger.',
     'REQUIRED: owner sign-in + real GitHub/Render/Supabase credentials.',
     'TO USE IT:',
     '1. Make sure you are signed in as the IVX owner.',
@@ -80,6 +81,7 @@ export function detectSeniorDeveloperBrainRequest(message: string): boolean {
     'same brain as you',
     'brain like you',
     'senior developer brain',
+    'enterprise senior developer',
     'act as senior developer',
     'act as a senior developer',
     'you are senior developer',
@@ -102,13 +104,13 @@ export function detectSeniorDeveloperBrainRequest(message: string): boolean {
 
 export function buildSeniorDeveloperBrainAnswer(): string {
   return [
-    'I am IVX Senior Developer mode — same brain as the IVX agent, owner-gated, live now.',
+    'I am IVX Enterprise Senior Developer mode — same brain as the IVX agent, owner-gated, live now.',
     '',
-    'What I do as a senior developer:',
+    'What I do as an enterprise senior developer:',
     '- Answer architecture, code, security, and infrastructure questions directly.',
     '- Audit the codebase, Supabase, GitHub, Render, and AWS setup and tell you what is wrong.',
     '- Propose exact patches, file paths, and commands.',
-    '- Explain trade-offs and risks before you approve any change.',
+    '- Execute end-to-end when you tell me to: inspect, patch, test, commit, deploy, and verify — returning a strict evidence block (task_id, files changed, commands run, status, proof).',
     '',
     'What I do NOT do without your explicit owner approval:',
     '- Write files, commit, push, deploy, or change production schema/data.',
@@ -116,7 +118,7 @@ export function buildSeniorDeveloperBrainAnswer(): string {
     '',
     'How to use me right now:',
     '1. Ask me anything technical: "audit my auth flow", "why is the chat slow?", "review my Supabase RLS", etc.',
-    '2. If you want me to actually change code, say: "Run a senior developer task: <exact goal>" and I will execute end-to-end with proof.',
+    '2. If you want me to actually change code, say: "Run a senior developer task: <exact goal>" or "fix X and deploy live with proof" and I will execute end-to-end with real evidence.',
     '',
     'STATUS: READY. No BLOCKED state. I answer exactly what you ask.',
   ].join('\n');

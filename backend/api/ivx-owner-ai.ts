@@ -3392,6 +3392,18 @@ function resolveOwnerDevelopmentActionIntent(prompt: string): OwnerDevelopmentAc
     return null;
   }
 
+  // Enterprise Senior Developer override: chat/UI/loading/disappearing bug fix + live deploy/proof.
+  // When the owner asks to audit/fix/remove a chat/loading/disappearing issue and also demands
+  // live deploy/show proof/verified evidence, this is a senior-developer execution task — not a
+  // standalone deploy confirmation. The senior-developer pipeline executes end-to-end and returns
+  // real evidence (task_id, files changed, tests, commit/deploy status, health verification).
+  const hasChatOrUiTarget = /\b(chat|owner\s+room|owner\s+ai|message\s+list|message\s+bubble|composer|screen|ui|component|loading|loader|spinner|delay|lag|freeze|stutter|flicker|glitch|disappear|disappearing|despairing|vanish|missing|not\s+showing|not\s+displayed)\b/.test(normalized);
+  const hasFixOrAuditVerb = /\b(audit|fix|repair|patch|remove|delete|hide|eliminate|clear|clean\s*up|get\s+rid\s+of|implement|build|update|change|improve|optimize|solve|resolve|debug)\b/.test(normalized);
+  const asksForProofOrLiveDeploy = /\b(deploy|live|production|verify|verified|proof|prove|show\s+me|evidence|now|immediately|asap|today|end[-\s]?to[-\s]?end)\b/.test(normalized);
+  if (hasChatOrUiTarget && hasFixOrAuditVerb && asksForProofOrLiveDeploy) {
+    return 'implementation_task';
+  }
+
   if (/\b(deploy|publish|release|push)\b.{0,48}\b(live|public|prod|production)\b|\b(live|public|prod|production)\b.{0,48}\b(deploy|publish|release|push)\b|^deploy\s+this\s+live\s+now\b/.test(normalized)) {
     return 'public_deploy';
   }

@@ -44,15 +44,21 @@ describe('IVX Owner AI Senior Developer Brain', () => {
     expect(answer).toContain('YES');
     expect(answer).toContain('CAPABILITIES');
     expect(answer).toContain('Run a senior developer task');
+    expect(answer).toContain('Enterprise Senior Developer');
   });
 
   test('brain answer is direct and ready, not BLOCKED', () => {
     const answer = buildSeniorDeveloperBrainAnswer();
-    expect(answer).toContain('I am IVX Senior Developer mode');
+    expect(answer).toContain('I am IVX Enterprise Senior Developer mode');
     expect(answer).toContain('same brain');
     expect(answer).toContain('STATUS: READY');
     expect(answer).not.toContain('STATE: BLOCKED');
     expect(answer).not.toContain('EXACT_ACTION_REQUIRED');
+  });
+
+  test('enterprise senior developer phrasing is detected', () => {
+    expect(detectSeniorDeveloperModeStatusRequest('Are you an enterprise senior developer?')).toBe(true);
+    expect(detectSeniorDeveloperBrainRequest('I want you to act as an enterprise senior developer')).toBe(true);
   });
 
   test('developer mode only blocks explicit immediate execution commands', () => {
