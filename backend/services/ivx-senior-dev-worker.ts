@@ -31,7 +31,7 @@ import {
   type IVXOwnerAITaskRow,
 } from './ivx-owner-ai-task-queue';
 import { hasApproval, writeProofLedger, updateProofLedger, type IVXSeniorDevApprovalAction } from './ivx-senior-dev-proof';
-import { githubCommitFile, githubReadFile, githubGetHeadSha } from './ivx-senior-dev-git';
+import { githubCommitFile, githubReadFile, githubGetHeadSha, githubListFiles } from './ivx-senior-dev-git';
 import { askAI, planEngineeringTask, generateFilePatch } from './ivx-senior-dev-ai';
 import {
   triggerRenderDeploy,
@@ -118,7 +118,14 @@ export async function startSeniorDevWorker(): Promise<void> {
 async function tick(): Promise<void> {
   const tasks = await listTasks(50);
   const candidates = tasks.filter((t) => {
-    if (t.task_type !== 'senior_dev') return false;
+    // Mark senior_dev tasks via trace_id (always "senior-dev-..." from the
+    // submit endpoint) because the task_type column is only created by the
+    // self-bootstrap DDL, which requires SUPABASE_ACCESS_TOKEN and may not have
+    // run yet. trace_id is in the original CREATE TABLE and is always present,
+    // so it is the reliable marker. task_type is checked too as a fallback.
+    const isSeniorDev = (t.task_type === 'senior_dev')
+      || (typeof t.trace_id === 'string' && t.trace_id.startsWith('senior-dev-'));
+    if (!isSeniorDev) return false;
     if (t.status !== 'QUEUED' && t.status !== 'RETRYING') return false;
     if (t.assigned_worker_id && t.assigned_worker_id !== IVX_SENIOR_DEV_WORKER_ID) return false;
     return true;
@@ -149,13 +156,18 @@ async function tick(): Promise<void> {
 
 async function claimTask(taskId: string): Promise<IVXOwnerAITaskRow | null> {
   const now = new Date().toISOString();
+  // The submit endpoint pre-assigns assigned_worker_id='IVX-SENIOR-DEV-01' so the
+  // task is already bound to this worker. The optimistic claim must therefore
+  // accept rows where assigned_worker_id IS NULL (unassigned) OR already equals
+  // IVX-SENIOR-DEV-01 (pre-assigned to us). Using PostgREST or= syntax.
+  const filter = `&status=in.(QUEUED,RETRYING)&or=(assigned_worker_id.is.null,assigned_worker_id.eq.${encodeURIComponent(IVX_SENIOR_DEV_WORKER_ID)})`;
   const patched = await patchTask(taskId, {
     status: 'RUNNING',
     checkpoint: `CLAIMED by ${IVX_SENIOR_DEV_WORKER_ID}`,
     assigned_worker_id: IVX_SENIOR_DEV_WORKER_ID,
     heartbeat_at: now,
     checkpoint_history: appendCheckpoint(null, `CLAIMED by ${IVX_SENIOR_DEV_WORKER_ID} at ${now}`),
-  }, `&status=in.(QUEUED,RETRYING)&assigned_worker_id=is.null`);
+  }, filter);
   return patched;
 }
 
@@ -179,27 +191,35 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
     repository: process.env.GITHUB_REPO_URL ?? undefined,
   });
   if (!run) {
-    throw new Error('Failed to create proof ledger run record.');
+    // Proof ledger write failed (table missing / Supabase unreachable). This is
+    // a hard failure for a senior_dev task — without a ledger there is no honest
+    // evidence trail. Do NOT fall through to a hollow VERIFIED. Fail loudly.
+    throw new Error('Failed to create proof ledger run record (ivx_senior_dev_worker_runs table unreachable — check SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + ensureSeniorDevTables bootstrap).');
   }
   const runId = run.id;
+  // Patch the proof_ledger_id back onto the task so callers can join ledger ↔ task.
+  await patchTask(task.id, { proof_ledger_id: runId });
 
   // ─── Phase 1: PLANNING ──────────────────────────────────────────────
   await setPhase(task.id, 'PLANNING', runId);
-  const planResult = await planEngineeringTask(task.prompt);
+  // Fetch the real repo file tree so the AI plans against actual files
+  // (not hallucinated paths like src/chat/ChatService.js that don't exist).
+  const fileTreeResult = await githubListFiles();
+  const repoFileTree = fileTreeResult.ok ? fileTreeResult.files.slice(0, 400) : [];
+  await logCheckpoint(task.id, runId, 'PLANNING', { repoFileCount: repoFileTree.length, fileTreeOk: fileTreeResult.ok, fileTreeError: fileTreeResult.error });
+  const planResult = await planEngineeringTask(task.prompt, repoFileTree);
   let plan: EngineerPlan;
   if (planResult.ok && planResult.content) {
     plan = parsePlan(planResult.content, task.prompt);
   } else {
-    // Fallback: minimal plan — inspect + no changes (audit-only).
-    plan = {
-      summary: `Audit-only fallback for: ${task.prompt.slice(0, 120)}`,
-      filesToInspect: [],
-      filesToChange: [],
-      testsToRun: ['bun test'],
-      requiresDeploy: false,
-      rollbackNotes: 'No changes — audit only.',
-    };
-    await logCheckpoint(task.id, runId, 'PLANNING', { warning: 'AI planning failed, using audit-only fallback', error: planResult.error });
+    // AI planning failed. The owner forbade fake/hollow VERIFIED certifications.
+    // Instead of silently falling back to an audit-only path that reaches VERIFIED
+    // with no real work, FAIL the task honestly with the AI planning error so the
+    // owner sees exactly why the autonomous worker could not proceed.
+    const planningError = planResult.error ?? 'AI planning returned empty content';
+    await failTask(task.id, `PLANNING failed: ${planningError}`);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: `PLANNING failed: ${planningError}` });
+    return;
   }
   await logCheckpoint(task.id, runId, 'PLANNING', { plan });
   await updateProofLedger(runId, { logs: [`plan: ${plan.summary}`] });
@@ -219,10 +239,25 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   // ─── Phase 3: IMPLEMENTING ──────────────────────────────────────────
   await setPhase(task.id, 'IMPLEMENTING', runId);
   const changedFiles: string[] = [];
-  const localEdits: { path: string; content: string }[] = [];
+  let localEdits: { path: string; content: string }[] = [];
 
   for (const fileChange of plan.filesToChange) {
-    const current = fileContents.get(fileChange.path) ?? '';
+    // CRITICAL: always read the current file content from GitHub before generating
+    // a patch. If the AI listed the file in filesToChange but NOT in filesToInspect,
+    // the fileContents map would be empty, and generateFilePatch would get current=''
+    // — causing it to hallucinate the full file from scratch (which breaks tsc/tests).
+    let current = fileContents.get(fileChange.path) ?? '';
+    if (!current) {
+      const readFile = await githubReadFile(fileChange.path);
+      if (readFile.ok && readFile.content !== null) {
+        current = readFile.content;
+        fileContents.set(fileChange.path, current);
+        await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, note: 'fetched current content from GitHub (not in filesToInspect)' });
+      } else {
+        await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, error: 'Could not read current file content from GitHub', githubError: readFile.error });
+        continue;
+      }
+    }
     const patchResult = await generateFilePatch({
       filePath: fileChange.path,
       currentContent: current,
@@ -246,17 +281,66 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   await updateProofLedger(runId, { filesChanged: changedFiles });
   await patchTask(task.id, { files_changed: changedFiles });
 
-  // ─── Phase 4: TESTING ───────────────────────────────────────────────
-  await setPhase(task.id, 'TESTING', runId);
-  const testResults = await runTests(plan.testsToRun);
-  await logCheckpoint(task.id, runId, 'TESTING', testResults as unknown as Record<string, unknown>);
-  await updateProofLedger(runId, { testResults: testResults as unknown as Record<string, unknown> });
-  await patchTask(task.id, { test_summary: testResults as unknown as Record<string, unknown> });
+  // ─── Phase 4: TESTING (with self-healing test-fix loop) ──────────────
+  // Standard autonomous-agent pattern: when tsc/tests fail, feed the error
+  // output back to the AI so it can fix the code. Retry up to 3 times. Only
+  // if all 3 attempts fail do we report FAILED honestly (never fake VERIFIED).
+  const MAX_TEST_FIX_ATTEMPTS = 3;
+  let testResults: TestRunResults | null = null;
+  let testFixAttempts = 0;
+  let testsPassed = false;
 
-  if (!testResults.passed) {
-    // Tests failed — do NOT commit. Report failure honestly.
-    await failTask(task.id, `Tests failed: ${testResults.summary}`);
-    await updateProofLedger(runId, { status: 'failed', errorMessage: `Tests failed: ${testResults.summary}` });
+  while (testFixAttempts < MAX_TEST_FIX_ATTEMPTS && !testsPassed) {
+    testFixAttempts += 1;
+    await setPhase(task.id, 'TESTING', runId);
+    if (testFixAttempts > 1) {
+      await logCheckpoint(task.id, runId, 'TESTING', { attempt: testFixAttempts, note: 'self-healing retry — feeding prior error back to AI' });
+    }
+    testResults = await runTests(plan.testsToRun);
+    await logCheckpoint(task.id, runId, 'TESTING', { attempt: testFixAttempts, ...testResults as unknown as Record<string, unknown> });
+    await patchTask(task.id, { test_summary: testResults as unknown as Record<string, unknown> });
+
+    if (testResults.passed) {
+      testsPassed = true;
+      break;
+    }
+
+    // Tests failed. If this is not the last attempt, feed the error back to
+    // the AI so it can fix each changed file. This is the self-healing loop.
+    if (testFixAttempts < MAX_TEST_FIX_ATTEMPTS && localEdits.length > 0) {
+      await logCheckpoint(task.id, runId, 'TESTING', { attempt: testFixAttempts, status: 'failed, entering self-healing fix loop', summary: testResults.summary });
+      const errorOutput = `typecheck: ${testResults.typecheck}\ntypecheck output:\n${testResults.typecheckOutput.slice(-1200)}\n\ntests: ${testResults.tests}\ntest output:\n${testResults.testOutput.slice(-1200)}`;
+      // Re-generate each changed file with the error context.
+      const healedEdits: { path: string; content: string }[] = [];
+      for (const edit of localEdits) {
+        const current = edit.content; // use the last (failed) version as the base
+        const fixResult = await generateFilePatch({
+          filePath: edit.path,
+          currentContent: current,
+          goal: `${task.prompt}\n\nThe previous version FAILED typecheck/tests. Fix the errors below. Keep the change minimal and surgical — only fix what the errors call out.\n\n--- TEST/TSC ERROR OUTPUT ---\n${errorOutput}\n--- END ERROR OUTPUT ---`,
+          priorContext: plan.summary,
+        });
+        if (fixResult.ok && fixResult.content) {
+          const fixedContent = stripCodeFences(fixResult.content);
+          writeLocalFile(edit.path, fixedContent);
+          healedEdits.push({ path: edit.path, content: fixedContent });
+          await logCheckpoint(task.id, runId, 'TESTING', { file: edit.path, attempt: testFixAttempts, note: 'AI generated fix', bytes: fixedContent.length });
+        } else {
+          // Could not generate a fix — keep the previous version for the next test run.
+          healedEdits.push(edit);
+          await logCheckpoint(task.id, runId, 'TESTING', { file: edit.path, attempt: testFixAttempts, error: fixResult.error ?? 'AI returned empty fix' });
+        }
+      }
+      localEdits = healedEdits;
+    }
+  }
+
+  await updateProofLedger(runId, { testResults: testResults as unknown as Record<string, unknown> });
+
+  if (!testsPassed || !testResults) {
+    // All self-healing attempts failed — report FAILED honestly.
+    await failTask(task.id, `Tests failed after ${testFixAttempts} attempt(s): ${testResults?.summary ?? 'unknown'}`);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: `Tests failed after ${testFixAttempts} attempt(s): ${testResults?.summary ?? 'unknown'}` });
     return;
   }
 
@@ -358,11 +442,18 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   });
   await patchTask(task.id, { runtime_sha: runtimeSha });
 
-  // Verify: production health 200 AND (if deployed) SHA parity.
-  const verified = health.ok && (!requestsDeploy || !changedFiles.length || versionMatch);
+  // Verify: production health 200 AND (if deployed) SHA parity AND at least one
+  // file was actually changed+committed (no hollow VERIFIED on audit-only no-ops).
+  // The owner explicitly forbade fake certifications where a task reaches VERIFIED
+  // with commitSha=null, deployId=null, filesChanged=[] just because /health is 200.
+  const didRealWork = changedFiles.length > 0 && lastCommitSha !== null;
+  const verified = health.ok && didRealWork && (!requestsDeploy || versionMatch);
   if (!verified) {
-    await failTask(task.id, `Live verification failed: health=${health.status}, match=${versionMatch}`);
-    await updateProofLedger(runId, { status: 'failed', errorMessage: 'Live verification failed' });
+    const reason = !didRealWork
+      ? `Live verification failed: no real code change was committed (changedFiles=${changedFiles.length}, commitSha=${lastCommitSha})`
+      : `Live verification failed: health=${health.status}, match=${versionMatch}`;
+    await failTask(task.id, reason);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: reason });
     return;
   }
 

@@ -245,3 +245,93 @@ export async function githubGetHeadSha(branch?: string): Promise<{ sha: string |
     return { sha: null, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+export interface GithubFileTreeResult {
+  ok: boolean;
+  files: string[];
+  error: string | null;
+}
+
+/**
+ * List the repository file tree (recursive) via the Git Trees API.
+ * Returns source files relevant to engineering planning (filters out
+ * node_modules, build artifacts, logs, assets, and other non-source paths
+ * so the AI planning prompt stays within token limits and focuses on code).
+ */
+export async function githubListFiles(branch?: string): Promise<GithubFileTreeResult> {
+  const repo = resolveGithubRepoIdentity();
+  const ref = branch || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  try {
+    const res = await fetch(`${GITHUB_API}/repos/${repo.owner}/${repo.repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`, {
+      headers: githubHeaders(),
+    });
+    if (!res.ok) return { ok: false, files: [], error: `GitHub API ${res.status}` };
+    const data = readRecord(await parseJsonResponse(res));
+    const tree = Array.isArray(data.tree) ? (data.tree as Array<Record<string, unknown>>) : [];
+    const allPaths = tree
+      .filter((node) => node.type === 'blob' && typeof node.path === 'string')
+      .map((node) => node.path as string);
+    const files = allPaths.filter((p) => isRelevantSourcePath(p));
+    return { ok: true, files, error: null };
+  } catch (err) {
+    return { ok: false, files: [], error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+const RELEVANT_SOURCE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.json', '.sql', '.md', '.yaml', '.yml', '.sh',
+]);
+
+const BLOCKED_PATH_PREFIXES = [
+  'node_modules/',
+  '.git/',
+  'dist/',
+  'build/',
+  'logs/',
+  '.rork/',
+  'android/build/',
+  'android/app/build/',
+  'ios-ivx-',
+  'expo/.expo/',
+  'expo/android/build/',
+  'expo/node_modules/',
+  '__tests__/mocks/',
+  'deploy/',
+  '.github/',
+  'keys/',
+  'cert-app/',
+  'docs/',
+];
+
+const BLOCKED_PATH_SEGMENTS = [
+  '/assets/',
+  '/static/',
+  'package-lock.json',
+  'bun.lock',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.svg',
+  '.ico',
+  '.ttf',
+  '.otf',
+  '.woff',
+  '.mp4',
+  '.mp3',
+  '.wav',
+  '.keystore',
+  '.pem',
+  '.key',
+  '.env',
+];
+
+function isRelevantSourcePath(path: string): boolean {
+  if (BLOCKED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))) return false;
+  if (BLOCKED_PATH_SEGMENTS.some((seg) => path.includes(seg))) return false;
+  const ext = path.slice(path.lastIndexOf('.'));
+  if (!ext || !RELEVANT_SOURCE_EXTENSIONS.has(ext)) return false;
+  return true;
+}

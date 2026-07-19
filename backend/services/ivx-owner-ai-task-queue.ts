@@ -589,6 +589,26 @@ async function workerTick(): Promise<void> {
     if (!res.ok) return;
     const candidates = await res.json().catch(() => []) as IVXOwnerAITaskRow[];
     for (const candidate of candidates) {
+      // CRITICAL: senior_dev tasks are owned by the IVX-SENIOR-DEV-01 autonomous
+      // worker (backend/services/ivx-senior-dev-worker.ts), which runs the real
+      // 8-phase engineering pipeline (PLANNING→INSPECTING→IMPLEMENTING→TESTING→
+      // WAITING_APPROVAL→COMMITTING→DEPLOYING→LIVE_VERIFYING→VERIFIED).
+      // The general queue worker must NEVER claim senior_dev tasks — doing so
+      // would call the chat AI, get a text answer, and falsely mark the task
+      // VERIFIED in ~10s with commitSha=null, deployId=null, filesChanged=[]
+      // (the exact fake certification the owner forbade). Skip them here so the
+      // senior dev worker is the sole executor of senior_dev tasks.
+      //
+      // We mark via trace_id (always "senior-dev-..." from the submit endpoint)
+      // because the task_type column is only created by the self-bootstrap DDL,
+      // which requires SUPABASE_ACCESS_TOKEN and may not have run yet. trace_id
+      // is in the original CREATE TABLE and is always present, so it is the
+      // reliable marker. task_type is checked too as a belt-and-suspenders.
+      const isSeniorDev = (candidate.task_type === 'senior_dev')
+        || (typeof candidate.trace_id === 'string' && candidate.trace_id.startsWith('senior-dev-'));
+      if (isSeniorDev) {
+        continue;
+      }
       const claimed = await claimTask(candidate);
       if (claimed) await executeTask(claimed);
     }

@@ -28,7 +28,14 @@ function resolveApiKey(): string {
 }
 
 function resolveModel(): string {
-  return readEnv('IVX_SENIOR_DEV_MODEL') || readEnv('IVX_OPENAI_FALLBACK_MODEL') || 'gpt-4.1-mini';
+  // Vercel AI Gateway requires the provider prefix (e.g. "openai/gpt-4o").
+  // The runtime health endpoint confirms the working key is vck_ + openai/gpt-4o.
+  // Default to the proven-working model so AI planning actually succeeds.
+  const explicit = readEnv('IVX_SENIOR_DEV_MODEL');
+  if (explicit) return explicit;
+  const fallback = readEnv('IVX_OPENAI_FALLBACK_MODEL');
+  if (fallback) return fallback.startsWith('openai/') || fallback.startsWith('anthropic/') ? fallback : `openai/${fallback}`;
+  return 'openai/gpt-4o';
 }
 
 /**
@@ -90,20 +97,26 @@ export async function askAI(prompt: string, opts: { systemPrompt?: string; maxTo
 
 /**
  * Ask the AI to produce a structured plan (JSON) for an engineering task.
+ * If repoFileTree is provided, it is injected so the AI plans against actual
+ * files (not hallucinated paths).
  */
-export async function planEngineeringTask(taskPrompt: string): Promise<AIReasoningResult> {
+export async function planEngineeringTask(taskPrompt: string, repoFileTree: string[] = []): Promise<AIReasoningResult> {
+  const fileTreeSection = repoFileTree.length > 0
+    ? `\n\n--- REPOSITORY FILE TREE (actual files you may inspect or edit) ---\n${repoFileTree.join('\n')}\n--- END FILE TREE ---\n\nIMPORTANT: Only reference files that appear in the file tree above. Do NOT invent paths.\n`
+    : '';
   const systemPrompt = [
     'You are an autonomous senior developer reasoning about a code change request.',
     'Inspect the repository context given and return a JSON object with keys:',
     '  "summary": one-line description of the change,',
-    '  "filesToInspect": array of repo-relative file paths to read before editing,',
-    '  "filesToChange": array of {path, reason} describing each file to edit,',
+    '  "filesToInspect": array of repo-relative file paths to read before editing (must exist in the file tree if provided),',
+    '  "filesToChange": array of {path, reason} describing each file to edit (must exist in the file tree if provided),',
     '  "testsToRun": array of test commands (e.g. "bun test backend/services/foo.test.ts"),',
     '  "requiresDeploy": boolean — true if the change must deploy to production,',
     '  "rollbackNotes": short rollback plan if the change breaks production.',
     'Return ONLY the JSON object. No prose, no markdown fences.',
+    'Prefer the SMALLEST safe change that fixes a real defect. Do NOT invent file paths.',
   ].join('\n');
-  return askAI(`Engineering task:\n${taskPrompt}\n\nReturn the plan JSON now.`, { systemPrompt, maxTokens: 1500, timeoutMs: 90_000 });
+  return askAI(`Engineering task:\n${taskPrompt}${fileTreeSection}\nReturn the plan JSON now.`, { systemPrompt, maxTokens: 1500, timeoutMs: 90_000 });
 }
 
 /**

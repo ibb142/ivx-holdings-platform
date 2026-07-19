@@ -3830,10 +3830,12 @@ app.get('/api/ivx/senior-developer/provider-diagnostics', async (context) => {
 app.options('/api/ivx/senior-developer/worker/status', () => seniorDeveloperWorkerOptions());
 app.get('/api/ivx/senior-developer/worker/status', async (context) => handleSeniorDeveloperWorkerStatusRequest(context.req.raw));
 app.options('/api/ivx/senior-developer/worker/jobs', () => seniorDeveloperWorkerOptions());
-app.post('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerEnqueueRequest(context.req.raw));
+// NOTE: POST /jobs and GET /jobs/:taskId are handled by the NEW autonomous worker
+// handlers registered earlier (handleSeniorDevWorkerSubmit/Status/Approve at lines 3116-3118).
+// The OLD ivx-senior-developer-runtime.ts enqueue/job handlers used to shadow them here;
+// they have been removed so the real 8-phase autonomous worker owns these routes.
 app.get('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerJobsRequest(context.req.raw));
 app.options('/api/ivx/senior-developer/worker/jobs/:jobId', () => seniorDeveloperWorkerOptions());
-app.get('/api/ivx/senior-developer/worker/jobs/:jobId', async (context) => handleSeniorDeveloperWorkerJobRequest(context.req.raw, context.req.param('jobId')));
 app.options('/api/ivx/senior-developer/worker/ledger', () => seniorDeveloperWorkerOptions());
 app.get('/api/ivx/senior-developer/worker/ledger', async (context) => handleSeniorDeveloperWorkerLedgerRequest(context.req.raw));
 app.options('/api/ivx/worker-last-proof', () => seniorDeveloperWorkerOptions());
