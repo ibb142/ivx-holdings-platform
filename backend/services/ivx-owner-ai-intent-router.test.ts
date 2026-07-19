@@ -6,6 +6,7 @@ import {
   buildIVXOwnerAIPlannerDecision,
   demandsExecutionProofNotNarrative,
   isOwnerExecutionOrTaskBlock,
+  isServerBugFixRequest,
   resolveExactEchoCommand,
   resolveOwnerLocationClarificationIntent,
 } from './ivx-owner-ai-intent-router';
@@ -232,7 +233,38 @@ describe('buildIVXOwnerAIPlannerDecision — removal/cleanup commands EXECUTE (r
   });
 });
 
+describe('isServerBugFixRequest — short server crash/fix prompts', () => {
+  test('detects "fix server crash" and related phrasings', () => {
+    expect(isServerBugFixRequest('fix server crash')).toBe(true);
+    expect(isServerBugFixRequest('can you fix server crash')).toBe(true);
+    expect(isServerBugFixRequest('server is down')).toBe(true);
+    expect(isServerBugFixRequest('fix the server issue')).toBe(true);
+    expect(isServerBugFixRequest('backend api crash')).toBe(true);
+    expect(isServerBugFixRequest('resolve the backend crash')).toBe(true);
+  });
+
+  test('does NOT fire on unrelated questions', () => {
+    expect(isServerBugFixRequest('what time is it')).toBe(false);
+    expect(isServerBugFixRequest('how is the server architecture designed')).toBe(false);
+    expect(isServerBugFixRequest('show me the server logs')).toBe(false);
+  });
+});
+
+describe('isOwnerExecutionOrTaskBlock — server crash prompts', () => {
+  test('short "fix server crash" is a task block, not a general question', () => {
+    expect(isOwnerExecutionOrTaskBlock('fix server crash')).toBe(true);
+    expect(isOwnerExecutionOrTaskBlock('can you fix server crash')).toBe(true);
+  });
+});
+
 describe('buildIVXOwnerAIPlannerDecision — senior developer execution prompts', () => {
+  test('"fix server crash" routes to the senior developer runtime', () => {
+    const decision = buildIVXOwnerAIPlannerDecision('Can you fix server crash');
+    expect(decision.semanticIntent).toBe('self_developer_execution');
+    expect(decision.route).toBe('self_developer');
+    expect(decision.toolHints).toContain('run_ivx_senior_developer_task');
+  });
+
   test('"fix this bug" routes to the senior developer runtime', () => {
     const decision = buildIVXOwnerAIPlannerDecision('fix this bug in the chat screen');
     expect(decision.semanticIntent).toBe('self_developer_execution');

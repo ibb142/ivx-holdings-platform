@@ -138,7 +138,7 @@ export function isOwnerExecutionOrTaskBlock(prompt: string): boolean {
   const hasStressTestSignal = /\bstress\s*test/i.test(normalized)
     || /\bload\s*test/i.test(normalized)
     || /\brun\s+a\s+(?:stress|load)\s+test/i.test(normalized);
-  if (hasAppScaffoldSignal || hasStressTestSignal) {
+  if (hasAppScaffoldSignal || hasStressTestSignal || isServerBugFixRequest(normalized)) {
     return true;
   }
 
@@ -225,6 +225,25 @@ export function asksToGenerate3DModel(normalized: string): boolean {
   }
   // "model/mesh/render" without "3d" only counts when paired with a clear object word.
   return meshTarget.test(normalized) && /\b(model|mesh|render|object|asset|figure|statue|product|prototype|scene)\b/.test(normalized);
+}
+
+/**
+ * Detects a short, imperative server bug/crash/fix request that must execute
+ * via the senior-developer runtime rather than fall through to a conversational
+ * GPT answer. Catches prompts like "fix server crash", "server is down", "fix
+ * the server issue", "resolve the backend crash" — these are concrete in-repo
+ * engineering tasks, not general questions. Without this signal the prompt is
+ * too short to register as a task block and the reliability gate blocks the
+ * GPT answer with a contradictory STATE: BLOCKED message.
+ */
+export function isServerBugFixRequest(normalized: string): boolean {
+  // Imperative "fix server ..." / "fix the server ..." / "fix backend/api ..."
+  const fixServer = /\bfix\s+(?:the\s+)?(?:server|backend|api)\b/i.test(normalized);
+  // Declarative server/backend/api crash / is down / outage / failure / error
+  const serverIncident = /\b(?:server|backend|api)\s+(?:is\s+|are\s+)?(?:crash|crashes|crashed|down|outage|offline|failing|failure|failures|error|errors|bug|bugs|issue|issues)\b/i.test(normalized);
+  // Imperative "fix server crash" / "fix backend outage" / "fix api error" (with specific noun)
+  const fixServerSpecific = /\bfix\s+(?:the\s+)?(?:server|backend|api)\s+(?:crash|crashes|outage|error|errors|failure|failures|issue|issues|bug|bugs)\b/i.test(normalized);
+  return fixServer || serverIncident || fixServerSpecific;
 }
 
 export function asksToBuildApp(normalized: string): boolean {
@@ -384,7 +403,8 @@ function isSelfDeveloperExecutionPrompt(normalized: string): boolean {
     || /\b(do\s+(?:it|this|that|the\s+task|the\s+work|the\s+fix|the\s+build|the\s+deploy|the\s+implementation|the\s+coding|now|immediately|asap|today|100%))\b/i.test(normalized)
     || /\b(developer\s+mode|self[-\s]?developer|senior\s+developer\s+mode|execute\s+(?:task|job|fix|build|deploy|patch|code)|run\s+developer\s+task|start\s+(?:coding|development|implementation|fix|build|deploy|patch))\b/i.test(normalized)
     || isRemovalExecutionPrompt(normalized)
-    || asksToFinishOrProveSeniorDeveloperWork(normalized);
+    || asksToFinishOrProveSeniorDeveloperWork(normalized)
+    || isServerBugFixRequest(normalized);
 }
 
 /**
