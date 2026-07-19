@@ -238,6 +238,14 @@ export type IVXOwnerAICanonicalResponse = {
   fallbackUsed?: boolean;
   toolOutputs?: IVXOwnerAIToolOutput[];
   runtimeV2?: IVXAgentRuntimeV2Snapshot;
+  /**
+   * FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19):
+   * Present on execution-mode responses (fix/build/deploy/audit/QA/refactor/
+   * migration/create module/create app/senior developer). Forwarded through
+   * validateCanonicalOwnerAIResponse so the chat can render a live-polling
+   * execution console bubble. Absent on normal conversation/explanation.
+   */
+  executionStatus?: IVXExecutionStatusPayload;
 };
 
 export type IVXOwnerAIRejectedResponse = {

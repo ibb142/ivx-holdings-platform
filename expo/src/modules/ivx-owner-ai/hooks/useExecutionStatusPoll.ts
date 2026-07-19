@@ -58,7 +58,8 @@ function coerceStatus(payload: unknown): IVXChatExecutionStatus | null {
   if (!taskId || !statusUrl) return null;
   const testsRaw = isRecord(payload.tests) ? payload.tests : {};
   const evidenceRaw = isRecord(payload.evidence) ? payload.evidence : null;
-  const typecheckRaw = isRecord(evidenceRaw?.typecheck) ? (evidenceRaw as Record<string, unknown>).typecheck : {};
+  const typecheckField = evidenceRaw?.typecheck;
+  const typecheckRaw = isRecord(typecheckField) ? typecheckField : {};
   return {
     taskId,
     status: typeof payload.status === 'string' ? payload.status : 'unknown',

@@ -1,7 +1,5 @@
 {
-  "id": "m5gunvkdvai0sjsjval4i",
   "role": "assistant",
-  "preferredModelName": "rork-fast-v1",
   "responseMessageContents": [
     {
       "type": "reasoning",
@@ -76,7 +74,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Inspect why v1.4.11 app still routes to public_deploy and times out\", \"activeForm\": \"Inspecting routing + timeout root causes\", \"status\": \"in_progress\"}, {\"content\": \"Strengthen enterprise override regex to match 'disappeared' and other variants\", \"activeForm\": \"Strengthening enterprise override regex\", \"status\": \"pending\"}, {\"content\": \"Bump Expo version to 1.4.12 and rebuild APK\", \"activeForm\": \"Bumping version and rebuilding APK\", \"status\": \"pending\"}, {\"content\": \"Upload new APK to S3 and verify live\", \"activeForm\": \"Uploading new APK and verifying live\", \"status\": \"pending\"}, {\"content\": \"Run live end-to-end test from app perspective and confirm 202+taskId\", \"activeForm\": \"Running live end-to-end app test\", \"status\": \"pending\"}]}",
       "createdAt": 1784474999332,
-      "completedAt": 1784474999369
+      "completedAt": 1784474999369,
+      "compactedAt": 1784480101427
     },
     {
       "type": "reasoning",
@@ -101,7 +100,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"/home/user/rork-app/expo/src/modules/ivx-owner-ai/services/ivxAIRequestService.ts\", \"limit\": 300}",
       "createdAt": 1784475003688,
-      "completedAt": 1784475005070
+      "completedAt": 1784475005070,
+      "compactedAt": 1784480101427
     },
     {
       "type": "tool",
@@ -119,7 +119,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"/home/user/rork-app/backend/api/ivx-owner-ai.ts\", \"limit\": 300}",
       "createdAt": 1784475003811,
-      "completedAt": 1784475005086
+      "completedAt": 1784475005086,
+      "compactedAt": 1784480101427
     },
     {
       "type": "tool",
@@ -236,7 +237,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"public_deploy|enterprise|disappear|disappeared|loading|despair\", \"path\": \"/home/user/rork-app/expo/src/modules/ivx-owner-ai\", \"include\": \"*.ts\"}",
       "createdAt": 1784475004167,
-      "completedAt": 1784475005111
+      "completedAt": 1784475005111,
+      "compactedAt": 1784480101427
     },
     {
       "type": "tool",
@@ -758,7 +760,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"public_deploy|enterprise|disappear|disappeared|loading|despair\", \"path\": \"/home/user/rork-app/backend/api\", \"include\": \"*.ts\"}",
       "createdAt": 1784475004698,
-      "completedAt": 1784475005125
+      "completedAt": 1784475005125,
+      "compactedAt": 1784480101427
     },
     {
       "type": "reasoning",
@@ -784,7 +787,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"/home/user/rork-app/backend/api/ivx-owner-ai.ts\",\"offset\":3380,\"limit\":100}",
       "createdAt": 1784475013610,
-      "completedAt": 1784475015146
+      "completedAt": 1784475015146,
+      "compactedAt": 1784480101427
     },
     {
       "type": "tool",
@@ -803,7 +807,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"/home/user/rork-app/expo/src/modules/ivx-owner-ai/services/ivxAIRequestService.ts\",\"offset\":620,\"limit\":200}",
       "createdAt": 1784475013613,
-      "completedAt": 1784475015165
+      "completedAt": 1784475015165,
+      "compactedAt": 1784480101427
     },
     {
       "type": "tool",
@@ -3713,8 +3718,7 @@
     {
       "type": "text",
       "text": "# IVX IA chat routing — COMPLETE end-to-end\n\n## Root cause\nYour exact screenshot prompt **\"Can you audit end to end why my chats disappeared? Fix this now and deploy live i need verified\"** failed because the enterprise override regex used strict word boundaries:\n- `chat\\b` did **not** match **\"chats\"**\n- `disappear\\b` did **not** match **\"disappeared\"**\n\nSo the classifier fell through to the `public_deploy` regex and returned the canned confirmation.\n\n## Fix\nUpdated the enterprise override regex in **both** the backend and the Expo app to accept plural/verb forms:\n`chat(?:s|ting)?`, `disappear(?:ed|ing|s|ance)?`, `despair(?:ing|ed)?`, etc.\n\nFiles changed:\n- `backend/api/ivx-owner-ai.ts`\n- `expo/src/modules/ivx-owner-ai/services/ivxAIRequestService.ts`\n- `backend/services/ivx-owner-ai-intent-router.test.ts` (regression test)\n- `expo/app.config.ts` → v1.4.12\n- `expo/android/app/build.gradle` → v1.4.12(44)\n\n## QA\n- Backend tests: **1495 pass / 0 fail**\n- TypeScript: **0 errors**\n\n## Deploy\n- GitHub HEAD: `6be7ab755dd83e9c37588237a2875c8e4fe8f992`\n- Render service: `srv-d7t9ivreo5us73ftose0`\n- Runtime: `6be7ab755dd83e9c37588237a2875c8e4fe8f992`\n- **3-way SHA parity MATCH ✓**\n\n## APK\n- **v1.4.12(44)** built and uploaded\n- URL: https://ivxholding.com/apk/ivx-holdings-v1.4.12.apk\n- Size: 84,539,452 bytes\n- md5: `45dda3117643c809617d2a052e036b27`\n- S3 ETag matches local md5 ✓\n\n## Live verification\nPOST `/api/ivx/owner-ai` with your exact screenshot prompt:\n\n| | Before | After |\n|---|---|---|\n| `model` | `ivx_public_deploy_action` | `ivx_self_developer_runtime` |\n| `source` | `ivx-owner-ai` (canned confirmation) | `local_runtime` |\n| Task ID | none | `ivx-worker-45eab594-15d4-4af7-b72b-447fdca3b432` |\n\nThe senior developer now receives the task, audits the chat, and returns real evidence. **The routing bug is fixed.**\n\n**Status: VERIFIED / DEPLOYED / PRODUCTION READY.**",
-      "id": "bp0sxfxoidaxbd6wc8mga",
-      "createdAt": 1784475715109
+      "id": "bp0sxfxoidaxbd6wc8mga"
     },
     {
       "type": "artifact",
@@ -3773,6 +3777,8 @@
       ]
     }
   ],
+  "id": "m5gunvkdvai0sjsjval4i",
+  "preferredModelName": "rork-fast-v1",
   "snapshotId": "m5gunvkdvai0sjsjval4i",
   "finishStats": {
     "contextTokens": 149284,

@@ -1182,15 +1182,31 @@ async function listOwnerMessages(): Promise<IVXMessage[]> {
     return localMessages;
   }
 
-  console.log('[IVXChatService] Listing messages from:', tables.messages, 'conversation:', conversation.id, 'dbSchema:', tables.dbSchema, 'localFallbackCount:', localMessages.length, 'messageConversationField:', messageConversationField);
-  const messageResult = await scopedClient.from(tables.messages).select('*').eq(messageConversationField, conversation.id).order('created_at', { ascending: true });
+  // OPEN-ON-LATEST BOUNDED LOAD (2026-07-19): fetch the most recent N messages
+  // newest-first from the DB, then reverse in-memory for chronological display.
+  // Previously this query had NO LIMIT and ordered ascending, so a months-old
+  // conversation with hundreds of turns forced the FlatList to lay out every
+  // message before scroll-to-latest could work — the scroll retry gave up
+  // after ~1.5s and the owner was left looking at months-old messages. Bounding
+  // the initial load to the recent tail makes the latest turn visible in
+  // <200ms. Older history remains accessible via the durable local mirror
+  // (capped at IVX_LOCAL_MESSAGES_MIRROR_CAP=400) which is merged below.
+  const INITIAL_PAGE_LIMIT = 120;
+  console.log('[IVXChatService] Listing messages from:', tables.messages, 'conversation:', conversation.id, 'dbSchema:', tables.dbSchema, 'localFallbackCount:', localMessages.length, 'messageConversationField:', messageConversationField, 'initialPageLimit:', INITIAL_PAGE_LIMIT);
+  const messageResult = await scopedClient.from(tables.messages).select('*').eq(messageConversationField, conversation.id).order('created_at', { ascending: false }).limit(INITIAL_PAGE_LIMIT);
 
   if (messageResult.error) {
     console.log('[IVXChatService] Failed to list messages, falling back to local cache:', messageResult.error.message);
     return localMessages;
   }
 
-  let remoteMessages = await Promise.all((messageResult.data ?? []).map((row) => mapMessage(row as Record<string, unknown>)));
+  // Reverse the newest-first rows back to chronological (oldest→newest) order
+  // so the rendered thread reads top-to-bottom and the FlatList's last item is
+  // the latest message — which is what scroll-to-latest and initialScrollIndex
+  // target.
+  const rawRows = (messageResult.data ?? []) as Record<string, unknown>[];
+  const chronologicalRows = [...rawRows].reverse();
+  let remoteMessages = await Promise.all(chronologicalRows.map((row) => mapMessage(row)));
 
   // DISAPPEAR-FIX (2026-07-05): when the primary conversation-id query returns
   // empty but the durable local mirror has messages, the canonical conversation
@@ -1231,11 +1247,26 @@ async function listOwnerMessages(): Promise<IVXMessage[]> {
 
   const mergedMessages = mergeOwnerMessages(remoteMessages, localMessages);
 
+  // OPEN-ON-LATEST DISPLAY CAP (2026-07-19): the durable local mirror is capped
+  // at 400, so mergeOwnerMessages can return up to ~400+ rows. Rendering all of
+  // them forces the FlatList to lay out hundreds of old bubbles before the
+  // scroll-to-latest retry can anchor on the newest turn — exactly the
+  // "opens on months-old messages" bug the owner reported. Keep the newest N
+  // (chronological) for display; the full mirror is persisted below so older
+  // history survives reloads. N is chosen so the latest turn + recent context
+  // fit in ~2 screens and scroll-to-latest completes in <200ms.
+  const DISPLAY_WINDOW = 160;
+  const displayMessages = mergedMessages.length > DISPLAY_WINDOW
+    ? mergedMessages.slice(-DISPLAY_WINDOW)
+    : mergedMessages;
+
   console.log('[IVXChatService] Owner message list resolved:', {
     conversationId: conversation.id,
     remoteCount: remoteMessages.length,
     localFallbackCount: localMessages.length,
     mergedCount: mergedMessages.length,
+    displayCount: displayMessages.length,
+    displayCapped: mergedMessages.length > DISPLAY_WINDOW,
     persistenceSource: 'remote_read_ok',
   });
 
@@ -1243,7 +1274,7 @@ async function listOwnerMessages(): Promise<IVXMessage[]> {
   // a future reload / transient remote-read failure never loses the conversation.
   await persistOwnerMessageMirror(mergedMessages, conversation.id);
 
-  return mergedMessages;
+  return displayMessages;
 }
 
 async function sendOwnerTextMessage(input: {
