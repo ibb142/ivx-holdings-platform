@@ -3397,7 +3397,7 @@ function resolveOwnerDevelopmentActionIntent(prompt: string): OwnerDevelopmentAc
   // live deploy/show proof/verified evidence, this is a senior-developer execution task — not a
   // standalone deploy confirmation. The senior-developer pipeline executes end-to-end and returns
   // real evidence (task_id, files changed, tests, commit/deploy status, health verification).
-  const hasChatOrUiTarget = /\b(chat|owner\s+room|owner\s+ai|message\s+list|message\s+bubble|composer|screen|ui|component|loading|loader|spinner|delay|lag|freeze|stutter|flicker|glitch|disappear|disappearing|despairing|vanish|missing|not\s+showing|not\s+displayed)\b/.test(normalized);
+  const hasChatOrUiTarget = /\b(chat(?:s|ting)?|owner\s+room(?:s)?|owner\s+ai|message\s+lists?|message\s+bubbles?|composer(?:s)?|screen(?:s)?|ui(?:s)?|component(?:s)?|load(?:ing|er|s)?|spinner(?:s)?|delay(?:s|ed)?|lag(?:s|ged)?|freez(?:e|es|ing)?|stutter(?:s|ing)?|flicker(?:s|ing)?|glitch(?:es|ing)?|disappear(?:ed|ing|s|ance)?|despair(?:ing|ed)?|vanish(?:es|ed|ing)?|missing|not\s+show(?:ing|ed)?|not\s+display(?:ed|ing)?)\b/.test(normalized);
   const hasFixOrAuditVerb = /\b(audit|fix|repair|patch|remove|delete|hide|eliminate|clear|clean\s*up|get\s+rid\s+of|implement|build|update|change|improve|optimize|solve|resolve|debug)\b/.test(normalized);
   const asksForProofOrLiveDeploy = /\b(deploy|live|production|verify|verified|proof|prove|show\s+me|evidence|now|immediately|asap|today|end[-\s]?to[-\s]?end)\b/.test(normalized);
   if (hasChatOrUiTarget && hasFixOrAuditVerb && asksForProofOrLiveDeploy) {

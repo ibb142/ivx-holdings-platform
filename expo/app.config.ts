@@ -17,12 +17,12 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: '1.4.11',
+  version: '1.4.12',
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_07_19_BUILD_43_IVX_IA_CHAT_ROUTING_FIX',
+    buildMarker: 'IVX_BUNDLE_2026_07_19_BUILD_44_ENTERPRISE_ROUTING_DISAPPEARED_FIX',
     buildTimestamp: '2026-07-19T14:25:00.000000+00:00',
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',

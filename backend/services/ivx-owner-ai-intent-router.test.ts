@@ -412,6 +412,8 @@ describe('buildIVXOwnerAIPlannerDecision — enterprise senior-developer chat fi
       'audit this chat, remove chat loading and deploy live with proof',
       'why is my chat disappearing fix this now and deploy verified',
       'remove the chat loading spinner end to end and show me proof',
+      'Can you audit end to end why my chats disappeared? Fix this now and deploy live i need verified',
+      'why are my messages vanishing and chat loading so slow? fix it now and show me proof',
     ];
     for (const prompt of prompts) {
       const decision = buildIVXOwnerAIPlannerDecision(prompt);
