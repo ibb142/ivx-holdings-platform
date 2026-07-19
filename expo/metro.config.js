@@ -1,6 +1,8 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { withRorkMetro } = require("@rork-ai/toolkit-sdk/metro");
 
+// IVX VENDOR-INDEPENDENCE 2026-07-19: @rork-ai/toolkit-sdk and withRorkMetro
+// removed. Metro now uses the plain Expo default config. The IVX app builds,
+// bundles, and runs with zero Rork SDK in the Metro pipeline.
 const config = getDefaultConfig(__dirname);
 
 // Watchman refuses to start in low-priority sandboxes (nice_value=19).
@@ -16,4 +18,4 @@ config.watcher = config.watcher || {};
 config.watchFolders = [__dirname];
 config.resolver = config.resolver || {};
 
-module.exports = withRorkMetro(config);
+module.exports = config;
