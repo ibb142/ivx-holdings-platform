@@ -869,10 +869,12 @@ export default function IVXOwnerChatRoute() {
   const prevSearchActiveRef = useRef<boolean>(false);
   const lastScrolledConversationIdRef = useRef<string | null>(null);
   // OPEN-ON-LATEST FIX: tracks whether the chat still needs to be anchored to
-  // the newest message after first load / conversation switch. Cleared once a
-  // scroll to the bottom actually executes. Prevents the race where scrollToEnd
-  // fires before the FlatList has measured dynamic message bubbles.
-  const pendingInitialScrollRef = useRef<boolean>(true);
+  // the newest message after first load / conversation switch. Kept as React
+  // state (not a ref) so a dedicated retry effect can re-render and keep trying
+  // until the FlatList actually reports it is at the bottom. Prevents the race
+  // where scrollToEnd / scrollToIndex fail silently before dynamic message
+  // bubbles have been measured.
+  const [initialScrollPending, setInitialScrollPending] = useState<boolean>(true);
   const insets = useSafeAreaInsets();
   const { user, userId, isLoading, isAuthenticated, userRole, loginOwnerPasswordless } = useAuth();
   const [composerValue, setComposerValue] = useState<string>('');
@@ -1664,7 +1666,7 @@ export default function IVXOwnerChatRoute() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (messages.length === 0) {
+    if (displayedMessages.length === 0) {
       return;
     }
 
@@ -1673,16 +1675,14 @@ export default function IVXOwnerChatRoute() {
     // conversation immediately, matching WhatsApp/iMessage behavior.
     const activeConversationId = conversationQuery.data?.id ?? 'ivx-owner-room';
     const isConversationSwitch = lastScrolledConversationIdRef.current !== activeConversationId;
-    if (isConversationSwitch && messages.length > 0) {
+    if (isConversationSwitch) {
       lastScrolledConversationIdRef.current = activeConversationId;
       ivxDiagnostics.recordAutoScroll('conversation-load');
-      // OPEN-ON-LATEST FIX: anchor the thread to the newest message. We set a
-      // pending flag that onLayout/onContentSizeChange also check, so even if
-      // this first scrollToEnd fails because the list hasn't measured yet, a
-      // later layout checkpoint will finish the job. Multiple timing retries
-      // cover Android's delayed measurement and dynamic bubble heights.
-      pendingInitialScrollRef.current = true;
-      scrollToBottomRobust(false);
+      // OPEN-ON-LATEST FIX: anchor the thread to the newest message. We keep a
+      // state flag so the retry effect can keep trying until the FlatList actually
+      // reports it is at the bottom, covering dynamic bubble heights and Android's
+      // delayed measurement. The user must never land on months-old messages.
+      setInitialScrollPending(true);
       isAtBottomRef.current = true;
       setShowScrollToLatest(false);
       setUnreadCount(0);
@@ -1693,7 +1693,7 @@ export default function IVXOwnerChatRoute() {
         console.log('[IVXOwnerChatRoute] Mark read failed:', error instanceof Error ? error.message : 'unknown');
       });
     }
-  }, [conversationQuery.data?.id, localFirstChatMode, messages.length]);
+  }, [conversationQuery.data?.id, localFirstChatMode, displayedMessages]);
 
   const persistSupportMessage = useCallback(async (text: string, role: 'system' | 'assistant' = 'system') => {
     const trimmedText = safeTrim(text);
@@ -5275,6 +5275,49 @@ export default function IVXOwnerChatRoute() {
     setTimeout(scrollIfAllowed, Platform.OS === 'android' ? 1200 : 500);
   }, [displayedMessages.length]);
 
+  // OPEN-ON-LATEST FIX: retry the initial scroll until the FlatList actually
+  // reports it is at the bottom. scrollToEnd / scrollToIndex can fail silently
+  // when the FlatList has not yet measured dynamic bubbles, so we keep polling
+  // for up to ~1.5s after the conversation first loads or switches. This is the
+  // fix for the bug where the chat opens showing months-old messages instead of
+  // the latest turn.
+  useEffect(() => {
+    if (!initialScrollPending || displayedMessages.length === 0) {
+      return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 8;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const tryScroll = () => {
+      if (cancelled) {
+        return;
+      }
+      attempts += 1;
+      scrollToBottomRobust(false);
+      if (isAtBottomRef.current) {
+        setInitialScrollPending(false);
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        setInitialScrollPending(false);
+        return;
+      }
+      timeoutId = setTimeout(tryScroll, Platform.OS === 'android' ? 180 : 80);
+    };
+
+    tryScroll();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [initialScrollPending, displayedMessages.length, scrollToBottomRobust]);
+
   const handleMessageListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     ivxDiagnostics.recordScroll('message-list');
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -5282,12 +5325,15 @@ export default function IVXOwnerChatRoute() {
     const atBottom = distanceFromBottom < 96;
     if (atBottom !== isAtBottomRef.current) {
       isAtBottomRef.current = atBottom;
+      if (atBottom && initialScrollPending) {
+        setInitialScrollPending(false);
+      }
       setShowScrollToLatest(!atBottom);
       if (atBottom) {
         setUnreadCount(0);
       }
     }
-  }, []);
+  }, [initialScrollPending]);
 
   const handleScrollToLatest = useCallback(() => {
     ivxDiagnostics.recordAutoScroll('jump-to-latest');
@@ -6347,9 +6393,11 @@ export default function IVXOwnerChatRoute() {
                 ivxDiagnostics.recordContentHeight(`h=${Math.round(height)} count=${displayedMessages.length} atBottom=${isAtBottomRef.current}`);
                 // OPEN-ON-LATEST FIX: on first load or conversation switch, force
                 // a scroll to the newest message once the content size is known.
-                if (pendingInitialScrollRef.current && displayedMessages.length > 0) {
+                // The retry effect clears the pending state when the list actually
+                // reports it is at the bottom, so we keep trying even if the first
+                // scrollToEnd silently fails.
+                if (initialScrollPending && displayedMessages.length > 0) {
                   scrollToBottomRobust(false);
-                  pendingInitialScrollRef.current = false;
                   return;
                 }
                 if (Date.now() < suppressAutoScrollUntilRef.current) {
@@ -6365,9 +6413,8 @@ export default function IVXOwnerChatRoute() {
                 // OPEN-ON-LATEST FIX: re-anchor to the newest message once the
                 // FlatList itself has mounted and measured. This covers the race
                 // where messagesQuery data arrives before the list has laid out.
-                if (pendingInitialScrollRef.current && displayedMessages.length > 0) {
+                if (initialScrollPending && displayedMessages.length > 0) {
                   scrollToBottomRobust(false);
-                  pendingInitialScrollRef.current = false;
                 } else if (isAtBottomRef.current) {
                   flatListRef.current?.scrollToEnd({ animated: false });
                 }
