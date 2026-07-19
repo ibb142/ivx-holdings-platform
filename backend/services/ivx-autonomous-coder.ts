@@ -1013,16 +1013,32 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
   let rollbackTriggered = false;
   let rollbackCommitSha: string | null = null;
   let rollbackError: string | null = null;
-  // Helper: check cancel + runtime at stage boundaries; returns true if we must stop.
+  // Helper: check cancel + runtime + per-stage-timeout at stage boundaries; returns
+  // true if we must stop. The per-stage timer is reset every time a NEW stage
+  // starts (via `markStageStart`), so a stage that hangs is detected even when
+  // the global runtime cap has not yet fired. This is the fix for the PILOT-7
+  // incident where the engine sat at TESTING 50% for 11+ minutes because the
+  // per-stage timeout helper existed but was never invoked.
+  let currentStageStartedAt = startedAt;
+  let currentStagePhase: IVXAutonomousCoderPhase = 'queued';
+  const markStageStart = (phase: IVXAutonomousCoderPhase): void => {
+    currentStageStartedAt = Date.now();
+    currentStagePhase = phase;
+  };
   const checkStop = (phase: IVXAutonomousCoderPhase, iteration: number, detail: string): boolean => {
     input.heartbeat?.({ phase, iteration, elapsedMs: Date.now() - startedAt, detail });
     if (isCanceled(input)) return true;
     if (runtimeExceeded(startedAt, maxRuntimeMs)) return true;
+    // Per-stage timeout: check the CURRENT stage's wall-clock elapsed against
+    // STAGE_TIMEOUTS_MS. The phase passed here is the stage we are about to
+    // enter; markStageStart should have been called when the prior stage began.
+    if (stageExceeded(currentStageStartedAt, String(currentStagePhase))) return true;
     return false;
   };
 
   // ── INSPECT ──────────────────────────────────────────────────────────────
   onPhase?.('inspecting', 'Indexing repository + picking inspection targets.');
+  markStageStart('inspecting');
   if (checkStop('inspecting', 0, 'pre-inspect')) {
     return buildCanceledProof(input, startedAt, iterations, commandsRun, null, [], '', '', [], null, llmCallCount, estimatedTokensUsed);
   }
@@ -1264,6 +1280,7 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
       break;
     }
     onPhase?.('planning', `Iteration ${iterationCount}: generating patch via IVX LLM (attempt ${llmAttempts + 1}/${MAX_LLM_ATTEMPTS}).`);
+    markStageStart('planning');
     let llmResponse = '';
     // Count the attempt BEFORE the call so a timeout/error still counts toward
     // the per-job call cap (an attempted call that hung is still a call).
@@ -1341,6 +1358,7 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
 
     // ── APPLY PATCH ──────────────────────────────────────────────────────
     onPhase?.('patching', `Iteration ${iterationCount}: applying ${parsed.operations.length} patch operation(s).`);
+    markStageStart('patching');
     let patchApplied = false;
     const appliedOps: IVXAutonomousCoderPatchOperation[] = [];
     let applyError: string | null = null;
@@ -1382,6 +1400,7 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
 
     // ── TEST ─────────────────────────────────────────────────────────────
     onPhase?.('testing', `Iteration ${iterationCount}: running targeted tests + typecheck.`);
+    markStageStart('testing');
     const targetTest = pickTargetTestFile(input.goal, filesChanged);
     const testCmd = `bun test ${targetTest}`;
     // Only run `bun test` when bun is actually available on PATH. The Render
