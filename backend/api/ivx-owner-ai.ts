@@ -112,6 +112,17 @@ import { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from '../ser
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock } from '../services/ivx-db-count';
 
 import { classifyOwnerExecutionCommand, type IVXOwnerExecutionDecision } from '../services/ivx-owner-execution-mode';
+import {
+  classifyExecutionModeIntent,
+  type IVXExecutionModeCategory,
+  type IVXExecutionModeClassification,
+} from '../services/ivx-execution-mode-classifier';
+import {
+  buildExecutionStatusPayload,
+  hasForbiddenNarrative,
+  findForbiddenNarrativePhrases,
+  type IVXExecutionStatusPayload,
+} from '../services/ivx-execution-status-schema';
 import { startDailyImprovementTask, type DailyImprovementStart } from '../services/ivx-daily-improvement';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { recordExecutionTrace } from '../services/ivx-execution-trace-store';
@@ -594,7 +605,7 @@ function safeTranscriptAssistantText(value: string): string {
 }
 
 type SafeOwnerAIResponsePayload = Pick<IVXOwnerAIResponse, 'requestId' | 'conversationId' | 'answer' | 'model' | 'status'>;
-type OwnerAIInternalMetadata = Partial<Pick<IVXOwnerAIResponse, 'source' | 'provider' | 'endpoint' | 'deploymentMarker' | 'assistantMessageId' | 'assistantPersisted' | 'selectedIntent' | 'selectedTool' | 'routerDebug' | 'toolInput' | 'toolOutput' | 'fallbackUsed' | 'toolOutputs' | 'runtimeV2' | 'continuationToken' | 'continuationPart' | 'continuationTotalParts' | 'continuationNextItemNumber' | 'continuationComplete' | 'continuationPrompt'>>;
+type OwnerAIInternalMetadata = Partial<Pick<IVXOwnerAIResponse, 'source' | 'provider' | 'endpoint' | 'deploymentMarker' | 'assistantMessageId' | 'assistantPersisted' | 'selectedIntent' | 'selectedTool' | 'routerDebug' | 'toolInput' | 'toolOutput' | 'fallbackUsed' | 'toolOutputs' | 'runtimeV2' | 'continuationToken' | 'continuationPart' | 'continuationTotalParts' | 'continuationNextItemNumber' | 'continuationComplete' | 'continuationPrompt' | 'executionStatus'>>;
 
 function buildOwnerRuntimeV2(input: {
   requestId: string;
@@ -637,6 +648,18 @@ function buildOwnerAIResponsePayload(
   internalMetadata: OwnerAIInternalMetadata,
   includeDiagnostics: boolean,
 ): IVXOwnerAIResponse | (IVXOwnerAIResponse & { diagnostics: OwnerAIInternalMetadata }) {
+  // Cast helper: buildOwnerAIResponsePayload produces the visible JSON shape.
+  // When the caller supplies an HTTP status (e.g. 202 for execution-mode), the
+  // caller passes it directly to ownerOnlyJson — this function only shapes the
+  // body. Keeping the cast local avoids touching every existing caller.
+  return buildOwnerAIResponsePayloadInner(safePayload, internalMetadata, includeDiagnostics);
+}
+
+function buildOwnerAIResponsePayloadInner(
+  safePayload: SafeOwnerAIResponsePayload,
+  internalMetadata: OwnerAIInternalMetadata,
+  includeDiagnostics: boolean,
+): IVXOwnerAIResponse | (IVXOwnerAIResponse & { diagnostics: OwnerAIInternalMetadata }) {
   console.log('[IVXOwnerAIBackend] Owner AI internal response metadata:', internalMetadata);
   const responsePayload: IVXOwnerAIResponse = {
     ...safePayload,
@@ -661,6 +684,12 @@ function buildOwnerAIResponsePayload(
     continuationNextItemNumber: internalMetadata.continuationNextItemNumber,
     continuationComplete: internalMetadata.continuationComplete,
     continuationPrompt: internalMetadata.continuationPrompt,
+    // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): forward
+    // the strict 9-field executionStatus payload so the Expo chat can render a
+    // live-polling ExecutionConsoleBubble for execution-mode prompts. Without
+    // this explicit field copy, the payload is constructed but dropped — the
+    // exact "executionStatus: ABSENT" bug the live routing test caught.
+    executionStatus: internalMetadata.executionStatus,
   };
 
   if (!includeDiagnostics) {
@@ -7280,20 +7309,57 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         conversationId: conversation.id,
       });
 
-      // Bounded poll for terminal state. The worker drains the queue async on
-      // the same process; we poll the in-memory/durable job until it reaches a
-      // terminal state or the safety timeout fires. Hard cap prevents an
-      // unbounded chat request.
-      const POLL_INTERVAL_MS = 1500;
-      const POLL_TIMEOUT_MS = 55_000; // stay under the HTTP 60s budget
-      const pollDeadline = Date.now() + POLL_TIMEOUT_MS;
+      // ── FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19) ───────
+      // The chat becomes an EXECUTION CONSOLE, not a planning assistant.
+      // Every developer request creates ONE persistent worker job and returns
+      // HTTP 202 + the strict 9-field executionStatus payload IMMEDIATELY so
+      // the owner sees the taskId + live progress without waiting on the
+      // HTTP path. The worker drains the queue asynchronously on the same
+      // process; the Expo client polls the statusUrl for live updates and the
+      // final verified evidence.
+      //
+      // The previous 55s blocking poll is removed deliberately: it held the
+      // HTTP connection for up to a minute, looked exactly like a hung chat
+      // to the owner, and forced the client to render a terminal answer that
+      // often arrived with stale stage data. Returning 202 immediately is the
+      // owner-required behavior for fix/build/deploy/audit/QA/refactor/
+      // migration/create module/create app/senior developer prompts.
+      const executionModeClassification = classifyExecutionModeIntent(prompt);
+      const executionModeCategory: IVXExecutionModeCategory | null = executionModeClassification.isExecutionMode
+        ? executionModeClassification.category
+        : null;
+      const jobId = taskId;
+
+      // Short bounded wait (max 12s) for the worker to advance past QUEUED so
+      // the first status payload reflects real execution progress, not just
+      // "queued". This stays well under the HTTP 60s budget and never blocks
+      // the chat for the full execution duration. If the worker is still
+      // mid-flight at 12s, we return 202 with the current live progress —
+      // the client polls the statusUrl for the rest.
+      const WARMUP_INTERVAL_MS = 750;
+      const WARMUP_TIMEOUT_MS = 12_000;
+      const warmupDeadline = Date.now() + WARMUP_TIMEOUT_MS;
       let finalJob: IVXWorkerJob = enqueuedJob;
       const isTerminal = (st: IVXWorkerJob['status']): boolean =>
         st === 'completed' || st === 'failed' || st === 'blocked' || st === 'cancelled';
-      while (!isTerminal(finalJob.status) && Date.now() < pollDeadline) {
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      const hasAdvanced = (st: IVXWorkerJob['status']): boolean =>
+        st !== 'queued';
+      while (!isTerminal(finalJob.status) && !hasAdvanced(finalJob.status) && Date.now() < warmupDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, WARMUP_INTERVAL_MS));
         const fresh = await getSeniorDeveloperJob(taskId);
         if (fresh) finalJob = fresh;
+      }
+      // If the worker reached a terminal state inside the warmup window, keep
+      // polling briefly so a fast job returns its final evidence in the same
+      // response (no extra client round-trip). Cap at +8s so the total stays
+      // under 20s — still well under the 60s HTTP budget.
+      if (!isTerminal(finalJob.status) && hasAdvanced(finalJob.status)) {
+        const extraDeadline = Math.min(Date.now() + 8_000, warmupDeadline + 8_000);
+        while (!isTerminal(finalJob.status) && Date.now() < extraDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, WARMUP_INTERVAL_MS));
+          const fresh = await getSeniorDeveloperJob(taskId);
+          if (fresh) finalJob = fresh;
+        }
       }
 
       // Final enforcement: the answer MUST be a real developer-execution response.
@@ -7307,8 +7373,21 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       if (enforcedExecution.enforced) {
         console.log('[IVXOwnerAIBackend] Developer-execution guard blocked a non-compliant answer:', enforcedExecution.result.violations);
       }
-      const jobId = taskId;
-      const answer = assertVisibleOwnerAIAnswer(enforcedExecution.answer);
+      // EXECUTION MODE narrative guard: any forbidden narrative phrase
+      // ("I'll inspect…", "Here is my plan", "I'll deploy…") is stripped and
+      // logged. The owner's acceptance criteria bans narrative planning for
+      // developer requests — only the strict execution block is allowed.
+      let answer = assertVisibleOwnerAIAnswer(enforcedExecution.answer);
+      if (hasForbiddenNarrative(answer)) {
+        const violations = findForbiddenNarrativePhrases(answer);
+        console.log('[IVXOwnerAIBackend] execution-mode narrative guard blocked phrases:', violations);
+        // Replace any forbidden phrase line with the strict execution marker so
+        // the visible answer stays evidence-only. We do not throw — the worker
+        // still produced real evidence in the strict block below.
+        for (const phrase of violations) {
+          answer = answer.split(phrase).join('[narrative removed — execution mode]');
+        }
+      }
       let assistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
       if (persistAssistantMessage && !assistantMessageId) {
         try {
@@ -7363,6 +7442,21 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         linkedClaim: answer,
       });
 
+      // Build the strict 9-field executionStatus payload the owner mandates.
+      // HTTP 202 while the job is still running; 200 once it reaches a terminal
+      // state with verified evidence. The Expo client polls statusUrl for live
+      // updates between the initial 202 and the terminal 200.
+      const executionStatusPayload = buildExecutionStatusPayload(finalJob, executionModeCategory, answer);
+      const executionHttpStatus = executionStatusPayload.httpStatus;
+      console.log('[IVXOwnerAIBackend] execution-mode response:', {
+        taskId: jobId,
+        category: executionModeCategory,
+        jobStatus: finalJob.status,
+        stage: finalJob.stage,
+        progress: finalJob.progressPercent,
+        httpStatus: executionHttpStatus,
+      });
+
       return ownerOnlyJson(buildOwnerAIResponsePayload({
         requestId,
         conversationId: conversation.id,
@@ -7376,7 +7470,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         deploymentMarker: DEPLOYMENT_MARKER,
         assistantMessageId,
         assistantPersisted: Boolean(assistantMessageId),
-      }, body.devTestModeActive === true));
+        executionStatus: executionStatusPayload,
+      }, body.devTestModeActive === true), executionHttpStatus);
     }
 
     const developmentActionIntent = initialDevelopmentActionIntent;

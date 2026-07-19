@@ -34,6 +34,8 @@ import {
   View,
 } from 'react-native';
 import { MessageBubble } from '@/src/modules/chat/components/MessageBubble';
+import { ExecutionConsoleBubble } from '@/src/modules/ivx-owner-ai/components/ExecutionConsoleBubble';
+import { coerceExecutionStatusFromPayload } from '@/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Activity, ChevronDown, ClipboardList, Cpu, Crosshair, Crown, Gauge, GitBranch, KeyRound, LayoutDashboard, LineChart, Lock, Mail, Megaphone, MessageCircle, Mic, Paperclip, Pin, PlayCircle, Radar, Radio, Rocket, Search, Send, ShieldCheck, Sparkles, Square, Terminal, Unplug, Upload, UserPlus, Users, X } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -49,7 +51,7 @@ import { getIVXAccessToken, getIVXOwnerAIConfigAudit, type IVXOwnerAIConfigAudit
 import { runOwnerSessionPreflight, OWNER_SESSION_REQUIRED_LABEL } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { safeSetString } from '@/lib/safe-clipboard';
-import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput } from '@/shared/ivx';
+import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput, IVXExecutionStatusPayload } from '@/shared/ivx';
 import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
 import { runDurableOwnerAIFallback, resumePendingDurableTasks, shouldAttemptDurableFallback } from '@/src/modules/ivx-owner-ai/services/ivxDurableTaskService';
 import { ivxAIWatchdog, type WatchdogTraceHandle } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
@@ -1265,6 +1267,13 @@ export default function IVXOwnerChatRoute() {
   });
 
   const [transientAssistantMessages, setTransientAssistantMessages] = useState<IVXMessage[]>([]);
+  // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): side-channel
+  // map from transient assistant message id → the 9-field executionStatus payload
+  // the backend attached to its 202 response. Kept outside IVXMessage (which is
+  // the persisted Supabase row shape) so we don't widen the DB schema. The
+  // renderMessage callback reads this map to decide whether to render a
+  // live-polling ExecutionConsoleBubble instead of a plain MessageBubble.
+  const [executionStatusByMessageId, setExecutionStatusByMessageId] = useState<Map<string, IVXExecutionStatusPayload>>(new Map());
   const [pendingOwnerMessages, setPendingOwnerMessages] = useState<PendingOwnerMessage[]>([]);
   const draftRestoreCompletedRef = useRef<boolean>(false);
   const uploadProgressTimersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -2263,6 +2272,33 @@ export default function IVXOwnerChatRoute() {
           ? `Tool used: ${executedToolNames.join(', ')}`
           : null;
         const visibleAnswer = toolUsedLabel ? `${normalizedAnswer}\n\n${toolUsedLabel}` : normalizedAnswer;
+
+        // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): capture
+        // the strict 9-field executionStatus payload the backend attached to its
+        // 202 response. Stored in a side-channel map keyed by the transient
+        // assistant message id so renderMessage can swap the plain MessageBubble
+        // for a live-polling ExecutionConsoleBubble. When the job is still
+        // running (HTTP 202), the console bubble polls the worker statusUrl and
+        // streams live stage/progress until the terminal verified-evidence block
+        // arrives. No narrative planning — execution console only.
+        const executionStatusPayload = aiResult.executionStatus ?? null;
+        if (executionStatusPayload) {
+          const capturedTransientId = transientReplyId;
+          setExecutionStatusByMessageId((current) => {
+            const next = new Map(current);
+            next.set(capturedTransientId, executionStatusPayload);
+            return next;
+          });
+          console.log('[IVXOwnerChatRoute] execution-mode status captured:', {
+            transientReplyId: capturedTransientId,
+            taskId: executionStatusPayload.taskId,
+            category: executionStatusPayload.category,
+            status: executionStatusPayload.status,
+            stage: executionStatusPayload.stage,
+            liveProgress: executionStatusPayload.liveProgress,
+            httpStatus: executionStatusPayload.httpStatus,
+          });
+        }
 
         console.log('[IVX_TRACE] 4_BACKEND_RESPONSE', { mutationRunId, source: normalizedSource, answerLength: normalizedAnswer.length, requestId: aiResult.requestId, assistantPersisted: aiResult.assistantPersisted });
         console.log('[IVXOwnerChatRoute] assistant_generation_success:', { source: normalizedSource, answerLength: normalizedAnswer.length, requestId: aiResult.requestId, toolUsed: toolUsedLabel });
@@ -4221,6 +4257,38 @@ export default function IVXOwnerChatRoute() {
       );
     }
 
+    // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): when the
+    // assistant message carries an executionStatus payload (attached by the
+    // send path when the backend returned 202 for fix/build/deploy/audit/QA/
+    // refactor/migration/create module/create app/senior developer prompts),
+    // render a live-polling ExecutionConsoleBubble instead of the plain
+    // MessageBubble. The console polls the worker statusUrl, streams live
+    // stage/progress, and swaps to the verified-evidence block when the job
+    // reaches a terminal state. No narrative planning — execution only.
+    const executionStatusForMessage = isAssistant
+      ? executionStatusByMessageId.get(item.id) ?? null
+      : null;
+    if (isAssistant && executionStatusForMessage) {
+      const coerced = coerceExecutionStatusFromPayload(executionStatusForMessage);
+      if (coerced) {
+        return (
+          <>
+            {shouldShowDateSeparator ? <DateSeparator value={item.createdAt} /> : null}
+            <View
+              style={[styles.messageRow, styles.messageRowOther]}
+              testID={`ivx-owner-message-${item.id}`}
+            >
+              <ExecutionConsoleBubble
+                initialStatus={coerced}
+                authToken={null}
+                categoryLabel={coerced.category ?? undefined}
+              />
+            </View>
+          </>
+        );
+      }
+    }
+
     const pendingState = pendingOwnerMessages.find((pendingMessage) => pendingMessage.clientId === item.id);
     const parsedReplyBody = pendingState?.replyTo ? { replyTo: pendingState.replyTo, body: item.body ?? '' } : parseReplyBody(item.body);
     const chatMessage = {
@@ -4275,7 +4343,7 @@ export default function IVXOwnerChatRoute() {
         </View>
       </>
     );
-  }, [displayedMessages, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
+  }, [displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
 
   useEffect(() => {
     const pendingMessageId = pendingJumpMessageIdRef.current;

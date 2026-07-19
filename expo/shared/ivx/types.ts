@@ -168,6 +168,55 @@ export type IVXOwnerAIResponse = {
   continuationNextItemNumber?: number | null;
   continuationComplete?: boolean;
   continuationPrompt?: string | null;
+  /**
+   * FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19):
+   * Present on every execution-mode response (fix/build/deploy/audit/QA/
+   * refactor/migration/create module/create app/senior developer). Carries
+   * the 9 owner-required fields: taskId, status, stage, liveProgress,
+   * filesChanged, tests, commitSha, deploymentId, evidence. Absent on normal
+   * conversation/explanation responses.
+   */
+  executionStatus?: IVXExecutionStatusPayload;
+};
+
+/**
+ * Execution-mode status payload — the strict 9-field schema the owner mandates
+ * for every developer request. Mirrors the backend
+ * `IVXExecutionStatusPayload` in backend/services/ivx-execution-status-schema.ts.
+ */
+export type IVXExecutionStatusPayload = {
+  taskId: string;
+  status: string;
+  stage: string;
+  liveProgress: number;
+  filesChanged: string[];
+  tests: {
+    run: boolean;
+    passed: boolean;
+    command: string | null;
+  };
+  commitSha: string | null;
+  deploymentId: string | null;
+  evidence: IVXExecutionEvidence | null;
+  httpStatus: 200 | 202;
+  category: string | null;
+  statusUrl: string;
+  generatedAt: string;
+};
+
+export type IVXExecutionEvidence = {
+  deployedToProduction: boolean;
+  liveCommit: string | null;
+  commitMatch: boolean;
+  healthOk: boolean;
+  typecheck: {
+    run: boolean;
+    passed: boolean;
+  };
+  buildRun: boolean;
+  finalStatus: string;
+  error: string | null;
+  answerBlock: string;
 };
 
 export type IVXOwnerAICanonicalResponse = {

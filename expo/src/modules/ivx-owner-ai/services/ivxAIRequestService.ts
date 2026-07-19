@@ -1592,6 +1592,14 @@ function validateCanonicalOwnerAIResponse(
   const runtimeV2 = isRecord(payload.runtimeV2) && payload.runtimeV2.version === 'agent_runtime_v2'
     ? payload.runtimeV2 as IVXAgentRuntimeV2Snapshot
     : undefined;
+  // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): the backend
+  // attaches a strict 9-field executionStatus payload to every execution-mode
+  // response (fix/build/deploy/audit/QA/refactor/migration/create module/
+  // create app/senior developer). Forward it through so the chat can render a
+  // live-polling execution console bubble instead of a static narrative answer.
+  const executionStatus = isRecord(payload.executionStatus) && typeof payload.executionStatus.taskId === 'string'
+    ? payload.executionStatus as IVXOwnerAIResponse['executionStatus']
+    : undefined;
   const normalizedRequestId = typeof requestId === 'string' && requestId.trim().length > 0
     ? requestId.trim()
     : `${fallbackRequestPrefix}-canonical`;
@@ -1648,6 +1656,7 @@ function validateCanonicalOwnerAIResponse(
       fallbackUsed: typeof fallbackUsed === 'boolean' ? fallbackUsed : undefined,
       toolOutputs: toolOutputs as IVXOwnerAIResponse['toolOutputs'],
       runtimeV2,
+      executionStatus,
     },
     rejection: null,
   };
