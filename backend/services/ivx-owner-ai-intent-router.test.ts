@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   asksForCodeRetrieval,
   asksToBuildApp,
+  asksToCreateAndShowProof,
   asksToFinishOrProveSeniorDeveloperWork,
   buildIVXOwnerAIPlannerDecision,
   demandsExecutionProofNotNarrative,
@@ -254,6 +255,50 @@ describe('isOwnerExecutionOrTaskBlock — server crash prompts', () => {
   test('short "fix server crash" is a task block, not a general question', () => {
     expect(isOwnerExecutionOrTaskBlock('fix server crash')).toBe(true);
     expect(isOwnerExecutionOrTaskBlock('can you fix server crash')).toBe(true);
+  });
+});
+
+describe('asksToCreateAndShowProof — "create and show me" execution commands', () => {
+  test('detects the screenshot prompt: create+show+chat module+senior developer status phrase', () => {
+    const prompt = 'Can you create and show me on this chat developer text for chat module I want to see if you are senior developer';
+    expect(asksToCreateAndShowProof(prompt)).toBe(true);
+  });
+
+  test('detects related create-and-show-proof phrasings', () => {
+    expect(asksToCreateAndShowProof('create a chat module and show me')).toBe(true);
+    expect(asksToCreateAndShowProof('build a feature and prove it')).toBe(true);
+    expect(asksToCreateAndShowProof('make the developer text and show me in chat')).toBe(true);
+    expect(asksToCreateAndShowProof('I want to see if you can create a backend route')).toBe(true);
+    expect(asksToCreateAndShowProof('show me the code you create for this screen')).toBe(true);
+  });
+
+  test('does NOT fire on purely informational or tutorial requests', () => {
+    expect(asksToCreateAndShowProof('how do I create a chat module')).toBe(false);
+    expect(asksToCreateAndShowProof('what is a chat module')).toBe(false);
+    expect(asksToCreateAndShowProof('are you a senior developer')).toBe(false);
+    expect(asksToCreateAndShowProof('show me the analytics code')).toBe(false);
+  });
+});
+
+describe('buildIVXOwnerAIPlannerDecision — "create and show me" routes to senior developer', () => {
+  test('the screenshot prompt routes to self developer, not status answer', () => {
+    const decision = buildIVXOwnerAIPlannerDecision('Can you create and show me on this chat developer text for chat module I want to see if you are senior developer');
+    expect(decision.route).toBe('self_developer');
+    expect(decision.semanticIntent).toBe('self_developer_execution');
+    expect(decision.toolHints).toContain('run_ivx_senior_developer_task');
+  });
+
+  test('related create-and-show prompts route to self developer', () => {
+    const prompts = [
+      'create a chat module and show me',
+      'build a feature and prove it',
+      'make the developer text and show me in chat',
+    ];
+    for (const prompt of prompts) {
+      const decision = buildIVXOwnerAIPlannerDecision(prompt);
+      expect(decision.route).toBe('self_developer');
+      expect(decision.semanticIntent).toBe('self_developer_execution');
+    }
   });
 });
 

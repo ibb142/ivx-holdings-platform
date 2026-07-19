@@ -138,7 +138,7 @@ export function isOwnerExecutionOrTaskBlock(prompt: string): boolean {
   const hasStressTestSignal = /\bstress\s*test/i.test(normalized)
     || /\bload\s*test/i.test(normalized)
     || /\brun\s+a\s+(?:stress|load)\s+test/i.test(normalized);
-  if (hasAppScaffoldSignal || hasStressTestSignal || isServerBugFixRequest(normalized)) {
+  if (hasAppScaffoldSignal || hasStressTestSignal || isServerBugFixRequest(normalized) || asksToCreateAndShowProof(normalized)) {
     return true;
   }
 
@@ -244,6 +244,37 @@ export function isServerBugFixRequest(normalized: string): boolean {
   // Imperative "fix server crash" / "fix backend outage" / "fix api error" (with specific noun)
   const fixServerSpecific = /\bfix\s+(?:the\s+)?(?:server|backend|api)\s+(?:crash|crashes|outage|error|errors|failure|failures|issue|issues|bug|bugs)\b/i.test(normalized);
   return fixServer || serverIncident || fixServerSpecific;
+}
+
+/**
+ * Detects owner prompts that demand a real creation/build be shown/proven in the chat
+ * (e.g. "create and show me a chat module", "build me a feature and prove it",
+ * "make the developer text and show me"). These are execution commands, not status
+ * questions or tutorial requests. The phrase "I want to see if you are senior developer"
+ * was wrongly answered with a static capability description because the router did not
+ * recognize the first half of the message as an execution signal. This detector closes
+ * that gap: when a create/build verb and a show/proof verb both appear with a code/UI
+ * target, the senior-developer runtime executes end-to-end and returns live proof.
+ */
+export function asksToCreateAndShowProof(normalized: string): boolean {
+  // A "how to" / tutorial request is informational, not an execution command.
+  if (/\bhow\s+to\b/.test(normalized)) {
+    return false;
+  }
+  const createVerb = /\b(create|make|build|code|develop|implement|add|wire|generate|write|design)\b/;
+  const showProof = /\b(show|prove|demonstrate|display|see|deploy|ship|verify|give\s+me)\b/;
+  const target = /\b(chat|module|component|screen|feature|fix|app|page|text|developer|backend|api|route|function|file|code|ui|dashboard|engine|pipeline|system|platform|workflow|bug|issue|error|patch|feature|interface)\b/;
+  if (!createVerb.test(normalized) || !target.test(normalized)) {
+    return false;
+  }
+  // "create X and show me" / "build X and prove it" / "make X and deploy it"
+  const createAndShow = /\b(?:create|make|build|code|develop|implement|add|wire|generate|write|design)\b.{0,80}\b(?:and|then)\s+(?:show|prove|demonstrate|display|deploy|ship|verify)\b/i.test(normalized);
+  // "show me the X you create" / "I want to see X created/built" / "give me the X"
+  const showThenCreate = showProof.test(normalized) && /\b(?:you|it|this|that|the)\s+(?:create|build|make|code|develop|implement|add|generate|write|design)\b/i.test(normalized);
+  // "I want to see if you can create/build X" / "see if you can make X" (screenshot prompt)
+  const wantToSeeCreation = /\b(?:i\s+want\s+to\s+see|see\s+if)\s+(?:you\s+)?(?:can\s+)?(?:create|build|make|code|develop|implement|write|design)\b/i.test(normalized)
+    || /\b(?:create|build|make|code|develop|implement|write|design)\b.{0,60}\b(?:and\s+show|and\s+prove|and\s+deploy|to\s+show|to\s+prove|to\s+deploy)\b/i.test(normalized);
+  return createAndShow || showThenCreate || wantToSeeCreation;
 }
 
 export function asksToBuildApp(normalized: string): boolean {
@@ -404,7 +435,8 @@ function isSelfDeveloperExecutionPrompt(normalized: string): boolean {
     || /\b(developer\s+mode|self[-\s]?developer|senior\s+developer\s+mode|execute\s+(?:task|job|fix|build|deploy|patch|code)|run\s+developer\s+task|start\s+(?:coding|development|implementation|fix|build|deploy|patch))\b/i.test(normalized)
     || isRemovalExecutionPrompt(normalized)
     || asksToFinishOrProveSeniorDeveloperWork(normalized)
-    || isServerBugFixRequest(normalized);
+    || isServerBugFixRequest(normalized)
+    || asksToCreateAndShowProof(normalized);
 }
 
 /**

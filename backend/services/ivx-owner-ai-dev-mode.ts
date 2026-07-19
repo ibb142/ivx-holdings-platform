@@ -14,11 +14,20 @@
  *     (TASK UNDERSTOOD / FILES CHANGED / COMMANDS RUN / STATUS / PROOF).
  */
 
+import { asksToCreateAndShowProof } from './ivx-owner-ai-intent-router';
+
 export type IVXOwnerAIDevModeResult =
   | { mode: 'developer'; ok: boolean; evidence: string; error: string | null };
 
 export function detectSeniorDeveloperModeStatusRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  // A "create and show me" / "build and prove" execution command must NEVER be
+  // hijacked by the static Senior Developer mode status answer, even if the owner
+  // also includes a phrase like "I want to see if you are senior developer". When
+  // both an execution signal and a status phrase are present, execution wins.
+  if (asksToCreateAndShowProof(text)) {
+    return false;
+  }
   const statusPhrases = [
     'senior developer mode',
     'senior dev mode',
@@ -59,6 +68,13 @@ export function buildSeniorDeveloperModeStatusAnswer(): string {
  */
 export function detectSeniorDeveloperBrainRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase();
+  // A "create and show me" / "build and prove" execution command must NEVER be
+  // hijacked by the conversational brain answer, even if the owner also asks the
+  // AI to "act as a senior developer" or "you are a senior developer". Execution
+  // wins over advisory/persona mode.
+  if (asksToCreateAndShowProof(text)) {
+    return false;
+  }
   const brainPhrases = [
     'same brain like you',
     'same brain as you',
@@ -110,6 +126,11 @@ export function detectDeveloperModeRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase();
   // Senior-developer mode STATUS and BRAIN questions are handled above, not blocked.
   if (detectSeniorDeveloperModeStatusRequest(message) || detectSeniorDeveloperBrainRequest(message)) {
+    return false;
+  }
+  // A creation/show-proof command is an explicit execution intent that routes to
+  // the owner-gated senior developer worker, not a legacy block.
+  if (asksToCreateAndShowProof(text)) {
     return false;
   }
   // Only block explicit, immediate execution commands that require the owner-gated worker.
