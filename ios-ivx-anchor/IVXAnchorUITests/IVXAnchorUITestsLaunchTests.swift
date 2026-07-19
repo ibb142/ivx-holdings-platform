@@ -2,7 +2,7 @@
 //  IVXAnchorUITestsLaunchTests.swift
 //  IVXAnchorUITests
 //
-//  Created by Rork on July 18, 2026.
+//  Created by IVX Holdings on July 18, 2026.
 //
 
 import XCTest

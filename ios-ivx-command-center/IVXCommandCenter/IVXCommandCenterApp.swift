@@ -2,7 +2,7 @@
 //  IVXCommandCenterApp.swift
 //  IVXCommandCenter
 //
-//  Created by Rork on July 17, 2026.
+//  Created by IVX Holdings on July 17, 2026.
 //
 
 import SwiftUI

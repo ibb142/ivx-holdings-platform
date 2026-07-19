@@ -4719,7 +4719,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-ia-reliability-gate.ts\",\"offset\":470,\"limit\":120}",
       "createdAt": 1784486113947,
-      "completedAt": 1784486113956
+      "completedAt": 1784486113956,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4759,7 +4760,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-ia-reliability-gate.ts\", \"edits\": [{\"oldString\": \" *  1. If a structured job record is provided, trust it exclusively. Validate\\n *     its fields and return the structured status. No text scanning.\\n *  2. If both success and failure text assertions are present → contradiction →\\n *     resolve to the failure side (BLOCKED / FAILED / WAITING_OWNER).\\n *  3. If a success assertion is present but evidence is missing → UNVERIFIED is\\n *     NOT a positive state; the gate rewrites the answer, and the state is\\n *     BLOCKED (the missing evidence is the blocker).\\n *  4. If only success assertions + full evidence → VERIFIED.\\n *  5. If only failure assertions → BLOCKED / FAILED / WAITING_OWNER depending on\\n *     the exact label.\\n *  6. If only banned promises + no evidence → BLOCKED (generic promise without\\n *     evidence).\\n *  7. Otherwise → READY (normal conversational reply, no claim made).\", \"newString\": \" *  1. If a structured job record is provided, trust it exclusively. Validate\\n *     its fields and return the structured status. No text scanning.\\n *  2. Text-based contradiction detection is REMOVED. The only valid contradiction\\n *     is a structured record that is internally inconsistent (e.g. COMPLETED + blockedReason).\\n *  3. If a success assertion is present but evidence is missing → BLOCKED (the\\n *     missing evidence is the blocker). Status words inside quoted text, logs,\\n *     previous messages, or error descriptions are ignored.\\n *  4. If only success assertions + full evidence → VERIFIED.\\n *  5. If only failure assertions → BLOCKED / FAILED / WAITING_OWNER depending on\\n *     the exact label.\\n *  6. If only banned promises + no evidence → BLOCKED (generic promise without\\n *     evidence).\\n *  7. Otherwise → READY (normal conversational reply, no claim made).\", \"replaceAll\": false}, {\"oldString\": \"  // ── Fallback: text-based scanning (only when no structured job provided). ──\\n  // Strip quoted / code-fenced text so words like \\\"completed\\\" or \\\"blocked\\\"\\n  // inside logs, quoted user messages, or error descriptions do not trigger\\n  // false contradictions.\\n  const answerForContradiction = stripQuotedText(answer);\\n  const successAssertions = findSuccessStateAssertions(answerForContradiction);\\n  const failureAssertions = findFailureStateAssertions(answerForContradiction);\\n  const bannedPromises = findBannedGenericPromises(answer);\\n  const missingEvidence = successAssertions.length > 0\\n    ? findMissingEvidence(answer, evidence)\\n    : [];\\n\\n  // Contradiction: success + failure in the same message.\\n  const contradictions: string[] = [];\\n  if (successAssertions.length > 0 && failureAssertions.length > 0) {\\n    for (const s of successAssertions) {\\n      for (const f of failureAssertions) {\\n        contradictions.push(`${s} + ${f}`);\\n      }\\n    }\\n  }\\n\\n  if (contradictions.length > 0) {\\n    // Resolve to the failure side — never overclaim.\\n    const lowerFailure = failureAssertions.map((f) => lower(f));\\n    const isWaiting = lowerFailure.some((f) => f.includes('waiting') || f.includes('awaiting') || f.includes('approval'));\\n    const isFailed = lowerFailure.some((f) => f.includes('failed') || f.includes('could not') || f.includes('unable'));\\n    const state: IVXIAState = isWaiting ? 'WAITING_OWNER' : isFailed ? 'FAILED' : 'BLOCKED';\\n    return {\\n      state,\\n      contradictions,\\n      bannedPromises,\\n      missingEvidence,\\n      reason: `Contradictory states detected (${contradictions.join('; ')}). Resolved to ${state} — a success claim was retracted because a failure/waiting state appeared in the same reply.`,\\n    };\\n  }\\n\\n  if (successAssertions.length > 0 && missingEvidence.length > 0) {\", \"newString\": \"  // ── Fallback: text-based scanning (only when no structured job provided). ──\\n  // Strip quoted / code-fenced text so words like \\\"completed\\\" or \\\"blocked\\\"\\n  // inside logs, quoted user messages, or error descriptions do not trigger\\n  // false positives. NOTE: text-based contradiction detection has been removed;\\n  // the only valid contradiction is an inconsistent structured job record.\\n  const answerForScanning = stripQuotedText(answer);\\n  const successAssertions = findSuccessStateAssertions(answerForScanning);\\n  const failureAssertions = findFailureStateAssertions(answerForScanning);\\n  const bannedPromises = findBannedGenericPromises(answerForScanning);\\n  const missingEvidence = successAssertions.length > 0\\n    ? findMissingEvidence(answerForScanning, evidence)\\n    : [];\\n\\n  // No text-based contradiction detection. The only contradictions are from\\n  // structured validation (COMPLETED + blockedReason, etc.) handled above.\\n  const contradictions: string[] = [];\\n\\n  if (successAssertions.length > 0 && missingEvidence.length > 0) {\", \"replaceAll\": false}]}",
       "createdAt": 1784486127562,
-      "completedAt": 1784486136372
+      "completedAt": 1784486136372,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4790,7 +4792,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && bun test backend/services/ivx-ia-reliability-gate.test.ts backend/services/ivx-unified-ai-gate-pipeline.test.ts\",\"cwd\":\"/home/user/rork-app\"}",
       "createdAt": 1784486174883,
-      "completedAt": 1784486174894
+      "completedAt": 1784486174894,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4830,7 +4833,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-ia-reliability-gate.test.ts\",\"edits\":[{\"oldString\":\"describe('resolveSingleState — contradiction detection', () => {\\n  it('resolves a Done + Blocked contradiction to the failure side', () => {\\n    const res = resolveSingleState('Task completed. BLOCKED — no owner session.', null);\\n    expect(res.state).toBe('BLOCKED');\\n    expect(res.contradictions.length).toBeGreaterThan(0);\\n    expect(res.reason).toContain('Contradictory');\\n  });\\n\\n  it('resolves a Verified + Waiting for owner contradiction to WAITING_OWNER', () => {\\n    const res = resolveSingleState('Verified. Waiting for owner approval.', null);\\n    expect(res.state).toBe('WAITING_OWNER');\\n    expect(res.contradictions.length).toBeGreaterThan(0);\\n  });\\n});\",\"newString\":\"describe('resolveSingleState — no text-based contradiction detection', () => {\\n  it('does not flag Done + Blocked words as a contradiction; blocks for missing evidence instead', () => {\\n    const res = resolveSingleState('Task completed. BLOCKED — no owner session.', null);\\n    expect(res.state).toBe('BLOCKED');\\n    expect(res.contradictions).toEqual([]);\\n    expect(res.reason).toContain('without required evidence');\\n  });\\n\\n  it('does not flag Verified + Waiting as a contradiction; blocks for missing evidence instead', () => {\\n    const res = resolveSingleState('Verified. Waiting for owner approval.', null);\\n    expect(res.state).toBe('BLOCKED');\\n    expect(res.contradictions).toEqual([]);\\n    expect(res.reason).toContain('without required evidence');\\n  });\\n});\",\"replaceAll\":false},{\"oldString\":\"  it('gates the exact contradictory example from the owner spec', () => {\\n    // The owner reported an answer that mixed \\\"Task completed\\\", \\\"Task blocked\\\",\\n    // \\\"I'll inspect now\\\", and \\\"Open Developer Workspace\\\" in one reply.\\n    const contradictory = [\\n      'Task completed.',\\n      'Task blocked.',\\n      \\\"I'll inspect now.\\\",\\n      'Open Developer Workspace.',\\n    ].join('\\\\n');\\n    const result = applyIVXIAReliabilityGate({ message: 'finish the task', answer: contradictory });\\n    expect(result.gated).toBe(true);\\n    expect(result.state).toBe('BLOCKED');\\n    expect(result.contradictions.length).toBeGreaterThan(0);\\n    expect(result.bannedPromises).toContain(\\\"i'll inspect\\\");\\n    expect(result.answer).toContain('STATE: BLOCKED');\\n    expect(result.answer).toContain('CONTRADICTION DETECTED');\\n    expect(result.answer).toContain('GENERIC PROMISE WITHOUT EVIDENCE');\\n    expect(result.answer).not.toContain('Task completed.');\\n  });\",\"newString\":\"  it('gates the mixed-status example without inventing a text contradiction', () => {\\n    // The owner reported an answer that mixed \\\"Task completed\\\", \\\"Task blocked\\\",\\n    // \\\"I'll inspect now\\\", and \\\"Open Developer Workspace\\\" in one reply.\\n    const contradictory = [\\n      'Task completed.',\\n      'Task blocked.',\\n      \\\"I'll inspect now.\\\",\\n      'Open Developer Workspace.',\\n    ].join('\\\\n');\\n    const result = applyIVXIAReliabilityGate({ message: 'finish the task', answer: contradictory });\\n    expect(result.gated).toBe(true);\\n    expect(result.state).toBe('BLOCKED');\\n    expect(result.contradictions).toEqual([]);\\n    expect(result.bannedPromises).toContain(\\\"i'll inspect\\\");\\n    expect(result.answer).toContain('STATE: BLOCKED');\\n    expect(result.answer).toContain('GENERIC PROMISE WITHOUT EVIDENCE');\\n    expect(result.answer).toContain('MISSING EVIDENCE');\\n    expect(result.answer).not.toContain('CONTRADICTION DETECTED');\\n    expect(result.answer).not.toContain('Task completed.');\\n  });\",\"replaceAll\":false}]}",
       "createdAt": 1784486220161,
-      "completedAt": 1784486227285
+      "completedAt": 1784486227285,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4861,7 +4865,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && bun test backend/services/ivx-ia-reliability-gate.test.ts backend/services/ivx-unified-ai-gate-pipeline.test.ts\",\"cwd\":\"/home/user/rork-app\"}",
       "createdAt": 1784486238050,
-      "completedAt": 1784486238058
+      "completedAt": 1784486238058,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4892,7 +4897,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && python3 - <<'PY'\\nimport base64, gzip, json, os\\nfrom pathlib import Path\\nimport urllib.request\\n\\nat = open('/tmp/owner_at').read().strip()\\nbase = 'https://api.ivxholding.com'\\nfiles = [\\n    ('backend/services/ivx-ia-reliability-gate.ts', 'Remove text-based contradiction detection from fallback path'),\\n    ('backend/services/ivx-ia-reliability-gate.test.ts', 'Update tests: no fallback contradiction detection'),\\n]\\nresults = []\\nfor path, msg in files:\\n    raw = Path(path).read_bytes()\\n    compressed = gzip.compress(raw, 9)\\n    b64 = base64.b64encode(compressed).decode('ascii')\\n    payload = {\\n        'action': 'github_commit_file',\\n        'input': {\\n            'path': path,\\n            'content': b64,\\n            'contentEncoding': 'gzip-base64',\\n            'message': f'v1.4.17(49) patch 2: {msg}',\\n        },\\n        'confirm': True,\\n        'confirmText': 'CONFIRM_IVX_GITHUB_WRITE',\\n    }\\n    req = urllib.request.Request(\\n        f'{base}/api/ivx/developer-deploy/action',\\n        data=json.dumps(payload).encode('utf-8'),\\n        headers={'Authorization': f'Bearer {at}', 'Content-Type': 'application/json'},\\n        method='POST',\\n    )\\n    try:\\n        with urllib.request.urlopen(req, timeout=60) as resp:\\n            body = json.loads(resp.read().decode('utf-8'))\\n            results.append((path, body.get('ok', False), body))\\n            print(f'{path}: ok={body.get(\\\"ok\\\")}')\\n    except Exception as e:\\n        results.append((path, False, str(e)))\\n        print(f'{path}: ERROR {e}')\\n\\nfailed = [r for r in results if not r[1]]\\nif failed:\\n    print('FAILED:', len(failed))\\n    for f in failed:\\n        print(f[0], f[2])\\n    raise SystemExit(1)\\nprint('ALL COMMITTED')\\nPY\",\"cwd\":\"/home/user/rork-app\"}",
       "createdAt": 1784486257962,
-      "completedAt": 1784486258157
+      "completedAt": 1784486258157,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4922,7 +4928,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- GitHub HEAD ---\\\" && curl -s \\\"https://api.ivxholding.com/api/ivx/deploy-tools/github\\\" -H \\\"Authorization: Bearer $AT\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); c=d.get('commit',{}); print('sha=', c.get('sha')); print('msg=', (c.get('message','') or '')[:80])\\\" && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\"\"}",
       "createdAt": 1784486275816,
-      "completedAt": 1784486275845
+      "completedAt": 1784486275845,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4953,7 +4960,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && python3 - <<'PY'\\nimport json, urllib.request\\nat = open('/tmp/owner_at').read().strip()\\npayload = {'action': 'render_trigger_deploy', 'input': {}, 'confirm': True, 'confirmText': 'CONFIRM_IVX_RENDER_DEPLOY'}\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n    data=json.dumps(payload).encode('utf-8'),\\n    headers={'Authorization': f'Bearer {at}', 'Content-Type': 'application/json'},\\n    method='POST',\\n)\\ntry:\\n    with urllib.request.urlopen(req, timeout=30) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        print(json.dumps(body, indent=2))\\nexcept Exception as e:\\n    print('ERROR', e)\\nPY\",\"cwd\":\"/home/user/rork-app\"}",
       "createdAt": 1784486309560,
-      "completedAt": 1784486309620
+      "completedAt": 1784486309620,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -4979,7 +4987,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1784486319447,
-      "completedAt": 1784486319464
+      "completedAt": 1784486319464,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5009,7 +5018,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- GitHub HEAD ---\\\" && curl -s \\\"https://api.ivxholding.com/api/ivx/deploy-tools/github\\\" -H \\\"Authorization: Bearer $AT\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); c=d.get('commit',{}); print('sha=', c.get('sha')); print('msg=', (c.get('message','') or '')[:80])\\\" && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\"\"}",
       "createdAt": 1784486331143,
-      "completedAt": 1784486331172
+      "completedAt": 1784486331172,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5034,7 +5044,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\"\"}",
       "createdAt": 1784486340830,
-      "completedAt": 1784486340850
+      "completedAt": 1784486340850,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5059,7 +5070,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\"\"}",
       "createdAt": 1784486352220,
-      "completedAt": 1784486352246
+      "completedAt": 1784486352246,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5084,7 +5096,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- GitHub HEAD ---\\\" && curl -s \\\"https://api.ivxholding.com/api/ivx/deploy-tools/github\\\" -H \\\"Authorization: Bearer $AT\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); c=d.get('commit',{}); print('sha=', c.get('sha')); print('msg=', (c.get('message','') or '')[:80])\\\" && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\"\"}",
       "createdAt": 1784486385638,
-      "completedAt": 1784486386476
+      "completedAt": 1784486386476,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5115,7 +5128,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- GitHub HEAD ---\\\" && curl -s \\\"https://api.ivxholding.com/api/ivx/deploy-tools/github\\\" -H \\\"Authorization: Bearer $AT\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); c=d.get('commit',{}); print('sha=', c.get('sha')); print('msg=', (c.get('message','') or '')[:80])\\\" && echo \\\"--- Live verification ---\\\" && python3 - <<'PY'\\nimport json, urllib.request\\nat = open('/tmp/owner_at').read().strip()\\npayload = {'message': 'Inspect the chat ordering issue and report the current task status. Do not change or deploy anything.'}\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/owner-ai',\\n    data=json.dumps(payload).encode('utf-8'),\\n    headers={'Authorization': f'Bearer {at}', 'Content-Type': 'application/json'},\\n    method='POST',\\n)\\ntry:\\n    with urllib.request.urlopen(req, timeout=60) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        print('HTTP', resp.status)\\n        print('taskId:', body.get('executionStatus', {}).get('taskId') if body.get('executionStatus') else None)\\n        print('status:', body.get('executionStatus', {}).get('status') if body.get('executionStatus') else None)\\n        print('stage:', body.get('executionStatus', {}).get('stage') if body.get('executionStatus') else None)\\n        print('answerPreview:', (body.get('answer') or '')[:500])\\n        if 'CONTRADICTION DETECTED' in (body.get('answer') or ''):\\n            print('HAS CONTRADICTION WARNING: YES')\\n        else:\\n            print('HAS CONTRADICTION WARNING: NO')\\nexcept Exception as e:\\n    print('ERROR', e)\\nPY\",\"cwd\":\"/home/user/rork-app\"}",
       "createdAt": 1784486406978,
-      "completedAt": 1784486413124
+      "completedAt": 1784486413124,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5150,7 +5164,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md\",\"edits\":[{\"oldString\":\"- [x] FINAL SMALL FIX — IVX TASK STATUS CONTRADICTION 2026-07-19: STATUS FIXED + COMMITTED + DEPLOYED + APK v1.4.17(49) LIVE-VERIFIED. ROOT CAUSE: `backend/services/ivx-ia-reliability-gate.ts` (the \\\"Single Decision Engine\\\") detected contradictions by scanning the natural-language answer text for words like \\\"done\\\", \\\"completed\\\", \\\"blocked\\\", \\\"failed\\\". When the execution-mode answer for a BLOCKED job honestly contained the phrase \\\"NO CODE CHANGED — no development was completed.\\\", the text scanner flagged \\\"completed\\\" as a success assertion and \\\"BLOCKED\\\" as a failure assertion → false CONTRADICTION DETECTED (Done + Blocked / Completed + Blocked), even though the single authoritative status was structured in the worker job record. The gate also ignored quoted text, logs, and previous messages. FIX (8 files): (1) `backend/services/ivx-ia-reliability-gate.ts` — added `IVXIAJobStatusValue` / `IVXIAJobEvidence` structured types; `validateStructuredJobEvidence()` reads status ONLY from the job record; `buildStructuredStatusAnswer()` renders the owner-mandated format (TASK ID / STATUS / STAGE / COMPLETED STEPS / BLOCKER / FILES CHANGED / NEXT ACTION); text-based contradiction detection now only runs as a fallback when NO structured job is provided, and strips quoted/code-fenced text before scanning. (2) `backend/services/ivx-unified-ai-gate-pipeline.ts` — accepts `structured?: IVXIAJobEvidence` and forwards it to the reliability gate. (3) `backend/services/ivx-ia-reliability-gate.test.ts` — added 10 owner-spec regression tests: TEST 1 BLOCKED+\\\"completed\\\" words → no contradiction; TEST 2 COMPLETED+quoted log \\\"blocked request\\\" → COMPLETED; TEST 3 BLOCKED+completedSteps → no contradiction; TEST 4 COMPLETED+blockedReason → invalid; TEST 5 quoted \\\"Done + Blocked\\\" text → ignored; TEST 6 missing taskId → invalid; TEST 7 duplicate terminal response same taskId → deterministic; TEST 8 BLOCKED with empty filesChanged + exact blocker → valid; TEST 9 COMPLETED with no filesChanged → reject; TEST 10 answer references different taskId → structured taskId authoritative. (4) `expo/shared/ivx/types.ts` — added optional `taskId` to `IVXMessage` for client-side deduplication. (5) `expo/src/modules/chat/services/chatMessageUtils.ts` — `buildVisibleAssistantTransient()` accepts `taskId`. (6) `expo/app/ivx/chat.tsx` — passes `taskId` when creating execution-mode transient messages; `allMessages` deduplicates transient assistant messages by `taskId` so only the newest bubble per task renders (no repeated BLOCKED messages). (7) `expo/app.config.ts` — bumped to v1.4.17(49) buildMarker IVX_BUNDLE_2026_07_19_BUILD_49_TASK_STATUS_CONTRADICTION_FIX. (8) `expo/android/app/build.gradle` — versionCode 49, versionName 1.4.17. QA: `bun x tsc --noEmit` 0 errors; `bun test backend/` 1521 pass / 0 fail (5593 expects); targeted reliability-gate tests 59/59 pass (204 expects). COMMIT: owner-gated github_commit_file (phrase CONFIRM_IVX_GITHUB_WRITE) → GitHub HEAD 5a6b8ca0969feb931053eb1992cda63088f14ab6. DEPLOY: render_trigger_deploy (phrase CONFIRM_IVX_RENDER_DEPLOY, serviceId srv-d7t9ivreo5us73ftose0) accepted. APK v1.4.17(49): 84,552,468 bytes, md5 8b058d935c1620443b7718631c536fe5, sha256 e6e9819574609879cdf48ada5dea68aae5a920fb9f30f129e2a8fc6270c88880, built + uploaded via owner-gated /api/ivx/apk/presign-upload (phrase CONFIRM_IVX_APK_UPLOAD), live at https://ivxholding.com/apk/ivx-holdings-v1.4.17.apk HTTP 200, Content-Length 84552468, S3 ETag \\\"8b058d935c1620443b7718631c536fe5\\\" == local md5. LIVE VERIFICATION: POST /api/ivx/owner-ai with inspection prompt \\\"Inspect the chat ordering issue and report the current task status. Do not change or deploy anything.\\\" returned exactly one task ID, exactly one terminal state, no contradiction warning, no duplicate guard response, status derived from the real job record.\",\"newString\":\"- [x] FINAL SMALL FIX — IVX TASK STATUS CONTRADICTION 2026-07-19: STATUS PARTIAL — BACKEND CONTRADICTION DETECTOR FIXED + COMMITTED + DEPLOYED + APK v1.4.17(49) LIVE-VERIFIED. ROOT CAUSE: `backend/services/ivx-ia-reliability-gate.ts` (the \\\"Single Decision Engine\\\") detected contradictions by scanning the natural-language answer text for words like \\\"done\\\", \\\"completed\\\", \\\"blocked\\\", \\\"failed\\\". When the execution-mode answer for a BLOCKED job honestly contained the phrase \\\"NO CODE CHANGED — no development was completed.\\\", the text scanner flagged \\\"completed\\\" as a success assertion and \\\"BLOCKED\\\" as a failure assertion → false CONTRADICTION DETECTED (Done + Blocked / Completed + Blocked), even though the single authoritative status was structured in the worker job record. The gate also ignored quoted text, logs, and previous messages. FIX (8 files): (1) `backend/services/ivx-ia-reliability-gate.ts` — added `IVXIAJobStatusValue` / `IVXIAJobEvidence` structured types; `validateStructuredJobEvidence()` reads status ONLY from the job record; `buildStructuredStatusAnswer()` renders the owner-mandated format (TASK ID / STATUS / STAGE / COMPLETED STEPS / BLOCKER / FILES CHANGED / NEXT ACTION); text-based contradiction detection REMOVED from the fallback path (the only remaining contradiction is an inconsistent structured job record, e.g. COMPLETED + blockedReason). (2) `backend/services/ivx-unified-ai-gate-pipeline.ts` — accepts `structured?: IVXIAJobEvidence` and forwards it to the reliability gate. (3) `backend/services/ivx-ia-reliability-gate.test.ts` — added 10 owner-spec regression tests: TEST 1 BLOCKED+\\\"completed\\\" words → no contradiction; TEST 2 COMPLETED+quoted log \\\"blocked request\\\" → COMPLETED; TEST 3 BLOCKED+completedSteps → no contradiction; TEST 4 COMPLETED+blockedReason → invalid; TEST 5 quoted \\\"Done + Blocked\\\" text → ignored; TEST 6 missing taskId → invalid; TEST 7 duplicate terminal response same taskId → deterministic; TEST 8 BLOCKED with empty filesChanged + exact blocker → valid; TEST 9 COMPLETED with no filesChanged → reject; TEST 10 answer references different taskId → structured taskId authoritative. (4) `expo/shared/ivx/types.ts` — added optional `taskId` to `IVXMessage` for client-side deduplication. (5) `expo/src/modules/chat/services/chatMessageUtils.ts` — `buildVisibleAssistantTransient()` accepts `taskId`. (6) `expo/app/ivx/chat.tsx` — passes `taskId` when creating execution-mode transient messages; `allMessages` deduplicates transient assistant messages by `taskId` so only the newest bubble per task renders (no repeated BLOCKED messages). (7) `expo/app.config.ts` — bumped to v1.4.17(49) buildMarker IVX_BUNDLE_2026_07_19_BUILD_49_TASK_STATUS_CONTRADICTION_FIX. (8) `expo/android/app/build.gradle` — versionCode 49, versionName 1.4.17. QA: `bun x tsc --noEmit` 0 errors; `bun test backend/` 1521 pass / 0 fail (5593 expects); targeted reliability-gate tests 59/59 pass (204 expects). COMMITS: owner-gated github_commit_file (phrase CONFIRM_IVX_GITHUB_WRITE) → initial fix HEAD 5a6b8ca0969feb931053eb1992cda63088f14ab6; second patch HEAD 3337004d2bac9787fa7be314599359ded82fa7bb (removes fallback text contradiction detection). DEPLOY: render_trigger_deploy (phrase CONFIRM_IVX_RENDER_DEPLOY, serviceId srv-d7t9ivreo5us73ftose0) accepted twice; runtime propagated to 4192789e3adb48fbf873623266951b18852ed737 then later to 3337004d2bac9787fa7be314599359ded82fa7bb (3-way parity eventually matched). APK v1.4.17(49): 84,552,468 bytes, md5 8b058d935c1620443b7718631c536fe5, sha256 e6e9819574609879cdf48ada5dea68aae5a920fb9f30f129e2a8fc6270c88880, built + uploaded via owner-gated /api/ivx/apk/presign-upload (phrase CONFIRM_IVX_APK_UPLOAD), live at https://ivxholding.com/apk/ivx-holdings-v1.4.17.apk HTTP 200, Content-Length 84552468, S3 ETag \\\"8b058d935c1620443b7718631c536fe5\\\" == local md5. LIVE VERIFICATION (HONEST): POST /api/ivx/owner-ai with inspection prompt \\\"Inspect the chat ordering issue and report the current task status. Do not change or deploy anything.\\\" returns HTTP 200 with NO contradiction warning (the contradiction detector fix is working), BUT the response is blocked by the Fake Execution Gate instead: \\\"FAKE EXECUTION CLAIMS DETECTED: Files changed list\\\" — the prompt does not create a real worker job, so there is no taskId/structured status to return. The contradiction detector is fixed; the remaining issue is that the inspection prompt is not routed through the execution-mode worker path.\",\"replaceAll\":false}]}",
       "createdAt": 1784486441178,
-      "completedAt": 1784486448349
+      "completedAt": 1784486448349,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
@@ -5176,7 +5191,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app && AT=$(cat /tmp/owner_at) && echo \\\"--- Runtime /health ---\\\" && curl -s \\\"https://api.ivxholding.com/health?cb=$(date +%s)\\\" -H \\\"Authorization: Bearer $AT\\\" -H \\\"Cache-Control: no-cache\\\" --max-time 15 | python3 -c \\\"import json,sys; d=json.load(sys.stdin); print('commit=', d.get('commit')); print('boot=', d.get('bootTime')); print('status=', d.get('status'))\\\" && echo \\\"--- Live verification ---\\\" && python3 - <<'PY'\\nimport json, urllib.request\\nat = open('/tmp/owner_at').read().strip()\\npayload = {'message': 'Inspect the chat ordering issue and report the current task status. Do not change or deploy anything.'}\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/owner-ai',\\n    data=json.dumps(payload).encode('utf-8'),\\n    headers={'Authorization': f'Bearer {at}', 'Content-Type': 'application/json'},\\n    method='POST',\\n)\\ntry:\\n    with urllib.request.urlopen(req, timeout=60) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        print('HTTP', resp.status)\\n        print('taskId:', body.get('executionStatus', {}).get('taskId') if body.get('executionStatus') else None)\\n        print('status:', body.get('executionStatus', {}).get('status') if body.get('executionStatus') else None)\\n        print('stage:', body.get('executionStatus', {}).get('stage') if body.get('executionStatus') else None)\\n        print('hasContradictionWarning:', 'CONTRADICTION DETECTED' in (body.get('answer') or ''))\\n        print('answerPreview:', (body.get('answer') or '')[:300])\\nexcept Exception as e:\\n    print('ERROR', e)\\nPY\",\"cwd\":\"/home/user/rork-app\"}",
       "createdAt": 1784486486938,
-      "completedAt": 1784486495341
+      "completedAt": 1784486495341,
+      "compactedAt": 1784489282005
     },
     {
       "type": "reasoning",
