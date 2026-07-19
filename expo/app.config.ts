@@ -17,13 +17,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: '1.4.10',
+  version: '1.4.11',
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_07_19_BUILD_42_SENIOR_DEV_APP_SCAFFOLD_STRESS_TEST',
-    buildTimestamp: '2026-07-19T11:30:00.000000+00:00',
+    buildMarker: 'IVX_BUNDLE_2026_07_19_BUILD_43_IVX_IA_CHAT_ROUTING_FIX',
+    buildTimestamp: '2026-07-19T14:25:00.000000+00:00',
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',
@@ -59,7 +59,7 @@ const config: ExpoConfig = {
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 42,
+    versionCode: 43,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {
