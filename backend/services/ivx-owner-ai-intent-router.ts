@@ -123,6 +123,25 @@ export function isOwnerExecutionOrTaskBlock(prompt: string): boolean {
     return true;
   }
 
+  // App-scaffold / new-app-from-scratch signals — explicit owner commands to
+  // CREATE a new app, scaffold a new project, build a new module from scratch,
+  // or run a stress/load test. These are real code-production requests the
+  // senior developer worker handles (create_file patch operations), NOT
+  // planning/narrative prompts. Without this guard, the planner mis-routes
+  // them to app_build_planning → gpt_conversation (narrative GPT-4o answer)
+  // and the senior developer never runs. Closes the PARTIAL item gap where
+  // "create a new app from scratch" returned a narrative plan instead of
+  // real scaffolded files.
+  const hasAppScaffoldSignal = /\b(?:create|scaffold|build|generate)\s+(?:a\s+)?(?:new\s+)?(?:app|application|module|service)\s+(?:from\s+scratch|project|skeleton|shell|template|called\s+|named\s+)/i.test(normalized)
+    || /\bnew\s+app\s+from\s+scratch/i.test(normalized)
+    || /\bscaffold\s+(?:a\s+)?(?:new\s+)?(?:app|project|module)/i.test(normalized);
+  const hasStressTestSignal = /\bstress\s*test/i.test(normalized)
+    || /\bload\s*test/i.test(normalized)
+    || /\brun\s+a\s+(?:stress|load)\s+test/i.test(normalized);
+  if (hasAppScaffoldSignal || hasStressTestSignal) {
+    return true;
+  }
+
   return false;
 }
 
