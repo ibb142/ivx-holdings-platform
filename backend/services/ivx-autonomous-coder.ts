@@ -660,19 +660,38 @@ async function callLLMForPatch(
 // general uncontrolled editing mechanism. Any other goal still goes through the
 // LLM planning loop.
 
-const PILOT_LABEL_REGEX = /AUTONOMOUS-CODER-PILOT-1/;
-const PILOT_TARGET_LABEL = 'AUTONOMOUS-CODER-PILOT-2';
-const PILOT_GOAL_TRIGGER = /AUTONOMOUS-CODER-PILOT-1[\s\S]*AUTONOMOUS-CODER-PILOT-2|AUTONOMOUS-CODER-PILOT-2[\s\S]*AUTONOMOUS-CODER-PILOT-1/i;
-/** The DEFINITION pattern: matches the file that declares the sentinel label
- * as an exported constant value (e.g. `export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-1'`).
- * This is intentionally narrower than a bare mention so that test files, the
- * engine, and other references do not count as a sentinel match — only the
- * canonical sentinel-definition file does. */
-const PILOT_LABEL_DEFINITION_REGEX = /(?:export\s+const|const|export\s+let|let)\s+PILOT_LABEL\s*=\s*['"]AUTONOMOUS-CODER-PILOT-1['"]/;
+// Generalized pilot fallback: handles ANY adjacent pilot label transition
+// (AUTONOMOUS-CODER-PILOT-N -> AUTONOMOUS-CODER-PILOT-(N+1)). The prior
+// implementation was hardcoded to PILOT-1 -> PILOT-2 only, which meant the
+// owner's next pilot goal (PILOT-2 -> PILOT-3) fell through to the LLM path
+// and hit the TS1470 false-positive in the scoped typecheck (see fix below).
+const PILOT_LABEL_PAIR_REGEX = /AUTONOMOUS-CODER-PILOT-(\d+)[\s\S]*?AUTONOMOUS-CODER-PILOT-(\d+)/i;
+const PILOT_LABEL_DEFINITION_REGEX_TEMPLATE = '(?:export\\s+const|const|export\\s+let|let)\\s+PILOT_LABEL\\s*=\\s*[\'"]AUTONOMOUS-CODER-PILOT-{N}[\'"]';
 
-/** Returns true only when the goal is the controlled pilot label change. */
+/** Extracts the (from, to) label pair from a goal like
+ * "change ... AUTONOMOUS-CODER-PILOT-2 ... to ... AUTONOMOUS-CODER-PILOT-3".
+ * Returns null when the goal does not mention two distinct adjacent pilot labels. */
+function extractPilotLabelPair(goal: string): { fromLabel: string; toLabel: string; fromN: number; toN: number } | null {
+  const match = goal.match(PILOT_LABEL_PAIR_REGEX);
+  if (!match) return null;
+  const fromN = parseInt(match[1], 10);
+  const toN = parseInt(match[2], 10);
+  if (Number.isNaN(fromN) || Number.isNaN(toN)) return null;
+  // Only ADJACENT transitions (N -> N+1) are allowed — prevents arbitrary
+  // label overwrites and keeps the controlled-pilot invariant.
+  if (toN !== fromN + 1) return null;
+  return {
+    fromLabel: `AUTONOMOUS-CODER-PILOT-${fromN}`,
+    toLabel: `AUTONOMOUS-CODER-PILOT-${toN}`,
+    fromN,
+    toN,
+  };
+}
+
+/** Returns true only when the goal is the controlled pilot label change
+ * (any adjacent N -> N+1 transition). */
 export function isPilotLabelChangeGoal(goal: string): boolean {
-  return PILOT_GOAL_TRIGGER.test(goal) && PILOT_LABEL_REGEX.test(goal);
+  return extractPilotLabelPair(goal) !== null;
 }
 
 /** Search all safe source files for the pilot sentinel DEFINITION (not mere
@@ -680,12 +699,18 @@ export function isPilotLabelChangeGoal(goal: string): boolean {
  * or multiple definition matches are found. Test files (.test.ts/.test.tsx)
  * and this engine file are excluded from the scan so only the canonical sentinel
  * module counts. */
-async function findPilotSentinelFile(projectRoot: string, fileReader?: (relPath: string) => Promise<string>): Promise<string | null> {
+async function findPilotSentinelFile(
+  fromLabel: string,
+  projectRoot: string,
+  fileReader?: (relPath: string) => Promise<string>,
+): Promise<string | null> {
   const candidates: string[] = [];
   const allFiles: string[] = [];
   await walkInspectableFiles('backend', allFiles, 500, projectRoot);
   await walkInspectableFiles('expo', allFiles, 500, projectRoot);
   const read = fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
+  // Build a definition regex for the FROM label (e.g. AUTONOMOUS-CODER-PILOT-2).
+  const defPattern = new RegExp(PILOT_LABEL_DEFINITION_REGEX_TEMPLATE.replace('{N}', String(fromLabel.match(/\d+$/)?.[0] ?? '1')));
   for (const file of allFiles) {
     // Exclude test files and the engine file itself — only the sentinel
     // definition module should match.
@@ -693,7 +718,7 @@ async function findPilotSentinelFile(projectRoot: string, fileReader?: (relPath:
     if (file.endsWith('ivx-autonomous-coder.ts')) continue;
     try {
       const content = await read(file);
-      if (PILOT_LABEL_DEFINITION_REGEX.test(content)) {
+      if (defPattern.test(content)) {
         candidates.push(file);
       }
     } catch {
@@ -713,29 +738,33 @@ async function findPilotSentinelFile(projectRoot: string, fileReader?: (relPath:
  * pilot label change without calling the LLM. Returns the patch operation or
  * null (BLOCKED) when the sentinel cannot be located uniquely. */
 async function deterministicPilotFallback(
+  goal: string,
   projectRoot: string,
   fileReader?: (relPath: string) => Promise<string>,
 ): Promise<{ rootCause: string; technicalPlan: string; operations: IVXAutonomousCoderPatchOperation[]; sentinelFile: string } | null> {
-  const sentinelFile = await findPilotSentinelFile(projectRoot, fileReader);
+  const pair = extractPilotLabelPair(goal);
+  if (!pair) return null;
+  const sentinelFile = await findPilotSentinelFile(pair.fromLabel, projectRoot, fileReader);
   if (!sentinelFile) return null;
   const read = fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
   const content = await read(sentinelFile);
-  // Find the exact definition string so we can replace just the value, not
-  // every mention of the label in comments/metadata.
-  const defMatch = content.match(PILOT_LABEL_DEFINITION_REGEX);
+  // Build a definition regex for the FROM label and find the exact definition
+  // string so we can replace just the value, not every mention in comments.
+  const fromN = pair.fromN;
+  const defPattern = new RegExp(PILOT_LABEL_DEFINITION_REGEX_TEMPLATE.replace('{N}', String(fromN)));
+  const defMatch = content.match(defPattern);
   if (!defMatch) return null;
-  // Replace only the label value inside the definition match.
   const oldText = defMatch[0];
-  const newText = oldText.replace('AUTONOMOUS-CODER-PILOT-1', PILOT_TARGET_LABEL);
+  const newText = oldText.replace(pair.fromLabel, pair.toLabel);
   return {
-    rootCause: 'Controlled pilot: the repository contains a single sentinel-label definition that must be changed to prove the loop end-to-end.',
-    technicalPlan: 'Apply an exact-replacement of the PILOT_LABEL definition value (AUTONOMOUS-CODER-PILOT-1 -> AUTONOMOUS-CODER-PILOT-2) in the single matching sentinel-definition file, then run targeted tests + typecheck + commit.',
+    rootCause: `Controlled pilot: the repository contains a single sentinel-label definition that must be changed (${pair.fromLabel} -> ${pair.toLabel}) to prove the loop end-to-end.`,
+    technicalPlan: `Apply an exact-replacement of the PILOT_LABEL definition value (${pair.fromLabel} -> ${pair.toLabel}) in the single matching sentinel-definition file, then run targeted tests + typecheck + commit.`,
     operations: [{
       path: sentinelFile,
       kind: 'replace_exact',
       oldText,
       newText,
-      reason: 'Pilot proof: change the visible version label per the owner mandate.',
+      reason: `Pilot proof: change the visible version label (${pair.fromLabel} -> ${pair.toLabel}) per the owner mandate.`,
     }],
     sentinelFile,
   };
@@ -995,6 +1024,65 @@ async function verifyProductionHealth(): Promise<{ ok: boolean; commit: string |
 
 export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Promise<IVXAutonomousCoderProof> {
   const startedAt = Date.now();
+  // FIX #3: the engine must NEVER throw. A throw escapes to the worker's
+  // top-level catch, which stores `result=null` and `error=message` with NO
+  // diagnostic trail (no iterations, no commandsRun, no filesInspected). This
+  // is why the failed PILOT-7 re-run job `ivx-worker-efb46ee9` had result=null —
+  // the engine threw somewhere in the inspect/plan/patch loop and the worker
+  // catch block swallowed the diagnostic state. Wrap the entire loop so any
+  // thrown error becomes a FAILED proof with the error message + whatever
+  // diagnostic state was accumulated before the throw. The worker then stores
+  // the full proof (iterations, commands, files inspected) instead of null.
+  try {
+    return await runIVXAutonomousCoderInner(input, startedAt);
+  } catch (error) {
+    const message = safeErrorMessage(error);
+    input.onPhase?.('failed', `Autonomous coder threw: ${message}`);
+    return {
+      marker: IVX_AUTONOMOUS_CODER_MARKER,
+      taskId: input.taskId,
+      goal: input.goal,
+      executionMode: input.executionMode,
+      approvalPolicy: input.approvalPolicy,
+      ownerId: input.ownerId,
+      startingSha: null,
+      filesInspected: [],
+      rootCause: '',
+      technicalPlan: '',
+      iterations: [],
+      finalPatch: [],
+      filesChanged: [],
+      commandsRun: [],
+      testsPassed: false,
+      typecheckPassed: false,
+      buildRun: false,
+      commitSha: null,
+      commitUrl: null,
+      branch: null,
+      deployApproved: false,
+      deployId: null,
+      deployStatus: null,
+      productionVerified: false,
+      liveCommit: null,
+      healthOk: false,
+      iterationCount: 0,
+      durationMs: Date.now() - startedAt,
+      finalStatus: 'FAILED',
+      error: `ENGINE_THREW: ${message}`,
+      generatedAt: nowIso(),
+      secretValuesReturned: false,
+      patchAuthoredBy: null,
+      llmCallCount: 0,
+      estimatedTokensUsed: 0,
+      tokenBudgetExceeded: false,
+      rollbackTriggered: false,
+      rollbackCommitSha: null,
+      rollbackError: null,
+    };
+  }
+}
+
+async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, startedAt: number): Promise<IVXAutonomousCoderProof> {
   const onPhase = input.onPhase;
   const iterations: IVXAutonomousCoderIteration[] = [];
   const commandsRun: IVXAutonomousCoderTestResult[] = [];
@@ -1087,7 +1175,7 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
   const isPilotGoal = !input.llmCaller && isPilotLabelChangeGoal(input.goal);
   if (isPilotGoal) {
     onPhase?.('planning', 'Pilot fallback: deterministic exact-replacement (no LLM call).');
-    const fallback = await deterministicPilotFallback(projectRoot, input.fileReader);
+    const fallback = await deterministicPilotFallback(input.goal, projectRoot, input.fileReader);
     if (!fallback) {
       // BLOCKED: zero or multiple sentinel matches — do NOT fake a patch.
       const iteration: IVXAutonomousCoderIteration = {
@@ -1161,7 +1249,13 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
         // bun is unavailable, or `bun x tsc --noEmit --skipLibCheck <file>`.
         // The full-project typecheck remains the gate for the LLM-driven path.
         const changedFilePath = fallback.operations[0]?.path ?? 'backend/services/ivx-autonomous-coder-pilot.ts';
-        const typecheckCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext ${changedFilePath}`;
+        // FIX: use --module esnext --moduleResolution bundler instead of
+        // --module nodenext. The nodenext setting rejects `import.meta`
+        // (TS1470) which the engine file and many backend modules use — a
+        // FALSE type error that blocked every LLM patch touching such a file.
+        // esnext+bundler still catches REAL type errors (verified) but allows
+        // import.meta, which is valid in the actual runtime (node+tsx / bun).
+        const typecheckCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
         let typecheckResult: IVXAutonomousCoderTestResult;
         if (input.testRunner) {
           typecheckResult = await input.testRunner(projectRoot, typecheckCmd);
@@ -1173,8 +1267,8 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
           const bunRes = resolveRuntimeCommand('bun');
           const bunAvail = !bunRes.usedFallback && bunRes.resolvedPath !== null;
           const scopedCmd = bunAvail
-            ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext ${changedFilePath}`
-            : `npx tsc --noEmit --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext ${changedFilePath}`;
+            ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`
+            : `npx tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
           typecheckResult = await runCommand(projectRoot, scopedCmd);
         }
         commandsRun.push(typecheckResult);
@@ -1443,8 +1537,8 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
     const bunAvailTsc = !bunResTsc.usedFallback && bunResTsc.resolvedPath !== null;
     const changedFileArgs = appliedOps.map((op) => op.path).join(' ');
     const scopedTypecheckCmd = bunAvailTsc
-      ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext ${changedFileArgs}`
-      : `npx tsc --noEmit --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext ${changedFileArgs}`;
+      ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`
+      : `npx tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
     const typecheckCmd = scopedTypecheckCmd;
     const typecheckResult = input.testRunner
       ? await input.testRunner(projectRoot, typecheckCmd)
