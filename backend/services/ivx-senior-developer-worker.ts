@@ -115,8 +115,15 @@ export type IVXWorkerJobInput = {
   ownerApproved: boolean;
   /** Apply the prepared safe code patch. */
   approvePatch: boolean;
+  /** Strict confirmation text required by the runtime patch gate
+   *  (IVX_SAFE_PATCH_CONFIRM_TEXT). Without it, proposed patches BLOCK at the
+   *  gate even when approvePatch=true. */
+  patchConfirmationText?: string;
   /** Commit + push + deploy to production (real mutation). */
   approveGitDeploy: boolean;
+  /** Strict confirmation text required by the git-deploy gate
+   *  (IVX_GIT_DEPLOY_CONFIRM_TEXT). */
+  gitDeployConfirmationText?: string;
   validationMode: 'focused' | 'typecheck';
   /** System bypass run (autonomous). Only set when role==='system'. */
   systemMode: boolean;

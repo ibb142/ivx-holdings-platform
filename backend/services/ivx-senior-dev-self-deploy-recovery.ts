@@ -314,7 +314,7 @@ async function executeRecoveryResume(task: IVXOwnerAITaskRow): Promise<RecoveryO
 
 // ─── Internals ─────────────────────────────────────────────────────────────
 
-interface ParityResult {
+export interface ParityResult {
   match: boolean;
   githubSha: string | null;
   renderSha: string | null;
@@ -323,6 +323,7 @@ interface ParityResult {
   healthSnapshot: Record<string, unknown>;
   attempts: number;
   lastError: string | null;
+  [key: string]: unknown;
 }
 
 async function verifyThreeWayParity(deployId: string, expectedCommitSha: string, maxRetries: number, intervalMs: number): Promise<ParityResult> {
@@ -385,16 +386,17 @@ async function verifyThreeWayParity(deployId: string, expectedCommitSha: string,
   };
 }
 
-interface LiveFeatureTestResult {
+export interface LiveFeatureTestResult {
   passed: boolean;
   httpStatus: number | null;
   reason: string;
   traceId: string | null;
   responseTimestamp: string | null;
   contradictoryState: boolean;
+  [key: string]: unknown;
 }
 
-async function runLiveFeatureTest(taskId: string): Promise<LiveFeatureTestResult> {
+export async function runLiveFeatureTest(taskId: string): Promise<LiveFeatureTestResult> {
   const url = `https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/${encodeURIComponent(taskId)}`;
   const responseTimestamp = new Date().toISOString();
   try {

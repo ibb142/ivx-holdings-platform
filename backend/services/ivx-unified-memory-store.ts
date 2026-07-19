@@ -193,10 +193,12 @@ async function writeState(records: MemoryRecord[]): Promise<void> {
     await writeDurableJson(STATE_PATH, bounded);
     return;
   }
-  // Robust atomic write: temp file lives in os.tmpdir() so parallel test
-  // directory deletion cannot erase it before the final rename.
-  const tmp = path.join(os.tmpdir(), `ivx-unified-memory-${randomUUID()}.tmp`);
+  // Robust atomic write: temp file lives in the SAME directory as the target
+  // so the final rename is intra-device (avoids EXDEV when os.tmpdir() is on a
+  // different filesystem than the project dir). Unique name per write prevents
+  // parallel-writer collisions.
   await ensureDir();
+  const tmp = path.join(DIR, `ivx-unified-memory-${randomUUID()}.tmp`);
   await writeFile(tmp, JSON.stringify(bounded, null, 2), 'utf8');
   try {
     await rename(tmp, STATE_PATH);

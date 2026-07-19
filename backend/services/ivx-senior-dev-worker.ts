@@ -40,6 +40,10 @@ import {
   verifyCommitMatch,
   getGitHubHeadSha,
 } from './ivx-enterprise-deployment-engine';
+import {
+  runLiveFeatureTest,
+  assertExactlyOneTerminalState,
+} from './ivx-senior-dev-self-deploy-recovery';
 
 export const IVX_SENIOR_DEV_WORKER_ID = 'IVX-SENIOR-DEV-01';
 export const WORKER_HEARTBEAT_SECONDS = 30;
@@ -55,6 +59,7 @@ export type IVXSeniorDevWorkerPhase =
   | 'WAITING_APPROVAL'
   | 'COMMITTING'
   | 'DEPLOYING'
+  | 'DEPLOYMENT_REQUESTED'
   | 'LIVE_VERIFYING'
   | 'ROLLING_BACK'
   | 'RETRYING';

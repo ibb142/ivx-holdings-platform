@@ -212,6 +212,7 @@ export interface ProofLedgerInput {
   filesInspected?: string[];
   filesChanged?: string[];
   testResults?: Record<string, unknown>;
+  testResultsAfterHeal?: Record<string, unknown>;
   lintResults?: Record<string, unknown>;
   typecheckResults?: Record<string, unknown>;
   buildResults?: Record<string, unknown>;
@@ -221,6 +222,12 @@ export interface ProofLedgerInput {
   runtimeSha?: string;
   healthResults?: Record<string, unknown>;
   liveFeatureResult?: Record<string, unknown>;
+  workerRestartEvent?: Record<string, unknown>;
+  deployHttpResponse?: Record<string, unknown>;
+  recoveryLeaseEvent?: Record<string, unknown>;
+  parityResult?: Record<string, unknown>;
+  finalStatus?: string;
+  finalTimestamp?: string;
   status?: string;
   errorMessage?: string;
   logs?: string[];
