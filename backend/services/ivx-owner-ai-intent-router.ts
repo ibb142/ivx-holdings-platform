@@ -105,6 +105,24 @@ export function isOwnerExecutionOrTaskBlock(prompt: string): boolean {
     return true;
   }
 
+  // Production-execution signals — explicit owner commands to commit/push/deploy/
+  // verify on this system. These must NEVER be hijacked by short-circuit
+  // clarification gates (time/date, location, manual-answer) just because the
+  // prompt happens to contain a date phrase like "(today's date)" inside a larger
+  // deploy instruction. This closes the chat→worker narrative-only fallback gap:
+  // a prompt like "Bump the version marker to ...-2026-07-19 (today's date), commit
+  // to GitHub, deploy to Render, verify /health" must route to the developer
+  // executor, not return "The answer is 2019." as a math/time query.
+  const hasCommitSignal = /\b(commit|push\s+(?:to\s+)?github|github\s+main|pr\s*#\d)\b/.test(normalized);
+  const hasDeploySignal = /\b(deploy|render|trigger\s+a\s+deploy|live\s+commit|production\s+commit)\b/.test(normalized);
+  const hasVerifySignal = /\b(verify|verified\s+evidence|verify\s+the\s+live|live\s+runtime\s+commit|github\s+head|sha\s+match|\/health)\b/.test(normalized);
+  const hasMutationSignal = /\b(bump|update|change|edit|modify|patch|fix|migrate|rollback)\b/.test(normalized)
+    && /\b(version|marker|file|endpoint|route|table|policy|config|code|production)\b/.test(normalized);
+  const executionSignalCount = [hasCommitSignal, hasDeploySignal, hasVerifySignal, hasMutationSignal].filter(Boolean).length;
+  if (executionSignalCount >= 2) {
+    return true;
+  }
+
   return false;
 }
 

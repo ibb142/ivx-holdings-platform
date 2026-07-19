@@ -259,7 +259,7 @@ export function routeIVXChatIntent(
     };
   }
 
-  const ownerBackendCommand = resolveOwnerBackendCommandLocal(prompt);
+  const ownerBackendCommand = isOwnerExecutionOrTaskBlock(prompt) ? null : resolveOwnerBackendCommandLocal(prompt);
   if (ownerBackendCommand) {
     return {
       branch: 'owner_actions',

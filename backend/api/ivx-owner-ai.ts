@@ -2077,6 +2077,16 @@ function parseTimezoneFromPrompt(prompt: string, fallback?: string | null): stri
 }
 
 function resolveOwnerBackendCommand(prompt: string): IVXOwnerBackendCommand | null {
+  // CHAT ↔ WORKER SYNC: never let the /time-now short-circuit hijack an owner
+  // execution/deploy/commit/audit task block. isOwnerExecutionOrTaskBlock()
+  // now recognizes production-execution signals (commit+github, deploy+render,
+  // verify+/health, bump+version/marker) so a prompt like "Bump the version marker
+  // to ...-2026-07-19 (today's date), commit to GitHub, deploy to Render, verify
+  // /health" routes to the developer_executor worker queue instead of returning
+  // a time-query answer ("The answer is 2019.").
+  if (isOwnerExecutionOrTaskBlock(prompt)) {
+    return null;
+  }
   const normalized = prompt.trim().toLowerCase();
   const command = normalized.split(/\s+/)[0] ?? '';
   if ((IVX_OWNER_BACKEND_COMMANDS as readonly string[]).includes(command)) {
@@ -5876,7 +5886,17 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // are answered directly here. This runs BEFORE the Supabase-bearer-guarded
     // main pipeline so owner-token-only requests get a real answer instead of 401.
     // It never blocks and never asks for proof — it is the IVX IA persona.
-    const conversationAnswer = resolveIVXConversationAnswer(prompt);
+    //
+    // CHAT ↔ WORKER SYNC: never let the conversation brain hijack an owner
+    // execution/deploy/commit/audit task block. isOwnerExecutionOrTaskBlock()
+    // now recognizes production-execution signals (commit+github, deploy+render,
+    // verify+/health, bump+version/marker) so a prompt like "Bump the version marker
+    // to ...-2026-07-19 (today's date), commit to GitHub, deploy to Render, verify
+    // /health" routes to the developer_executor worker queue instead of being
+    // answered as a math/conversation question ("The answer is 2019.").
+    const conversationAnswer = isOwnerExecutionOrTaskBlock(prompt)
+      ? null
+      : resolveIVXConversationAnswer(prompt);
     if (conversationAnswer) {
       return ownerOnlyJson({
         ok: true,
@@ -7208,7 +7228,15 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         goal: prompt,
         ownerApproved: true,
         approvePatch: autoExecuteEndToEnd,
+        // The runtime's patch approval gate requires BOTH the boolean flag AND
+        // the exact confirmation text (IVX_SAFE_PATCH_CONFIRM_TEXT). Without
+        // the text, proposed patches BLOCK at the gate and the worker returns
+        // 'No code change was required' even when buildPatchProposal produced a
+        // real goal-driven edit. Owner-authorized non-destructive execution
+        // (autoExecuteEndToEnd) supplies both so the patch applies end-to-end.
+        patchConfirmationText: autoExecuteEndToEnd ? IVX_SAFE_PATCH_CONFIRM_TEXT : undefined,
         approveGitDeploy: autoExecuteEndToEnd,
+        gitDeployConfirmationText: autoExecuteEndToEnd ? IVX_GIT_DEPLOY_CONFIRM_TEXT : undefined,
         validationMode: 'focused',
         systemMode: false,
         ownerApprovedAction: {

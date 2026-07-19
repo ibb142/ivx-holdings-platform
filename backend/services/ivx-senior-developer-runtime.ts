@@ -595,7 +595,109 @@ function assertSafePatchPath(repoPath: string): void {
   }
 }
 
-async function buildPatchProposal(projectRoot: string): Promise<IVXCodePatchProposal> {
+/**
+ * Goal-driven patch parser. Extracts a safe, exact replace_exact operation from
+ * an owner goal that explicitly names a file + old text + new text. Currently
+ * recognizes the "bump/change X in <file> from '<old>' to '<new>'" pattern used
+ * by the controlled deployment test (mandate section 14 part 2). Returns null
+ * when the goal does not match a supported pattern, in which case the legacy
+ * hardcoded patch fallback runs.
+ *
+ * Safety: the returned path is re-validated by assertSafePatchPath in the
+ * caller; oldText/newText are used verbatim in a replace_exact operation that
+ * refuses to write if oldText is absent or newText already present.
+ */
+function buildGoalDrivenPatchProposal(goal: string): { path: string; oldText: string; newText: string; summary: string } | null {
+  const normalizedGoal = goal.trim();
+  if (!normalizedGoal) {
+    return null;
+  }
+  // Pattern: "... in <file> from '<old>' to '<new>' ..." (single or double quotes,
+  // backticks accepted). The file path must be a repo-relative path under
+  // backend/ or expo/ (enforced by assertSafePatchPath in the caller).
+  const fileMatch = normalizedGoal.match(/\bin\s+([A-Za-z0-9_\-./]+\.(?:ts|tsx|js|jsx|json|yaml|yml|md))\b/);
+  const fromToMatch = normalizedGoal.match(/from\s+['"`]([^'"`]{1,200})['"`]\s+to\s+['"`]([^'"`]{1,200})['"`]/);
+  if (!fileMatch || !fromToMatch) {
+    return null;
+  }
+  const path = fileMatch[1];
+  const oldText = fromToMatch[1];
+  const newText = fromToMatch[2];
+  // Refuse paths that look like they try to escape the repo or touch secrets.
+  if (path.includes('..') || path.startsWith('/') || /secret|\.env|\.pem|\.key/i.test(path)) {
+    return null;
+  }
+  // Only allow allowlisted roots (defensive — assertSafePatchPath re-checks).
+  if (!path.startsWith('backend/') && !path.startsWith('expo/') && path !== 'package.json' && path !== 'tsconfig.json' && path !== 'render.yaml') {
+    return null;
+  }
+  const summary = `Goal-driven edit: replace '${oldText.slice(0, 60)}' with '${newText.slice(0, 60)}' in ${path} per owner goal.`;
+  return { path, oldText, newText, summary };
+}
+
+async function buildPatchProposal(projectRoot: string, goal: string): Promise<IVXCodePatchProposal> {
+  // CHAT ↔ WORKER SYNC: goal-driven patch brain. The original hardcoded patch only
+  // ever touched one file (multi-agent-framework.ts) and ignored the goal entirely,
+  // so any owner request whose target already satisfied the hardcoded check returned
+  // 'not_needed' and BLOCKED. This goal-driven branch lets the worker produce a
+  // real, goal-specific edit when the owner names an explicit file + old/new content,
+  // which is exactly what the controlled deployment test (mandate section 14 part 2)
+  // requires: bump the version marker → commit → deploy → verify.
+  const goalPatch = buildGoalDrivenPatchProposal(goal);
+  if (goalPatch) {
+    assertSafePatchPath(goalPatch.path);
+    const goalSource = await readFile(path.join(projectRoot, goalPatch.path), 'utf8').catch(() => null);
+    if (goalSource === null) {
+      return {
+        block: 34,
+        status: 'blocked',
+        approvalRequired: true,
+        requiredConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT,
+        operations: [],
+        diffPreview: `Blocked: goal-targeted file ${goalPatch.path} was not found in the repo; refusing to patch a missing file.`,
+        safety: { secretsTouched: false, destructiveOperation: false, allowedPathsOnly: true },
+      };
+    }
+    if (!goalSource.includes(goalPatch.oldText)) {
+      return {
+        block: 34,
+        status: 'blocked',
+        approvalRequired: true,
+        requiredConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT,
+        operations: [],
+        diffPreview: `Blocked: goal-targeted oldText was not found in ${goalPatch.path}; the marker may already be bumped or the line drifted.`,
+        safety: { secretsTouched: false, destructiveOperation: false, allowedPathsOnly: true },
+      };
+    }
+    if (goalSource.includes(goalPatch.newText)) {
+      return {
+        block: 34,
+        status: 'not_needed',
+        approvalRequired: true,
+        requiredConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT,
+        operations: [],
+        diffPreview: `No patch needed: ${goalPatch.path} already contains the target text (${goalPatch.newText.slice(0, 60)}…).`,
+        safety: { secretsTouched: false, destructiveOperation: false, allowedPathsOnly: true },
+      };
+    }
+    return {
+      block: 34,
+      status: 'proposed',
+      approvalRequired: true,
+      requiredConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT,
+      operations: [{
+        path: goalPatch.path,
+        kind: 'replace_exact',
+        summary: goalPatch.summary,
+        oldText: goalPatch.oldText,
+        newText: goalPatch.newText,
+      }],
+      diffPreview: [`--- ${goalPatch.path}`, `- ${goalPatch.oldText}`, `+ ${goalPatch.newText}`].join('\n'),
+      safety: { secretsTouched: false, destructiveOperation: false, allowedPathsOnly: true },
+    };
+  }
+
+  // Legacy fallback: the original hardcoded keyword-routing patch for backward compat.
   const targetPath = 'backend/services/agents/multi-agent-framework.ts';
   assertSafePatchPath(targetPath);
   const source = await readFile(path.join(projectRoot, targetPath), 'utf8');
@@ -1635,7 +1737,7 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   log('plan_created', 'info', 'Senior planner created one-goal execution plan.', { taskTree, ownerApprovedAction: input.ownerApprovedAction ?? null });
   onPhase?.('plan_created', 'Execution plan created.');
 
-  const patchProposal = await buildPatchProposal(projectRoot);
+  const patchProposal = await buildPatchProposal(projectRoot, goal);
   setTaskStatus(taskTree, 34, patchProposal.status === 'blocked' ? 'blocked' : 'running');
   log('diff_proposed', patchProposal.status === 'blocked' ? 'warn' : 'info', 'Safe code diff prepared.', { status: patchProposal.status, operations: patchProposal.operations.map((operation) => ({ path: operation.path, summary: operation.summary })) });
   onPhase?.('diff_proposed', 'Safe code diff prepared.');
