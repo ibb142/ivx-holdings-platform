@@ -124,6 +124,12 @@ import {
   type IVXExecutionStatusPayload,
 } from '../services/ivx-execution-status-schema';
 import { startDailyImprovementTask, type DailyImprovementStart } from '../services/ivx-daily-improvement';
+import {
+  buildReadOnlyInspectionAnswer,
+  IVX_READONLY_INSPECTION_MARKER,
+  runIVXReadOnlyInspection,
+  type IVXReadOnlyInspectionProof,
+} from '../services/ivx-senior-developer-readonly-runtime';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { recordExecutionTrace } from '../services/ivx-execution-trace-store';
 import {
@@ -7231,6 +7237,198 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // developer_executor even when the legacy keyword planner does not map them
     // to self_developer. Without this OR, those prompts fall through to the
     // narrative GPT path — which is exactly the bug this fix closes.
+    // ── READ-ONLY INSPECTION ROUTE (owner mandate 2026-07-19) ──────────────
+    // Read-only technical inspection prompts ("inspect the chat ordering issue
+    // and report the current task status; do not change or deploy anything")
+    // MUST route through the persistent worker queue as a READ_ONLY job — never
+    // through the narrative fallback model. This closes the gap where an
+    // inspection prompt fell through to GPT, which then mentioned files it
+    // "inspected" and tripped the Fake Execution Gate.
+    //
+    // The classifier fires BEFORE the developer_executor branch so a read-only
+    // signal combined with an inspection signal wins over the generic audit/
+    // fix matchers in the 10-category execution list. The worker runs the
+    // read-only runtime (no file edits / commit / deploy / migrations) and
+    // returns the strict inspection format (TASK ID / STATUS / MODE: READ_ONLY /
+    // FILES INSPECTED / COMMANDS RUN / FINDINGS / ROOT CAUSE / FILES CHANGED:
+    // NONE / COMMIT: NOT REQUESTED / DEPLOYMENT: NOT REQUESTED).
+    const inspectionClassification = classifyExecutionModeIntent(prompt);
+    const isReadOnlyInspection = inspectionClassification.isExecutionMode
+      && inspectionClassification.category === 'developer_inspection';
+    if (isReadOnlyInspection) {
+      const workerOwnerId = ownerContext.userId ?? 'owner';
+      const inspectionWorkerInput: IVXWorkerJobInput = {
+        goal: prompt,
+        ownerApproved: true,
+        // Read-only mode: the worker's read-only branch ignores these flags,
+        // but we set them false so the audit contract is explicit.
+        approvePatch: false,
+        approveGitDeploy: false,
+        validationMode: 'focused',
+        systemMode: false,
+        executionMode: 'read_only',
+        ownerApprovedAction: {
+          proposedPlan: prompt.slice(0, 500),
+          filesAffected: [],
+          riskLevel: 'low',
+          rollbackOption: '',
+          rollbackAvailable: false,
+          auditLog: [
+            `source=ivx_ia_chat`,
+            `conversationId=${conversation.id}`,
+            `requestId=${requestId}`,
+            `ownerId=${workerOwnerId}`,
+            `executionMode=read_only`,
+            `matchedTrigger=${inspectionClassification.matchedTrigger}`,
+          ],
+          secretValuesReturned: false as const,
+        },
+        ownerId: workerOwnerId,
+      };
+
+      const { job: enqueuedInspectionJob, attached: inspectionAttached, activeJobId: inspectionActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(inspectionWorkerInput);
+      const inspectionTaskId = enqueuedInspectionJob.jobId;
+      console.log('[IVXOwnerAIBackend] chat→worker (read-only inspection):', {
+        taskId: inspectionTaskId,
+        attached: inspectionAttached,
+        activeJobId: inspectionActiveJobId,
+        ownerId: workerOwnerId,
+        conversationId: conversation.id,
+        matchedTrigger: inspectionClassification.matchedTrigger,
+      });
+
+      // Bounded warmup so the first status payload reflects real inspection
+      // progress, not just "queued". Cap at 12s so we stay well under the HTTP
+      // 60s budget; the Expo client polls the statusUrl for the rest.
+      const INSPECTION_WARMUP_INTERVAL_MS = 750;
+      const INSPECTION_WARMUP_TIMEOUT_MS = 12_000;
+      const inspectionWarmupDeadline = Date.now() + INSPECTION_WARMUP_TIMEOUT_MS;
+      let inspectionJob: IVXWorkerJob = enqueuedInspectionJob;
+      const inspectionIsTerminal = (st: IVXWorkerJob['status']): boolean =>
+        st === 'completed' || st === 'failed' || st === 'blocked' || st === 'cancelled';
+      const inspectionHasAdvanced = (st: IVXWorkerJob['status']): boolean => st !== 'queued';
+      while (!inspectionIsTerminal(inspectionJob.status) && !inspectionHasAdvanced(inspectionJob.status) && Date.now() < inspectionWarmupDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, INSPECTION_WARMUP_INTERVAL_MS));
+        const fresh = await getSeniorDeveloperJob(inspectionTaskId);
+        if (fresh) inspectionJob = fresh;
+      }
+      // If the worker advanced past queued, keep polling briefly so a fast
+      // inspection returns its final evidence in the same response.
+      if (!inspectionIsTerminal(inspectionJob.status) && inspectionHasAdvanced(inspectionJob.status)) {
+        const extraDeadline = Math.min(Date.now() + 8_000, inspectionWarmupDeadline + 8_000);
+        while (!inspectionIsTerminal(inspectionJob.status) && Date.now() < extraDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, INSPECTION_WARMUP_INTERVAL_MS));
+          const fresh = await getSeniorDeveloperJob(inspectionTaskId);
+          if (fresh) inspectionJob = fresh;
+        }
+      }
+
+      // Render the strict read-only inspection answer. When the job is still
+      // running, surface the live progress block (no fabricated evidence).
+      // When terminal, run the real read-only runtime to produce the
+      // owner-mandated format from the actual inspected files + commands.
+      let inspectionAnswer: string;
+      let inspectionProof: IVXReadOnlyInspectionProof | null = null;
+      if (inspectionJob.result && inspectionIsTerminal(inspectionJob.status)) {
+        // Re-run the read-only runtime deterministically to render the final
+        // answer from real inspected files + commands. The proof is already
+        // persisted in the durable ledger via summarizeReadOnlyInspectionProof.
+        inspectionProof = await runIVXReadOnlyInspection({ goal: prompt });
+        inspectionAnswer = buildReadOnlyInspectionAnswer(inspectionProof);
+      } else {
+        // Still running: show live progress. This is honest — no VERIFIED claim.
+        inspectionAnswer = [
+          `TASK ID:\n${inspectionJob.jobId}`,
+          `STATUS:\nRUNNING (${inspectionJob.status}, ${inspectionJob.progressPercent}%)`,
+          'MODE:\nREAD_ONLY',
+          `FILES INSPECTED:\n(inspection in progress — stage: ${inspectionJob.stage})`,
+          `COMMANDS RUN:\n$ worker phase ${inspectionJob.stage} → exit pending (progress: ${inspectionJob.progressPercent}%)`,
+          'FINDINGS:\n(inspection in progress — poll the status URL for the final findings)',
+          'ROOT CAUSE:\n(inspection in progress)',
+          'FILES CHANGED:\nNONE — read-only inspection mode never edits files.',
+          'COMMIT:\nNOT REQUESTED — read-only inspection mode never commits.',
+          'DEPLOYMENT:\nNOT REQUESTED — read-only inspection mode never deploys.',
+          `STATUS URL:\n/api/ivx/senior-developer/worker/jobs/${inspectionJob.jobId}`,
+        ].join('\n\n');
+      }
+      inspectionAnswer = assertVisibleOwnerAIAnswer(inspectionAnswer);
+
+      let inspectionAssistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
+      if (persistAssistantMessage && !inspectionAssistantMessageId) {
+        try {
+          const assistantMessage = await insertMessage(ownerContext.client, tables, {
+            conversationId: conversation.id,
+            senderRole: 'assistant',
+            senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+            senderLabel: IVX_OWNER_AI_PROFILE.name,
+            body: inspectionAnswer,
+          });
+          inspectionAssistantMessageId = assistantMessage.id;
+        } catch (error) {
+          console.log('[IVXOwnerAIBackend] Read-only inspection answer persistence failed:', error instanceof Error ? error.message : 'unknown');
+          throw error instanceof Error ? error : new Error('Assistant reply could not be saved.');
+        }
+        await safeUpdateConversationSummary(ownerContext.client, tables, conversation.id, inspectionAnswer);
+        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+      }
+
+      await safeUpsertAIRequest(ownerContext.client, tables, {
+        requestId,
+        conversationId: conversation.id,
+        userId: ownerContext.userId,
+        prompt,
+        responseText: inspectionAnswer,
+        responseMessageId: inspectionAssistantMessageId,
+        status: 'completed',
+        model: 'ivx_readonly_inspection_runtime',
+      });
+
+      logOwnerAuditRouting({
+        promptText: prompt,
+        detectedIntent: 'development_action',
+        selectedRoute: 'ivx_readonly_inspection_runtime',
+        auditEndpointCalled: false,
+        renderedFinalAnswer: inspectionAnswer,
+      });
+
+      await recordExecutionTrace({
+        toolName: 'ivx_readonly_inspection_runtime',
+        requestId,
+        taskId: inspectionTaskId,
+        conversationId: conversation.id,
+        rawOutput: inspectionJob.result ?? { jobId: inspectionTaskId, status: inspectionJob.status, stage: inspectionJob.stage, mode: 'read_only' },
+        rawOutputRef: `logs/audit/${inspectionTaskId}.json`,
+        linkedClaim: inspectionAnswer,
+      });
+
+      const inspectionStatusPayload = buildExecutionStatusPayload(inspectionJob, 'developer_inspection', inspectionAnswer);
+      const inspectionHttpStatus = inspectionStatusPayload.httpStatus;
+      console.log('[IVXOwnerAIBackend] read-only inspection response:', {
+        taskId: inspectionTaskId,
+        category: 'developer_inspection',
+        jobStatus: inspectionJob.status,
+        stage: inspectionJob.stage,
+        progress: inspectionJob.progressPercent,
+        httpStatus: inspectionHttpStatus,
+      });
+
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: conversation.id,
+        answer: inspectionAnswer,
+        model: 'ivx_readonly_inspection_runtime',
+        status: 'ok',
+      }, {
+        source: 'local_runtime',
+        provider: 'ivx_readonly_inspection_runtime',
+        endpoint: '/api/ivx/owner-ai',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        assistantMessageId: inspectionAssistantMessageId,
+        assistantPersisted: Boolean(inspectionAssistantMessageId),
+        executionStatus: inspectionStatusPayload,
+      }, body.devTestModeActive === true), inspectionHttpStatus);
+    }
+
     if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor') {
       // When the unified router selected developer_executor but the legacy
       // planner did not, log the routing reconciliation so the audit trail is

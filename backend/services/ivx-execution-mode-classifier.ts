@@ -22,7 +22,7 @@
  * Pure + deterministic (no I/O, no AI gateway) so it is fully unit-testable.
  */
 
-/** The 10 owner-mandated execution categories. */
+/** The 11 owner-mandated execution categories (10 execution + 1 read-only inspection). */
 export type IVXExecutionModeCategory =
   | 'fix'
   | 'build'
@@ -33,7 +33,8 @@ export type IVXExecutionModeCategory =
   | 'migration'
   | 'create_module'
   | 'create_app'
-  | 'senior_developer';
+  | 'senior_developer'
+  | 'developer_inspection';
 
 export type IVXExecutionModeClassification = {
   /** True when the prompt matches any of the 10 execution categories. */
@@ -153,6 +154,34 @@ export function classifyExecutionModeIntent(prompt: string): IVXExecutionModeCla
       categoryLabel: '',
       matchedTrigger: '',
       reason: 'Empty prompt — no execution-mode category detected.',
+    };
+  }
+
+  // ── Read-only developer inspection (owner mandate 2026-07-19) ──────────
+  // BEFORE the explanation hatch and the category matchers: detect read-only
+  // inspection intent. These prompts must route through the persistent worker
+  // as a READ_ONLY job (no file edits / commit / deploy / migrations), never
+  // through the narrative fallback model. Fires when an inspection signal is
+  // combined with a read-only signal (in either order), or when the explicit
+  // "read-only inspection" phrase appears.
+  const INSPECTION_SIGNAL_PATTERN =
+    /\b(?:inspect(?:ion)?(?:\s+(?:code|logs|the\s+\w+|this|that))?|audit\s+(?:the\s+)?code|trace\s+(?:the\s+)?(?:issue|bug|defect|root\s+cause)|report\s+(?:the\s+)?(?:current\s+)?task\s+status|verify\s+(?:the\s+)?(?:implementation|deploy|build)|diagnose\s+(?:the\s+)?(?:bug|issue|defect|root\s+cause))\b/i;
+  const READ_ONLY_SIGNAL_PATTERN =
+    /\b(?:do\s+not\s+(?:change|deploy|modify|edit|commit|push|apply|run|touch)|don'?t\s+(?:change|deploy|modify|edit|commit|push|apply|run|touch)|read[-\s]?only|no\s+changes?\s+(?:required|allowed|needed|made)|without\s+changing|without\s+deploying)\b/i;
+  const EXPLICIT_READ_ONLY_INSPECTION_PATTERN = /\bread[-\s]?only\s+inspection\b/i;
+  const hasInspectionSignal = INSPECTION_SIGNAL_PATTERN.test(normalized);
+  const hasReadOnlySignal = READ_ONLY_SIGNAL_PATTERN.test(normalized);
+  const hasExplicitInspection = EXPLICIT_READ_ONLY_INSPECTION_PATTERN.test(normalized);
+  if ((hasInspectionSignal && hasReadOnlySignal) || hasExplicitInspection) {
+    const trigger = hasExplicitInspection
+      ? 'read-only inspection'
+      : `${normalized.match(INSPECTION_SIGNAL_PATTERN)?.[0] ?? ''} + ${normalized.match(READ_ONLY_SIGNAL_PATTERN)?.[0] ?? ''}`.trim();
+    return {
+      isExecutionMode: true,
+      category: 'developer_inspection',
+      categoryLabel: 'developer inspection',
+      matchedTrigger: trigger,
+      reason: `Read-only developer inspection matched ("${trigger}"). Routes through the persistent worker as a READ_ONLY job: inspect files / search code / run read-only tests, NEVER edit/commit/deploy/migrate. Returns the strict inspection format (TASK ID / STATUS / MODE: READ_ONLY / FILES INSPECTED / COMMANDS RUN / FINDINGS / ROOT CAUSE / FILES CHANGED: NONE / COMMIT: NOT REQUESTED / DEPLOYMENT: NOT REQUESTED).`,
     };
   }
 

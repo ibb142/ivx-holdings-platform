@@ -46,6 +46,14 @@ import {
   type IVXSeniorDeveloperApprovedActionContract,
   type IVXSeniorDeveloperRunProof,
 } from './ivx-senior-developer-runtime';
+import {
+  IVX_READONLY_INSPECTION_MARKER,
+  runIVXReadOnlyInspection,
+  buildReadOnlyInspectionAnswer,
+  type IVXReadOnlyInspectionProof,
+  type IVXInspectionExecutionMode,
+  type IVXReadOnlyInspectionPhase,
+} from './ivx-senior-developer-readonly-runtime';
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
@@ -131,6 +139,10 @@ export type IVXWorkerJobInput = {
   ownerApprovedAction: IVXSeniorDeveloperApprovedActionContract | null;
   /** Owner identifier for per-owner single-flight enforcement. */
   ownerId?: string;
+  /** Execution mode: 'read_only' routes through the read-only inspection
+   *  runtime (no file edits / commit / deploy / migrations). Undefined/absent
+   *  routes through the full developer_executor pipeline (default). */
+  executionMode?: IVXInspectionExecutionMode;
 };
 
 export type IVXWorkerJob = {
@@ -425,6 +437,54 @@ export async function archiveDeploymentProofToLedger(entry: IVXWorkerJobResult):
   } catch {
     return false;
   }
+}
+
+/**
+ * Derive a secret-safe proof summary from a read-only inspection proof. The
+ * result shape is the same `IVXWorkerJobResult` the durable ledger stores for
+ * developer_executor jobs, so /senior-proof and /senior-ledger surface it the
+ * same way. All mutation flags are forced false (read-only mode never edits,
+ * commits, pushes, or deploys).
+ */
+export function summarizeReadOnlyInspectionProof(
+  jobId: string,
+  proof: IVXReadOnlyInspectionProof,
+): IVXWorkerJobResult {
+  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'
+    ? 'COMPLETE'
+    : proof.finalStatus === 'BLOCKED'
+      ? 'BLOCKED'
+      : 'FAILED';
+  return {
+    jobId,
+    goal: proof.goal.slice(0, 280),
+    ok: proof.finalStatus === 'COMPLETED',
+    endToEndProductionComplete: false,
+    changedFiles: [],
+    testsRun: proof.commandsRun.some((cmd) => cmd.kind === 'run_tests'),
+    testsPassed: proof.commandsRun.some((cmd) => cmd.kind === 'run_tests') && proof.commandsRun.filter((cmd) => cmd.kind === 'run_tests').every((cmd) => cmd.ok),
+    typecheckRun: proof.commandsRun.some((cmd) => cmd.kind === 'typecheck'),
+    buildRun: false,
+    commitCreated: false,
+    commitSha: null,
+    commitUrl: null,
+    pushed: false,
+    branch: null,
+    deployId: null,
+    deployStatus: null,
+    deployVerified: false,
+    liveCommit: null,
+    commitMatch: false,
+    healthOk: false,
+    healthStatus: null,
+    versionEndpoint: null,
+    generatedFeatureSlug: null,
+    auditFiles: { json: '', jsonl: '' },
+    finalStatus,
+    error: proof.error,
+    durable: isDurableStoreConfigured(),
+    generatedAt: proof.generatedAt,
+  };
 }
 
 /**
@@ -787,14 +847,13 @@ async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: s
   });
 }
 
-/**
- * Map a senior-developer runtime phase to a worker job stage.
- */
+/** Map a senior-developer runtime phase to a worker job stage. */
 function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string } {
   switch (phase) {
     case 'queued':
       return { stage: 'QUEUED', detail: 'Task queued.' };
     case 'repo_brain_indexed':
+    case 'repo_indexed':
       return { stage: 'RUNNING', detail: 'Repo brain indexed source tree.' };
     case 'plan_created':
       return { stage: 'RUNNING', detail: 'Execution plan created.' };
@@ -804,6 +863,12 @@ function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string
       return { stage: 'PATCHING', detail: 'Patch approval gate checked.' };
     case 'patch_applied':
       return { stage: 'PATCHING', detail: 'Code patch applied.' };
+    case 'files_inspected':
+      return { stage: 'RUNNING', detail: 'Read-only inspection: files inspected.' };
+    case 'commands_run':
+      return { stage: 'TESTING', detail: 'Read-only commands executed.' };
+    case 'root_cause_identified':
+      return { stage: 'VERIFYING', detail: 'Root cause identified.' };
     case 'validation_started':
       return { stage: 'TESTING', detail: 'Validation runner started.' };
     case 'validation_completed':
@@ -873,6 +938,53 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       });
       activeJobControllers.delete(job.jobId);
       return null;
+    }
+
+    // ── READ-ONLY INSPECTION BRANCH (owner mandate 2026-07-19) ───────────────
+    // Read-only developer inspection prompts route through the same persistent
+    // worker queue but run a strictly READ-ONLY pipeline: inspect files, search
+    // code, run read-only tests/typecheck, identify root cause. NEVER edit,
+    // commit, push, deploy, or apply migrations. Returns a structured proof +
+    // the owner-mandated strict inspection format.
+    if (job.input.executionMode === 'read_only') {
+      const readOnlyProof = await runIVXReadOnlyInspection({
+        goal: job.input.goal,
+        onPhase: (phase: IVXReadOnlyInspectionPhase, detail: string) => {
+          if (controller.cancelled) return;
+          const { stage, detail: mappedDetail } = phaseToStage(phase);
+          void updateJobStage(job.jobId, stage, mappedDetail || detail);
+        },
+      });
+
+      if (controller.cancelled) {
+        await updateJob(job.jobId, {
+          status: 'cancelled',
+          stage: 'FAILED',
+          finishedAt: nowIso(),
+          cancelledAt: nowIso(),
+          error: 'Job cancelled during read-only inspection.',
+        });
+        activeJobControllers.delete(job.jobId);
+        return null;
+      }
+
+      const result = summarizeReadOnlyInspectionProof(job.jobId, readOnlyProof);
+      const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE' ? 'completed' : 'failed';
+      const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
+      await updateJob(job.jobId, {
+        status,
+        stage: finalStage,
+        progressPercent: STAGE_PROGRESS[finalStage],
+        stageDetail: status === 'completed'
+          ? 'Read-only inspection completed. No files changed, no commit, no deploy.'
+          : (result.error ?? 'Read-only inspection failed.'),
+        finishedAt: nowIso(),
+        result,
+        error: result.error,
+      });
+      await appendLedger(result);
+      activeJobControllers.delete(job.jobId);
+      return result;
     }
 
     const proof = await runIVXSeniorDeveloperTask({
