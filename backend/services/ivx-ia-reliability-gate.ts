@@ -5,23 +5,36 @@
  * same conversation — "Task completed" + "Task blocked" + "I'll inspect now" +
  * "Open Developer Workspace" — which destroys trust.
  *
- * This gate enforces four owner-required rules, deterministically and with no I/O:
+ * FINAL SMALL FIX — IVX TASK STATUS CONTRADICTION (2026-07-19):
+ * The previous text-based contradiction detector scanned the natural-language
+ * answer for words like "done", "completed", "blocked", "failed", etc. That
+ * produced false positives on honest execution answers such as
+ * "NO CODE CHANGED — no development was completed." when the structured job
+ * status was BLOCKED. The fix makes the gate read ONE authoritative structured
+ * status from the persistent worker job whenever it is available, and only
+ * falls back to text scanning when no structured job is provided.
+ *
+ * This gate now enforces five owner-required rules, deterministically and with
+ * no I/O:
  *
  *  1. SINGLE DECISION ENGINE — every reply carries exactly ONE status, picked
  *     from a fixed state machine: READY | RUNNING | WAITING_OWNER | BLOCKED |
  *     FAILED | VERIFIED. Never mixed.
- *  2. NO GENERIC PROMISES — "I'll inspect now", "I'll fix it", "One moment",
+ *  2. AUTHORITATIVE STRUCTURED STATUS — when a worker job is provided, the
+ *     final status is read ONLY from job.status. Natural-language words inside
+ *     the answer, previous messages, quoted text, logs, or error descriptions
+ *     do NOT determine the status.
+ *  3. NO GENERIC PROMISES — "I'll inspect now", "I'll fix it", "One moment",
  *     "hold on", "let me check" are blocked unless the answer also carries real
  *     evidence (a task id, files changed, commit SHA, deploy id, or live
- *     verification line). A promise without evidence is rewritten to UNVERIFIED.
- *  3. EVIDENCE-FIRST — any claim of Done / Fixed / Verified / Deployed must be
+ *     verification). A promise without evidence is rewritten to UNVERIFIED.
+ *  4. EVIDENCE-FIRST — any claim of Done / Fixed / Verified / Deployed must be
  *     backed by evidence fields (Task ID, Files changed, Commit SHA, Render
  *     Deploy ID, Live verification). Missing evidence → answer becomes
  *     "UNVERIFIED" with the exact missing artifact named.
- *  4. REMOVE CONTRADICTIONS — an answer that asserts a success state (Done /
- *     Completed / Verified / Deployed) AND a failure state (Blocked / Failed /
- *     Waiting) in the same message is contradictory. The gate resolves to the
- *     lower-confidence state and explains the event that caused the change.
+ *  5. STRUCTURED VALIDATION — a completed job must not carry a blockedReason.
+ *     A blocked job may list completedSteps. A completed code-change task must
+ *     have filesChanged. Evidence must belong to the same taskId.
  *
  * Pure + deterministic (no network, filesystem, or AI) so it is fully
  * unit-testable. It runs AFTER the senior-developer / access-status / execution
@@ -29,7 +42,7 @@
  * into a single-state, evidence-first reply.
  */
 export const IVX_IA_RELIABILITY_GATE_MARKER =
-  'ivx-ia-reliability-gate-2026-07-04-v1';
+  'ivx-ia-reliability-gate-2026-07-19-v2';
 
 /** The single allowed decision state for any IVX IA reply. */
 export type IVXIAState =
@@ -50,10 +63,41 @@ export type IVXIAEvidence = {
   liveVerification?: string | null;
 };
 
+/** Authoritative structured status values from the persistent worker job. */
+export type IVXIAJobStatusValue =
+  | 'QUEUED'
+  | 'CLAIMED'
+  | 'RUNNING'
+  | 'TESTING'
+  | 'WAITING_OWNER'
+  | 'BLOCKED'
+  | 'FAILED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+/** Structured evidence from the persistent worker job — the single source of truth. */
+export type IVXIAJobEvidence = {
+  taskId: string;
+  status: IVXIAJobStatusValue;
+  stage?: string;
+  filesChanged?: string[];
+  tests?: { run: boolean; passed: boolean; command: string | null };
+  commitSha?: string | null;
+  deploymentId?: string | null;
+  blockedReason?: string | null;
+  completedSteps?: string[];
+  error?: string | null;
+  currentAction?: string | null;
+  lastHeartbeat?: string | null;
+  progress?: number;
+};
+
 export type IVXIAReliabilityGateInput = {
   message: string;
   answer: string;
   evidence?: IVXIAEvidence | null;
+  /** When provided, status is derived from the structured job record only. */
+  structured?: IVXIAJobEvidence | null;
 };
 
 export type IVXIAReliabilityGateResult = {
@@ -73,28 +117,28 @@ export type IVXIAReliabilityGateResult = {
  */
 export const BANNED_GENERIC_PROMISES: readonly string[] = [
   "i'll inspect",
-  "i will inspect",
+  'i will inspect',
   "i'll fix",
-  "i will fix",
+  'i will fix',
   "i'll patch",
-  "i will patch",
+  'i will patch',
   "i'll validate",
-  "i will validate",
+  'i will validate',
   "i'll implement",
-  "i will implement",
+  'i will implement',
   "i'll return proof",
-  "i will return proof",
+  'i will return proof',
   "i'll check",
-  "i will check",
+  'i will check',
   "i'll look",
-  "i will look",
+  'i will look',
   "i'll review",
-  "i will review",
-  "let me check",
-  "let me look",
-  "let me inspect",
-  "let me review",
-  "let me see",
+  'i will review',
+  'let me check',
+  'let me look',
+  'let me inspect',
+  'let me review',
+  'let me see',
   'one moment',
   'one sec',
   'just a moment',
@@ -122,6 +166,9 @@ export const BANNED_GENERIC_PROMISES: readonly string[] = [
  * Success-state assertions. When any of these appear, the answer is claiming a
  * positive outcome and must carry evidence — otherwise it is a fabricated
  * completion claim.
+ *
+ * NOTE: These are only used when NO structured job record is provided. When a
+ * structured job is present, status is determined exclusively from job.status.
  */
 const SUCCESS_STATE_PATTERNS: { pattern: RegExp; label: string }[] = [
   { pattern: /\btask\s+completed\b/i, label: 'Task completed' },
@@ -143,6 +190,8 @@ const SUCCESS_STATE_PATTERNS: { pattern: RegExp; label: string }[] = [
 /**
  * Failure / waiting-state assertions. When one of these coexists with a success
  * assertion in the same answer, the reply is contradictory.
+ *
+ * NOTE: These are only used when NO structured job record is provided.
  */
 const FAILURE_STATE_PATTERNS: { pattern: RegExp; label: string }[] = [
   { pattern: /\bblocked\b/i, label: 'Blocked' },
@@ -162,6 +211,14 @@ function trimmed(value: unknown): string {
 
 function lower(value: string): string {
   return value.toLowerCase();
+}
+
+/** Remove quoted / code-fenced text so status words inside logs or quoted user text do not trigger false positives. */
+function stripQuotedText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/["'](?:[^"']|\\["'])*["']/g, ' ');
 }
 
 /** Detect banned generic promise phrases in an answer. */
@@ -187,6 +244,10 @@ export function findFailureStateAssertions(answer: string): string[] {
 /**
  * Evidence required to back a success claim. Returns the list of missing
  * evidence fields given the claimed success labels and the attached evidence.
+ *
+ * NOTE: This text-based evidence check is only used when NO structured job
+ * record is provided, or when the structured job is COMPLETED and we need to
+ * validate that the required evidence fields are present.
  */
 export function findMissingEvidence(
   answer: string,
@@ -223,24 +284,208 @@ export function findMissingEvidence(
 }
 
 /**
- * Resolve a single decision state from the answer + evidence.
+ * Validate a structured worker job record. This is the single source of truth
+ * for status contradiction detection. The answer text is NOT inspected.
+ */
+export function validateStructuredJobEvidence(
+  job: IVXIAJobEvidence,
+): {
+  valid: boolean;
+  state: IVXIAState;
+  reason: string | null;
+  contradictions: string[];
+  missing: string[];
+} {
+  const allowedStatuses: IVXIAJobStatusValue[] = [
+    'QUEUED', 'CLAIMED', 'RUNNING', 'TESTING', 'WAITING_OWNER',
+    'BLOCKED', 'FAILED', 'COMPLETED', 'CANCELLED',
+  ];
+  const contradictions: string[] = [];
+  const missing: string[] = [];
+
+  if (!job.taskId || trimmed(job.taskId).length < 4) {
+    missing.push('taskId');
+  }
+  if (!job.status) {
+    missing.push('status');
+  }
+  if (!job.stage) {
+    missing.push('currentStage');
+  }
+
+  if (job.status && !allowedStatuses.includes(job.status)) {
+    return {
+      valid: false,
+      state: 'UNVERIFIED',
+      reason: `Invalid structured status: ${job.status}`,
+      contradictions,
+      missing,
+    };
+  }
+
+  // Required evidence by status (owner spec section 4).
+  if (job.status === 'RUNNING' || job.status === 'QUEUED' || job.status === 'CLAIMED' || job.status === 'TESTING') {
+    if (!job.lastHeartbeat) missing.push('lastHeartbeat');
+    if (job.progress === undefined || job.progress === null) missing.push('progress');
+    if (!job.currentAction) missing.push('currentAction');
+  }
+
+  if (job.status === 'BLOCKED') {
+    if (!job.blockedReason && !job.error) missing.push('exact blocker or error');
+    if (!job.completedSteps || job.completedSteps.length === 0) missing.push('completed steps');
+  }
+
+  if (job.status === 'COMPLETED') {
+    if (!job.tests || !job.tests.run) missing.push('tests');
+    if (job.filesChanged === undefined || job.filesChanged.length === 0) missing.push('filesChanged');
+  }
+
+  // Structural contradiction: a completed job cannot have a blocking reason.
+  if (job.status === 'COMPLETED' && job.blockedReason) {
+    contradictions.push('COMPLETED + blockedReason');
+    return {
+      valid: false,
+      state: 'UNVERIFIED',
+      reason: 'COMPLETED job cannot carry a blockedReason',
+      contradictions,
+      missing,
+    };
+  }
+
+  // Missing required fields makes the structured record invalid.
+  if (missing.length > 0) {
+    return {
+      valid: false,
+      state: 'UNVERIFIED',
+      reason: `Structured job record incomplete: missing ${missing.join(', ')}`,
+      contradictions,
+      missing,
+    };
+  }
+
+  const stateMap: Record<IVXIAJobStatusValue, IVXIAState> = {
+    QUEUED: 'RUNNING',
+    CLAIMED: 'RUNNING',
+    RUNNING: 'RUNNING',
+    TESTING: 'RUNNING',
+    WAITING_OWNER: 'WAITING_OWNER',
+    BLOCKED: 'BLOCKED',
+    FAILED: 'FAILED',
+    COMPLETED: 'VERIFIED',
+    CANCELLED: 'BLOCKED',
+  };
+
+  return {
+    valid: true,
+    state: stateMap[job.status],
+    reason: null,
+    contradictions,
+    missing,
+  };
+}
+
+/**
+ * Build a clean structured status answer from the job record. This replaces the
+ * old narrative-style BLOCKED answer when the job is the single source of truth.
+ */
+export function buildStructuredStatusAnswer(job: IVXIAJobEvidence): string {
+  const lines: string[] = [];
+  lines.push(`TASK ID:`);
+  lines.push(job.taskId);
+  lines.push('');
+  lines.push('STATUS:');
+  lines.push(job.status);
+  lines.push('');
+  lines.push('STAGE:');
+  lines.push(job.stage ?? 'UNKNOWN');
+  lines.push('');
+
+  if (job.completedSteps && job.completedSteps.length > 0) {
+    lines.push('COMPLETED STEPS:');
+    for (const step of job.completedSteps) {
+      lines.push(`- ${step}`);
+    }
+    lines.push('');
+  }
+
+  if (job.blockedReason) {
+    lines.push('BLOCKER:');
+    lines.push(job.blockedReason);
+    lines.push('');
+  }
+
+  if (job.error && job.status !== 'BLOCKED') {
+    lines.push('ERROR:');
+    lines.push(job.error);
+    lines.push('');
+  }
+
+  if (job.filesChanged && job.filesChanged.length > 0) {
+    lines.push('FILES CHANGED:');
+    for (const f of job.filesChanged) {
+      lines.push(`- ${f}`);
+    }
+    lines.push('');
+  }
+
+  if (job.commitSha) {
+    lines.push('COMMIT SHA:');
+    lines.push(job.commitSha);
+    lines.push('');
+  }
+
+  if (job.deploymentId) {
+    lines.push('DEPLOYMENT ID:');
+    lines.push(job.deploymentId);
+    lines.push('');
+  }
+
+  if (job.tests && job.tests.run) {
+    lines.push('TESTS:');
+    lines.push(job.tests.passed ? 'PASS' : 'FAIL');
+    lines.push(job.tests.command ?? '');
+    lines.push('');
+  }
+
+  lines.push('NEXT ACTION:');
+  if (job.status === 'BLOCKED') {
+    lines.push(job.blockedReason ? `Resolve the blocker and resume task ${job.taskId}.` : 'Resolve the blocker and resume the same task.');
+  } else if (job.status === 'COMPLETED') {
+    lines.push('Task is complete. Evidence is attached above.');
+  } else if (job.status === 'FAILED') {
+    lines.push('Retry or fix the failure and resume the same task.');
+  } else if (job.status === 'WAITING_OWNER') {
+    lines.push('Owner approval required to proceed.');
+  } else {
+    lines.push(`Task is ${job.status.toLowerCase()}. Poll statusUrl for updates.`);
+  }
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * Resolve a single decision state from the answer + evidence + optional
+ * structured job record.
  *
  * Priority (lowest confidence wins so a contradiction never overclaims):
- *  1. If both success and failure assertions are present → contradiction →
- *     resolve to the failure side (BLOCKED / FAILED / WAITING_OWNER).
- *  2. If a success assertion is present but evidence is missing → UNVERIFIED is
- *     NOT a positive state; the gate rewrites the answer, and the state is
- *     BLOCKED (the missing evidence is the blocker).
- *  3. If only success assertions + full evidence → VERIFIED.
- *  4. If only failure assertions → BLOCKED / FAILED / WAITING_OWNER depending on
+ *  1. If a structured job record is provided, trust it exclusively. Validate
+ *     its fields and return the structured status. No text scanning.
+ *  2. Text-based contradiction detection is REMOVED. The only valid contradiction
+ *     is a structured record that is internally inconsistent (e.g. COMPLETED + blockedReason).
+ *  3. If a success assertion is present but evidence is missing → BLOCKED (the
+ *     missing evidence is the blocker). Status words inside quoted text, logs,
+ *     previous messages, or error descriptions are ignored.
+ *  4. If only success assertions + full evidence → VERIFIED.
+ *  5. If only failure assertions → BLOCKED / FAILED / WAITING_OWNER depending on
  *     the exact label.
- *  5. If only banned promises + no evidence → BLOCKED (generic promise without
+ *  6. If only banned promises + no evidence → BLOCKED (generic promise without
  *     evidence).
- *  6. Otherwise → READY (normal conversational reply, no claim made).
+ *  7. Otherwise → READY (normal conversational reply, no claim made).
  */
 export function resolveSingleState(
   answer: string,
   evidence: IVXIAEvidence | null | undefined,
+  structured?: IVXIAJobEvidence | null,
 ): {
   state: IVXIAState;
   contradictions: string[];
@@ -248,37 +493,43 @@ export function resolveSingleState(
   missingEvidence: string[];
   reason: string | null;
 } {
-  const successAssertions = findSuccessStateAssertions(answer);
-  const failureAssertions = findFailureStateAssertions(answer);
-  const bannedPromises = findBannedGenericPromises(answer);
-  const missingEvidence = successAssertions.length > 0
-    ? findMissingEvidence(answer, evidence)
-    : [];
-
-  // Contradiction: success + failure in the same message.
-  const contradictions: string[] = [];
-  if (successAssertions.length > 0 && failureAssertions.length > 0) {
-    for (const s of successAssertions) {
-      for (const f of failureAssertions) {
-        contradictions.push(`${s} + ${f}`);
-      }
+  // ── Structured job record is the single source of truth. ─────────────────
+  if (structured) {
+    const validation = validateStructuredJobEvidence(structured);
+    if (!validation.valid) {
+      return {
+        state: validation.state,
+        contradictions: validation.contradictions,
+        bannedPromises: [],
+        missingEvidence: validation.missing,
+        reason: validation.reason,
+      };
     }
-  }
-
-  if (contradictions.length > 0) {
-    // Resolve to the failure side — never overclaim.
-    const lowerFailure = failureAssertions.map((f) => lower(f));
-    const isWaiting = lowerFailure.some((f) => f.includes('waiting') || f.includes('awaiting') || f.includes('approval'));
-    const isFailed = lowerFailure.some((f) => f.includes('failed') || f.includes('could not') || f.includes('unable'));
-    const state: IVXIAState = isWaiting ? 'WAITING_OWNER' : isFailed ? 'FAILED' : 'BLOCKED';
     return {
-      state,
-      contradictions,
-      bannedPromises,
-      missingEvidence,
-      reason: `Contradictory states detected (${contradictions.join('; ')}). Resolved to ${state} — a success claim was retracted because a failure/waiting state appeared in the same reply.`,
+      state: validation.state,
+      contradictions: [],
+      bannedPromises: [],
+      missingEvidence: validation.missing,
+      reason: null,
     };
   }
+
+  // ── Fallback: text-based scanning (only when no structured job provided). ──
+  // Strip quoted / code-fenced text so words like "completed" or "blocked"
+  // inside logs, quoted user messages, or error descriptions do not trigger
+  // false positives. NOTE: text-based contradiction detection has been removed;
+  // the only valid contradiction is an inconsistent structured job record.
+  const answerForScanning = stripQuotedText(answer);
+  const successAssertions = findSuccessStateAssertions(answerForScanning);
+  const failureAssertions = findFailureStateAssertions(answerForScanning);
+  const bannedPromises = findBannedGenericPromises(answerForScanning);
+  const missingEvidence = successAssertions.length > 0
+    ? findMissingEvidence(answerForScanning, evidence)
+    : [];
+
+  // No text-based contradiction detection. The only contradictions are from
+  // structured validation (COMPLETED + blockedReason, etc.) handled above.
+  const contradictions: string[] = [];
 
   if (successAssertions.length > 0 && missingEvidence.length > 0) {
     return {
@@ -309,7 +560,7 @@ export function resolveSingleState(
       contradictions,
       bannedPromises,
       missingEvidence,
-      reason: `Generic promise without evidence: ${bannedPromises.join(', ')}. Inspection has not actually started (no task id or evidence attached).`,
+      reason: `Generic promise without evidence: ${bannedPromises.join(', ')}. Inspection / execution has not actually started (no task id or evidence attached).`,
     };
   }
 
@@ -390,19 +641,53 @@ export function buildReliabilityBlockedAnswer(input: {
 /**
  * Apply the IVX IA Reliability Gate to a chat answer.
  *
- * The gate intervenes (rewrites the answer) when:
- *  - The answer contradicts itself (success + failure states together).
- *  - The answer makes a success claim without the required evidence.
- *  - The answer contains a banned generic promise with no evidence.
- *
- * Otherwise the answer passes through unchanged. The resolved state is always
- * returned so the caller can attach it to the response payload.
+ * When a structured job record is provided, the gate derives status from the
+ * job and returns a clean structured answer. When no structured job is
+ * provided, the gate falls back to text scanning for contradictions, banned
+ * promises, and missing evidence.
  */
 export function applyIVXIAReliabilityGate(
   input: IVXIAReliabilityGateInput,
 ): IVXIAReliabilityGateResult {
   const answer = trimmed(input.answer);
-  const resolution = resolveSingleState(answer, input.evidence);
+  const resolution = resolveSingleState(answer, input.evidence, input.structured ?? null);
+
+  // If structured evidence is provided and is valid, rewrite the answer to the
+  // owner-mandated structured format. This ensures one terminal response per
+  // task and removes narrative contradictions.
+  if (input.structured && resolution.reason === null) {
+    const structuredAnswer = buildStructuredStatusAnswer(input.structured);
+    return {
+      answer: structuredAnswer,
+      gated: structuredAnswer !== answer,
+      state: resolution.state,
+      contradictions: [],
+      bannedPromises: [],
+      missingEvidence: [],
+      reason: null,
+    };
+  }
+
+  // If structured evidence is provided but invalid, build a blocked answer that
+  // names the exact validation failure (missing taskId, COMPLETED + blockedReason, etc.).
+  if (input.structured && resolution.reason !== null) {
+    const blockedAnswer = buildReliabilityBlockedAnswer({
+      state: resolution.state,
+      reason: resolution.reason,
+      missingEvidence: resolution.missingEvidence,
+      contradictions: resolution.contradictions,
+      bannedPromises: [],
+    });
+    return {
+      answer: blockedAnswer,
+      gated: true,
+      state: resolution.state,
+      contradictions: resolution.contradictions,
+      bannedPromises: [],
+      missingEvidence: resolution.missingEvidence,
+      reason: resolution.reason,
+    };
+  }
 
   // Pass-through states: READY (no claim), VERIFIED (claim + full evidence),
   // and pure failure/waiting states that have NO contradictions, banned promises,

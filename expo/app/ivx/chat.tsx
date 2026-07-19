@@ -1389,7 +1389,24 @@ export default function IVXOwnerChatRoute() {
 
       deduped.set(message.id, message);
     }
+    // Deduplicate execution-mode assistant messages by taskId. When the same
+    // worker taskId is returned for multiple requests (per-owner single-flight
+    // or retries), keep only the newest transient bubble so the chat shows
+    // exactly one terminal response per task instead of repeated BLOCKED messages.
+    const taskIdSeen = new Map<string, IVXMessage>();
     for (const message of visibleTransientAssistantMessages) {
+      if (!message.taskId) {
+        if (!deduped.has(message.id)) {
+          deduped.set(message.id, message);
+        }
+        continue;
+      }
+      const existing = taskIdSeen.get(message.taskId);
+      if (!existing || new Date(message.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+        taskIdSeen.set(message.taskId, message);
+      }
+    }
+    for (const message of taskIdSeen.values()) {
       if (!deduped.has(message.id)) {
         deduped.set(message.id, message);
       }
@@ -2338,6 +2355,7 @@ export default function IVXOwnerChatRoute() {
               id: transientReplyId,
               conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
               body: visibleAnswerWithBadge,
+              taskId: executionStatusPayload?.taskId ?? null,
             });
             return [...current.filter((message) => message.id !== transientReplyId), replyMessage];
           });

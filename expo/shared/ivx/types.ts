@@ -47,6 +47,8 @@ export type IVXMessage = {
   attachmentKind: IVXAttachmentKind;
   createdAt: string;
   updatedAt: string;
+  /** Optional durable task id attached by execution-mode responses (client-only; not persisted to DB). */
+  taskId?: string | null;
 };
 
 export type IVXInboxItem = {

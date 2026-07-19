@@ -226,6 +226,8 @@ export function buildVisibleAssistantTransient(input: {
   senderRole?: IVXMessage['senderRole'];
   attachmentKind?: IVXMessage['attachmentKind'];
   senderLabel?: string;
+  /** Optional durable task id for execution-mode responses (client-only). */
+  taskId?: string | null;
 }): IVXMessage {
   const role: IVXMessage['senderRole'] = input.senderRole ?? 'assistant';
   if (role !== 'assistant') {
@@ -254,6 +256,9 @@ export function buildVisibleAssistantTransient(input: {
     createdAt: nowIso,
     updatedAt: nowIso,
   };
+  if (input.taskId) {
+    payload.taskId = input.taskId;
+  }
   return payload;
 }
 

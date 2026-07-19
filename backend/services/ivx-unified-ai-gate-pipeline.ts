@@ -44,7 +44,7 @@
 import { applyIVXFakeExecutionGate, isDeveloperRequest, isVerificationRequest, type IVXFakeExecutionState } from './ivx-fake-execution-gate';
 import { applySeniorDeveloperNarrativeGate } from './ivx-senior-developer-narrative-gate';
 import { applyAccessStatusNarrativeGate } from './ivx-access-status-narrative-gate';
-import { applyIVXIAReliabilityGate, type IVXIAState } from './ivx-ia-reliability-gate';
+import { applyIVXIAReliabilityGate, type IVXIAJobEvidence, type IVXIAState } from './ivx-ia-reliability-gate';
 import {
   classifyTaskIntent,
   requiredCapabilitiesFor,
@@ -101,6 +101,10 @@ export type IVXGatePipelineInput = {
     renderDeployId?: string | null;
     liveVerification?: string | null;
   } | null;
+  /** Optional authoritative structured worker job record. When provided, the
+   *  reliability gate reads status ONLY from this record and never infers it
+   *  from natural-language text in the answer. */
+  structured?: IVXIAJobEvidence | null;
   /** Pre-execution feasibility gate result, when the caller already ran it.
    *  When provided, the pipeline uses it as Stage 0 and short-circuits to
    *  BLOCKED if the gate blocked. When omitted, the pipeline runs the
@@ -373,7 +377,7 @@ export function runIVXUnifiedGatePipeline(input: IVXGatePipelineInput): IVXGateP
           : null,
       }
     : null);
-  const reliability = applyIVXIAReliabilityGate({ message: input.message, answer, evidence });
+  const reliability = applyIVXIAReliabilityGate({ message: input.message, answer, evidence, structured: input.structured ?? null });
   stages.push({
     gate: 'reliability',
     gated: reliability.gated,
