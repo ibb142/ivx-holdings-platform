@@ -656,7 +656,15 @@ function isAppScaffoldGoal(goal: string): boolean {
  * letters, digits, and hyphens, max 40 chars.
  */
 function extractAppName(goal: string): string {
-  const nameMatch = goal.match(/(?:app|application|module|service|project)(?:\s+called|\s+named)?\s+["'`]?([A-Za-z0-9 _-]{2,40})["'`]?/i);
+  // Prefer an explicit "called X" / "named X" pattern first so we don't grab
+  // preceding words like "from scratch". Match up to the next clause boundary.
+  const calledMatch = goal.match(/(?:called|named)\s+["'`]?([A-Za-z0-9][A-Za-z0-9 _-]{1,40})["'`]?(?:\b|$|[.,;!?])/i);
+  if (calledMatch && calledMatch[1]) {
+    const slug = calledMatch[1].trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    if (slug.length >= 2) return slug;
+  }
+  // Fallback: "app/application/module X" with no "called" separator.
+  const nameMatch = goal.match(/(?:app|application|module|service|project)\s+["'`]?([A-Za-z0-9][A-Za-z0-9 _-]{1,40})["'`]?(?:\b|$|[.,;!?])/i);
   if (nameMatch && nameMatch[1]) {
     const slug = nameMatch[1].trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
     if (slug.length >= 2) return slug;
@@ -750,28 +758,34 @@ async function buildAppScaffoldPatchProposal(projectRoot: string, goal: string):
   const indexContent = indexLines.join('\n');
   const readmeContent = `# ${appName}\n\nAuto-scaffolded by the IVX Senior Developer runtime from scratch.\n\n**Goal:** ${escapedGoal}\n\n**Created:** ${createdAt}\n\n## Structure\n\n- \`index.ts\` — entry point with exported app object and \`runApp()\` function\n- \`index.test.ts\` — unit test proving the app works\n- \`package.json\` — module manifest with scripts\n\n## Usage\n\n\`\`\`ts\nimport { runApp } from './index';\nconsole.log(runApp('hello'));
 \`\`\`\n\n## Proof\n\nThis file set is real evidence the IVX Senior Developer can create a whole\nnew app project from scratch — not just patch existing files.\n`;
+  // NOTE: test file uses node:assert (not bun:test) so it passes the
+  // production import-smoke gate (Node ESM import must resolve all imports).
+  // The file is still runnable via `bun test` AND `node --test`.
   const testLines = [
     '// AUTO-SCAFFOLDED test for the ' + appName + ' app.',
-    "import { describe, expect, test } from 'bun:test';",
+    '// Uses node:assert so it is import-safe under Node import-smoke validation',
+    '// and runnable via `bun test` or `node --test`.',
+    "import { describe, test } from 'node:test';",
+    "import assert from 'node:assert/strict';",
     "import { runApp, " + appVar + "App } from './index';",
     '',
     "describe('" + appName + " scaffolded app', () => {",
     "  test('runApp returns a real execution string', () => {",
     "    const result = runApp('test-input');",
-    "    expect(result).toContain('" + appName + "');",
-    "    expect(result).toContain('test-input');",
-    "    expect(result).toContain('Scaffolded by IVX Senior Developer');",
+    "    assert.ok(result.includes('" + appName + "'), 'result should contain app name');",
+    "    assert.ok(result.includes('test-input'), 'result should contain input');",
+    "    assert.ok(result.includes('Scaffolded by IVX Senior Developer'), 'result should mention IVX Senior Developer');",
     '  });',
     '',
     "  test('app metadata is real', () => {",
-    '    expect(' + appVar + 'App.name).toBe(' + JSON.stringify(appName) + ');',
-    "    expect(" + appVar + "App.version).toBe('0.1.0');",
-    '    expect(' + appVar + 'App.createdAt).toBeTruthy();',
+    '    assert.equal(' + appVar + 'App.name, ' + JSON.stringify(appName) + ');',
+    "    assert.equal(" + appVar + "App.version, '0.1.0');",
+    '    assert.ok(' + appVar + 'App.createdAt, ' + JSON.stringify('createdAt should be truthy') + ');',
     '  });',
     '',
     "  test('runApp with no input uses default', () => {",
     '    const result = runApp();',
-    "    expect(result).toContain('" + appName + "');",
+    "    assert.ok(result.includes('" + appName + "'), 'result should contain app name');",
     '  });',
     '});',
     '',
