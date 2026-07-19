@@ -181,6 +181,11 @@ export type AutonomousActionItem = {
 export type AutonomousActionsView = {
   schedulerEnabled: boolean;
   totalRuns: number;
+  // Audit 2026-07-19 Finding 3: split totalRuns by evidence so the UI cannot
+  // imply all runs produced persisted proof. architecture-map classification:
+  // completedWithEvidence vs completedWithoutEvidence.
+  runsWithEvidence: number;
+  runsWithoutEvidence: number;
   loopsRun: number;
   outcomesRecorded: number;
   actions: AutonomousActionItem[];
@@ -295,13 +300,17 @@ export function buildDailyBriefing(
     },
     crmPipeline: {
       label: 'CRM pipeline',
-      value: `${pipeline.activeInvestors + pipeline.activeBuyers} active`,
-      note: `${pipeline.activeInvestors} investor(s) + ${pipeline.activeBuyers} buyer(s) active · ${pipeline.dealsInProgress} deal(s) in progress.`,
+      // Audit 2026-07-19: the entries counted here are capital-pipeline rows
+      // auto-seeded from jv_deals (source=verified_deal) with partyType=investor —
+      // they are DEAL FUNDING TARGETS, not active investor relationships. The
+      // owner-dashboard confirms investors.active=0. Label honestly.
+      value: `${pipeline.dealsInProgress} active deal-funding target(s)`,
+      note: `${pipeline.activeInvestors} capital-pipeline target(s) (auto-seeded from deals, NOT active investor relationships) + ${pipeline.activeBuyers} buyer(s) active · ${pipeline.dealsInProgress} deal(s) in progress · 0 active investor relationships per CRM.`,
     },
     investorPipeline: {
-      label: 'Investor pipeline',
+      label: 'Investor pipeline (capital being sought)',
       value: usd(pipeline.totalPipeline),
-      note: `Weighted ${usd(pipeline.weightedPipeline)} · ${usd(pipeline.capitalCommitted)} committed · ${usd(command.capitalRaisedThisMonth)} raised this month.`,
+      note: `Capital being sought across ${pipeline.dealsInProgress} deal-funding target(s) — NOT committed capital, NOT funds received. Weighted ${usd(pipeline.weightedPipeline)} · ${usd(pipeline.capitalCommitted)} committed · ${usd(command.capitalRaisedThisMonth)} raised this month.`,
     },
     cashRunway: {
       label: 'Cash runway',
@@ -736,6 +745,7 @@ const SCHEDULER_JOB_LABELS: Record<string, string> = {
 export function buildAutonomousActionsView(
   scheduler: SchedulerState,
   loopSummary: ActionLoopSummary,
+  runEvidence?: { completedWithEvidence: number; completedWithoutEvidence: number; failed: number },
 ): AutonomousActionsView {
   const actions: AutonomousActionItem[] = [];
   let totalRuns = 0;
@@ -751,16 +761,32 @@ export function buildAutonomousActionsView(
     });
   }
 
+  // Audit 2026-07-19 Finding 3: split totalRuns by evidence so the UI cannot
+  // imply every run produced persisted proof. Prefer the architecture-map
+  // classification (runEvidence) when supplied; otherwise derive conservatively
+  // from the scheduler jobs themselves (a run counts as evidenced only if its
+  // last run produced a summary artifact and ended ok).
+  const runsWithEvidence = runEvidence
+    ? runEvidence.completedWithEvidence
+    : Object.values(scheduler.jobs).filter(
+        (j) => j.lastStatus === 'ok' && Boolean(j.lastSummary),
+      ).length;
+  const runsWithoutEvidence = runEvidence
+    ? runEvidence.completedWithoutEvidence
+    : Math.max(0, totalRuns - runsWithEvidence);
+
   return {
     schedulerEnabled: scheduler.enabled,
     totalRuns,
+    runsWithEvidence,
+    runsWithoutEvidence,
     loopsRun: loopSummary.total,
     outcomesRecorded: loopSummary.withOutcome,
     actions,
     note:
       totalRuns === 0
         ? 'The autonomous scheduler is armed but has not completed a run yet — actions appear here after the first daily cycle.'
-        : 'Autonomous actions are real scheduled runs (self-audit + drift detection); each drives a recommendation→execution→outcome loop.',
+        : `Autonomous actions are real scheduled runs (self-audit + drift detection). ${runsWithEvidence} run(s) produced persisted evidence; ${runsWithoutEvidence} completed without a persisted evidence artifact. Each drives a recommendation→execution→outcome loop.`,
   };
 }
 
@@ -831,6 +857,7 @@ export async function buildExecutiveLayer(now: number = Date.now()): Promise<Exe
     { listTasks },
     { getSchedulerState, freshSchedulerState },
     { learnFromOutcomes, summarizeActionLoop },
+    { buildAiArchitectureMap },
   ] = await Promise.all([
     import('./ivx-business-impact'),
     import('./ivx-capital-command-center'),
@@ -838,6 +865,7 @@ export async function buildExecutiveLayer(now: number = Date.now()): Promise<Exe
     import('./ivx-task-state-store'),
     import('./ivx-autonomous-scheduler'),
     import('./ivx-executive-action-loop'),
+    import('./ivx-ai-architecture-map'),
   ]);
 
   const emptyLoopSummary: ActionLoopSummary = {
@@ -858,7 +886,7 @@ export async function buildExecutiveLayer(now: number = Date.now()): Promise<Exe
     note: 'Learning report unavailable.',
   };
 
-  const [impact, command, autonomous, tasks, scheduler, learning, loopSummary] = await Promise.all([
+  const [impact, command, autonomous, tasks, scheduler, learning, loopSummary, archMap] = await Promise.all([
     safe(() => buildBusinessImpactDashboard(now), null as BusinessImpactDashboard | null),
     safe(() => buildCapitalCommandCenter(), EMPTY_COMMAND),
     safe(() => buildAutonomousDashboard(), null as AutonomousDashboard | null),
@@ -866,7 +894,13 @@ export async function buildExecutiveLayer(now: number = Date.now()): Promise<Exe
     safe(() => getSchedulerState(), freshSchedulerState(now) as SchedulerState),
     safe(() => learnFromOutcomes(), emptyLearning),
     safe(() => summarizeActionLoop(), emptyLoopSummary),
+    safe(() => buildAiArchitectureMap('executive-layer'), null as { autonomousRunClassification?: { completedWithEvidence: number; completedWithoutEvidence: number; failed: number } } | null),
   ]);
+
+  // Audit 2026-07-19 Finding 3: pass the authoritative autonomous-run evidence
+  // classification through to the autonomous-actions view so the UI can split
+  // totalRuns into runsWithEvidence vs runsWithoutEvidence honestly.
+  const runEvidence = archMap?.autonomousRunClassification ?? undefined;
 
   // business-impact and autonomous dashboards are required for derivation; if a
   // reader failed, fall back to a freshly-built empty-but-valid dashboard.
@@ -880,7 +914,7 @@ export async function buildExecutiveLayer(now: number = Date.now()): Promise<Exe
   const executionTracking = buildExecutionTracking(tasks);
   const investorPriorities = buildInvestorPriorities(command);
   const dealPipeline = buildDealPipelineView(command);
-  const autonomousActions = buildAutonomousActionsView(scheduler, loopSummary);
+  const autonomousActions = buildAutonomousActionsView(scheduler, loopSummary, runEvidence);
   const learningSummary = buildLearningSummaryView(learning, loopSummary);
   const scorecards = buildExecutiveScorecards(impactDash, command, autonomousDash, executionTracking);
 
