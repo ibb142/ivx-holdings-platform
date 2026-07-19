@@ -7429,6 +7429,151 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, body.devTestModeActive === true), inspectionHttpStatus);
     }
 
+    // ── AUTONOMOUS CODER BRANCH (owner mandate 2026-07-19) ──────────────────
+    // code_change / deploy execution modes route through the IVX Autonomous
+    // Coder engine — the REAL code-writing loop where the owner-controlled LLM
+    // generates the patch, the engine applies it, runs tests + typecheck,
+    // iterates on failure (bounded to 5 iterations), commits via GitHub Git
+    // Data API, and — only when executionMode === 'deploy' AND owner approval
+    // is verified — triggers render_trigger_deploy + verifies production.
+    // The patch is authored by the IVX LLM, NOT by Rork manually editing.
+    //
+    // Routing trigger: an explicit "autonomous coder" / "code_change" / "write
+    // code" / "implement patch" / "autonomous-coder-pilot" signal in the
+    // prompt. This keeps the autonomous coder opt-in so the existing
+    // developer_executor pipeline (legacy safe-patch runtime) stays the default
+    // for generic fix/build/deploy prompts until the owner broadens the trigger.
+    const autonomousCoderTrigger = /autonomous[-_ ]?coder|code[-_ ]?change|write[-_ ]?code|implement[-_ ]?patch|autonomous[-_ ]?coding/i.test(prompt);
+    if (autonomousCoderTrigger) {
+      const workerOwnerId = ownerContext.userId ?? 'owner';
+      // Detect deploy intent: only when the prompt requests deploy WITHOUT a
+      // negation. "do not deploy" / "without deploying" must NOT trigger deploy.
+      const deployNegated = /do\s+not\s+deploy|don'?t\s+deploy|without\s+deploy|no\s+deploy/i.test(prompt);
+      const deployRequested = !deployNegated && /\bdeploy\b|production|\blive\b/i.test(prompt);
+      const autonomousExecutionMode: 'code_change' | 'deploy' = deployRequested ? 'deploy' : 'code_change';
+      const autonomousWorkerInput: IVXWorkerJobInput = {
+        goal: prompt,
+        ownerApproved: true,
+        approvePatch: true,
+        patchConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT,
+        approveGitDeploy: deployRequested,
+        gitDeployConfirmationText: deployRequested ? IVX_GIT_DEPLOY_CONFIRM_TEXT : undefined,
+        validationMode: 'focused',
+        systemMode: false,
+        executionMode: autonomousExecutionMode,
+        ownerApprovedAction: {
+          proposedPlan: prompt.slice(0, 500),
+          filesAffected: [],
+          riskLevel: deployRequested ? 'high' : 'medium',
+          rollbackOption: deployRequested ? 'git revert + render_trigger_deploy' : '',
+          rollbackAvailable: deployRequested,
+          auditLog: [
+            `source=ivx_ia_chat`,
+            `conversationId=${conversation.id}`,
+            `requestId=${requestId}`,
+            `ownerId=${workerOwnerId}`,
+            `executionMode=${autonomousExecutionMode}`,
+            `autonomousCoder=true`,
+          ],
+          secretValuesReturned: false as const,
+        },
+        ownerId: workerOwnerId,
+      };
+
+      const { job: enqueuedAutonomousJob, attached: autonomousAttached, activeJobId: autonomousActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(autonomousWorkerInput);
+      const autonomousTaskId = enqueuedAutonomousJob.jobId;
+      console.log('[IVXOwnerAIBackend] autonomous coder enqueue:', {
+        taskId: autonomousTaskId,
+        attached: autonomousAttached,
+        activeJobId: autonomousActiveJobId,
+        ownerId: workerOwnerId,
+        executionMode: autonomousExecutionMode,
+        conversationId: conversation.id,
+      });
+
+      // Bounded warmup: wait up to 15s for the worker to advance past QUEUED.
+      const AC_WARMUP_INTERVAL_MS = 750;
+      const AC_WARMUP_TIMEOUT_MS = 15_000;
+      const acWarmupDeadline = Date.now() + AC_WARMUP_TIMEOUT_MS;
+      let autonomousJob: IVXWorkerJob = enqueuedAutonomousJob;
+      while (Date.now() < acWarmupDeadline) {
+        const current = await getSeniorDeveloperJob(autonomousTaskId);
+        if (!current) break;
+        autonomousJob = current;
+        if (autonomousJob.status !== 'queued' && autonomousJob.status !== 'running') break;
+        if (autonomousJob.stage !== 'QUEUED' && autonomousJob.stage !== 'RUNNING') break;
+        await new Promise((resolve) => setTimeout(resolve, AC_WARMUP_INTERVAL_MS));
+      }
+
+      // Render the autonomous coder answer.
+      // When the job is still running, return an honest live-progress block
+      // with the taskId + statusUrl (no fabricated VERIFIED).
+      // When terminal, build the owner-mandated autonomous-coder answer format.
+      const autonomousIsTerminal = autonomousJob.status === 'completed'
+        || autonomousJob.status === 'failed'
+        || autonomousJob.status === 'blocked'
+        || autonomousJob.status === 'cancelled';
+
+      let autonomousAnswer: string;
+      if (autonomousIsTerminal && autonomousJob.result) {
+        // Terminal: render the full autonomous-coder evidence from the persisted result.
+        autonomousAnswer = [
+          `TASK ID: ${autonomousTaskId}`,
+          `STATUS: ${autonomousJob.status.toUpperCase()}`,
+          `MODE: ${autonomousExecutionMode}`,
+          `FINAL STATUS: ${autonomousJob.result.finalStatus}`,
+          `FILES CHANGED: ${autonomousJob.result.changedFiles.length > 0 ? autonomousJob.result.changedFiles.join(', ') : 'NONE'}`,
+          `TESTS: ${autonomousJob.result.testsPassed ? 'PASS' : 'FAIL'}`,
+          `TYPECHECK: ${autonomousJob.result.typecheckRun ? (autonomousJob.result.testsPassed ? 'PASS' : 'FAIL') : 'NOT RUN'}`,
+          `COMMIT SHA: ${autonomousJob.result.commitSha ?? 'NONE'}`,
+          `COMMIT URL: ${autonomousJob.result.commitUrl ?? 'NONE'}`,
+          `DEPLOYMENT: ${autonomousJob.result.deployId ? `deployId=${autonomousJob.result.deployId} status=${autonomousJob.result.deployStatus}` : 'NOT REQUESTED'}`,
+          `PRODUCTION VERIFICATION: ${autonomousJob.result.deployVerified ? 'VERIFIED' : 'NOT VERIFIED'}`,
+          `LIVE COMMIT: ${autonomousJob.result.liveCommit ?? 'NONE'}`,
+          `HEALTH: ${autonomousJob.result.healthOk ? 'OK' : 'UNKNOWN'}`,
+          `PATCH AUTHORED BY: ${autonomousJob.result.finalStatus === 'COMPLETE' ? 'ivx_llm' : 'NONE'}`,
+          autonomousJob.result.error ? `ERROR: ${autonomousJob.result.error}` : 'ERROR: NONE',
+        ].join('\n');
+      } else {
+        // Running: honest live-progress block, no fabricated completion.
+        autonomousAnswer = [
+          `TASK ID: ${autonomousTaskId}`,
+          `STATUS: ${autonomousJob.status.toUpperCase()}`,
+          `MODE: ${autonomousExecutionMode}`,
+          `STAGE: ${autonomousJob.stage}`,
+          `PROGRESS: ${autonomousJob.progressPercent}%`,
+          `DETAIL: ${autonomousJob.stageDetail}`,
+          `STATUS URL: /api/ivx/senior-developer/worker/jobs/${autonomousTaskId}`,
+          'NOTE: The autonomous coder is running the real INSPECT→PLAN→PATCH→TEST→COMMIT loop. Poll the status URL for live progress + verified evidence.',
+        ].join('\n');
+      }
+
+      const autonomousStatusPayload = buildExecutionStatusPayload(autonomousJob, 'senior_developer', autonomousAnswer);
+      const autonomousHttpStatus = autonomousStatusPayload.httpStatus;
+      console.log('[IVXOwnerAIBackend] autonomous coder response:', {
+        taskId: autonomousTaskId,
+        executionMode: autonomousExecutionMode,
+        jobStatus: autonomousJob.status,
+        stage: autonomousJob.stage,
+        progress: autonomousJob.progressPercent,
+        httpStatus: autonomousHttpStatus,
+      });
+
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: conversation.id,
+        answer: autonomousAnswer,
+        model: 'ivx_self_developer_runtime',
+        status: 'ok',
+      }, {
+        source: 'local_runtime',
+        provider: 'ivx_self_developer_runtime',
+        endpoint: '/api/ivx/owner-ai',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        executionStatus: autonomousStatusPayload,
+      }, body.devTestModeActive === true), autonomousHttpStatus);
+    }
+
     if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor') {
       // When the unified router selected developer_executor but the legacy
       // planner did not, log the routing reconciliation so the audit trail is

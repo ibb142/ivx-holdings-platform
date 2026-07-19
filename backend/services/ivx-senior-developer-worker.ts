@@ -54,6 +54,14 @@ import {
   type IVXInspectionExecutionMode,
   type IVXReadOnlyInspectionPhase,
 } from './ivx-senior-developer-readonly-runtime';
+import {
+  IVX_AUTONOMOUS_CODER_MARKER,
+  runIVXAutonomousCoder,
+  buildAutonomousCoderAnswer,
+  type IVXAutonomousCoderProof,
+  type IVXAutonomousCoderExecutionMode as IVXAutonomousCoderMode,
+  type IVXAutonomousCoderPhase,
+} from './ivx-autonomous-coder';
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
@@ -140,9 +148,13 @@ export type IVXWorkerJobInput = {
   /** Owner identifier for per-owner single-flight enforcement. */
   ownerId?: string;
   /** Execution mode: 'read_only' routes through the read-only inspection
-   *  runtime (no file edits / commit / deploy / migrations). Undefined/absent
-   *  routes through the full developer_executor pipeline (default). */
-  executionMode?: IVXInspectionExecutionMode;
+   *  runtime (no file edits / commit / deploy / migrations). 'code_change'
+   *  routes through the IVX Autonomous Coder engine (LLM-generated patch →
+   *  apply → test → typecheck → commit, NO deploy). 'deploy' routes through
+   *  the Autonomous Coder with deploy approval (commit → deploy → verify).
+   *  Undefined/absent routes through the full developer_executor pipeline
+   *  (default, legacy behavior). */
+  executionMode?: IVXInspectionExecutionMode | IVXAutonomousCoderMode;
 };
 
 export type IVXWorkerJob = {
@@ -476,6 +488,54 @@ export function summarizeReadOnlyInspectionProof(
     liveCommit: null,
     commitMatch: false,
     healthOk: false,
+    healthStatus: null,
+    versionEndpoint: null,
+    generatedFeatureSlug: null,
+    auditFiles: { json: '', jsonl: '' },
+    finalStatus,
+    error: proof.error,
+    durable: isDurableStoreConfigured(),
+    generatedAt: proof.generatedAt,
+  };
+}
+
+/**
+ * Derive a secret-safe proof summary from an autonomous-coder run proof.
+ * Same `IVXWorkerJobResult` shape the durable ledger stores, so /senior-proof
+ * and /senior-ledger surface it the same way. Mutation flags reflect the
+ * real autonomous-coder outcome (patch applied, commit created, deploy
+ * triggered, production verified).
+ */
+export function summarizeAutonomousCoderProof(
+  jobId: string,
+  proof: IVXAutonomousCoderProof,
+): IVXWorkerJobResult {
+  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'
+    ? (proof.commitSha ? 'COMPLETE' : 'LOCAL_ONLY')
+    : proof.finalStatus === 'BLOCKED'
+      ? 'BLOCKED'
+      : 'FAILED';
+  return {
+    jobId,
+    goal: proof.goal.slice(0, 280),
+    ok: proof.finalStatus === 'COMPLETED',
+    endToEndProductionComplete: proof.productionVerified,
+    changedFiles: proof.filesChanged.slice(0, 25),
+    testsRun: proof.commandsRun.some((cmd) => /test/i.test(cmd.command)),
+    testsPassed: proof.testsPassed,
+    typecheckRun: proof.commandsRun.some((cmd) => /tsc|typecheck|noEmit/i.test(cmd.command)),
+    buildRun: proof.buildRun,
+    commitCreated: Boolean(proof.commitSha),
+    commitSha: proof.commitSha,
+    commitUrl: proof.commitUrl,
+    pushed: Boolean(proof.commitSha),
+    branch: proof.branch,
+    deployId: proof.deployId,
+    deployStatus: proof.deployStatus,
+    deployVerified: proof.productionVerified,
+    liveCommit: proof.liveCommit,
+    commitMatch: proof.productionVerified && proof.liveCommit === proof.commitSha,
+    healthOk: proof.healthOk,
     healthStatus: null,
     versionEndpoint: null,
     generatedFeatureSlug: null,
@@ -848,6 +908,44 @@ async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: s
 }
 
 /** Map a senior-developer runtime phase to a worker job stage. */
+/** Map an autonomous-coder runtime phase to a worker job stage. */
+function autonomousCoderPhaseToStage(phase: IVXAutonomousCoderPhase): { stage: IVXWorkerJobStage; detail: string } {
+  switch (phase) {
+    case 'queued':
+      return { stage: 'QUEUED', detail: 'Autonomous coder job queued.' };
+    case 'inspecting':
+      return { stage: 'RUNNING', detail: 'Inspecting repository files.' };
+    case 'planning':
+      return { stage: 'RUNNING', detail: 'Generating technical plan + patch via IVX LLM.' };
+    case 'patching':
+      return { stage: 'PATCHING', detail: 'Applying LLM-generated patch.' };
+    case 'testing':
+      return { stage: 'TESTING', detail: 'Running targeted tests + typecheck.' };
+    case 'analyzing':
+      return { stage: 'TESTING', detail: 'Analyzing test failures.' };
+    case 'revising':
+      return { stage: 'PATCHING', detail: 'Revising patch after failure.' };
+    case 'verifying':
+      return { stage: 'VERIFYING', detail: 'Tests + typecheck passed; verifying.' };
+    case 'committing':
+      return { stage: 'COMMITTING', detail: 'Committing via GitHub Git Data API.' };
+    case 'awaiting_owner_approval':
+      return { stage: 'COMMITTING', detail: 'Awaiting owner approval for deploy.' };
+    case 'deploying':
+      return { stage: 'DEPLOYING', detail: 'Deploying to Render (owner-approved).' };
+    case 'production_verifying':
+      return { stage: 'VERIFYING', detail: 'Verifying production health.' };
+    case 'completed':
+      return { stage: 'COMPLETED', detail: 'Autonomous coder job completed.' };
+    case 'blocked':
+      return { stage: 'FAILED', detail: 'Autonomous coder blocked.' };
+    case 'failed':
+      return { stage: 'FAILED', detail: 'Autonomous coder failed.' };
+    default:
+      return { stage: 'RUNNING', detail: `Phase: ${phase}` };
+  }
+}
+
 function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string } {
   switch (phase) {
     case 'queued':
@@ -978,6 +1076,66 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         stageDetail: status === 'completed'
           ? 'Read-only inspection completed. No files changed, no commit, no deploy.'
           : (result.error ?? 'Read-only inspection failed.'),
+        finishedAt: nowIso(),
+        result,
+        error: result.error,
+      });
+      await appendLedger(result);
+      activeJobControllers.delete(job.jobId);
+      return result;
+    }
+
+    // ── AUTONOMOUS CODER BRANCH (owner mandate 2026-07-19) ──────────────────
+    // code_change / deploy execution modes route through the IVX Autonomous
+    // Coder engine: the owner-controlled LLM generates a real patch, the engine
+    // applies it in the repo, runs real tests + typecheck, iterates on failure
+    // (bounded to MAX_ITERATIONS), commits via the GitHub Git Data API, and —
+    // only when executionMode === 'deploy' AND owner approval is verified —
+    // triggers render_trigger_deploy + verifies production health. This is the
+    // real code-writing loop: the patch is authored by the IVX LLM, NOT by Rork
+    // manually editing the code.
+    if (job.input.executionMode === 'code_change' || job.input.executionMode === 'deploy') {
+      const coderProof = await runIVXAutonomousCoder({
+        taskId: job.jobId,
+        goal: job.input.goal,
+        executionMode: job.input.executionMode,
+        ownerId: job.ownerId,
+        approvalPolicy: 'owner_gated',
+        deployApproved: job.input.approveGitDeploy,
+        deployConfirmationText: job.input.gitDeployConfirmationText,
+        onPhase: (phase: IVXAutonomousCoderPhase, detail: string) => {
+          if (controller.cancelled) return;
+          const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
+          void updateJobStage(job.jobId, stage, mappedDetail || detail);
+        },
+      });
+
+      if (controller.cancelled) {
+        await updateJob(job.jobId, {
+          status: 'cancelled',
+          stage: 'FAILED',
+          finishedAt: nowIso(),
+          cancelledAt: nowIso(),
+          error: 'Job cancelled during autonomous coding.',
+        });
+        activeJobControllers.delete(job.jobId);
+        return null;
+      }
+
+      const result = summarizeAutonomousCoderProof(job.jobId, coderProof);
+      const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
+        ? 'completed'
+        : result.finalStatus === 'BLOCKED'
+          ? 'blocked'
+          : 'failed';
+      const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
+      await updateJob(job.jobId, {
+        status,
+        stage: finalStage,
+        progressPercent: STAGE_PROGRESS[finalStage],
+        stageDetail: status === 'completed'
+          ? `Autonomous coder completed. Patch authored by ${coderProof.patchAuthoredBy ?? 'none'}, commit ${coderProof.commitSha ?? 'none'}, deploy ${coderProof.deployId ?? 'not requested'}.`
+          : (result.error ?? 'Autonomous coder failed.'),
         finishedAt: nowIso(),
         result,
         error: result.error,
