@@ -473,6 +473,12 @@ describe('IVX Autonomous Coder — answer format', () => {
       generatedAt: '2026-07-19T00:00:00Z',
       secretValuesReturned: false as const,
       patchAuthoredBy: 'ivx_llm' as const,
+      llmCallCount: 1,
+      estimatedTokensUsed: 1200,
+      tokenBudgetExceeded: false,
+      rollbackTriggered: false,
+      rollbackCommitSha: null,
+      rollbackError: null,
     };
     const answer = buildAutonomousCoderAnswer(proof);
     expect(answer).toContain('TASK ID:');
@@ -529,6 +535,12 @@ describe('IVX Autonomous Coder — answer format', () => {
       generatedAt: '2026-07-19T00:00:00Z',
       secretValuesReturned: false as const,
       patchAuthoredBy: null,
+      llmCallCount: 0,
+      estimatedTokensUsed: 0,
+      tokenBudgetExceeded: false,
+      rollbackTriggered: false,
+      rollbackCommitSha: null,
+      rollbackError: null,
     };
     const answer = buildAutonomousCoderAnswer(proof);
     expect(answer).toContain('STATUS:\nBLOCKED');
@@ -712,5 +724,385 @@ describe('IVX Autonomous Coder — deterministic pilot fallback (Phase 3)', () =
     // The file on disk WAS changed (the fallback applies the patch), but no commit was created.
     const updated = await repo.fileReader('backend/services/ivx-autonomous-coder-pilot.ts');
     expect(updated).toContain(PILOT_LABEL_TARGET);
+  });
+});
+
+describe('IVX Autonomous Coder — hardening (Phase 12 + 16 + 17)', () => {
+  // G16: model timeout → BLOCKED with a real reason (no infinite hang).
+  it('G16: BLOCKS when the injected LLM caller rejects (simulated timeout) after MAX_LLM_ATTEMPTS', async () => {
+    const repo = await makeIsolatedRepo('g16-timeout');
+    let calls = 0;
+    const llmCaller = async () => {
+      calls += 1;
+      throw new Error('LLM patch generation timed out after 45000ms');
+    };
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g16',
+      goal: 'Fix the chat ordering bug.',
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'never', commitUrl: '', branch: 'main' }),
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.commitSha).toBeNull();
+    expect(proof.error).toContain('LLM_PLAN_INVALID');
+    expect(proof.llmCallCount).toBeGreaterThanOrEqual(1);
+    expect(calls).toBeGreaterThanOrEqual(1);
+  });
+
+  // G17: model retry-and-recovery — first call malformed, second call valid → COMPLETED.
+  it('G17: retries when the first LLM response is malformed and succeeds on the second (revision slot preserved)', async () => {
+    const repo = await makeIsolatedRepo('g17-retry');
+    let calls = 0;
+    const llmCaller = async () => {
+      calls += 1;
+      if (calls === 1) return 'not json at all';
+      return JSON.stringify({
+        rootCause: 'ok', technicalPlan: 'ok',
+        operations: [{
+          path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+          kind: 'replace_exact',
+          oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+          newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+          reason: 'ok',
+        }],
+      });
+    };
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g17',
+      goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'g17-sha', commitUrl: 'url', branch: 'main' }),
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('COMPLETED');
+    expect(proof.commitSha).toBe('g17-sha');
+    expect(proof.llmCallCount).toBe(2);
+  });
+
+  // G18: truncated model response (valid JSON prefix but cut off) → BLOCKED, no crash.
+  it('G18: BLOCKS when the LLM response is truncated mid-JSON (parser returns null)', async () => {
+    const repo = await makeIsolatedRepo('g18-truncated');
+    let calls = 0;
+    const llmCaller = async () => {
+      calls += 1;
+      // First call: truncated JSON (no closing brace). Second call: still malformed.
+      return '{"rootCause":"x","operations":[{"path":"backend/services/ivx-autonomous-coder-pilot.ts","kind":"replace_exact","oldText":"';
+    };
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g18',
+      goal: 'Fix a bug.',
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'never', commitUrl: '', branch: 'main' }),
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.commitSha).toBeNull();
+    expect(proof.error).toContain('LLM_PLAN_INVALID');
+  });
+
+  // G19: patch parser rejection — unsafe path (..) → patch application fails → revision or BLOCKED.
+  it('G19: rejects a patch with an unsafe path (.. traversal) and BLOCKS after revision', async () => {
+    const repo = await makeIsolatedRepo('g19-unsafe');
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'x', technicalPlan: 'x',
+      operations: [{
+        path: 'backend/services/../../../etc/passwd',
+        kind: 'replace_exact',
+        oldText: 'x', newText: 'y', reason: 'x',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g19',
+      goal: 'Fix a bug.',
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'never', commitUrl: '', branch: 'main' }),
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.commitSha).toBeNull();
+    // The unsafe path must appear in the failure context (either error or iteration failure).
+    const allText = `${proof.error ?? ''} ${proof.iterations.map((i) => i.failureSummary ?? '').join(' ')}`;
+    expect(allText).toContain('Unsafe');
+  });
+
+  // G20: GitHub push failure → finalStatus FAILED with commit error.
+  it('G20: reports FAILED when the commit function throws a GitHub push error', async () => {
+    const repo = await makeIsolatedRepo('g20-pushfail');
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'ok', technicalPlan: 'ok',
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+        kind: 'replace_exact',
+        oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+        newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+        reason: 'ok',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g20',
+      goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => { throw new Error('GitHub branch update failed: 422'); },
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('FAILED');
+    expect(proof.commitSha).toBeNull();
+    expect(proof.error).toContain('Commit failed');
+    expect(proof.error).toContain('422');
+  });
+
+  // G21: production verification failure → rollback triggered.
+  it('G21: triggers rollback when deploy succeeds but production health returns a different commit', async () => {
+    const repo = await makeIsolatedRepo('g21-rollback');
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'ok', technicalPlan: 'ok',
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+        kind: 'replace_exact',
+        oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+        newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+        reason: 'ok',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    let rollbackCalled = false;
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g21',
+      goal: 'Change the label and deploy.',
+      executionMode: 'deploy',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'bad-commit', commitUrl: 'url', branch: 'main' }),
+      deployApproved: true,
+      deployConfirmationText: 'CONFIRM_IVX_RENDER_DEPLOY',
+      deployFn: async () => ({ deployId: 'dep-1', deployStatus: 'live' }),
+      // Health returns a DIFFERENT commit → verify-fail → rollback.
+      healthChecker: async () => ({ ok: true, commit: 'different-commit' }),
+      sleepFn: async () => { /* skip */ },
+      rollbackFn: async () => {
+        rollbackCalled = true;
+        return { reverted: true, revertCommitSha: 'revert-sha', error: null };
+      },
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(rollbackCalled).toBe(true);
+    expect(proof.rollbackTriggered).toBe(true);
+    expect(proof.rollbackCommitSha).toBe('revert-sha');
+    expect(proof.productionVerified).toBe(false);
+    expect(proof.finalStatus).toBe('COMPLETED');
+    expect(proof.error).toContain('rollback');
+  });
+
+  // G22: rollback itself fails → FAILED with the rollback error recorded.
+  it('G22: reports FAILED when rollback cannot restore the prior SHA', async () => {
+    const repo = await makeIsolatedRepo('g22-rollback-fail');
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'ok', technicalPlan: 'ok',
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+        kind: 'replace_exact',
+        oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+        newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+        reason: 'ok',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g22',
+      goal: 'Change the label and deploy.',
+      executionMode: 'deploy',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'bad-commit', commitUrl: 'url', branch: 'main' }),
+      deployApproved: true,
+      deployConfirmationText: 'CONFIRM_IVX_RENDER_DEPLOY',
+      deployFn: async () => ({ deployId: 'dep-1', deployStatus: 'live' }),
+      healthChecker: async () => ({ ok: false, commit: null }),
+      sleepFn: async () => { /* skip */ },
+      rollbackFn: async () => ({ reverted: false, revertCommitSha: null, error: 'Branch ref update failed: 500' }),
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.rollbackTriggered).toBe(true);
+    expect(proof.rollbackError).toContain('Branch ref update failed');
+    expect(proof.finalStatus).toBe('FAILED');
+    expect(proof.error).toContain('rollback failed');
+  });
+
+  // G23: cancellation — isCanceled returns true before the first iteration → CANCELED proof.
+  it('G23: returns CANCELED when the owner cancels before the loop starts', async () => {
+    const repo = await makeIsolatedRepo('g23-cancel');
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'ok', technicalPlan: 'ok',
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+        kind: 'replace_exact',
+        oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+        newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+        reason: 'ok',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g23',
+      goal: 'Fix a bug.',
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'never', commitUrl: '', branch: 'main' }),
+      isCanceled: () => true,
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('CANCELED');
+    expect(proof.commitSha).toBeNull();
+    expect(proof.error).toContain('JOB_CANCELED');
+  });
+
+  // G24: heartbeat is invoked at stage boundaries with real phase + elapsed info.
+  it('G24: heartbeat fires at stage boundaries with phase + elapsedMs + iteration', async () => {
+    const repo = await makeIsolatedRepo('g24-heartbeat');
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'ok', technicalPlan: 'ok',
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+        kind: 'replace_exact',
+        oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+        newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+        reason: 'ok',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const beats: Array<{ phase: string; iteration: number; elapsedMs: number }> = [];
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g24',
+      goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'g24-sha', commitUrl: 'url', branch: 'main' }),
+      heartbeat: (info) => beats.push({ phase: info.phase, iteration: info.iteration, elapsedMs: info.elapsedMs }),
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.finalStatus).toBe('COMPLETED');
+    expect(beats.length).toBeGreaterThanOrEqual(2);
+    expect(beats.some((b) => b.phase === 'inspecting')).toBe(true);
+    expect(beats.some((b) => b.phase === 'planning')).toBe(true);
+    expect(beats.every((b) => b.elapsedMs >= 0)).toBe(true);
+  });
+
+  // G25: token budget exceeded → BLOCKED with TOKEN_BUDGET_EXCEEDED (no unbounded spend).
+  it('G25: BLOCKS with TOKEN_BUDGET_EXCEEDED when the soft token cap is hit', async () => {
+    const repo = await makeIsolatedRepo('g25-budget');
+    // Return a huge response to blow the tiny budget on the first call.
+    const llmCaller = async () => JSON.stringify({
+      rootCause: 'x'.repeat(5000), technicalPlan: 'x'.repeat(5000),
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts',
+        kind: 'replace_exact',
+        oldText: `export const PILOT_LABEL = '${PILOT_LABEL}'`,
+        newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}'`,
+        reason: 'x'.repeat(5000),
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> => ({
+      command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1,
+    });
+    const input: IVXAutonomousCoderInput = {
+      taskId: 'ivx-g25',
+      goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+      executionMode: 'code_change',
+      ownerId: 'test-owner',
+      approvalPolicy: 'owner_gated',
+      projectRoot: repo.root,
+      fileWriter: repo.fileWriter,
+      fileReader: repo.fileReader,
+      llmCaller,
+      testRunner,
+      commitFn: async () => ({ commitSha: 'never', commitUrl: '', branch: 'main' }),
+      maxTokenBudget: 100, // tiny cap → first call blows it
+    };
+    const proof = await runIVXAutonomousCoder(input);
+    expect(proof.tokenBudgetExceeded).toBe(true);
+    // The proof must record the spend honestly.
+    expect(proof.estimatedTokensUsed).toBeGreaterThan(100);
+    expect(proof.llmCallCount).toBeGreaterThanOrEqual(1);
   });
 });
