@@ -443,37 +443,108 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
     await patchTask(task.id, { status: 'RUNNING', checkpoint: 'APPROVED — deploying' });
   }
 
-  // ─── Phase 7: DEPLOYING ─────────────────────────────────────────────
+  // ─── Phase 7-8: SELF-DEPLOY HANDOFF + CLEAN EXIT ─────────────────────
+  // When a task triggers a Render deploy, the deploy restarts THIS runtime
+  // process, killing the worker before it can reach LIVE_VERIFYING. To survive,
+  // we persist a deployment handoff atomically BEFORE triggering Render, capture
+  // the deployId, then exit cleanly — leaving the task resumable. The new
+  // runtime (after the deploy restart) runs recoverSelfDeployTasks() on boot,
+  // which claims the recovery lease and resumes at LIVE_VERIFYING.
   let deployId: string | null = null;
   if (requestsDeploy && changedFiles.length > 0) {
+    // 7a. Capture pre-deploy runtime SHA + expected SHA (GitHub HEAD = our commit)
+    const preHealth = await getProductionHealth();
+    const preDeployRuntimeSha = preHealth.commit ?? null;
+    const ghHead = await getGitHubHeadSha();
+    const expectedRuntimeSha = ghHead.sha ?? lastCommitSha;
+    const baseSha = lastCommitSha;
+    const branch = 'main';
+    const ownerApprovalId = `approval-${task.id}-${Date.now()}`;
+    const triggerRequestId = `deploy-req-${task.id}-${Date.now()}`;
+
+    // 7b. ATOMICALLY persist the deployment handoff BEFORE triggering Render.
+    // If this PATCH fails, we do NOT trigger Render — a missing handoff means the
+    // new runtime would have no resumable state, orphaning the task permanently.
+    await setPhase(task.id, 'DEPLOYMENT_REQUESTED', runId);
+    const handoffRow = await patchTask(task.id, {
+      status: 'DEPLOYMENT_REQUESTED',
+      checkpoint: 'DEPLOYMENT_REQUESTED — handoff persisted, about to trigger Render deploy',
+      commit_sha: lastCommitSha,
+      render_deploy_id: null as string | null,
+      base_sha: baseSha,
+      branch,
+      pre_deploy_runtime_sha: preDeployRuntimeSha,
+      expected_runtime_sha: expectedRuntimeSha,
+      deployment_requested_at: new Date().toISOString(),
+      deployment_attempt: 1,
+      deployment_service_id: process.env.RENDER_SERVICE_ID ?? null,
+      deployment_trigger_request_id: triggerRequestId,
+      owner_approval_id: ownerApprovalId,
+      resume_required: true,
+      resume_phase: 'LIVE_VERIFYING',
+      last_safe_checkpoint: 'DEPLOYMENT_REQUESTED',
+      heartbeat_at: new Date().toISOString(),
+      checkpoint_history: appendCheckpoint(null, `DEPLOYMENT_REQUESTED at ${new Date().toISOString()} (handoff persisted pre-trigger)`),
+    });
+    if (!handoffRow) {
+      // Handoff did not persist — DO NOT trigger Render. Fail honestly.
+      await failTask(task.id, 'Self-deploy handoff did not persist (patchTask returned null) — aborting before Render trigger to avoid orphaning the task');
+      await updateProofLedger(runId, { status: 'failed', errorMessage: 'Self-deploy handoff did not persist' });
+      return;
+    }
+    await logCheckpoint(task.id, runId, 'DEPLOYMENT_REQUESTED', { handoffPersisted: true, preDeployRuntimeSha, expectedRuntimeSha, baseSha, triggerRequestId });
+    await updateProofLedger(runId, {
+      commitSha: lastCommitSha ?? undefined,
+      workerRestartEvent: { preDeployRuntimeSha, expectedRuntimeSha, handoffPersistedAt: new Date().toISOString() },
+    });
+
+    // 7c. Trigger Render deploy and capture deployId.
     await setPhase(task.id, 'DEPLOYING', runId);
     const deployResult = await triggerRenderDeploy(false);
     if (!deployResult.ok || !deployResult.deploy) {
-      await failTask(task.id, `Render deploy failed: ${deployResult.error}`);
-      await updateProofLedger(runId, { status: 'failed', errorMessage: `Deploy failed: ${deployResult.error}` });
+      // Trigger failed — no restart will happen. Mark FAILED (not resumable).
+      await failTask(task.id, `Render deploy trigger failed: ${deployResult.error}`);
+      await updateProofLedger(runId, { status: 'failed', errorMessage: `Deploy trigger failed: ${deployResult.error}` });
       return;
     }
     deployId = deployResult.deploy.id;
-    await logCheckpoint(task.id, runId, 'DEPLOYING', { deployId });
-    await updateProofLedger(runId, { renderDeployId: deployId });
-    await patchTask(task.id, { render_deploy_id: deployId });
+    // 7d. Persist deployId + DEPLOYING status. This PATCH may race with the
+    // runtime restart — if it fails, the recovery scanner still sees the task in
+    // DEPLOYMENT_REQUESTED with resume_required=true and will poll Render's
+    // deploy list to find the live deploy by createdAt window.
+    await patchTask(task.id, {
+      status: 'DEPLOYING',
+      checkpoint: 'DEPLOYING — Render deploy triggered, deployId persisted, exiting for restart',
+      render_deploy_id: deployId,
+      resume_required: true,
+      resume_phase: 'LIVE_VERIFYING',
+      last_safe_checkpoint: 'DEPLOYING',
+      heartbeat_at: new Date().toISOString(),
+      checkpoint_history: appendCheckpoint(null, `DEPLOYING at ${new Date().toISOString()} (deployId=${deployId} — worker exiting for self-deploy restart)`),
+    });
+    await updateProofLedger(runId, {
+      renderDeployId: deployId,
+      deployHttpResponse: { deployId, status: deployResult.deploy.status, triggeredAt: new Date().toISOString() },
+    });
+    await logCheckpoint(task.id, runId, 'DEPLOYING', { deployId, note: 'handoff complete — worker exiting cleanly for self-deploy restart' });
+    console.log('[IVX-SENIOR-DEV-01] Self-deploy handoff complete — exiting cleanly for runtime restart', { taskId: task.id, deployId, commitSha: lastCommitSha });
 
-    // Poll deploy status until it finishes (live or failed).
-    const deployStatus = await pollRenderDeploy(deployId, 10 * 60 * 1000);
-    await logCheckpoint(task.id, runId, 'DEPLOYING', { deployId, finalStatus: deployStatus });
-    if (deployStatus !== 'live') {
-      await failTask(task.id, `Deploy did not reach live state: ${deployStatus}`);
-      await updateProofLedger(runId, { status: 'failed', errorMessage: `Deploy status: ${deployStatus}` });
-      return;
-    }
+    // 7e. CLEAN EXIT. Do NOT poll Render here — the deploy will restart this
+    // process imminently. Do NOT mark FAILED/BLOCKED/VERIFIED. The task stays
+    // resumable (resume_required=true, status=DEPLOYING). The new runtime's
+    // recoverSelfDeployTasks() will claim the lease and resume at LIVE_VERIFYING.
+    await updateProofLedger(runId, {
+      logs: [`self-deploy handoff complete at ${new Date().toISOString()} — worker exiting cleanly, task resumable`],
+    });
+    state.currentPhase = null;
+    state.currentTaskId = null;
+    return;
   }
 
-  // ─── Phase 8: LIVE_VERIFYING ────────────────────────────────────────
+  // ─── Phase 8: LIVE_VERIFYING (only reached when requestsDeploy=false) ────
+  // Tasks that do NOT trigger a Render deploy (requestsDeploy=false) can run
+  // LIVE_VERIFYING inline because no restart will kill this process.
   await setPhase(task.id, 'LIVE_VERIFYING', runId);
-  // Wait a moment for the runtime to boot if a deploy happened.
-  if (deployId) {
-    await sleep(15_000);
-  }
   const health = await getProductionHealth();
   const commitMatch = await verifyCommitMatch();
   const runtimeSha = health.commit ?? null;
@@ -492,29 +563,63 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   });
   await patchTask(task.id, { runtime_sha: runtimeSha });
 
-  // Verify: production health 200 AND (if deployed) SHA parity AND at least one
-  // file was actually changed+committed (no hollow VERIFIED on audit-only no-ops).
-  // The owner explicitly forbade fake certifications where a task reaches VERIFIED
-  // with commitSha=null, deployId=null, filesChanged=[] just because /health is 200.
-  const didRealWork = changedFiles.length > 0 && lastCommitSha !== null;
-  const verified = health.ok && didRealWork && (!requestsDeploy || versionMatch);
-  if (!verified) {
-    const reason = !didRealWork
-      ? `Live verification failed: no real code change was committed (changedFiles=${changedFiles.length}, commitSha=${lastCommitSha})`
-      : `Live verification failed: health=${health.status}, match=${versionMatch}`;
+  // Live feature test (owner rule 7): authenticated GET on the worker jobs
+  // endpoint for THIS task. Must be 200, not 503, not contradictory state.
+  // A healthy /health alone is not sufficient — the actual changed feature must
+  // respond correctly in production.
+  const feature = await runLiveFeatureTest(task.id);
+  await logCheckpoint(task.id, runId, 'LIVE_VERIFYING', { liveFeatureTest: feature });
+  await updateProofLedger(runId, { liveFeatureResult: feature });
+  if (!feature.passed) {
+    const reason = `Live feature test failed: ${feature.reason} (http=${feature.httpStatus})`;
     await failTask(task.id, reason);
     await updateProofLedger(runId, { status: 'failed', errorMessage: reason });
     return;
   }
 
-  // ─── Final: VERIFIED ────────────────────────────────────────────────
+  // Verify: production health 200 AND (if deployed) SHA parity AND at least one
+  // file was actually changed+committed (no hollow VERIFIED on audit-only no-ops).
+  // The owner explicitly forbade fake certifications where a task reaches VERIFIED
+  // with commitSha=null, deployId=null, filesChanged=[] just because /health is 200.
+  const didRealWork = changedFiles.length > 0 && lastCommitSha !== null;
+  // For non-deploy tasks, deployId is null — that is acceptable (no deploy was
+  // requested). The 4-evidence bar for DEPLOY tasks is enforced by the recovery
+  // scanner; for non-deploy tasks, commitSha + runtimeSha + proofLedgerId +
+  // live feature test pass is the honest bar.
+  const verified = health.ok && didRealWork && feature.passed && (!requestsDeploy || versionMatch);
+  if (!verified) {
+    const reason = !didRealWork
+      ? `Live verification failed: no real code change was committed (changedFiles=${changedFiles.length}, commitSha=${lastCommitSha})`
+      : `Live verification failed: health=${health.status}, match=${versionMatch}, feature=${feature.passed}`;
+    await failTask(task.id, reason);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: reason });
+    return;
+  }
+
+  // ─── Final: VERIFIED (exactly-one-terminal-state enforced) ──────────
+  // Enforce owner rule 9: VERIFIED only when commitSha + (deployId if deploy
+  // requested) + runtimeSha + proofLedgerId all present, AND exactly one
+  // terminal state. Never VERIFIED+BLOCKED, never COMPLETED+FAILED.
+  const terminalCheck = assertExactlyOneTerminalState({
+    status: 'VERIFIED',
+    commitSha: lastCommitSha,
+    deployId,
+    runtimeSha,
+    proofLedgerId: runId,
+  });
+  if (!terminalCheck.ok) {
+    await failTask(task.id, `Terminal-state invariant violated: ${terminalCheck.reason}`);
+    await updateProofLedger(runId, { status: 'failed', errorMessage: terminalCheck.reason });
+    return;
+  }
   await patchTask(task.id, {
     status: 'VERIFIED',
     checkpoint: 'VERIFIED — autonomous senior dev task complete',
     checkpoint_history: appendCheckpoint(null, 'VERIFIED'),
     proof_ledger_id: runId,
+    resume_required: false,
   });
-  await updateProofLedger(runId, { status: 'verified' });
+  await updateProofLedger(runId, { status: 'verified', finalStatus: 'VERIFIED', finalTimestamp: new Date().toISOString() });
   await logCheckpoint(task.id, runId, 'VERIFIED', { commitSha: lastCommitSha, deployId, runtimeSha, versionMatch });
   console.log('[IVX-SENIOR-DEV-01] Task VERIFIED', { taskId: task.id, commitSha: lastCommitSha, deployId, runtimeSha });
   // Post the verified result back to owner chat so the owner sees real evidence.

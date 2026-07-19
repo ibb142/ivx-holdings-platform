@@ -78,6 +78,23 @@ export interface IVXOwnerAITaskRow {
   render_deploy_id: string | null;
   runtime_sha: string | null;
   proof_ledger_id: string | null;
+  resume_required: boolean | null;
+  resume_phase: string | null;
+  last_safe_checkpoint: string | null;
+  pre_deploy_runtime_sha: string | null;
+  expected_runtime_sha: string | null;
+  deployment_requested_at: string | null;
+  deployment_attempt: number | null;
+  deployment_service_id: string | null;
+  deployment_trigger_request_id: string | null;
+  recovery_lease_owner: string | null;
+  recovery_lease_expires_at: string | null;
+  recovery_attempt: number | null;
+  recovery_idempotency_key: string | null;
+  task_version: number | null;
+  base_sha: string | null;
+  branch: string | null;
+  owner_approval_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -256,6 +273,30 @@ export async function listTasks(limit: number = 20): Promise<IVXOwnerAITaskRow[]
     method: 'GET',
     headers: restHeaders(),
   });
+  if (!res.ok) return [];
+  return await res.json().catch(() => []) as IVXOwnerAITaskRow[];
+}
+
+/**
+ * List self-deploy resumable senior-dev tasks for the boot recovery scanner.
+ * Returns tasks where resume_required=true, status is a resumable post-handoff
+ * state, commit_sha is present (real work was committed), and there is no
+ * active recovery lease held by another worker. Ordered oldest-first so the
+ * recovery scanner honors FIFO and avoids starvation of later queued tasks.
+ */
+export async function listSelfDeployResumableTasks(limit: number = 20): Promise<IVXOwnerAITaskRow[]> {
+  const capped = Math.min(Math.max(limit, 1), 100);
+  const now = encodeURIComponent(nowIso());
+  const statusFilter = 'status=in.(DEPLOYMENT_REQUESTED,DEPLOYING,LIVE_VERIFYING,RETRYING)';
+  const resumeFilter = 'resume_required=eq.true';
+  const commitFilter = 'commit_sha=not.is.null';
+  // Either no lease owner, or the lease has already expired (stale lease).
+  const leaseFilter = `or=(recovery_lease_owner.is.null,recovery_lease_expires_at.lt.${now})`;
+  const order = 'order=created_at.asc';
+  const res = await restFetch(
+    `${TASKS_TABLE}?${statusFilter}&${resumeFilter}&${commitFilter}&${leaseFilter}&${order}&limit=${capped}`,
+    { method: 'GET', headers: restHeaders() },
+  );
   if (!res.ok) return [];
   return await res.json().catch(() => []) as IVXOwnerAITaskRow[];
 }

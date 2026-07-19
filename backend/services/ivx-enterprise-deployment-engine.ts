@@ -372,6 +372,36 @@ export async function getRenderDeployStatus(deployId: string): Promise<{ ok: boo
   }
 }
 
+/**
+ * Fetch the full commit SHA that a specific Render deploy built and shipped.
+ * Used for 3-way SHA parity (GitHub HEAD == Render deployed commit == runtime
+ * /health commit) during LIVE_VERIFYING after a self-deploy handoff.
+ *
+ * Returns the FULL SHA (not truncated) when available, plus the short form for
+ * parity comparison against /health.commitShort.
+ */
+export async function getRenderDeployCommitSha(deployId: string): Promise<{
+  ok: boolean;
+  fullSha: string | null;
+  shortSha: string | null;
+  deployStatus: string | null;
+  error: string | null;
+}> {
+  const status = await getRenderDeployStatus(deployId);
+  if (!status.ok || !status.deploy) {
+    return { ok: false, fullSha: null, shortSha: null, deployStatus: null, error: status.error };
+  }
+  const full = status.deploy.commitSha ?? null;
+  const short = full ? full.slice(0, 8) : null;
+  return {
+    ok: true,
+    fullSha: full,
+    shortSha: short,
+    deployStatus: status.deploy.status,
+    error: null,
+  };
+}
+
 // ─── Production Verification ───────────────────────────────────────────
 
 export async function getProductionHealth(): Promise<{ ok: boolean; status: string | null; commitShort: string | null; commit: string | null; bootTime: string | null; error: string | null }> {

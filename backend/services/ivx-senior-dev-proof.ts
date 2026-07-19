@@ -61,11 +61,30 @@ ALTER TABLE IF EXISTS public.ivx_owner_ai_tasks
   ADD COLUMN IF NOT EXISTS commit_sha TEXT,
   ADD COLUMN IF NOT EXISTS render_deploy_id TEXT,
   ADD COLUMN IF NOT EXISTS runtime_sha TEXT,
-  ADD COLUMN IF NOT EXISTS proof_ledger_id TEXT;
+  ADD COLUMN IF NOT EXISTS proof_ledger_id TEXT,
+  ADD COLUMN IF NOT EXISTS resume_required BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS resume_phase TEXT,
+  ADD COLUMN IF NOT EXISTS last_safe_checkpoint TEXT,
+  ADD COLUMN IF NOT EXISTS pre_deploy_runtime_sha TEXT,
+  ADD COLUMN IF NOT EXISTS expected_runtime_sha TEXT,
+  ADD COLUMN IF NOT EXISTS deployment_requested_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS deployment_attempt INT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS deployment_service_id TEXT,
+  ADD COLUMN IF NOT EXISTS deployment_trigger_request_id TEXT,
+  ADD COLUMN IF NOT EXISTS recovery_lease_owner TEXT,
+  ADD COLUMN IF NOT EXISTS recovery_lease_expires_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS recovery_attempt INT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS recovery_idempotency_key TEXT,
+  ADD COLUMN IF NOT EXISTS task_version INT DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS base_sha TEXT,
+  ADD COLUMN IF NOT EXISTS branch TEXT,
+  ADD COLUMN IF NOT EXISTS owner_approval_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_task_type_status
   ON public.ivx_owner_ai_tasks (task_type, status) WHERE task_type = 'senior_dev';
 CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_assigned_worker
   ON public.ivx_owner_ai_tasks (assigned_worker_id, status) WHERE assigned_worker_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_resume
+  ON public.ivx_owner_ai_tasks (resume_required, status) WHERE resume_required = true;
 CREATE TABLE IF NOT EXISTS public.ivx_senior_dev_worker_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID NOT NULL REFERENCES public.ivx_owner_ai_tasks(id) ON DELETE CASCADE,
@@ -78,6 +97,11 @@ CREATE TABLE IF NOT EXISTS public.ivx_senior_dev_worker_runs (
   health_results JSONB DEFAULT '{}', live_feature_result JSONB DEFAULT '{}',
   proof_ledger_id TEXT, error_message TEXT, logs TEXT[] DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'running',
+  recovery_lease_event JSONB DEFAULT '{}',
+  worker_restart_event JSONB DEFAULT '{}',
+  parity_result JSONB DEFAULT '{}',
+  deploy_http_response JSONB DEFAULT '{}',
+  final_status TEXT, final_timestamp TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_ivx_senior_dev_worker_runs_task_id
@@ -263,4 +287,84 @@ export async function updateProofLedger(runId: string, patch: Partial<ProofLedge
   if (!res.ok) return null;
   const rows = await res.json().catch(() => []) as IVXSeniorDevWorkerRun[];
   return rows[0] ?? null;
+}
+
+// ─── Self-Deploy Recovery Lease ───────────────────────────────────────────
+// Optimistic-lock claim that prevents two runtimes from resuming the same
+// self-deploying task after a restart. Uses task_version as a monotonic guard:
+// the PATCH only matches if the row's current task_version equals the value
+// the caller read, so a competing claim shows 0 rows updated.
+
+export interface RecoveryLeaseInput {
+  taskId: string;
+  workerId: string;
+  expectedTaskVersion: number;
+  leaseDurationMs: number;
+  idempotencyKey: string;
+  recoveryAttempt: number;
+}
+
+export interface RecoveryLeaseResult {
+  claimed: boolean;
+  taskVersion: number | null;
+  leaseExpiresAt: string | null;
+  reason: string;
+}
+
+export async function claimRecoveryLease(input: RecoveryLeaseInput): Promise<RecoveryLeaseResult> {
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+    return { claimed: false, taskVersion: null, leaseExpiresAt: null, reason: 'supabase_not_configured' };
+  }
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + input.leaseDurationMs).toISOString();
+  const newVersion = input.expectedTaskVersion + 1;
+  // Only claim if either no active lease, or the existing lease already
+  // expired, AND the row's task_version matches our read (optimistic lock).
+  const filter = `&id=eq.${encodeURIComponent(input.taskId)}`
+    + `&task_version=eq.${input.expectedTaskVersion}`
+    + `&or=(recovery_lease_owner.is.null,recovery_lease_expires_at.lt.${encodeURIComponent(now.toISOString())})`;
+  const res = await restFetch(`ivx_owner_ai_tasks?${filter}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      recovery_lease_owner: input.workerId,
+      recovery_lease_expires_at: expiresAt,
+      recovery_idempotency_key: input.idempotencyKey,
+      recovery_attempt: input.recoveryAttempt,
+      task_version: newVersion,
+      heartbeat_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    }),
+  });
+  if (!res.ok) {
+    return { claimed: false, taskVersion: null, leaseExpiresAt: null, reason: `http_${res.status}` };
+  }
+  const rows = await res.json().catch(() => []) as { task_version?: number; recovery_lease_expires_at?: string }[];
+  if (!rows[0]) {
+    return { claimed: false, taskVersion: null, leaseExpiresAt: null, reason: 'optimistic_lock_contention' };
+  }
+  return {
+    claimed: true,
+    taskVersion: (rows[0].task_version as number | undefined) ?? newVersion,
+    leaseExpiresAt: (rows[0].recovery_lease_expires_at as string | undefined) ?? expiresAt,
+    reason: 'claimed',
+  };
+}
+
+export async function releaseRecoveryLease(taskId: string, workerId: string): Promise<boolean> {
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return false;
+  const res = await restFetch(
+    `ivx_owner_ai_tasks?id=eq.${encodeURIComponent(taskId)}&recovery_lease_owner=eq.${encodeURIComponent(workerId)}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        recovery_lease_owner: null,
+        recovery_lease_expires_at: null,
+        resume_required: false,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+  return res.ok;
 }
