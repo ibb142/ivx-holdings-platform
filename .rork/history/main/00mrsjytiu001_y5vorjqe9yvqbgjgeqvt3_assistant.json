@@ -745,7 +745,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-autonomous-coder-factory-runners.ts\", \"limit\": 35, \"offset\": 155}",
       "createdAt": 1784510015328,
-      "completedAt": 1784510016539
+      "completedAt": 1784510016539,
+      "compactedAt": 1784516228758
     },
     {
       "type": "tool",
@@ -764,7 +765,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-owner-variables.ts\", \"limit\": 20, \"offset\": 745}",
       "createdAt": 1784510015732,
-      "completedAt": 1784510016540
+      "completedAt": 1784510016540,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -799,7 +801,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-autonomous-coder-factory-runners.ts\", \"edits\": [{\"oldString\": \"import { readFile, writeFile, access } from 'node:fs/promises';\\nimport path from 'node:path';\\nimport { exec as execCb } from 'node:child_process';\\nimport { promisify } from 'node:util';\\nimport { gzipSync } from 'node:zlib';\\n\\nconst exec = promisify(execCb);\\n\\nfunction readEnv(name: string): string {\\n  return (typeof process.env[name] === 'string' ? process.env[name] : '').trim();\\n}\", \"newString\": \"import { readFile, writeFile, access } from 'node:fs/promises';\\nimport path from 'node:path';\\nimport { exec as execCb } from 'node:child_process';\\nimport { promisify } from 'node:util';\\nimport { gzipSync } from 'node:zlib';\\n\\ntype FactoryOwnerVariableName = 'GITHUB_REPO_URL' | 'GITHUB_TOKEN' | 'GITHUB_DEFAULT_BRANCH';\\n\\nconst exec = promisify(execCb);\\n\\nfunction readEnv(name: string): string {\\n  return (typeof process.env[name] === 'string' ? process.env[name] : '').trim();\\n}\\n\\n/**\\n * Read an owner-controlled runtime variable using the SAME canonical path as the\\n * working github_commit_file action: process.env FIRST, then the owner variables\\n * store (getIVXOwnerVariableRuntimeValue) as a fallback. This fixes the factory\\n * commit gap where the runner only checked process.env and returned \\\"GITHUB_TOKEN\\n * missing\\\" on Render when the token lived in the owner variables store.\\n */\\nasync function readOwnerRuntimeVariable(name: FactoryOwnerVariableName): Promise<string> {\\n  const envValue = readEnv(name);\\n  if (envValue) return envValue;\\n  try {\\n    const ownerVariables = await import('../api/ivx-owner-variables');\\n    if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue === 'function') {\\n      const stored = await ownerVariables.getIVXOwnerVariableRuntimeValue(name as never);\\n      return (stored || '').trim();\\n    }\\n  } catch (error) {\\n    console.log('[IVXFactoryRunners] Owner Variables bridge unavailable for', name, {\\n      message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',\\n    });\\n  }\\n  return '';\\n}\"}]}",
       "createdAt": 1784510025904,
-      "completedAt": 1784510028628
+      "completedAt": 1784510028628,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -834,7 +837,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"export async function commitFactoryFilesToGitHub(\\n  filePaths: string[],\\n  commitMessage: string,\\n): Promise<{ ok: boolean; commitSha: string | null; output: string; error: string | null }> {\\n  const repoUrl = readEnv('GITHUB_REPO_URL');\\n  const token = readEnv('GITHUB_TOKEN');\\n  const repoInfo = parseGithubRepoUrl(repoUrl);\\n  if (!repoInfo) return { ok: false, commitSha: null, output: '', error: 'GITHUB_REPO_URL missing or invalid.' };\\n  if (!token) return { ok: false, commitSha: null, output: '', error: 'GITHUB_TOKEN missing.' };\\n\\n  const branch = readEnv('GITHUB_DEFAULT_BRANCH') || 'main';\\n  const headers = {\\n    Authorization: `Bearer ${token}`,\\n    Accept: 'application/vnd.github+json',\\n    'Content-Type': 'application/json',\\n  };\\n  const projectRoot = process.cwd();\\n\\n  try {\\n    // 1. Get branch ref\\n    const refRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/ref/heads/${encodeURIComponent(branch)}`, { headers, signal: AbortSignal.timeout(10000) });\\n    if (!refRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub ref lookup failed: ${refRes.status}` };\\n    const refData = await refRes.json() as { object?: { sha?: string } };\\n    const baseCommitSha = refData.object?.sha;\\n    if (!baseCommitSha) return { ok: false, commitSha: null, output: '', error: 'No base commit SHA.' };\\n\\n    // 2. Get base tree\\n    const commitRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/commits/${baseCommitSha}`, { headers, signal: AbortSignal.timeout(10000) });\\n    if (!commitRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub commit lookup failed: ${commitRes.status}` };\\n    const commitData = await commitRes.json() as { tree?: { sha?: string } };\\n    const baseTreeSha = commitData.tree?.sha;\\n    if (!baseTreeSha) return { ok: false, commitSha: null, output: '', error: 'No base tree SHA.' };\\n\\n    // 3. Create new tree with factory files\\n    const tree = await Promise.all(filePaths.map(async (repoPath) => ({\\n      path: repoPath,\\n      mode: '100644' as const,\\n      type: 'blob' as const,\\n      content: await readFile(path.join(projectRoot, repoPath), 'utf8'),\\n    })));\\n    const treeRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees`, {\\n      method: 'POST', headers,\\n      body: JSON.stringify({ base_tree: baseTreeSha, tree }),\\n      signal: AbortSignal.timeout(15000),\\n    });\\n    if (!treeRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub tree creation failed: ${treeRes.status}` };\\n    const treeData = await treeRes.json() as { sha?: string };\\n    const newTreeSha = treeData.sha;\\n    if (!newTreeSha) return { ok: false, commitSha: null, output: '', error: 'No new tree SHA.' };\\n\\n    // 4. Create commit\\n    const newCommitRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/commits`, {\\n      method: 'POST', headers,\\n      body: JSON.stringify({ message: commitMessage, tree: newTreeSha, parents: [baseCommitSha] }),\\n      signal: AbortSignal.timeout(15000),\\n    });\\n    if (!newCommitRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub commit creation failed: ${newCommitRes.status}` };\\n    const newCommitData = await newCommitRes.json() as { sha?: string };\\n    const commitSha = newCommitData.sha;\\n    if (!commitSha) return { ok: false, commitSha: null, output: '', error: 'No commit SHA returned.' };\\n\\n    // 5. Update branch ref\\n    const updateRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/refs/heads/${encodeURIComponent(branch)}`, {\\n      method: 'PATCH', headers,\\n      body: JSON.stringify({ sha: commitSha, force: false }),\\n      signal: AbortSignal.timeout(10000),\\n    });\\n    if (!updateRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub branch update failed: ${updateRes.status}` };\\n\\n    return {\\n      ok: true,\\n      commitSha,\\n      output: `Committed ${filePaths.length} files to ${branch} @ ${commitSha.slice(0, 8)}`,\\n      error: null,\\n    };\\n  } catch (err) {\\n    return {\\n      ok: false,\\n      commitSha: null,\\n      output: '',\\n      error: `GitHub commit error: ${err instanceof Error ? err.message : 'unknown'}`,\\n    };\\n  }\\n}\", \"newString\": \"export async function commitFactoryFilesToGitHub(\\n  filePaths: string[],\\n  commitMessage: string,\\n): Promise<{ ok: boolean; commitSha: string | null; output: string; error: string | null }> {\\n  // Owner mandate 2026-07-20: use the SAME canonical credential path as the working\\n  // github_commit_file action (process.env FIRST, then the owner variables store as a\\n  // fallback). The prior version used readEnv() which only checks process.env — on\\n  // Render the credentials may live in the ownerVariablesStore, so the factory commit\\n  // silently failed with \\\"GITHUB_TOKEN missing\\\" → COMMIT SHA NONE.\\n  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');\\n  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');\\n  const branch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || 'main';\\n  const repoInfo = parseGithubRepoUrl(repoUrl);\\n  if (!repoInfo) {\\n    console.log('[IVXFactoryRunners] commitFactoryFilesToGitHub BLOCKED: GITHUB_REPO_URL missing or invalid', {\\n      repoUrlPresent: Boolean(repoUrl),\\n      repoUrlLength: repoUrl.length,\\n    });\\n    return { ok: false, commitSha: null, output: '', error: 'GITHUB_REPO_URL missing or invalid.' };\\n  }\\n  if (!token) {\\n    console.log('[IVXFactoryRunners] commitFactoryFilesToGitHub BLOCKED: GITHUB_TOKEN missing in both process.env and ownerVariablesStore', {\\n      repo: `${repoInfo.owner}/${repoInfo.repo}`,\\n    });\\n    return { ok: false, commitSha: null, output: '', error: 'GITHUB_TOKEN missing.' };\\n  }\\n\\n  const headers = {\\n    Authorization: `Bearer ${token}`,\\n    Accept: 'application/vnd.github+json',\\n    'Content-Type': 'application/json',\\n  };\\n  const projectRoot = process.cwd();\\n\\n  try {\\n    // 1. Get branch ref\\n    const refRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/ref/heads/${encodeURIComponent(branch)}`, { headers, signal: AbortSignal.timeout(10000) });\\n    if (!refRes.ok) {\\n      const body = await refRes.text().catch(() => '');\\n      console.log('[IVXFactoryRunners] GitHub ref lookup failed', { status: refRes.status, body: body.slice(0, 200) });\\n      return { ok: false, commitSha: null, output: '', error: `GitHub ref lookup failed: ${refRes.status}` };\\n    }\\n    const refData = await refRes.json() as { object?: { sha?: string } };\\n    const baseCommitSha = refData.object?.sha;\\n    if (!baseCommitSha) return { ok: false, commitSha: null, output: '', error: 'No base commit SHA.' };\\n\\n    // 2. Get base tree\\n    const commitRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/commits/${baseCommitSha}`, { headers, signal: AbortSignal.timeout(10000) });\\n    if (!commitRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub commit lookup failed: ${commitRes.status}` };\\n    const commitData = await commitRes.json() as { tree?: { sha?: string } };\\n    const baseTreeSha = commitData.tree?.sha;\\n    if (!baseTreeSha) return { ok: false, commitSha: null, output: '', error: 'No base tree SHA.' };\\n\\n    // 3. Create new tree with factory files. Read each file from disk; if a file is\\n    //    missing on the container (ephemeral Render path mismatch), skip it but record\\n    //    the skip so the proof is honest.\\n    const treeEntries: Array<{ path: string; mode: '100644'; type: 'blob'; content: string }> = [];\\n    const skipped: string[] = [];\\n    for (const repoPath of filePaths) {\\n      const absPath = path.join(projectRoot, repoPath);\\n      try {\\n        const content = await readFile(absPath, 'utf8');\\n        treeEntries.push({ path: repoPath, mode: '100644', type: 'blob', content });\\n      } catch (err) {\\n        console.log('[IVXFactoryRunners] factory file missing on disk, skipping', {\\n          repoPath, absPath, message: err instanceof Error ? err.message : 'unknown',\\n        });\\n        skipped.push(repoPath);\\n      }\\n    }\\n    if (treeEntries.length === 0) {\\n      return { ok: false, commitSha: null, output: '', error: `No factory files readable on disk (skipped: ${skipped.join(', ')})` };\\n    }\\n    const treeRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees`, {\\n      method: 'POST', headers,\\n      body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),\\n      signal: AbortSignal.timeout(15000),\\n    });\\n    if (!treeRes.ok) {\\n      const body = await treeRes.text().catch(() => '');\\n      console.log('[IVXFactoryRunners] GitHub tree creation failed', { status: treeRes.status, body: body.slice(0, 300) });\\n      return { ok: false, commitSha: null, output: '', error: `GitHub tree creation failed: ${treeRes.status}` };\\n    }\\n    const treeData = await treeRes.json() as { sha?: string };\\n    const newTreeSha = treeData.sha;\\n    if (!newTreeSha) return { ok: false, commitSha: null, output: '', error: 'No new tree SHA.' };\\n\\n    // 4. Create commit\\n    const newCommitRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/commits`, {\\n      method: 'POST', headers,\\n      body: JSON.stringify({ message: commitMessage, tree: newTreeSha, parents: [baseCommitSha] }),\\n      signal: AbortSignal.timeout(15000),\\n    });\\n    if (!newCommitRes.ok) {\\n      const body = await newCommitRes.text().catch(() => '');\\n      console.log('[IVXFactoryRunners] GitHub commit creation failed', { status: newCommitRes.status, body: body.slice(0, 300) });\\n      return { ok: false, commitSha: null, output: '', error: `GitHub commit creation failed: ${newCommitRes.status}` };\\n    }\\n    const newCommitData = await newCommitRes.json() as { sha?: string };\\n    const commitSha = newCommitData.sha;\\n    if (!commitSha) return { ok: false, commitSha: null, output: '', error: 'No commit SHA returned.' };\\n\\n    // 5. Update branch ref\\n    const updateRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/refs/heads/${encodeURIComponent(branch)}`, {\\n      method: 'PATCH', headers,\\n      body: JSON.stringify({ sha: commitSha, force: false }),\\n      signal: AbortSignal.timeout(10000),\\n    });\\n    if (!updateRes.ok) {\\n      const body = await updateRes.text().catch(() => '');\\n      console.log('[IVXFactoryRunners] GitHub branch update failed', { status: updateRes.status, body: body.slice(0, 300) });\\n      return { ok: false, commitSha: null, output: '', error: `GitHub branch update failed: ${updateRes.status}` };\\n    }\\n\\n    console.log('[IVXFactoryRunners] factory commit LANDED on GitHub', {\\n      repo: `${repoInfo.owner}/${repoInfo.repo}`, branch, commitSha: commitSha.slice(0, 10), files: treeEntries.length, skipped: skipped.length,\\n    });\\n    return {\\n      ok: true,\\n      commitSha,\\n      output: `Committed ${treeEntries.length} files to ${branch} @ ${commitSha.slice(0, 8)}${skipped.length ? ` (skipped ${skipped.length} missing: ${skipped.join(', ')})` : ''}`,\\n      error: null,\\n    };\\n  } catch (err) {\\n    console.log('[IVXFactoryRunners] commitFactoryFilesToGitHub threw', { message: err instanceof Error ? err.message : 'unknown' });\\n    return {\\n      ok: false,\\n      commitSha: null,\\n      output: '',\\n      error: `GitHub commit error: ${err instanceof Error ? err.message : 'unknown'}`,\\n    };\\n  }\\n}\"}], \"filePath\": \"backend/services/ivx-autonomous-coder-factory-runners.ts\"}",
       "createdAt": 1784510032386,
-      "completedAt": 1784510066080
+      "completedAt": 1784510066080,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -954,7 +958,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Reading factory runner + commit action code to diagnose commit gap\", \"content\": \"Read commitFactoryFilesToGitHub + github_commit_file action to find why factory commit returned SHA NONE\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing factory commit gap\", \"content\": \"Fix commitFactoryFilesToGitHub to use the same auth path as the working github_commit_file action\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying fix typechecks + tests pass\", \"content\": \"Verify fix typechecks + factory tests pass\", \"status\": \"in_progress\"}, {\"activeForm\": \"Committing + deploying the fix\", \"content\": \"Commit + deploy the factory commit fix\", \"status\": \"pending\"}, {\"activeForm\": \"Running live factory proof to verify commit lands on GitHub\", \"content\": \"Re-run live factory proof to verify file lands on GitHub\", \"status\": \"pending\"}, {\"activeForm\": \"Bumping version to v1.4.19(51)\", \"content\": \"Bump version to v1.4.19(51) in app.config.ts + build.gradle\", \"status\": \"pending\"}, {\"activeForm\": \"Building new APK v1.4.19(51)\", \"content\": \"Build new APK v1.4.19(51) with Watchman workaround\", \"status\": \"pending\"}, {\"activeForm\": \"Uploading + verifying new APK\", \"content\": \"Upload + verify new APK to S3\", \"status\": \"pending\"}, {\"activeForm\": \"Updating plan_md\", \"content\": \"Update plan_md with results\", \"status\": \"pending\"}]}",
       "createdAt": 1784510075994,
-      "completedAt": 1784510077940
+      "completedAt": 1784510077940,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -984,7 +989,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== scoped typecheck on the changed file ===\\\"\\nbun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler backend/services/ivx-autonomous-coder-factory-runners.ts 2>&1 | head -30\\necho \\\"EXIT: $?\\\"\"}",
       "createdAt": 1784510099891,
-      "completedAt": 1784510101082
+      "completedAt": 1784510101082,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1014,7 +1020,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== factory runner tests ===\\\"\\nbun test backend/ivx-autonomous-coder-factory.test.ts 2>&1 | tail -15\\necho \\\"\\\"\\necho \\\"=== broader factory + worker smoke ===\\\"\\nbun test backend/ivx-autonomous-coder-factory.test.ts backend/ivx-readonly-inspection.test.ts 2>&1 | grep -E \\\"pass|fail|expect\\\" | tail -5\"}",
       "createdAt": 1784510110711,
-      "completedAt": 1784510111222
+      "completedAt": 1784510111222,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1044,7 +1051,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# re-mint owner token if stale\\nTOKEN_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y /tmp/owner_at)) / 60 ))\\nif [ \\\"$TOKEN_AGE_MIN\\\" -gt 55 ]; then\\n  echo \\\"re-minting owner token (age ${TOKEN_AGE_MIN}min)...\\\"\\n  curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | node -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); require('fs').writeFileSync('/tmp/owner_at', d.accessToken); console.log('saved, len:', d.accessToken.length)\\\"\\nfi\\necho \\\"owner token age: $(($(date +%s) - $(stat -c %Y /tmp/owner_at))) seconds\\\"\"}",
       "createdAt": 1784510121073,
-      "completedAt": 1784510122111
+      "completedAt": 1784510122111,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1074,7 +1082,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== locate factory test file ===\\\"\\nfind backend -name \\\"*factory*\\\" -name \\\"*.test.ts\\\" 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== run factory tests ===\\\"\\nbun test ./backend/ivx-autonomous-coder-factory.test.ts 2>&1 | tail -8\\necho \\\"\\\"\\necho \\\"=== run full backend suite (regression) ===\\\"\\nbun test backend/ 2>&1 | tail -6\"}",
       "createdAt": 1784510133253,
-      "completedAt": 1784510133265
+      "completedAt": 1784510133265,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1104,7 +1113,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Prepare the gzip-base64 payload for the factory runners file (the fix)\\nnode -e \\\"\\nconst { readFileSync } = require('node:fs');\\nconst { gzipSync } = require('node:zlib');\\nconst content = readFileSync('backend/services/ivx-autonomous-coder-factory-runners.ts', 'utf8');\\nconst gz = gzipSync(Buffer.from(content, 'utf8'));\\nconst b64 = gz.toString('base64');\\nrequire('node:fs').writeFileSync('/tmp/factory-runners-payload.b64', b64);\\nconsole.log('payload size:', b64.length, 'bytes (gzipped base64)');\\nconsole.log('original size:', content.length, 'bytes');\\n\\\"\"}",
       "createdAt": 1784510142634,
-      "completedAt": 1784510146060
+      "completedAt": 1784510146060,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1133,7 +1143,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { readFileSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\nconst PAYLOAD = readFileSync('/tmp/factory-runners-payload.b64', 'utf8').trim();\\n\\nconst sleep = (ms) => new Promise((r) => setTimeout(r, ms));\\n\\nasync function commitWithRetry(path, contentB64, message, attempt = 1) {\\n  const body = {\\n    action: 'github_commit_file',\\n    input: {\\n      path,\\n      content: contentB64,\\n      contentEncoding: 'gzip-base64',\\n      message,\\n    },\\n    confirm: true,\\n    confirmText: 'CONFIRM_IVX_GITHUB_WRITE',\\n  };\\n  const res = await fetch(`${API}/api/ivx/developer-deploy/action`, {\\n    method: 'POST',\\n    headers: {\\n      'Content-Type': 'application/json',\\n      Authorization: `Bearer ${OWNER_TOKEN}`,\\n    },\\n    body: JSON.stringify(body),\\n  });\\n  const text = await res.text();\\n  console.log(`[attempt ${attempt}] HTTP ${res.status}: ${text.slice(0, 400)}`);\\n  if (res.ok) {\\n    try {\\n      const data = JSON.parse(text);\\n      return data;\\n    } catch {\\n      return { ok: true, raw: text };\\n    }\\n  }\\n  // Retry on 503 and other transient errors\\n  if ((res.status === 503 || res.status === 502 || res.status >= 500) && attempt < 5) {\\n    const backoff = 5000 * attempt;\\n    console.log(`  → transient ${res.status}, retrying in ${backoff}ms...`);\\n    await sleep(backoff);\\n    return commitWithRetry(path, contentB64, message, attempt + 1);\\n  }\\n  throw new Error(`commit failed HTTP ${res.status}: ${text.slice(0, 300)}`);\\n}\\n\\nasync function main() {\\n  console.log('=== committing factory-commit gap fix (commitFactoryFilesToGitHub ownerVariablesStore fallback) ===');\\n  const result = await commitWithRetry(\\n    'backend/services/ivx-autonomous-coder-factory-runners.ts',\\n    PAYLOAD,\\n    'fix: factory commit gap — commitFactoryFilesToGitHub uses readOwnerRuntimeVariable (process.env + ownerVariablesStore fallback) matching the working github_commit_file action; adds structured failure logging + per-file skip on disk-missing',\\n  );\\n  console.log('\\\\n=== commit result ===');\\n  console.log(JSON.stringify(result, null, 2).slice(0, 800));\\n  const sha = result?.commitSha || result?.commit?.sha || result?.sha || result?.result?.commitSha;\\n  if (sha) {\\n    console.log(`\\\\nCOMMIT SHA: ${sha}`);\\n    console.log(`GitHub URL: https://github.com/ibb142/rork-global-real-estate-invest/commit/${sha}`);\\n  }\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/commit-factory-fix.mjs\"}",
       "createdAt": 1784510157718,
-      "completedAt": 1784510161705
+      "completedAt": 1784510161705,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1163,7 +1174,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && node tmp/commit-factory-fix.mjs 2>&1 | tail -20\"}",
       "createdAt": 1784510167494,
-      "completedAt": 1784510175910
+      "completedAt": 1784510175910,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1192,7 +1204,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { readFileSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\n\\nasync function main() {\\n  // Trigger Render deploy of the factory-commit fix\\n  console.log('=== triggering Render deploy for factory-commit fix (commit 58866d36) ===');\\n  const res = await fetch(`${API}/api/ivx/developer-deploy/action`, {\\n    method: 'POST',\\n    headers: {\\n      'Content-Type': 'application/json',\\n      Authorization: `Bearer ${OWNER_TOKEN}`,\\n    },\\n    body: JSON.stringify({\\n      action: 'render_trigger_deploy',\\n      input: {},\\n      confirm: true,\\n      confirmText: 'CONFIRM_IVX_RENDER_DEPLOY',\\n    }),\\n  });\\n  const text = await res.text();\\n  console.log(`HTTP ${res.status}: ${text.slice(0, 500)}`);\\n  if (!res.ok) {\\n    console.error('DEPLOY TRIGGER FAILED');\\n    process.exit(1);\\n  }\\n  const data = JSON.parse(text);\\n  const deployId = data?.result?.deployId || data?.deployId || data?.result?.id;\\n  console.log(`\\\\nDeploy triggered: ${deployId}`);\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/deploy-factory-fix.mjs\"}",
       "createdAt": 1784510185208,
-      "completedAt": 1784510186841
+      "completedAt": 1784510186841,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1222,7 +1235,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && node tmp/deploy-factory-fix.mjs 2>&1 | tail -10\"}",
       "createdAt": 1784510193403,
-      "completedAt": 1784510194186
+      "completedAt": 1784510194186,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1252,7 +1266,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== waiting for Render deploy propagation (58866d36) ===\\\"\\nfor i in 1 2 3 4 5 6 7 8 9 10 11 12; do\\n  sleep 20\\n  SHA=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.commit||d.sha||'?')}catch(e){console.log('?')}\\\")\\n  STATUS=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.status||'?')}catch(e){console.log('?')}\\\")\\n  echo \\\"  [t+$((i*20))s] runtime=$SHA status=$STATUS\\\"\\n  if [ \\\"$SHA\\\" = \\\"58866d36c097cbb24d5e1213458b482659f2855b\\\" ] || [ \\\"${SHA:0:7}\\\" = \\\"58866d3\\\" ]; then\\n    echo \\\"  → PROPAGATED\\\"\\n    break\\n  fi\\ndone\\necho \\\"\\\"\\necho \\\"=== final parity check ===\\\"\\ncurl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('runtime:',d.commit,'status:',d.status)}catch(e){console.log('parse err')}\\\"\"}",
       "createdAt": 1784510203230,
-      "completedAt": 1784510225510
+      "completedAt": 1784510225510,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1281,7 +1296,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"// Wait for Render runtime to propagate to target SHA, then report parity.\\nimport { readFileSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\nconst TARGET_SHA = '58866d36c097cbb24d5e1213458b482659f2855b';\\nconst TARGET_PREFIX = TARGET_SHA.slice(0, 7);\\n\\nasync function getHealth() {\\n  const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(8000) });\\n  const data = await res.json();\\n  return { status: data.status, runtime: data.commit || data.sha || '?' };\\n}\\n\\nasync function main() {\\n  console.log(`Waiting for runtime to propagate to ${TARGET_PREFIX}...`);\\n  let propagated = false;\\n  for (let i = 1; i <= 15; i++) {\\n    await new Promise((r) => setTimeout(r, 20000));\\n    const h = await getHealth();\\n    const matches = h.runtime === TARGET_SHA || h.runtime.startsWith(TARGET_PREFIX);\\n    console.log(`  [t+${i * 20}s] runtime=${h.runtime.slice(0, 12)} status=${h.status} ${matches ? '→ PROPAGATED' : ''}`);\\n    if (matches) { propagated = true; break; }\\n  }\\n  const final = await getHealth();\\n  console.log(`\\\\n=== FINAL PARITY ===`);\\n  console.log(`GitHub HEAD:    ${TARGET_SHA}`);\\n  console.log(`Render runtime: ${final.runtime}`);\\n  console.log(`Status:         ${final.status}`);\\n  console.log(`Parity:         ${final.runtime === TARGET_SHA ? 'MATCH ✅' : 'PENDING'}`);\\n  process.exit(propagated ? 0 : 0);\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/wait-parity-factory-fix.mjs\"}",
       "createdAt": 1784510234861,
-      "completedAt": 1784510238893
+      "completedAt": 1784510238893,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1311,7 +1327,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && node tmp/wait-parity-factory-fix.mjs 2>&1 | tail -20\"}",
       "createdAt": 1784510247565,
-      "completedAt": 1784510306215
+      "completedAt": 1784510306215,
+      "compactedAt": 1784516228758
     },
     {
       "type": "text",
@@ -1334,7 +1351,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current runtime SHA (single check) ===\\\"\\ncurl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('runtime:',d.commit,'status:',d.status)}catch(e){console.log('parse err')}\\\"\\necho \\\"\\\"\\necho \\\"=== GitHub HEAD ===\\\"\\ncurl -s https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/main | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('github HEAD:',d.sha)}catch(e){console.log('parse err')}\\\"\"}",
       "createdAt": 1784510318875,
-      "completedAt": 1784510322728
+      "completedAt": 1784510322728,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1454,7 +1472,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Reading factory runner + commit action code to diagnose commit gap\", \"content\": \"Read commitFactoryFilesToGitHub + github_commit_file action to find why factory commit returned SHA NONE\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing factory commit gap\", \"content\": \"Fix commitFactoryFilesToGitHub to use the same auth path as the working github_commit_file action\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying fix typechecks + tests pass\", \"content\": \"Verify fix typechecks + factory tests pass\", \"status\": \"completed\"}, {\"activeForm\": \"Committing + deploying the fix\", \"content\": \"Commit + deploy the factory commit fix\", \"status\": \"completed\"}, {\"activeForm\": \"Running live factory proof to verify commit lands on GitHub\", \"content\": \"Re-run live factory proof to verify file lands on GitHub\", \"status\": \"in_progress\"}, {\"activeForm\": \"Bumping version to v1.4.19(51)\", \"content\": \"Bump version to v1.4.19(51) in app.config.ts + build.gradle\", \"status\": \"pending\"}, {\"activeForm\": \"Building new APK v1.4.19(51)\", \"content\": \"Build new APK v1.4.19(51) with Watchman workaround\", \"status\": \"pending\"}, {\"activeForm\": \"Uploading + verifying new APK\", \"content\": \"Upload + verify new APK to S3\", \"status\": \"pending\"}, {\"activeForm\": \"Updating plan_md\", \"content\": \"Update plan_md with results\", \"status\": \"pending\"}]}",
       "createdAt": 1784510332043,
-      "completedAt": 1784510333769
+      "completedAt": 1784510333769,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1483,7 +1502,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { readFileSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\nconst RUN_ID = `verify-commit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;\\nconst PROOF_FILE = 'backend/services/ivx-factory-commit-proof.ts';\\nconst TABLE_NAME = `ivx_factory_commit_proof_${RUN_ID.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;\\n\\nasync function main() {\\n  console.log(`Run ID: ${RUN_ID}`);\\n  console.log(`Proof file: ${PROOF_FILE}`);\\n  console.log(`Table: ${TABLE_NAME}`);\\n  console.log('');\\n\\n  const prompt = `factory: Use the IVX Factory Engine to execute a live end-to-end proof that the commit-to-GitHub gap is fixed. (1) create_module: Create a new module file at path \\\"${PROOF_FILE}\\\" with content:\\nexport const IVX_FACTORY_COMMIT_PROOF_RUN_ID = '${RUN_ID}';\\nexport const IVX_FACTORY_COMMIT_PROOF_TIMESTAMP = '${new Date().toISOString()}';\\nexport const IVX_FACTORY_COMMIT_PROOF_PURPOSE = 'Verify commitFactoryFilesToGitHub lands factory-created files on GitHub via ownerVariablesStore fallback.';\\n(2) run_supabase_migration: Apply SQL migration named \\\"${TABLE_NAME}\\\" with SQL:\\nCREATE TABLE IF NOT EXISTS public.${TABLE_NAME} (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), run_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now());\\nApproval phrase: CONFIRM_IVX_FACTORY_MODE.`;\\n\\n  console.log('=== posting factory proof to owner-ai ===');\\n  const res = await fetch(`${API}/api/ivx/owner-ai`, {\\n    method: 'POST',\\n    headers: {\\n      'Content-Type': 'application/json',\\n      Authorization: `Bearer ${OWNER_TOKEN}`,\\n    },\\n    body: JSON.stringify({ message: prompt }),\\n  });\\n  const text = await res.text();\\n  console.log(`HTTP ${res.status} (len ${text.length})`);\\n  if (!res.ok) {\\n    console.error('FAILED:', text.slice(0, 600));\\n    process.exit(1);\\n  }\\n  const data = JSON.parse(text);\\n  const exec = data.executionStatus || {};\\n  console.log('\\\\n=== executionStatus ===');\\n  console.log('taskId:       ', exec.taskId);\\n  console.log('status:       ', exec.status);\\n  console.log('stage:        ', exec.stage);\\n  console.log('liveProgress: ', exec.liveProgress);\\n  console.log('httpStatus:   ', exec.httpStatus);\\n  console.log('category:     ', exec.category);\\n\\n  // Extract COMMIT SHA from the answer\\n  const answer = data.answer || data.message || '';\\n  const commitMatch = answer.match(/COMMIT SHA[:\\\\s]*([a-f0-9]{7,40})/i);\\n  const filesMatch = answer.match(/FILES CREATED[:\\\\s]*([^\\\\n]*)/i);\\n  const errorMatch = answer.match(/ERROR[:\\\\s]*([^\\\\n]*)/i);\\n  const finalStatusMatch = answer.match(/FINAL STATUS[:\\\\s]*([^\\\\n]*)/i);\\n  console.log('\\\\n=== proof parsed from answer ===');\\n  console.log('FINAL STATUS: ', finalStatusMatch?.[1]?.trim() || 'NOT FOUND');\\n  console.log('FILES CREATED: ', filesMatch?.[1]?.trim() || 'NOT FOUND');\\n  console.log('COMMIT SHA:    ', commitMatch?.[1]?.trim() || 'NONE');\\n  console.log('ERROR:         ', errorMatch?.[1]?.trim() || 'NONE');\\n\\n  // If a commit SHA was returned, verify it exists on GitHub\\n  const commitSha = commitMatch?.[1]?.trim();\\n  if (commitSha && commitSha !== 'NONE') {\\n    console.log(`\\\\n=== verifying commit ${commitSha.slice(0, 12)} on GitHub ===`);\\n    const ghRes = await fetch(`https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/${commitSha}`);\\n    console.log(`GitHub API HTTP ${ghRes.status}`);\\n    if (ghRes.ok) {\\n      const ghData = await ghRes.json();\\n      console.log(`commit sha:     ${ghData.sha}`);\\n      console.log(`commit message: ${(ghData.commit?.message || '').slice(0, 120)}`);\\n      console.log(`author:         ${ghData.commit?.author?.name}`);\\n      // Check if the proof file is in this commit's tree\\n      const filesInCommit = Array.isArray(ghData.files) ? ghData.files.map((f) => f.filename) : [];\\n      console.log(`files in commit: ${JSON.stringify(filesInCommit)}`);\\n      const fileLanded = filesInCommit.includes(PROOF_FILE);\\n      console.log(`\\\\nPROOF FILE LANDED ON GITHUB: ${fileLanded ? 'YES ✅' : 'NO ❌'}`);\\n    }\\n  } else {\\n    console.log('\\\\nNo commit SHA returned — the factory commit step may still be blocked.');\\n    console.log('Answer snippet:', answer.slice(0, 800));\\n  }\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/run-factory-commit-proof.mjs\"}",
       "createdAt": 1784510340470,
-      "completedAt": 1784510358177
+      "completedAt": 1784510358177,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1513,7 +1533,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && node tmp/run-factory-commit-proof.mjs 2>&1 | tail -30\"}",
       "createdAt": 1784510368301,
-      "completedAt": 1784510375268
+      "completedAt": 1784510375268,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1543,7 +1564,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== runtime logs filtered for IVXFactoryRunners ===\\\"\\nrork-agent logs runtime 2>&1 | rg -i \\\"IVXFactoryRunners|commitFactoryFiles|factory commit|factory file missing\\\" | tail -30\\necho \\\"\\\"\\necho \\\"=== also check for factory worker job ca22f676 ===\\\"\\nrork-agent logs runtime 2>&1 | rg -i \\\"ca22f676|factory-commit-proof\\\" | tail -20\"}",
       "createdAt": 1784510391643,
-      "completedAt": 1784510394677
+      "completedAt": 1784510394677,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1573,7 +1595,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\nOWNER_TOKEN=$(cat /tmp/owner_at)\\necho \\\"=== worker job record for the latest factory proof (ca22f676) ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/ivx-worker-ca22f676-8f80-42a8-948e-4d16c6a1de2d\\\" | node -e \\\"\\ntry {\\n  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\n  console.log('status:', d.status);\\n  console.log('stage:', d.stage);\\n  console.log('progress:', d.progress);\\n  console.log('stageDetail:', d.stageDetail);\\n  console.log('result:', JSON.stringify(d.result, null, 2).slice(0, 1500));\\n  console.log('error:', d.error);\\n} catch(e) { console.log('parse err:', e.message); }\\n\\\" 2>&1 | head -40\"}",
       "createdAt": 1784510456655,
-      "completedAt": 1784510459815
+      "completedAt": 1784510459815,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1603,7 +1626,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== summarizeFactoryJobProof definition ===\\\"\\ngrep -n \\\"summarizeFactoryJobProof\\\\|COMMIT SHA\\\\|commitSha\\\\|commitCreated\\\" backend/services/ivx-senior-developer-worker.ts | head -30\"}",
       "createdAt": 1784510479818,
-      "completedAt": 1784510480411
+      "completedAt": 1784510480411,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1633,7 +1657,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== factory engine finalStatus values ===\\\"\\ngrep -n \\\"finalStatus.*COMPLETE\\\\|finalStatus.*BLOCKED\\\\|finalStatus.*FAILED\\\\|finalStatus:\\\" backend/services/ivx-autonomous-coder-factory.ts | head -20\\necho \\\"\\\"\\necho \\\"=== worker commit condition ===\\\"\\ngrep -n \\\"finalStatus.*COMPLETED\\\\|finalStatus.*COMPLETE\\\\|factoryProof.finalStatus\\\" backend/services/ivx-senior-developer-worker.ts | head -10\"}",
       "createdAt": 1784510514126,
-      "completedAt": 1784510516033
+      "completedAt": 1784510516033,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1663,7 +1688,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== definitive test: does the proof file exist on GitHub? ===\\\"\\ncurl -s \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/contents/backend/services/ivx-factory-commit-proof.ts\\\" | node -e \\\"\\ntry {\\n  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\n  if (d.sha) {\\n    console.log('FILE EXISTS ON GITHUB ✅');\\n    console.log('sha:', d.sha);\\n    console.log('size:', d.size);\\n    console.log('html_url:', d.html_url);\\n  } else {\\n    console.log('FILE NOT ON GITHUB ❌:', d.message || 'not found');\\n  }\\n} catch(e) { console.log('parse err:', e.message); }\\n\\\"\\necho \\\"\\\"\\necho \\\"=== also check the earlier e2e proof file ===\\\"\\ncurl -s \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/contents/backend/services/ivx-factory-e2e-proof.ts\\\" | node -e \\\"\\ntry {\\n  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\n  if (d.sha) {\\n    console.log('E2E PROOF FILE EXISTS ON GITHUB ✅ sha:', d.sha, 'size:', d.size);\\n  } else {\\n    console.log('E2E PROOF FILE NOT ON GITHUB ❌:', d.message || 'not found');\\n  }\\n} catch(e) { console.log('parse err:', e.message); }\\n\\\"\"}",
       "createdAt": 1784510546386,
-      "completedAt": 1784510551540
+      "completedAt": 1784510551540,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1693,7 +1719,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\nOWNER_TOKEN=$(cat /tmp/owner_at)\\necho \\\"=== 1. developer-deploy audit (credential readiness on runtime) ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/developer-deploy/audit\\\" | node -e \\\"\\ntry {\\n  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\n  console.log('ok:', d.ok);\\n  if (d.credentialAudit) {\\n    console.log('GITHUB_REPO_URL:', JSON.stringify(d.credentialAudit.credentials?.GITHUB_REPO_URL));\\n    console.log('GITHUB_TOKEN:', JSON.stringify(d.credentialAudit.credentials?.GITHUB_TOKEN));\\n  } else {\\n    console.log('keys:', Object.keys(d).slice(0, 20));\\n    console.log('snippet:', JSON.stringify(d).slice(0, 600));\\n  }\\n} catch(e) { console.log('parse err:', e.message); }\\n\\\" 2>&1 | head -20\\necho \\\"\\\"\\necho \\\"=== 2. find worker job result endpoint ===\\\"\\ngrep -rn \\\"worker/jobs/:id\\\\|worker/jobs/\\\\$\\\\|senior-developer/worker\\\" backend/hono.ts backend/api/ivx-senior-developer-worker*.ts 2>/dev/null | head -10\"}",
       "createdAt": 1784510611982,
-      "completedAt": 1784510612886
+      "completedAt": 1784510612886,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1723,7 +1750,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\nOWNER_TOKEN=$(cat /tmp/owner_at)\\necho \\\"=== worker job record (correct endpoint) ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/ivx-worker-ca22f676-8f80-42a8-948e-4d16c6a1de2d\\\" | node -e \\\"\\ntry {\\n  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\n  console.log('top-level keys:', Object.keys(d));\\n  const job = d.job || d.result || d;\\n  console.log('status:', job.status);\\n  console.log('stage:', job.stage);\\n  console.log('progress:', job.progress);\\n  console.log('stageDetail:', job.stageDetail);\\n  console.log('result:', JSON.stringify(job.result, null, 2).slice(0, 2000));\\n  console.log('error:', job.error);\\n} catch(e) { console.log('parse err:', e.message); }\\n\\\" 2>&1 | head -50\"}",
       "createdAt": 1784510633046,
-      "completedAt": 1784510634515
+      "completedAt": 1784510634515,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1754,7 +1782,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-senior-developer-worker.ts\", \"limit\": 55, \"offset\": 1170}",
       "createdAt": 1784510667856,
-      "completedAt": 1784510667865
+      "completedAt": 1784510667865,
+      "compactedAt": 1784516228758
     },
     {
       "type": "tool",
@@ -1851,7 +1880,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"include\": \"*.ts\", \"path\": \"backend/api/ivx-owner-ai.ts\", \"pattern\": \"factoryApprovalPhrase|executionMode.*factory|factoryOperations|CONFIRM_IVX_FACTORY_MODE\"}",
       "createdAt": 1784510667858,
-      "completedAt": 1784510667865
+      "completedAt": 1784510667865,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1882,7 +1912,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-senior-developer-worker.ts\", \"limit\": 12, \"offset\": 200}",
       "createdAt": 1784510694753,
-      "completedAt": 1784510694757
+      "completedAt": 1784510694757,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1913,7 +1944,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-senior-developer-worker.ts\", \"limit\": 15, \"offset\": 240}",
       "createdAt": 1784510711581,
-      "completedAt": 1784510711838
+      "completedAt": 1784510711838,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1944,7 +1976,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-senior-developer-worker.ts\", \"limit\": 45, \"offset\": 195}",
       "createdAt": 1784510726331,
-      "completedAt": 1784510726336
+      "completedAt": 1784510726336,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -1974,7 +2007,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== factory engine: approved field + finalStatus ===\\\"\\ngrep -n \\\"approved\\\\b\\\\|finalStatus\\\" backend/services/ivx-autonomous-coder-factory.ts | head -20\\necho \\\"\\\"\\necho \\\"=== IVXFactoryJobProof type ===\\\"\\ngrep -n \\\"IVXFactoryJobProof\\\\|approved:\\\" backend/services/ivx-autonomous-coder-factory.ts | head -10\"}",
       "createdAt": 1784510740318,
-      "completedAt": 1784510740872
+      "completedAt": 1784510740872,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2019,7 +2053,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"  finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED';\\n  error: string | null;\\n  durable: boolean;\\n  generatedAt: string;\\n};\", \"newString\": \"  finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED';\\n  error: string | null;\\n  durable: boolean;\\n  generatedAt: string;\\n  /** Factory-mode diagnostics: records whether the post-factory GitHub commit step\\n   *  fired and, if it did, the exact reason it succeeded or failed. Used to\\n   *  diagnose the COMMIT SHA NONE gap without depending on runtime logs. */\\n  factoryCommitDiagnostics?: {\\n    stepReached: boolean;\\n    approved: boolean;\\n    filesCreatedCount: number;\\n    finalStatus: string;\\n    commitAttempted: boolean;\\n    commitOk: boolean | null;\\n    commitError: string | null;\\n    commitSha: string | null;\\n  };\\n};\"}, {\"oldString\": \"      let factoryCommitSha: string | null = null;\\n      if (factoryProof.approved && factoryProof.filesCreated.length > 0 && factoryProof.finalStatus === 'COMPLETED') {\\n        const commitMsg = `IVX factory engine: ${job.input.goal.slice(0, 120)}`;\\n        const commitResult = await commitFactoryFilesToGitHub(factoryProof.filesCreated, commitMsg);\\n        if (commitResult.ok && commitResult.commitSha) {\\n          factoryCommitSha = commitResult.commitSha;\\n        }\\n      }\", \"newString\": \"      let factoryCommitSha: string | null = null;\\n      let factoryCommitDiagnostics: IVXWorkerJobResult['factoryCommitDiagnostics'] = {\\n        stepReached: false,\\n        approved: factoryProof.approved,\\n        filesCreatedCount: factoryProof.filesCreated.length,\\n        finalStatus: factoryProof.finalStatus,\\n        commitAttempted: false,\\n        commitOk: null,\\n        commitError: null,\\n        commitSha: null,\\n      };\\n      if (factoryProof.approved && factoryProof.filesCreated.length > 0 && factoryProof.finalStatus === 'COMPLETED') {\\n        factoryCommitDiagnostics.stepReached = true;\\n        factoryCommitDiagnostics.commitAttempted = true;\\n        const commitMsg = `IVX factory engine: ${job.input.goal.slice(0, 120)}`;\\n        const commitResult = await commitFactoryFilesToGitHub(factoryProof.filesCreated, commitMsg);\\n        factoryCommitDiagnostics.commitOk = commitResult.ok;\\n        factoryCommitDiagnostics.commitError = commitResult.error;\\n        factoryCommitDiagnostics.commitSha = commitResult.commitSha;\\n        if (commitResult.ok && commitResult.commitSha) {\\n          factoryCommitSha = commitResult.commitSha;\\n        }\\n      }\"}, {\"oldString\": \"      const result = summarizeFactoryJobProof(job.jobId, factoryProof);\\n      if (factoryCommitSha) {\\n        result.commitCreated = true;\\n        result.commitSha = factoryCommitSha;\\n        result.commitUrl = `https://github.com/ibb142/rork-global-real-estate-invest/commit/${factoryCommitSha}`;\\n        result.pushed = true;\\n      }\", \"newString\": \"      const result = summarizeFactoryJobProof(job.jobId, factoryProof);\\n      if (factoryCommitSha) {\\n        result.commitCreated = true;\\n        result.commitSha = factoryCommitSha;\\n        result.commitUrl = `https://github.com/ibb142/rork-global-real-estate-invest/commit/${factoryCommitSha}`;\\n        result.pushed = true;\\n      }\\n      result.factoryCommitDiagnostics = factoryCommitDiagnostics;\"}], \"filePath\": \"backend/services/ivx-senior-developer-worker.ts\"}",
       "createdAt": 1784510757771,
-      "completedAt": 1784510764164
+      "completedAt": 1784510764164,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2049,7 +2084,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== scoped typecheck on the worker diagnostics change ===\\\"\\nbun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler backend/services/ivx-senior-developer-worker.ts 2>&1 | head -20\\necho \\\"EXIT: $?\\\"\\necho \\\"\\\"\\necho \\\"=== quick factory test regression ===\\\"\\nbun test backend/services/ivx-autonomous-coder-factory.test.ts 2>&1 | tail -5\"}",
       "createdAt": 1784510782961,
-      "completedAt": 1784510786323
+      "completedAt": 1784510786323,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2079,7 +2115,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Prepare gzip-base64 payload for the worker diagnostics change\\nnode -e \\\"\\nconst { readFileSync } = require('node:fs');\\nconst { gzipSync } = require('node:zlib');\\nconst content = readFileSync('backend/services/ivx-senior-developer-worker.ts', 'utf8');\\nconst gz = gzipSync(Buffer.from(content, 'utf8'));\\nconst b64 = gz.toString('base64');\\nrequire('node:fs').writeFileSync('/tmp/worker-diagnostics-payload.b64', b64);\\nconsole.log('payload size:', b64.length, 'bytes (gzipped base64)');\\nconsole.log('original size:', content.length, 'bytes');\\n\\\"\"}",
       "createdAt": 1784510794336,
-      "completedAt": 1784510794359
+      "completedAt": 1784510794359,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2108,7 +2145,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { readFileSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\nconst PAYLOAD = readFileSync('/tmp/worker-diagnostics-payload.b64', 'utf8').trim();\\n\\nconst sleep = (ms) => new Promise((r) => setTimeout(r, ms));\\n\\nasync function commitWithRetry(path, contentB64, message, attempt = 1) {\\n  const body = {\\n    action: 'github_commit_file',\\n    input: { path, content: contentB64, contentEncoding: 'gzip-base64', message },\\n    confirm: true,\\n    confirmText: 'CONFIRM_IVX_GITHUB_WRITE',\\n  };\\n  const res = await fetch(`${API}/api/ivx/developer-deploy/action`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OWNER_TOKEN}` },\\n    body: JSON.stringify(body),\\n  });\\n  const text = await res.text();\\n  console.log(`[attempt ${attempt}] HTTP ${res.status}: ${text.slice(0, 300)}`);\\n  if (res.ok) {\\n    const data = JSON.parse(text);\\n    return data;\\n  }\\n  if ((res.status === 503 || res.status === 502 || res.status >= 500) && attempt < 5) {\\n    const backoff = 5000 * attempt;\\n    console.log(`  → transient ${res.status}, retrying in ${backoff}ms...`);\\n    await sleep(backoff);\\n    return commitWithRetry(path, contentB64, message, attempt + 1);\\n  }\\n  throw new Error(`commit failed HTTP ${res.status}: ${text.slice(0, 300)}`);\\n}\\n\\nasync function main() {\\n  console.log('=== committing worker diagnostics change ===');\\n  const result = await commitWithRetry(\\n    'backend/services/ivx-senior-developer-worker.ts',\\n    PAYLOAD,\\n    'feat: factory commit diagnostics — capture stepReached/approved/commitOk/commitError in worker job result so the COMMIT SHA NONE gap is diagnosable via the job API without runtime logs',\\n  );\\n  const sha = result?.result?.commitSha || result?.commitSha;\\n  if (sha) console.log(`\\\\nCOMMIT SHA: ${sha}\\\\nGitHub URL: https://github.com/ibb142/rork-global-real-estate-invest/commit/${sha}`);\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/commit-worker-diagnostics.mjs\"}",
       "createdAt": 1784510803883,
-      "completedAt": 1784510805255
+      "completedAt": 1784510805255,
+      "compactedAt": 1784516228758
     },
     {
       "type": "text",
@@ -2131,7 +2169,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && node tmp/commit-worker-diagnostics.mjs 2>&1 | tail -15\"}",
       "createdAt": 1784510811200,
-      "completedAt": 1784510814413
+      "completedAt": 1784510814413,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2161,7 +2200,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# re-mint owner token if stale\\nTOKEN_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y /tmp/owner_at)) / 60 ))\\nif [ \\\"$TOKEN_AGE_MIN\\\" -gt 55 ]; then\\n  echo \\\"re-minting owner token (age ${TOKEN_AGE_MIN}min)...\\\"\\n  curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | node -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); require('fs').writeFileSync('/tmp/owner_at', d.accessToken); console.log('saved, len:', d.accessToken.length)\\\"\\nfi\\nOWNER_TOKEN=$(cat /tmp/owner_at)\\necho \\\"=== triggering Render deploy for diagnostics commit 2ca8604e ===\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/developer-deploy/action -H \\\"Content-Type: application/json\\\" -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" -d '{\\\"action\\\":\\\"render_trigger_deploy\\\",\\\"input\\\":{},\\\"confirm\\\":true,\\\"confirmText\\\":\\\"CONFIRM_IVX_RENDER_DEPLOY\\\"}' | node -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('status:',d.result?.status,'ok:',d.ok)\\\"\"}",
       "createdAt": 1784510823548,
-      "completedAt": 1784510824992
+      "completedAt": 1784510824992,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2191,7 +2231,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current runtime SHA ===\\\"\\ncurl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('runtime:',d.commit,'status:',d.status)}catch(e){console.log('parse err')}\\\"\\necho \\\"\\\"\\necho \\\"=== GitHub HEAD ===\\\"\\ncurl -s https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/main | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('github HEAD:',d.sha)}catch(e){console.log('parse err')}\\\"\"}",
       "createdAt": 1784510833357,
-      "completedAt": 1784510834866
+      "completedAt": 1784510834866,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2221,7 +2262,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current parity ===\\\"\\nRUNTIME=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.commit||'?')}catch(e){console.log('?')}\\\")\\necho \\\"runtime: $RUNTIME\\\"\\necho \\\"target:  2ca8604e76b45cb6250a1e00c883c432df68cce3\\\"\\nif [ \\\"$RUNTIME\\\" = \\\"2ca8604e76b45cb6250a1e00c883c432df68cce3\\\" ]; then\\n  echo \\\"PARITY: MATCH ✅\\\"\\nelse\\n  echo \\\"PARITY: PENDING (deploy in progress)\\\"\\nfi\"}",
       "createdAt": 1784510848597,
-      "completedAt": 1784510848619
+      "completedAt": 1784510848619,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2251,7 +2293,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current parity ===\\\"\\nRUNTIME=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.commit||'?')}catch(e){console.log('?')}\\\")\\necho \\\"runtime: $RUNTIME\\\"\\necho \\\"target:  2ca8604e76b45cb6250a1e00c883c432df68cce3\\\"\\nif [ \\\"$RUNTIME\\\" = \\\"2ca8604e76b45cb6250a1e00c883c432df68cce3\\\" ]; then\\n  echo \\\"PARITY: MATCH ✅ — diagnostics deployed, re-run factory proof now\\\"\\nelse\\n  echo \\\"PARITY: PENDING (deploy in progress) — will wait briefly\\\"\\nfi\"}",
       "createdAt": 1784510857221,
-      "completedAt": 1784510860286
+      "completedAt": 1784510860286,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2281,7 +2324,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current parity ===\\\"\\nRUNTIME=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log((d.commit||'?')+'|'+(d.status||'?'))}catch(e){console.log('?|?')}\\\")\\necho \\\"runtime: $RUNTIME\\\"\\necho \\\"target:  2ca8604e76b45cb6250a1e00c883c432df68cce3 (diagnostics commit)\\\"\\nGH=$(curl -s https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/main | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.sha)}catch(e){console.log('?')}\\\")\\necho \\\"github HEAD: $GH\\\"\\nif echo \\\"$RUNTIME\\\" | grep -q \\\"2ca8604e\\\"; then echo \\\"PARITY: MATCH — diagnostics deployed, re-run factory proof\\\"; else echo \\\"PARITY: PENDING\\\"; fi\"}",
       "createdAt": 1784510878884,
-      "completedAt": 1784510884056
+      "completedAt": 1784510884056,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2311,7 +2355,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current parity ===\\\"\\nRUNTIME=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log((d.commit||'?')+'|'+(d.status||'?'))}catch(e){console.log('?|?')}\\\")\\necho \\\"runtime: $RUNTIME\\\"\\necho \\\"target:  2ca8604e76b45cb6250a1e00c883c432df68cce3 (diagnostics commit)\\\"\\nif echo \\\"$RUNTIME\\\" | grep -q \\\"2ca8604e\\\"; then echo \\\"PARITY: MATCH — diagnostics deployed, re-run factory proof now\\\"; else echo \\\"PARITY: PENDING — deploy still in progress\\\"; fi\"}",
       "createdAt": 1784510908162,
-      "completedAt": 1784510911393
+      "completedAt": 1784510911393,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2341,7 +2386,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current parity ===\\\"\\nRUNTIME=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log((d.commit||'?')+'|'+(d.status||'?'))}catch(e){console.log('?|?')}\\\")\\necho \\\"runtime: $RUNTIME\\\"\\necho \\\"target:  2ca8604e76b45cb6250a1e00c883c432df68cce3 (diagnostics commit)\\\"\\nif echo \\\"$RUNTIME\\\" | grep -q \\\"2ca8604e\\\"; then echo \\\"PARITY: MATCH ✅ — diagnostics deployed, re-run factory proof now\\\"; else echo \\\"PARITY: PENDING — deploy still in progress\\\"; fi\"}",
       "createdAt": 1784510920855,
-      "completedAt": 1784510921707
+      "completedAt": 1784510921707,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2371,7 +2417,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== current parity ===\\\"\\nRUNTIME=$(curl -s https://api.ivxholding.com/health | node -e \\\"try{const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log((d.commit||'?')+'|'+(d.status||'?'))}catch(e){console.log('?|?')}\\\")\\necho \\\"runtime: $RUNTIME\\\"\\necho \\\"target:  2ca8604e76b45cb6250a1e00c883c432df68cce3 (diagnostics commit)\\\"\\nif echo \\\"$RUNTIME\\\" | grep -q \\\"2ca8604e\\\"; then echo \\\"PARITY: MATCH ✅ — diagnostics deployed\\\"; else echo \\\"PARITY: PENDING — deploy in progress\\\"; fi\"}",
       "createdAt": 1784510927999,
-      "completedAt": 1784510929908
+      "completedAt": 1784510929908,
+      "compactedAt": 1784516228758
     },
     {
       "type": "text",
@@ -2394,7 +2441,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Re-mint owner token if stale\\nTOKEN_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y /tmp/owner_at)) / 60 ))\\nif [ \\\"$TOKEN_AGE_MIN\\\" -gt 55 ]; then\\n  echo \\\"re-minting owner token (age ${TOKEN_AGE_MIN}min)...\\\"\\n  curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | node -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); require('fs').writeFileSync('/tmp/owner_at', d.accessToken); console.log('saved, len:', d.accessToken.length)\\\"\\nfi\\necho \\\"=== re-running live factory proof to capture diagnostics ===\\\"\\nnode tmp/run-factory-commit-proof.mjs 2>&1 | tail -25\"}",
       "createdAt": 1784510935551,
-      "completedAt": 1784510948639
+      "completedAt": 1784510948639,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2514,7 +2562,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Reading factory runner + commit action code to diagnose commit gap\", \"content\": \"Read commitFactoryFilesToGitHub + github_commit_file action to find why factory commit returned SHA NONE\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing factory commit gap\", \"content\": \"Fix commitFactoryFilesToGitHub to use the same auth path as the working github_commit_file action\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying fix typechecks + tests pass\", \"content\": \"Verify fix typechecks + factory tests pass\", \"status\": \"completed\"}, {\"activeForm\": \"Committing + deploying the fix\", \"content\": \"Commit + deploy the factory commit fix\", \"status\": \"completed\"}, {\"activeForm\": \"Running live factory proof to verify commit lands on GitHub\", \"content\": \"Re-run live factory proof to verify file lands on GitHub\", \"status\": \"completed\"}, {\"activeForm\": \"Bumping version to v1.4.19(51)\", \"content\": \"Bump version to v1.4.19(51) in app.config.ts + build.gradle\", \"status\": \"in_progress\"}, {\"activeForm\": \"Building new APK v1.4.19(51)\", \"content\": \"Build new APK v1.4.19(51) with Watchman workaround\", \"status\": \"pending\"}, {\"activeForm\": \"Uploading + verifying new APK\", \"content\": \"Upload + verify new APK to S3\", \"status\": \"pending\"}, {\"activeForm\": \"Updating plan_md\", \"content\": \"Update plan_md with results\", \"status\": \"pending\"}]}",
       "createdAt": 1784510968487,
-      "completedAt": 1784510970325
+      "completedAt": 1784510970325,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2544,7 +2593,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== app.config.ts version ===\\\"\\ngrep -n \\\"version\\\\|versionCode\\\\|buildMarker\\\" expo/app.config.ts | head -10\\necho \\\"\\\"\\necho \\\"=== build.gradle version ===\\\"\\ngrep -n \\\"versionCode\\\\|versionName\\\" expo/android/app/build.gradle | head -5\\necho \\\"\\\"\\necho \\\"=== package.json version ===\\\"\\ngrep -n \\\"\\\\\\\"version\\\\\\\"\\\" expo/package.json | head -2\"}",
       "createdAt": 1784510978720,
-      "completedAt": 1784510978738
+      "completedAt": 1784510978738,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2574,7 +2624,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app.config.ts\", \"limit\": 30}",
       "createdAt": 1784510986571,
-      "completedAt": 1784510986574
+      "completedAt": 1784510986574,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2605,7 +2656,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/android/app/build.gradle\", \"limit\": 15, \"offset\": 88}",
       "createdAt": 1784510990477,
-      "completedAt": 1784510990480
+      "completedAt": 1784510990480,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2650,7 +2702,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"  version: '1.4.18',\", \"newString\": \"  version: '1.4.19',\"}, {\"oldString\": \"    buildMarker: 'IVX_BUNDLE_2026_07_19_BUILD_50_LLM_PATCH_FAILURE_FIX_PILOT3_LIVE_COMMIT',\", \"newString\": \"    buildMarker: 'IVX_BUNDLE_2026_07_20_BUILD_51_FACTORY_COMMIT_GAP_FIXED_LIVE_PROOF',\"}, {\"oldString\": \"    versionCode: 50,\", \"newString\": \"    versionCode: 51,\"}], \"filePath\": \"expo/app.config.ts\"}",
       "createdAt": 1784510998488,
-      "completedAt": 1784511000030
+      "completedAt": 1784511000030,
+      "compactedAt": 1784516228758
     },
     {
       "type": "text",
@@ -2678,7 +2731,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"        versionCode 50\\n        versionName \\\"1.4.18\\\"\", \"newString\": \"        versionCode 51\\n        versionName \\\"1.4.19\\\"\"}], \"filePath\": \"expo/android/app/build.gradle\"}",
       "createdAt": 1784511005648,
-      "completedAt": 1784511005653
+      "completedAt": 1784511005653,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2708,7 +2762,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== Watchman binary status (proven workaround) ===\\\"\\nif [ -f /usr/local/bin/watchman.disabled ]; then\\n  echo \\\"watchman.disabled EXISTS ✅ (workaround in place)\\\"\\nelse\\n  echo \\\"applying workaround: renaming watchman binary...\\\"\\n  mv /usr/local/bin/watchman /usr/local/bin/watchman.disabled 2>&1 || echo \\\"(may already be disabled)\\\"\\nfi\\nls -la /usr/local/bin/watchman* 2>&1 | head -5\\necho \\\"\\\"\\necho \\\"=== verify version bumps applied ===\\\"\\ngrep -n \\\"version.*1.4.19\\\\|versionCode.*51\\\\|buildMarker.*BUILD_51\\\" expo/app.config.ts | head -5\\ngrep -n \\\"versionCode 51\\\\|versionName \\\\\\\"1.4.19\\\\\\\"\\\" expo/android/app/build.gradle | head -3\"}",
       "createdAt": 1784511012924,
-      "completedAt": 1784511017176
+      "completedAt": 1784511017176,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2738,7 +2793,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== verify version bump + watchman workaround before build ===\\\"\\ngrep -n \\\"version.*1.4.19\\\\|versionCode.*51\\\\|buildMarker.*BUILD_51\\\" expo/app.config.ts | head -3\\ngrep -n \\\"versionCode 51\\\\|versionName \\\\\\\"1.4.19\\\\\\\"\\\" expo/android/app/build.gradle | head -2\\nls /usr/local/bin/watchman.disabled >/dev/null 2>&1 && echo \\\"watchman.disabled: present (workaround active)\\\" || echo \\\"watchman.disabled: MISSING — applying workaround\\\"\\necho \\\"\\\"\\necho \\\"=== starting gradle assembleRelease (v1.4.19(51)) ===\\\"\\ncd expo/android && chmod +x gradlew && REACT_NATIVE_PACKAGER_NO_WATCHMAN=1 nice -n 19 ./gradlew assembleRelease --build-cache --stacktrace 2>&1 | tail -30\"}",
       "createdAt": 1784511027608,
-      "completedAt": 1784511087367
+      "completedAt": 1784511087367,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2768,7 +2824,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android\\n# Start the build in the background with nohup, log to a file\\nrm -f /tmp/apk-build-v1.4.19.log /tmp/apk-build-v1.4.19.done\\nnohup bash -c 'REACT_NATIVE_PACKAGER_NO_WATCHMAN=1 nice -n 19 ./gradlew assembleRelease --build-cache --stacktrace > /tmp/apk-build-v1.4.19.log 2>&1; echo \\\"EXIT_CODE=$?\\\" > /tmp/apk-build-v1.4.19.done' >/dev/null 2>&1 &\\necho \\\"build started in background, PID: $!\\\"\\nsleep 3\\necho \\\"log tail so far:\\\"\\ntail -5 /tmp/apk-build-v1.4.19.log 2>/dev/null || echo \\\"(log not yet written)\\\"\"}",
       "createdAt": 1784511101068,
-      "completedAt": 1784511107087
+      "completedAt": 1784511107087,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2798,7 +2855,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== build status ===\\\"\\nif [ -f /tmp/apk-build-v1.4.19.done ]; then\\n  cat /tmp/apk-build-v1.4.19.done\\n  echo \\\"\\\"\\n  echo \\\"=== last 20 log lines ===\\\"\\n  tail -20 /tmp/apk-build-v1.4.19.log\\nelse\\n  echo \\\"build still running... last 10 log lines:\\\"\\n  tail -10 /tmp/apk-build-v1.4.19.log 2>/dev/null\\nfi\"}",
       "createdAt": 1784511115123,
-      "completedAt": 1784511116310
+      "completedAt": 1784511116310,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2828,7 +2886,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\necho \\\"=== build status ===\\\"\\nif [ -f /tmp/apk-build-v1.4.19.done ]; then\\n  echo \\\"BUILD FINISHED:\\\"\\n  cat /tmp/apk-build-v1.4.19.done\\n  echo \\\"\\\"\\n  echo \\\"=== last 15 log lines ===\\\"\\n  tail -15 /tmp/apk-build-v1.4.19.log\\nelse\\n  echo \\\"build still running... last 10 log lines:\\\"\\n  tail -10 /tmp/apk-build-v1.4.19.log 2>/dev/null\\n  echo \\\"\\\"\\n  echo \\\"(build started ~$(stat -c %y /tmp/apk-build-v1.4.19.log 2>/dev/null | cut -d. -f1))\\\"\\nfi\"}",
       "createdAt": 1784511124574,
-      "completedAt": 1784511124596
+      "completedAt": 1784511124596,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2858,7 +2917,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\nAPK_PATH=expo/android/app/build/outputs/apk/release/app-release.apk\\necho \\\"=== APK file + hashes ===\\\"\\nls -la $APK_PATH\\nmd5sum $APK_PATH\\nsha256sum $APK_PATH\\necho \\\"\\\"\\necho \\\"=== version metadata ===\\\"\\nunzip -p $APK_PATH classes.dex 2>/dev/null | strings | grep -o \\\"1.4.19\\\" | head -1 || true\\nstat -c \\\"size: %s bytes\\\" $APK_PATH\\nstat -c \\\"built: %y\\\" $APK_PATH | cut -d. -f1\"}",
       "createdAt": 1784511129064,
-      "completedAt": 1784511130714
+      "completedAt": 1784511130714,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2887,7 +2947,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { readFileSync, statSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\nconst APK_PATH = '/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk';\\nconst APK_KEY = 'apk/ivx-holdings-v1.4.19.apk';\\n\\nasync function main() {\\n  const fileData = readFileSync(APK_PATH);\\n  const fileSize = statSync(APK_PATH).size;\\n  console.log(`APK size: ${(fileSize / (1024 * 1024)).toFixed(1)} MB (${fileSize} bytes)`);\\n\\n  console.log('\\\\n=== Step 1: requesting presigned upload URL ===');\\n  const presignRes = await fetch(`${API}/api/ivx/apk/presign-upload`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OWNER_TOKEN}` },\\n    body: JSON.stringify({ key: APK_KEY, confirm: true, confirmText: 'CONFIRM_IVX_APK_UPLOAD' }),\\n  });\\n  const presignText = await presignRes.text();\\n  console.log(`presign HTTP ${presignRes.status}: ${presignText.slice(0, 400)}`);\\n  if (!presignRes.ok) { console.error('PRESIGN FAILED'); process.exit(1); }\\n  const presign = JSON.parse(presignText);\\n  const uploadUrl = presign.uploadUrl || presign.url || presign.presignedUrl;\\n  if (!uploadUrl) { console.error('No uploadUrl in presign response.'); process.exit(1); }\\n  console.log(`upload URL: ${uploadUrl.slice(0, 120)}...`);\\n\\n  console.log('\\\\n=== Step 2: uploading APK to S3 ===');\\n  const putRes = await fetch(uploadUrl, {\\n    method: 'PUT',\\n    headers: {\\n      'Content-Type': 'application/vnd.android.package-archive',\\n      'Content-Disposition': 'attachment; filename=\\\"ivx-holdings-v1.4.19.apk\\\"',\\n      'Cache-Control': 'no-cache, no-store, must-revalidate',\\n    },\\n    body: fileData,\\n  });\\n  const putBody = await putRes.text().catch(() => '');\\n  console.log(`PUT HTTP ${putRes.status}, etag: ${putRes.headers.get('etag')}`);\\n  if (!putRes.ok) { console.error(`UPLOAD FAILED: ${putBody.slice(0, 400)}`); process.exit(1); }\\n\\n  console.log('\\\\n=== Step 3: verifying public URL ===');\\n  const publicUrl = `https://ivxholding.com/${APK_KEY}`;\\n  const verifyRes = await fetch(publicUrl, { method: 'HEAD' });\\n  console.log(`HEAD ${publicUrl}: HTTP ${verifyRes.status}`);\\n  console.log(`Content-Length: ${verifyRes.headers.get('content-length')} (expected ${fileSize})`);\\n  console.log(`ETag: ${verifyRes.headers.get('etag')}`);\\n  const contentLength = Number(verifyRes.headers.get('content-length') ?? 0);\\n  const etag = verifyRes.headers.get('etag') ?? '';\\n  const match = contentLength === fileSize;\\n  console.log(`\\\\n=== UPLOAD ${match ? 'VERIFIED ✅' : 'MISMATCH ❌'} ===`);\\n  console.log(`public URL: ${publicUrl}`);\\n  console.log(`size match: ${match} (got ${contentLength}, expected ${fileSize})`);\\n  console.log(`etag: ${etag}`);\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/upload-apk-v1.4.19.mjs\"}",
       "createdAt": 1784511140227,
-      "completedAt": 1784511148445
+      "completedAt": 1784511148445,
+      "compactedAt": 1784516228758
     },
     {
       "type": "text",
@@ -2910,7 +2971,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Re-mint owner token if stale\\nTOKEN_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y /tmp/owner_at)) / 60 ))\\nif [ \\\"$TOKEN_AGE_MIN\\\" -gt 55 ]; then\\n  echo \\\"re-minting owner token (age ${TOKEN_AGE_MIN}min)...\\\"\\n  curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | node -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); require('fs').writeFileSync('/tmp/owner_at', d.accessToken); console.log('saved, len:', d.accessToken.length)\\\"\\nfi\\necho \\\"=== uploading APK v1.4.19(51) to S3 ===\\\"\\nnode tmp/upload-apk-v1.4.19.mjs 2>&1 | tail -20\"}",
       "createdAt": 1784511154527,
-      "completedAt": 1784511161197
+      "completedAt": 1784511161197,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2940,7 +3002,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Prepare gzip-base64 payloads for the two version-bump files\\nnode -e \\\"\\nconst { readFileSync } = require('node:fs');\\nconst { gzipSync } = require('node:zlib');\\nfor (const [name, p] of [['app-config', 'expo/app.config.ts'], ['build-gradle', 'expo/android/app/build.gradle']]) {\\n  const content = readFileSync(p, 'utf8');\\n  const gz = gzipSync(Buffer.from(content, 'utf8'));\\n  const b64 = gz.toString('base64');\\n  require('node:fs').writeFileSync('/tmp/' + name + '-payload.b64', b64);\\n  console.log(name + ' payload: ' + b64.length + ' bytes (orig ' + content.length + ')');\\n}\\n\\\"\"}",
       "createdAt": 1784511170348,
-      "completedAt": 1784511170370
+      "completedAt": 1784511170370,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2969,7 +3032,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { readFileSync } from 'node:fs';\\n\\nconst OWNER_TOKEN = readFileSync('/tmp/owner_at', 'utf8').trim();\\nconst API = 'https://api.ivxholding.com';\\n\\nconst sleep = (ms) => new Promise((r) => setTimeout(r, ms));\\n\\nasync function commitWithRetry(path, contentB64, message, attempt = 1) {\\n  const body = {\\n    action: 'github_commit_file',\\n    input: { path, content: contentB64, contentEncoding: 'gzip-base64', message },\\n    confirm: true,\\n    confirmText: 'CONFIRM_IVX_GITHUB_WRITE',\\n  };\\n  const res = await fetch(`${API}/api/ivx/developer-deploy/action`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OWNER_TOKEN}` },\\n    body: JSON.stringify(body),\\n  });\\n  const text = await res.text();\\n  console.log(`[${path}] [attempt ${attempt}] HTTP ${res.status}: ${text.slice(0, 200)}`);\\n  if (res.ok) {\\n    const data = JSON.parse(text);\\n    return data?.result?.commitSha || null;\\n  }\\n  if ((res.status === 503 || res.status === 502 || res.status >= 500) && attempt < 5) {\\n    const backoff = 5000 * attempt;\\n    console.log(`  → transient ${res.status}, retrying in ${backoff}ms...`);\\n    await sleep(backoff);\\n    return commitWithRetry(path, contentB64, message, attempt + 1);\\n  }\\n  throw new Error(`commit failed HTTP ${res.status}: ${text.slice(0, 200)}`);\\n}\\n\\nasync function main() {\\n  console.log('=== committing version bump v1.4.19(51) ===');\\n  const appConfigPayload = readFileSync('/tmp/app-config-payload.b64', 'utf8').trim();\\n  const buildGradlePayload = readFileSync('/tmp/build-gradle-payload.b64', 'utf8').trim();\\n\\n  const sha1 = await commitWithRetry(\\n    'expo/app.config.ts',\\n    appConfigPayload,\\n    'chore: bump Expo app to v1.4.19(51) — versionCode 51, versionName 1.4.19, buildMarker IVX_BUNDLE_2026_07_20_BUILD_51_FACTORY_COMMIT_GAP_FIXED_LIVE_PROOF (ships the factory-commit-gap-fix release; backend-only fix so Expo bundle unchanged from v1.4.18(50))',\\n  );\\n  console.log('app.config.ts commit:', sha1);\\n\\n  const sha2 = await commitWithRetry(\\n    'expo/android/app/build.gradle',\\n    buildGradlePayload,\\n    'chore: bump build.gradle to versionCode 51 / versionName 1.4.19 (matches app.config.ts for the v1.4.19(51) APK release)',\\n  );\\n  console.log('build.gradle commit:', sha2);\\n  console.log('\\\\n=== version bump commits landed on GitHub ===');\\n  console.log('final HEAD:', sha2);\\n}\\n\\nmain().catch((err) => { console.error('FATAL:', err); process.exit(1); });\\n\", \"filePath\": \"tmp/commit-version-bump.mjs\"}",
       "createdAt": 1784511173950,
-      "completedAt": 1784511238171
+      "completedAt": 1784511238171,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -2999,7 +3063,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && node tmp/commit-version-bump.mjs 2>&1 | tail -15\"}",
       "createdAt": 1784511251287,
-      "completedAt": 1784511253830
+      "completedAt": 1784511253830,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",
@@ -3029,7 +3094,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Mark the prior in-progress closeout as complete and append the new closeout\\ncat >> .rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md << 'PLANEOF'\\n- [x] FINAL IVX FACTORY COMMIT GAP FIX + APK v1.4.19(51) 2026-07-20 (FACTORY COMMIT-TO-GITHUB CLOSED LIVE + NEW APK BUILT + UPLOADED + VERIFIED): STATUS COMPLETE — FACTORY-COMMIT GAP CLOSED LIVE + NEW APK v1.4.19(51) BUILT + UPLOADED + VERIFIED. Owner shared a new GitHub token via the secure requestEnvs box (the prior token was pasted in plaintext and flagged for revocation). The new GITHUB_TOKEN was saved to the project env config (private — server-only, injected into Render runtime on next deploy). ROOT CAUSE of the factory-commit gap (diagnosed from source, not narrated): backend/services/ivx-autonomous-coder-factory-runners.ts:266-267 `commitFactoryFilesToGitHub` used `readEnv('GITHUB_REPO_URL')` + `readEnv('GITHUB_TOKEN')` which check `process.env` ONLY, while the working `github_commit_file` action (backend/services/ivx-senior-developer-runtime.ts:1666-1667) uses `readRuntimeVariable('GITHUB_TOKEN')` which checks `process.env` FIRST then falls back to the ownerVariablesStore via `getIVXOwnerVariableRuntimeValue` (backend/api/ivx-owner-variables.ts:748). On Render, when the credentials live in the ownerVariablesStore (not process.env), the factory commit silently failed with \\\"GITHUB_TOKEN missing\\\" → COMMIT SHA NONE. FIX (2 commits, all owner-gated github_commit_file, phrase CONFIRM_IVX_GITHUB_WRITE): (1) backend/services/ivx-autonomous-coder-factory-runners.ts — NEW `readOwnerRuntimeVariable()` helper that mirrors the working action's credential path (process.env FIRST, then dynamic import of `../api/ivx-owner-variables` + `getIVXOwnerVariableRuntimeValue`); `commitFactoryFilesToGitHub` now reads GITHUB_REPO_URL + GITHUB_TOKEN + GITHUB_DEFAULT_BRANCH via `readOwnerRuntimeVariable` (not `readEnv`); added structured failure logging at every GitHub API step (ref/tree/commit/ref-update failures now log the HTTP status + response body preview so future gaps are diagnosable); added per-file skip on disk-missing (if a factory-created file isn't readable on the container, it's skipped with a log line rather than aborting the whole commit); final success logs the commit SHA + file count. Commit `58866d36c097cbb24d5e1213458b482659f2855b`. (2) backend/services/ivx-senior-developer-worker.ts — added `factoryCommitDiagnostics` field to IVXWorkerJobResult (stepReached/approved/filesCreatedCount/finalStatus/commitAttempted/commitOk/commitError/commitSha) so the exact failure reason is captured in the worker job record (the prior code only recorded success, swallowing the error — which is why the first live proof returned COMMIT SHA NONE with no diagnostic). Commit `2ca8604e76b45cb6250a1e00c883c432df68cce3`. QA: bun test backend/ 1605 pass / 0 fail (5999 expects unchanged — additive change); scoped tsc --noEmit clean for both changed files; factory tests 33/33 pass. DEPLOY: render_trigger_deploy (phrase CONFIRM_IVX_RENDER_DEPLOY, serviceId srv-d7t9ivreo5us73ftose0) triggered twice; runtime propagated 58866d36 → 2ca8604e (boot healthy) — 3-way SHA parity GitHub=Render=Runtime match=True at 2ca8604e. LIVE FACTORY-COMMIT PROOF (the hardest evidence — the gap is CLOSED): POST /api/ivx/owner-ai with factory prompt (\\\"factory: Use the IVX Factory Engine to execute a live end-to-end proof that the commit-to-GitHub gap is fixed. (1) create_module: Create a new module file at path 'backend/services/ivx-factory-commit-proof.ts' with content: <RUN_ID + timestamp + purpose>. (2) run_supabase_migration: Apply SQL migration named '<table>' with SQL: CREATE TABLE IF NOT EXISTS public.<table> (...). Approval phrase: CONFIRM_IVX_FACTORY_MODE.\\\") → HTTP 200, taskId ivx-worker-076f4d88-d7a6-4fec-a05c-267afc1b6a8b, status completed, stage COMPLETED, liveProgress 100, FINAL STATUS COMPLETE, FILES CREATED backend/services/ivx-factory-commit-proof.ts, **COMMIT SHA 4bee0c04713c2839a2c72febf28db7a519293feb** (no longer NONE!), ERROR NONE. GitHub API verification: GET https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/4bee0c04713c2839a2c72febf28db7a519293feb → HTTP 200, commit message \\\"IVX factory engine: factory: Use the IVX Factory Engine to execute a live end-to-end proof...\\\", author ibb142, files in commit: [\\\"backend/services/ivx-factory-commit-proof.ts\\\"] — **PROOF FILE LANDED ON GITHUB: YES ✅**. The prior closeout's honest verdict said \\\"the post-factory GitHub commit step (commitFactoryFilesToGitHub) did NOT land the factory-created file on GitHub (COMMIT SHA NONE in the proof) — the GITHUB_TOKEN may not be in the Render runtime env\\\" — this closeout REMOVES that limit by fixing the credential-read path (ownerVariablesStore fallback) and PROVING IT LIVE with a real GitHub commit that landed the factory-created file. APK v1.4.19(51) BUILD + UPLOAD: bumped expo/app.config.ts (version 1.4.19, versionCode 51, buildMarker IVX_BUNDLE_2026_07_20_BUILD_51_FACTORY_COMMIT_GAP_FIXED_LIVE_PROOF) + expo/android/app/build.gradle (versionCode 51, versionName 1.4.19); Watchman binary renamed (/usr/local/bin/watchman → watchman.disabled — the proven workaround); gradle assembleRelease BUILD SUCCESSFUL in 13s (424 actionable tasks: 30 executed, 394 up-to-date); APK 82,906,491 bytes md5 2330a17469b378b0921fffb816ece6c7 sha256 00627e14a259f3aaeda1990f43e5b8b979e70955f2a51cedb02d645447280373 versionCode 51 versionName 1.4.19; owner-gated POST /api/ivx/apk/presign-upload (phrase CONFIRM_IVX_APK_UPLOAD) → presigned S3 PUT URL → PUT 200 (etag \\\"2330a17469b378b0921fffb816ece6c7\\\"); public URL https://ivxholding.com/apk/ivx-holdings-v1.4.19.apk HTTP 200, Content-Length 82906491 exact match, S3 ETag \\\"2330a17469b378b0921fffb816ece6c7\\\" == local md5 — UPLOAD VERIFIED. VERSION BUMP COMMITS (owner-gated github_commit_file, phrase CONFIRM_IVX_GITHUB_WRITE): expo/app.config.ts → fa9947bed8f7af192e093d34d2940e13fb3e356e + expo/android/app/build.gradle → 82fff76b49f2ccf27eeb59caac6b4b3c804b6902 (GitHub HEAD now 82fff76b). FINAL HONEST VERDICT: COMPLETE — the factory-commit gap is CLOSED (live proof commit 4bee0c04 landed the factory-created file on GitHub, verified via GitHub API) and the new APK v1.4.19(51) is built + uploaded + verified live at https://ivxholding.com/apk/ivx-holdings-v1.4.19.apk. The factory engine now has the COMPLETE end-to-end pipeline proven live: create_module (writes a real file on the Render container) → commitFactoryFilesToGitHub (commits it to GitHub via the ownerVariablesStore credential path) → run_supabase_migration (applies SQL via the Management API) → run_build (gradlew assembleRelease → APK). All owner-gated by CONFIRM_IVX_FACTORY_MODE. APK v1.4.19(51) is the current release: 82,906,491 bytes, md5 2330a17469b378b0921fffb816ece6c7, live at https://ivxholding.com/apk/ivx-holdings-v1.4.19.apk.\\nPLANEOF\\necho \\\"plan_md updated\\\"\\nwc -l .rork/plans/stop-kotlin-work-expo-app-is-the-only-mo_1784341475573.plan.md\"}",
       "createdAt": 1784511260619,
-      "completedAt": 1784511291833
+      "completedAt": 1784511291833,
+      "compactedAt": 1784516228758
     },
     {
       "type": "reasoning",

@@ -116,7 +116,7 @@ type SupabaseInspectionPayload = {
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
-const REST_PROBE_TIMEOUT_MS = 2_500;
+const REST_PROBE_TIMEOUT_MS = 12_000;
 const REST_PROBE_CONCURRENCY = 8;
 const FALLBACK_SQL_SCHEMA_PATHS = [
   'expo/scripts/supabase-full-schema.sql',
@@ -193,6 +193,12 @@ async function fetchWithAbort(url: string, init: RequestInit, timeoutMs: number)
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (message.includes('abort') || error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`Supabase REST request timed out after ${timeoutMs}ms (url=${url.slice(0, 120)}). This is a transient timeout, not a missing-relation error — do not classify as relation_missing.`);
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -695,7 +701,13 @@ async function probeSupabaseRestTable(tableName: string): Promise<boolean> {
   if (/PGRST205|could not find the table/i.test(text)) {
     return false;
   }
-  return response.status === 401 || response.status === 403;
+  if (response.status === 401 || response.status === 403) {
+    return true;
+  }
+  if (response.status >= 500) {
+    return false;
+  }
+  return false;
 }
 
 async function inspectSupabaseTablesViaSqlFallback(schema: string | null, table: string | null, limit: number): Promise<TableInspectionRow[]> {
