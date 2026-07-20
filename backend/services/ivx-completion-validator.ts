@@ -110,8 +110,8 @@ const DEPLOYMENT_TASK_TYPES: ReadonlySet<IVXTaskType> = new Set([
 
 export function classifyTaskType(goal: string): IVXTaskType {
   const normalized = (goal ?? '').toLowerCase();
-  if (/(audit|inspect|investigate|trace|root cause|diagnose|find why|report)/i.test(normalized)
-      && !/(fix|deploy|change|edit|apply|implement|patch|build|upgrade|create)/i.test(normalized)) {
+  if (/(audit|inspect|investigate|trace|root cause|diagnose|find why|report|explain|understand|analyze|analysis|why is|why does|why are|what is causing|what causes)/i.test(normalized)
+      && !/(fix|deploy|change|edit|apply|implement|patch|build|upgrade|create|repair|resolve|correct)/i.test(normalized)) {
     return 'INVESTIGATION';
   }
   if (/\b(deploy|redeploy|push live|release|rollout|render deploy)\b/i.test(normalized)

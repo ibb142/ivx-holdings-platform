@@ -58,10 +58,21 @@ export function buildOwnerMessageContentKey(message: MergeableOwnerMessage): str
   ].join('::');
 }
 
+/**
+ * STABLE ORDERING FIX (owner mandate 2026-07-20 Phase 4D): sort by created_at
+ * ascending, breaking ties by message id (stable secondary key). Previously
+ * this sorted ONLY by createdAt — equal-timestamp messages (common when the
+ * server assigns near-simultaneous timestamps to realtime + optimistic copies)
+ * changed order after every realtime sync, producing the flicker/reorder the
+ * owner reported. The id tiebreak is deterministic and stable across reloads.
+ */
 function sortByCreatedAtAscending<T extends MergeableOwnerMessage>(messages: T[]): T[] {
-  return [...messages].sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-  );
+  return [...messages].sort((left, right) => {
+    const ta = new Date(left.createdAt).getTime();
+    const tb = new Date(right.createdAt).getTime();
+    if (ta !== tb) return ta - tb;
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+  });
 }
 
 /**
