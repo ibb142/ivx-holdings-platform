@@ -26,10 +26,36 @@ import { exec as execCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 
+type FactoryOwnerVariableName = 'GITHUB_REPO_URL' | 'GITHUB_TOKEN' | 'GITHUB_DEFAULT_BRANCH';
+
 const exec = promisify(execCb);
 
 function readEnv(name: string): string {
   return (typeof process.env[name] === 'string' ? process.env[name] : '').trim();
+}
+
+/**
+ * Read an owner-controlled runtime variable using the SAME canonical path as the
+ * working github_commit_file action: process.env FIRST, then the owner variables
+ * store (getIVXOwnerVariableRuntimeValue) as a fallback. This fixes the factory
+ * commit gap where the runner only checked process.env and returned "GITHUB_TOKEN
+ * missing" on Render when the token lived in the owner variables store.
+ */
+async function readOwnerRuntimeVariable(name: FactoryOwnerVariableName): Promise<string> {
+  const envValue = readEnv(name);
+  if (envValue) return envValue;
+  try {
+    const ownerVariables = await import('../api/ivx-owner-variables');
+    if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue === 'function') {
+      const stored = await ownerVariables.getIVXOwnerVariableRuntimeValue(name as never);
+      return (stored || '').trim();
+    }
+  } catch (error) {
+    console.log('[IVXFactoryRunners] Owner Variables bridge unavailable for', name, {
+      message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+    });
+  }
+  return '';
 }
 
 function supabaseUrl(): string {
@@ -263,13 +289,29 @@ export async function commitFactoryFilesToGitHub(
   filePaths: string[],
   commitMessage: string,
 ): Promise<{ ok: boolean; commitSha: string | null; output: string; error: string | null }> {
-  const repoUrl = readEnv('GITHUB_REPO_URL');
-  const token = readEnv('GITHUB_TOKEN');
+  // Owner mandate 2026-07-20: use the SAME canonical credential path as the working
+  // github_commit_file action (process.env FIRST, then the owner variables store as a
+  // fallback). The prior version used readEnv() which only checks process.env — on
+  // Render the credentials may live in the ownerVariablesStore, so the factory commit
+  // silently failed with "GITHUB_TOKEN missing" → COMMIT SHA NONE.
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
+  const branch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || 'main';
   const repoInfo = parseGithubRepoUrl(repoUrl);
-  if (!repoInfo) return { ok: false, commitSha: null, output: '', error: 'GITHUB_REPO_URL missing or invalid.' };
-  if (!token) return { ok: false, commitSha: null, output: '', error: 'GITHUB_TOKEN missing.' };
+  if (!repoInfo) {
+    console.log('[IVXFactoryRunners] commitFactoryFilesToGitHub BLOCKED: GITHUB_REPO_URL missing or invalid', {
+      repoUrlPresent: Boolean(repoUrl),
+      repoUrlLength: repoUrl.length,
+    });
+    return { ok: false, commitSha: null, output: '', error: 'GITHUB_REPO_URL missing or invalid.' };
+  }
+  if (!token) {
+    console.log('[IVXFactoryRunners] commitFactoryFilesToGitHub BLOCKED: GITHUB_TOKEN missing in both process.env and ownerVariablesStore', {
+      repo: `${repoInfo.owner}/${repoInfo.repo}`,
+    });
+    return { ok: false, commitSha: null, output: '', error: 'GITHUB_TOKEN missing.' };
+  }
 
-  const branch = readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -280,7 +322,11 @@ export async function commitFactoryFilesToGitHub(
   try {
     // 1. Get branch ref
     const refRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/ref/heads/${encodeURIComponent(branch)}`, { headers, signal: AbortSignal.timeout(10000) });
-    if (!refRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub ref lookup failed: ${refRes.status}` };
+    if (!refRes.ok) {
+      const body = await refRes.text().catch(() => '');
+      console.log('[IVXFactoryRunners] GitHub ref lookup failed', { status: refRes.status, body: body.slice(0, 200) });
+      return { ok: false, commitSha: null, output: '', error: `GitHub ref lookup failed: ${refRes.status}` };
+    }
     const refData = await refRes.json() as { object?: { sha?: string } };
     const baseCommitSha = refData.object?.sha;
     if (!baseCommitSha) return { ok: false, commitSha: null, output: '', error: 'No base commit SHA.' };
@@ -292,19 +338,36 @@ export async function commitFactoryFilesToGitHub(
     const baseTreeSha = commitData.tree?.sha;
     if (!baseTreeSha) return { ok: false, commitSha: null, output: '', error: 'No base tree SHA.' };
 
-    // 3. Create new tree with factory files
-    const tree = await Promise.all(filePaths.map(async (repoPath) => ({
-      path: repoPath,
-      mode: '100644' as const,
-      type: 'blob' as const,
-      content: await readFile(path.join(projectRoot, repoPath), 'utf8'),
-    })));
+    // 3. Create new tree with factory files. Read each file from disk; if a file is
+    //    missing on the container (ephemeral Render path mismatch), skip it but record
+    //    the skip so the proof is honest.
+    const treeEntries: Array<{ path: string; mode: '100644'; type: 'blob'; content: string }> = [];
+    const skipped: string[] = [];
+    for (const repoPath of filePaths) {
+      const absPath = path.join(projectRoot, repoPath);
+      try {
+        const content = await readFile(absPath, 'utf8');
+        treeEntries.push({ path: repoPath, mode: '100644', type: 'blob', content });
+      } catch (err) {
+        console.log('[IVXFactoryRunners] factory file missing on disk, skipping', {
+          repoPath, absPath, message: err instanceof Error ? err.message : 'unknown',
+        });
+        skipped.push(repoPath);
+      }
+    }
+    if (treeEntries.length === 0) {
+      return { ok: false, commitSha: null, output: '', error: `No factory files readable on disk (skipped: ${skipped.join(', ')})` };
+    }
     const treeRes = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees`, {
       method: 'POST', headers,
-      body: JSON.stringify({ base_tree: baseTreeSha, tree }),
+      body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!treeRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub tree creation failed: ${treeRes.status}` };
+    if (!treeRes.ok) {
+      const body = await treeRes.text().catch(() => '');
+      console.log('[IVXFactoryRunners] GitHub tree creation failed', { status: treeRes.status, body: body.slice(0, 300) });
+      return { ok: false, commitSha: null, output: '', error: `GitHub tree creation failed: ${treeRes.status}` };
+    }
     const treeData = await treeRes.json() as { sha?: string };
     const newTreeSha = treeData.sha;
     if (!newTreeSha) return { ok: false, commitSha: null, output: '', error: 'No new tree SHA.' };
@@ -315,7 +378,11 @@ export async function commitFactoryFilesToGitHub(
       body: JSON.stringify({ message: commitMessage, tree: newTreeSha, parents: [baseCommitSha] }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!newCommitRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub commit creation failed: ${newCommitRes.status}` };
+    if (!newCommitRes.ok) {
+      const body = await newCommitRes.text().catch(() => '');
+      console.log('[IVXFactoryRunners] GitHub commit creation failed', { status: newCommitRes.status, body: body.slice(0, 300) });
+      return { ok: false, commitSha: null, output: '', error: `GitHub commit creation failed: ${newCommitRes.status}` };
+    }
     const newCommitData = await newCommitRes.json() as { sha?: string };
     const commitSha = newCommitData.sha;
     if (!commitSha) return { ok: false, commitSha: null, output: '', error: 'No commit SHA returned.' };
@@ -326,15 +393,23 @@ export async function commitFactoryFilesToGitHub(
       body: JSON.stringify({ sha: commitSha, force: false }),
       signal: AbortSignal.timeout(10000),
     });
-    if (!updateRes.ok) return { ok: false, commitSha: null, output: '', error: `GitHub branch update failed: ${updateRes.status}` };
+    if (!updateRes.ok) {
+      const body = await updateRes.text().catch(() => '');
+      console.log('[IVXFactoryRunners] GitHub branch update failed', { status: updateRes.status, body: body.slice(0, 300) });
+      return { ok: false, commitSha: null, output: '', error: `GitHub branch update failed: ${updateRes.status}` };
+    }
 
+    console.log('[IVXFactoryRunners] factory commit LANDED on GitHub', {
+      repo: `${repoInfo.owner}/${repoInfo.repo}`, branch, commitSha: commitSha.slice(0, 10), files: treeEntries.length, skipped: skipped.length,
+    });
     return {
       ok: true,
       commitSha,
-      output: `Committed ${filePaths.length} files to ${branch} @ ${commitSha.slice(0, 8)}`,
+      output: `Committed ${treeEntries.length} files to ${branch} @ ${commitSha.slice(0, 8)}${skipped.length ? ` (skipped ${skipped.length} missing: ${skipped.join(', ')})` : ''}`,
       error: null,
     };
   } catch (err) {
+    console.log('[IVXFactoryRunners] commitFactoryFilesToGitHub threw', { message: err instanceof Error ? err.message : 'unknown' });
     return {
       ok: false,
       commitSha: null,

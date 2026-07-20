@@ -225,6 +225,19 @@ export type IVXWorkerJobResult = {
   error: string | null;
   durable: boolean;
   generatedAt: string;
+  /** Factory-mode diagnostics: records whether the post-factory GitHub commit step
+   *  fired and, if it did, the exact reason it succeeded or failed. Used to
+   *  diagnose the COMMIT SHA NONE gap without depending on runtime logs. */
+  factoryCommitDiagnostics?: {
+    stepReached: boolean;
+    approved: boolean;
+    filesCreatedCount: number;
+    finalStatus: string;
+    commitAttempted: boolean;
+    commitOk: boolean | null;
+    commitError: string | null;
+    commitSha: string | null;
+  };
 };
 
 type QueueDoc = {
@@ -1175,9 +1188,24 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       // makes create_directory + create_module operations PERSIST to the canonical
       // repo — the factory engine can now scaffold real modules live.
       let factoryCommitSha: string | null = null;
+      let factoryCommitDiagnostics: IVXWorkerJobResult['factoryCommitDiagnostics'] = {
+        stepReached: false,
+        approved: factoryProof.approved,
+        filesCreatedCount: factoryProof.filesCreated.length,
+        finalStatus: factoryProof.finalStatus,
+        commitAttempted: false,
+        commitOk: null,
+        commitError: null,
+        commitSha: null,
+      };
       if (factoryProof.approved && factoryProof.filesCreated.length > 0 && factoryProof.finalStatus === 'COMPLETED') {
+        factoryCommitDiagnostics.stepReached = true;
+        factoryCommitDiagnostics.commitAttempted = true;
         const commitMsg = `IVX factory engine: ${job.input.goal.slice(0, 120)}`;
         const commitResult = await commitFactoryFilesToGitHub(factoryProof.filesCreated, commitMsg);
+        factoryCommitDiagnostics.commitOk = commitResult.ok;
+        factoryCommitDiagnostics.commitError = commitResult.error;
+        factoryCommitDiagnostics.commitSha = commitResult.commitSha;
         if (commitResult.ok && commitResult.commitSha) {
           factoryCommitSha = commitResult.commitSha;
         }
@@ -1202,6 +1230,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         result.commitUrl = `https://github.com/ibb142/rork-global-real-estate-invest/commit/${factoryCommitSha}`;
         result.pushed = true;
       }
+      result.factoryCommitDiagnostics = factoryCommitDiagnostics;
       const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
         ? 'completed'
         : result.finalStatus === 'BLOCKED'
