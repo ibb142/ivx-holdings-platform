@@ -134,11 +134,11 @@ export function buildSeniorDeveloperExecutionAnswer(
   const checksRan = testValidations.length > 0 || typecheckValidations.length > 0;
   const checksPassed = checksRan && validations.every((v) => v.ok);
   const deployConfirmed = git.status === 'executed'
-    && Boolean(git.github.commitSha)
+    && (git.render.deployAttempted || git.github.commitAttempted)
     && proof.productionVerification.ok
     && proof.changedRouteVerification.ok;
   let status: 'DEPLOYED' | 'UNVERIFIED' | 'LOCAL ONLY' | 'BLOCKED';
-  if (changedFiles.length === 0 || proof.patchProposal.status === 'blocked') {
+  if (proof.patchProposal.status === 'blocked') {
     status = 'BLOCKED';
   } else if (deployConfirmed && checksPassed) {
     status = 'DEPLOYED';
@@ -146,6 +146,10 @@ export function buildSeniorDeveloperExecutionAnswer(
     // Deploy pipeline reported done, but checks were not run/confirmed — do not
     // overclaim. Surface UNVERIFIED so the report matches the TEST/TYPECHECK lines.
     status = 'UNVERIFIED';
+  } else if (changedFiles.length === 0) {
+    // No code change needed and no deploy was requested (or deploy-only was not
+    // confirmed). This is NOT a blocker — the existing code already satisfies the goal.
+    status = 'LOCAL ONLY';
   } else {
     status = 'LOCAL ONLY';
   }
@@ -169,6 +173,9 @@ export function buildSeniorDeveloperExecutionAnswer(
   } else {
     proofLines.push('git diff --stat: (no changes)');
     proofLines.push('git status --short: (clean)');
+    if (git.render.deployAttempted && git.github.commitSha) {
+      proofLines.push(`deploy-only from commit: ${git.github.commitSha}${git.github.branch ? ` (${git.github.branch})` : ''}`);
+    }
   }
   proofLines.push(`job: ${proof.jobId}`);
 

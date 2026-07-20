@@ -165,13 +165,43 @@ describe('buildSeniorDeveloperExecutionAnswer — strict format', () => {
 });
 
 describe('hard enforcement', () => {
-  test('no changed files → NO CODE CHANGED and BLOCKED status', () => {
+  test('no changed files and no deploy → NO CODE CHANGED and LOCAL ONLY status', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
-      makeProof({ changedFiles: [], patchProposal: { status: 'not_needed', operations: [], diffPreview: '' } } as unknown as Partial<IVXSeniorDeveloperRunProof>),
+      makeProof({
+        changedFiles: [],
+        patchProposal: { status: 'not_needed', operations: [], diffPreview: '' },
+        gitDeployOperator: {
+          status: 'ready_owner_approval_required',
+          github: { commitAttempted: false, commitSha: null, branch: null },
+          render: { deployAttempted: false, deployId: null, deployStatus: null, error: null },
+          reason: 'No code change was required and no production deploy was requested this pass.',
+        },
+      } as unknown as Partial<IVXSeniorDeveloperRunProof>),
       autoDecision,
     );
     expect(answer).toContain('NO CODE CHANGED — no development was completed.');
-    expect(answer).toContain('STATUS:\nBLOCKED');
+    expect(answer).toContain('STATUS:\nLOCAL ONLY');
+    expect(answer).not.toContain('STATUS:\nBLOCKED');
+  });
+
+  test('deploy-only redeploy with no code change → DEPLOYED status', () => {
+    const answer = buildSeniorDeveloperExecutionAnswer(
+      makeProof({
+        changedFiles: [],
+        patchProposal: { status: 'not_needed', operations: [], diffPreview: '' },
+        gitDeployOperator: {
+          status: 'executed',
+          github: { commitAttempted: false, commitSha: 'headsha123', branch: 'main' },
+          render: { deployAttempted: true, deployId: 'dep_123', deployStatus: 'live', error: null },
+          reason: 'Deploy-only: no code change was required; production redeployed.',
+        },
+      } as unknown as Partial<IVXSeniorDeveloperRunProof>),
+      autoDecision,
+    );
+    expect(answer).toContain('NO CODE CHANGED — no development was completed.');
+    expect(answer).toContain('STATUS:\nDEPLOYED');
+    expect(answer).toContain('$ render deploy → live (dep_123)');
+    expect(answer).toContain('deploy-only from commit: headsha123 (main)');
   });
 
   test('patch blocked → BLOCKED — I do not have code write access.', () => {

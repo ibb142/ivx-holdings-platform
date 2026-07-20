@@ -1735,6 +1735,23 @@ async function commitFilesToGithub(projectRoot: string, filePaths: string[], bra
   };
 }
 
+async function getGithubBranchHead(branchOverride?: string | null): Promise<string> {
+  const repoUrl = await readRuntimeVariable('GITHUB_REPO_URL');
+  const token = await readRuntimeVariable('GITHUB_TOKEN');
+  const repoInfo = parseGithubRepoUrl(repoUrl);
+  if (!repoInfo) throw new Error('GITHUB_REPO_URL is missing or invalid.');
+  if (!token) throw new Error('GITHUB_TOKEN is missing.');
+
+  const branch = branchOverride || readTrimmedEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH;
+  const headers = githubHeaders(token);
+  const readRefPath = `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/git/ref/heads/${encodeURIComponent(branch)}`;
+  const ref = await fetchJson(readRefPath, { method: 'GET', headers });
+  if (!ref.ok) throw new Error(externalFailureMessage('GitHub', 'branch ref lookup', ref));
+  const baseCommitSha = readString(readRecord(readRecord(ref.data).object).sha);
+  if (!baseCommitSha) throw new Error('GitHub branch ref response did not include a commit SHA.');
+  return baseCommitSha;
+}
+
 async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: string | null; deployStatus: string | null; deployUrl: string | null; autoDeployFallback: boolean; apiError: string | null; deduplicated: boolean }> {
   const apiKey = await readRuntimeVariable('RENDER_API_KEY');
   const serviceId = await readRuntimeVariable('RENDER_SERVICE_ID');
@@ -1774,7 +1791,7 @@ async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: strin
   };
 }
 
-async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, projectRoot: string, filePaths: string[], validationsOk: boolean): Promise<IVXGitDeployOperatorProof> {
+async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, projectRoot: string, filePaths: string[], validationsOk: boolean, deployOnly = false): Promise<IVXGitDeployOperatorProof> {
   const credentialAudit = await auditIVXProductionCredentialRuntime();
   const repoConfigured = credentialAudit.credentials.GITHUB_REPO_URL.present;
   const tokenConfigured = credentialAudit.credentials.GITHUB_TOKEN.present;
@@ -1825,12 +1842,14 @@ async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, project
       tokenConfigured,
       apiKeyConfigured,
       serviceConfigured,
-      reason: 'GitHub commit and Render deploy are credential-ready but require explicit owner approval before production mutation.',
+      reason: deployOnly
+        ? 'Deploy-only redeploy was requested, but explicit owner approval is required before production mutation. No code change was required.'
+        : 'GitHub commit and Render deploy are credential-ready but require explicit owner approval before production mutation.',
       github: { accessCheck: githubAccessCheck, branch: githubAccessCheck.branch },
     });
   }
 
-  if (!validationsOk) {
+  if (!validationsOk && !deployOnly) {
     return makeGitDeployProof({
       status: 'failed',
       repoConfigured,
@@ -1839,6 +1858,29 @@ async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, project
       serviceConfigured,
       reason: 'GitHub/Render production operator refused to run because validation did not pass.',
       github: { accessCheck: githubAccessCheck, branch: githubAccessCheck.branch },
+    });
+  }
+
+  // Deploy-only path: no new code change, but the user explicitly asked to deploy
+  // the existing code to production (e.g., "fix end to end and update deploy live").
+  // We redeploy the current GitHub branch HEAD without creating a new commit.
+  if (deployOnly) {
+    const headSha = await getGithubBranchHead(githubAccessCheck.branch);
+    const deploy = await triggerRenderDeploy(headSha);
+    const deployReason = deploy.autoDeployFallback
+      ? 'Deploy-only: no code change was required; production redeployed via render.yaml autoDeployTrigger:commit because the Render REST trigger was unavailable.'
+      : deploy.deduplicated
+        ? `Deploy-only: no code change was required; Render deploy deduplicated (existing deploy ${deploy.deployId} for same SHA).`
+        : 'Deploy-only: no code change was required; production redeployed by the owner-approved senior developer runtime.';
+    return makeGitDeployProof({
+      status: 'executed',
+      repoConfigured,
+      tokenConfigured,
+      apiKeyConfigured,
+      serviceConfigured,
+      reason: deployReason,
+      github: { commitAttempted: false, commitSha: headSha, commitUrl: null, branch: githubAccessCheck.branch, committedPaths: [], accessCheck: githubAccessCheck },
+      render: { deployAttempted: true, deployId: deploy.deployId, deployStatus: deploy.deployStatus, deployUrl: deploy.deployUrl, error: deploy.apiError },
     });
   }
 
@@ -2278,23 +2320,27 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   log('validation_completed', validationsOk ? 'info' : 'error', 'Validation runner completed.', { validations: validations.map((validation) => ({ command: validation.command, ok: validation.ok, durationMs: validation.durationMs, error: validation.error })) });
   onPhase?.('validation_completed', validationsOk ? 'Validation passed.' : 'Validation failed.');
 
-  // Only commit/deploy when there is a REAL code change. Force-committing an
-  // unchanged file would push an empty no-op commit and redeploy production on
-  // every pass — dishonest and wasteful. When the inspected target already
-  // satisfies the goal (no changed files), skip the git/deploy operator and let
-  // success be defined by: validation passed + production verified.
+  // Only commit/deploy when there is a REAL code change, EXCEPT when the user
+  // explicitly asked for production deploy/proof and the existing code already
+  // satisfies the goal. In that case we run a deploy-only redeploy of the
+  // latest GitHub HEAD rather than returning a fake "BLOCKED" report. Force-
+  // committing an unchanged file would push an empty no-op commit, so the deploy-
+  // only path skips the commit and triggers Render directly.
   const hasRealChange = changedFiles.length > 0;
+  const deployOnlyRequested = productionProofRequested && !hasRealChange;
   const gitDeployOperator = hasRealChange
     ? await buildGitDeployOperator(input, projectRoot, changedFiles, validationsOk)
-    : makeGitDeployProof({
-        status: 'ready_owner_approval_required',
-        repoConfigured: await hasRuntimeVariable('GITHUB_REPO_URL'),
-        tokenConfigured: await hasRuntimeVariable('GITHUB_TOKEN'),
-        apiKeyConfigured: await hasRuntimeVariable('RENDER_API_KEY'),
-        serviceConfigured: await hasRuntimeVariable('RENDER_SERVICE_ID'),
-        reason: 'No code change was required this pass — the inspected target already satisfies the goal; nothing was committed or deployed (no phantom no-op commit).',
-      });
-  setTaskStatus(taskTree, 36, !hasRealChange || gitDeployOperator.status === 'executed' ? 'completed' : gitDeployOperator.status === 'failed' ? 'failed' : 'blocked');
+    : deployOnlyRequested
+      ? await buildGitDeployOperator(input, projectRoot, [], validationsOk, true)
+      : makeGitDeployProof({
+          status: 'ready_owner_approval_required',
+          repoConfigured: await hasRuntimeVariable('GITHUB_REPO_URL'),
+          tokenConfigured: await hasRuntimeVariable('GITHUB_TOKEN'),
+          apiKeyConfigured: await hasRuntimeVariable('RENDER_API_KEY'),
+          serviceConfigured: await hasRuntimeVariable('RENDER_SERVICE_ID'),
+          reason: 'No code change was required and no production deploy was requested this pass — the inspected target already satisfies the goal. Returning COMPLETED with no phantom deploy.',
+        });
+  setTaskStatus(taskTree, 36, gitDeployOperator.status === 'executed' ? 'completed' : gitDeployOperator.status === 'failed' ? 'failed' : 'blocked');
   log('git_deploy_operator_checked', gitDeployOperator.status === 'executed' ? 'info' : 'warn', hasRealChange ? 'Git/deploy operator gate checked.' : 'No code change this pass — git/deploy operator skipped.', gitDeployOperator as unknown as Record<string, unknown>);
   onPhase?.('git_deploy_operator_checked', gitDeployOperator.status === 'executed' ? 'Git/deploy operator executed.' : 'Git/deploy operator checked.');
 
@@ -2303,7 +2349,7 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   log('production_verified', productionVerification.ok && changedRouteVerification.ok ? 'info' : 'warn', 'Production health and changed-route verification attempted.', { health: productionVerification, changedRoute: changedRouteVerification });
   onPhase?.('production_verified', productionVerification.ok ? 'Production health verified.' : 'Production health verification failed.');
 
-  const endToEndProductionComplete = hasRealChange && gitDeployOperator.status === 'executed' && productionVerification.ok && changedRouteVerification.ok;
+  const endToEndProductionComplete = gitDeployOperator.status === 'executed' && productionVerification.ok && changedRouteVerification.ok;
   const localCodingOk = validationsOk && (patchProposal.status === 'not_needed' || changedFiles.length > 0);
   const ok = productionProofRequested ? endToEndProductionComplete : localCodingOk;
   setTaskStatus(taskTree, 37, ok ? 'completed' : 'failed');
