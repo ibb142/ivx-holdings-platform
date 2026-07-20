@@ -17,13 +17,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: '1.4.23',
+  version: '1.4.24',
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_07_20_BUILD_55_DEEP_QA_AUDIT_0_DEFECTS',
-    buildTimestamp: '2026-07-19T22:40:00.000000+00:00',
+    buildMarker: 'IVX_BUNDLE_2026_07_20_BUILD_56_CHAT_RENDER_TIMEOUT_FIX',
+    buildTimestamp: '2026-07-20T14:00:00.000000+00:00',
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',

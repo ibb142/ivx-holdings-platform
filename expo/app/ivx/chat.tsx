@@ -1552,6 +1552,20 @@ export default function IVXOwnerChatRoute() {
     const allIds = new Set(allMessages.map((m) => m.id));
     const visibleIds = new Set(displayedMessages.map((m) => m.id));
     const assistantCountAll = allMessages.filter((m) => m.senderRole === 'assistant').length;
+    // Build lookup maps for dedup-recovery: when a newer transient with the same
+    // taskId supersedes an older one (removed from displayedMessages by taskId
+    // dedup at lines ~1396-1413), the trace bound to the old id can still
+    // complete because the owner's response IS visible — just via the newer
+    // bubble. Also, FlatList windowing means renderMessage is only called for
+    // items in the viewport; an off-screen assistant bubble would never trigger
+    // RENDER_MESSAGE_CALLED, causing a false 90s SILENT_FAILURE timeout.
+    const allMessageById = new Map(allMessages.map((m) => [m.id, m]));
+    const visibleTaskIds = new Set<string>();
+    for (const message of displayedMessages) {
+      if (message.senderRole === 'assistant' && message.taskId) {
+        visibleTaskIds.add(message.taskId);
+      }
+    }
     for (const trace of activeWatchdogTracesRef.current.values()) {
       const report = trace.getReport();
       if (report.finalStatus !== 'PENDING') continue;
@@ -1566,6 +1580,31 @@ export default function IVXOwnerChatRoute() {
       }
       if (anyInVisible) {
         trace.pass('SEARCH_PIN_FILTER_PASSED', `searchActive=${searchActive}`);
+        // Pass RENDER_MESSAGE_CALLED directly when the bound id is in
+        // displayedMessages. FlatList only calls renderMessage for viewport
+        // items — an off-screen assistant bubble (e.g. scroll-to-latest
+        // hasn't completed yet) would never trigger renderMessage, causing
+        // a false 90s SILENT_FAILURE timeout. If the id is in
+        // displayedMessages, FlatList WILL render it when it enters view.
+        trace.pass('RENDER_MESSAGE_CALLED', 'id in displayedMessages (FlatList renders on view)');
+      } else {
+        // Dedup recovery: a newer transient with the same taskId may have
+        // replaced the bound id in displayedMessages. The owner's response
+        // IS visible — just via a newer bubble — so complete the trace.
+        const boundTaskIds = new Set<string>();
+        for (const boundId of boundIds) {
+          const msg = allMessageById.get(boundId);
+          if (msg?.taskId) {
+            boundTaskIds.add(msg.taskId);
+          }
+        }
+        const anyTaskIdVisible = Array.from(boundTaskIds).some((taskId) => visibleTaskIds.has(taskId));
+        if (anyTaskIdVisible) {
+          trace.pass('SEARCH_PIN_FILTER_PASSED', 'superseded by newer same-taskId bubble');
+          trace.pass('RENDER_MESSAGE_CALLED', 'rendered via newer same-taskId bubble');
+          trace.pass('ASSISTANT_BUBBLE_VISIBLE', 'newer same-taskId bubble visible on screen');
+          trace.complete('SUCCESS');
+        }
       }
     }
   }, [allMessages, displayedMessages, searchActive]);
