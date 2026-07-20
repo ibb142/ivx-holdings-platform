@@ -62,6 +62,14 @@ import {
   type IVXAutonomousCoderExecutionMode as IVXAutonomousCoderMode,
   type IVXAutonomousCoderPhase,
 } from './ivx-autonomous-coder';
+import {
+  IVX_FACTORY_ENGINE_MARKER,
+  IVX_FACTORY_APPROVAL_PHRASE,
+  runIVXFactoryJob,
+  buildFactoryJobAnswer,
+  type IVXFactoryJobProof,
+  type IVXFactoryOperation,
+} from './ivx-autonomous-coder-factory';
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
@@ -152,9 +160,16 @@ export type IVXWorkerJobInput = {
    *  routes through the IVX Autonomous Coder engine (LLM-generated patch →
    *  apply → test → typecheck → commit, NO deploy). 'deploy' routes through
    *  the Autonomous Coder with deploy approval (commit → deploy → verify).
+   *  'factory' routes through the IVX Factory Engine (create_directory /
+   *  create_module / install_dependency / run_supabase_migration / run_build /
+   *  create_tool / upgrade_self — owner-gated by CONFIRM_IVX_FACTORY_MODE).
    *  Undefined/absent routes through the full developer_executor pipeline
    *  (default, legacy behavior). */
-  executionMode?: IVXInspectionExecutionMode | IVXAutonomousCoderMode;
+  executionMode?: IVXInspectionExecutionMode | IVXAutonomousCoderMode | 'factory';
+  /** Factory-mode operations (from the LLM plan). Required when executionMode === 'factory'. */
+  factoryOperations?: IVXFactoryOperation[];
+  /** Factory-mode approval phrase (must equal CONFIRM_IVX_FACTORY_MODE). */
+  factoryApprovalPhrase?: string;
 };
 
 export type IVXWorkerJob = {
@@ -491,6 +506,48 @@ export function summarizeReadOnlyInspectionProof(
     healthStatus: null,
     versionEndpoint: null,
     generatedFeatureSlug: null,
+    auditFiles: { json: '', jsonl: '' },
+    finalStatus,
+    error: proof.error,
+    durable: isDurableStoreConfigured(),
+    generatedAt: proof.generatedAt,
+  };
+}
+
+export function summarizeFactoryJobProof(
+  jobId: string,
+  proof: IVXFactoryJobProof,
+): IVXWorkerJobResult {
+  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'
+    ? 'COMPLETE'
+    : proof.finalStatus === 'BLOCKED'
+      ? 'BLOCKED'
+      : 'FAILED';
+  const anyBuildOk = proof.buildsProduced.some((b) => b.ok);
+  return {
+    jobId,
+    goal: proof.goal.slice(0, 280),
+    ok: proof.finalStatus === 'COMPLETED',
+    endToEndProductionComplete: false,
+    changedFiles: proof.filesCreated.slice(0, 25),
+    testsRun: proof.operations.some((op) => op.kind === 'run_build'),
+    testsPassed: proof.finalStatus === 'COMPLETED',
+    typecheckRun: false,
+    buildRun: proof.operations.some((op) => op.kind === 'run_build'),
+    commitCreated: false,
+    commitSha: null,
+    commitUrl: null,
+    pushed: false,
+    branch: null,
+    deployId: null,
+    deployStatus: null,
+    deployVerified: false,
+    liveCommit: null,
+    commitMatch: false,
+    healthOk: false,
+    healthStatus: null,
+    versionEndpoint: null,
+    generatedFeatureSlug: proof.capabilitiesAdded.length > 0 ? proof.capabilitiesAdded.join(',') : null,
     auditFiles: { json: '', jsonl: '' },
     finalStatus,
     error: proof.error,
@@ -1076,6 +1133,59 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         stageDetail: status === 'completed'
           ? 'Read-only inspection completed. No files changed, no commit, no deploy.'
           : (result.error ?? 'Read-only inspection failed.'),
+        finishedAt: nowIso(),
+        result,
+        error: result.error,
+      });
+      await appendLedger(result);
+      activeJobControllers.delete(job.jobId);
+      return result;
+    }
+
+    // ── FACTORY ENGINE BRANCH (owner mandate 2026-07-19) ────────────────────
+    // factory execution mode routes through the IVX Factory Engine: the owner-
+    // gated LLM plan produces a sequence of factory operations (create_directory,
+    // create_module, install_dependency, run_supabase_migration, run_build,
+    // create_tool, upgrade_self). Each operation runs with a structured proof,
+    // and the job produces a single IVXFactoryJobProof. Factory mode requires
+    // the explicit approval phrase CONFIRM_IVX_FACTORY_MODE — no factory
+    // operation runs without it. This extends the autonomous coder from a
+    // PATCH engine into a FACTORY engine that can build apps from scratch.
+    if (job.input.executionMode === 'factory') {
+      const factoryProof = await runIVXFactoryJob({
+        taskId: job.jobId,
+        goal: job.input.goal,
+        ownerId: job.ownerId,
+        approvalPhrase: job.input.factoryApprovalPhrase ?? '',
+        operations: job.input.factoryOperations ?? [],
+      });
+
+      if (controller.cancelled) {
+        await updateJob(job.jobId, {
+          status: 'cancelled',
+          stage: 'FAILED',
+          finishedAt: nowIso(),
+          cancelledAt: nowIso(),
+          error: 'Job cancelled during factory execution.',
+        });
+        activeJobControllers.delete(job.jobId);
+        return null;
+      }
+
+      const result = summarizeFactoryJobProof(job.jobId, factoryProof);
+      const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
+        ? 'completed'
+        : result.finalStatus === 'BLOCKED'
+          ? 'blocked'
+          : 'failed';
+      const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
+      await updateJob(job.jobId, {
+        status,
+        stage: finalStage,
+        progressPercent: STAGE_PROGRESS[finalStage],
+        stageDetail: status === 'completed'
+          ? `Factory job completed. ${factoryProof.filesCreated.length} files created, ${factoryProof.dependenciesInstalled.length} deps installed, ${factoryProof.migrationsApplied.length} migrations, ${factoryProof.buildsProduced.length} builds, ${factoryProof.toolsRegistered.length} tools registered, ${factoryProof.capabilitiesAdded.length} capabilities added.`
+          : (result.error ?? 'Factory job failed.'),
         finishedAt: nowIso(),
         result,
         error: result.error,

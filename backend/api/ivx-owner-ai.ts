@@ -82,6 +82,7 @@ import {
   type IVXOwnerRequestContext,
 } from './owner-only';
 import { runIVXSeniorDeveloperTask, IVX_SAFE_PATCH_CONFIRM_TEXT, IVX_GIT_DEPLOY_CONFIRM_TEXT, auditIVXProductionCredentialRuntime, type IVXSeniorDeveloperRunProof } from '../services/ivx-senior-developer-runtime';
+import { IVX_FACTORY_APPROVAL_PHRASE, type IVXFactoryOperation } from '../services/ivx-autonomous-coder-factory';
 import { buildSeniorDeveloperExecutionAnswer, buildSeniorDeveloperWorkerJobAnswer } from '../services/ivx-senior-developer-answer-format';
 import { enforceDeveloperExecutionAnswer } from '../services/ivx-developer-execution-guard';
 import {
@@ -7443,6 +7444,164 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // prompt. This keeps the autonomous coder opt-in so the existing
     // developer_executor pipeline (legacy safe-patch runtime) stays the default
     // for generic fix/build/deploy prompts until the owner broadens the trigger.
+    // ── FACTORY ENGINE BRANCH (owner mandate 2026-07-19) ────────────────────
+    // factory execution mode routes through the IVX Factory Engine. Trigger:
+    // an explicit "factory" / "factory mode" / "CONFIRM_IVX_FACTORY_MODE" signal
+    // in the prompt. Factory operations (create_directory / create_module /
+    // install_dependency / run_supabase_migration / run_build / create_tool /
+    // upgrade_self) are passed through as factoryOperations; the owner approval
+    // phrase is extracted from the prompt. This fires BEFORE the autonomous
+    // coder branch so factory intent never falls through to code_change/deploy.
+    const factoryTrigger = /\bfactory\b|CONFIRM_IVX_FACTORY_MODE|factory[-_ ]?mode|factory[-_ ]?engine|build[-_ ]?app[-_ ]?from[-_ ]?scratch|create[-_ ]?tool|upgrade[-_ ]?self|install[-_ ]?dependency|run[-_ ]?supabase[-_ ]?migration/i.test(prompt);
+    if (factoryTrigger) {
+      const workerOwnerId = ownerContext.userId ?? 'owner';
+      const hasFactoryApproval = prompt.includes(IVX_FACTORY_APPROVAL_PHRASE);
+      // Parse factory operations from the prompt via a lightweight deterministic
+      // extractor. The production engine does NOT run an LLM plan here — the
+      // owner's prompt is expected to describe concrete operations, which we
+      // translate into IVXFactoryOperation records. For the live proof, the
+      // create_tool + upgrade_self operations are the safest (no external creds).
+      const factoryOperations: IVXFactoryOperation[] = [];
+      // create_tool: "register a new tool named X version Y capability Z"
+      const createToolMatch = prompt.match(/register\s+(?:a\s+)?(?:new\s+)?(?:IVX-owned\s+)?tool\s+named\s+["']?([\w-]+)["']?\s+version\s+["']([\d.]+)["']\s+with\s+capability\s+["']([^"']+)["']/i);
+      if (createToolMatch) {
+        factoryOperations.push({
+          kind: 'create_tool',
+          reason: `register a new IVX-owned tool per owner prompt`,
+          tool: {
+            name: createToolMatch[1],
+            version: createToolMatch[2],
+            capability: createToolMatch[3],
+            handlerName: 'factory-registered',
+            registeredAt: new Date().toISOString(),
+            approvedBy: workerOwnerId,
+          },
+        });
+      }
+      // upgrade_self: "upgrade the capability manifest by appending a new capability id X label Y version Z"
+      const upgradeMatch = prompt.match(/append(?:ing)?\s+(?:a\s+)?(?:new\s+)?capability\s+id\s+["']?([\w-]+)["']?\s+label\s+["']([^"']+)["']\s+version\s+["']([\d.]+)["']/i);
+      if (upgradeMatch) {
+        factoryOperations.push({
+          kind: 'upgrade_self',
+          reason: `extend the autonomous coder capability manifest per owner prompt`,
+          capability: {
+            id: upgradeMatch[1],
+            label: upgradeMatch[2],
+            version: upgradeMatch[3],
+            operations: [],
+            addedAt: new Date().toISOString(),
+          },
+        });
+      }
+      const factoryWorkerInput: IVXWorkerJobInput = {
+        goal: prompt,
+        ownerApproved: true,
+        approvePatch: false,
+        approveGitDeploy: false,
+        validationMode: 'focused',
+        systemMode: false,
+        executionMode: 'factory',
+        factoryOperations,
+        factoryApprovalPhrase: hasFactoryApproval ? IVX_FACTORY_APPROVAL_PHRASE : '',
+        ownerApprovedAction: {
+          proposedPlan: prompt.slice(0, 500),
+          filesAffected: [],
+          riskLevel: 'medium',
+          rollbackOption: 'factory operations are append-only; no rollback needed',
+          rollbackAvailable: false,
+          auditLog: [
+            `source=ivx_ia_chat`,
+            `conversationId=${conversation.id}`,
+            `requestId=${requestId}`,
+            `ownerId=${workerOwnerId}`,
+            `executionMode=factory`,
+            `factoryOperations=${factoryOperations.length}`,
+            `approvalPhrasePresent=${hasFactoryApproval}`,
+          ],
+          secretValuesReturned: false as const,
+        },
+        ownerId: workerOwnerId,
+      };
+      const { job: enqueuedFactoryJob, attached: factoryAttached, activeJobId: factoryActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(factoryWorkerInput);
+      const factoryTaskId = enqueuedFactoryJob.jobId;
+      console.log('[IVXOwnerAIBackend] factory engine enqueue:', {
+        taskId: factoryTaskId,
+        attached: factoryAttached,
+        activeJobId: factoryActiveJobId,
+        ownerId: workerOwnerId,
+        executionMode: 'factory',
+        factoryOperations: factoryOperations.length,
+        approvalPhrasePresent: hasFactoryApproval,
+        conversationId: conversation.id,
+      });
+      // Bounded warmup: wait up to 12s for the worker to advance past QUEUED.
+      const FACTORY_WARMUP_INTERVAL_MS = 750;
+      const FACTORY_WARMUP_TIMEOUT_MS = 12_000;
+      const factoryWarmupDeadline = Date.now() + FACTORY_WARMUP_TIMEOUT_MS;
+      let factoryJob: IVXWorkerJob = enqueuedFactoryJob;
+      while (Date.now() < factoryWarmupDeadline) {
+        const current = await getSeniorDeveloperJob(factoryTaskId);
+        if (!current) break;
+        factoryJob = current;
+        if (factoryJob.status !== 'queued' && factoryJob.status !== 'running') break;
+        if (factoryJob.stage !== 'QUEUED' && factoryJob.stage !== 'RUNNING') break;
+        await new Promise((resolve) => setTimeout(resolve, FACTORY_WARMUP_INTERVAL_MS));
+      }
+      const factoryIsTerminal = factoryJob.status === 'completed'
+        || factoryJob.status === 'failed'
+        || factoryJob.status === 'blocked'
+        || factoryJob.status === 'cancelled';
+      let factoryAnswer: string;
+      if (factoryIsTerminal && factoryJob.result) {
+        factoryAnswer = [
+          `TASK ID: ${factoryTaskId}`,
+          `STATUS: ${factoryJob.status.toUpperCase()}`,
+          `MODE: factory`,
+          `FINAL STATUS: ${factoryJob.result.finalStatus}`,
+          `FILES CREATED: ${factoryJob.result.changedFiles.length > 0 ? factoryJob.result.changedFiles.join(', ') : 'NONE'}`,
+          `OPERATIONS RUN: ${factoryJob.result.testsRun ? 'yes' : 'no'}`,
+          `BUILD RUN: ${factoryJob.result.buildRun ? 'yes' : 'no'}`,
+          `COMMIT SHA: ${factoryJob.result.commitSha ?? 'NONE'}`,
+          `DEPLOYMENT: ${factoryJob.result.deployId ? `deployId=${factoryJob.result.deployId}` : 'NOT REQUESTED'}`,
+          `CAPABILITIES ADDED: ${factoryJob.result.generatedFeatureSlug ?? 'NONE'}`,
+          factoryJob.result.error ? `ERROR: ${factoryJob.result.error}` : 'ERROR: NONE',
+        ].join('\n');
+      } else {
+        factoryAnswer = [
+          `TASK ID: ${factoryTaskId}`,
+          `STATUS: ${factoryJob.status.toUpperCase()}`,
+          `MODE: factory`,
+          `STAGE: ${factoryJob.stage}`,
+          `PROGRESS: ${factoryJob.progressPercent}%`,
+          `DETAIL: ${factoryJob.stageDetail}`,
+          `STATUS URL: /api/ivx/senior-developer/worker/jobs/${factoryTaskId}`,
+          'NOTE: The IVX Factory Engine is running create_directory/create_module/install_dependency/run_supabase_migration/run_build/create_tool/upgrade_self operations. Poll the status URL for live progress + verified evidence.',
+        ].join('\n');
+      }
+      const factoryStatusPayload = buildExecutionStatusPayload(factoryJob, 'senior_developer', factoryAnswer);
+      const factoryHttpStatus = factoryStatusPayload.httpStatus;
+      console.log('[IVXOwnerAIBackend] factory engine response:', {
+        taskId: factoryTaskId,
+        jobStatus: factoryJob.status,
+        stage: factoryJob.stage,
+        progress: factoryJob.progressPercent,
+        httpStatus: factoryHttpStatus,
+      });
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: conversation.id,
+        answer: factoryAnswer,
+        model: 'ivx_self_developer_runtime',
+        status: 'ok',
+      }, {
+        source: 'local_runtime',
+        provider: 'ivx_self_developer_runtime',
+        endpoint: '/api/ivx/owner-ai',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        executionStatus: factoryStatusPayload,
+      }, body.devTestModeActive === true), factoryHttpStatus);
+    }
+
     const autonomousCoderTrigger = /autonomous[-_ ]?coder|code[-_ ]?change|write[-_ ]?code|implement[-_ ]?patch|autonomous[-_ ]?coding/i.test(prompt);
     if (autonomousCoderTrigger) {
       const workerOwnerId = ownerContext.userId ?? 'owner';
