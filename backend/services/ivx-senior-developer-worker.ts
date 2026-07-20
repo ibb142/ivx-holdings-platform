@@ -56,6 +56,14 @@ import {
   type IVXReadOnlyInspectionPhase,
 } from './ivx-senior-developer-readonly-runtime';
 import {
+  IVX_QA_ONLY_MARKER,
+  runIVXQAOnly,
+  buildQAOnlyAnswer,
+  type IVXQAOnlyProof,
+  type IVXQAOnlyExecutionMode,
+  type IVXQAOnlyPhase,
+} from './ivx-senior-developer-qa-runtime';
+import {
   IVX_AUTONOMOUS_CODER_MARKER,
   runIVXAutonomousCoder,
   buildAutonomousCoderAnswer,
@@ -188,7 +196,7 @@ export type IVXWorkerJobInput = {
    *  create_tool / upgrade_self — owner-gated by CONFIRM_IVX_FACTORY_MODE).
    *  Undefined/absent routes through the full developer_executor pipeline
    *  (default, legacy behavior). */
-  executionMode?: IVXInspectionExecutionMode | IVXAutonomousCoderMode | 'factory';
+  executionMode?: IVXInspectionExecutionMode | IVXAutonomousCoderMode | IVXQAOnlyExecutionMode | 'factory';
   /** Factory-mode operations (from the LLM plan). Required when executionMode === 'factory'. */
   factoryOperations?: IVXFactoryOperation[];
   /** Factory-mode approval phrase (must equal CONFIRM_IVX_FACTORY_MODE). */
@@ -630,6 +638,84 @@ export function summarizeFactoryJobProof(
     generatedAt: proof.generatedAt,
     taskType: classifyTaskType(proof.goal),
   };
+}
+
+/**
+ * Derive a secret-safe proof summary from a QA-only run proof. The result
+ * shape is the same `IVXWorkerJobResult` the durable ledger stores for
+ * developer_executor jobs, so /senior-proof and /senior-ledger surface it
+ * the same way. All mutation flags are forced false (QA-only mode never
+ * edits, commits, pushes, or deploys). Tests/typecheck flags reflect the
+ * real QA run outcome.
+ */
+export function summarizeQAOnlyProof(
+  jobId: string,
+  proof: IVXQAOnlyProof,
+): IVXWorkerJobResult {
+  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'
+    ? 'COMPLETE'
+    : proof.finalStatus === 'BLOCKED'
+      ? 'BLOCKED'
+      : 'FAILED';
+  return {
+    jobId,
+    goal: proof.goal.slice(0, 280),
+    ok: proof.finalStatus === 'COMPLETED',
+    endToEndProductionComplete: false,
+    changedFiles: [],
+    testsRun: proof.commandsRun.some((cmd) => cmd.kind === 'run_tests'),
+    testsPassed: proof.finalStatus === 'COMPLETED' && proof.passed > 0 && proof.failed === 0,
+    typecheckRun: proof.commandsRun.some((cmd) => cmd.kind === 'typecheck'),
+    buildRun: false,
+    commitCreated: false,
+    commitSha: null,
+    commitUrl: null,
+    pushed: false,
+    branch: null,
+    deployId: null,
+    deployStatus: null,
+    deployVerified: false,
+    liveCommit: null,
+    commitMatch: false,
+    healthOk: false,
+    healthStatus: null,
+    versionEndpoint: null,
+    generatedFeatureSlug: null,
+    auditFiles: { json: '', jsonl: '' },
+    finalStatus,
+    error: proof.error,
+    durable: isDurableStoreConfigured(),
+    generatedAt: proof.generatedAt,
+    taskType: classifyTaskType(proof.goal),
+  };
+}
+
+/** Map a QA-only runtime phase to a worker job stage. */
+function qaPhaseToStage(phase: IVXQAOnlyPhase): { stage: IVXWorkerJobStage; detail: string } {
+  switch (phase) {
+    case 'queued':
+      return { stage: 'QUEUED', detail: 'QA-only run queued.' };
+    case 'module_identified':
+      return { stage: 'RUNNING', detail: 'Identifying module keywords from goal.' };
+    case 'files_inspected':
+      return { stage: 'RUNNING', detail: 'Inspecting module source files.' };
+    case 'tests_selected':
+      return { stage: 'TESTING', detail: 'Selecting test files matching the module.' };
+    case 'tests_executed':
+      return { stage: 'TESTING', detail: 'Running targeted module tests.' };
+    case 'typecheck_run':
+      return { stage: 'VERIFYING', detail: 'Running scoped typecheck.' };
+    case 'lint_run':
+      return { stage: 'VERIFYING', detail: 'Running lint.' };
+    case 'completed':
+      return { stage: 'COMPLETED', detail: 'QA-only run completed. No files changed, no commit, no deploy.' };
+    case 'blocked':
+      return { stage: 'FAILED', detail: 'QA-only run blocked (QA_TARGET_NOT_FOUND).' };
+    case 'failed':
+      return { stage: 'FAILED', detail: 'QA-only run failed.' };
+    default:
+      return { stage: 'RUNNING', detail: `Phase: ${phase}` };
+  }
 }
 
 /**
@@ -1389,6 +1475,63 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         stageDetail: status === 'completed'
           ? 'Read-only inspection completed. No files changed, no commit, no deploy.'
           : (result.error ?? 'Read-only inspection failed.'),
+        finishedAt: nowIso(),
+        result,
+        error: result.error,
+      });
+      await appendLedger(result);
+      activeJobControllers.delete(job.jobId);
+      return result;
+    }
+
+    // ── QA-ONLY BRANCH (owner certification fix 2026-07-20) ─────────────────
+    // QA-only requests ("Run QA on the IVX Chat module without modifying code")
+    // route through the IVX QA-Only Runtime: inspect the requested module's
+    // source files, select the matching test files, run targeted `bun test`,
+    // run scoped typecheck, run lint when applicable, capture exit codes +
+    // pass/fail/skip counts + duration. NEVER edit, commit, push, deploy, or
+    // apply migrations. When the target module cannot be identified, returns
+    // BLOCKED with errorCode QA_TARGET_NOT_FOUND (never a generic health check
+    // as QA evidence). Produces an IVXQAOnlyProof written to the durable ledger.
+    if (job.input.executionMode === 'qa_only') {
+      const qaProof = await runIVXQAOnly({
+        goal: job.input.goal,
+        onPhase: (phase: IVXQAOnlyPhase, detail: string) => {
+          if (controller.cancelled) return;
+          const { stage, detail: mappedDetail } = qaPhaseToStage(phase);
+          void updateJobStage(job.jobId, stage, mappedDetail || detail);
+        },
+      });
+
+      if (controller.cancelled) {
+        await updateJob(job.jobId, {
+          status: 'cancelled',
+          stage: 'FAILED',
+          finishedAt: nowIso(),
+          cancelledAt: nowIso(),
+          error: 'Job cancelled during QA-only execution.',
+        });
+        activeJobControllers.delete(job.jobId);
+        return null;
+      }
+
+      const qaResult = summarizeQAOnlyProof(job.jobId, qaProof);
+      const result = finalizeResultWithStateRecord(job, qaResult);
+      const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
+        ? 'completed'
+        : result.finalStatus === 'BLOCKED'
+          ? 'blocked'
+          : 'failed';
+      const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
+      await updateJob(job.jobId, {
+        status,
+        stage: finalStage,
+        progressPercent: STAGE_PROGRESS[finalStage],
+        stageDetail: status === 'completed'
+          ? `QA-only run completed. ${qaProof.passed} pass / ${qaProof.failed} fail / ${qaProof.skipped} skip. No files changed, no commit, no deploy.`
+          : qaProof.errorCode === 'QA_TARGET_NOT_FOUND'
+            ? 'QA-only run BLOCKED — no test files matched the requested module (QA_TARGET_NOT_FOUND).'
+            : (result.error ?? 'QA-only run failed.'),
         finishedAt: nowIso(),
         result,
         error: result.error,

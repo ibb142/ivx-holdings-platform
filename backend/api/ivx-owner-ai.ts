@@ -131,6 +131,12 @@ import {
   runIVXReadOnlyInspection,
   type IVXReadOnlyInspectionProof,
 } from '../services/ivx-senior-developer-readonly-runtime';
+import {
+  buildQAOnlyAnswer,
+  IVX_QA_ONLY_MARKER,
+  runIVXQAOnly,
+  type IVXQAOnlyProof,
+} from '../services/ivx-senior-developer-qa-runtime';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
@@ -7501,20 +7507,218 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, body.devTestModeActive === true), inspectionHttpStatus);
     }
 
-    // ── AUTONOMOUS CODER BRANCH (owner mandate 2026-07-19) ──────────────────
-    // code_change / deploy execution modes route through the IVX Autonomous
-    // Coder engine — the REAL code-writing loop where the owner-controlled LLM
-    // generates the patch, the engine applies it, runs tests + typecheck,
-    // iterates on failure (bounded to 5 iterations), commits via GitHub Git
-    // Data API, and — only when executionMode === 'deploy' AND owner approval
-    // is verified — triggers render_trigger_deploy + verifies production.
-    // The patch is authored by the IVX LLM, NOT by Rork manually editing.
+    // ── QA-ONLY BRANCH (certification fix 2026-07-20) ────────────────────────
+    // QA-only requests ("Run QA on the IVX Chat module without modifying code")
+    // route through the IVX QA-Only Runtime: inspect the requested module's
+    // source files, select the matching test files, run targeted `bun test`,
+    // run scoped typecheck, run lint when applicable, capture exit codes +
+    // pass/fail/skip counts + duration. NEVER edit, commit, push, deploy, or
+    // apply migrations. When the target module cannot be identified, returns
+    // BLOCKED with errorCode QA_TARGET_NOT_FOUND (never a generic health check
+    // as QA evidence). Fires BEFORE the autonomous coder branch so QA intent
+    // never falls through to code_change/deploy.
     //
-    // Routing trigger: an explicit "autonomous coder" / "code_change" / "write
-    // code" / "implement patch" / "autonomous-coder-pilot" signal in the
-    // prompt. This keeps the autonomous coder opt-in so the existing
-    // developer_executor pipeline (legacy safe-patch runtime) stays the default
-    // for generic fix/build/deploy prompts until the owner broadens the trigger.
+    // Routing trigger: a QA signal ("run QA" / "run regression" / "quality
+    // assurance" / "run the tests" / "test suite" / "regression test" /
+    // "smoke test" / "verification sweep" / "pre-flight" / "pre-submission")
+    // WITHOUT a code-change signal (find and fix / fix this bug / implement /
+    // refactor / patch). When a QA signal is combined with a code-change signal,
+    // the code-change signal wins (route to the autonomous coder).
+    const qaOnlyTrigger = /\b(?:run\s+qa|run\s+regression(?:\s+qa)?|quality\s+assurance|run\s+the\s+tests?|test\s+suite|regression\s+(?:test|check|sweep)|smoke\s+test|verification\s+sweep|pre[-\s]?flight|pre[-\s]?submission)\b/i.test(prompt);
+    const qaOnlyCodeChangeSignal = /\b(?:find\s+and\s+fix|inspect\s+and\s+fix|fix\s+(?:this|the|a)\s+bug|diagnose\s+and\s+repair|update\s+(?:this|the)\s+module|implement\s+(?:this|the|a)\s+change|refactor)\b/i.test(prompt);
+    const qaOnlyDeployExplicit = /\bdeploy\s+commit\s+[a-f0-9]{7,40}\b|\bredeploy\b|\bdeploy\s+(?:the\s+)?latest\s+commit\b/i.test(prompt);
+    if (qaOnlyTrigger && !qaOnlyCodeChangeSignal && !qaOnlyDeployExplicit) {
+      const workerOwnerId = ownerContext.userId ?? 'owner';
+      const qaOnlyWorkerInput: IVXWorkerJobInput = {
+        goal: prompt,
+        ownerApproved: true,
+        approvePatch: false,
+        approveGitDeploy: false,
+        validationMode: 'focused',
+        systemMode: false,
+        executionMode: 'qa_only',
+        ownerApprovedAction: {
+          proposedPlan: prompt.slice(0, 500),
+          filesAffected: [],
+          riskLevel: 'low',
+          rollbackOption: '',
+          rollbackAvailable: false,
+          auditLog: [
+            `source=ivx_ia_chat`,
+            `conversationId=${conversation.id}`,
+            `requestId=${requestId}`,
+            `ownerId=${workerOwnerId}`,
+            `executionMode=qa_only`,
+            `route=qa_only`,
+          ],
+          secretValuesReturned: false as const,
+        },
+        ownerId: workerOwnerId,
+      };
+
+      const { job: enqueuedQaJob, attached: qaAttached, activeJobId: qaActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(qaOnlyWorkerInput);
+      const qaTaskId = enqueuedQaJob.jobId;
+      console.log('[IVXOwnerAIBackend] chat→worker (qa-only):', {
+        taskId: qaTaskId,
+        attached: qaAttached,
+        activeJobId: qaActiveJobId,
+        ownerId: workerOwnerId,
+        conversationId: conversation.id,
+        executionMode: 'qa_only',
+      });
+
+      // Bounded warmup so the first status payload reflects real QA progress.
+      const QA_WARMUP_INTERVAL_MS = 750;
+      const QA_WARMUP_TIMEOUT_MS = 12_000;
+      const qaWarmupDeadline = Date.now() + QA_WARMUP_TIMEOUT_MS;
+      let qaJob: IVXWorkerJob = enqueuedQaJob;
+      const qaIsTerminal = (st: IVXWorkerJob['status']): boolean =>
+        st === 'completed' || st === 'failed' || st === 'blocked' || st === 'cancelled';
+      const qaHasAdvanced = (st: IVXWorkerJob['status']): boolean => st !== 'queued';
+      while (!qaIsTerminal(qaJob.status) && !qaHasAdvanced(qaJob.status) && Date.now() < qaWarmupDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, QA_WARMUP_INTERVAL_MS));
+        const fresh = await getSeniorDeveloperJob(qaTaskId);
+        if (fresh) qaJob = fresh;
+      }
+      if (!qaIsTerminal(qaJob.status) && qaHasAdvanced(qaJob.status)) {
+        const extraDeadline = Math.min(Date.now() + 8_000, qaWarmupDeadline + 8_000);
+        while (!qaIsTerminal(qaJob.status) && Date.now() < extraDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, QA_WARMUP_INTERVAL_MS));
+          const fresh = await getSeniorDeveloperJob(qaTaskId);
+          if (fresh) qaJob = fresh;
+        }
+      }
+
+      // Render the strict QA-only answer. When terminal, re-run the QA runtime
+      // deterministically to render the final answer from real inspected files
+      // + commands. When terminal but result is null (race between status flip
+      // and result attachment), render an honest "finalizing evidence" block
+      // (never a contradictory "RUNNING (completed, 100%)"). When still running,
+      // surface the live progress block.
+      let qaOnlyAnswer: string;
+      let qaOnlyProof: IVXQAOnlyProof | null = null;
+      const qaJobIsTerminalNow = qaIsTerminal(qaJob.status);
+      if (qaJobIsTerminalNow && qaJob.result) {
+        qaOnlyProof = await runIVXQAOnly({ goal: prompt });
+        qaOnlyAnswer = buildQAOnlyAnswer(qaOnlyProof);
+      } else if (qaJobIsTerminalNow && !qaJob.result) {
+        // Terminal but result not yet attached (race) — render honest
+        // finalizing-evidence block, never a contradictory RUNNING line.
+        qaOnlyAnswer = [
+          `TASK ID:\n${qaJob.jobId}`,
+          'MODE:\nQA_ONLY',
+          `STATUS:\n${qaJob.status.toUpperCase()} (finalizing evidence — poll the status URL)`,
+          `STAGE:\n${qaJob.stage}`,
+          `PROGRESS:\n${qaJob.progressPercent}%`,
+          'FILES INSPECTED:\n(finalizing — poll the status URL for the final evidence)',
+          'TESTS SELECTED:\n(finalizing — poll the status URL)',
+          'COMMANDS RUN:\n(finalizing — poll the status URL)',
+          'EXIT CODES:\n(pending)',
+          'PASSED:\n(pending)',
+          'FAILED:\n(pending)',
+          'SKIPPED:\n(pending)',
+          'TYPECHECK:\n(pending)',
+          'LINT:\n(pending)',
+          `FINDINGS:\n(finalizing — poll the status URL)`,
+          `STATUS URL:\n/api/ivx/senior-developer/worker/jobs/${qaJob.jobId}`,
+        ].join('\n\n');
+      } else {
+        qaOnlyAnswer = [
+          `TASK ID:\n${qaJob.jobId}`,
+          'MODE:\nQA_ONLY',
+          `STATUS:\nRUNNING (${qaJob.status}, ${qaJob.progressPercent}%)`,
+          `FILES INSPECTED:\n(QA in progress — stage: ${qaJob.stage})`,
+          `TESTS SELECTED:\n(QA in progress — stage: ${qaJob.stage})`,
+          `COMMANDS RUN:\n(QA in progress — poll the status URL for the final evidence)`,
+          'EXIT CODES:\n(pending)',
+          'PASSED:\n(pending)',
+          'FAILED:\n(pending)',
+          'SKIPPED:\n(pending)',
+          'TYPECHECK:\n(pending)',
+          'LINT:\n(pending)',
+          `FINDINGS:\n(QA in progress — stage: ${qaJob.stage})`,
+          `STATUS URL:\n/api/ivx/senior-developer/worker/jobs/${qaJob.jobId}`,
+        ].join('\n\n');
+      }
+      qaOnlyAnswer = assertVisibleOwnerAIAnswer(qaOnlyAnswer);
+
+      let qaAssistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
+      if (persistAssistantMessage && !qaAssistantMessageId) {
+        try {
+          const assistantMessage = await insertMessage(ownerContext.client, tables, {
+            conversationId: conversation.id,
+            senderRole: 'assistant',
+            senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+            senderLabel: IVX_OWNER_AI_PROFILE.name,
+            body: qaOnlyAnswer,
+          });
+          qaAssistantMessageId = assistantMessage.id;
+        } catch (error) {
+          console.log('[IVXOwnerAIBackend] QA-only answer persistence failed:', error instanceof Error ? error.message : 'unknown');
+          throw error instanceof Error ? error : new Error('Assistant reply could not be saved.');
+        }
+        await safeUpdateConversationSummary(ownerContext.client, tables, conversation.id, qaOnlyAnswer);
+        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+      }
+
+      await safeUpsertAIRequest(ownerContext.client, tables, {
+        requestId,
+        conversationId: conversation.id,
+        userId: ownerContext.userId,
+        prompt,
+        responseText: qaOnlyAnswer,
+        responseMessageId: qaAssistantMessageId,
+        status: 'completed',
+        model: 'ivx_qa_only_runtime',
+      });
+
+      logOwnerAuditRouting({
+        promptText: prompt,
+        detectedIntent: 'development_action',
+        selectedRoute: 'ivx_qa_only_runtime',
+        auditEndpointCalled: false,
+        renderedFinalAnswer: qaOnlyAnswer,
+      });
+
+      await recordExecutionTrace({
+        toolName: 'ivx_qa_only_runtime',
+        requestId,
+        taskId: qaTaskId,
+        conversationId: conversation.id,
+        rawOutput: qaJob.result ?? { jobId: qaTaskId, status: qaJob.status, stage: qaJob.stage, mode: 'qa_only' },
+        rawOutputRef: `logs/audit/${qaTaskId}.json`,
+        linkedClaim: qaOnlyAnswer,
+      });
+
+      const qaStatusPayload = buildExecutionStatusPayload(qaJob, 'qa', qaOnlyAnswer);
+      const qaHttpStatus = qaStatusPayload.httpStatus;
+      console.log('[IVXOwnerAIBackend] QA-only response:', {
+        taskId: qaTaskId,
+        category: 'qa',
+        jobStatus: qaJob.status,
+        stage: qaJob.stage,
+        progress: qaJob.progressPercent,
+        httpStatus: qaHttpStatus,
+      });
+
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: conversation.id,
+        answer: qaOnlyAnswer,
+        model: 'ivx_qa_only_runtime',
+        status: 'ok',
+      }, {
+        source: 'local_runtime',
+        provider: 'ivx_qa_only_runtime',
+        endpoint: '/api/ivx/owner-ai',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        assistantMessageId: qaAssistantMessageId,
+        assistantPersisted: Boolean(qaAssistantMessageId),
+        executionStatus: qaStatusPayload,
+      }, body.devTestModeActive === true), qaHttpStatus);
+    }
+
+    // ── AUTONOMOUS CODER BRANCH (owner mandate 2026-07-19) ──────────────────
     // ── FACTORY ENGINE BRANCH (owner mandate 2026-07-19) ────────────────────
     // factory execution mode routes through the IVX Factory Engine. Trigger:
     // an explicit "factory" / "factory mode" / "CONFIRM_IVX_FACTORY_MODE" signal
@@ -7702,8 +7906,39 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, body.devTestModeActive === true), factoryHttpStatus);
     }
 
-    const autonomousCoderTrigger = /autonomous[-_ ]?coder|code[-_ ]?change|write[-_ ]?code|implement[-_ ]?patch|autonomous[-_ ]?coding/i.test(prompt);
-    if (autonomousCoderTrigger) {
+    // ── AUTONOMOUS CODER ROUTE (certification fix 2026-07-20) ──────────────
+    // Code-change intents (find and fix / inspect and fix / fix this bug /
+    // implement / refactor / update this module / diagnose and repair) MUST
+    // route to the autonomous coder engine (CODE_CHANGE mode) — NOT to the
+    // developer_executor deploy-only path. The developer_executor path does a
+    // deploy-only redeploy instead of invoking the autonomous coder to inspect
+    // files and create a real patch (INSPECT→PLAN→PATCH→TEST→REVISE→
+    // TYPECHECK→COMMIT loop). Deployment must remain a later stage requiring
+    // owner approval; do not trigger deployment when no new verified commit
+    // exists; do not redeploy an old commit as a substitute for fixing the bug.
+    //
+    // Deploy-only is used ONLY when the owner explicitly requests deployment of
+    // an existing verified commit ("deploy commit <sha>" / "deploy the latest
+    // commit" / "redeploy"). Those prompts route to the developer_executor
+    // branch below.
+    //
+    // The autonomous coder trigger is broadened from the narrow explicit-signal
+    // matcher (autonomous coder / code_change / write code / implement patch)
+    // to the full owner-mandated routing rules:
+    //   "find and fix"       → autonomous_coder / CODE_CHANGE
+    //   "inspect and fix"    → autonomous_coder / CODE_CHANGE
+    //   "fix this bug"       → autonomous_coder / CODE_CHANGE
+    //   "implement"          → autonomous_coder / CODE_CHANGE
+    //   "refactor"           → autonomous_coder / CODE_CHANGE
+    //   "create module"      → factory (handled above)
+    //   "deploy commit <sha>"→ developer_executor / DEPLOY_ONLY (handled below)
+    const autonomousCoderTrigger = /autonomous[-_ ]?coder|code[-_ ]?change|write[-_ ]?code|implement[-_ ]?patch|autonomous[-_ ]?coding|\bfind\s+and\s+fix\b|\binspect\s+and\s+fix\b|\bfix\s+(?:this|the|a)\s+bug\b|\bdiagnose\s+and\s+repair\b|\bupdate\s+(?:this|the)\s+module\b|\bimplement\s+(?:this|the|a)\s+change\b|\brefactor\b/i.test(prompt);
+    // The explicit "deploy commit <sha>" / "redeploy" / "deploy the latest
+    // commit" signal routes to the developer_executor deploy-only path INSTEAD
+    // of the autonomous coder. This keeps deploy-only used only when the owner
+    // explicitly requests deployment of an existing verified commit.
+    const deployOnlyExplicit = /\bdeploy\s+commit\s+[a-f0-9]{7,40}\b|\bredeploy\b|\bdeploy\s+(?:the\s+)?latest\s+commit\b/i.test(prompt);
+    if (autonomousCoderTrigger && !deployOnlyExplicit) {
       const workerOwnerId = ownerContext.userId ?? 'owner';
       // Detect deploy intent: only when the prompt requests deploy WITHOUT a
       // negation. "do not deploy" / "without deploying" must NOT trigger deploy.
