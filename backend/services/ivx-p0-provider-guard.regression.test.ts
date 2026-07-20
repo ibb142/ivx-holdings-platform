@@ -122,14 +122,12 @@ describe('P0 Regression — Execution Guard Allows Valid In-Progress Text', () =
     // A real developer execution answer that mentions "starting implementation"
     // but has all required sections AND raw command output must PASS.
     const answer = [
-      'TASK UNDERSTOOD:\nFix the broken health route. Starting implementation now.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nbackend/hono.ts',
-      'COMMANDS RUN:\n$ bun test backend/hono.test.ts → exit 0 (PASS)',
-      'TEST RESULT:\n$ bun test backend/hono.test.ts\n12 pass\n0 fail\nexit code: 0 → PASS',
-      'TYPECHECK RESULT:\n$ tsc --noEmit\nexit code: 0 → PASS',
+      'TASK ID:\njob_regression_1',
       'STATUS:\nLOCAL ONLY',
-      'PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | add health guard\ngit status --short:\n M backend/hono.ts\njob: job_regression_1',
+      'FILES CHANGED:\n- backend/hono.ts',
+      'COMMANDS:\n- $ bun test backend/hono.test.ts -> exit 0 (PASS)\n- $ tsc --noEmit -> exit 0 (PASS)',
+      'TESTS:\n$ bun test backend/hono.test.ts\n12 pass\n0 fail\nexit code: 0 -> PASS',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | add health guard\ngit status --short:\n M backend/hono.ts\njob: job_regression_1',
     ].join('\n\n');
     const result = validateDeveloperExecutionAnswer(answer);
     expect(result.ok).toBe(true);

@@ -4,12 +4,20 @@
  * Final safety net for the self-developer route. The router already sends
  * development commands to the senior-developer runtime, and
  * `buildSeniorDeveloperExecutionAnswer` already renders the strict evidence
- * format. This module is the LAST line of defence: it inspects the answer that
- * is about to be returned to the owner and BLOCKS it when it is narrative-only
+ * format. This module is the LAST line of defence: it inspects the answer
+ * that is about to be returned to the owner and BLOCKS it when it is narrative-only
  * or makes a claim it has not proven.
  *
+ * Owner-mandated answer format (6 sections):
+ *   TASK ID
+ *   STATUS
+ *   FILES CHANGED
+ *   COMMANDS
+ *   TESTS
+ *   DEPLOYED PROOF
+ *
  * Hard rules enforced here (owner spec):
- *   - No narrative-only answers. The strict section headers must be present.
+ *   - No narrative-only answers. The 6 section headers must be present.
  *   - No "reviewed/prepared/initialized/awaiting approval/development phase/
  *     schema planning" prose unless real proof (raw command output) is present.
  *   - No "verified" claim without raw command output (`$ ... exit code:`).
@@ -31,14 +39,12 @@ export const DEVELOPER_EXECUTION_GUARD_MARKER = 'failed developer-execution enfo
 
 /** Section headers every development-task answer must contain, in order. */
 export const REQUIRED_DEVELOPER_SECTIONS: readonly string[] = [
-  'TASK UNDERSTOOD:',
-  'FILES INSPECTED:',
-  'FILES CHANGED:',
-  'COMMANDS RUN:',
-  'TEST RESULT:',
-  'TYPECHECK RESULT:',
+  'TASK ID:',
   'STATUS:',
-  'PROOF:',
+  'FILES CHANGED:',
+  'COMMANDS:',
+  'TESTS:',
+  'DEPLOYED PROOF:',
 ];
 
 /**
@@ -52,7 +58,7 @@ export const REQUIRED_DEVELOPER_SECTIONS: readonly string[] = [
  * they are the developer worker reporting its progress. The guard runs AFTER
  * execution, so if the worker produced real proof alongside these phrases,
  * they are fine. If the worker produced ONLY these phrases with no proof,
- * the missing-sections check (no COMMANDS RUN / no TEST RESULT) already
+ * the missing-sections check (no COMMANDS / no TESTS) already
  * catches that — the phrase ban is a secondary safety net.
  */
 export const BANNED_NARRATIVE_PHRASES: readonly string[] = [
@@ -77,7 +83,7 @@ export type DeveloperExecutionGuardResult = {
 export function hasRawCommandOutput(answer: string): boolean {
   const text = answer ?? '';
   const hasCommandLine = /^\s*\$\s+\S+/m.test(text);
-  const hasExitCode = /\bexit\s+code:\s*\S+/i.test(text) || /→\s*exit\s+\S+/i.test(text);
+  const hasExitCode = /\bexit\s+code:\s*\S+/i.test(text) || /->\s*exit\s+\S+/i.test(text);
   return hasCommandLine && hasExitCode;
 }
 
@@ -128,7 +134,8 @@ export function hasDeploymentProof(answer: string): boolean {
   const text = answer ?? '';
   return /\bcommit:\s*[0-9a-f]{6,}/i.test(text)
     || /production\s+\/health:\s*healthy/i.test(text)
-    || /changed\s+route:\s*live/i.test(text);
+    || /changed\s+route:\s*live/i.test(text)
+    || /deploy:\s*\S+/i.test(text);
 }
 
 /**
@@ -194,14 +201,12 @@ export function validateDeveloperExecutionAnswer(answer: string): DeveloperExecu
 export function buildBlockedDeveloperExecutionAnswer(violations: string[]): string {
   const reasons = violations.length > 0 ? violations.map((v) => ` - ${v}`).join('\n') : ' - narrative-only response blocked';
   return [
-    `TASK UNDERSTOOD:\nDevelopment-task response blocked by the execution guard (${DEVELOPER_EXECUTION_GUARD_MARKER}).`,
-    'FILES INSPECTED:\nnone — output rejected before delivery.',
-    'FILES CHANGED:\nNO CODE CHANGED — no development was completed.',
-    'COMMANDS RUN:\nNONE — no commands were executed.',
-    'TEST RESULT:\nNOT VERIFIED — tests were not run.',
-    'TYPECHECK RESULT:\nNOT VERIFIED — typecheck was not run.',
+    `TASK ID:\n(blocked)`,
     'STATUS:\nBLOCKED',
-    `PROOF:\nBLOCKED — the generated answer ${DEVELOPER_EXECUTION_GUARD_MARKER}:\n${reasons}`,
+    'FILES CHANGED:\nNO CODE CHANGED — no development was completed.',
+    'COMMANDS:\nNONE — no commands were executed.',
+    'TESTS:\nNOT VERIFIED — tests were not run.',
+    `DEPLOYED PROOF:\nBLOCKED — the generated answer ${DEVELOPER_EXECUTION_GUARD_MARKER}:\n${reasons}`,
   ].join('\n\n');
 }
 

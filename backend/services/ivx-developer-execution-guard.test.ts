@@ -10,14 +10,12 @@ import {
 
 /** A real, fully-proven developer-execution answer (changed file + raw output + commit). */
 const PROVEN_ANSWER = [
-  'TASK UNDERSTOOD:\nFix the broken health route.',
-  'FILES INSPECTED:\nbackend/hono.ts',
-  'FILES CHANGED:\nbackend/hono.ts',
-  'COMMANDS RUN:\n$ bun test backend/hono.test.ts → exit 0 (PASS)',
-  'TEST RESULT:\n$ bun test backend/hono.test.ts\n12 pass\n0 fail\nexit code: 0 → PASS',
-  'TYPECHECK RESULT:\n$ bun run typecheck\ntsc --noEmit clean\nexit code: 0 → PASS',
+  'TASK ID:\njob_1',
   'STATUS:\nDEPLOYED',
-  'PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | add /health guard\ngit status --short:\n M backend/hono.ts\ncommit: abc1234 (main)\nproduction /health: healthy; changed route: live\njob: job_1',
+  'FILES CHANGED:\nbackend/hono.ts',
+  'COMMANDS:\n- $ bun test backend/hono.test.ts -> exit 0 (PASS)\n- $ bun run typecheck -> exit 0 (PASS)\n- $ git commit/push -> exit 0 (committed abc1234)\n- $ render deploy -> exit 0 (live dep_1)',
+  'TESTS:\n$ bun test backend/hono.test.ts\n12 pass\n0 fail\nexit code: 0 -> PASS',
+  'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | add /health guard\ngit status --short:\n M backend/hono.ts\ncommit: abc1234 (main)\nproduction /health: healthy; changed route: live\ndeploy: dep_1 (live)\njob: job_1',
 ].join('\n\n');
 
 /** A narrative-only answer (the kind the owner keeps rejecting). */
@@ -45,7 +43,7 @@ describe('hasFileDiffProof', () => {
 describe('hasDeploymentProof', () => {
   test('requires a commit sha or a live endpoint line', () => {
     expect(hasDeploymentProof(PROVEN_ANSWER)).toBe(true);
-    expect(hasDeploymentProof('STATUS:\nDEPLOYED\nPROOF: trust me')).toBe(false);
+    expect(hasDeploymentProof('STATUS:\nDEPLOYED\nDEPLOYED PROOF: trust me')).toBe(false);
   });
 });
 
@@ -69,14 +67,12 @@ describe('validateDeveloperExecutionAnswer — narrative is blocked', () => {
 describe('claim enforcement — no proof, no claim', () => {
   test('development task cannot claim done without a real file diff', () => {
     const answer = [
-      'TASK UNDERSTOOD:\nDo it.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nNO CODE CHANGED — no development was completed.',
-      'COMMANDS RUN:\nNONE — no commands were executed.',
-      'TEST RESULT:\nNOT VERIFIED — tests were not run.',
-      'TYPECHECK RESULT:\nNOT VERIFIED — typecheck was not run.',
+      'TASK ID:\njob_2',
       'STATUS:\nBLOCKED',
-      'PROOF:\nTask complete and done. job: job_2',
+      'FILES CHANGED:\nNO CODE CHANGED — no development was completed.',
+      'COMMANDS:\nNONE — no commands were executed.',
+      'TESTS:\nNOT VERIFIED — tests were not run.',
+      'DEPLOYED PROOF:\nTask complete and done. job: job_2',
     ].join('\n\n');
     const result = validateDeveloperExecutionAnswer(answer);
     expect(result.ok).toBe(false);
@@ -85,14 +81,12 @@ describe('claim enforcement — no proof, no claim', () => {
 
   test('verification cannot be claimed without raw command output', () => {
     const answer = [
-      'TASK UNDERSTOOD:\nFix it.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nbackend/hono.ts',
-      'COMMANDS RUN:\nNONE — no commands were executed.',
-      'TEST RESULT:\nAll checks passed and verified.',
-      'TYPECHECK RESULT:\nNOT VERIFIED — typecheck was not run.',
+      'TASK ID:\njob_3',
       'STATUS:\nLOCAL ONLY',
-      'PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ngit status --short:\n M backend/hono.ts\njob: job_3',
+      'FILES CHANGED:\nbackend/hono.ts',
+      'COMMANDS:\nNONE — no commands were executed.',
+      'TESTS:\nAll checks passed and verified.',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ngit status --short:\n M backend/hono.ts\njob: job_3',
     ].join('\n\n');
     const result = validateDeveloperExecutionAnswer(answer);
     expect(result.ok).toBe(false);
@@ -101,18 +95,29 @@ describe('claim enforcement — no proof, no claim', () => {
 
   test('deployment cannot be claimed without live endpoint proof', () => {
     const answer = [
-      'TASK UNDERSTOOD:\nDeploy it.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nbackend/hono.ts',
-      'COMMANDS RUN:\n$ bun test → exit 0 (PASS)',
-      'TEST RESULT:\n$ bun test\n1 pass\nexit code: 0 → PASS',
-      'TYPECHECK RESULT:\n$ tsc --noEmit\nexit code: 0 → PASS',
+      'TASK ID:\njob_4',
       'STATUS:\nDEPLOYED',
-      'PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ngit status --short:\n M backend/hono.ts\njob: job_4',
+      'FILES CHANGED:\nbackend/hono.ts',
+      'COMMANDS:\n- $ bun test -> exit 0 (PASS)',
+      'TESTS:\n$ bun test\n1 pass\nexit code: 0 -> PASS',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ngit status --short:\n M backend/hono.ts\njob: job_4',
     ].join('\n\n');
     const result = validateDeveloperExecutionAnswer(answer);
     expect(result.ok).toBe(false);
     expect(result.violations.some((v) => v.includes('without live endpoint'))).toBe(true);
+  });
+
+  test('answer with goal word "complete" in quoted text is allowed when structured proof is present', () => {
+    const answer = [
+      'TASK ID:\njob_5',
+      'STATUS:\nDEPLOYED',
+      'FILES CHANGED:\nbackend/hono.ts',
+      'COMMANDS:\n- $ bun test -> exit 0 (PASS)',
+      'TESTS:\n$ bun test\n1 pass\nexit code: 0 -> PASS',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ncommit: abc1234\nproduction /health: healthy\njob: job_5',
+    ].join('\n\n');
+    const result = validateDeveloperExecutionAnswer(answer);
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -127,7 +132,7 @@ describe('enforceDeveloperExecutionAnswer', () => {
     const { answer, enforced, result } = enforceDeveloperExecutionAnswer(NARRATIVE_ANSWER);
     expect(enforced).toBe(true);
     expect(result.ok).toBe(false);
-    // The replacement is itself in strict format and reports BLOCKED.
+    // The replacement is itself in strict 6-section format and reports BLOCKED.
     expect(answer).toContain('STATUS:\nBLOCKED');
     expect(answer).toContain('NO CODE CHANGED — no development was completed.');
     // And the replacement passes the guard (it makes no unproven claims).
@@ -136,7 +141,7 @@ describe('enforceDeveloperExecutionAnswer', () => {
 });
 
 describe('buildBlockedDeveloperExecutionAnswer', () => {
-  test('lists the violations in the PROOF section', () => {
+  test('lists the violations in the DEPLOYED PROOF section', () => {
     const answer = buildBlockedDeveloperExecutionAnswer(['claims "verified" without raw command output']);
     expect(answer).toContain('failed developer-execution enforcement');
     expect(answer).toContain('claims "verified" without raw command output');

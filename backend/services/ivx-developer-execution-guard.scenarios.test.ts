@@ -95,14 +95,12 @@ describe('PHASE 2 — guard is active in the production pipeline', () => {
   test('TEST 2: "Verify authentication." — cannot claim verification without test output', () => {
     const rawRequest = 'Verify authentication.';
     const candidate = [
-      'TASK UNDERSTOOD:\nVerify the authentication flow.',
-      'FILES INSPECTED:\nbackend/api/ivx-auth.ts',
-      'FILES CHANGED:\nbackend/api/ivx-auth.ts',
-      'COMMANDS RUN:\nNONE — no commands were executed.',
-      'TEST RESULT:\nAll authentication checks passed and verified.',
-      'TYPECHECK RESULT:\nNOT VERIFIED — typecheck was not run.',
+      'TASK ID:\njob_auth',
       'STATUS:\nLOCAL ONLY',
-      'PROOF:\ngit diff --stat (applied patch):\n backend/api/ivx-auth.ts | edit\ngit status --short:\n M backend/api/ivx-auth.ts\njob: job_auth',
+      'FILES CHANGED:\n- backend/api/ivx-auth.ts',
+      'COMMANDS:\nNONE — no commands were executed.',
+      'TESTS:\nAll authentication checks passed and verified.',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/api/ivx-auth.ts | edit\ngit status --short:\n M backend/api/ivx-auth.ts\njob: job_auth',
     ].join('\n\n');
 
     const r = runPipeline(rawRequest, candidate);
@@ -118,14 +116,12 @@ describe('PHASE 2 — guard is active in the production pipeline', () => {
   test('TEST 3: "Deploy the changes." — cannot claim deployment without live commit proof', () => {
     const rawRequest = 'Deploy the changes.';
     const candidate = [
-      'TASK UNDERSTOOD:\nDeploy the pending changes to production.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nbackend/hono.ts',
-      'COMMANDS RUN:\n$ bun test → exit 0 (PASS)',
-      'TEST RESULT:\n$ bun test\n3 pass\n0 fail\nexit code: 0 → PASS',
-      'TYPECHECK RESULT:\n$ tsc --noEmit\nexit code: 0 → PASS',
+      'TASK ID:\njob_deploy',
       'STATUS:\nDEPLOYED',
-      'PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ngit status --short:\n M backend/hono.ts\njob: job_deploy',
+      'FILES CHANGED:\n- backend/hono.ts',
+      'COMMANDS:\n- $ bun test -> exit 0 (PASS)',
+      'TESTS:\n$ bun test\n3 pass\n0 fail\nexit code: 0 -> PASS',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | edit\ngit status --short:\n M backend/hono.ts\njob: job_deploy',
     ].join('\n\n');
 
     const r = runPipeline(rawRequest, candidate);
@@ -141,14 +137,12 @@ describe('PHASE 2 — guard is active in the production pipeline', () => {
   test('TEST 4: "Implement a feature but do not modify files." — returns NO CODE CHANGED', () => {
     const rawRequest = 'Implement a feature but do not modify files.';
     const candidate = [
-      'TASK UNDERSTOOD:\nImplement the requested feature.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nNO CODE CHANGED — no development was completed.',
-      'COMMANDS RUN:\nNONE — no commands were executed.',
-      'TEST RESULT:\nNOT VERIFIED — tests were not run.',
-      'TYPECHECK RESULT:\nNOT VERIFIED — typecheck was not run.',
+      'TASK ID:\njob_feature',
       'STATUS:\nBLOCKED',
-      'PROOF:\nThe feature is complete and done. job: job_feature',
+      'FILES CHANGED:\nNO CODE CHANGED — no development was completed.',
+      'COMMANDS:\nNONE — no commands were executed.',
+      'TESTS:\nNOT VERIFIED — tests were not run.',
+      'DEPLOYED PROOF:\nThe feature is complete and done. job: job_feature',
     ].join('\n\n');
 
     const r = runPipeline(rawRequest, candidate);
@@ -167,14 +161,12 @@ describe('PHASE 2 — pipeline integrity (User -> IVX IA -> Execution -> Guard -
   // real developer work is never falsely blocked.
   test('a fully proven answer passes through the guard unchanged', () => {
     const provenAnswer = [
-      'TASK UNDERSTOOD:\nAdd the settings route.',
-      'FILES INSPECTED:\nbackend/hono.ts',
-      'FILES CHANGED:\nbackend/hono.ts',
-      'COMMANDS RUN:\n$ bun test backend/hono.test.ts → exit 0 (PASS)',
-      'TEST RESULT:\n$ bun test backend/hono.test.ts\n9 pass\n0 fail\nexit code: 0 → PASS',
-      'TYPECHECK RESULT:\n$ tsc --noEmit\nexit code: 0 → PASS',
+      'TASK ID:\njob_ok',
       'STATUS:\nDEPLOYED',
-      'PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | add settings route\ngit status --short:\n M backend/hono.ts\ncommit: abc1234 (main)\nproduction /health: healthy; changed route: live\njob: job_ok',
+      'FILES CHANGED:\n- backend/hono.ts',
+      'COMMANDS:\n- $ bun test backend/hono.test.ts -> exit 0 (PASS)\n- $ tsc --noEmit -> exit 0 (PASS)',
+      'TESTS:\n$ bun test backend/hono.test.ts\n9 pass\n0 fail\nexit code: 0 -> PASS',
+      'DEPLOYED PROOF:\ngit diff --stat (applied patch):\n backend/hono.ts | add settings route\ngit status --short:\n M backend/hono.ts\ncommit: abc1234 (main)\nproduction /health: healthy; changed route: live\njob: job_ok',
     ].join('\n\n');
 
     const enforced = enforceDeveloperExecutionAnswer(provenAnswer);

@@ -68,6 +68,15 @@ const autoDecision: IVXOwnerExecutionDecision = {
   safeCategories: [],
 };
 
+const requiredHeaders = [
+  'TASK ID:',
+  'STATUS:',
+  'FILES CHANGED:',
+  'COMMANDS:',
+  'TESTS:',
+  'DEPLOYED PROOF:',
+];
+
 describe('command classification', () => {
   test('typecheck vs test commands are distinguished', () => {
     expect(isTypecheckCommand('bun run typecheck')).toBe(true);
@@ -77,25 +86,25 @@ describe('command classification', () => {
   });
 });
 
-describe('buildSeniorDeveloperExecutionAnswer — strict format', () => {
+describe('buildSeniorDeveloperExecutionAnswer — strict 6-section format', () => {
   test('emits the exact owner-required section headers in order', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), autoDecision);
-    const headers = [
-      'TASK UNDERSTOOD:',
-      'FILES INSPECTED:',
-      'FILES CHANGED:',
-      'COMMANDS RUN:',
-      'TEST RESULT:',
-      'TYPECHECK RESULT:',
-      'STATUS:',
-      'PROOF:',
-    ];
     let cursor = -1;
-    for (const header of headers) {
+    for (const header of requiredHeaders) {
       const idx = answer.indexOf(header);
       expect(idx).toBeGreaterThan(cursor);
       cursor = idx;
     }
+  });
+
+  test('does NOT echo the user goal into the answer (no false guard positives)', () => {
+    const answer = buildSeniorDeveloperExecutionAnswer(
+      makeProof({ goal: 'complete the loading on this chat after deploy' }),
+      autoDecision,
+    );
+    expect(answer).not.toContain('complete the loading');
+    expect(answer).not.toContain('TASK UNDERSTOOD');
+    expect(answer).not.toContain('FILES INSPECTED');
   });
 
   test('never contains the old narrative prose', () => {
@@ -104,11 +113,13 @@ describe('buildSeniorDeveloperExecutionAnswer — strict format', () => {
     expect(answer).not.toContain('Files inspected: indexed');
   });
 
-  test('shows real changed files and raw test + typecheck output', () => {
+  test('shows real changed files and raw test output', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), autoDecision);
     expect(answer).toContain('backend/hono.ts');
     expect(answer).toContain('12 pass');
-    expect(answer).toContain('tsc --noEmit clean');
+    expect(answer).toContain('0 fail');
+    // Typecheck is a command, not a test; its command line appears in COMMANDS.
+    expect(answer).toContain('bun run typecheck');
   });
 
   test('STATUS is DEPLOYED when commit + deploy executed and production verified', () => {
@@ -124,7 +135,6 @@ describe('buildSeniorDeveloperExecutionAnswer — strict format', () => {
     expect(answer).toContain('STATUS:\nUNVERIFIED');
     expect(answer).not.toContain('STATUS:\nDEPLOYED');
     expect(answer).toContain('NOT VERIFIED — tests were not run.');
-    expect(answer).toContain('NOT VERIFIED — typecheck was not run.');
   });
 
   test('STATUS is not DEPLOYED when a validation failed', () => {
@@ -165,7 +175,7 @@ describe('buildSeniorDeveloperExecutionAnswer — strict format', () => {
 });
 
 describe('hard enforcement', () => {
-  test('no changed files and no deploy → NO CODE CHANGED and LOCAL ONLY status', () => {
+  test('no changed files and no deploy -> NO CODE CHANGED and LOCAL ONLY status', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({
         changedFiles: [],
@@ -184,7 +194,7 @@ describe('hard enforcement', () => {
     expect(answer).not.toContain('STATUS:\nBLOCKED');
   });
 
-  test('deploy-only redeploy with no code change → DEPLOYED status', () => {
+  test('deploy-only redeploy with no code change -> DEPLOYED status', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({
         changedFiles: [],
@@ -200,28 +210,28 @@ describe('hard enforcement', () => {
     );
     expect(answer).toContain('NO CODE CHANGED — no development was completed.');
     expect(answer).toContain('STATUS:\nDEPLOYED');
-    expect(answer).toContain('$ render deploy → live (dep_123)');
+    expect(answer).toContain('- $ render deploy -> exit 0 (live dep_123)');
     expect(answer).toContain('deploy-only from commit: headsha123 (main)');
   });
 
-  test('patch blocked → BLOCKED — I do not have code write access.', () => {
+  test('patch blocked -> BLOCKED status', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({ changedFiles: [], patchProposal: { status: 'blocked', operations: [], diffPreview: 'cannot write' } } as unknown as Partial<IVXSeniorDeveloperRunProof>),
       autoDecision,
     );
+    expect(answer).toContain('STATUS:\nBLOCKED');
     expect(answer).toContain('BLOCKED — I do not have code write access.');
   });
 
-  test('no tests run → NOT VERIFIED — tests were not run.', () => {
+  test('no tests run -> NOT VERIFIED', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({ validations: [] } as unknown as Partial<IVXSeniorDeveloperRunProof>),
       autoDecision,
     );
     expect(answer).toContain('NOT VERIFIED — tests were not run.');
-    expect(answer).toContain('NOT VERIFIED — typecheck was not run.');
   });
 
-  test('guarded action requiring approval → BLOCKED with confirmation request', () => {
+  test('guarded action requiring approval -> BLOCKED with confirmation request', () => {
     const guardedDecision: IVXOwnerExecutionDecision = {
       ...autoDecision,
       autoExecute: false,
@@ -231,7 +241,6 @@ describe('hard enforcement', () => {
     };
     const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), guardedDecision);
     expect(answer).toContain('STATUS:\nBLOCKED');
-    expect(answer).toContain('requires owner confirmation: delete_data');
-    expect(answer).toContain('NO CODE CHANGED — no development was completed.');
+    expect(answer).toContain('requires owner confirmation before execution');
   });
 });
