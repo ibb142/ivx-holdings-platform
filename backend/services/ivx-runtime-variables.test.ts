@@ -98,6 +98,37 @@ describe('verifyVariable', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('marks Supabase anon key VERIFIED when a real table read returns 200', async () => {
+    const env: EnvSnapshot = {
+      EXPO_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+    };
+    const result = await verifyVariable('EXPO_PUBLIC_SUPABASE_ANON_KEY', env, fakeFetch({ 'abc.supabase.co/rest/v1/jv_deals?select=id&limit=1': { status: 200, body: '[]' } }));
+    expect(result.status).toBe('VERIFIED');
+    expect(result.ok).toBe(true);
+    expect(result.detail).toContain('jv_deals');
+  });
+
+  it('marks Supabase anon key PRESENT_BUT_UNAUTHORIZED when the table read returns 401', async () => {
+    const env: EnvSnapshot = {
+      EXPO_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+    };
+    const result = await verifyVariable('EXPO_PUBLIC_SUPABASE_ANON_KEY', env, fakeFetch({ 'abc.supabase.co/rest/v1/jv_deals?select=id&limit=1': { status: 401 } }));
+    expect(result.status).toBe('PRESENT_BUT_UNAUTHORIZED');
+    expect(result.ok).toBe(false);
+  });
+
+  it('marks Supabase anon key PRESENT_BUT_UNAUTHORIZED when RLS denies the table read (403)', async () => {
+    const env: EnvSnapshot = {
+      EXPO_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+    };
+    const result = await verifyVariable('EXPO_PUBLIC_SUPABASE_ANON_KEY', env, fakeFetch({ 'abc.supabase.co/rest/v1/jv_deals?select=id&limit=1': { status: 403 } }));
+    expect(result.status).toBe('PRESENT_BUT_UNAUTHORIZED');
+    expect(result.ok).toBe(false);
+  });
+
   it('reports not-injected honestly when absent but known in Rork', async () => {
     const result = await verifyVariable('GITHUB_TOKEN', {}, fakeFetch({}));
     expect(result.status).toBe('PRESENT_IN_RORK_NOT_INJECTED');
@@ -159,7 +190,7 @@ describe('verifyAllVariables', () => {
       EXPO_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co',
       EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon',
     };
-    const report = await verifyAllVariables(env, fakeFetch({ 'abc.supabase.co/rest/v1': { status: 200, body: '{}' } }));
+    const report = await verifyAllVariables(env, fakeFetch({ 'abc.supabase.co/rest/v1/jv_deals?select=id&limit=1': { status: 200, body: '[]' } }));
     const anon = report.variables.find((v) => v.name === 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
     expect(anon?.status).toBe('VERIFIED');
     expect(anon?.lastVerifiedAt).not.toBeNull();

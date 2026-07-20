@@ -368,8 +368,17 @@ export async function verifyVariable(
       if (!url || !anon) {
         return { name, verifyKind: spec.verify, status: 'PRESENT_BUT_INVALID', ok: false, httpStatus: null, detail: 'EXPO_PUBLIC_SUPABASE_URL + EXPO_PUBLIC_SUPABASE_ANON_KEY required.', verifiedAt };
       }
-      const r = await probe(fetchImpl, `${url.replace(/\/+$/, '')}/rest/v1/?apikey=${encodeURIComponent(anon)}`, { headers: { apikey: anon, Authorization: `Bearer ${anon}` } });
-      return { name, verifyKind: spec.verify, status: statusFromHttp(r.status), ok: r.ok, httpStatus: r.status, detail: r.ok ? 'Supabase anon REST health OK.' : `Supabase REST returned HTTP ${r.status ?? 'network-error'}.`, verifiedAt };
+      // Probe a real RLS-enabled table that the landing page reads via anon.
+      // The root /rest/v1/?apikey= endpoint requires service-role, so it always
+      // 401s for anon keys — that is not a valid anon-key health check.
+      const table = 'jv_deals';
+      const r = await probe(fetchImpl, `${url.replace(/\/+$/, '')}/rest/v1/${table}?select=id&limit=1`, { headers: { apikey: anon, Authorization: `Bearer ${anon}`, Accept: 'application/json' } });
+      if (r.ok) {
+        return { name, verifyKind: spec.verify, status: 'VERIFIED', ok: true, httpStatus: r.status, detail: `Supabase anon REST table read OK (${table} readable via anon key).`, verifiedAt };
+      }
+      // Anon keys are RLS-gated. 401 means invalid key; 403 means valid key but
+      // no RLS access to this table. Both are reported honestly.
+      return { name, verifyKind: spec.verify, status: statusFromHttp(r.status), ok: false, httpStatus: r.status, detail: `Supabase anon table read (${table}) returned HTTP ${r.status ?? 'network-error'}.`, verifiedAt };
     }
     case 'supabase_service': {
       const url = trimmed(env.EXPO_PUBLIC_SUPABASE_URL) || trimmed(env.SUPABASE_URL);
