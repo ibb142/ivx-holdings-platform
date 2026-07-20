@@ -70,6 +70,7 @@ import {
   type IVXFactoryJobProof,
   type IVXFactoryOperation,
 } from './ivx-autonomous-coder-factory';
+import { getRealFactoryRunners, commitFactoryFilesToGitHub } from './ivx-autonomous-coder-factory-runners';
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
@@ -1152,13 +1153,35 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     // operation runs without it. This extends the autonomous coder from a
     // PATCH engine into a FACTORY engine that can build apps from scratch.
     if (job.input.executionMode === 'factory') {
+      // Owner mandate 2026-07-20: inject REAL runners so factory operations execute
+      // live on production, not just in unit tests. The runners read credentials from
+      // process.env at RUNTIME (Render env) — no secrets in code. If a credential is
+      // missing, the runner returns ok=false and the factory engine records a BLOCKED
+      // proof (honest, no phantom success).
+      const realRunners = getRealFactoryRunners();
       const factoryProof = await runIVXFactoryJob({
         taskId: job.jobId,
         goal: job.input.goal,
         ownerId: job.ownerId,
         approvalPhrase: job.input.factoryApprovalPhrase ?? '',
         operations: job.input.factoryOperations ?? [],
+        migrationRunner: realRunners.migrationRunner,
+        dependencyRunner: realRunners.dependencyRunner,
+        buildRunner: realRunners.buildRunner,
       });
+
+      // If the factory created files on disk, commit them to GitHub via the owner-
+      // gated Git Data API (same canonical path the autonomous coder uses). This
+      // makes create_directory + create_module operations PERSIST to the canonical
+      // repo — the factory engine can now scaffold real modules live.
+      let factoryCommitSha: string | null = null;
+      if (factoryProof.approved && factoryProof.filesCreated.length > 0 && factoryProof.finalStatus === 'COMPLETED') {
+        const commitMsg = `IVX factory engine: ${job.input.goal.slice(0, 120)}`;
+        const commitResult = await commitFactoryFilesToGitHub(factoryProof.filesCreated, commitMsg);
+        if (commitResult.ok && commitResult.commitSha) {
+          factoryCommitSha = commitResult.commitSha;
+        }
+      }
 
       if (controller.cancelled) {
         await updateJob(job.jobId, {
@@ -1173,6 +1196,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       }
 
       const result = summarizeFactoryJobProof(job.jobId, factoryProof);
+      if (factoryCommitSha) {
+        result.commitCreated = true;
+        result.commitSha = factoryCommitSha;
+        result.commitUrl = `https://github.com/ibb142/rork-global-real-estate-invest/commit/${factoryCommitSha}`;
+        result.pushed = true;
+      }
       const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
         ? 'completed'
         : result.finalStatus === 'BLOCKED'

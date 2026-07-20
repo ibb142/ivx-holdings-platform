@@ -7493,6 +7493,35 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           },
         });
       }
+      // create_module: "create_module: Create a new module file at path "X" with content: <content>"
+      // The owner's prompt format is: create_module: Create a new module file at path "<path>" with content:\n<content>
+      // We extract the path (quoted) and the content (everything after 'with content:' up to the next operation or end).
+      const createModuleMatch = prompt.match(/create_module:\s*Create\s+a\s+new\s+module\s+file\s+at\s+path\s+["']([^"']+)["']\s+with\s+content:\s*\n?([\s\S]*?)(?=\n\([0-9]+\)\s|\nApproval phrase:|$)/i);
+      if (createModuleMatch) {
+        const modulePath = createModuleMatch[1];
+        let moduleContent = createModuleMatch[2].trim();
+        // Strip a leading newline if present and a trailing newline
+        moduleContent = moduleContent.replace(/^\n+/, '').replace(/\n+$/, '');
+        factoryOperations.push({
+          kind: 'create_module',
+          reason: `create a new module file per owner prompt`,
+          target: modulePath.includes('/') ? modulePath.split('/').slice(0, -1).join('/') : modulePath,
+          files: [{ path: modulePath, content: moduleContent }],
+        });
+      }
+      // run_supabase_migration: "run_supabase_migration: Apply SQL migration named "X" with SQL:\n<sql>"
+      const migrationMatch = prompt.match(/run_supabase_migration:\s*Apply\s+SQL\s+migration\s+named\s+["']([^"']+)["']\s+with\s+SQL:\s*\n?([\s\S]*?)(?=\n\([0-9]+\)\s|\nApproval phrase:|$)/i);
+      if (migrationMatch) {
+        const migrationName = migrationMatch[1];
+        let sql = migrationMatch[2].trim();
+        sql = sql.replace(/^\n+/, '').replace(/\n+$/, '');
+        factoryOperations.push({
+          kind: 'run_supabase_migration',
+          reason: `apply a Supabase SQL migration per owner prompt`,
+          migrationName,
+          sql,
+        });
+      }
       const factoryWorkerInput: IVXWorkerJobInput = {
         goal: prompt,
         ownerApproved: true,
