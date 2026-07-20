@@ -24,12 +24,25 @@
  * innocent words like "complete" ("complete the loading on this chat") and
  * replace a real DEPLOYED answer with a generic BLOCKED message.
  *
+ * 2026-07-20 completion-validator integration: the status line is now decided
+ * by the completion validator, not by simple health/commit checks. A deploy-only
+ * redeploy with NO code change is reported as DEPLOYED_ONLY (redeployed unchanged
+ * code — the requested fix was NOT implemented), not as DEPLOYED. A code/ui/feature
+ * task with no code change and no deployment is reported as NOT_COMPLETED.
+ *
  * This module is runtime-free and deterministic (no network/filesystem/AI) so it
  * is fully unit-testable.
  */
 import type { IVXSeniorDeveloperRunProof } from './ivx-senior-developer-runtime';
 import type { IVXOwnerExecutionDecision } from './ivx-owner-execution-mode';
 import type { IVXWorkerJob, IVXWorkerJobResult } from './ivx-senior-developer-worker';
+import {
+  classifyTaskType,
+  validateCompletion,
+  renderValidatorVerdict,
+  type IVXCompletionEvidence,
+  type IVXTaskType,
+} from './ivx-completion-validator';
 
 function trimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -56,41 +69,68 @@ export function isTestCommand(command: string): boolean {
   return /\btest\b/i.test(command) && !isTypecheckCommand(command);
 }
 
-function buildStatusLine(
-  proof: IVXSeniorDeveloperRunProof,
-  changedFiles: string[],
-): 'DEPLOYED' | 'UNVERIFIED' | 'LOCAL ONLY' | 'BLOCKED' {
+function buildEvidenceFromProof(proof: IVXSeniorDeveloperRunProof): IVXCompletionEvidence {
   const validations = proof.validations;
   const testValidations = validations.filter((v) => isTestCommand(v.command));
   const typecheckValidations = validations.filter((v) => isTypecheckCommand(v.command));
-  const checksRan = testValidations.length > 0 || typecheckValidations.length > 0;
-  const checksPassed = checksRan && validations.every((v) => v.ok);
-  const git = proof.gitDeployOperator;
+  const commitSha = proof.gitDeployOperator.github.commitSha;
+  const healthOk = proof.productionVerification.ok;
+  const commitMatch = healthOk && proof.changedRouteVerification.ok;
+  return {
+    taskType: classifyTaskType(proof.goal),
+    requestedOutcome: proof.goal.slice(0, 400),
+    acceptanceCriteria: [],
+    state: 'DEPLOYED',
+    previousVerdict: proof.endToEndProductionComplete ? 'VERIFIED' : null,
+    filesChanged: proof.changedFiles,
+    testsPassed: testValidations.length > 0 && validations.every((v) => v.ok),
+    testsRun: testValidations.length > 0,
+    typecheckPassed: typecheckValidations.length > 0 && validations.every((v) => v.ok),
+    typecheckRun: typecheckValidations.length > 0,
+    buildPassed: validations.length > 0 && validations.every((v) => v.ok),
+    buildRun: validations.length > 0,
+    commitSha,
+    deployId: proof.gitDeployOperator.render.deployId,
+    productionHealthOk: healthOk,
+    commitMatch,
+    featureVerificationOk: null,
+    error: proof.ok ? null : (proof.gitDeployOperator.reason || proof.productionVerification.error || 'Run did not complete end-to-end.'),
+    startedAt: proof.generatedAt,
+    completedAt: proof.generatedAt,
+    verifiedAt: proof.generatedAt,
+  };
+}
 
-  const deployConfirmed =
-    git.status === 'executed' &&
-    (git.render.deployAttempted || git.github.commitAttempted) &&
-    proof.productionVerification.ok &&
-    proof.changedRouteVerification.ok;
-
-  if (proof.patchProposal.status === 'blocked') {
-    return 'BLOCKED';
-  }
-  if (deployConfirmed && checksPassed) {
-    return 'DEPLOYED';
-  }
-  if (deployConfirmed && !checksPassed) {
-    return 'UNVERIFIED';
-  }
-  if (changedFiles.length === 0) {
-    return 'LOCAL ONLY';
-  }
-  return 'LOCAL ONLY';
+function buildEvidenceFromWorkerResult(result: IVXWorkerJobResult): IVXCompletionEvidence {
+  return {
+    taskType: result.taskType ?? classifyTaskType(result.goal),
+    requestedOutcome: result.goal.slice(0, 400),
+    acceptanceCriteria: [],
+    state: 'DEPLOYED',
+    previousVerdict: result.finalStatus === 'COMPLETE' ? 'VERIFIED' : null,
+    filesChanged: result.changedFiles,
+    testsPassed: result.testsPassed,
+    testsRun: result.testsRun,
+    typecheckPassed: result.typecheckRun && result.testsPassed,
+    typecheckRun: result.typecheckRun,
+    buildPassed: result.buildRun,
+    buildRun: result.buildRun,
+    commitSha: result.commitSha,
+    deployId: result.deployId,
+    productionHealthOk: result.healthOk,
+    commitMatch: result.commitMatch,
+    featureVerificationOk: null,
+    error: result.error,
+    startedAt: result.generatedAt,
+    completedAt: result.generatedAt,
+    verifiedAt: result.generatedAt,
+  };
 }
 
 function buildFilesChangedLine(
   changedFiles: string[],
   patchStatus: IVXSeniorDeveloperRunProof['patchProposal']['status'],
+  taskType: IVXTaskType,
 ): string {
   if (changedFiles.length > 0) {
     return changedFiles.map((filePath) => `- ${filePath}`).join('\n');
@@ -98,7 +138,7 @@ function buildFilesChangedLine(
   if (patchStatus === 'blocked') {
     return 'BLOCKED — I do not have code write access.';
   }
-  return 'NO CODE CHANGED — no development was completed.';
+  return `NO CODE CHANGED — no development was completed. (task type: ${taskType})`;
 }
 
 function buildCommandsSection(proof: IVXSeniorDeveloperRunProof): string {
@@ -134,7 +174,10 @@ function buildTestsSection(proof: IVXSeniorDeveloperRunProof): string {
     : 'NOT VERIFIED — tests were not run.';
 }
 
-function buildDeployedProofSection(proof: IVXSeniorDeveloperRunProof): string {
+function buildDeployedProofSection(
+  proof: IVXSeniorDeveloperRunProof,
+  validationStatus: string,
+): string {
   const changedFiles = proof.changedFiles;
   const git = proof.gitDeployOperator;
   const lines: string[] = [];
@@ -166,6 +209,9 @@ function buildDeployedProofSection(proof: IVXSeniorDeveloperRunProof): string {
   if (git.render.deployId) {
     lines.push(`deploy: ${git.render.deployId} (${git.render.deployStatus ?? 'unknown'})`);
   }
+  if (validationStatus === 'NOT_COMPLETED' || validationStatus === 'NO_CHANGE_REQUIRED' || validationStatus === 'DEPLOYED_ONLY') {
+    lines.push(`completion verdict: ${validationStatus}`);
+  }
   lines.push(`job: ${proof.jobId}`);
 
   return lines.join('\n');
@@ -192,26 +238,41 @@ export function buildSeniorDeveloperExecutionAnswer(
   }
 
   const changedFiles = proof.changedFiles;
-  const status = buildStatusLine(proof, changedFiles);
+  const taskType = classifyTaskType(proof.goal);
+
+  if (proof.patchProposal.status === 'blocked') {
+    return [
+      `TASK ID:\n${proof.jobId}`,
+      'STATUS:\nBLOCKED',
+      `FILES CHANGED:\n${buildFilesChangedLine(changedFiles, proof.patchProposal.status, taskType)}`,
+      `COMMANDS:\n${buildCommandsSection(proof)}`,
+      `TESTS:\n${buildTestsSection(proof)}`,
+      `DEPLOYED PROOF:\n${buildDeployedProofSection(proof, 'BLOCKED')}`,
+    ].join('\n\n');
+  }
+
+  const validation = validateCompletion(buildEvidenceFromProof(proof));
+  const validatedStatus = renderValidatorVerdict(validation.verdict);
+  const status = validation.ok ? 'VERIFIED' : validatedStatus;
 
   return [
     `TASK ID:\n${proof.jobId}`,
     `STATUS:\n${status}`,
-    `FILES CHANGED:\n${buildFilesChangedLine(changedFiles, proof.patchProposal.status)}`,
+    `FILES CHANGED:\n${buildFilesChangedLine(changedFiles, proof.patchProposal.status, taskType)}`,
     `COMMANDS:\n${buildCommandsSection(proof)}`,
     `TESTS:\n${buildTestsSection(proof)}`,
-    `DEPLOYED PROOF:\n${buildDeployedProofSection(proof)}`,
+    `DEPLOYED PROOF:\n${buildDeployedProofSection(proof, status)}`,
   ].join('\n\n');
 }
 
-function buildWorkerFilesChangedLine(result: IVXWorkerJobResult): string {
+function buildWorkerFilesChangedLine(result: IVXWorkerJobResult, taskType: IVXTaskType): string {
   if (result.changedFiles.length > 0) {
     return result.changedFiles.map((filePath) => `- ${filePath}`).join('\n');
   }
   if (result.finalStatus === 'BLOCKED') {
     return 'BLOCKED — I do not have code write access.';
   }
-  return 'NO CODE CHANGED — no development was completed.';
+  return `NO CODE CHANGED — no development was completed. (task type: ${taskType})`;
 }
 
 function buildWorkerCommandsSection(job: IVXWorkerJob, result: IVXWorkerJobResult): string {
@@ -253,7 +314,11 @@ function buildWorkerTestsSection(result: IVXWorkerJobResult): string {
     : '$ bun test\nexit code: 1 -> FAIL';
 }
 
-function buildWorkerDeployedProofSection(job: IVXWorkerJob, result: IVXWorkerJobResult): string {
+function buildWorkerDeployedProofSection(
+  job: IVXWorkerJob,
+  result: IVXWorkerJobResult,
+  validationStatus: string,
+): string {
   const lines: string[] = [];
   if (result.changedFiles.length > 0) {
     lines.push('git diff --stat (applied patch):');
@@ -270,6 +335,9 @@ function buildWorkerDeployedProofSection(job: IVXWorkerJob, result: IVXWorkerJob
     lines.push(`deploy: ${result.deployId} (${result.deployStatus ?? 'unknown'})`);
   }
   lines.push(`production /health: ${result.healthOk ? 'healthy' : 'not confirmed'}; commit match: ${result.commitMatch ? 'true' : 'false'}`);
+  if (validationStatus === 'NOT_COMPLETED' || validationStatus === 'NO_CHANGE_REQUIRED' || validationStatus === 'DEPLOYED_ONLY') {
+    lines.push(`completion verdict: ${validationStatus}`);
+  }
   if (result.error) {
     lines.push(`error: ${result.error}`);
   }
@@ -319,25 +387,17 @@ export function buildSeniorDeveloperWorkerJobAnswer(
     ].join('\n\n');
   }
 
-  let status: string;
-  if (job.status === 'blocked') {
-    status = 'BLOCKED';
-  } else if (result.endToEndProductionComplete && result.commitMatch && result.healthOk) {
-    status = 'DEPLOYED';
-  } else if (result.commitSha && !result.commitMatch) {
-    status = 'UNVERIFIED';
-  } else if (result.commitSha) {
-    status = 'LOCAL ONLY';
-  } else {
-    status = result.finalStatus === 'BLOCKED' ? 'BLOCKED' : (job.status === 'failed' ? 'FAILED' : 'LOCAL ONLY');
-  }
+  const taskType = result.taskType ?? classifyTaskType(job.input.goal);
+  const validation = validateCompletion(buildEvidenceFromWorkerResult(result));
+  const validatedStatus = renderValidatorVerdict(validation.verdict);
+  const status = validation.ok ? 'VERIFIED' : validatedStatus;
 
   return [
     `TASK ID:\n${job.jobId}`,
     `STATUS:\n${status}`,
-    `FILES CHANGED:\n${buildWorkerFilesChangedLine(result)}`,
+    `FILES CHANGED:\n${buildWorkerFilesChangedLine(result, taskType)}`,
     `COMMANDS:\n${buildWorkerCommandsSection(job, result)}`,
     `TESTS:\n${buildWorkerTestsSection(result)}`,
-    `DEPLOYED PROOF:\n${buildWorkerDeployedProofSection(job, result)}`,
+    `DEPLOYED PROOF:\n${buildWorkerDeployedProofSection(job, result, status)}`,
   ].join('\n\n');
 }

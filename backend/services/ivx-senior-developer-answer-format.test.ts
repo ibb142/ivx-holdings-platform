@@ -122,22 +122,23 @@ describe('buildSeniorDeveloperExecutionAnswer — strict 6-section format', () =
     expect(answer).toContain('bun run typecheck');
   });
 
-  test('STATUS is DEPLOYED when commit + deploy executed and production verified', () => {
+  test('STATUS is VERIFIED when code changed, commit + deploy executed, and production verified', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), autoDecision);
-    expect(answer).toContain('STATUS:\nDEPLOYED');
+    expect(answer).toContain('STATUS:\nVERIFIED');
   });
 
-  test('STATUS is UNVERIFIED when deploy looks complete but checks were not run', () => {
+  test('STATUS is NOT_COMPLETED when files changed but tests were not run', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({ validations: [] } as unknown as Partial<IVXSeniorDeveloperRunProof>),
       autoDecision,
     );
-    expect(answer).toContain('STATUS:\nUNVERIFIED');
-    expect(answer).not.toContain('STATUS:\nDEPLOYED');
+    expect(answer).toContain('STATUS:\nNOT_COMPLETED');
+    expect(answer).toContain('completion verdict: NOT_COMPLETED');
+    expect(answer).not.toMatch(/STATUS:\nDEPLOYED(?:\n| )/);
     expect(answer).toContain('NOT VERIFIED — tests were not run.');
   });
 
-  test('STATUS is not DEPLOYED when a validation failed', () => {
+  test('STATUS is NOT_COMPLETED when a validation failed', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({
         validations: [
@@ -154,11 +155,12 @@ describe('buildSeniorDeveloperExecutionAnswer — strict 6-section format', () =
       } as unknown as Partial<IVXSeniorDeveloperRunProof>),
       autoDecision,
     );
-    expect(answer).not.toContain('STATUS:\nDEPLOYED');
-    expect(answer).toContain('STATUS:\nUNVERIFIED');
+    expect(answer).not.toMatch(/STATUS:\nDEPLOYED(?:\n| )/);
+    expect(answer).toContain('STATUS:\nNOT_COMPLETED');
+    expect(answer).toContain('completion verdict: NOT_COMPLETED');
   });
 
-  test('STATUS is LOCAL ONLY when changed but not deployed', () => {
+  test('STATUS is NOT_COMPLETED when files changed but not deployed', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({
         gitDeployOperator: {
@@ -170,12 +172,13 @@ describe('buildSeniorDeveloperExecutionAnswer — strict 6-section format', () =
       } as unknown as Partial<IVXSeniorDeveloperRunProof>),
       autoDecision,
     );
-    expect(answer).toContain('STATUS:\nLOCAL ONLY');
+    expect(answer).toContain('STATUS:\nNOT_COMPLETED');
+    expect(answer).toContain('completion verdict: NOT_COMPLETED');
   });
 });
 
 describe('hard enforcement', () => {
-  test('no changed files and no deploy -> NO CODE CHANGED and LOCAL ONLY status', () => {
+  test('no changed files and no deploy -> NO CODE CHANGED and NOT_COMPLETED status', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({
         changedFiles: [],
@@ -190,11 +193,12 @@ describe('hard enforcement', () => {
       autoDecision,
     );
     expect(answer).toContain('NO CODE CHANGED — no development was completed.');
-    expect(answer).toContain('STATUS:\nLOCAL ONLY');
+    expect(answer).toContain('STATUS:\nNOT_COMPLETED');
+    expect(answer).toContain('completion verdict: NOT_COMPLETED');
     expect(answer).not.toContain('STATUS:\nBLOCKED');
   });
 
-  test('deploy-only redeploy with no code change -> DEPLOYED status', () => {
+  test('deploy-only redeploy with no code change for a CODE_FIX -> DEPLOYED_ONLY / NOT_COMPLETED', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(
       makeProof({
         changedFiles: [],
@@ -209,9 +213,30 @@ describe('hard enforcement', () => {
       autoDecision,
     );
     expect(answer).toContain('NO CODE CHANGED — no development was completed.');
-    expect(answer).toContain('STATUS:\nDEPLOYED');
+    expect(answer).toContain('STATUS:\nDEPLOYED_ONLY');
     expect(answer).toContain('- $ render deploy -> exit 0 (live dep_123)');
     expect(answer).toContain('deploy-only from commit: headsha123 (main)');
+    expect(answer).toContain('completion verdict: DEPLOYED_ONLY');
+    expect(answer).not.toMatch(/STATUS:\nDEPLOYED(?:\n| )/);
+  });
+
+  test('deploy-only redeploy with no code change for a DEPLOYMENT task -> VERIFIED', () => {
+    const answer = buildSeniorDeveloperExecutionAnswer(
+      makeProof({
+        goal: 'redeploy the production service now',
+        changedFiles: [],
+        patchProposal: { status: 'not_needed', operations: [], diffPreview: '' },
+        gitDeployOperator: {
+          status: 'executed',
+          github: { commitAttempted: false, commitSha: 'headsha123', branch: 'main' },
+          render: { deployAttempted: true, deployId: 'dep_123', deployStatus: 'live', error: null },
+          reason: 'Deploy-only: no code change was required; production redeployed.',
+        },
+      } as unknown as Partial<IVXSeniorDeveloperRunProof>),
+      autoDecision,
+    );
+    expect(answer).toContain('STATUS:\nVERIFIED');
+    expect(answer).toContain('- $ render deploy -> exit 0 (live dep_123)');
   });
 
   test('patch blocked -> BLOCKED status', () => {

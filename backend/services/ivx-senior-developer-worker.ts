@@ -38,6 +38,7 @@ import {
   writeDurableJson,
 } from './ivx-durable-store';
 import { checkEmergencyStop } from './ivx-emergency-stop-gate';
+import { classifyTaskType } from './ivx-completion-validator';
 import {
   IVX_GIT_DEPLOY_CONFIRM_TEXT,
   IVX_SAFE_PATCH_CONFIRM_TEXT,
@@ -196,6 +197,8 @@ export type IVXWorkerJob = {
 };
 
 /** Secret-safe proof summary written to the durable ledger. */
+import type { IVXTaskType } from './ivx-completion-validator';
+
 export type IVXWorkerJobResult = {
   jobId: string;
   goal: string;
@@ -225,6 +228,10 @@ export type IVXWorkerJobResult = {
   error: string | null;
   durable: boolean;
   generatedAt: string;
+  /** Classification of the task type used by the completion validator to decide
+   *  whether no-code-change is acceptable (e.g. DEPLOYMENT) or a failure
+   *  (e.g. CODE_FIX). */
+  taskType?: IVXTaskType;
   /** Factory-mode diagnostics: records whether the post-factory GitHub commit step
    *  fired and, if it did, the exact reason it succeeded or failed. Used to
    *  diagnose the COMMIT SHA NONE gap without depending on runtime logs. */
@@ -525,6 +532,7 @@ export function summarizeReadOnlyInspectionProof(
     error: proof.error,
     durable: isDurableStoreConfigured(),
     generatedAt: proof.generatedAt,
+    taskType: classifyTaskType(proof.goal),
   };
 }
 
@@ -567,6 +575,7 @@ export function summarizeFactoryJobProof(
     error: proof.error,
     durable: isDurableStoreConfigured(),
     generatedAt: proof.generatedAt,
+    taskType: classifyTaskType(proof.goal),
   };
 }
 
@@ -615,6 +624,7 @@ export function summarizeAutonomousCoderProof(
     error: proof.error,
     durable: isDurableStoreConfigured(),
     generatedAt: proof.generatedAt,
+    taskType: classifyTaskType(proof.goal),
   };
 }
 
@@ -674,6 +684,7 @@ export function summarizeProof(
     error: proof.ok ? null : (proof.gitDeployOperator.reason || proof.productionVerification.error || 'Run did not complete end-to-end.'),
     durable: isDurableStoreConfigured(),
     generatedAt: proof.generatedAt,
+    taskType: classifyTaskType(proof.goal),
   };
 }
 
