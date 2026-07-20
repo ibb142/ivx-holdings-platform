@@ -132,6 +132,8 @@ import {
   type IVXReadOnlyInspectionProof,
 } from '../services/ivx-senior-developer-readonly-runtime';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
+import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
+import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
 import { recordExecutionTrace } from '../services/ivx-execution-trace-store';
 import {
   buildDocumentAnalysisInstructionBlock,
@@ -4525,10 +4527,70 @@ function buildPromptText(input: {
 
   return [
     buildLiveGroundingContext(),
+    // Phase 8: context pipeline block — retrieval-scored context (conversation
+    // history, task state, repo, recent commits, deployment state, production
+    // logs, relevant source files) truncated to a 12000-token budget. Grounds
+    // the model without dumping the full history on every request.
+    buildOwnerAIContextPipelineBlock({
+      prompt: input.prompt,
+      recentMessages: input.recentMessages,
+      conversationHistory: input.recentMessages.map((m) => ({
+        role: m.sender_role === 'assistant' ? 'assistant' : 'owner',
+        body: readTrimmedString(m.body),
+        createdAt: m.created_at,
+      })),
+      taskState: undefined,
+      ownerPreferences: [
+        'DEPLOYED means only that a deployment occurred.',
+        'VERIFIED means the requested acceptance tests passed.',
+        'Never claim development occurred when the code diff is empty.',
+      ],
+    }),
     plannerBlock,
     transcript.length > 0 ? `Recent conversation:\n${transcript}` : 'Recent conversation: none',
     `Owner request: ${input.prompt}`,
   ].join('\n\n');
+}
+
+/**
+ * Phase 8: build the context pipeline block for the owner-AI prompt. Assembles
+ * the current user request + conversation history + task state + repository +
+ * recent commits + deployment state + production logs + relevant source files
+ * via keyword-scored retrieval, truncated to a 12000-token budget. Rendered as
+ * a single [IVX CONTEXT PIPELINE] block appended to the prompt text so the
+ * model has grounded context without dumping the full history on every request.
+ */
+function buildOwnerAIContextPipelineBlock(input: {
+  prompt: string;
+  recentMessages: IVXMessageRow[];
+  conversationHistory?: { role: string; body: string; createdAt: string }[];
+  taskState?: string;
+  sourceFiles?: { path: string; content: string }[];
+  recentCommits?: { sha: string; message: string; date: string }[];
+  deploymentState?: { serviceId: string; status: string; commitSha: string };
+  productionLogs?: { name: string; status: number; detail: string }[];
+  ownerPreferences?: string[];
+  acceptanceCriteria?: string[];
+  availableTools?: { name: string; permission: string }[];
+}): string {
+  const pipelineInput: IVXContextPipelineInput = {
+    userRequest: input.prompt,
+    conversationHistory: input.conversationHistory,
+    taskState: input.taskState,
+    sourceFiles: input.sourceFiles,
+    recentCommits: input.recentCommits,
+    deploymentState: input.deploymentState,
+    productionLogs: input.productionLogs,
+    ownerPreferences: input.ownerPreferences,
+    acceptanceCriteria: input.acceptanceCriteria,
+    availableTools: input.availableTools,
+  };
+  try {
+    const result = buildContextPipeline(pipelineInput);
+    return renderContextPipeline(result);
+  } catch {
+    return '';
+  }
 }
 
 async function generateOwnerAIAnswer(input: {
@@ -4566,6 +4628,14 @@ async function generateOwnerAIAnswer(input: {
     ].join('\n\n')
     : buildOwnerAISystemPrompt({ mode: input.mode ?? 'chat', devTestModeActive: input.devTestModeActive === true });
   let systemPrompt = baseSystem;
+  // Phase 9: append the canonical senior-developer system prompt with the 18-step
+  // loop, DEPLOYED-vs-VERIFIED distinction, and forbidden vague language rules.
+  // This is the permanent rules block the owner mandated for every owner-AI run.
+  if (!input.healthProbe) {
+    systemPrompt = `${systemPrompt}
+
+${buildSeniorDeveloperSystemPrompt()}`;
+  }
   if (tz && !input.healthProbe) {
     try {
       const nowLocal = new Intl.DateTimeFormat('en-US', { timeZone: tz, dateStyle: 'full', timeStyle: 'long' }).format(new Date());

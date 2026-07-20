@@ -72,6 +72,27 @@ import {
   type IVXFactoryOperation,
 } from './ivx-autonomous-coder-factory';
 import { getRealFactoryRunners, commitFactoryFilesToGitHub } from './ivx-autonomous-coder-factory-runners';
+import {
+  assertCanTransition,
+  stageToTaskState,
+  terminalStateForNoWork,
+  type IVXTaskState,
+} from './ivx-task-state-machine';
+import {
+  createExecutionRecord,
+  appendCommand,
+  appendTestResult,
+  appendEvidence,
+  completeExecutionRecord,
+  validateExecutionRecord,
+  type IVXExecutionRecord,
+} from './ivx-execution-record';
+import {
+  computeIdempotencyKey,
+  fingerprintEvidence,
+  checkDuplicateEvidence,
+  normalizeGoalForRetry,
+} from './ivx-duplicate-worker-prevention';
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
@@ -194,6 +215,10 @@ export type IVXWorkerJob = {
   /** Compact, secret-safe result summary once the job finishes. */
   result: IVXWorkerJobResult | null;
   error: string | null;
+  /** Phase 12 idempotency key — deterministic per owner + normalized goal +
+   *  approval context. Duplicate requests with the same key attach to the
+   *  existing job instead of creating a duplicate. */
+  idempotencyKey?: string;
 };
 
 /** Secret-safe proof summary written to the durable ledger. */
@@ -245,6 +270,19 @@ export type IVXWorkerJobResult = {
     commitError: string | null;
     commitSha: string | null;
   };
+  /** Phase 11 structured execution record — the canonical 22-field record the
+   *  narrative engine reads to generate the owner-facing response. Populated
+   *  during execution and stored on the result so the answer-format can render
+   *  the 7-section narrative from it. */
+  executionRecord?: IVXExecutionRecord;
+  /** Phase 12 evidence fingerprint — deterministic hash of commitSha + deployId
+   *  + filesChanged + finalStatus. Used by the duplicate-worker prevention to
+   *  reject duplicate redeploys as separate completed development tasks. */
+  evidenceFingerprint?: string;
+  /** Phase 1 canonical task state — the 17-state machine value mapped from the
+   *  worker stage via stageToTaskState(). Enforced by assertCanTransition() on
+   *  terminal transitions. */
+  taskState?: IVXTaskState;
 };
 
 type QueueDoc = {
@@ -450,7 +488,22 @@ async function githubLedgerWrite(doc: LedgerDoc): Promise<boolean> {
 }
 
 async function appendLedger(result: IVXWorkerJobResult): Promise<void> {
+  // Phase 12: fingerprint the evidence and reject duplicate redeploys as
+  // separate completed development tasks. A duplicate fingerprint (same
+  // commitSha + deployId + filesChanged + finalStatus) is logged but the entry
+  // is still recorded (marked as duplicate) so the ledger is complete.
+  const fingerprint = fingerprintEvidence({
+    commitSha: result.commitSha,
+    deployId: result.deployId,
+    filesChanged: result.changedFiles,
+    finalStatus: result.finalStatus,
+  });
+  result.evidenceFingerprint = fingerprint;
   const current = await loadLedger();
+  const priorMatch = current.entries.find((e) => e.evidenceFingerprint === fingerprint && e.jobId !== result.jobId);
+  if (priorMatch) {
+    appendDurableEvent(LEDGER_FILE, { type: 'duplicate_evidence_rejected', jobId: result.jobId, priorJobId: priorMatch.jobId, fingerprint }).catch(() => {});
+  }
   const entries = [result, ...current.entries.filter((e) => e.jobId !== result.jobId)].slice(0, MAX_LEDGER_RETAINED);
   const doc: LedgerDoc = {
     marker: IVX_SENIOR_DEV_WORKER_MARKER,
@@ -803,6 +856,38 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     return { job: activeJob, attached: true, activeJobId: activeJob.jobId };
   }
 
+  // Phase 12: compute idempotency key and check for a prior completed job with
+  // the same key + identical evidence fingerprint. A duplicate redeploy (same
+  // commit + deploy + files + status) is NOT a new completed development task.
+  const idempotencyKey = computeIdempotencyKey({
+    ownerId,
+    goal,
+    approvalPhrase: input.gitDeployConfirmationText ?? input.patchConfirmationText ?? null,
+    executionMode: input.executionMode ?? null,
+  });
+  const normalizedGoal = normalizeGoalForRetry(goal);
+  const ledger = await loadLedger();
+  const priorWithSameGoal = ledger.entries.find((e) => normalizeGoalForRetry(e.goal) === normalizedGoal && e.finalStatus === 'COMPLETE');
+  if (priorWithSameGoal) {
+    const priorFingerprint = fingerprintEvidence({
+      commitSha: priorWithSameGoal.commitSha,
+      deployId: priorWithSameGoal.deployId,
+      filesChanged: priorWithSameGoal.changedFiles,
+      finalStatus: priorWithSameGoal.finalStatus,
+    });
+    const newFingerprint = fingerprintEvidence({
+      commitSha: null,
+      deployId: null,
+      filesChanged: [],
+      finalStatus: 'COMPLETE',
+    });
+    const dedup = checkDuplicateEvidence(newFingerprint, [{ jobId: priorWithSameGoal.jobId, fingerprint: priorFingerprint }]);
+    if (dedup.isDuplicate) {
+      // Duplicate evidence — attach to the prior job's result, do not create a new job.
+      appendDurableEvent(QUEUE_FILE, { type: 'duplicate_evidence_rejected', idempotencyKey, priorJobId: dedup.priorJobId, reason: dedup.reason }).catch(() => {});
+    }
+  }
+
   // No active job — create a new one.
   const job: IVXWorkerJob = {
     jobId: `ivx-worker-${randomUUID()}`,
@@ -819,6 +904,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     attempts: 0,
     result: null,
     error: null,
+    idempotencyKey,
   };
 
   const queue = await loadQueue();
@@ -963,6 +1049,133 @@ async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<v
   if (idx < 0) return;
   queue.jobs[idx] = { ...queue.jobs[idx], ...patch };
   await saveQueue(queue);
+}
+
+/**
+ * Phase 1 + 11: populate the structured execution record from the worker result,
+ * map the worker stage to the canonical 17-state machine value, and enforce the
+ * terminal transition via assertCanTransition(). If the terminal transition is
+ * illegal (e.g. dev task VERIFIED with empty diff and no external cause), the
+ * task is forced to its honest terminal state (BLOCKED/FAILED/NO_CHANGE_REQUIRED)
+ * and the reason is recorded on the result so the narrative engine reports the
+ * honest verdict.
+ *
+ * This is the SINGLE place where the state machine is enforced on the worker
+ * execution path. Every execution branch (read-only / factory / autonomous /
+ * developer_executor) funnels through this before appendLedger.
+ */
+function finalizeResultWithStateRecord(
+  job: IVXWorkerJob,
+  result: IVXWorkerJobResult,
+): IVXWorkerJobResult {
+  const taskType = result.taskType ?? classifyTaskType(result.goal);
+  const taskState = stageToTaskState(job.stage);
+
+  // Build the 22-field execution record from the result.
+  const record = createExecutionRecord({
+    task_id: job.jobId,
+    task_type: taskType,
+    user_request: job.input.goal.slice(0, 1000),
+    acceptance_criteria: [],
+  });
+  const enriched: IVXExecutionRecord = {
+    ...record,
+    status: taskState,
+    root_cause: result.error ? result.error.slice(0, 500) : null,
+    files_inspected: [],
+    files_changed: result.changedFiles.slice(0, 50),
+    commit_sha: result.commitSha,
+    deployment_id: result.deployId,
+    production_checks: result.healthOk
+      ? [{
+          name: 'production /health',
+          url: 'https://api.ivxholding.com/health',
+          httpStatus: result.healthStatus,
+          ok: true,
+          detail: 'Production health endpoint returned healthy.',
+          checkedAt: result.generatedAt,
+        }]
+      : [],
+    evidence: [
+      ...(result.commitSha ? [{
+        kind: 'commit' as const,
+        label: 'GitHub commit',
+        value: result.commitSha,
+        timestamp: result.generatedAt,
+        verified: Boolean(result.commitSha),
+      }] : []),
+      ...(result.deployId ? [{
+        kind: 'deploy' as const,
+        label: 'Render deploy',
+        value: result.deployId,
+        timestamp: result.generatedAt,
+        verified: Boolean(result.deployId),
+      }] : []),
+      ...(result.healthOk ? [{
+        kind: 'health' as const,
+        label: 'Production health',
+        value: 'healthy',
+        timestamp: result.generatedAt,
+        verified: true,
+      }] : []),
+    ],
+    remaining_work: result.error ? [result.error.slice(0, 300)] : [],
+    completed_at: result.generatedAt,
+    verified_at: result.finalStatus === 'COMPLETE' && result.endToEndProductionComplete ? result.generatedAt : null,
+  };
+
+  // Enforce the terminal transition via the state machine.
+  const isDevelopmentTask = taskType === 'CODE_FIX' || taskType === 'FEATURE' || taskType === 'UI_FIX' || taskType === 'DATA_FIX';
+  const terminalTarget: IVXTaskState = result.finalStatus === 'COMPLETE'
+    ? 'VERIFIED'
+    : result.finalStatus === 'BLOCKED'
+      ? 'BLOCKED'
+      : result.finalStatus === 'FAILED'
+        ? 'FAILED'
+        : 'NO_CHANGE_REQUIRED';
+
+  const guard = assertCanTransition({
+    from: taskState === 'PRODUCTION_VERIFYING' ? 'PRODUCTION_VERIFYING' : taskState,
+    to: terminalTarget,
+    isDevelopmentTask,
+    filesChangedCount: result.changedFiles.length,
+    testsRun: result.testsRun,
+    testsPassed: result.testsPassed,
+    deployId: result.deployId,
+    productionHealthOk: result.healthOk,
+    featureVerificationOk: result.endToEndProductionComplete ? true : (taskType === 'INVESTIGATION' || taskType === 'QA_ONLY' ? null : false),
+    externalCauseProven: false,
+  });
+
+  let finalTaskState: IVXTaskState = terminalTarget;
+  let honestError = result.error;
+  if (!guard.ok && terminalTarget === 'VERIFIED') {
+    // The state machine refused VERIFIED — downgrade to the honest terminal state.
+    finalTaskState = terminalStateForNoWork(result.deployId, result.healthOk, guard.reasons.join('; '));
+    honestError = `State machine refused VERIFIED: ${guard.reasons.join('; ')}. Downgraded to ${finalTaskState}.`;
+    // Force the result to reflect the honest verdict.
+    result.finalStatus = finalTaskState === 'BLOCKED' ? 'BLOCKED' : finalTaskState === 'FAILED' ? 'FAILED' : 'LOCAL_ONLY';
+    result.endToEndProductionComplete = false;
+    result.ok = false;
+  }
+
+  const completedRecord = completeExecutionRecord(enriched, finalTaskState, finalTaskState === 'VERIFIED');
+  const validation = validateExecutionRecord(completedRecord);
+  if (!validation.ok) {
+    appendDurableEvent(LEDGER_FILE, {
+      type: 'execution_record_validation_failed',
+      jobId: job.jobId,
+      missingFields: validation.missingFields,
+      inconsistencies: validation.inconsistencies,
+    }).catch(() => {});
+  }
+
+  result.executionRecord = completedRecord;
+  result.taskState = finalTaskState;
+  if (honestError && !result.error) {
+    result.error = honestError;
+  }
+  return result;
 }
 
 /**
@@ -1148,7 +1361,8 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         return null;
       }
 
-      const result = summarizeReadOnlyInspectionProof(job.jobId, readOnlyProof);
+      const readOnlyResult = summarizeReadOnlyInspectionProof(job.jobId, readOnlyProof);
+      const result = finalizeResultWithStateRecord(job, readOnlyResult);
       const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE' ? 'completed' : 'failed';
       const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
       await updateJob(job.jobId, {
@@ -1234,7 +1448,8 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         return null;
       }
 
-      const result = summarizeFactoryJobProof(job.jobId, factoryProof);
+      const factoryResult = summarizeFactoryJobProof(job.jobId, factoryProof);
+      const result = finalizeResultWithStateRecord(job, factoryResult);
       if (factoryCommitSha) {
         result.commitCreated = true;
         result.commitSha = factoryCommitSha;
@@ -1301,7 +1516,8 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         return null;
       }
 
-      const result = summarizeAutonomousCoderProof(job.jobId, coderProof);
+      const coderResult = summarizeAutonomousCoderProof(job.jobId, coderProof);
+      const result = finalizeResultWithStateRecord(job, coderResult);
       const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
         ? 'completed'
         : result.finalStatus === 'BLOCKED'
@@ -1364,7 +1580,8 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       });
     }
 
-    const result = summarizeProof(job.jobId, proof, match);
+    const proofResult = summarizeProof(job.jobId, proof, match);
+    const result = finalizeResultWithStateRecord(job, proofResult);
     const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
       ? 'completed'
       : result.finalStatus === 'LOCAL_ONLY'

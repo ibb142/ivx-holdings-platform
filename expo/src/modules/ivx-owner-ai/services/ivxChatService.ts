@@ -1277,6 +1277,63 @@ async function listOwnerMessages(): Promise<IVXMessage[]> {
   return displayMessages;
 }
 
+/**
+ * Phase 4 (areas B, C, E): cursor-based older-messages fetch. Called by the
+ * chat screen when the user scrolls to the top of the currently-loaded window.
+ * Fetches the next page of messages OLDER than the provided cursor (the
+ * oldest currently-loaded message's created_at + id), deduplicates against the
+ * current list, and prepends them in stable chronological order. Returns the
+ * merged list so the caller can preserve the scroll anchor.
+ *
+ * The cursor is (createdAt, id) so equal-timestamp messages paginate
+ * deterministically (the same stable secondary key used by the merge module).
+ */
+async function listOlderOwnerMessages(input: {
+  cursor: { createdAt: string; id: string };
+  currentMessages: IVXMessage[];
+  pageSize?: number;
+}): Promise<{ messages: IVXMessage[]; addedCount: number; hasMore: boolean }> {
+  const pageSize = Math.max(1, Math.min(200, input.pageSize ?? 80));
+  const client = getIVXSupabaseClient();
+  const tables = await resolveIVXTables();
+  const scopedClient = getScopedSupabaseClient(client, tables.dbSchema);
+  const conversation = await bootstrapOwnerConversation();
+  const messageConversationField = tables.schema === 'generic' ? 'room_id' : 'conversation_id';
+
+  if (tables.schema === 'none') {
+    return { messages: input.currentMessages, addedCount: 0, hasMore: false };
+  }
+
+  // Fetch messages strictly older than the cursor. lt('created_at') handles the
+  // common case; for equal-timestamp messages we rely on the id tiebreak in
+  // stableMessageOrder on the client side (Supabase doesn't support compound
+  // cursor predicates simply, so we slightly over-fetch and dedup).
+  const result = await scopedClient
+    .from(tables.messages)
+    .select('*')
+    .eq(messageConversationField, conversation.id)
+    .lt('created_at', input.cursor.createdAt)
+    .order('created_at', { ascending: false })
+    .limit(pageSize + 1);
+
+  if (result.error) {
+    console.log('[IVXChatService] listOlderOwnerMessages query failed:', result.error.message);
+    return { messages: input.currentMessages, addedCount: 0, hasMore: false };
+  }
+
+  const rows = (result.data ?? []) as Record<string, unknown>[];
+  const hasMore = rows.length > pageSize;
+  const pageRows = hasMore ? rows.slice(0, pageSize) : rows;
+  const chronologicalPage = [...pageRows].reverse();
+  const olderMessages = await Promise.all(chronologicalPage.map((row) => mapMessage(row)));
+
+  // Prepend + dedup + stable sort using the Expo-side pagination helpers.
+  const { prependOlderMessages } = await import('./ivxChatPagination');
+  const merged = prependOlderMessages(input.currentMessages, olderMessages);
+  const addedCount = merged.length - input.currentMessages.length;
+  return { messages: merged, addedCount: Math.max(0, addedCount), hasMore };
+}
+
 async function sendOwnerTextMessage(input: {
   body: string;
   senderLabel?: string | null;
@@ -1955,6 +2012,7 @@ export const ivxChatService = {
   getCanonicalConversationIdSync,
   setCanonicalConversationId,
   listOwnerMessages,
+  listOlderOwnerMessages,
   searchOwnerMessages,
   sendOwnerTextMessage,
   sendOwnerSupportMessage,

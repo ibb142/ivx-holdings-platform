@@ -40,9 +40,16 @@ import {
   classifyTaskType,
   validateCompletion,
   renderValidatorVerdict,
+  renderValidatorReason,
   type IVXCompletionEvidence,
   type IVXTaskType,
+  type IVXValidationVerdict,
 } from './ivx-completion-validator';
+import {
+  buildSeniorDeveloperNarrative,
+  detectForbiddenVaguePhrases,
+  detectInventedActions,
+} from './ivx-senior-developer-narrative';
 
 function trimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -262,7 +269,8 @@ export function buildSeniorDeveloperExecutionAnswer(
     `COMMANDS:\n${buildCommandsSection(proof)}`,
     `TESTS:\n${buildTestsSection(proof)}`,
     `DEPLOYED PROOF:\n${buildDeployedProofSection(proof, status)}`,
-  ].join('\n\n');
+    buildNarrativeAppendix({ ...proof, executionRecord: undefined } as unknown as IVXWorkerJobResult, validation.verdict),
+  ].filter((section) => section.length > 0).join('\n\n');
 }
 
 function buildWorkerFilesChangedLine(result: IVXWorkerJobResult, taskType: IVXTaskType): string {
@@ -338,11 +346,44 @@ function buildWorkerDeployedProofSection(
   if (validationStatus === 'NOT_COMPLETED' || validationStatus === 'NO_CHANGE_REQUIRED' || validationStatus === 'DEPLOYED_ONLY') {
     lines.push(`completion verdict: ${validationStatus}`);
   }
+  if (result.taskState) {
+    lines.push(`task state: ${result.taskState}`);
+  }
+  if (result.evidenceFingerprint) {
+    lines.push(`evidence fingerprint: ${result.evidenceFingerprint.slice(0, 40)}`);
+  }
   if (result.error) {
     lines.push(`error: ${result.error}`);
   }
   lines.push(`job: ${job.jobId}`);
   return lines.join('\n');
+}
+
+/**
+ * Phase 7 + 10: build the 7-section narrative from the execution record (when
+ * present) and append it to the 6-section owner-mandated format. The narrative
+ * is the SEPARATE response engine output — it reads the record and explains
+ * the result, separating facts from assumptions and reporting failures
+ * honestly. Forbidden vague phrases and invented actions are detected and
+ * flagged at the end so the owner can see the honesty guard fired.
+ */
+function buildNarrativeAppendix(result: IVXWorkerJobResult, verdict: IVXValidationVerdict): string {
+  if (!result.executionRecord) return '';
+  const verdictReason = renderValidatorReason(verdict, []);
+  const narrative = buildSeniorDeveloperNarrative({
+    record: result.executionRecord,
+    verdict,
+    verdictReason,
+  });
+  const flags: string[] = [];
+  if (narrative.forbiddenPhrasesDetected.length > 0) {
+    flags.push(`forbidden-vague-phrases: ${narrative.forbiddenPhrasesDetected.join(', ')}`);
+  }
+  if (narrative.inventedActionsDetected.length > 0) {
+    flags.push(`invented-actions: ${narrative.inventedActionsDetected.join('; ')}`);
+  }
+  const flagLine = flags.length > 0 ? `\n\nHONESTY GUARD:\n${flags.join('\n')}` : '';
+  return `\n\n---\n\nNARRATIVE (7-section response engine):\n${narrative.text}${flagLine}`;
 }
 
 /**
@@ -399,5 +440,6 @@ export function buildSeniorDeveloperWorkerJobAnswer(
     `COMMANDS:\n${buildWorkerCommandsSection(job, result)}`,
     `TESTS:\n${buildWorkerTestsSection(result)}`,
     `DEPLOYED PROOF:\n${buildWorkerDeployedProofSection(job, result, status)}`,
-  ].join('\n\n');
+    buildNarrativeAppendix(result, validation.verdict),
+  ].filter((section) => section.length > 0).join('\n\n');
 }

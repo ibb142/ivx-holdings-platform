@@ -1275,6 +1275,15 @@ export default function IVXOwnerChatRoute() {
   // live-polling ExecutionConsoleBubble instead of a plain MessageBubble.
   const [executionStatusByMessageId, setExecutionStatusByMessageId] = useState<Map<string, IVXExecutionStatusPayload>>(new Map());
   const [pendingOwnerMessages, setPendingOwnerMessages] = useState<PendingOwnerMessage[]>([]);
+  // Phase 4 (areas B, C, E): cursor-based older-messages pagination. When the
+  // owner scrolls to the top of the currently-loaded window, we fetch the next
+  // page of older messages via listOlderOwnerMessages(cursor) and prepend them
+  // to the React Query cache, preserving the scroll anchor. The loadingRef
+  // prevents concurrent fetches; hasMoreRef short-circuits once the older page
+  // returns fewer than pageSize+1 rows (no more history).
+  const loadingOlderMessagesRef = useRef<boolean>(false);
+  const hasMoreOlderMessagesRef = useRef<boolean>(true);
+  const [, setOlderMessagesLoading] = useState<boolean>(false);
   const draftRestoreCompletedRef = useRef<boolean>(false);
   const uploadProgressTimersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const normalizedComposerValue = useMemo<string>(() => normalizeComposerText(composerValue), [composerValue]);
@@ -5458,7 +5467,45 @@ export default function IVXOwnerChatRoute() {
         setUnreadCount(0);
       }
     }
-  }, [initialScrollPending]);
+    // Phase 4: cursor-based older-messages pagination. When the owner scrolls
+    // near the top (contentOffset.y < 120px), fetch the next page of older
+    // messages and prepend them. Skip during search, initial scroll anchor,
+    // active fetch, or when no more history exists.
+    if (
+      !searchActive &&
+      !initialScrollPending &&
+      contentOffset.y < 120 &&
+      !loadingOlderMessagesRef.current &&
+      hasMoreOlderMessagesRef.current &&
+      displayedMessages.length > 0
+    ) {
+      const oldest = displayedMessages[0];
+      if (oldest) {
+        loadingOlderMessagesRef.current = true;
+        setOlderMessagesLoading(true);
+        ivxChatService
+          .listOlderOwnerMessages({
+            cursor: { createdAt: oldest.createdAt, id: oldest.id },
+            currentMessages: messagesQuery.data ?? [],
+          })
+          .then((result) => {
+            hasMoreOlderMessagesRef.current = result.hasMore;
+            if (result.addedCount > 0) {
+              // Preserve the scroll anchor: the FlatList keeps the currently-
+              // visible message in view because we only PREPEND older rows.
+              queryClient.setQueryData<IVXMessage[]>(IVX_OWNER_MESSAGES_QUERY_KEY, () => result.messages);
+            }
+          })
+          .catch((error: unknown) => {
+            console.log('[IVXOwnerChatRoute] listOlderOwnerMessages failed:', error instanceof Error ? error.message : 'unknown');
+          })
+          .finally(() => {
+            loadingOlderMessagesRef.current = false;
+            setOlderMessagesLoading(false);
+          });
+      }
+    }
+  }, [initialScrollPending, searchActive, displayedMessages, messagesQuery.data, queryClient]);
 
   const handleScrollToLatest = useCallback(() => {
     ivxDiagnostics.recordAutoScroll('jump-to-latest');
