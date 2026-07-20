@@ -1,4 +1,5 @@
 import { gunzipSync } from 'node:zlib';
+import { createClient } from '@supabase/supabase-js';
 import { buildIVXCredentialRequestManifestSnapshot, IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES } from '../config/ivx-credential-request-manifest';
 import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
@@ -42,7 +43,8 @@ type DeveloperDeployAction =
   | 'render_upsert_env_var'
   | 'render_update_subdomain_policy'
   | 'render_update_source'
-  | 'supabase_execute_sql';
+  | 'supabase_execute_sql'
+  | 'supabase_reset_owner_password';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -103,7 +105,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'render_update_subdomain_policy'
     || normalized === 'render_update_source'
     || normalized === 'supabase_execute_sql'
-  ) {
+    || normalized === 'supabase_reset_owner_password'
+ ) {
     return normalized;
   }
   throw new Error('Unsupported IVX developer deploy action.');
@@ -128,6 +131,57 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
     return RENDER_SERVICE_CONFIRM_TEXT;
   }
   return SUPABASE_SQL_CONFIRM_TEXT;
+}
+
+function resolveSupabaseAdminClient() {
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  const serviceRoleKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
+  if (!supabaseUrl) {
+    throw new Error('Supabase URL is not configured on the backend (EXPO_PUBLIC_SUPABASE_URL).');
+  }
+  if (!serviceRoleKey) {
+    throw new Error('Supabase service role key is not configured on the backend (SUPABASE_SERVICE_ROLE_KEY).');
+  }
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+async function runSupabaseResetOwnerPassword(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const email = readTrimmed(input.email).toLowerCase();
+  const newPassword = readTrimmed(input.newPassword) || readTrimmed(input.password);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('A valid owner email is required for supabase_reset_owner_password.');
+  }
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error('A new password of at least 8 characters is required for supabase_reset_owner_password.');
+  }
+  const admin = resolveSupabaseAdminClient();
+  const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (listError) {
+    throw new Error(`Supabase listUsers failed: ${listError.message}`);
+  }
+  const user = (listData.users ?? []).find((u) => (u.email ?? '').toLowerCase() === email);
+  if (!user) {
+    throw new Error(`No Supabase auth user found for email ${email}.`);
+  }
+  const { data: updateData, error: updateError } = await admin.auth.admin.updateUserById(user.id, {
+    password: newPassword,
+    email_confirm: true,
+    ban_duration: 'none',
+  });
+  if (updateError || !updateData.user) {
+    throw new Error(`Supabase updateUserById failed: ${updateError?.message ?? 'no user returned'}`);
+  }
+  return {
+    provider: 'supabase',
+    action: 'supabase_reset_owner_password',
+    email,
+    userId: user.id,
+    passwordReset: true,
+    emailConfirmed: Boolean(updateData.user.email_confirmed_at || updateData.user.confirmed_at) || true,
+    timestamp: nowIso(),
+  };
 }
 
 function assertConfirmed(action: DeveloperDeployAction, request: DeveloperDeployRequest): void {
@@ -949,6 +1003,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   if (action === 'render_update_source') {
     return await runRenderUpdateSource(input);
   }
+  if (action === 'supabase_reset_owner_password') {
+    return await runSupabaseResetOwnerPassword(input);
+  }
   return await runSupabaseExecuteSql(input);
 }
 
@@ -963,6 +1020,7 @@ async function auditDeveloperDeployAction(ownerContext: IVXOwnerRequestContext, 
     renderSubdomainPolicy: action === 'render_update_subdomain_policy' ? normalizeRenderSubdomainPolicy(input.renderSubdomainPolicy ?? input.policy) : undefined,
     renderSourceBranch: action === 'render_update_source' ? readTrimmed(input.branch) || 'main' : undefined,
     sqlLength: action === 'supabase_execute_sql' ? readTrimmed(input.sql).length : undefined,
+    resetEmail: action === 'supabase_reset_owner_password' ? readTrimmed(input.email) : undefined,
     resultProvider: readTrimmed(result.provider),
     timestamp: nowIso(),
   });
