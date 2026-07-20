@@ -414,6 +414,21 @@ export function buildSeniorDeveloperWorkerJobAnswer(
   }
 
   // Job still running — show live progress from the real queue state.
+  // DEFECT FIX (cert-3B): a job whose status is a terminal value (completed/failed/blocked/canceled)
+  // must NOT render "RUNNING (...)" even if result is momentarily null (race between status flip
+  // and result attachment). Render an honest terminal-pending block instead.
+  const TERMINAL_JOB_STATUSES = new Set(['completed', 'failed', 'blocked', 'canceled', 'cancelled']);
+  const isTerminalJobStatus = TERMINAL_JOB_STATUSES.has(job.status);
+  if (!result && isTerminalJobStatus) {
+    return [
+      `TASK ID:\n${job.jobId}`,
+      `STATUS:\n${job.status.toUpperCase()} (finalizing evidence — poll the status URL)`,
+      'FILES CHANGED:\n(evidence being assembled)',
+      `COMMANDS:\n- $ worker phase ${job.stage} -> exit pending (status=${job.status}, progress=${job.progressPercent}%)`,
+      'TESTS:\nNOT VERIFIED — evidence is being assembled.',
+      `DEPLOYED PROOF:\nLive status from durable queue. stage=${job.stage} status=${job.status} progress=${job.progressPercent}% detail="${job.stageDetail}" attempts=${job.attempts}`,
+    ].join('\n\n');
+  }
   if (!result || job.status === 'queued' || job.status === 'running'
       || job.status === 'patching' || job.status === 'testing'
       || job.status === 'committing' || job.status === 'deploying'

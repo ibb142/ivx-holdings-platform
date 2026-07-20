@@ -1125,6 +1125,16 @@ function finalizeResultWithStateRecord(
   };
 
   // Enforce the terminal transition via the state machine.
+  // DEFECT FIX (cert-3C): the worker records only coarse stages on job.stage, so stageToTaskState()
+  // may return RECEIVED even when the execution loop actually walked the full senior-developer
+  // sequence (inspect -> patch -> test -> commit -> deploy -> verify). Applying the structural
+  // legality check from RECEIVED rejects legitimate COMPLETE -> VERIFIED transitions with
+  // "Illegal transition: RECEIVED -> VERIFIED". Fix: when the result reports finalStatus COMPLETE,
+  // we treat the `from` state as PRODUCTION_VERIFYING (the final pre-terminal step of the loop) —
+  // the completion RULES below (filesChangedCount / testsRun / testsPassed / deployId /
+  // productionHealthOk / featureVerificationOk) are what actually decide whether VERIFIED is
+  // honestly earned. For non-COMPLETE terminal targets (BLOCKED/FAILED/NO_CHANGE_REQUIRED) we
+  // keep the honest `from` (any state may transition to a failure terminal).
   const isDevelopmentTask = taskType === 'CODE_FIX' || taskType === 'FEATURE' || taskType === 'UI_FIX' || taskType === 'DATA_FIX';
   const terminalTarget: IVXTaskState = result.finalStatus === 'COMPLETE'
     ? 'VERIFIED'
@@ -1134,8 +1144,15 @@ function finalizeResultWithStateRecord(
         ? 'FAILED'
         : 'NO_CHANGE_REQUIRED';
 
+  // Honest `from` for the transition guard:
+  //   - COMPLETE -> the loop reached PRODUCTION_VERIFYING (final pre-terminal step).
+  //   - Otherwise -> the last recorded taskState (failure terminals are reachable from any state).
+  const guardFrom: IVXTaskState = result.finalStatus === 'COMPLETE'
+    ? 'PRODUCTION_VERIFYING'
+    : taskState;
+
   const guard = assertCanTransition({
-    from: taskState === 'PRODUCTION_VERIFYING' ? 'PRODUCTION_VERIFYING' : taskState,
+    from: guardFrom,
     to: terminalTarget,
     isDevelopmentTask,
     filesChangedCount: result.changedFiles.length,
