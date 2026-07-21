@@ -68,6 +68,232 @@ function isLikelyEmail(value: string): boolean {
 }
 
 /**
+ * Request AWS SES to verify an email address as a sender/recipient identity.
+ * AWS sends a verification email to the address; the recipient must click the
+ * link before the address can be used to send or receive mail in sandbox mode.
+ * Returns structured status; never throws.
+ */
+export async function verifySesEmailIdentity(email: string): Promise<SesSendResult> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+  const target = email.trim().toLowerCase();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+
+  if (missingEnvNames.length > 0) {
+    return {
+      ok: false,
+      status: 'missing_config',
+      region,
+      to: target || undefined,
+      missingEnvNames,
+      error: 'Amazon SES is not fully configured.',
+      sentAt,
+    };
+  }
+
+  if (!isLikelyEmail(target)) {
+    return {
+      ok: false,
+      status: 'failed',
+      region,
+      to: target || undefined,
+      missingEnvNames,
+      error: 'Identity is not a valid email address.',
+      sentAt,
+    };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/';
+  const action = 'VerifyEmailIdentity';
+  const payload = `Action=${encodeURIComponent(action)}&EmailAddress=${encodeURIComponent(target)}&Version=2010-12-01`;
+  const bodyHash = hash(payload);
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const contentType = 'application/x-www-form-urlencoded';
+  const headerLines: [string, string][] = [
+    ['content-type', contentType],
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['POST', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: 'failed',
+        region,
+        to: target,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 500) || `SES verification request responded ${response.status}`,
+        sentAt,
+      };
+    }
+    return {
+      ok: true,
+      status: 'sent',
+      region,
+      to: target,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'failed',
+      region,
+      to: target,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES verification request failed.',
+      sentAt,
+    };
+  }
+}
+
+/**
+ * List verified and pending SES identities (email addresses and domains).
+ * Returns structured status; never throws.
+ */
+export async function listSesIdentities(): Promise<{
+  ok: boolean;
+  identities?: string[];
+  error?: string;
+  region?: string;
+  httpStatus?: number;
+  missingEnvNames: string[];
+  sentAt: string;
+}> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+
+  if (missingEnvNames.length > 0) {
+    return {
+      ok: false,
+      region,
+      missingEnvNames,
+      error: 'Amazon SES is not fully configured.',
+      sentAt,
+    };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/';
+  const payload = 'Action=ListIdentities&Version=2010-12-01';
+  const bodyHash = hash(payload);
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const contentType = 'application/x-www-form-urlencoded';
+  const headerLines: [string, string][] = [
+    ['content-type', contentType],
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['POST', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        region,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 500) || `SES list identities responded ${response.status}`,
+        sentAt,
+      };
+    }
+    const identities: string[] = [];
+    const emailMatches = text.matchAll(/<member>([^<]+)<\/member>/g);
+    for (const match of emailMatches) {
+      identities.push(match[1].trim());
+    }
+    return {
+      ok: true,
+      region,
+      identities,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      region,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES list identities request failed.',
+      sentAt,
+    };
+  }
+}
+
+/**
  * Send a single transactional email via Amazon SES. Returns structured status;
  * never throws. Owner approval must be enforced by the caller.
  */

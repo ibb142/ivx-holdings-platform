@@ -2,7 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import { createClient } from '@supabase/supabase-js';
 import { buildIVXCredentialRequestManifestSnapshot, IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES } from '../config/ivx-credential-request-manifest';
 import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
-import { sendSesEmail } from '../services/ivx-ses-email';
+import { sendSesEmail, verifySesEmailIdentity, listSesIdentities } from '../services/ivx-ses-email';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 
@@ -48,7 +48,9 @@ type DeveloperDeployAction =
   | 'supabase_reset_owner_password'
   | 'supabase_revoke_owner_sessions'
   | 'supabase_audit_owner_auth_user'
-  | 'send_owner_password_reset_email_via_ses';
+  | 'send_owner_password_reset_email_via_ses'
+  | 'verify_ses_email_identity'
+  | 'list_ses_identities';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -113,6 +115,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'supabase_revoke_owner_sessions'
     || normalized === 'supabase_audit_owner_auth_user'
     || normalized === 'send_owner_password_reset_email_via_ses'
+    || normalized === 'verify_ses_email_identity'
+    || normalized === 'list_ses_identities'
  ) {
     return normalized;
   }
@@ -333,6 +337,44 @@ If you did not request this reset, you can safely ignore this email.
     messageId: sendResult.messageId ?? null,
     sesRegion: sendResult.region ?? null,
     sesFrom: sendResult.from ?? null,
+    timestamp: nowIso(),
+    secretValuesReturned: false as const,
+  };
+}
+
+async function runVerifySesEmailIdentity(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const email = readTrimmed(input.email).toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('A valid email address is required for verify_ses_email_identity.');
+  }
+  const result = await verifySesEmailIdentity(email);
+  if (!result.ok) {
+    const missing = Array.isArray(result.missingEnvNames) ? result.missingEnvNames.join(', ') : 'unknown';
+    throw new Error(`SES verify identity failed: ${result.status}${result.error ? ` — ${result.error}` : ''} (missing: ${missing})`);
+  }
+  return {
+    provider: 'ses',
+    action: 'verify_ses_email_identity',
+    email,
+    httpStatus: result.httpStatus ?? null,
+    sesRegion: result.region ?? null,
+    timestamp: nowIso(),
+    secretValuesReturned: false as const,
+  };
+}
+
+async function runListSesIdentities(): Promise<Record<string, unknown>> {
+  const result = await listSesIdentities();
+  if (!result.ok) {
+    const missing = Array.isArray(result.missingEnvNames) ? result.missingEnvNames.join(', ') : 'unknown';
+    throw new Error(`SES list identities failed: ${result.error ? ` — ${result.error}` : ''} (missing: ${missing})`);
+  }
+  return {
+    provider: 'ses',
+    action: 'list_ses_identities',
+    identities: result.identities ?? [],
+    count: (result.identities ?? []).length,
+    sesRegion: result.region ?? null,
     timestamp: nowIso(),
     secretValuesReturned: false as const,
   };
@@ -1168,6 +1210,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'send_owner_password_reset_email_via_ses') {
     return await runSendOwnerPasswordResetEmailViaSES(input);
+  }
+  if (action === 'verify_ses_email_identity') {
+    return await runVerifySesEmailIdentity(input);
+  }
+  if (action === 'list_ses_identities') {
+    return await runListSesIdentities();
   }
   return await runSupabaseExecuteSql(input);
 }
