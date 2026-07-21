@@ -83,6 +83,7 @@ import {
   formatBirthdayInput,
   parseBirthday,
 } from '@/lib/auth-helpers';
+import { getPasswordResetRedirectUrl } from '@/lib/auth-password-recovery';
 import * as MemberService from '@/lib/member-service';
 import { supabase } from '@/lib/supabase';
 
@@ -533,11 +534,16 @@ export function IVXAuthCard({
     }
     setForgotPasswordSending(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo: `${Platform.OS === 'web' ? window.location.origin : 'https://chat.ivxholding.com'}/login`,
-      });
+      const redirectTo = getPasswordResetRedirectUrl();
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
       if (error) {
-        setLoginError(error.message || 'Could not send reset email. Please try again.');
+        const raw = error.message || 'Could not send reset email. Please try again.';
+        const isRateLimit = (error as any)?.status === 429 || raw.toLowerCase().includes('rate limit');
+        setLoginError(
+          isRateLimit
+            ? 'Too many reset attempts. Please wait 60 seconds and try again.'
+            : raw,
+        );
       } else {
         setForgotPasswordSent(true);
         if (Platform.OS !== 'web') {
@@ -545,7 +551,9 @@ export function IVXAuthCard({
         }
       }
     } catch (err: any) {
-      setLoginError(err?.message || 'Could not send reset email.');
+      const raw = err?.message || 'Could not send reset email.';
+      const isRateLimit = raw.toLowerCase().includes('rate limit');
+      setLoginError(isRateLimit ? 'Too many reset attempts. Please wait 60 seconds and try again.' : raw);
     } finally {
       setForgotPasswordSending(false);
     }

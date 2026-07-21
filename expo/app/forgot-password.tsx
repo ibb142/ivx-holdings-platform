@@ -59,8 +59,14 @@ export default function ForgotPasswordScreen() {
       setSent(true);
     } catch (error: unknown) {
       const raw = error instanceof Error ? error.message : String(error ?? '');
+      const isRateLimit = raw.toLowerCase().includes('rate limit') || (error as any)?.status === 429;
       console.log('[ForgotPassword] Reset email failed:', raw);
-      Alert.alert('Reset Failed', raw || 'Could not send the reset email. Try again in a moment.');
+      Alert.alert(
+        'Reset Failed',
+        isRateLimit
+          ? 'Too many reset attempts. Please wait 60 seconds and try again.'
+          : raw || 'Could not send the reset email. Try again in a moment.',
+      );
     } finally {
       setLoading(false);
     }
