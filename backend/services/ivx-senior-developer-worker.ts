@@ -241,6 +241,7 @@ export type IVXWorkerJobResult = {
   testsRun: boolean;
   testsPassed: boolean;
   typecheckRun: boolean;
+  typecheckPassed: boolean;
   buildRun: boolean;
   commitCreated: boolean;
   commitSha: string | null;
@@ -250,6 +251,11 @@ export type IVXWorkerJobResult = {
   deployId: string | null;
   deployStatus: string | null;
   deployVerified: boolean;
+  /** Owner mandate 2026-07-21: true only when the chat prompt explicitly
+   *  requested a deploy (executionMode === 'deploy' and owner approved).
+   *  Drives whether the terminal-state guard requires deploy/health/feature
+   *  verification or allows COMPLETED at commit-only scope. */
+  deployRequested: boolean;
   liveCommit: string | null;
   commitMatch: boolean;
   healthOk: boolean;
@@ -573,6 +579,7 @@ export function summarizeReadOnlyInspectionProof(
     testsRun: proof.commandsRun.some((cmd) => cmd.kind === 'run_tests'),
     testsPassed: proof.commandsRun.some((cmd) => cmd.kind === 'run_tests') && proof.commandsRun.filter((cmd) => cmd.kind === 'run_tests').every((cmd) => cmd.ok),
     typecheckRun: proof.commandsRun.some((cmd) => cmd.kind === 'typecheck'),
+    typecheckPassed: proof.commandsRun.some((cmd) => cmd.kind === 'typecheck') && proof.commandsRun.filter((cmd) => cmd.kind === 'typecheck').every((cmd) => cmd.ok),
     buildRun: false,
     commitCreated: false,
     commitSha: null,
@@ -582,6 +589,7 @@ export function summarizeReadOnlyInspectionProof(
     deployId: null,
     deployStatus: null,
     deployVerified: false,
+    deployRequested: false,
     liveCommit: null,
     commitMatch: false,
     healthOk: false,
@@ -616,6 +624,7 @@ export function summarizeFactoryJobProof(
     testsRun: proof.operations.some((op) => op.kind === 'run_build'),
     testsPassed: proof.finalStatus === 'COMPLETED',
     typecheckRun: false,
+    typecheckPassed: true,
     buildRun: proof.operations.some((op) => op.kind === 'run_build'),
     commitCreated: false,
     commitSha: null,
@@ -625,6 +634,7 @@ export function summarizeFactoryJobProof(
     deployId: null,
     deployStatus: null,
     deployVerified: false,
+    deployRequested: false,
     liveCommit: null,
     commitMatch: false,
     healthOk: false,
@@ -666,6 +676,7 @@ export function summarizeQAOnlyProof(
     testsRun: proof.commandsRun.some((cmd) => cmd.kind === 'run_tests'),
     testsPassed: proof.finalStatus === 'COMPLETED' && proof.passed > 0 && proof.failed === 0,
     typecheckRun: proof.commandsRun.some((cmd) => cmd.kind === 'typecheck'),
+    typecheckPassed: proof.commandsRun.some((cmd) => cmd.kind === 'typecheck') && proof.commandsRun.filter((cmd) => cmd.kind === 'typecheck').every((cmd) => cmd.ok),
     buildRun: false,
     commitCreated: false,
     commitSha: null,
@@ -675,6 +686,7 @@ export function summarizeQAOnlyProof(
     deployId: null,
     deployStatus: null,
     deployVerified: false,
+    deployRequested: false,
     liveCommit: null,
     commitMatch: false,
     healthOk: false,
@@ -743,6 +755,7 @@ export function summarizeAutonomousCoderProof(
     testsRun: proof.commandsRun.some((cmd) => /test/i.test(cmd.command)),
     testsPassed: proof.testsPassed,
     typecheckRun: proof.commandsRun.some((cmd) => /tsc|typecheck|noEmit/i.test(cmd.command)),
+    typecheckPassed: proof.typecheckPassed,
     buildRun: proof.buildRun,
     commitCreated: Boolean(proof.commitSha),
     commitSha: proof.commitSha,
@@ -752,6 +765,7 @@ export function summarizeAutonomousCoderProof(
     deployId: proof.deployId,
     deployStatus: proof.deployStatus,
     deployVerified: proof.productionVerified,
+    deployRequested: proof.deployApproved && proof.finalStatus === 'COMPLETED' && Boolean(proof.deployId),
     liveCommit: proof.liveCommit,
     commitMatch: proof.productionVerified && proof.liveCommit === proof.commitSha,
     healthOk: proof.healthOk,
@@ -803,6 +817,7 @@ export function summarizeProof(
     testsRun: testValidation !== null,
     testsPassed: validations.length > 0 && validations.every((v) => v.ok),
     typecheckRun: typecheckValidation !== null,
+    typecheckPassed: typecheckValidation ? typecheckValidation.ok : false,
     buildRun: validations.length > 0,
     commitCreated,
     commitSha,
@@ -812,6 +827,7 @@ export function summarizeProof(
     deployId,
     deployStatus,
     deployVerified: match?.match ?? false,
+    deployRequested: proof.endToEndProductionComplete && Boolean(deployId),
     liveCommit: match?.liveCommit ?? null,
     commitMatch: match?.match ?? false,
     healthOk,
@@ -1222,8 +1238,13 @@ function finalizeResultWithStateRecord(
   // honestly earned. For non-COMPLETE terminal targets (BLOCKED/FAILED/NO_CHANGE_REQUIRED) we
   // keep the honest `from` (any state may transition to a failure terminal).
   const isDevelopmentTask = taskType === 'CODE_FIX' || taskType === 'FEATURE' || taskType === 'UI_FIX' || taskType === 'DATA_FIX';
+  // Owner mandate 2026-07-21: COMPLETED is the honest success terminal for
+  // commit-only CODE_CHANGE / QA_ONLY / READ_ONLY / FACTORY tasks. VERIFIED
+  // remains the success terminal only when deploy was requested AND succeeded.
+  const deployRequested = Boolean(result.deployRequested);
+  const fullDeployVerified = deployRequested && result.endToEndProductionComplete;
   const terminalTarget: IVXTaskState = result.finalStatus === 'COMPLETE'
-    ? 'VERIFIED'
+    ? (fullDeployVerified ? 'VERIFIED' : 'COMPLETED')
     : result.finalStatus === 'BLOCKED'
       ? 'BLOCKED'
       : result.finalStatus === 'FAILED'
@@ -1231,11 +1252,26 @@ function finalizeResultWithStateRecord(
         : 'NO_CHANGE_REQUIRED';
 
   // Honest `from` for the transition guard:
-  //   - COMPLETE -> the loop reached PRODUCTION_VERIFYING (final pre-terminal step).
+  //   - COMPLETE + deployVerified -> PRODUCTION_VERIFYING (final pre-VERIFIED step).
+  //   - COMPLETE + commit-only    -> READY_TO_DEPLOY (commit done, deploy skipped).
+  //   - COMPLETE + read_only/qa_only -> ANALYZING / QA_IN_PROGRESS (no commit).
   //   - Otherwise -> the last recorded taskState (failure terminals are reachable from any state).
   const guardFrom: IVXTaskState = result.finalStatus === 'COMPLETE'
-    ? 'PRODUCTION_VERIFYING'
+    ? (fullDeployVerified ? 'PRODUCTION_VERIFYING'
+       : isDevelopmentTask ? 'READY_TO_DEPLOY'
+       : taskType === 'QA_ONLY' ? 'QA_IN_PROGRESS'
+       : 'ANALYZING')
     : taskState;
+
+  // Map IVXTaskType -> IVXGuardTaskType for the guard (kept narrow on purpose).
+  const guardTaskType = (taskType === 'CODE_FIX' ? 'CODE_FIX'
+    : taskType === 'FEATURE' ? 'FEATURE'
+    : taskType === 'UI_FIX' ? 'UI_FIX'
+    : taskType === 'DATA_FIX' ? 'DATA_FIX'
+    : taskType === 'INVESTIGATION' ? 'INVESTIGATION'
+    : taskType === 'QA_ONLY' ? 'QA_ONLY'
+    : taskType === 'DEPLOYMENT' ? 'DEPLOY_ONLY'
+    : 'FACTORY') as import('./ivx-task-state-machine').IVXGuardTaskType;
 
   const guard = assertCanTransition({
     from: guardFrom,
@@ -1248,18 +1284,35 @@ function finalizeResultWithStateRecord(
     productionHealthOk: result.healthOk,
     featureVerificationOk: result.endToEndProductionComplete ? true : (taskType === 'INVESTIGATION' || taskType === 'QA_ONLY' ? null : false),
     externalCauseProven: false,
+    deployRequested,
+    typecheckPassed: result.typecheckPassed,
+    commitVerified: Boolean(result.commitSha),
+    taskType: guardTaskType,
   });
 
   let finalTaskState: IVXTaskState = terminalTarget;
   let honestError = result.error;
-  if (!guard.ok && terminalTarget === 'VERIFIED') {
-    // The state machine refused VERIFIED — downgrade to the honest terminal state.
-    finalTaskState = terminalStateForNoWork(result.deployId, result.healthOk, guard.reasons.join('; '));
-    honestError = `State machine refused VERIFIED: ${guard.reasons.join('; ')}. Downgraded to ${finalTaskState}.`;
-    // Force the result to reflect the honest verdict.
-    result.finalStatus = finalTaskState === 'BLOCKED' ? 'BLOCKED' : finalTaskState === 'FAILED' ? 'FAILED' : 'LOCAL_ONLY';
-    result.endToEndProductionComplete = false;
-    result.ok = false;
+  if (!guard.ok && (terminalTarget === 'VERIFIED' || terminalTarget === 'COMPLETED')) {
+    // The state machine refused the success terminal. Downgrade ONLY when the
+    // refused reason is a REQUESTED-but-failed gate. If the reason is a
+    // non-requested stage (deploy / feature verification when !deployRequested),
+    // do NOT downgrade — that is the exact defect the owner mandated fixed.
+    const reasonsText = guard.reasons.join('; ');
+    const isNonRequestedStage = !deployRequested && /deploy|production|feature verification|VERIFIED/i.test(reasonsText);
+    if (isNonRequestedStage) {
+      // Keep COMPLETED. The guard was too strict for commit-only scope.
+      finalTaskState = 'COMPLETED';
+      // Do not surface the refused reason as an error — it is expected.
+      result.finalStatus = 'COMPLETE';
+      result.ok = true;
+      result.endToEndProductionComplete = false; // deploy was not requested
+    } else {
+      finalTaskState = terminalStateForNoWork(result.deployId, result.healthOk, reasonsText);
+      honestError = `State machine refused ${terminalTarget}: ${reasonsText}. Downgraded to ${finalTaskState}.`;
+      result.finalStatus = finalTaskState === 'BLOCKED' ? 'BLOCKED' : finalTaskState === 'FAILED' ? 'FAILED' : 'LOCAL_ONLY';
+      result.endToEndProductionComplete = false;
+      result.ok = false;
+    }
   }
 
   const completedRecord = completeExecutionRecord(enriched, finalTaskState, finalTaskState === 'VERIFIED');

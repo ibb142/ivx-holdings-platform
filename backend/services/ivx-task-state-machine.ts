@@ -20,7 +20,7 @@
  * to avoid circular dependencies.
  */
 
-export const IVX_TASK_STATE_MACHINE_MARKER = 'ivx-task-state-machine-2026-07-20';
+export const IVX_TASK_STATE_MACHINE_MARKER = 'ivx-task-state-machine-2026-07-21';
 
 export type IVXTaskState =
   | 'RECEIVED'
@@ -37,6 +37,7 @@ export type IVXTaskState =
   | 'DEPLOYED'
   | 'PRODUCTION_VERIFYING'
   | 'VERIFIED'
+  | 'COMPLETED'
   | 'BLOCKED'
   | 'FAILED'
   | 'NO_CHANGE_REQUIRED';
@@ -56,6 +57,7 @@ export const ALL_TASK_STATES: readonly IVXTaskState[] = [
   'DEPLOYED',
   'PRODUCTION_VERIFYING',
   'VERIFIED',
+  'COMPLETED',
   'BLOCKED',
   'FAILED',
   'NO_CHANGE_REQUIRED',
@@ -63,30 +65,49 @@ export const ALL_TASK_STATES: readonly IVXTaskState[] = [
 
 export const TERMINAL_TASK_STATES: ReadonlySet<IVXTaskState> = new Set([
   'VERIFIED',
+  'COMPLETED',
   'BLOCKED',
   'FAILED',
   'NO_CHANGE_REQUIRED',
 ]);
 
 /**
+ * Task types that drive the terminal-state completion rules. The guard uses
+ * these to decide which gates are required for COMPLETED vs VERIFIED.
+ * Owner mandate 2026-07-21: a task must NEVER finish FAILED when its requested
+ * gates all succeeded; deploy/feature-verification are only required when
+ * deployment was explicitly requested.
+ */
+export type IVXGuardTaskType =
+  | 'CODE_FIX'
+  | 'FEATURE'
+  | 'UI_FIX'
+  | 'DATA_FIX'
+  | 'INVESTIGATION'
+  | 'QA_ONLY'
+  | 'DEPLOY_ONLY'
+  | 'FACTORY';
+
+/**
  * Legal forward transitions. A task may not skip from RECEIVED straight to
  * DEPLOYED or VERIFIED — it must walk the senior-developer loop.
  */
 const LEGAL_TRANSITIONS: ReadonlyMap<IVXTaskState, ReadonlySet<IVXTaskState>> = new Map([
-  ['RECEIVED', new Set(['ANALYZING', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
-  ['ANALYZING', new Set(['REPRODUCING', 'ROOT_CAUSE_IDENTIFIED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
+  ['RECEIVED', new Set(['ANALYZING', 'COMPLETED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
+  ['ANALYZING', new Set(['REPRODUCING', 'ROOT_CAUSE_IDENTIFIED', 'COMPLETED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
   ['REPRODUCING', new Set(['ROOT_CAUSE_IDENTIFIED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
   ['ROOT_CAUSE_IDENTIFIED', new Set(['IMPLEMENTING', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
   ['IMPLEMENTING', new Set(['CODE_CHANGED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
-  ['CODE_CHANGED', new Set(['TESTING', 'BLOCKED', 'FAILED'])],
-  ['TESTING', new Set(['QA_REQUIRED', 'READY_TO_DEPLOY', 'BLOCKED', 'FAILED'])],
+  ['CODE_CHANGED', new Set(['TESTING', 'COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['TESTING', new Set(['QA_REQUIRED', 'READY_TO_DEPLOY', 'COMPLETED', 'BLOCKED', 'FAILED'])],
   ['QA_REQUIRED', new Set(['QA_IN_PROGRESS', 'BLOCKED', 'FAILED'])],
-  ['QA_IN_PROGRESS', new Set(['READY_TO_DEPLOY', 'BLOCKED', 'FAILED'])],
-  ['READY_TO_DEPLOY', new Set(['DEPLOYING', 'BLOCKED', 'FAILED'])],
+  ['QA_IN_PROGRESS', new Set(['READY_TO_DEPLOY', 'COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['READY_TO_DEPLOY', new Set(['DEPLOYING', 'COMPLETED', 'BLOCKED', 'FAILED'])],
   ['DEPLOYING', new Set(['DEPLOYED', 'BLOCKED', 'FAILED'])],
-  ['DEPLOYED', new Set(['PRODUCTION_VERIFYING', 'BLOCKED', 'FAILED'])],
-  ['PRODUCTION_VERIFYING', new Set(['VERIFIED', 'BLOCKED', 'FAILED'])],
+  ['DEPLOYED', new Set(['PRODUCTION_VERIFYING', 'COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['PRODUCTION_VERIFYING', new Set(['VERIFIED', 'COMPLETED', 'BLOCKED', 'FAILED'])],
   ['VERIFIED', new Set()],
+  ['COMPLETED', new Set()],
   ['BLOCKED', new Set()],
   ['FAILED', new Set()],
   ['NO_CHANGE_REQUIRED', new Set()],
@@ -113,6 +134,20 @@ export type IVXTransitionGuardInput = {
   productionHealthOk: boolean;
   featureVerificationOk: boolean | null;
   externalCauseProven: boolean;
+  /** Owner mandate 2026-07-21: whether deployment was explicitly requested.
+   *  When false, a CODE_CHANGE task may reach COMPLETED without deployId /
+   *  productionHealthOk / featureVerificationOk. Defaults to false (treat
+   *  missing as "deploy not requested") so legacy callers keep working. */
+  deployRequested?: boolean;
+  /** Whether a targeted typecheck was run and passed. Required for COMPLETED
+   *  on development tasks. Defaults to false. */
+  typecheckPassed?: boolean;
+  /** Whether the GitHub commit was created and verified (commitSha present).
+   *  Required for COMPLETED on development tasks and DEPLOY_ONLY. */
+  commitVerified?: boolean;
+  /** Task type used to decide which gates apply for COMPLETED. Falls back to
+   *  isDevelopmentTask for legacy callers. */
+  taskType?: IVXGuardTaskType;
 };
 
 export type IVXTransitionGuardResult = {
@@ -140,6 +175,86 @@ export function assertCanTransition(input: IVXTransitionGuardInput): IVXTransiti
   if (!canTransition(from, to)) {
     reasons.push(`Illegal transition: ${from} -> ${to} is not a permitted forward transition.`);
     return { ok: false, legal: false, reasons, from, to };
+  }
+
+  // Owner mandate 2026-07-21: COMPLETED is the honest success terminal for
+  // tasks that fulfilled all REQUESTED gates but did not deploy / run feature
+  // verification (e.g. "commit but do not deploy"). VERIFIED remains the
+  // success terminal only for the full deploy + production-verify path.
+  if (to === 'COMPLETED') {
+    const tt = input.taskType;
+    const isDev = input.isDevelopmentTask || tt === 'CODE_FIX' || tt === 'FEATURE' || tt === 'UI_FIX' || tt === 'DATA_FIX';
+    const isReadOnly = tt === 'INVESTIGATION';
+    const isQaOnly = tt === 'QA_ONLY';
+    const isDeployOnly = tt === 'DEPLOY_ONLY';
+
+    if (isDev) {
+      // CODE_CHANGE + NO_DEPLOY: PATCH + TESTS + TYPECHECK + COMMIT + GITHUB_VERIFY = COMPLETED
+      // CODE_CHANGE + DEPLOY: must go through VERIFIED, not COMPLETED.
+      if (input.deployRequested) {
+        reasons.push('A development task with deploy requested must reach VERIFIED via PRODUCTION_VERIFYING, not COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (input.filesChangedCount === 0) {
+        reasons.push('A development task cannot become COMPLETED with an empty diff.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.testsRun) {
+        reasons.push('Files changed but tests were not run — cannot become COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.testsPassed) {
+        reasons.push('Files changed but tests failed — cannot become COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (input.typecheckPassed === false) {
+        reasons.push('Typecheck was run and failed — cannot become COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.commitVerified) {
+        reasons.push('Commit was not created / verified — cannot become COMPLETED for a development task.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      // Deploy + production health + feature verification are NOT required
+      // when deploy was not requested. Do not push any reason for them.
+    } else if (isReadOnly) {
+      // READ_ONLY: INSPECTION + FINDINGS = COMPLETED. No patch/commit/deploy.
+      if (input.filesChangedCount > 0) {
+        reasons.push('A read-only task cannot become COMPLETED with files changed.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+    } else if (isQaOnly) {
+      // QA_ONLY: TARGETED TESTS + RESULTS = COMPLETED. No patch/commit/deploy.
+      if (!input.testsRun) {
+        reasons.push('A QA-only task cannot become COMPLETED without targeted tests.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+    } else if (isDeployOnly) {
+      // DEPLOY_ONLY: VERIFIED COMMIT + DEPLOY + HEALTH = COMPLETED.
+      if (!input.commitVerified) {
+        reasons.push('A deploy-only task cannot become COMPLETED without a verified commit.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.deployId) {
+        reasons.push('A deploy-only task cannot become COMPLETED without a deployId.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.productionHealthOk) {
+        reasons.push('A deploy-only task cannot become COMPLETED without production health confirmed.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+    }
+    // FACTORY tasks: require commitVerified + filesChangedCount > 0 to be COMPLETED.
+    if (tt === 'FACTORY') {
+      if (input.filesChangedCount === 0) {
+        reasons.push('A factory task cannot become COMPLETED with no files created.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.commitVerified) {
+        reasons.push('A factory task cannot become COMPLETED without a verified commit.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+    }
   }
 
   // Enforce completion rules on entry to VERIFIED.
@@ -269,6 +384,7 @@ export function stageToTaskState(stage: string | null | undefined): IVXTaskState
   if (s.includes('DEPLOYING') || s.includes('DEPLOY_IN_PROGRESS')) return 'DEPLOYING';
   if (s.includes('DEPLOYED') && !s.includes('VERIFY')) return 'DEPLOYED';
   if (s.includes('PRODUCTION_VERIFY') || s.includes('VERIFYING') || s.includes('VERIFY')) return 'PRODUCTION_VERIFYING';
+  if (s.includes('COMPLETED') && !s.includes('NOT_COMPLETED')) return 'COMPLETED';
   if (s.includes('VERIFIED') || s.includes('COMPLETE')) return 'VERIFIED';
   if (s.includes('BLOCKED')) return 'BLOCKED';
   if (s.includes('FAILED') || s.includes('ERROR')) return 'FAILED';

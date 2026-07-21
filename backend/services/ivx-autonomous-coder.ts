@@ -140,6 +140,11 @@ export type IVXAutonomousCoderProof = {
   commitUrl: string | null;
   branch: string | null;
   deployApproved: boolean;
+  /** Owner mandate 2026-07-21: true when the chat prompt explicitly requested
+   *  a deploy (executionMode === 'deploy'). Drives whether the worker's
+   *  terminal-state guard requires deploy/health/feature verification or
+   *  allows COMPLETED at commit-only scope. */
+  deployRequested: boolean;
   deployId: string | null;
   deployStatus: string | null;
   productionVerified: boolean;
@@ -281,6 +286,7 @@ function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, i
     commitUrl: null,
     branch: null,
     deployApproved: false,
+    deployRequested: input.executionMode === 'deploy',
     deployId: null,
     deployStatus: null,
     productionVerified: false,
@@ -1060,6 +1066,7 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
       commitUrl: null,
       branch: null,
       deployApproved: false,
+      deployRequested: input.executionMode === 'deploy',
       deployId: null,
       deployStatus: null,
       productionVerified: false,
@@ -1791,6 +1798,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     commitUrl,
     branch,
     deployApproved: Boolean(input.deployApproved && input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY'),
+    deployRequested: input.executionMode === 'deploy',
     deployId,
     deployStatus,
     productionVerified,
