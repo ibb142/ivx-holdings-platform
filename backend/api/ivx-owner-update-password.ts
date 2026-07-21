@@ -119,16 +119,20 @@ export async function handleIVXOwnerUpdatePassword(request: Request): Promise<Re
     );
   }
 
-  let ownerContext: { context: { email?: string; userId?: string }; approval: unknown };
+  let ownerEmail = '';
+  let ownerUserId = '';
   try {
-    ownerContext = await assertIVXRegisteredOwnerBearer(request, 'owner_update_password');
+    const ownerContext = await assertIVXRegisteredOwnerBearer(request, 'owner_update_password');
+    ownerEmail = readTrimmed(ownerContext.context.email ?? '').toLowerCase();
+    ownerUserId = readTrimmed(ownerContext.context.userId ?? '');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Owner bearer verification failed.';
     const status = message.toLowerCase().includes('missing bearer') ? 401 : 403;
     return ownerOnlyJson({ ok: false, error: message, secretValuesReturned: false }, status);
   }
 
-  const email = readTrimmed(ownerContext.context.email).toLowerCase();
+  const email = ownerEmail;
+  void ownerUserId;
   if (!email || !EMAIL_RE.test(email)) {
     return ownerOnlyJson({ ok: false, error: 'Owner email could not be resolved from session.' }, 400);
   }

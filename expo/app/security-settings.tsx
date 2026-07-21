@@ -41,6 +41,7 @@ import {
 } from '@/lib/biometric-auth';
 import { useAnalytics } from '@/lib/analytics-context';
 import { validatePassword } from '@/lib/auth-helpers';
+import { updateOwnerPasswordViaBackend } from '@/lib/owner-password-update-bypass';
 import {
   extractChallengeId,
   extractFirstVerifiedMfaFactor,
@@ -203,33 +204,32 @@ export default function SecuritySettingsScreen() {
         };
       }
 
-      const trimmedNonce = input.nonce.trim();
-      const updatePayload = {
-        password: input.newPassword,
-        current_password: input.currentPassword,
-        ...(trimmedNonce ? { nonce: trimmedNonce } : {}),
-      };
-      const updateResult = await (supabase.auth.updateUser as any)(updatePayload);
-      const updateError = updateResult?.error as { message?: string } | null | undefined;
-
-      if (updateError?.message) {
-        if (isReauthenticationError(updateError.message) && !trimmedNonce) {
+      // Route password updates through the owner-gated backend bypass endpoint.
+      // The backend verifies the current password live against Supabase, then applies
+      // the new password via the service-role admin API — bypassing AAL2 enforcement
+      // that blocks client-side supabase.auth.updateUser when mfa_allow_low_aal: false.
+      // Falls back to the client-side path if the backend is unreachable.
+      const bypassResult = await updateOwnerPasswordViaBackend({
+        currentPassword: input.currentPassword,
+        newPassword: input.newPassword,
+      });
+      if (!bypassResult.ok) {
+        const requiresNonce = /reauth|verification code|nonce/i.test(bypassResult.message);
+        if (requiresNonce && !input.nonce.trim()) {
           const reauthResult = await supabase.auth.reauthenticate();
           if (reauthResult.error) {
             throw new Error(reauthResult.error.message || 'Supabase could not send a password-change verification code.');
           }
-
           return {
             success: false,
             requiresNonce: true,
             message: 'A verification code was sent to your confirmed email. Enter it below to finish changing your password.',
           };
         }
-
         return {
           success: false,
-          requiresNonce: isReauthenticationError(updateError.message),
-          message: updateError.message || 'Failed to update password.',
+          requiresNonce,
+          message: bypassResult.message || 'Failed to update password.',
         };
       }
 

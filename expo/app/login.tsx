@@ -413,6 +413,10 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
   const [serverPasswordRepairLoading, setServerPasswordRepairLoading] = useState<boolean>(false);
   // "Remember Me" is OFF by default — the owner must manually sign in every launch.
   const [rememberMe, setRememberMe] = useState<boolean>(false);
+  // Amazon/Instagram-level UX: all diagnostic/recovery machinery is collapsed
+  // behind a single "Troubleshoot access" disclosure by default. The owner sees
+  // email + password + Sign In + Forgot? — nothing else — until they tap it.
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [repairDebug, setRepairDebug] = useState<{
     endpoint: string;
     status: number | null;
@@ -1718,8 +1722,24 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
               <Text style={styles.title}>{loginTitle}</Text>
               <Text style={styles.subtitle}>{loginSubtitle}</Text>
 
+              {/* Amazon/Instagram-level UX: a single clean inline error line when the
+                  advanced diagnostic panel is collapsed. The full diagnostic card
+                  (with telemetry, repair buttons, issue matrix) stays available
+                  behind the "Troubleshoot access" disclosure below. */}
+              {!showAdvanced && failedLoginMessage ? (
+                <View style={styles.inlineErrorRow} testID="login-inline-error">
+                  <AlertTriangle size={14} color={Colors.error} />
+                  <Text style={styles.inlineErrorText} numberOfLines={2}>{failedLoginMessage}</Text>
+                </View>
+              ) : null}
+              {!showAdvanced && attemptState.kind === 'reset-sent' ? (
+                <View style={styles.inlineSuccessRow} testID="login-inline-success">
+                  <MailCheck size={14} color={Colors.success} />
+                  <Text style={styles.inlineSuccessText} numberOfLines={2}>Reset link sent to {attemptState.email}. Check your inbox.</Text>
+                </View>
+              ) : null}
 
-              {adminAccessLocked ? (
+              {showAdvanced && adminAccessLocked ? (
                 <View style={styles.adminLockCard} testID="login-admin-lock-card">
                   <View style={styles.authAuditHeader}>
                     <Shield size={15} color={Colors.error} />
@@ -1742,7 +1762,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 </View>
               ) : null}
 
-              {attemptState.kind === 'reset-sent' ? (
+              {showAdvanced && attemptState.kind === 'reset-sent' ? (
                 <View style={styles.resetSentCard} testID="login-reset-sent-card">
                   <View style={styles.resetSentIconWrap}>
                     <MailCheck size={28} color={Colors.success} />
@@ -1769,7 +1789,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                     </View>
                   ) : null}
                 </View>
-              ) : (
+              ) : showAdvanced ? (
                 <View
                   style={[
                     styles.authAuditCard,
@@ -1821,10 +1841,10 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                     </View>
                   ) : null}
                 </View>
-              )}
+              ) : null}
 
-              {effectiveOwnerMode ? <SupabaseAuthDiagnostic /> : null}
-              {effectiveOwnerMode ? <OwnerAuthActions /> : null}
+              {showAdvanced && effectiveOwnerMode ? <SupabaseAuthDiagnostic /> : null}
+              {showAdvanced && effectiveOwnerMode ? <OwnerAuthActions /> : null}
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Email Address</Text>
@@ -1914,7 +1934,21 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 )}
               </TouchableOpacity>
 
-              {effectiveOwnerMode ? (
+              {/* Amazon/Instagram-level UX: a single muted "Troubleshoot access"
+                  disclosure that expands the full diagnostic + recovery panel.
+                  Collapsed by default so the owner sees a clean sign-in. */}
+              <TouchableOpacity
+                style={styles.troubleshootToggle}
+                onPress={() => setShowAdvanced((v) => !v)}
+                activeOpacity={0.7}
+                testID="login-troubleshoot-toggle"
+              >
+                <Shield size={13} color={Colors.textTertiary} />
+                <Text style={styles.troubleshootToggleText}>{showAdvanced ? 'Hide advanced options' : 'Troubleshoot access'}</Text>
+                <ChevronRight size={13} color={Colors.textTertiary} style={{ transform: [{ rotate: showAdvanced ? '90deg' : '0deg' }] }} />
+              </TouchableOpacity>
+
+              {showAdvanced && effectiveOwnerMode ? (
                 <TouchableOpacity
                   style={styles.ownerSmsRecoveryButton}
                   activeOpacity={0.84}
@@ -1925,7 +1959,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 </TouchableOpacity>
               ) : null}
 
-              {effectiveOwnerMode ? (
+              {showAdvanced && effectiveOwnerMode ? (
                 <>
                   <TouchableOpacity
                     style={[styles.ownerPasswordResetCard, passwordResetLoading && styles.ownerPasswordResetCardDisabled, { opacity: 0.85 }]}
@@ -1948,7 +1982,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 </>
               ) : null}
 
-              {shouldShowOwnerAccessNotice ? (
+              {showAdvanced && shouldShowOwnerAccessNotice ? (
                 <TouchableOpacity
                   style={styles.ownerAccessNotice}
                   testID="login-owner-access-notice"
@@ -1973,6 +2007,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 </TouchableOpacity>
               ) : null}
 
+              {showAdvanced ? (
               <TouchableOpacity
                 style={styles.ownerAlternativeCard}
                 activeOpacity={0.84}
@@ -1990,7 +2025,9 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 </View>
                 <ChevronRight size={18} color={Colors.primary} />
               </TouchableOpacity>
+              ) : null}
 
+              {showAdvanced ? (
               <View style={styles.truthCard} testID="login-truth-card">
                 <Text style={styles.truthTitle}>Straight answer</Text>
                 <Text style={styles.truthSubtitle}>Why the server repair key came up, and what actually gets you back in fastest.</Text>
@@ -2008,8 +2045,9 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                   ))}
                 </View>
               </View>
+              ) : null}
 
-              {failedLoginMessage ? (
+              {showAdvanced && failedLoginMessage ? (
                 <View style={styles.loginFailureCard} testID="login-failure-card">
                   <View style={styles.loginFailureHeader}>
                     <Shield size={15} color={lastFailureReason === 'admin_access_locked' ? Colors.error : ownerRecoveryAudit?.eligible ? Colors.success : '#F59E0B'} />
@@ -2502,6 +2540,63 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 13,
     fontWeight: '700' as const,
+  },
+  inlineErrorRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.error + '40',
+    backgroundColor: Colors.error + '12',
+    marginBottom: 16,
+  },
+  inlineErrorText: {
+    color: Colors.error,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    lineHeight: 17,
+    flex: 1,
+  },
+  inlineSuccessRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.success + '40',
+    backgroundColor: Colors.success + '12',
+    marginBottom: 16,
+  },
+  inlineSuccessText: {
+    color: Colors.success,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    lineHeight: 17,
+    flex: 1,
+  },
+  troubleshootToggle: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    backgroundColor: 'transparent',
+  },
+  troubleshootToggleText: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    letterSpacing: 0.2,
   },
   passwordPolicyHint: {
     color: Colors.primary,

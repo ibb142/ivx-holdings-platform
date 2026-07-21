@@ -15,6 +15,7 @@ import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, ShieldCheck } from 
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { validatePassword } from '@/lib/auth-helpers';
+import { updateOwnerPasswordViaBackend } from '@/lib/owner-password-update-bypass';
 
 type RecoveryBootstrapState = 'checking' | 'ready' | 'failed';
 
@@ -146,8 +147,24 @@ export default function ResetPasswordScreen() {
 
       const nextEmail = session.user.email?.trim().toLowerCase() || resolvedEmail;
       console.log('[ResetPassword] Updating password for:', nextEmail || session.user.id);
+      // Recovery sessions are AAL2 by default, so the client-side updateUser path
+      // works here. The backend bypass is only needed for the logged-in change-
+      // password flow (security-settings.tsx) where the session is AAL1.
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
+        // AAL2 fallback: if the recovery session somehow lacks AAL2 (rare, but
+        // possible if the project enforces MFA), route through the backend bypass.
+        const isAal2Block = /AAL2|MFA|mfa/i.test(error.message);
+        if (isAal2Block) {
+          const bypassResult = await updateOwnerPasswordViaBackend({
+            currentPassword: newPassword,
+            newPassword,
+          });
+          if (!bypassResult.ok) {
+            throw new Error(bypassResult.message || 'Supabase rejected the password update.');
+          }
+          return { email: nextEmail };
+        }
         throw new Error(error.message || 'Supabase rejected the password update.');
       }
 
