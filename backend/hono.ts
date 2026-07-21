@@ -638,6 +638,7 @@ import { executeIVXAIBrainTool } from './services/ivx-ai-brain-tool-executor';
 import { OPTIONS as supabaseOwnerActionOptions, handleIVXSupabaseOwnerActionRequest } from './api/ivx-supabase-owner-actions';
 import { OPTIONS as ownerRegistrationOptions, handleIVXOwnerAccessRepairRequest, handleIVXOwnerAccessRepairStatusRequest, handleIVXOwnerRegistrationRepairRequest, handleIVXOwnerRegistrationRequest, handleIVXOwnerRegistrationStatusRequest, handleIVXOwnerSignupAuditRequest } from './api/ivx-owner-registration';
 import { handleIVXOwnerPasswordlessLogin, ivxOwnerPasswordlessLoginOptions } from './api/ivx-owner-passwordless-login';
+import { handleIVXOwnerUpdatePassword, ivxOwnerUpdatePasswordOptions } from './api/ivx-owner-update-password';
 import { registerTimezoneRoutes } from './api/ivx-timezone';
 import { handleIVXDevelopmentActionRequest, handleIVXDevelopmentControlRequest, ivxDevelopmentControlOptions } from './api/ivx-development-control';
 import { OPTIONS as aiBrainToolsOptions, handleIVXAIBrainToolExecuteRequest, handleIVXAIBrainToolsListRequest } from './api/ivx-ai-brain-tools';
@@ -4392,6 +4393,8 @@ app.post('/api/ivx/owner-registration', async (context) => handleIVXOwnerRegistr
 app.post('/api/ivx/owner-registration/repair', async (context) => handleIVXOwnerRegistrationRepairRequest(context.req.raw));
 app.post('/api/ivx/owner-access-repair', async (context) => handleIVXOwnerAccessRepairRequest(context.req.raw));
 app.post('/api/ivx/owner-passwordless-login', async (context) => withRateLimit(context.req.raw, 'owner-login', 3, 0.2, () => handleIVXOwnerPasswordlessLogin(context.req.raw)) as Promise<Response>);
+app.options('/api/ivx/owner-update-password', () => ivxOwnerUpdatePasswordOptions());
+app.post('/api/ivx/owner-update-password', async (context) => withRateLimit(context.req.raw, 'owner-update-password', 5, 0.3, () => handleIVXOwnerUpdatePassword(context.req.raw)) as Promise<Response>);
 app.get('/api/ivx/owner-recovery/status', async (context) => handleOwnerRecoveryStatusRequest(context.req.raw));
 app.post('/api/ivx/owner-recovery/request', async (context) => handleOwnerRecoveryRequestRequest(context.req.raw));
 app.post('/api/ivx/owner-recovery/verify', async (context) => handleOwnerRecoveryVerifyRequest(context.req.raw));
