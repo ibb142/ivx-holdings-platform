@@ -51,7 +51,10 @@ type DeveloperDeployAction =
   | 'send_owner_password_reset_email_via_ses'
   | 'generate_owner_password_reset_link'
   | 'verify_ses_email_identity'
-  | 'list_ses_identities';
+  | 'list_ses_identities'
+  | 'get_supabase_auth_config'
+  | 'disable_supabase_mfa_aal2_enforcement'
+  | 'unenroll_owner_mfa_factor';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -119,6 +122,9 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'generate_owner_password_reset_link'
     || normalized === 'verify_ses_email_identity'
     || normalized === 'list_ses_identities'
+    || normalized === 'get_supabase_auth_config'
+    || normalized === 'disable_supabase_mfa_aal2_enforcement'
+    || normalized === 'unenroll_owner_mfa_factor'
  ) {
     return normalized;
   }
@@ -127,7 +133,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
 
 /** Read-only actions that inspect state without mutating anything; no owner confirmation required. */
 function isReadOnlyAction(action: DeveloperDeployAction): boolean {
-  return action === 'github_pull_request_status';
+  return action === 'github_pull_request_status' || action === 'get_supabase_auth_config';
 }
 
 function requiredConfirmationText(action: DeveloperDeployAction): string {
@@ -344,6 +350,196 @@ async function ensureSupabaseAuthRedirectUrl(supabaseUrl: string, redirectTo: st
   } catch (err) {
     return { ok: false, tokenPresent: true, projectRef, message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+async function getSupabaseAuthConfig(): Promise<{
+  ok: boolean;
+  projectRef: string | null;
+  config: Record<string, unknown> | null;
+  getStatus?: number;
+  getError?: string;
+  message: string;
+}> {
+  const managementToken = readEnv('SUPABASE_ACCESS_TOKEN');
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  if (!managementToken) {
+    return { ok: false, projectRef: null, config: null, message: 'SUPABASE_ACCESS_TOKEN not configured in runtime.' };
+  }
+  if (!supabaseUrl) {
+    return { ok: false, projectRef: null, config: null, message: 'Supabase URL is not configured.' };
+  }
+  const projectRefMatch = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
+  const projectRef = projectRefMatch?.[1] ?? null;
+  if (!projectRef) {
+    return { ok: false, projectRef, config: null, message: `Could not extract project ref from Supabase URL: ${supabaseUrl}` };
+  }
+  try {
+    const authUrl = `https://api.supabase.com/v1/projects/${projectRef}/config/auth`;
+    const getResp = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
+    const getText = await getResp.text();
+    if (!getResp.ok) {
+      return { ok: false, projectRef, config: null, getStatus: getResp.status, getError: getText.slice(0, 300), message: `GET auth config failed: HTTP ${getResp.status}` };
+    }
+    const config = JSON.parse(getText) as Record<string, unknown>;
+    return { ok: true, projectRef, config, getStatus: getResp.status, message: 'Supabase auth config retrieved.' };
+  } catch (err) {
+    return { ok: false, projectRef, config: null, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function runUnenrollOwnerMfaFactor(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const email = readTrimmed(input.email).toLowerCase() || 'iperez4242@gmail.com';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('A valid owner email is required for unenroll_owner_mfa_factor.');
+  }
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  const serviceRoleKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Supabase URL or service role key is not configured on the backend.');
+  }
+  const adminUrl = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin`;
+  const adminHeaders = {
+    'Content-Type': 'application/json',
+    'apikey': serviceRoleKey,
+    'Authorization': `Bearer ${serviceRoleKey}`,
+  };
+
+  // Find the user by email.
+  const listResp = await fetch(`${adminUrl}/users?per_page=1000&page=1`, { headers: adminHeaders });
+  const listText = await listResp.text();
+  if (!listResp.ok) {
+    throw new Error(`Supabase listUsers failed: HTTP ${listResp.status} ${listText.slice(0, 300)}`);
+  }
+  const listData = JSON.parse(listText) as { users?: Array<{ id: string; email?: string | null }> };
+  const user = (listData.users ?? []).find((u) => (u.email ?? '').toLowerCase() === email);
+  if (!user) {
+    throw new Error(`No Supabase auth user found for email ${email}.`);
+  }
+  const userId = user.id;
+
+  // List MFA factors for this user.
+  const factorsResp = await fetch(`${adminUrl}/users/${userId}/factors`, { headers: adminHeaders });
+  const factorsText = await factorsResp.text();
+  if (!factorsResp.ok) {
+    throw new Error(`Supabase list factors failed: HTTP ${factorsResp.status} ${factorsText.slice(0, 300)}`);
+  }
+  const factorsData = JSON.parse(factorsText) as { factors?: Array<{ id: string; factor_type: string; status: string; friendly_name?: string }> };
+  const factors = factorsData.factors ?? [];
+
+  // Unenroll every factor.
+  const unenrolled: Array<{ factorId: string; factorType: string; status: string; ok: boolean; httpStatus?: number; error?: string }> = [];
+  for (const factor of factors) {
+    const factorId = factor.id;
+    const delResp = await fetch(`${adminUrl}/users/${userId}/factors/${factorId}`, {
+      method: 'DELETE',
+      headers: adminHeaders,
+    });
+    const delText = await delResp.text();
+    unenrolled.push({
+      factorId,
+      factorType: factor.factor_type,
+      status: factor.status,
+      ok: delResp.ok,
+      httpStatus: delResp.status,
+      error: delResp.ok ? undefined : delText.slice(0, 200),
+    });
+  }
+
+  return {
+    provider: 'supabase',
+    action: 'unenroll_owner_mfa_factor',
+    email,
+    userId,
+    factorsBeforeCount: factors.length,
+    factorsUnenrolled: unenrolled,
+    allUnenrolled: unenrolled.every((f) => f.ok),
+    timestamp: nowIso(),
+    secretValuesReturned: false,
+  };
+}
+
+async function runDisableSupabaseMfaAal2Enforcement(): Promise<Record<string, unknown>> {
+  const managementToken = readEnv('SUPABASE_ACCESS_TOKEN');
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  if (!managementToken) {
+    throw new Error('SUPABASE_ACCESS_TOKEN not configured in runtime.');
+  }
+  if (!supabaseUrl) {
+    throw new Error('Supabase URL is not configured.');
+  }
+  const projectRefMatch = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
+  const projectRef = projectRefMatch?.[1] ?? null;
+  if (!projectRef) {
+    throw new Error(`Could not extract project ref from Supabase URL: ${supabaseUrl}`);
+  }
+  const authUrl = `https://api.supabase.com/v1/projects/${projectRef}/config/auth`;
+
+  const getResp = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
+  const getText = await getResp.text();
+  if (!getResp.ok) {
+    throw new Error(`GET Supabase auth config failed: HTTP ${getResp.status} ${getText.slice(0, 300)}`);
+  }
+  const beforeConfig = JSON.parse(getText) as Record<string, unknown>;
+
+  // The Supabase auth config PATCH endpoint appears to ignore isolated
+  // mfa_allow_low_aal changes. We include the existing site_url and uri_allow_list
+  // in the same PATCH body (same pattern that successfully changed uri_allow_list)
+  // and also include the related MFA fields so the change is accepted.
+  const targetSettings = {
+    site_url: 'https://ivxholding.com',
+    uri_allow_list: 'https://ivxholding.com/reset-password.html',
+    mfa_allow_low_aal: true,
+    mfa_max_enrolled_factors: 10,
+    mfa_totp_enroll_enabled: true,
+    mfa_totp_verify_enabled: true,
+  };
+
+  const patchBody = JSON.stringify(targetSettings);
+  const patchResp = await fetch(authUrl, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${managementToken}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: patchBody,
+  });
+  const patchText = await patchResp.text();
+  if (!patchResp.ok) {
+    throw new Error(`PATCH Supabase auth config failed: HTTP ${patchResp.status} ${patchText.slice(0, 300)}`);
+  }
+
+  const getResp2 = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
+  const getText2 = await getResp2.text();
+  if (!getResp2.ok) {
+    throw new Error(`Re-read Supabase auth config failed: HTTP ${getResp2.status} ${getText2.slice(0, 300)}`);
+  }
+  const afterConfig = JSON.parse(getText2) as Record<string, unknown>;
+
+  const mfaAllowLowAalBefore = beforeConfig.mfa_allow_low_aal;
+  const mfaAllowLowAalAfter = afterConfig.mfa_allow_low_aal;
+  const mfaTotpEnrollEnabledAfter = afterConfig.mfa_totp_enroll_enabled;
+  const mfaTotpVerifyEnabledAfter = afterConfig.mfa_totp_verify_enabled;
+  const mfaMaxEnrolledFactorsAfter = afterConfig.mfa_max_enrolled_factors;
+  const uriAllowListAfter = afterConfig.uri_allow_list;
+
+  const aal2EnforcementDisabled = mfaAllowLowAalAfter === true;
+
+  return {
+    provider: 'supabase',
+    action: 'disable_supabase_mfa_aal2_enforcement',
+    projectRef,
+    mfaAllowLowAalBefore,
+    mfaAllowLowAalAfter,
+    mfaMaxEnrolledFactorsAfter,
+    mfaTotpEnrollEnabledAfter,
+    mfaTotpVerifyEnabledAfter,
+    uriAllowListAfter,
+    aal2EnforcementDisabled,
+    patchStatus: patchResp.status,
+    patchResponsePreview: patchText.slice(0, 300),
+    message: aal2EnforcementDisabled
+      ? 'Supabase AAL2 enforcement is now disabled. MFA (TOTP) remains available as an optional setting in the app.'
+      : 'PATCH accepted but mfa_allow_low_aal is not true after re-read. Supabase Management API may require this change to be made in the Supabase dashboard.',
+    timestamp: nowIso(),
+    secretValuesReturned: false,
+  };
 }
 
 async function generatePasswordResetLinkViaAdminApi(email: string, redirectTo: string): Promise<{ actionLink: string; redirectUrlStatus: Awaited<ReturnType<typeof ensureSupabaseAuthRedirectUrl>> }> {
@@ -1334,6 +1530,15 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'list_ses_identities') {
     return await runListSesIdentities();
+  }
+  if (action === 'get_supabase_auth_config') {
+    return await getSupabaseAuthConfig();
+  }
+  if (action === 'disable_supabase_mfa_aal2_enforcement') {
+    return await runDisableSupabaseMfaAal2Enforcement();
+  }
+  if (action === 'unenroll_owner_mfa_factor') {
+    return await runUnenrollOwnerMfaFactor(input);
   }
   return await runSupabaseExecuteSql(input);
 }
