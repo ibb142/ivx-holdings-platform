@@ -191,7 +191,7 @@
     + 'flex-direction:column;gap:16px;align-items:center}'
     + '.ivxr-act{background:none;border:none;color:#fff;cursor:pointer;text-align:center;padding:0;'
     + 'filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}'
-    + '.ivxr-act .i{font-size:27px;line-height:1;display:block;transition:transform .12s}'
+    + '.ivxr-act .i{font-size:26px;line-height:1;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.25);margin:0 auto;transition:transform .12s}'
     + '.ivxr-act:active .i{transform:scale(1.25)}'
     + '.ivxr-act .c{font:600 11px/1 -apple-system,sans-serif;margin-top:4px;display:block}'
     + '.ivxr-act.on .i{color:#e0245e}'
@@ -243,6 +243,7 @@
     + '.ivxr-invest-card{position:absolute;left:0;right:0;bottom:0;z-index:20;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.35) 30%,rgba(0,0,0,.72) 100%);border-radius:0;padding:36px 84px calc(18px + env(safe-area-inset-bottom)) 14px;box-shadow:none;color:#fff}'
     + '.ivxr-invest-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px}'
     + '.ivxr-invest-title{font:800 18px/1.2 -apple-system,Segoe UI,sans-serif;color:#fff}'
+    + '.ivxr-invest-badge{display:inline-block;background:#E6C200;color:#000;border-radius:5px;padding:3px 8px;font:800 10px/1.4 -apple-system,sans-serif;text-transform:uppercase;letter-spacing:.4px;margin-right:6px}'
     + '.ivxr-invest-active{font:800 10px/1 -apple-system,sans-serif;color:#E6C200;border:1px solid #E6C200;border-radius:5px;padding:3px 8px;text-transform:uppercase;letter-spacing:.4px}'
     + '.ivxr-invest-loc{font:500 13px/1.3 -apple-system,sans-serif;color:rgba(255,255,255,.85);margin-top:3px}'
     + '.ivxr-invest-metrics{display:flex;gap:22px;margin-top:10px}'
@@ -621,8 +622,10 @@
     var cardHtml = '';
     cardHtml += '<div class="ivxr-invest-head">'
       + '<div class="ivxr-invest-title">' + escapeHtml(parsed.title) + '</div>'
+      + (hasDeal ? '<div class="ivxr-invest-badge">INVESTMENT</div>' : '')
       + (isActive ? '<div class="ivxr-invest-active">ACTIVE</div>' : '')
       + '</div>';
+    if (parsed.subtitle) cardHtml += '<div class="ivxr-invest-loc" style="font-size:13px;opacity:.9">' + escapeHtml(parsed.subtitle) + '</div>';
     if (parsed.location) cardHtml += '<div class="ivxr-invest-loc">' + escapeHtml(parsed.location) + '</div>';
     if (hasDeal && (roi || minInvest || minOwnership)) {
       cardHtml += '<div class="ivxr-invest-metrics">';
@@ -1010,7 +1013,7 @@
     state.activeSince = 0;
   }
 
-  /* ---------- upload ---------- */
+  /* ---------- upload (presigned S3 — synced with app video-upload-pipeline.ts) ---------- */
   el('upload').addEventListener('click', function () { el('file').click(); });
   el('file').addEventListener('change', function () {
     var file = el('file').files && el('file').files[0];
@@ -1019,59 +1022,98 @@
     openSheet('Uploading video', false);
     var bd = el('sheetBody');
     bd.innerHTML = '<div class="ivxr-up"><div>' + escapeHtml(file.name) + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)</div>'
-      + '<div class="bar"><div data-r="upbar"></div></div><div data-r="upstat">Uploading… 0%</div></div>';
-    var form = new FormData();
-    form.append('file', file);
-    form.append('title', title);
-    form.append('userId', VIEWER);
-    /* Upload with automatic resume: up to 3 attempts on network failure. */
-    var attempt = 0;
-    function sendUpload() {
-      attempt += 1;
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', API + '/api/ivx/video-pipeline/upload');
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) {
-          var pct = Math.round(e.loaded / e.total * 100);
-          var bar = root.querySelector('[data-r="upbar"]');
-          var stat = root.querySelector('[data-r="upstat"]');
-          if (bar) bar.style.width = pct + '%';
-          if (stat) stat.textContent = 'Uploading… ' + pct + '%' + (attempt > 1 ? ' (attempt ' + attempt + ')' : '');
-        }
-      };
-      xhr.onload = function () {
-        var stat = root.querySelector('[data-r="upstat"]');
-        try {
-          var res = JSON.parse(xhr.responseText);
-          if (xhr.status === 201 && res.videoId) {
-            if (stat) stat.textContent = 'Processing video (transcoding to adaptive HLS)…';
-            var metaBody = state.channel
-              ? { audiences: [state.channel], creator_id: VIEWER }
-              : { creator_id: VIEWER };
-            fetch(API + '/api/ivx/video-platform/videos/' + res.videoId + '/meta', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(metaBody)
-            }).catch(function () {});
-            pollUpload(res.videoId, stat);
-          } else {
-            if (stat) stat.textContent = 'Upload failed: ' + (res.error || xhr.status);
+      + '<div class="bar"><div data-r="upbar"></div></div><div data-r="upstat">Requesting upload URL…</div></div>';
+    var stat = root.querySelector('[data-r="upstat"]');
+    var bar = root.querySelector('[data-r="upbar"]');
+
+    /* Map browser file type to backend-allowed content types */
+    var ct = (file.type || 'video/mp4').toLowerCase();
+    var allowed = ['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm'];
+    if (allowed.indexOf(ct) === -1) ct = 'video/mp4'; /* default to mp4 for unknown types */
+
+    var idempotencyKey = 'ivx-landing-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    var videoType = state.channel === '__reels' ? 'reel' : 'deal';
+
+    /* Step 1: request presigned S3 upload URL from backend */
+    fetch(API + '/api/ivx/video-platform/admin/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: ct,
+        idempotencyKey: idempotencyKey,
+        title: title,
+        videoType: videoType
+      })
+    }).then(function (r) { return r.json(); }).then(function (presign) {
+      if (!presign || !presign.ok || !presign.uploadUrl) {
+        if (stat) stat.textContent = 'Upload failed: ' + (presign && presign.error ? presign.error : 'no upload URL returned');
+        return;
+      }
+      if (stat) stat.textContent = 'Uploading to S3… 0%';
+
+      /* Step 2: PUT file directly to S3 with progress (presigned URL) */
+      var attempt = 0;
+      function putToS3() {
+        attempt += 1;
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', presign.uploadUrl);
+        xhr.setRequestHeader('Content-Type', ct);
+        xhr.upload.onprogress = function (e) {
+          if (e.lengthComputable) {
+            var pct = Math.round(e.loaded / e.total * 100);
+            if (bar) bar.style.width = pct + '%';
+            if (stat) stat.textContent = 'Uploading to S3… ' + pct + '%' + (attempt > 1 ? ' (attempt ' + attempt + ')' : '');
           }
-        } catch (e) {
-          if (stat) stat.textContent = 'Upload failed (' + xhr.status + ')';
-        }
-      };
-      xhr.onerror = function () {
-        var stat = root.querySelector('[data-r="upstat"]');
-        if (attempt < 3) {
-          if (stat) stat.textContent = 'Network error — resuming upload (attempt ' + (attempt + 1) + ' of 3)…';
-          setTimeout(sendUpload, 1500 * attempt);
-        } else if (stat) {
-          stat.textContent = 'Upload failed after 3 attempts — check your connection and try again.';
-        }
-      };
-      xhr.send(form);
-    }
-    sendUpload();
+        };
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (stat) stat.textContent = 'Upload complete — creating video record…';
+            /* Step 3: create the DB record via /admin/add-reel */
+            var publicUrl = presign.publicUrl || presign.uploadUrl.split('?')[0];
+            fetch(API + '/api/ivx/video-platform/admin/add-reel', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                video_url: publicUrl,
+                title: title,
+                video_type: videoType,
+                poster_url: presign.thumbnailUrl || null,
+                duration_sec: 0,
+                idempotencyKey: idempotencyKey,
+                uploadVideoId: presign.videoId
+              })
+            }).then(function (r2) { return r2.json(); }).then(function (pub) {
+              if (pub && pub.ok) {
+                if (stat) stat.textContent = 'Video published — live in the feed.';
+                toast('Video is live');
+                sheetEl.classList.remove('open');
+                resetFeed();
+                loadMore();
+              } else {
+                if (stat) stat.textContent = 'Publish failed: ' + (pub && pub.error ? pub.error : 'unknown');
+              }
+            }).catch(function () {
+              if (stat) stat.textContent = 'Publish failed — network error. Retry from owner console.';
+            });
+          } else {
+            if (stat) stat.textContent = 'S3 upload failed (HTTP ' + xhr.status + ')';
+          }
+        };
+        xhr.onerror = function () {
+          if (attempt < 3) {
+            if (stat) stat.textContent = 'Network error — retrying (attempt ' + (attempt + 1) + ' of 3)…';
+            setTimeout(putToS3, 1500 * attempt);
+          } else if (stat) {
+            stat.textContent = 'Upload failed after 3 attempts — check your connection.';
+          }
+        };
+        xhr.send(file);
+      }
+      putToS3();
+    }).catch(function (err) {
+      if (stat) stat.textContent = 'Upload URL request failed: ' + (err && err.message ? err.message : 'network error');
+    });
     el('file').value = '';
   });
 
@@ -1080,12 +1122,12 @@
     var t = setInterval(function () {
       tries += 1;
       if (tries > 150) { clearInterval(t); return; }
-      fetch(API + '/api/ivx/video-pipeline/' + videoId)
+      fetch(API + '/api/ivx/video-platform/admin/videos/' + videoId)
         .then(function (r) { return r.json(); })
         .then(function (d) {
           var v = d && d.video;
           if (!v) return;
-          if (v.status === 'ready') {
+          if (v.status === 'ready' || v.status === 'published') {
             clearInterval(t);
             if (stat) stat.textContent = 'Ready — live in the feed with adaptive streaming.';
             toast('Video is live');
@@ -1095,7 +1137,7 @@
             clearInterval(t);
             if (stat) stat.textContent = 'Processing failed: ' + (v.error || 'unknown') + ' — retry from owner console.';
           } else if (stat) {
-            stat.textContent = 'Processing (' + v.status + ')… renditions: 720p / 480p / 360p';
+            stat.textContent = 'Processing (' + v.status + ')…';
           }
         }).catch(function () {});
     }, 4000);
