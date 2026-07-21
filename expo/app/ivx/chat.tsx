@@ -16,7 +16,6 @@ import {
   AppState,
   type AppStateStatus,
   FlatList,
-  ActivityIndicator,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -5306,6 +5305,7 @@ export default function IVXOwnerChatRoute() {
     if (devTestMode.testModeActive) {
       return 'Assistant ready.';
     }
+    // Auth state messages remain — these are not "loading" indicators.
     if (ownerAIAuthState === 'AUTH_INITIALIZING') {
       return 'Initializing IVX owner session…';
     }
@@ -5321,23 +5321,11 @@ export default function IVXOwnerChatRoute() {
     if (ownerAIAuthState === 'AUTH_ERROR') {
       return 'Authentication error. Tap to sign in again.';
     }
-    if (isRecordingVoice) {
-      return 'Recording voice prompt. Tap stop when finished.';
-    }
-    if (isTranscribingVoice) {
-      return 'Transcribing voice prompt...';
-    }
-    if (aiReplyPending) {
-      return 'Message sent. Reply will appear when ready.';
-    }
-    if (currentOwnerTrust.requiresElevatedConfirmation) {
-      return 'Sensitive action detected. Please confirm before I proceed.';
-    }
-    if (ownerAIRoutingBlocked || ownerAIProofStatus.id === 'blocked_by_auth') {
-      return 'Assistant is temporarily unavailable.';
-    }
+    // Loading indicators removed per owner request: the composer no longer
+    // displays "Recording...", "Transcribing...", or "Reply will appear"
+    // status text. The underlying voice/reply operations still work.
     return 'Assistant ready.';
-  }, [aiReplyPending, currentOwnerTrust.requiresElevatedConfirmation, devTestMode.testModeActive, isRecordingVoice, isTranscribingVoice, ownerAIAuthState, ownerAIProofStatus.id, ownerAIRoutingBlocked, runtimeDebugSnapshot.hasVisibleResponseText]);
+  }, [devTestMode.testModeActive, ownerAIAuthState]);
 
   const controlRoomItems = useMemo<IVXControlRoomItem[]>(() => {
     if (controlRoomQuery.data?.statusItems && controlRoomQuery.data.statusItems.length > 0) {
