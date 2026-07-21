@@ -49,6 +49,7 @@ type DeveloperDeployAction =
   | 'supabase_revoke_owner_sessions'
   | 'supabase_audit_owner_auth_user'
   | 'send_owner_password_reset_email_via_ses'
+  | 'generate_owner_password_reset_link'
   | 'verify_ses_email_identity'
   | 'list_ses_identities';
 
@@ -115,6 +116,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'supabase_revoke_owner_sessions'
     || normalized === 'supabase_audit_owner_auth_user'
     || normalized === 'send_owner_password_reset_email_via_ses'
+    || normalized === 'generate_owner_password_reset_link'
     || normalized === 'verify_ses_email_identity'
     || normalized === 'list_ses_identities'
  ) {
@@ -264,12 +266,90 @@ async function runSupabaseAuditOwnerAuthUser(input: Record<string, unknown>): Pr
 
 const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password';
 
-async function generatePasswordResetLinkViaAdminApi(email: string, redirectTo: string): Promise<string> {
+async function ensureSupabaseAuthRedirectUrl(supabaseUrl: string, redirectTo: string): Promise<{
+  ok: boolean;
+  tokenPresent: boolean;
+  projectRef: string | null;
+  getStatus?: number;
+  getError?: string;
+  getResponse?: string;
+  beforeUrls?: string[];
+  afterUrls?: string[];
+  patchStatus?: number;
+  patchError?: string;
+  patchBody?: string;
+  putStatus?: number;
+  putError?: string;
+  putBody?: string;
+  message: string;
+}> {
+  const managementToken = readEnv('SUPABASE_ACCESS_TOKEN');
+  if (!managementToken) {
+    return { ok: false, tokenPresent: false, projectRef: null, message: 'SUPABASE_ACCESS_TOKEN not configured in runtime.' };
+  }
+  const projectRefMatch = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
+  const projectRef = projectRefMatch?.[1] ?? null;
+  if (!projectRef) {
+    return { ok: false, tokenPresent: true, projectRef, message: `Could not extract project ref from Supabase URL: ${supabaseUrl}` };
+  }
+  try {
+    const authUrl = `https://api.supabase.com/v1/projects/${projectRef}/config/auth`;
+
+    const getResp = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
+    const getText = await getResp.text();
+    if (!getResp.ok) {
+      return { ok: false, tokenPresent: true, projectRef, getStatus: getResp.status, getError: getText.slice(0, 300), message: `GET auth config failed: HTTP ${getResp.status}` };
+    }
+    const getConfig = JSON.parse(getText) as { uri_allow_list?: string; site_url?: string; };
+    const rawAllowList = typeof getConfig.uri_allow_list === 'string' ? getConfig.uri_allow_list : '';
+    const redirectUrls = rawAllowList.split(/[\s,]+/).map((u) => u.trim()).filter(Boolean);
+    const beforeUrls = [...redirectUrls];
+
+    if (redirectUrls.includes(redirectTo)) {
+      return { ok: true, tokenPresent: true, projectRef, getResponse: getText.slice(0, 400), beforeUrls, afterUrls: beforeUrls, message: 'Redirect URL already allowed.' };
+    }
+
+    const nextUrls = [...redirectUrls, redirectTo];
+    const nextAllowList = nextUrls.join(' ');
+
+    // PATCH using the correct Supabase field name uri_allow_list; keep site_url as the app base URL.
+    const patchBody = JSON.stringify({ uri_allow_list: nextAllowList, site_url: 'https://ivxholding.com' });
+    const patchResp = await fetch(authUrl, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${managementToken}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: patchBody,
+    });
+    const patchText = await patchResp.text();
+
+    if (!patchResp.ok) {
+      return { ok: false, tokenPresent: true, projectRef, getResponse: getText.slice(0, 400), beforeUrls, patchStatus: patchResp.status, patchError: patchText.slice(0, 300), patchBody, message: `PATCH auth config failed: HTTP ${patchResp.status}` };
+    }
+
+    // Re-read to verify
+    const getResp2 = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
+    const getText2 = await getResp2.text();
+    const afterConfig = JSON.parse(getText2) as { uri_allow_list?: string; };
+    const afterUrls = typeof afterConfig.uri_allow_list === 'string'
+      ? afterConfig.uri_allow_list.split(/[\s,]+/).map((u) => u.trim()).filter(Boolean)
+      : [];
+
+    if (afterUrls.includes(redirectTo)) {
+      return { ok: true, tokenPresent: true, projectRef, getResponse: getText.slice(0, 400), beforeUrls, afterUrls, patchStatus: patchResp.status, patchBody, message: 'Added redirect URL to Supabase auth config (verified by re-read).' };
+    }
+
+    return { ok: false, tokenPresent: true, projectRef, getResponse: getText.slice(0, 400), beforeUrls, afterUrls, patchStatus: patchResp.status, patchError: patchText.slice(0, 300), patchBody, message: 'PATCH accepted but URL not present in uri_allow_list after re-read.' };
+  } catch (err) {
+    return { ok: false, tokenPresent: true, projectRef, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function generatePasswordResetLinkViaAdminApi(email: string, redirectTo: string): Promise<{ actionLink: string; redirectUrlStatus: Awaited<ReturnType<typeof ensureSupabaseAuthRedirectUrl>> }> {
   const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
   const serviceRoleKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Supabase URL or service role key is not configured on the backend.');
   }
+  const redirectUrlStatus = await ensureSupabaseAuthRedirectUrl(supabaseUrl, redirectTo);
   const url = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`;
   const response = await fetch(url, {
     method: 'POST',
@@ -278,7 +358,7 @@ async function generatePasswordResetLinkViaAdminApi(email: string, redirectTo: s
       'apikey': serviceRoleKey,
       'Authorization': `Bearer ${serviceRoleKey}`,
     },
-    body: JSON.stringify({ type: 'recovery', email, options: { redirectTo } }),
+    body: JSON.stringify({ type: 'recovery', email, options: { redirect_to: redirectTo, redirectTo } }),
   });
   const text = await response.text();
   if (!response.ok) {
@@ -290,11 +370,22 @@ async function generatePasswordResetLinkViaAdminApi(email: string, redirectTo: s
   } catch {
     throw new Error('Supabase admin generate_link returned invalid JSON.');
   }
-  const actionLink = parsed.action_link || parsed.action_link;
+  let actionLink = parsed.action_link || parsed.action_link;
   if (typeof actionLink !== 'string' || !actionLink) {
     throw new Error('Supabase admin generate_link response did not contain a valid action_link.');
   }
-  return actionLink;
+  actionLink = replaceRedirectUrlInSupabaseActionLink(actionLink, redirectTo);
+  return { actionLink, redirectUrlStatus };
+}
+
+function replaceRedirectUrlInSupabaseActionLink(actionLink: string, redirectTo: string): string {
+  try {
+    const url = new URL(actionLink);
+    url.searchParams.set('redirect_to', redirectTo);
+    return url.toString();
+  } catch {
+    return actionLink;
+  }
 }
 
 async function runSendOwnerPasswordResetEmailViaSES(input: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -304,7 +395,7 @@ async function runSendOwnerPasswordResetEmailViaSES(input: Record<string, unknow
   }
   const redirectTo = readTrimmed(input.redirectTo) || DEFAULT_PASSWORD_RESET_REDIRECT_URL;
   const fromEmail = readTrimmed(input.fromEmail) || readEnv('IVX_SES_FROM_EMAIL') || readEnv('OWNER_REPAIR_EMAIL') || readEnv('EXPO_PUBLIC_OWNER_EMAIL') || 'security@ivxholding.com';
-  const actionLink = await generatePasswordResetLinkViaAdminApi(email, redirectTo);
+  const { actionLink, redirectUrlStatus } = await generatePasswordResetLinkViaAdminApi(email, redirectTo);
   const subject = 'Reset your IVX Holdings password';
   const body = `Hello,
 
@@ -337,6 +428,27 @@ If you did not request this reset, you can safely ignore this email.
     messageId: sendResult.messageId ?? null,
     sesRegion: sendResult.region ?? null,
     sesFrom: sendResult.from ?? null,
+    redirectUrlStatus,
+    timestamp: nowIso(),
+    secretValuesReturned: false as const,
+  };
+}
+
+async function runGenerateOwnerPasswordResetLink(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const email = readTrimmed(input.email).toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('A valid owner email is required for generate_owner_password_reset_link.');
+  }
+  const redirectTo = readTrimmed(input.redirectTo) || DEFAULT_PASSWORD_RESET_REDIRECT_URL;
+  const { actionLink, redirectUrlStatus } = await generatePasswordResetLinkViaAdminApi(email, redirectTo);
+  return {
+    provider: 'supabase',
+    action: 'generate_owner_password_reset_link',
+    email,
+    redirectTo,
+    actionLink,
+    actionLinkMasked: `${actionLink.slice(0, 60)}...`,
+    redirectUrlStatus,
     timestamp: nowIso(),
     secretValuesReturned: false as const,
   };
@@ -1211,6 +1323,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   if (action === 'send_owner_password_reset_email_via_ses') {
     return await runSendOwnerPasswordResetEmailViaSES(input);
   }
+  if (action === 'generate_owner_password_reset_link') {
+    return await runGenerateOwnerPasswordResetLink(input);
+  }
   if (action === 'verify_ses_email_identity') {
     return await runVerifySesEmailIdentity(input);
   }
@@ -1231,7 +1346,7 @@ async function auditDeveloperDeployAction(ownerContext: IVXOwnerRequestContext, 
     renderSubdomainPolicy: action === 'render_update_subdomain_policy' ? normalizeRenderSubdomainPolicy(input.renderSubdomainPolicy ?? input.policy) : undefined,
     renderSourceBranch: action === 'render_update_source' ? readTrimmed(input.branch) || 'main' : undefined,
     sqlLength: action === 'supabase_execute_sql' ? readTrimmed(input.sql).length : undefined,
-    resetEmail: action === 'supabase_reset_owner_password' || action === 'send_owner_password_reset_email_via_ses' ? readTrimmed(input.email) : undefined,
+    resetEmail: action === 'supabase_reset_owner_password' || action === 'send_owner_password_reset_email_via_ses' || action === 'generate_owner_password_reset_link' ? readTrimmed(input.email) : undefined,
     resultProvider: readTrimmed(result.provider),
     timestamp: nowIso(),
   });
