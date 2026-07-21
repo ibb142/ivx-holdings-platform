@@ -59,7 +59,7 @@ const config: ExpoConfig = {
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 60,
+    versionCode: 61,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {

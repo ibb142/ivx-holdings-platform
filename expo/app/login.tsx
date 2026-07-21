@@ -1575,11 +1575,9 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
   }, [effectiveRecoveryEmail, ownerRecoveryAudit?.eligible, ownerRepairReadiness.hasRealServiceRole]);
 
   const hasVisibleSupabaseError = Boolean(attemptState.supabaseErrorMessage || attemptState.supabaseErrorCode || attemptState.supabaseErrorStatus || attemptState.supabaseErrorName);
-  const loginTitle = effectiveOwnerMode ? 'Owner Login' : 'Welcome Back';
-  const loginSubtitle = effectiveOwnerMode
-    ? 'Enter your verified owner email and password. The owner account must sign in manually every launch — no automatic owner access.'
-    : 'Use direct email/password sign-in first. Owner recovery stays available below if this device was already verified.';
-  const signInButtonLabel = effectiveOwnerMode ? 'Owner Sign In' : 'Sign In';
+  const loginTitle = 'Sign In';
+  const loginSubtitle = '';
+  const signInButtonLabel = 'Sign In';
   const ownerAlternativeTitle = effectiveOwnerMode
     ? 'Owner recovery hub'
     : adminAccessLocked
@@ -1711,8 +1709,6 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
               <View style={styles.logoCard}>
                 <Image source={IVX_LOGO_SOURCE} style={styles.logo} resizeMode="contain" />
               </View>
-              <Text style={styles.brand}>IVX HOLDINGS LLC</Text>
-              <Text style={styles.tagline}>Premium Real Estate Investing</Text>
             </Animated.View>
 
             <Animated.View style={[styles.formCard, {
@@ -1720,7 +1716,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
               transform: [{ translateY: slideAnim }, { translateX: shakeAnim }],
             }]}>
               <Text style={styles.title}>{loginTitle}</Text>
-              <Text style={styles.subtitle}>{loginSubtitle}</Text>
+              {loginSubtitle ? <Text style={styles.subtitle}>{loginSubtitle}</Text> : null}
 
               {/* Amazon/Instagram-level UX: a single clean inline error line when the
                   advanced diagnostic panel is collapsed. The full diagnostic card
