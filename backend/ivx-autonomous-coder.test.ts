@@ -277,9 +277,9 @@ describe('IVX Autonomous Coder — engine loop', () => {
     expect(proof.commitSha).toBeNull();
     expect(proof.testsPassed).toBe(false);
     expect(proof.typecheckPassed).toBe(false);
-    expect(proof.iterationCount).toBe(5); // MAX_ITERATIONS
+    expect(proof.iterationCount).toBe(4); // MAX_ITERATIONS (reduced from 5 in the convergence-hardening fix)
     expect(proof.error).toContain('Tests or typecheck failed');
-    expect(proof.error).toContain('5 iteration');
+    expect(proof.error).toContain('4 iteration');
     // Pilot file in temp repo should be reverted to original
     const finalContent = await repo.fileReader('backend/services/ivx-autonomous-coder-pilot.ts');
     expect(finalContent).toContain(PILOT_LABEL);

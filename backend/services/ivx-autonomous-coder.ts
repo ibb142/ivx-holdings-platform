@@ -39,15 +39,15 @@ const execFileAsync = promisify(execFile);
 export const IVX_AUTONOMOUS_CODER_MARKER = 'ivx-autonomous-coder-2026-07-19';
 
 /** Bounded loop: max LLM revision iterations before BLOCKED. */
-const MAX_ITERATIONS = 5;
+const MAX_ITERATIONS = 4;
 /** Per-command timeout (ms). */
 const COMMAND_TIMEOUT_MS = 60_000;
 /** LLM planning timeout (ms). The Render runtime was hanging in the planning
  * phase indefinitely; this hard cap ensures the loop progresses or BLOCKS with
  * a real reason instead of sitting at RUNNING 10% forever. */
-const LLM_TIMEOUT_MS = 45_000;
+const LLM_TIMEOUT_MS = 90_000;
 /** LLM planning attempts before LLM_PLAN_INVALID BLOCKED. */
-const MAX_LLM_ATTEMPTS = 2;
+const MAX_LLM_ATTEMPTS = 3;
 /** Stage-specific timeouts (ms) — each bounded loop stage has its own hard cap
  * so a stuck inspection / patch / test / commit / deploy is detectable and the
  * engine BLOCKS with a real reason instead of hanging forever. These are
@@ -541,27 +541,20 @@ function pickTargetTestFile(goal: string, changedFiles: string[]): string {
 const PATCH_SYSTEM_PROMPT = `You are the IVX Autonomous Coder — a real senior developer engine.
 Given a GOAL and FILE CONTENTS, generate a JSON patch to achieve the goal.
 
-OUTPUT FORMAT (strict JSON, no markdown, no prose):
-{
-  "rootCause": "one-line root cause",
-  "technicalPlan": "one-line plan",
-  "operations": [
-    {
-      "path": "backend/services/example.ts",
-      "kind": "replace_exact",
-      "oldText": "the exact text to find",
-      "newText": "the replacement text",
-      "reason": "why this change"
-    }
-  ]
-}
+OUTPUT FORMAT (strict JSON, no markdown fences, no prose before or after):
+{"rootCause":"one-line root cause","technicalPlan":"one-line plan","operations":[{"path":"backend/services/example.ts","kind":"replace_exact","oldText":"the exact text to find","newText":"the replacement text","reason":"why this change"}]}
 
 Rules:
+- Respond with JSON ONLY. No \`\`\`json fences. No explanation. No prose.
 - kind must be "replace_exact" (replace oldText with newText) or "create_file" (new file).
-- oldText must be an EXACT substring of the file content (copy it verbatim).
-- Make the smallest safe change.
+- oldText must be an EXACT substring of the file content (copy it verbatim from the FILE CONTENTS above).
+- Make the smallest safe change (1-3 operations max).
 - Only modify files under backend/ or expo/.
-- No secrets, no destructive operations.`;
+- No secrets, no destructive operations.
+- If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
+
+EXAMPLE (add a comment line above an existing const):
+{"rootCause":"need a comment","technicalPlan":"insert comment above PILOT_LABEL","operations":[{"path":"backend/services/ivx-autonomous-coder-pilot.ts","kind":"replace_exact","oldText":"export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-3';","newText":"// IVX autonomous coder pilot sentinel\nexport const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-3';","reason":"add a comment line above the existing const"}]}`;
 
 function buildPatchUserPrompt(goal: string, files: { path: string; content: string }[], failureContext: string | null): string {
   const fileBlocks = files.map((f) => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
@@ -573,24 +566,24 @@ function buildPatchUserPrompt(goal: string, files: { path: string; content: stri
 
 function parseLLMPatchResponse(response: string): { rootCause: string; technicalPlan: string; operations: IVXAutonomousCoderPatchOperation[] } | null {
   try {
-    // Strip markdown code fences if present
+    // Strip markdown code fences if present (be aggressive — LLMs love fences)
     const cleaned = response.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    // Find the first { and last }
+    // Some LLMs wrap the JSON in <json>...</json> or return prose before/after
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
     if (start < 0 || end < 0 || end <= start) return null;
-    const jsonStr = cleaned.slice(start, end + 1);
-    const parsed = JSON.parse(jsonStr) as {
-      rootCause?: string;
-      technicalPlan?: string;
-      operations?: Array<{
-        path?: string;
-        kind?: string;
-        oldText?: string;
-        newText?: string;
-        reason?: string;
-      }>;
-    };
+    let jsonStr = cleaned.slice(start, end + 1);
+    let parsed: { rootCause?: string; technicalPlan?: string; operations?: Array<{ path?: string; kind?: string; oldText?: string; newText?: string; reason?: string }> };
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      // Permissive fallback: strip trailing commas + fix smart quotes LLMs sometimes emit
+      const fixed = jsonStr
+        .replace(/,\s*([}\]])/g, '$1')
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'");
+      parsed = JSON.parse(fixed);
+    }
     if (!Array.isArray(parsed.operations)) return null;
     const operations: IVXAutonomousCoderPatchOperation[] = [];
     for (const op of parsed.operations) {
@@ -605,7 +598,14 @@ function parseLLMPatchResponse(response: string): { rootCause: string; technical
         reason: typeof op.reason === 'string' ? op.reason : '',
       });
     }
-    if (operations.length === 0) return null;
+    // Empty operations is valid when the LLM signals "already satisfied" — return it so the loop exits cleanly (no phantom patch)
+    if (operations.length === 0) {
+      return {
+        rootCause: typeof parsed.rootCause === 'string' ? parsed.rootCause : 'no operations needed',
+        technicalPlan: typeof parsed.technicalPlan === 'string' ? parsed.technicalPlan : 'no change required',
+        operations: [],
+      };
+    }
     return {
       rootCause: typeof parsed.rootCause === 'string' ? parsed.rootCause : 'LLM-generated patch',
       technicalPlan: typeof parsed.technicalPlan === 'string' ? parsed.technicalPlan : 'Replace exact text per operations',
@@ -1417,10 +1417,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     }
 
     const parsed = parseLLMPatchResponse(llmResponse);
-    if (!parsed || parsed.operations.length === 0) {
+    if (!parsed) {
       anyPatchGenerated = false;
       llmAttempts += 1;
-      lastPatchFailureReason = 'LLM did not return valid JSON patch operations.';
+      lastPatchFailureReason = 'LLM response could not be parsed as JSON patch.';
       const iteration: IVXAutonomousCoderIteration = {
         iteration: iterationCount,
         patchGenerated: false,
@@ -1429,18 +1429,38 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         testsPassed: false,
         typecheckRun: false,
         typecheckPassed: false,
-        failureSummary: 'LLM did not return valid JSON patch operations.',
+        failureSummary: 'LLM response could not be parsed as JSON patch.',
         revised: false,
       };
       iterations.push(iteration);
-      lastFailureContext = `LLM response did not contain valid patch operations. Response: ${truncate(llmResponse, 1000)}`;
+      lastFailureContext = `LLM response could not be parsed. Response: ${truncate(llmResponse, 1000)}`;
       if (llmAttempts < MAX_LLM_ATTEMPTS) {
-        onPhase?.('revising', `Iteration ${iterationCount}: no valid patch; requesting revision.`);
+        onPhase?.('revising', `Iteration ${iterationCount}: unparseable response; requesting revision.`);
         iterationCount -= 1;
         continue;
       }
       // Max LLM attempts exhausted — LLM_PLAN_INVALID BLOCKED.
-      lastPatchFailureReason = `LLM_PLAN_INVALID: LLM did not return valid JSON patch operations after ${MAX_LLM_ATTEMPTS} attempts. Last raw response: ${lastLLMResponseRaw ?? 'none'}`;
+      lastPatchFailureReason = `LLM_PLAN_INVALID: LLM response unparseable after ${MAX_LLM_ATTEMPTS} attempts. Last raw response: ${lastLLMResponseRaw ?? 'none'}`;
+      break;
+    }
+    // "already satisfied" empty-operations case: exit cleanly with COMPLETED, no phantom patch
+    if (parsed.operations.length === 0) {
+      rootCause = parsed.rootCause;
+      technicalPlan = parsed.technicalPlan;
+      anyPatchGenerated = false;
+      const iteration: IVXAutonomousCoderIteration = {
+        iteration: iterationCount,
+        patchGenerated: false,
+        patchApplied: false,
+        testsRun: false,
+        testsPassed: false,
+        typecheckRun: false,
+        typecheckPassed: false,
+        failureSummary: 'LLM determined the goal is already satisfied — no patch required.',
+        revised: false,
+      };
+      iterations.push(iteration);
+      lastPatchFailureReason = 'GOAL_ALREADY_SATISFIED: LLM returned empty operations with rootCause.';
       break;
     }
 
