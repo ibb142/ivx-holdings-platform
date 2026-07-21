@@ -487,10 +487,10 @@ async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCo
       effectiveArgs = ['--test', ...effectiveArgs.slice(1)];
       displayCommand = `node --test ${effectiveArgs.slice(1).join(' ')}`;
     } else if (effectiveArgs[0] === 'x') {
-      // `bun x tsc` → use npx instead
+      // `bun x tsc` → use npx instead (with --yes so it never waits for confirmation)
       const npxRes = resolveRuntimeCommand('npx');
       effectiveCmd = npxRes.resolvedPath ?? npxRes.effectiveCommand;
-      effectiveArgs = effectiveArgs.slice(1); // drop the 'x'
+      effectiveArgs = ['--yes', ...effectiveArgs.slice(1)]; // drop the 'x', add --yes
       displayCommand = `npx ${effectiveArgs.join(' ')}`;
     }
   }
@@ -1268,7 +1268,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           const bunAvail = !bunRes.usedFallback && bunRes.resolvedPath !== null;
           const scopedCmd = bunAvail
             ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`
-            : `npx tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+            : `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
           typecheckResult = await runCommand(projectRoot, scopedCmd);
         }
         commandsRun.push(typecheckResult);
@@ -1558,7 +1558,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     const changedFileArgs = appliedOps.map((op) => op.path).join(' ');
     const scopedTypecheckCmd = bunAvailTsc
       ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`
-      : `npx tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+      : `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
     const typecheckCmd = scopedTypecheckCmd;
     const typecheckResult = input.testRunner
       ? await input.testRunner(projectRoot, typecheckCmd)
