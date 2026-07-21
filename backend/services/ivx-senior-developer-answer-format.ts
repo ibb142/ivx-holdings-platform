@@ -30,6 +30,10 @@
  * code — the requested fix was NOT implemented), not as DEPLOYED. A code/ui/feature
  * task with no code change and no deployment is reported as NOT_COMPLETED.
  *
+ * 2026-07-21 narrative-removal correction: the 7-section narrative appendix
+ * (DIRECT ANSWER / WHAT WAS WRONG / ...) is removed. The owner mandated the
+ * strict 6-section format only; no extra narrative engine output is appended.
+ *
  * This module is runtime-free and deterministic (no network/filesystem/AI) so it
  * is fully unit-testable.
  */
@@ -45,11 +49,6 @@ import {
   type IVXTaskType,
   type IVXValidationVerdict,
 } from './ivx-completion-validator';
-import {
-  buildSeniorDeveloperNarrative,
-  detectForbiddenVaguePhrases,
-  detectInventedActions,
-} from './ivx-senior-developer-narrative';
 
 function trimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -269,8 +268,7 @@ export function buildSeniorDeveloperExecutionAnswer(
     `COMMANDS:\n${buildCommandsSection(proof)}`,
     `TESTS:\n${buildTestsSection(proof)}`,
     `DEPLOYED PROOF:\n${buildDeployedProofSection(proof, status)}`,
-    buildNarrativeAppendix({ ...proof, executionRecord: undefined } as unknown as IVXWorkerJobResult, validation.verdict),
-  ].filter((section) => section.length > 0).join('\n\n');
+  ].join('\n\n');
 }
 
 function buildWorkerFilesChangedLine(result: IVXWorkerJobResult, taskType: IVXTaskType): string {
@@ -360,33 +358,6 @@ function buildWorkerDeployedProofSection(
 }
 
 /**
- * Phase 7 + 10: build the 7-section narrative from the execution record (when
- * present) and append it to the 6-section owner-mandated format. The narrative
- * is the SEPARATE response engine output — it reads the record and explains
- * the result, separating facts from assumptions and reporting failures
- * honestly. Forbidden vague phrases and invented actions are detected and
- * flagged at the end so the owner can see the honesty guard fired.
- */
-function buildNarrativeAppendix(result: IVXWorkerJobResult, verdict: IVXValidationVerdict): string {
-  if (!result.executionRecord) return '';
-  const verdictReason = renderValidatorReason(verdict, []);
-  const narrative = buildSeniorDeveloperNarrative({
-    record: result.executionRecord,
-    verdict,
-    verdictReason,
-  });
-  const flags: string[] = [];
-  if (narrative.forbiddenPhrasesDetected.length > 0) {
-    flags.push(`forbidden-vague-phrases: ${narrative.forbiddenPhrasesDetected.join(', ')}`);
-  }
-  if (narrative.inventedActionsDetected.length > 0) {
-    flags.push(`invented-actions: ${narrative.inventedActionsDetected.join('; ')}`);
-  }
-  const flagLine = flags.length > 0 ? `\n\nHONESTY GUARD:\n${flags.join('\n')}` : '';
-  return `\n\n---\n\nNARRATIVE (7-section response engine):\n${narrative.text}${flagLine}`;
-}
-
-/**
  * Build the strict execution answer from a completed worker-queue job result.
  *
  * This is the chat-side renderer for jobs created via the persistent worker
@@ -455,6 +426,5 @@ export function buildSeniorDeveloperWorkerJobAnswer(
     `COMMANDS:\n${buildWorkerCommandsSection(job, result)}`,
     `TESTS:\n${buildWorkerTestsSection(result)}`,
     `DEPLOYED PROOF:\n${buildWorkerDeployedProofSection(job, result, status)}`,
-    buildNarrativeAppendix(result, validation.verdict),
-  ].filter((section) => section.length > 0).join('\n\n');
+  ].join('\n\n');
 }

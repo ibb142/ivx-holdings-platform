@@ -113,6 +113,26 @@ describe('buildSeniorDeveloperExecutionAnswer — strict 6-section format', () =
     expect(answer).not.toContain('Files inspected: indexed');
   });
 
+  test('never contains the 7-section narrative appendix', () => {
+    const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), autoDecision);
+    expect(answer).not.toContain('NARRATIVE (7-section response engine)');
+    expect(answer).not.toContain('DIRECT ANSWER');
+    expect(answer).not.toContain('WHAT WAS WRONG');
+    expect(answer).not.toContain('WHAT I CHANGED');
+    expect(answer).not.toContain('WHY THIS FIX WORKS');
+    expect(answer).not.toContain('WHAT IS STILL NOT VERIFIED');
+    expect(answer).not.toContain('HONESTY GUARD');
+    expect(answer).not.toContain('---');
+  });
+
+  test('answer is exactly the 6 owner-required sections with no extra markers', () => {
+    const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), autoDecision);
+    const headers = ['TASK ID:', 'STATUS:', 'FILES CHANGED:', 'COMMANDS:', 'TESTS:', 'DEPLOYED PROOF:'];
+    const matches = headers.map((h) => (answer.match(new RegExp(`^${h}$`, 'gm')) ?? []).length);
+    expect(matches).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(answer.split('\n\n').length).toBe(6);
+  });
+
   test('shows real changed files and raw test output', () => {
     const answer = buildSeniorDeveloperExecutionAnswer(makeProof(), autoDecision);
     expect(answer).toContain('backend/hono.ts');
