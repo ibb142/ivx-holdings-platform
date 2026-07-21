@@ -1221,6 +1221,7 @@ import {
   handlePlatformAdminListVideos,
   handlePlatformAdminAddReel,
   handlePlatformAdminUpdateVideo,
+  handlePlatformAdminUpload,
 } from './api/ivx-video-platform';
 
 async function loadRoute53Module() {
@@ -5168,6 +5169,7 @@ app.get('/api/ivx/video-platform/moderation/queue', async () => handlePlatformMo
 app.post('/api/ivx/video-platform/moderation/:videoId', async (c) => handlePlatformModerationDecision(c.req.raw, c.req.param('videoId')));
 
 // ── Admin Reels Management (2026-07-06) — owner adds/manages videos without a developer ──
+app.post('/api/ivx/video-platform/admin/upload', async (c) => handlePlatformAdminUpload(c.req.raw));
 app.get('/api/ivx/video-platform/admin/videos', async (c) => handlePlatformAdminListVideos(c.req.raw));
 app.post('/api/ivx/video-platform/admin/add-reel', async (c) => handlePlatformAdminAddReel(c.req.raw));
 app.post('/api/ivx/video-platform/admin/videos/:videoId', async (c) => handlePlatformAdminUpdateVideo(c.req.raw, c.req.param('videoId')));

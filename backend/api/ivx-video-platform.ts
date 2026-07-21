@@ -1160,6 +1160,80 @@ export async function handlePlatformModerationQueue(): Promise<Response> {
   }
 }
 
+/**
+ * POST /api/ivx/video-platform/admin/upload — mint a presigned S3 PUT URL so the
+ * mobile/web client can upload a reel/deal video directly to S3, then publish
+ * via /admin/add-reel. This is the missing endpoint that caused every Reels
+ * upload to 404 (expo/lib/video-upload-pipeline.ts calls this route).
+ *
+ * Request: { fileName, contentType, idempotencyKey, title, videoType, projectId?, caption? }
+ * Response: { ok, uploadUrl, videoId, thumbnailUrl?, key }
+ */
+export async function handlePlatformAdminUpload(req: Request): Promise<Response> {
+  try {
+    const body = await readBody(req);
+    const fileName = str(body.fileName);
+    const contentType = str(body.contentType) || 'video/mp4';
+    const idempotencyKey = str(body.idempotencyKey);
+    if (!fileName) {
+      return json({ ok: false, error: 'fileName is required', marker: VIDEO_PLATFORM_MARKER }, 400);
+    }
+
+    // AWS credentials — required for S3 presigning
+    const accessKey = (process.env.AWS_ACCESS_KEY_ID || '').trim();
+    const secretKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+    const region = (process.env.AWS_REGION || 'us-east-1').trim();
+    const bucket = (process.env.S3_BUCKET_NAME || 'ivx-landing').trim();
+    if (!accessKey || !secretKey) {
+      return json({ ok: false, error: 'S3 upload unavailable: AWS credentials not configured on server. Set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY.', marker: VIDEO_PLATFORM_MARKER }, 503);
+    }
+
+    // Validate content type (only video allowed)
+    const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm'];
+    if (!allowedTypes.includes(contentType)) {
+      return json({ ok: false, error: `Unsupported contentType: ${contentType}. Allowed: ${allowedTypes.join(', ')}`, marker: VIDEO_PLATFORM_MARKER }, 400);
+    }
+
+    // Generate a unique videoId + S3 key
+    const { randomUUID } = await import('node:crypto');
+    const videoId = idempotencyKey || randomUUID();
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const key = `reels/${videoId}/${safeName}`;
+
+    // Build the presigned URL
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+    const s3 = new S3Client({
+      region,
+      credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+    });
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType,
+      ACL: 'public-read',
+    });
+    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 600 }); // 10 min
+
+    // Thumbnail URL (derived from the public S3 URL pattern)
+    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+    const thumbnailUrl = `https://${bucket}.s3.${region}.amazonaws.com/reels/${videoId}/thumb.jpg`;
+
+    return json({
+      ok: true,
+      uploadUrl,
+      videoId,
+      key,
+      thumbnailUrl,
+      publicUrl,
+      marker: VIDEO_PLATFORM_MARKER,
+    });
+  } catch (err) {
+    return json({ ok: false, error: err instanceof Error ? err.message : 'upload presign failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+  }
+}
+
 /** GET /api/ivx/video-platform/admin/videos — ALL videos (including hidden/draft) for admin management. */
 export async function handlePlatformAdminListVideos(req: Request): Promise<Response> {
   try {
