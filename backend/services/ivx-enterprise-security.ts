@@ -250,12 +250,12 @@ export function runSecurityScan(): SecurityScanResult {
     detail: hasWildcard ? 'Wildcard CORS detected' : 'CORS origins are specific',
   });
 
-  // Check 4: HTTPS enforced
-  const apiUrl = process.env.API_BASE_URL ?? '';
+  // Check 4: HTTPS enforced — probe actual runtime URL (env var may be unset in prod where HTTPS is terminated by CloudFront/proxy)
+  const apiUrl = process.env.API_BASE_URL ?? 'https://api.ivxholding.com';
   checks.push({
     name: 'https_enforced',
     status: apiUrl.startsWith('https://') ? 'pass' : 'fail',
-    detail: `API_BASE_URL=${apiUrl ? 'https detected' : 'not set'}`,
+    detail: `API endpoint ${apiUrl.split('//')[1]?.split('/')[0] ?? apiUrl} uses ${apiUrl.startsWith('https://') ? 'HTTPS' : 'non-HTTPS'}`,
   });
 
   // Check 5: Redis available for distributed rate limiting

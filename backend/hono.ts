@@ -812,6 +812,13 @@ import {
   handleEnterpriseCapacityRequest,
   handleEnterpriseHealthRequest,
 } from './api/ivx-enterprise';
+import {
+  certificationOptions,
+  handleCertificationLatestRequest,
+  handleCertificationReportsRequest,
+  handleCertificationRunRequest,
+  handleCertificationStatusRequest,
+} from './api/ivx-certification';
 
 /** Apply rate limit; if blocked, return the 429 directly. */
 async function withRateLimit<T extends Response>(
@@ -5733,6 +5740,18 @@ app.get('/cert-app', async (c) => {
 // Public enterprise health (no auth required)
 app.get('/api/ivx/enterprise/health', () => handleEnterpriseHealthRequest());
 app.options('/api/ivx/enterprise/health', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+
+// ============================================================
+// IVX Deploy Certification Gate — permanent 16-module audit pipeline
+// ============================================================
+app.get('/api/ivx/certification/status', () => handleCertificationStatusRequest());
+app.options('/api/ivx/certification/status', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/certification/latest', (c) => handleCertificationLatestRequest(c.req.raw));
+app.options('/api/ivx/certification/latest', () => certificationOptions());
+app.get('/api/ivx/certification/reports', (c) => handleCertificationReportsRequest(c.req.raw));
+app.options('/api/ivx/certification/reports', () => certificationOptions());
+app.post('/api/ivx/certification/run', (c) => handleCertificationRunRequest(c.req.raw));
+app.options('/api/ivx/certification/run', () => certificationOptions());
 
 // Enterprise metrics endpoint — observability dashboard data
 app.get('/api/ivx/enterprise/metrics', (context) => {

@@ -1124,14 +1124,36 @@ async function runRenderTriggerDeploy(input: Record<string, unknown>): Promise<R
     throw new Error(`Render deploy trigger failed with HTTP ${response.status}.`);
   }
   const data = readRecord(response.data);
-  return {
+  const deployId = readTrimmed(data.id) || readTrimmed(readRecord(data.deploy).id) || null;
+  const result: Record<string, unknown> = {
     provider: 'render',
     action: 'render_trigger_deploy',
     serviceId,
-    deployId: readTrimmed(data.id) || readTrimmed(readRecord(data.deploy).id) || null,
+    deployId,
     status: readTrimmed(data.status) || readTrimmed(readRecord(data.deploy).status) || 'accepted',
     url: readTrimmed(data.url) || null,
   };
+  // ============================================================
+  // Permanent deploy-gate hook: trigger the 16-module certification
+  // gate automatically after every successful deploy. Runs in the
+  // background — never blocks the deploy response. The report lands
+  // in the certification ledger and is visible via /api/ivx/certification/*.
+  // ============================================================
+  try {
+    const { runDeployCertificationGate } = await import('./services/ivx-deploy-certification-gate');
+    void runDeployCertificationGate({
+      triggeredBy: 'post_deploy',
+      triggerSource: `render_trigger_deploy:${deployId ?? 'unknown'}`,
+      deployId: deployId ?? null,
+      apiBase: 'https://api.ivxholding.com',
+      ownerToken: null,
+    }).catch((gateError) => {
+      console.log('[IVXDeveloperDeployControl] post-deploy certification gate failed (non-fatal):', gateError instanceof Error ? gateError.message : 'unknown');
+    });
+  } catch (importError) {
+    console.log('[IVXDeveloperDeployControl] certification gate import failed (non-fatal):', importError instanceof Error ? importError.message : 'unknown');
+  }
+  return result;
 }
 
 async function runRenderRestartService(input: Record<string, unknown>): Promise<Record<string, unknown>> {
