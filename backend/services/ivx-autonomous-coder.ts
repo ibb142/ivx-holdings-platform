@@ -780,6 +780,13 @@ async function deterministicPilotFallback(
 
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const GITHUB_DEFAULT_BRANCH = 'main';
+// Branch for code_change jobs (no deploy requested). Render auto-deploys on
+// every commit to main, which restarts the service and orphans the in-flight
+// worker before it can reach a terminal state. Committing code_change jobs to
+// a separate non-deploy branch decouples the worker from the auto-deploy that
+// kills it. Deploy-mode jobs still commit to main (the self-deploy handoff
+// already persists resumable state before triggering Render).
+const AUTONOMOUS_CODER_BRANCH = 'ivx-autonomous';
 
 function readEnv(name: string): string {
   return (typeof process.env[name] === 'string' ? process.env[name] : '').trim();
@@ -816,6 +823,49 @@ async function getStartingSha(): Promise<string | null> {
   }
 }
 
+async function ensureBranchExists(
+  owner: string,
+  repo: string,
+  branch: string,
+  headers: Record<string, string>,
+): Promise<string> {
+  // Fast path: branch already exists — return its current HEAD SHA.
+  const refRes = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+    { headers, signal: AbortSignal.timeout(10000) },
+  );
+  if (refRes.ok) {
+    const refData = await refRes.json() as { object?: { sha?: string } };
+    const existingSha = refData.object?.sha;
+    if (existingSha) return existingSha;
+  }
+  if (refRes.status !== 404) throw new Error(`GitHub branch ref lookup failed: ${refRes.status}`);
+  // Branch does not exist — create it from the default branch HEAD.
+  const defaultBranch = readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH;
+  const baseRefRes = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(defaultBranch)}`,
+    { headers, signal: AbortSignal.timeout(10000) },
+  );
+  if (!baseRefRes.ok) throw new Error(`GitHub default branch ref lookup failed: ${baseRefRes.status}`);
+  const baseRefData = await baseRefRes.json() as { object?: { sha?: string } };
+  const baseSha = baseRefData.object?.sha;
+  if (!baseSha) throw new Error('GitHub default branch ref did not include a commit SHA.');
+  const createRefRes = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/refs`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (!createRefRes.ok && createRefRes.status !== 422) {
+    // 422 = branch already exists (race); treat as success.
+    throw new Error(`GitHub branch creation failed: ${createRefRes.status}`);
+  }
+  return baseSha;
+}
+
 async function commitFilesViaGitDataApi(
   filePaths: string[],
   branch: string,
@@ -832,15 +882,8 @@ async function commitFilesViaGitDataApi(
     'Content-Type': 'application/json',
   };
 
-  // Read the branch ref
-  const refRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/git/ref/heads/${encodeURIComponent(branch)}`,
-    { headers, signal: AbortSignal.timeout(10000) },
-  );
-  if (!refRes.ok) throw new Error(`GitHub branch ref lookup failed: ${refRes.status}`);
-  const refData = await refRes.json() as { object?: { sha?: string } };
-  const baseCommitSha = refData.object?.sha;
-  if (!baseCommitSha) throw new Error('GitHub branch ref did not include a commit SHA.');
+  // Ensure the target branch exists (create from default branch HEAD if missing).
+  const baseCommitSha = await ensureBranchExists(repoInfo.owner, repoInfo.repo, branch, headers);
 
   // Get the base commit's tree
   const commitRes = await fetch(
@@ -1673,7 +1716,13 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     if (input.executionMode === 'code_change' || input.executionMode === 'deploy') {
       onPhase?.('committing', 'Tests + typecheck passed; committing via GitHub Git Data API.');
       try {
-        const branchName = readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH;
+        // code_change jobs commit to a non-deploy branch so Render auto-deploy
+        // does not restart the service and orphan the worker mid-stage. Deploy
+        // jobs still commit to main (the self-deploy handoff persists resumable
+        // state before triggering Render, so the restart is expected there).
+        const branchName = input.executionMode === 'deploy'
+          ? (readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH)
+          : AUTONOMOUS_CODER_BRANCH;
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
           : await commitFilesViaGitDataApi(filesChanged, branchName);
