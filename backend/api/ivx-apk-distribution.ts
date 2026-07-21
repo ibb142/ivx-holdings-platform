@@ -22,7 +22,7 @@ const IVX_APK_UPLOAD_CONFIRM_PHRASE = 'CONFIRM_IVX_APK_UPLOAD';
 const IVX_LANDING_UPLOAD_CONFIRM_PHRASE = 'CONFIRM_IVX_LANDING_UPLOAD';
 const IVX_APK_KEY_PATTERN = /^apk\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(apk|aab)$/;
 /** Top-level landing-page assets only — no prefixes, no traversal, tight extension set. */
-const IVX_LANDING_KEY_PATTERN = /^(index\.html|robots\.txt|sitemap\.xml|ivx-[a-z0-9-]{1,60}\.(js|json)|landing-support-chat\.(js|css))$/;
+const IVX_LANDING_KEY_PATTERN = /^(index\.html|reset-password\.html|robots\.txt|sitemap\.xml|ivx-[a-z0-9-]{1,60}\.(js|json)|landing-support-chat\.(js|css))$/;
 const IVX_APK_PRESIGN_EXPIRES_SECONDS = 900;
 const IVX_APK_BUCKET_DEFAULT = 'ivxholding.com';
 
@@ -139,7 +139,7 @@ export async function handleIVXApkPresignUploadRequest(request: Request): Promis
     return ownerOnlyJson({
       status: 'error',
       error: 'INVALID_KEY',
-      detail: 'Key must match apk/<name>.(apk|aab) or a whitelisted top-level landing file (index.html, robots.txt, sitemap.xml, ivx-*.js/json, landing-support-chat.js/css).',
+      detail: 'Key must match apk/<name>.(apk|aab) or a whitelisted top-level landing file (index.html, reset-password.html, robots.txt, sitemap.xml, ivx-*.js/json, landing-support-chat.js/css).',
     }, 400);
   }
 

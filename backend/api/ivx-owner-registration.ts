@@ -78,7 +78,7 @@ type SafeWalletRecord = {
 
 const DEPLOYMENT_MARKER = 'ivx-owner-registration-2026-05-11t-render-direct-phone-repair-v7';
 const OWNER_ACCESS_REPAIR_BACKEND_VERSION = 'V7';
-const DEFAULT_OWNER_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password';
+const DEFAULT_OWNER_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password.html';
 
 const OWNER_REGISTRATION_HEADERS = {
   'Content-Type': 'application/json',

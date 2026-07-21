@@ -1941,7 +1941,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                     )}
                     <View style={styles.ownerPasswordResetContent}>
                       <Text style={styles.ownerPasswordResetTitle}>Secondary/manual fallback: email reset</Text>
-                      <Text style={styles.ownerPasswordResetText}>May be rate-limited and requires Supabase redirect allow-list: https://ivxholding.com/reset-password. This never blocks the primary server reset above.</Text>
+                      <Text style={styles.ownerPasswordResetText}>May be rate-limited and requires Supabase redirect allow-list: https://ivxholding.com/reset-password.html. This never blocks the primary server reset above.</Text>
                     </View>
                     <ChevronRight size={16} color={Colors.primary} />
                   </TouchableOpacity>

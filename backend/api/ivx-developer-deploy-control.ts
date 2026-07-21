@@ -264,7 +264,7 @@ async function runSupabaseAuditOwnerAuthUser(input: Record<string, unknown>): Pr
   };
 }
 
-const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password';
+const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password.html';
 
 async function ensureSupabaseAuthRedirectUrl(supabaseUrl: string, redirectTo: string): Promise<{
   ok: boolean;

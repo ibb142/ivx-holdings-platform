@@ -32,7 +32,7 @@ import {
  *   - password preservation (no lowercasing / symbol stripping / truncation)
  *   - trace ID generation (no password data)
  *   - Supabase project match (mobile references production project only)
- *   - password-reset redirect (production https://ivxholding.com/reset-password)
+ *   - password-reset redirect (production https://ivxholding.com/reset-password.html)
  *   - role canonicalization (owner/admin/investor)
  *   - no hardcoded passwords in the auth helpers
  *   - no password value in trace IDs
@@ -162,12 +162,12 @@ describe('IVX Enterprise Auth Recovery — Phase 15', () => {
 
   describe('Password reset redirect (Phase 4 + 12)', () => {
     it('resolves to the production reset route', () => {
-      expect(getPasswordResetRedirectUrl()).toBe('https://ivxholding.com/reset-password');
+      expect(getPasswordResetRedirectUrl()).toBe('https://ivxholding.com/reset-password.html');
     });
 
     it('inspectPasswordResetRedirect returns a valid audit', () => {
       const audit = inspectPasswordResetRedirect();
-      expect(audit.resolvedUrl).toContain('ivxholding.com/reset-password');
+      expect(audit.resolvedUrl).toContain('ivxholding.com/reset-password.html');
       expect(audit.resolvedUrl.startsWith('https://')).toBe(true);
     });
   });

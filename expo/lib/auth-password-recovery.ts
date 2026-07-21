@@ -1,5 +1,5 @@
 const PASSWORD_RESET_ROUTE_PATH = '/reset-password';
-const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password';
+const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'https://ivxholding.com/reset-password.html';
 
 export interface PasswordResetRedirectAudit {
   configuredValue: string;
