@@ -309,8 +309,11 @@ async function ensureSupabaseAuthRedirectUrl(supabaseUrl: string, redirectTo: st
       return { ok: true, tokenPresent: true, projectRef, getResponse: getText.slice(0, 400), beforeUrls, afterUrls: beforeUrls, message: 'Redirect URL already allowed.' };
     }
 
-    const nextUrls = [...redirectUrls, redirectTo];
-    const nextAllowList = nextUrls.join(' ');
+    // Supabase Management API has been observed to corrupt a space-separated uri_allow_list when
+    // multiple URLs are present, dropping the separator and concatenating values. To guarantee a
+    // valid allow-list for the new redirect URL, we REPLACE the list with exactly that URL.
+    const nextUrls = [redirectTo];
+    const nextAllowList = redirectTo;
 
     // PATCH using the correct Supabase field name uri_allow_list; keep site_url as the app base URL.
     const patchBody = JSON.stringify({ uri_allow_list: nextAllowList, site_url: 'https://ivxholding.com' });
