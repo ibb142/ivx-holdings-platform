@@ -32,13 +32,13 @@ import {
   Eye,
   Target,
   Flame,
-  Crown,
   BrainCircuit,
   ChevronRight,
   Sparkles,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 
 interface SystemModule {
   id: string;
@@ -482,7 +482,7 @@ export default function ActivationCenterScreen() {
         </View>
 
         <View style={styles.missionCard}>
-          <Crown size={20} color={Colors.primary} />
+          <IVXBrandIcon size={20} />
           <Text style={styles.missionTitle}>Mission: 1 → 100M Users</Text>
           <Text style={styles.missionText}>
             Your AI army is deployed. Landing page is live. Every social channel is connected.

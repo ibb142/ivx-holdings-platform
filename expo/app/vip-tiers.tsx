@@ -15,8 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Shield,
   Award,
-  Crown,
-  Gem,
+    Gem,
   ArrowLeft,
   Check,
   Lock,
@@ -33,6 +32,7 @@ import {
   ChevronRight,
   Sparkles,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { VIP_TIERS, getUserVIPProgress, getTierByLevel, VIPTier, VIPTierLevel } from '@/mocks/vip-tiers';
 import { useCurrentUser } from '@/lib/data-hooks';
@@ -43,8 +43,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TIER_ICONS: Record<string, React.ComponentType<any>> = {
   shield: Shield,
   award: Award,
-  crown: Crown,
-  gem: Gem,
+  crown:   gem: Gem,
 };
 
 const TIER_GRADIENTS: Record<VIPTierLevel, [string, string]> = {

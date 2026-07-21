@@ -21,8 +21,7 @@ import {
   ChevronRight,
   Search,
   X,
-  Crown,
-  UserCog,
+    UserCog,
   Lock,
   Unlock,
   LogOut,
@@ -40,6 +39,7 @@ import {
   Smartphone,
   Zap,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -472,7 +472,7 @@ function AssignmentCard({
       <View style={styles.cardHeader}>
         <View style={styles.cardLeftSection}>
           <View style={[styles.roleBadge, assignment.status === 'suspended' && styles.roleBadgeSuspended]}>
-            <Crown size={12} color={assignment.status === 'suspended' ? Colors.muted : Colors.primary} />
+            <IVXBrandIcon size={12} />
             <Text
               style={[
                 styles.roleBadgeText,
@@ -1077,7 +1077,7 @@ function UserDetailModal({
           <View style={styles.detailSection}>
             <Text style={styles.detailLabel}>Role</Text>
             <View style={styles.roleBadge}>
-              <Crown size={12} color={Colors.primary} />
+              <IVXBrandIcon size={12} />
               <Text style={styles.roleBadgeText}>{roleDisplayName}</Text>
             </View>
           </View>

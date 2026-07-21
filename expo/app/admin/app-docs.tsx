@@ -31,8 +31,7 @@ import {
   MessageSquare,
   Settings,
   BarChart3,
-  Crown,
-  Handshake,
+    Handshake,
   Brain,
   Gift,
   Lock,
@@ -48,6 +47,7 @@ import {
   FileSpreadsheet,
   ArrowLeft,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Clipboard from 'expo-clipboard';
 import * as Print from 'expo-print';
 
@@ -73,7 +73,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   BarChart3: <BarChart3 size={20} color="#8B5CF6" />,
   Wallet: <Wallet size={20} color="#14B8A6" />,
   Gift: <Gift size={20} color="#F97316" />,
-  Crown: <Crown size={20} color="#EAB308" />,
+  IVXBrandIcon: <IVXBrandIcon size={20} />,
   Bell: <Bell size={20} color="#FF4D4D" />,
   Brain: <Brain size={20} color="#A855F7" />,
   MessageSquare: <MessageSquare size={20} color="#4A90D9" />,

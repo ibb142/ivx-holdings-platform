@@ -17,7 +17,7 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.4.31",
+  version: "1.4.32",
   runtimeVersion: {
     policy: 'appVersion',
   },
@@ -33,7 +33,7 @@ const config: ExpoConfig = {
   },
   sdkVersion: '54.0.0',
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: './assets/images/icon.png', // Official IVX master logo (brand standardization 2026-07-21)
   scheme: 'ivx-app',
   userInterfaceStyle: 'dark',
   backgroundColor: '#000000',
@@ -44,26 +44,26 @@ const config: ExpoConfig = {
     fallbackToCacheTimeout: 0,
   },
   splash: {
-    image: './assets/images/splash-icon.png',
+    image: './assets/images/splash-icon.png', // Official IVX splash logo (brand standardization 2026-07-21)
     resizeMode: 'contain',
     backgroundColor: '#000000',
   },
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.ivxholdings.app',
-    buildNumber: '1',
+    buildNumber: '2',
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: './assets/images/adaptive-icon.png',
+      foregroundImage: './assets/images/adaptive-icon.png', // Official IVX adaptive icon (brand standardization 2026-07-21)
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 63,
+    versionCode: 64,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {
-    favicon: './assets/images/favicon.png',
+    favicon: './assets/images/favicon.png', // Official IVX favicon (brand standardization 2026-07-21)
     bundler: 'metro',
   },
   plugins: [

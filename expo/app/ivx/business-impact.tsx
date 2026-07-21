@@ -17,8 +17,7 @@ import {
   CheckCircle2,
   Clock,
   Compass,
-  Crown,
-  Handshake,
+    Handshake,
   Lightbulb,
   Radar,
   Target,
@@ -26,6 +25,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -119,7 +119,7 @@ function BusinessImpactContent() {
     >
       <View style={styles.heroCard}>
         <View style={styles.heroHeaderRow}>
-          <Crown size={18} color={Colors.primary} />
+          <IVXBrandIcon size={18} />
           <Text style={styles.heroTitle}>IVX Holdings Command Center</Text>
         </View>
         <Text style={styles.heroSubtitle}>

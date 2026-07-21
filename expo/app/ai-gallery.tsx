@@ -36,8 +36,7 @@ import {
   MessageCircle,
   Shield,
   Users,
-  Crown,
-  Gift,
+    Gift,
   Copy,
   Brain,
   FileText,
@@ -50,6 +49,7 @@ import {
   Coins,
   Share2,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
@@ -274,7 +274,7 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
     label: 'VIP Experience',
     prompt: 'Photorealistic image of a luxury VIP lounge scene with a golden membership card on a polished dark marble table, a champagne glass nearby, smartphone showing exclusive premium real estate deals, dramatic low-key lighting with gold accents, velvet textures, premium luxury lifestyle photography, bokeh background with warm amber lights, 8K ultra-realistic',
     category: 'App Features',
-    icon: <Crown size={18} color="#FFD700" />,
+    icon: <IVXBrandIcon size={18} />,
     color: '#FFD700',
   },
   {

@@ -108,7 +108,7 @@ export const FUNCTIONALITY_REGISTRY: Module[] = [
     ],
   },
   {
-    id: 'ipx', title: 'IVXHOLDINGS Token System', icon: 'Crown', color: '#EAB308',
+    id: 'ipx', title: 'IVXHOLDINGS Token System', icon: 'IVXBrandIcon', color: '#EAB308',
     description: 'IVXHOLDINGS token management and staking',
     features: [
       { id: 'ipx-1', name: 'IVXHOLDINGS token balance and price tracking', status: 'active', addedDate: '2024-01-01' },

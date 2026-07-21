@@ -68,6 +68,8 @@ async function walk(dir) {
     for (const mark of PROHIBITED_MARKS) {
       const re = new RegExp(`\\b${mark}\\b`, 'g');
       if (re.test(content)) {
+        // Governance docs are allowed to mention prohibited marks as rules.
+        if (entry.name === 'BRAND_GOVERNANCE.md') continue;
         issues.push({ file: rel, type: 'prohibited-mark', detail: mark });
       }
     }
@@ -75,6 +77,9 @@ async function walk(dir) {
       const imageMatches = content.match(/source=\{[^}]*\}/g) || [];
       for (const m of imageMatches) {
         if (m.includes('http') && !m.includes('ivx-logo') && !m.includes('ivx-symbol') && !m.includes('ivx-wordmark')) {
+          // Skip known property/background image hosts (not logos).
+          const urlMatch = m.match(/https?:\/\/[^\s"'\`]+/);
+          if (urlMatch && isPropertyUrl(urlMatch[0])) continue;
           issues.push({ file: rel, type: 'remote-logo-candidate', detail: m.slice(0, 80) });
         }
       }

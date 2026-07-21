@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   KeyRound,
   Wifi,
-  Crown,
   ChevronRight,
   CheckCircle2,
   XCircle,
@@ -30,6 +29,7 @@ import {
   Smartphone,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { validateEmail } from '@/lib/auth-helpers';
@@ -71,7 +71,7 @@ interface QuickActionCard {
   title: string;
   subtitle: string;
   accent: string;
-  icon: typeof LayoutGrid;
+  icon: React.ComponentType<{ size: number; color: string }> | React.ComponentType<any>;
   onPress: () => void;
   testID: string;
 }
@@ -630,7 +630,7 @@ export default function OwnerAccessScreen() {
         title: 'Open Owner Controls',
         subtitle: 'Verify or rotate trusted device access',
         accent: '#4A90D9',
-        icon: Crown,
+        icon: IVXBrandIcon,
         onPress: () => router.push('/admin/owner-controls' as any),
         testID: 'owner-access-open-owner-controls',
       },
@@ -1027,7 +1027,7 @@ export default function OwnerAccessScreen() {
             testID="owner-access-open-admin-direct"
           >
             <View style={styles.verifyIconWrap}>
-              <Crown size={20} color="#000" />
+              <IVXBrandIcon size={20} />
             </View>
             <View style={styles.verifyBody}>
               <Text style={styles.verifyTitle}>Open Admin HQ</Text>
@@ -1104,7 +1104,7 @@ export default function OwnerAccessScreen() {
               {claimOwnerMutation.isPending ? (
                 <ActivityIndicator color="#000" size="small" />
               ) : (
-                <Crown size={22} color="#000" />
+                <IVXBrandIcon size={22} />
               )}
             </View>
             <View style={styles.claimBody}>
@@ -1610,7 +1610,7 @@ export default function OwnerAccessScreen() {
         ) : null}
 
         {ACCESS_ROUTES.map((item) => {
-          const Icon = item.mode === 'signin' ? KeyRound : item.mode === 'restore' ? Wifi : Crown;
+          const Icon = item.mode === 'signin' ? KeyRound : item.mode === 'restore' ? Wifi : IVXBrandIcon;
           const loading = item.mode === 'restore' && ownerRestoreMutation.isPending;
           const disabled = loading;
           const isRestoreReady = item.mode === 'restore' && trustedReady;

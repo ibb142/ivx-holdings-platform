@@ -126,6 +126,48 @@ function tryReadLandingFile(relativePath: string): string | null {
   return null;
 }
 
+function tryReadBrandAsset(filename: string): Buffer | null {
+  const candidates = [
+    join(process.cwd(), 'expo', 'assets', 'images', filename),
+    join(process.cwd(), 'assets', 'images', filename),
+  ];
+  for (const path of candidates) {
+    try {
+      return readFileSync(path);
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
+async function fetchBrandAssetFromGitHub(filename: string): Promise<Buffer | null> {
+  const repoUrl = readEnv('GITHUB_REPO_URL') || 'https://github.com/ibb142/rork-global-real-estate-invest';
+  const token = readEnv('GITHUB_TOKEN') || '';
+  const repoPath = repoUrl.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  const apiUrl = `https://api.github.com/repos/${repoPath}/contents/expo/assets/images/${encodeURIComponent(filename)}?ref=main`;
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.raw',
+      'User-Agent': 'ivx-landing-deploy',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const response = await fetch(apiUrl, { headers });
+    if (!response.ok) {
+      console.log(`[LandingFullDeploy] GitHub fetch ${filename} failed: HTTP ${response.status}`);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'github fetch failed';
+    console.log(`[LandingFullDeploy] GitHub fetch ${filename} error: ${message}`);
+    return null;
+  }
+}
+
 /** List all files in the landing directory */
 function listLandingFiles(): string[] {
   const dirCandidates = [
@@ -257,6 +299,51 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
       const message = error instanceof Error ? error.message : 'upload failed';
       uploads.push({ key: filename, contentType, bytes, ok: false, error: message });
       console.log(`[LandingFullDeploy] FAILED ${filename}: ${message}`);
+    }
+  }
+
+  // Upload official brand assets from expo/assets/images/ to the S3 bucket root
+  console.log('[LandingFullDeploy] Uploading brand assets from expo/assets/images/');
+  const brandAssets = [
+    { filename: 'ivx-logo.png', key: 'ivx-logo.png' },
+    { filename: 'ivx-logo-master.png', key: 'ivx-logo-master.png' },
+    { filename: 'ivx-symbol.png', key: 'ivx-symbol.png' },
+    { filename: 'ivx-og-image.png', key: 'ivx-og-image.png' },
+    { filename: 'favicon.png', key: 'favicon.png' },
+    { filename: 'favicon-16.png', key: 'favicon-16.png' },
+    { filename: 'favicon-32.png', key: 'favicon-32.png' },
+    { filename: 'favicon-180.png', key: 'favicon-180.png' },
+    { filename: 'favicon-192.png', key: 'favicon-192.png' },
+  ];
+  for (const asset of brandAssets) {
+    let buffer = tryReadBrandAsset(asset.filename);
+    if (!buffer) {
+      console.log(`[LandingFullDeploy] Brand asset not found locally, fetching ${asset.filename} from GitHub...`);
+      buffer = await fetchBrandAssetFromGitHub(asset.filename);
+    }
+    if (!buffer) {
+      uploads.push({ key: asset.key, contentType: getContentType(asset.key), bytes: 0, ok: false, error: 'Brand asset not readable and GitHub fetch failed' });
+      continue;
+    }
+    const contentType = getContentType(asset.key);
+    const cacheControl = asset.key === 'ivx-logo.png' || asset.key === 'ivx-symbol.png'
+      ? 'public, max-age=31536000'
+      : 'public, max-age=86400';
+    try {
+      await s3.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: asset.key,
+        Body: buffer,
+        ContentType: contentType,
+        CacheControl: cacheControl,
+      }));
+      uploads.push({ key: asset.key, contentType, bytes: buffer.length, ok: true });
+      invalidationPaths.push(`/${asset.key}`);
+      console.log(`[LandingFullDeploy] Uploaded brand asset ${asset.key} (${contentType}, ${buffer.length} bytes)`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'upload failed';
+      uploads.push({ key: asset.key, contentType, bytes: 0, ok: false, error: message });
+      console.log(`[LandingFullDeploy] FAILED brand asset ${asset.key}: ${message}`);
     }
   }
 

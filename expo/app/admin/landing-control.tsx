@@ -53,9 +53,9 @@ import {
   BarChart3,
   Target,
   Megaphone,
-  Crown,
-  Type,
+    Type,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -120,8 +120,7 @@ const MODULE_ICON_MAP: Record<string, React.ComponentType<any>> = {
   'signup': Users,
   'login': Lock,
   'kyc': Shield,
-  'vip-tiers': Crown,
-  'notifications': Radio,
+  'vip-tiers':   'notifications': Radio,
   'app-guide': FileText,
   'company-info': Globe,
   'trust-center': Shield,
@@ -221,7 +220,7 @@ const DEFAULT_MODULES: AppModule[] = [
   { id: 'signup', name: 'Sign Up', description: 'New user registration', icon: Users, enabled: true, visibility: 'public', category: 'core', route: '/signup' },
   { id: 'login', name: 'Login', description: 'User authentication', icon: Lock, enabled: true, visibility: 'public', category: 'core', route: '/login' },
   { id: 'kyc', name: 'KYC Verification', description: 'Identity verification flow', icon: Shield, enabled: true, visibility: 'members', category: 'tools', route: '/kyc-verification' },
-  { id: 'vip-tiers', name: 'VIP Tiers', description: 'VIP membership levels', icon: Crown, enabled: true, visibility: 'public', category: 'social', route: '/vip-tiers' },
+  { id: 'vip-tiers', name: 'VIP Tiers', description: 'VIP membership levels', icon: IVXBrandIcon, enabled: true, visibility: 'public', category: 'social', route: '/vip-tiers' },
   { id: 'notifications', name: 'Notifications', description: 'Push & in-app notifications', icon: Radio, enabled: true, visibility: 'members', category: 'tools', route: '/notifications' },
   { id: 'app-guide', name: 'App Guide', description: 'Onboarding & help guide', icon: FileText, enabled: true, visibility: 'public', category: 'tools', route: '/app-guide' },
   { id: 'company-info', name: 'Company Info', description: 'About IVX Holdings', icon: Globe, enabled: true, visibility: 'public', category: 'core', route: '/company-info' },

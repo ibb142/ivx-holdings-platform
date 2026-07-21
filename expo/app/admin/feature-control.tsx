@@ -29,8 +29,7 @@ import {
   TrendingUp,
   Wallet,
   Gift,
-  Crown,
-  Bell,
+    Bell,
   Brain,
   Settings,
   Palette,
@@ -41,6 +40,7 @@ import {
   Filter,
   Layers,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -56,8 +56,7 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   TrendingUp,
   Wallet,
   Gift,
-  Crown,
-  Bell,
+    Bell,
   Brain,
   Settings,
   ShieldCheck,

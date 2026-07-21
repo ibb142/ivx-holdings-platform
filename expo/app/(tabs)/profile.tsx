@@ -34,7 +34,6 @@ import {
   BookOpen,
   Briefcase,
   Handshake,
-  Crown,
   RefreshCw,
   Users,
   Scale,
@@ -45,6 +44,7 @@ import {
   CreditCard,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -427,7 +427,7 @@ export default function ProfileScreen() {
             <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('investorTools').toUpperCase()}</Text>
             <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
               <MenuItem
-                icon={<Crown size={isXs ? 18 : 20} color={'#FFD700'} />}
+                icon={<IVXBrandIcon size={isXs ? 18 : 20} />}
                 title={t('vipTiers')}
                 subtitle={t('vipTiersDesc')}
                 onPress={() => router.push('/vip-tiers' as any)}

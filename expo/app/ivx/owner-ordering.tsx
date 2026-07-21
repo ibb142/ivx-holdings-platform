@@ -15,10 +15,10 @@ import {
   Ban,
   CheckCircle2,
   CircleX,
-  Crown,
-  RotateCcw,
+    RotateCcw,
   Trash2,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
@@ -328,7 +328,7 @@ function OwnerOrderingScreen() {
       >
         <View style={styles.hero}>
           <View style={styles.heroRow}>
-            <Crown size={20} color={Colors.gold} />
+            <IVXBrandIcon size={20} />
             <Text style={styles.heroTitle}>Owner Ordering & Block Review</Text>
           </View>
           <Text style={styles.heroSub}>

@@ -16,8 +16,7 @@ import { useRouter } from 'expo-router';
 import {
   Users,
   UserPlus,
-  Crown,
-  X,
+    X,
   Mail,
   Phone,
   Clock,
@@ -31,6 +30,7 @@ import {
   BarChart3,
   ArrowLeft,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { TeamMember, AdminRole } from '@/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -117,7 +117,7 @@ export default function TeamManagement() {
   const getRoleIcon = (roleType: string) => {
     switch (roleType) {
       case 'ceo':
-        return <Crown size={16} color={Colors.warning} />;
+        return <IVXBrandIcon size={16} />;
       case 'manager':
         return <Settings size={16} color={Colors.primary} />;
       case 'analyst':
@@ -281,7 +281,7 @@ export default function TeamManagement() {
       >
         <View style={styles.ceoCard}>
           <View style={styles.ceoHeader}>
-            <Crown size={20} color={Colors.warning} />
+            <IVXBrandIcon size={20} />
             <Text style={styles.ceoTitle}>CEO Access Only</Text>
           </View>
           <Text style={styles.ceoDescription}>
@@ -333,7 +333,7 @@ export default function TeamManagement() {
                       {member.firstName} {member.lastName}
                     </Text>
                     {member.role.type === 'ceo' && (
-                      <Crown size={14} color={Colors.warning} />
+                      <IVXBrandIcon size={14} />
                     )}
                   </View>
                   <Text style={styles.memberEmail}>{member.email}</Text>

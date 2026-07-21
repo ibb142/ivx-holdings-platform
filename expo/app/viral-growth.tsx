@@ -21,8 +21,7 @@ import {
   Globe,
   Share2,
   Gift,
-  Crown,
-  Target,
+    Target,
   Flame,
   BarChart3,
   ArrowUpRight,
@@ -37,6 +36,7 @@ import {
   Play,
   Briefcase,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -303,7 +303,7 @@ function ReferralRewardEngine({ onShare }: { onShare: () => void }) {
               if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
           >
-            <Crown size={12} color={t.color} />
+            <IVXBrandIcon size={12} />
             <Text style={[s.tierTabText, selectedTier === i && { color: t.color }]}>{t.name}</Text>
           </TouchableOpacity>
         ))}

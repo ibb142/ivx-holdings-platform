@@ -13,8 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  Crown,
-  DollarSign,
+    DollarSign,
   Building2,
   Percent,
   Settings,
@@ -65,6 +64,7 @@ import {
   LayoutDashboard,
   Code,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchJVDeals, archiveJVDeal } from '@/lib/jv-storage';
@@ -658,7 +658,7 @@ export default function OwnerControlsScreen() {
   const renderRevenue = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.ownerBadge}>
-        <Crown size={24} color="#FFD700" />
+        <IVXBrandIcon size={24} />
         <Text style={styles.ownerBadgeText}>Owner Dashboard</Text>
       </View>
 
@@ -1412,7 +1412,7 @@ export default function OwnerControlsScreen() {
     { id: 'registration-audit', name: 'Registration Audit', desc: 'Signup & device audit', route: '/admin/registration-audit', category: 'Users & Investors', color: '#4ECDC4', icon: Shield },
     { id: 'investor-profits', name: 'Investor Profits', desc: 'Dividends & ROI', route: '/admin/investor-profits', category: 'Users & Investors', color: '#4ECDC4', icon: DollarSign },
     { id: 'kyc-verification', name: 'KYC Verification', desc: 'Identity verification', route: '/kyc-verification', category: 'Users & Investors', color: '#4ECDC4', icon: ShieldCheck },
-    { id: 'vip-tiers', name: 'VIP Tiers', desc: 'Premium membership tiers', route: '/vip-tiers', category: 'Users & Investors', color: '#4ECDC4', icon: Crown },
+    { id: 'vip-tiers', name: 'VIP Tiers', desc: 'Premium membership tiers', route: '/vip-tiers', category: 'Users & Investors', color: '#4ECDC4', icon: IVXBrandIcon },
     { id: 'agent-apply', name: 'Agent Applications', desc: 'Agent intake', route: '/agent-apply', category: 'Users & Investors', color: '#4ECDC4', icon: FileText },
     { id: 'broker-apply', name: 'Broker Applications', desc: 'Broker intake', route: '/broker-apply', category: 'Users & Investors', color: '#4ECDC4', icon: FileText },
     { id: 'influencer-apply', name: 'Influencer Applications', desc: 'Influencer intake', route: '/influencer-apply', category: 'Users & Investors', color: '#4ECDC4', icon: FileText },
@@ -1491,7 +1491,7 @@ export default function OwnerControlsScreen() {
   const renderAllModules = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.ownerBadge}>
-        <Crown size={20} color="#FFD700" />
+        <IVXBrandIcon size={20} />
         <Text style={styles.ownerBadgeText}>All Owner & Admin Modules ({ALL_MODULES.length})</Text>
       </View>
 
@@ -1562,7 +1562,7 @@ export default function OwnerControlsScreen() {
           <ArrowLeft size={22} color={Colors.text} />
         </TouchableOpacity>
         <View style={[styles.headerLeft, { flex: 1 }]}>
-          <Crown size={28} color="#FFD700" />
+          <IVXBrandIcon size={28} />
           <View>
             <Text style={styles.title}>Owner Controls</Text>
             <Text style={styles.subtitle}>Full platform management</Text>

@@ -385,38 +385,28 @@ async function deploy() {
   }));
   console.log('   ✅ /health uploaded');
 
-  console.log('\n🖼️  Uploading logo...');
-  const logoBuffer = readFileSync('./assets/images/ivx-logo.png');
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: 'ivx-logo.png',
-    Body: logoBuffer,
-    ContentType: 'image/png',
-    CacheControl: 'public, max-age=31536000',
-  }));
-  console.log('   ✅ logo uploaded');
-
-  console.log('\n🖼️  Uploading OG image (WhatsApp/social share preview)...');
-  const ogImageBuffer = readFileSync('./assets/images/ivx-og-image.jpg');
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: 'ivx-og-image.jpg',
-    Body: ogImageBuffer,
-    ContentType: 'image/jpeg',
-    CacheControl: 'public, max-age=86400',
-  }));
-  console.log('   ✅ OG image uploaded');
-
-  console.log('\n🖼️  Uploading favicon...');
-  const faviconBuffer = readFileSync('./assets/images/ivx-favicon.png');
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: 'favicon.png',
-    Body: faviconBuffer,
-    ContentType: 'image/png',
-    CacheControl: 'public, max-age=86400',
-  }));
-  console.log('   ✅ favicon uploaded');
+  console.log('\n🖼️  Uploading brand assets...');
+  const brandAssets = [
+    { src: './assets/images/ivx-logo.png', key: 'ivx-logo.png', contentType: 'image/png' },
+    { src: './assets/images/ivx-symbol.png', key: 'ivx-symbol.png', contentType: 'image/png' },
+    { src: './assets/images/ivx-og-image.png', key: 'ivx-og-image.png', contentType: 'image/png' },
+    { src: './assets/images/favicon.png', key: 'favicon.png', contentType: 'image/png' },
+    { src: './assets/images/favicon-16.png', key: 'favicon-16.png', contentType: 'image/png' },
+    { src: './assets/images/favicon-32.png', key: 'favicon-32.png', contentType: 'image/png' },
+    { src: './assets/images/favicon-180.png', key: 'favicon-180.png', contentType: 'image/png' },
+    { src: './assets/images/favicon-192.png', key: 'favicon-192.png', contentType: 'image/png' },
+  ];
+  for (const asset of brandAssets) {
+    const buffer = readFileSync(asset.src);
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: asset.key,
+      Body: buffer,
+      ContentType: asset.contentType,
+      CacheControl: asset.key.startsWith('ivx-logo') || asset.key === 'ivx-symbol.png' ? 'public, max-age=31536000' : 'public, max-age=86400',
+    }));
+    console.log(`   ✅ ${asset.key} uploaded`);
+  }
 
   console.log('\n🔎 Uploading robots.txt (real crawl directives — not the SPA fallback)...');
   const robotsTxt = readFileSync('./ivxholding-landing/robots.txt', 'utf-8');

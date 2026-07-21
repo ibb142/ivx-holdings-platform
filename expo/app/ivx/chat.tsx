@@ -36,7 +36,8 @@ import { MessageBubble } from '@/src/modules/chat/components/MessageBubble';
 import { ExecutionConsoleBubble } from '@/src/modules/ivx-owner-ai/components/ExecutionConsoleBubble';
 import { coerceExecutionStatusFromPayload } from '@/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Activity, ChevronDown, ClipboardList, Cpu, Crosshair, Crown, Gauge, GitBranch, KeyRound, LayoutDashboard, LineChart, Lock, Mail, Megaphone, MessageCircle, Mic, Paperclip, Pin, PlayCircle, Radar, Radio, Rocket, Search, Send, ShieldCheck, Sparkles, Square, Terminal, Unplug, Upload, UserPlus, Users, X } from 'lucide-react-native';
+import { Activity, ChevronDown, ClipboardList, Cpu, Crosshair, Gauge, GitBranch, KeyRound, LayoutDashboard, LineChart, Lock, Mail, Megaphone, MessageCircle, Mic, Paperclip, Pin, PlayCircle, Radar, Radio, Rocket, Search, Send, ShieldCheck, Sparkles, Square, Terminal, Unplug, Upload, UserPlus, Users, X } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { SafeIcon } from '@/lib/safe-icon';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
@@ -5624,7 +5625,7 @@ export default function IVXOwnerChatRoute() {
                 <View style={styles.brandRow} testID="ivx-owner-chat-brand-row">
                   <View style={styles.brandLeftCompact}>
                     <View style={styles.brandMark}>
-                      <Crown size={15} color={Colors.black} />
+                      <IVXBrandIcon size={15} />
                     </View>
                     <Text style={styles.brandTitleCompact} numberOfLines={1}>IVX</Text>
                   </View>
@@ -5836,7 +5837,7 @@ export default function IVXOwnerChatRoute() {
                       onPress={() => router.push('/ivx/business-impact' as never)}
                       testID="ivx-owner-open-business-impact"
                     >
-                      <Crown size={13} color={Colors.black} />
+                      <IVXBrandIcon size={13} />
                       <Text style={styles.graphActionButtonText}>Command</Text>
                     </Pressable>
                     <Pressable

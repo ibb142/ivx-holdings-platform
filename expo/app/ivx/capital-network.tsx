@@ -14,8 +14,7 @@ import {
   AlertTriangle,
   Building2,
   CheckCircle2,
-  Crown,
-  FileText,
+    FileText,
   Handshake,
   HardHat,
   Link2,
@@ -28,6 +27,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -59,7 +59,7 @@ const TYPE_LABEL: Record<ProspectType, string> = {
 function typeIcon(type: ProspectType, size: number, color: string) {
   switch (type) {
     case 'buyer':
-      return <Crown size={size} color={color} />;
+      return <IVXBrandIcon size={size} />;
     case 'investor':
       return <TrendingUp size={size} color={color} />;
     case 'developer':
@@ -376,7 +376,7 @@ function CapitalNetworkContent() {
       {dashboard ? (
         <>
           <View style={styles.bestGrid}>
-            <BestPick icon={<Crown size={14} color={Colors.warning} />} label="Best buyer today" rec={dashboard.bestBuyerToday} />
+            <BestPick icon={<IVXBrandIcon size={14} />} label="Best buyer today" rec={dashboard.bestBuyerToday} />
             <BestPick icon={<TrendingUp size={14} color={Colors.info} />} label="Best investor today" rec={dashboard.bestInvestorToday} />
           </View>
           <View style={styles.bestGrid}>

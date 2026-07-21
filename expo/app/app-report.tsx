@@ -26,8 +26,7 @@ import {
   BarChart3,
   Wallet,
   Gift,
-  Crown,
-  Bell,
+    Bell,
   Brain,
   MessageSquare,
   Handshake,
@@ -44,6 +43,7 @@ import {
   Clipboard as ClipboardIcon,
   ClipboardCopy,
 } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
@@ -63,8 +63,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string
   BarChart3,
   Wallet,
   Gift,
-  Crown,
-  Bell,
+    Bell,
   Brain,
   MessageSquare,
   Handshake,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
-import { LogOut, Crown, Shield } from 'lucide-react-native';
+import { LogOut, Shield } from 'lucide-react-native';
+import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import Colors from '@/constants/colors';
@@ -61,7 +62,7 @@ export function OwnerAuthActions(): React.ReactElement | null {
           onPress={handleOwnerLogin}
           testID="owner-auth-actions-owner-login"
         >
-          <Crown size={14} color={Colors.black} />
+          <IVXBrandIcon size={14} />
           <Text style={styles.primaryButtonText}>Owner login</Text>
         </Pressable>
       </View>
