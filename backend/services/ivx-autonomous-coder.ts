@@ -214,6 +214,12 @@ export type IVXAutonomousCoderInput = {
   heartbeat?: (info: { phase: IVXAutonomousCoderPhase; iteration: number; elapsedMs: number; detail: string }) => void,
   /** Injectable rollback function for testing the production-rollback path. */
   rollbackFn?: (commitSha: string, branch: string) => Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }>,
+  /** Resilience callback fired IMMEDIATELY after the GitHub commit SHA is known,
+   *  before proof construction. Lets the caller persist the commit SHA to the
+   *  job record so a process crash between commit-landed and proof-return does
+   *  not orphan the job at COMMITTING with an empty commitSha. Must never throw.
+   *  If it throws, the error is swallowed and the engine continues. */
+  onCommitLanded?: (info: { commitSha: string; commitUrl: string; branch: string }) => void,
 };
 
 export type IVXAutonomousCoderPhase =
@@ -1729,6 +1735,16 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         commitSha = commitResult.commitSha;
         commitUrl = commitResult.commitUrl;
         branch = commitResult.branch;
+        // RESILIENCE: persist the commit SHA to the job record IMMEDIATELY, before
+        // any further work (proof construction, deploy, verify). If the process
+        // crashes between this point and the proof return, the recovery sweep can
+        // still find the commit on the ivx-autonomous branch and recover the job
+        // to COMPLETED instead of orphaning it at COMMITTING 65% with commitSha=''.
+        try {
+          input.onCommitLanded?.({ commitSha, commitUrl, branch });
+        } catch {
+          // The persistence callback must never break the engine loop.
+        }
         onPhase?.('committing', `Commit created: ${commitSha}`);
       } catch (err) {
         finalStatus = 'FAILED';

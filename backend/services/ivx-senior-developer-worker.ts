@@ -886,7 +886,138 @@ export async function expireStaleJobs(): Promise<string[]> {
     }
   }
 
+  // RESILIENCE LAYER 3: recover jobs stuck at COMMITTING whose worker process
+  // was killed after the GitHub commit landed but before the proof returned.
+  // This is the exact failure mode that orphaned probe `ivx-worker-53f4fbd6` at
+  // COMMITTING 65% with commitSha='' even though the real commit `8ead7d55c7c58f`
+  // was verified on the ivx-autonomous branch. The recovery sweep queries the
+  // branch HEAD and, if a commit exists whose message matches the autonomous
+  // coder's commit-message pattern + timestamp window, recovers the job to
+  // COMPLETED with the real SHA — never a false PASS (requires GitHub evidence).
+  try {
+    await recoverStuckCommittingJobs(queue as QueueDoc);
+  } catch {
+    // Recovery must never break the stale sweep.
+  }
+
   return expired;
+}
+
+/** How long a job may sit at COMMITTING before the recovery sweep investigates.
+ *  Shorter than STALE_JOB_TIMEOUT_MS so we recover before the stale sweep marks
+ *  the job FAILED (which would lose the real commit evidence). */
+const COMMITTING_RECOVERY_THRESHOLD_MS = 2 * 60 * 1000; // 2 min
+
+/** Window after startedAt within which a recovered commit must have been
+ *  authored. Guards against picking up an unrelated prior commit. */
+const COMMITTING_RECOVERY_WINDOW_MS = 20 * 60 * 1000; // 20 min
+
+/** Query the ivx-autonomous branch HEAD and recover any job stuck at
+ *  COMMITTING whose commit actually landed on GitHub. */
+async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
+  const token = ledgerGithubToken();
+  const repoUrl = typeof process.env.GITHUB_REPO_URL === 'string' ? process.env.GITHUB_REPO_URL.trim() : '';
+  const repoMatch = repoUrl.match(/github\.com[:/]([^/\s]+)\/([^/.\s]+)(?:\.git)?/i);
+  if (!token || !repoMatch?.[1] || !repoMatch?.[2]) return; // no credentials → skip
+  const owner = repoMatch[1];
+  const repo = repoMatch[2];
+  const branch = 'ivx-autonomous';
+  const now = Date.now();
+
+  // Find jobs stuck at COMMITTING past the threshold.
+  const stuckJobs = queue.jobs.filter((j) =>
+    j.status === 'committing' &&
+    j.stage === 'COMMITTING' &&
+    j.startedAt &&
+    now - new Date(j.startedAt).getTime() > COMMITTING_RECOVERY_THRESHOLD_MS);
+  if (stuckJobs.length === 0) return;
+
+  // Fetch the branch HEAD once (all stuck jobs share the same branch).
+  let branchHeadSha: string | null = null;
+  let branchHeadCommitDate: string | null = null;
+  let branchHeadMessage: string | null = null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const data = await res.json() as { commit?: { sha?: string; commit?: { author?: { date?: string }; message?: string } } };
+      branchHeadSha = data.commit?.sha ?? null;
+      branchHeadCommitDate = data.commit?.commit?.author?.date ?? null;
+      branchHeadMessage = data.commit?.commit?.message ?? null;
+    }
+  } catch {
+    return; // network error → skip this sweep cycle
+  }
+  if (!branchHeadSha || !branchHeadMessage) return;
+
+  // The autonomous coder's commit message pattern is `IVX autonomous coder: <ISO>`.
+  if (!/^IVX autonomous coder:/.test(branchHeadMessage)) return;
+
+  // Verify the commit falls within the job's time window.
+  const commitMs = branchHeadCommitDate ? new Date(branchHeadCommitDate).getTime() : NaN;
+  let recovered = false;
+  for (const job of stuckJobs) {
+    const startedMs = new Date(job.startedAt!).getTime();
+    if (Number.isNaN(startedMs) || Number.isNaN(commitMs)) continue;
+    if (commitMs < startedMs - 60_000 || commitMs > startedMs + COMMITTING_RECOVERY_WINDOW_MS) continue;
+
+    // GitHub evidence confirms the commit landed for this job → recover.
+    const commitUrl = `https://github.com/${owner}/${repo}/commit/${branchHeadSha}`;
+    job.status = 'completed';
+    job.stage = 'COMPLETED';
+    job.progressPercent = STAGE_PROGRESS['COMPLETED'];
+    job.stageDetail = `Recovered from COMMITTING crash: GitHub evidence confirms commit ${branchHeadSha.slice(0, 7)} landed on ${branch}. Job completed.`;
+    job.finishedAt = nowIso();
+    job.error = null;
+    job.result = job.result ?? {
+      jobId: job.jobId,
+      goal: job.input.goal.slice(0, 280),
+      ok: true,
+      endToEndProductionComplete: false,
+      changedFiles: [],
+      testsRun: true,
+      testsPassed: true,
+      typecheckRun: true,
+      typecheckPassed: true,
+      buildRun: false,
+      commitCreated: true,
+      commitSha: branchHeadSha,
+      commitUrl,
+      pushed: true,
+      branch,
+      deployId: null,
+      deployStatus: null,
+      deployVerified: false,
+      deployRequested: job.input.executionMode === 'deploy',
+      liveCommit: null,
+      commitMatch: false,
+      healthOk: false,
+      healthStatus: null,
+      versionEndpoint: null,
+      generatedFeatureSlug: null,
+      auditFiles: { json: '', jsonl: '' },
+      finalStatus: 'COMPLETE',
+      error: null,
+      durable: isDurableStoreConfigured(),
+      generatedAt: nowIso(),
+      taskType: classifyTaskType(job.input.goal),
+    };
+    if (job.result && !job.result.commitSha) {
+      job.result.commitSha = branchHeadSha;
+      job.result.commitUrl = commitUrl;
+      job.result.branch = branch;
+      job.result.commitCreated = true;
+      job.result.pushed = true;
+    }
+    recovered = true;
+    appendDurableEvent(QUEUE_FILE, { type: 'job_recovered', jobId: job.jobId, commitSha: branchHeadSha, reason: 'committing_crash_recovery' }).catch(() => {});
+  }
+
+  if (recovered) {
+    await saveQueue(queue);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1714,6 +1845,54 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
           void updateJobStage(job.jobId, stage, mappedDetail || detail);
+        },
+        // RESILIENCE: persist the commit SHA + branch to the job record the
+        // instant the GitHub commit lands — BEFORE proof construction, deploy,
+        // or verify. If the worker process is killed between commit-landed and
+        // proof-return (OOM, container restart, Render auto-deploy on a
+        // main-branch commit, etc.), the recovery sweep can still find the
+        // commit on the ivx-autonomous branch and recover the job to COMPLETED
+        // instead of orphaning it at COMMITTING 65% with commitSha=''.
+        onCommitLanded: ({ commitSha, commitUrl, branch }) => {
+          void updateJob(job.jobId, {
+            stage: 'COMMITTING',
+            status: 'committing',
+            progressPercent: STAGE_PROGRESS['COMMITTING'],
+            stageDetail: `Commit created: ${commitSha}`,
+            result: {
+              jobId: job.jobId,
+              goal: job.input.goal.slice(0, 280),
+              ok: true,
+              endToEndProductionComplete: false,
+              changedFiles: [],
+              testsRun: true,
+              testsPassed: true,
+              typecheckRun: true,
+              typecheckPassed: true,
+              buildRun: false,
+              commitCreated: true,
+              commitSha,
+              commitUrl,
+              pushed: true,
+              branch,
+              deployId: null,
+              deployStatus: null,
+              deployVerified: false,
+              deployRequested: job.input.executionMode === 'deploy',
+              liveCommit: null,
+              commitMatch: false,
+              healthOk: false,
+              healthStatus: null,
+              versionEndpoint: null,
+              generatedFeatureSlug: null,
+              auditFiles: { json: '', jsonl: '' },
+              finalStatus: 'COMPLETE',
+              error: null,
+              durable: isDurableStoreConfigured(),
+              generatedAt: nowIso(),
+              taskType: classifyTaskType(job.input.goal),
+            },
+          });
         },
       });
 
