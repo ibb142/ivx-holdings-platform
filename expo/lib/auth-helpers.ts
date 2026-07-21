@@ -50,9 +50,21 @@ export function validateEmail(email: string): boolean {
   return re.test(email);
 }
 
+/**
+ * Enterprise password policy (Phase 5):
+ * - minimum 12 characters
+ * - at least 1 uppercase letter
+ * - at least 1 number
+ * - maximum 128 characters (allow long passphrases)
+ * - symbols and spaces are accepted (never rejected)
+ * - password-manager-generated passwords are supported
+ */
 export function validatePassword(password: string): { valid: boolean; reason?: string } {
-  if (password.length < 8) {
-    return { valid: false, reason: 'Password must be at least 8 characters.' };
+  if (password.length < 12) {
+    return { valid: false, reason: 'Password must be at least 12 characters.' };
+  }
+  if (password.length > 128) {
+    return { valid: false, reason: 'Password must be at most 128 characters.' };
   }
   if (!/[A-Z]/.test(password)) {
     return { valid: false, reason: 'Password must contain at least 1 uppercase letter.' };

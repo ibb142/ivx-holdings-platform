@@ -44,7 +44,9 @@ type DeveloperDeployAction =
   | 'render_update_subdomain_policy'
   | 'render_update_source'
   | 'supabase_execute_sql'
-  | 'supabase_reset_owner_password';
+  | 'supabase_reset_owner_password'
+  | 'supabase_revoke_owner_sessions'
+  | 'supabase_audit_owner_auth_user';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -106,6 +108,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'render_update_source'
     || normalized === 'supabase_execute_sql'
     || normalized === 'supabase_reset_owner_password'
+    || normalized === 'supabase_revoke_owner_sessions'
+    || normalized === 'supabase_audit_owner_auth_user'
  ) {
     return normalized;
   }
@@ -153,8 +157,8 @@ async function runSupabaseResetOwnerPassword(input: Record<string, unknown>): Pr
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('A valid owner email is required for supabase_reset_owner_password.');
   }
-  if (!newPassword || newPassword.length < 8) {
-    throw new Error('A new password of at least 8 characters is required for supabase_reset_owner_password.');
+  if (!newPassword || newPassword.length < 12) {
+    throw new Error('A new password of at least 12 characters is required for supabase_reset_owner_password (enterprise policy).');
   }
   const admin = resolveSupabaseAdminClient();
   const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -173,14 +177,81 @@ async function runSupabaseResetOwnerPassword(input: Record<string, unknown>): Pr
   if (updateError || !updateData.user) {
     throw new Error(`Supabase updateUserById failed: ${updateError?.message ?? 'no user returned'}`);
   }
+  // SECURITY: revoke all existing sessions so any session bound to the old (compromised) password is killed.
+  try {
+    await admin.auth.admin.signOut(user.id, 'global');
+  } catch (signOutError) {
+    console.log('[SupabaseResetOwnerPassword] Session revocation note:', signOutError instanceof Error ? signOutError.message : 'unknown');
+  }
   return {
     provider: 'supabase',
     action: 'supabase_reset_owner_password',
     email,
     userId: user.id,
     passwordReset: true,
+    sessionsRevoked: true,
     emailConfirmed: Boolean(updateData.user.email_confirmed_at || updateData.user.confirmed_at) || true,
     timestamp: nowIso(),
+    secretValuesReturned: false as const,
+  };
+}
+
+async function runSupabaseRevokeOwnerSessions(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const email = readTrimmed(input.email).toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('A valid owner email is required for supabase_revoke_owner_sessions.');
+  }
+  const admin = resolveSupabaseAdminClient();
+  const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (listError) {
+    throw new Error(`Supabase listUsers failed: ${listError.message}`);
+  }
+  const user = (listData.users ?? []).find((u) => (u.email ?? '').toLowerCase() === email);
+  if (!user) {
+    throw new Error(`No Supabase auth user found for email ${email}.`);
+  }
+  await admin.auth.admin.signOut(user.id, 'global');
+  return {
+    provider: 'supabase',
+    action: 'supabase_revoke_owner_sessions',
+    email,
+    userId: user.id,
+    sessionsRevoked: true,
+    timestamp: nowIso(),
+    secretValuesReturned: false as const,
+  };
+}
+
+async function runSupabaseAuditOwnerAuthUser(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const email = readTrimmed(input.email).toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('A valid owner email is required for supabase_audit_owner_auth_user.');
+  }
+  const admin = resolveSupabaseAdminClient();
+  const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (listError) {
+    throw new Error(`Supabase listUsers failed: ${listError.message}`);
+  }
+  const user = (listData.users ?? []).find((u) => (u.email ?? '').toLowerCase() === email);
+  if (!user) {
+    throw new Error(`No Supabase auth user found for email ${email}.`);
+  }
+  return {
+    provider: 'supabase',
+    action: 'supabase_audit_owner_auth_user',
+    email,
+    userId: user.id,
+    userExists: true,
+    emailConfirmed: Boolean(user.email_confirmed_at || user.confirmed_at),
+    banned: Boolean(user.banned_until),
+    bannedUntil: user.banned_until ?? null,
+    createdAt: user.created_at ?? null,
+    lastSignInAt: user.last_sign_in_at ?? null,
+    identitiesCount: Array.isArray(user.identities) ? user.identities.length : 0,
+    appMetadata: user.app_metadata ?? {},
+    userMetadata: user.user_metadata ?? {},
+    timestamp: nowIso(),
+    secretValuesReturned: false as const,
   };
 }
 
@@ -1005,6 +1076,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'supabase_reset_owner_password') {
     return await runSupabaseResetOwnerPassword(input);
+  }
+  if (action === 'supabase_revoke_owner_sessions') {
+    return await runSupabaseRevokeOwnerSessions(input);
+  }
+  if (action === 'supabase_audit_owner_auth_user') {
+    return await runSupabaseAuditOwnerAuthUser(input);
   }
   return await runSupabaseExecuteSql(input);
 }
