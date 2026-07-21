@@ -1,4 +1,32 @@
-const tintColorLight = '#FFD700';
+/**
+ * IVX Global Design Tokens
+ *
+ * Derived from the official IVX brand system:
+ *   - Primary black: #000000
+ *   - Official gold: #E6C200
+ *   - Secondary gold: #FFD700
+ *   - Text white: #FFFFFF
+ *   - Muted gray: #909090
+ *
+ * Do not introduce new golds or blacks outside these tokens. All IVX surfaces
+ * (mobile, web, emails, PDFs) should reference these values.
+ */
+
+const primaryBlack = '#000000' as const;
+const officialGold = '#E6C200' as const;
+const secondaryGold = '#FFD700' as const;
+const goldLight = '#FFF2A3' as const;
+const textWhite = '#FFFFFF' as const;
+const mutedGray = '#909090' as const;
+const surface = '#141414' as const;
+const surfaceElevated = '#1A1A1A' as const;
+const surfaceBorder = '#2A2A2A' as const;
+const error = '#FF4D4D' as const;
+const success = '#00C48C' as const;
+const warning = '#F59E0B' as const;
+const info = '#4A90D9' as const;
+
+const tintColorLight = officialGold;
 
 type ColorScheme = {
   text: string;
@@ -52,64 +80,77 @@ type AppColors = {
   blue: string;
   overlay: string;
   transparent: string;
+  // Official brand tokens
+  primaryBlack: string;
+  officialGold: string;
+  secondaryGold: string;
+  goldLight: string;
+  textWhite: string;
+  mutedGray: string;
 };
 
 const Colors: AppColors = {
   light: {
-    text: '#FFFFFF',
-    background: '#000000',
+    text: textWhite,
+    background: primaryBlack,
     tint: tintColorLight,
     tabIconDefault: '#555555',
     tabIconSelected: tintColorLight,
   },
   dark: {
-    text: '#FFFFFF',
-    background: '#000000',
+    text: textWhite,
+    background: primaryBlack,
     tint: tintColorLight,
     tabIconDefault: '#555555',
     tabIconSelected: tintColorLight,
   },
-  primary: '#FFD700',
-  primaryDark: '#E6C200',
-  primaryLight: '#FFF2A3',
-  secondary: '#1A1A1A',
-  accent: '#FFD700',
-  background: '#000000',
-  backgroundSecondary: '#1A1A1A',
+  primary: officialGold,
+  primaryDark: officialGold,
+  primaryLight: goldLight,
+  secondary: surfaceElevated,
+  accent: officialGold,
+  background: primaryBlack,
+  backgroundSecondary: surfaceElevated,
   backgroundTertiary: '#242424',
-  surface: '#141414',
-  surfaceElevated: '#1A1A1A',
+  surface,
+  surfaceElevated,
   surfaceLight: '#2A2A2A',
-  surfaceBorder: '#2A2A2A',
-  border: '#2A2A2A',
-  card: '#141414',
-  text: '#FFFFFF',
-  textSecondary: '#909090',
+  surfaceBorder,
+  border: surfaceBorder,
+  card: surface,
+  text: textWhite,
+  textSecondary: mutedGray,
   textTertiary: '#555555',
-  subtitle: '#909090',
+  subtitle: mutedGray,
   tint: tintColorLight,
   muted: '#555555',
   inputPlaceholder: '#555555',
-  inputBackground: '#1A1A1A',
+  inputBackground: surfaceElevated,
   inputBorder: '#333333',
-  white: '#FFFFFF',
-  black: '#000000',
-  success: '#00C48C',
-  positive: '#00C48C',
-  warning: '#F59E0B',
-  error: '#FF4D4D',
-  danger: '#FF4D4D',
-  negative: '#FF4D4D',
-  info: '#4A90D9',
-  gold: '#FFD700',
-  green: '#00C48C',
-  chartGreen: '#00C48C',
-  red: '#FF4D4D',
-  chartRed: '#FF4D4D',
-  orange: '#F59E0B',
-  blue: '#4A90D9',
+  white: textWhite,
+  black: primaryBlack,
+  success,
+  positive: success,
+  warning,
+  error,
+  danger: error,
+  negative: error,
+  info,
+  gold: officialGold,
+  green: success,
+  chartGreen: success,
+  red: error,
+  chartRed: error,
+  orange: warning,
+  blue: info,
   overlay: 'rgba(0,0,0,0.7)',
   transparent: 'transparent',
+  primaryBlack,
+  officialGold,
+  secondaryGold,
+  goldLight,
+  textWhite,
+  mutedGray,
 };
 
 export default Colors;

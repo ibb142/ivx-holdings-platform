@@ -25,10 +25,10 @@ import {
   QrCode,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { IVX_LOGO_SOURCE } from '@/constants/brand';
+import IVXBrandLogo from '@/components/IVXBrandLogo';
 import QRCodeView from '@/components/QRCodeView';
 
-const IVX_BUSINESS_CARD_URL = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/u2shr3b6qstzut5xgdyud.jpg';
+const IVX_BUSINESS_CARD_URL = 'https://r2-pub.rork.com/projects/j2l8t44588ix9ns7b57mu/assets/13a98cc9-5275-4104-8380-38ee2d5b1fca.png';
 
 const GOLD = '#FFD700';
 const GOLD_DIM = '#C9A800';
@@ -208,7 +208,13 @@ export default function BusinessCardScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.companyBranding, { opacity: socialFade }]}>
-          <Image source={IVX_LOGO_SOURCE} style={styles.companyLogo} resizeMode="contain" />
+          <IVXBrandLogo
+            variant="symbol"
+            size="md"
+            theme="dark"
+            containerStyle={styles.companyLogo}
+            accessibilityLabel="IVX Holdings LLC logo"
+          />
           <Text style={styles.companyName}>IVX HOLDINGS LLC</Text>
           <Text style={styles.companyTagline}>Smart Investing Platform</Text>
           <Text style={styles.companyLegal}>
@@ -391,12 +397,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#1A1A1A',
   },
   companyLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#252525',
   },
   companyName: {
     color: '#fff',

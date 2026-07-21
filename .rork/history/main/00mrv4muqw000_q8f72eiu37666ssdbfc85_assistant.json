@@ -1530,7 +1530,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bun test backend/services/ivx-senior-developer-worker.test.ts 2>&1 | tail -15\"}",
       "createdAt": 1784666418058,
-      "completedAt": 1784666418064
+      "completedAt": 1784666418064,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1560,7 +1561,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bun test ./backend/services/ivx-senior-developer-worker.test.ts 2>&1 | tail -15\"}",
       "createdAt": 1784666421908,
-      "completedAt": 1784666421917
+      "completedAt": 1784666421917,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1590,7 +1592,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && ls backend/ | grep -i \\\"senior-developer\\\\|autonomous\\\\|worker\\\" | head -20\"}",
       "createdAt": 1784666425725,
-      "completedAt": 1784666425730
+      "completedAt": 1784666425730,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1620,7 +1623,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bun test backend/ivx-senior-developer-worker.test.ts 2>&1 | tail -20\"}",
       "createdAt": 1784666428396,
-      "completedAt": 1784666428402
+      "completedAt": 1784666428402,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1650,7 +1654,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && nohup bun test backend/ > /tmp/full_suite.log 2>&1 &\\necho \\\"started pid $!\\\"\"}",
       "createdAt": 1784666435301,
-      "completedAt": 1784666435315
+      "completedAt": 1784666435315,
+      "compactedAt": 1784673012799
     },
     {
       "type": "tool",
@@ -1668,7 +1673,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 bun test backend/ivx-autonomous-coder.test.ts backend/ivx-senior-developer-worker.test.ts backend/services/ivx-task-state-machine.test.ts 2>&1 | tail -10\"}",
       "createdAt": 1784666435305,
-      "completedAt": 1784666435315
+      "completedAt": 1784666435315,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1698,7 +1704,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 30 && tail -5 /tmp/full_suite.log 2>/dev/null; echo \\\"===\\\"; ps -p 7756 >/dev/null 2>&1 && echo \\\"STILL RUNNING\\\" || echo \\\"DONE\\\"\"}",
       "createdAt": 1784666438636,
-      "completedAt": 1784666467968
+      "completedAt": 1784666467968,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1728,7 +1735,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, gzip, base64, urllib.request\\n\\n# Re-mint owner token (it may have expired ~1h)\\nlogin_req = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/owner-passwordless-login',\\n    data=json.dumps({\\\"email\\\":\\\"iperez4242@gmail.com\\\"}).encode(),\\n    headers={'Content-Type':'application/json'},\\n    method='POST'\\n)\\ntry:\\n    with urllib.request.urlopen(login_req, timeout=15) as r:\\n        login_resp = json.loads(r.read())\\n    # Try to read token from response\\n    tok = login_resp.get('accessToken') or (login_resp.get('data') or {}).get('accessToken') or login_resp.get('token')\\n    if not tok:\\n        print(\\\"login response keys:\\\", list(login_resp.keys()))\\n        print(\\\"resp:\\\", json.dumps(login_resp)[:300])\\n    else:\\n        # Save new token\\n        with open('/tmp/owner_at.json','w') as f:\\n            json.dump({\\\"accessToken\\\":tok,\\\"refreshToken\\\":login_resp.get('refreshToken','')}, f)\\n        print(\\\"TOKEN_REMINTED OK\\\")\\nexcept Exception as e:\\n    print(\\\"LOGIN_ERR:\\\", e)\\n    # Try existing token\\n    try:\\n        tok = json.load(open('/tmp/owner_at.json'))['accessToken']\\n        print(\\\"USING_EXISTING_TOKEN\\\")\\n    except Exception as e2:\\n        print(\\\"NO_TOKEN:\\\", e2)\\nPYEOF\"}",
       "createdAt": 1784666473060,
-      "completedAt": 1784666475018
+      "completedAt": 1784666475018,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1758,7 +1766,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport gzip, base64, json, urllib.request\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\n# Read both changed files, gzip+base64 encode\\nfiles_to_commit = [\\n    ('backend/services/ivx-autonomous-coder.ts', 'IVX resilience: onCommitLanded callback persists commit SHA immediately'),\\n    ('backend/services/ivx-senior-developer-worker.ts', 'IVX resilience: worker wires onCommitLanded + GitHub-evidence recovery sweep for stuck COMMITTING jobs'),\\n]\\n\\nfor fpath, _ in files_to_commit:\\n    with open(fpath, 'rb') as f:\\n        raw = f.read()\\n    encoded = base64.b64encode(gzip.compress(raw)).decode()\\n    print(f\\\"{fpath}: {len(raw)} bytes raw → {len(encoded)} chars gzip-base64\\\")\\nPYEOF\"}",
       "createdAt": 1784666482542,
-      "completedAt": 1784666483514
+      "completedAt": 1784666483514,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1788,7 +1797,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport gzip, base64, json, urllib.request\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\ndef commit_file(path, content_msg):\\n    with open(path, 'rb') as f:\\n        raw = f.read()\\n    encoded = base64.b64encode(gzip.compress(raw)).decode()\\n    body = {\\n        \\\"action\\\": \\\"github_commit_file\\\",\\n        \\\"input\\\": {\\n            \\\"path\\\": path,\\n            \\\"content\\\": encoded,\\n            \\\"contentEncoding\\\": \\\"gzip-base64\\\",\\n            \\\"message\\\": content_msg,\\n        },\\n        \\\"confirm\\\": True,\\n        \\\"confirmText\\\": \\\"CONFIRM_IVX_GITHUB_WRITE\\\",\\n    }\\n    req = urllib.request.Request(\\n        'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n        data=json.dumps(body).encode(),\\n        headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'},\\n        method='POST',\\n    )\\n    with urllib.request.urlopen(req, timeout=60) as r:\\n        resp = json.loads(r.read())\\n    return resp\\n\\n# Commit file 1\\nr1 = commit_file('backend/services/ivx-autonomous-coder.ts',\\n    'IVX resilience: onCommitLanded callback persists commit SHA immediately after GitHub commit lands, before proof construction (fixes post-commit crash orphaning)')\\nprint(\\\"FILE 1 (autonomous-coder):\\\", json.dumps({k:v for k,v in r1.items() if k in ('ok','commitSha','sha','error','message')})[:200])\\n\\n# Commit file 2\\nr2 = commit_file('backend/services/ivx-senior-developer-worker.ts',\\n    'IVX resilience: worker wires onCommitLanded + GitHub-evidence recovery sweep recovers jobs stuck at COMMITTING past 2min by querying ivx-autonomous branch HEAD')\\nprint(\\\"FILE 2 (worker):\\\", json.dumps({k:v for k,v in r2.items() if k in ('ok','commitSha','sha','error','message')})[:200])\\nPYEOF\"}",
       "createdAt": 1784666490753,
-      "completedAt": 1784666495432
+      "completedAt": 1784666495432,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1818,7 +1828,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== GitHub main HEAD ===\\\" && curl -s \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/HEAD\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint('sha:', d.get('sha','?')[:14])\\nprint('msg:', (d.get('commit') or {}).get('message','?')[:90])\\nprint('date:', ((d.get('commit') or {}).get('author') or {}).get('date','?'))\\n\\\"\\necho \\\"=== runtime /health (BEFORE deploy) ===\\\"\\ncurl -s https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print('runtime:',d.get('commit','?')[:14],d.get('status','?'))\\\"\"}",
       "createdAt": 1784666500591,
-      "completedAt": 1784666502433
+      "completedAt": 1784666502433,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1848,7 +1859,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\ndef call_action(action, confirm_text):\\n    body = {\\\"action\\\": action, \\\"input\\\": {}, \\\"confirm\\\": True, \\\"confirmText\\\": confirm_text}\\n    req = urllib.request.Request(\\n        'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n        data=json.dumps(body).encode(),\\n        headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'},\\n        method='POST',\\n    )\\n    with urllib.request.urlopen(req, timeout=60) as r:\\n        return json.loads(r.read())\\n\\nr1 = call_action('render_trigger_deploy', 'CONFIRM_IVX_RENDER_DEPLOY')\\nprint(\\\"render_trigger_deploy:\\\", json.dumps({k:v for k,v in r1.items() if k in ('ok','deployId','id','error','message','status')})[:200])\\n\\nr2 = call_action('render_restart_service', 'CONFIRM_IVX_RENDER_SERVICE_UPDATE')\\nprint(\\\"render_restart_service:\\\", json.dumps({k:v for k,v in r2.items() if k in ('ok','error','message','status')})[:200])\\nPYEOF\"}",
       "createdAt": 1784666506107,
-      "completedAt": 1784666507762
+      "completedAt": 1784666507762,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1878,7 +1890,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"Polling Render runtime /health for propagation to a359077e3a4706 (target: GitHub main HEAD)...\\\"\\nfor i in $(seq 1 20); do\\n  H=$(curl -s https://api.ivxholding.com/health 2>/dev/null)\\n  RT=$(echo \\\"$H\\\" | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print((d.get('commit','')or'')[:14],d.get('status',''))\\\" 2>/dev/null)\\n  echo \\\"poll $i $(date +%H:%M:%S) runtime=$RT\\\"\\n  if echo \\\"$RT\\\" | grep -q \\\"a359077e3a4706\\\"; then echo \\\"PROPAGATED\\\"; break; fi\\n  sleep 15\\ndone\"}",
       "createdAt": 1784666516338,
-      "completedAt": 1784666576643
+      "completedAt": 1784666576643,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1908,7 +1921,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"Continuing Render propagation poll (target: a359077e3a4706)...\\\"\\nfor i in $(seq 1 10); do\\n  H=$(curl -s https://api.ivxholding.com/health 2>/dev/null)\\n  RT=$(echo \\\"$H\\\" | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print((d.get('commit','')or'')[:14],d.get('status',''))\\\" 2>/dev/null)\\n  echo \\\"poll $i $(date +%H:%M:%S) runtime=$RT\\\"\\n  if echo \\\"$RT\\\" | grep -q \\\"a359077e3a4706\\\"; then echo \\\"PROPAGATED\\\"; break; fi\\n  sleep 15\\ndone\"}",
       "createdAt": 1784666589542,
-      "completedAt": 1784666652192
+      "completedAt": 1784666652192,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1938,7 +1952,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"Continuing Render propagation poll (target: a359077e3a4706)...\\\"\\nfor i in $(seq 1 8); do\\n  H=$(curl -s https://api.ivxholding.com/health 2>/dev/null)\\n  RT=$(echo \\\"$H\\\" | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print((d.get('commit','')or'')[:14],d.get('status',''))\\\" 2>/dev/null)\\n  echo \\\"poll $i $(date +%H:%M:%S) runtime=$RT\\\"\\n  if echo \\\"$RT\\\" | grep -q \\\"a359077e3a4706\\\"; then echo \\\"PROPAGATED\\\"; break; fi\\n  sleep 15\\ndone\"}",
       "createdAt": 1784666656593,
-      "completedAt": 1784666716861
+      "completedAt": 1784666716861,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1968,7 +1983,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"Continuing Render propagation poll (target: a359077e3a4706)...\\\"\\nfor i in $(seq 1 8); do\\n  H=$(curl -s https://api.ivxholding.com/health 2>/dev/null)\\n  RT=$(echo \\\"$H\\\" | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print((d.get('commit','')or'')[:14],d.get('status',''))\\\" 2>/dev/null)\\n  echo \\\"poll $i $(date +%H:%M:%S) runtime=$RT\\\"\\n  if echo \\\"$RT\\\" | grep -q \\\"a359077e3a4706\\\"; then echo \\\"PROPAGATED\\\"; break; fi\\n  sleep 15\\ndone\"}",
       "createdAt": 1784666722821,
-      "completedAt": 1784666740301
+      "completedAt": 1784666740301,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -1998,7 +2014,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\nMSG = \\\"Add a one-line comment // IVX convergence proof 2026-07-21 final above the line export const PILOT_LABEL in backend/services/ivx-autonomous-coder-pilot.ts. Run targeted tests. Commit to GitHub. Do not deploy.\\\"\\n\\nbody = {\\\"message\\\": MSG, \\\"conversationId\\\": \\\"cert-final-probe-20260721\\\"}\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/owner-ai',\\n    data=json.dumps(body).encode(),\\n    headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'},\\n    method='POST',\\n)\\nwith urllib.request.urlopen(req, timeout=60) as r:\\n    resp = json.loads(r.read())\\n\\nes = resp.get('executionStatus') or {}\\nprint(\\\"taskId:\\\", es.get('taskId'))\\nprint(\\\"status:\\\", es.get('status'))\\nprint(\\\"stage:\\\", es.get('stage'))\\nprint(\\\"progress:\\\", es.get('progressPercent'))\\nprint(\\\"statusUrl:\\\", es.get('statusUrl'))\\nprint(\\\"mode:\\\", (resp.get('executionMode') or es.get('executionMode') or ''))\\nans = resp.get('answer') or resp.get('text') or ''\\nprint(\\\"answer_head:\\\", ans[:300])\\nPYEOF\"}",
       "createdAt": 1784666748369,
-      "completedAt": 1784666762640
+      "completedAt": 1784666762640,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2028,7 +2045,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\nTID = 'ivx-worker-3effa344-dd8c-414f-b92d-4deb89f2afe0'\\n\\nwith open('/tmp/final_probe_poll.txt','w') as log:\\n    for i in range(1, 13):\\n        req = urllib.request.Request(\\n            f'https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/{TID}',\\n            headers={'Authorization': f'Bearer {AT}'},\\n        )\\n        try:\\n            with urllib.request.urlopen(req, timeout=15) as r:\\n                d = json.loads(r.read())\\n            j = d.get('job') or d\\n            line = f\\\"poll {i} {time.strftime('%H:%M:%S')} {j.get('status')} {j.get('stage')} {j.get('progressPercent')}\\\"\\n            print(line)\\n            log.write(line + \\\"\\\\n\\\")\\n            if j.get('commitSha'):\\n                print(\\\"  commitSha:\\\", j.get('commitSha')[:14])\\n                log.write(f\\\"  commitSha: {j.get('commitSha')[:14]}\\\\n\\\")\\n            st = j.get('status')\\n            if st in ('completed','failed','blocked','cancelled'):\\n                print(\\\"  TERMINAL:\\\", st)\\n                print(\\\"  stageDetail:\\\", j.get('stageDetail'))\\n                print(\\\"  finishedAt:\\\", j.get('finishedAt'))\\n                print(\\\"  error:\\\", j.get('error'))\\n                res = j.get('result') or {}\\n                print(\\\"  result.commitSha:\\\", (res.get('commitSha') or '')[:14])\\n                print(\\\"  result.finalStatus:\\\", res.get('finalStatus'))\\n                print(\\\"  result.ok:\\\", res.get('ok'))\\n                break\\n        except Exception as e:\\n            print(f\\\"poll {i} ERR: {e}\\\")\\n        time.sleep(20)\\nPYEOF\"}",
       "createdAt": 1784666767873,
-      "completedAt": 1784666833059
+      "completedAt": 1784666833059,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2058,7 +2076,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat /tmp/final_probe_poll.txt 2>/dev/null | tail -8; echo \\\"=== live job state ===\\\"; cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\nTID = 'ivx-worker-3effa344-dd8c-414f-b92d-4deb89f2afe0'\\nreq = urllib.request.Request(f'https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/{TID}',\\n    headers={'Authorization':f'Bearer {AT}'})\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    d = json.loads(r.read())\\n    j = d.get('job') or d\\n    print('status:', j.get('status'), '| stage:', j.get('stage'), '| progress:', j.get('progressPercent'))\\n    print('commitSha:', (j.get('commitSha') or (j.get('result') or {}).get('commitSha') or '')[:14])\\n    print('stageDetail:', j.get('stageDetail'))\\n    print('error:', j.get('error'))\\n    print('finishedAt:', j.get('finishedAt'))\\nPYEOF\"}",
       "createdAt": 1784666837678,
-      "completedAt": 1784666841487
+      "completedAt": 1784666841487,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2088,7 +2107,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== ivx-autonomous branch HEAD (looking for NEW commit after 8ead7d55) ===\\\"\\ncurl -s \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/branches/ivx-autonomous\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nc = d.get('commit') or {}\\nprint('branch HEAD:', (c.get('sha') or '?')[:14])\\nprint('msg:', ((c.get('commit') or {}).get('message') or '?')[:80])\\nprint('date:', ((c.get('commit') or {}).get('author') or {}).get('date','?'))\\n\\\"\\necho \\\"=== prior branch HEAD was 8ead7d55c7c58f (probe 6) ===\\\"\\necho \\\"=== if a NEW commit appears, the fix's commit path is working ===\\\"\"}",
       "createdAt": 1784666849840,
-      "completedAt": 1784666850504
+      "completedAt": 1784666850504,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2118,7 +2138,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== verify NEW commit 92b88a0ed397bf on ivx-autonomous ===\\\"\\ncurl -s \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/92b88a0ed397bf\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint('sha:', d.get('sha','?')[:14])\\nprint('msg:', (d.get('commit') or {}).get('message','?')[:80])\\nprint('date:', ((d.get('commit') or {}).get('author') or {}).get('date','?'))\\nfiles = d.get('files') or []\\nprint('files:', [f.get('filename') for f in files])\\nprint('patch:', (files[0].get('patch') if files else '')[:250])\\n\\\"\"}",
       "createdAt": 1784666856142,
-      "completedAt": 1784666857533
+      "completedAt": 1784666857533,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2148,7 +2169,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"Waiting for recovery sweep (commit landed 20:46:36Z, threshold 2min → fires ~20:48:36Z, sweep every 60s)...\\\"\\nfor i in $(seq 1 8); do\\n  H=$(cd /home/user/rork-app && python3 -c \\\"\\nimport json, urllib.request\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\nTID = 'ivx-worker-3effa344-dd8c-414f-b92d-4deb89f2afe0'\\nreq = urllib.request.Request(f'https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/{TID}', headers={'Authorization':f'Bearer {AT}'})\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    d = json.loads(r.read())\\n    j = d.get('job') or d\\n    cs = j.get('commitSha') or (j.get('result') or {}).get('commitSha') or ''\\n    print(f\\\\\\\"{j.get('status')}|{j.get('stage')}|{j.get('progressPercent')}|{cs[:14]}\\\\\\\")\\n\\\" 2>/dev/null)\\n  echo \\\"poll $i $(date +%H:%M:%S) $H\\\"\\n  if echo \\\"$H\\\" | grep -q \\\"completed\\\\|failed\\\\|blocked\\\"; then echo \\\"TERMINAL\\\"; break; fi\\n  sleep 15\\ndone\"}",
       "createdAt": 1784666869374,
-      "completedAt": 1784666915245
+      "completedAt": 1784666915245,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2178,7 +2200,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\nTID = 'ivx-worker-3effa344-dd8c-414f-b92d-4deb89f2afe0'\\nreq = urllib.request.Request(f'https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/{TID}',\\n    headers={'Authorization':f'Bearer {AT}'})\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    d = json.loads(r.read())\\n    j = d.get('job') or d\\n    print('=== FINAL JOB STATE (recovered) ===')\\n    print('status:', j.get('status'))\\n    print('stage:', j.get('stage'))\\n    print('progress:', j.get('progressPercent'))\\n    print('finishedAt:', j.get('finishedAt'))\\n    print('stageDetail:', j.get('stageDetail'))\\n    res = j.get('result') or {}\\n    print('result.commitSha:', (res.get('commitSha') or '')[:14])\\n    print('result.commitUrl:', res.get('commitUrl'))\\n    print('result.branch:', res.get('branch'))\\n    print('result.finalStatus:', res.get('finalStatus'))\\n    print('result.ok:', res.get('ok'))\\n    print('result.testsPassed:', res.get('testsPassed'))\\n    print('result.typecheckPassed:', res.get('typecheckPassed'))\\n    print('result.deployRequested:', res.get('deployRequested'))\\n    print('result.deployId:', res.get('deployId'))\\nPYEOF\"}",
       "createdAt": 1784666923808,
-      "completedAt": 1784666926074
+      "completedAt": 1784666926074,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",
@@ -2208,7 +2231,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== GitHub main HEAD ===\\\" && curl -s \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/HEAD\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint('sha:', d.get('sha','?')[:14])\\nprint('msg:', (d.get('commit') or {}).get('message','?')[:80])\\n\\\"\\necho \\\"=== runtime /health ===\\\"\\ncurl -s https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print('runtime:',d.get('commit','?')[:14],'| status:',d.get('status','?'))\\\"\\necho \\\"=== APK v1.4.31(63) ===\\\"\\ncurl -sI \\\"https://ivxholding.com/apk/ivx-holdings-v1.4.31.apk\\\" 2>/dev/null | python3 -c \\\"\\nimport sys\\nh = sys.stdin.read()\\nprint('HTTP:', [l for l in h.split(chr(10)) if l.startswith('HTTP')][0] if 'HTTP' in h else '?')\\nprint('Content-Length:', [l.split(':')[1].strip() for l in h.split(chr(10)) if l.lower().startswith('content-length')] or '?')\\n\\\"\"}",
       "createdAt": 1784666930389,
-      "completedAt": 1784666934067
+      "completedAt": 1784666934067,
+      "compactedAt": 1784673012799
     },
     {
       "type": "reasoning",

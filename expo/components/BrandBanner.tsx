@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { IVX_LOGO_SOURCE } from '@/constants/brand';
+import IVXBrandLogo from '@/components/IVXBrandLogo';
 
 interface BrandBannerProps {
   notificationCount?: number;
@@ -22,10 +22,11 @@ export default function BrandBanner({ notificationCount = 2 }: BrandBannerProps)
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.banner}>
         <View style={styles.leftSection}>
-          <Image 
-            source={IVX_LOGO_SOURCE} 
-            style={styles.logo}
-            resizeMode="contain"
+          <IVXBrandLogo
+            variant="symbol"
+            size="sm"
+            theme="dark"
+            containerStyle={styles.logoContainer}
             accessibilityLabel="IVX HOLDINGS LLC logo"
           />
           <Text style={styles.brandText}>IVX HOLDINGS LLC</Text>
@@ -70,10 +71,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  logo: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
+  logoContainer: {
     marginRight: 12,
   },
   brandText: {
