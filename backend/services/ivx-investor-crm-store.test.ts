@@ -1,6 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+
+// Force filesystem mode — prevents Supabase state pollution between test files
+mock.module('./ivx-durable-store', () => ({
+  isDurableStoreConfigured: () => false,
+  readDurableJson: async (_f: string, fallback: unknown) => fallback,
+  writeDurableJson: async () => {},
+  appendDurableEvent: async () => {},
+  readDurableEvents: async () => [],
+  durableKeyForFile: (f: string) => f,
+}));
+
 import {
   clampScore,
   createInvestor,

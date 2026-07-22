@@ -44,7 +44,7 @@ let _registerStub: ((input: unknown) => Promise<unknown>) | null = null;
 mock.module('./services/ivx-member-database', () => ({
   registerMember: async (input: unknown) => _registerStub ? _registerStub(input) : {
     success: true, userId: 'stub-user-id', email: (input as any)?.email, message: 'ok',
-    requiresVerification: true, deploymentMarker: 'test',
+    requiresVerification: false, deploymentMarker: 'test',
   },
   getMemberProfile: async () => null,
   updateMemberKYCStatus: async () => true,
@@ -157,7 +157,7 @@ describe('ivx-registration-orchestrator — idempotency', () => {
       userId: 'test-user-id-2',
       email: 'idem@example.com',
       message: 'ok',
-      requiresVerification: true,
+      requiresVerification: false,
       deploymentMarker: 'test',
     });
     const requestId = '11111111-1111-4111-8111-111111111111';
@@ -167,7 +167,7 @@ describe('ivx-registration-orchestrator — idempotency', () => {
       expect(result.registrationRequestId).toBe(requestId);
       expect(result.traceId).toMatch(/^ivx-reg-/);
       expect(result.authUserId).toBe('test-user-id-2');
-      expect(result.requiresVerification).toBe(true);
+      expect(result.requiresVerification).toBe(false);
     }
   });
 
@@ -177,7 +177,7 @@ describe('ivx-registration-orchestrator — idempotency', () => {
       callCount++;
       return {
         success: true, userId: 'test-user-id-3', email: 'dup@example.com', message: 'ok',
-        requiresVerification: true, deploymentMarker: 'test',
+        requiresVerification: false, deploymentMarker: 'test',
       };
     });
     const requestId = '22222222-2222-4222-8222-222222222222';

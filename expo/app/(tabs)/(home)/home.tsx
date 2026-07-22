@@ -103,6 +103,14 @@ function ExploreDealsSection({ router }: { router: ReturnType<typeof useRouter> 
         onPress: () => router.push('/(tabs)/portfolio' as any),
         testID: 'explore-investor-dashboard',
       },
+      {
+        icon: TrendingUp,
+        title: 'Performance Center',
+        subtitle: 'ROI, distributions & deal metrics',
+        tint: Colors.primary,
+        onPress: () => router.push('/investor-performance' as any),
+        testID: 'explore-investor-performance',
+      },
     ],
     [router],
   );

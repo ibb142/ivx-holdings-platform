@@ -911,6 +911,7 @@ import {
   restoreCenterOptions,
 } from './api/ivx-restore-center';
 import { handleZeroDataLossMigration, zeroDataLossMigrationOptions } from './api/ivx-zero-data-loss-migration';
+import { handleInvestorPerformanceRequest, investorPerformanceOptions } from './api/ivx-investor-performance';
 import {
   enterpriseRecoveryOptions,
   handleRecoveryObjectives,
@@ -5776,5 +5777,11 @@ app.get('/api/ivx/enterprise/metrics', (context) => {
     metrics,
   });
 });
+
+// ============================================================
+// IVX Investor Performance Center — real portfolio metrics
+// ============================================================
+app.get('/api/ivx/investor-performance', async (context) => handleInvestorPerformanceRequest(context.req.raw));
+app.options('/api/ivx/investor-performance', () => investorPerformanceOptions());
 
 export default app;

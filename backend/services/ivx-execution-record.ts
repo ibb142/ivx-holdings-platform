@@ -11,6 +11,14 @@
 export const IVX_EXECUTION_RECORD_MARKER =
   'ivx-execution-record-2026-07-22';
 
+export const EXECUTION_RECORD_REQUIRED_FIELDS = [
+  'task_id', 'parent_task_id', 'task_type', 'user_request', 'acceptance_criteria',
+  'status', 'analysis', 'reproduction_steps', 'root_cause', 'implementation_plan',
+  'files_inspected', 'files_changed', 'commands', 'tests', 'qa_results',
+  'commit_sha', 'deployment_id', 'production_checks', 'evidence', 'blockers',
+  'remaining_work', 'started_at', 'completed_at', 'verified_at',
+] as const;
+
 export type IVXExecutionRecord = {
   /** Unique task identifier. */
   task_id: string;
@@ -58,7 +66,7 @@ export type IVXExecutionRecord = {
     timestamp: number;
   }[];
   /** All evidence collected. */
-  evidence: { type: string; value: string; timestamp: number }[];
+  evidence: { type?: string; kind?: string; value: string; label?: string; timestamp: number | string; verified?: boolean }[];
   /** Blockers encountered. */
   blockers: { description: string; attempted_command: string | null }[];
   /** Remaining work items. */
@@ -234,4 +242,64 @@ export function verifyRecord(record: IVXExecutionRecord): IVXExecutionRecord {
  */
 export function serializeExecutionRecord(record: IVXExecutionRecord): string {
   return JSON.stringify(record, null, 2);
+}
+
+// --- Compatibility aliases (object-parameter style used by tests) ---
+
+export function appendCommand(
+  record: IVXExecutionRecord,
+  input: { command: string; exitCode: number | null; outputPreview: string; startedAt?: string; finishedAt?: string },
+): IVXExecutionRecord {
+  return addCommand(record, input.command, input.exitCode, input.outputPreview);
+}
+
+export function appendTestResult(
+  record: IVXExecutionRecord,
+  input: { name: string; command?: string; passed: boolean; passedCount?: number; failedCount?: number; durationMs: number | null; outputPreview?: string },
+): IVXExecutionRecord {
+  return addTestResult(record, input.name, input.passed, input.durationMs);
+}
+
+export function appendQAResult(
+  record: IVXExecutionRecord,
+  input: { platform: string; name?: string; scenario?: string; passed: boolean; evidence: string; notes?: string },
+): IVXExecutionRecord {
+  return addQAResult(record, input.platform, input.name ?? input.scenario ?? 'unnamed', input.passed, input.evidence);
+}
+
+export function appendEvidence(
+  record: IVXExecutionRecord,
+  input: { kind: string; label?: string; value: string; timestamp: string | number; verified?: boolean },
+): IVXExecutionRecord {
+  return addEvidence(record, input.kind, input.value);
+}
+
+export function completeExecutionRecord(
+  record: IVXExecutionRecord,
+  status: string,
+  verified: boolean,
+): IVXExecutionRecord {
+  const r = completeRecord(record, status);
+  return verified ? { ...r, verified_at: Date.now() } : r;
+}
+
+export function validateExecutionRecord(record: IVXExecutionRecord): {
+  ok: boolean;
+  missingFields: string[];
+  inconsistencies: string[];
+} {
+  const missingFields: string[] = [];
+  const inconsistencies: string[] = [];
+  const recordAny = record as unknown as Record<string, unknown>;
+  for (const field of EXECUTION_RECORD_REQUIRED_FIELDS) {
+    if (!(field in recordAny)) missingFields.push(field);
+  }
+  if (record.status === 'VERIFIED' && (record.task_type === 'CODE_FIX' || record.task_type === 'FEATURE')) {
+    if (record.files_changed.length === 0) inconsistencies.push('no files changed for a verified development task');
+    if (!record.evidence.some((e) => (e.kind ?? e.type) === 'feature')) inconsistencies.push('feature-verification evidence missing');
+  }
+  if (record.status === 'DEPLOYED' && !record.deployment_id) {
+    inconsistencies.push('deployment_id is missing for DEPLOYED status');
+  }
+  return { ok: missingFields.length === 0 && inconsistencies.length === 0, missingFields, inconsistencies };
 }

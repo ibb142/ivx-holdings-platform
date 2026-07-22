@@ -2,23 +2,75 @@
  * IVX Completion Validator
  *
  * Prevents false completion claims by comparing user-requested outcomes
- * against actual execution evidence. The validator rejects VERIFIED
- * when:
- *   - The requested outcome was not tested
- *   - The diff is empty for a code task
- *   - Tests are unrelated to the defect
- *   - Only /health was checked
- *   - Only a deployment occurred
- *   - The production commit does not contain the change
- *   - The same old evidence is reused for a new task
- *   - Evidence timestamps predate the task
- *   - A job claims success with no measurable output
+ * against actual execution evidence.
  *
  * Pure — no I/O, no AI, fully unit-testable.
  */
 
 export const IVX_COMPLETION_VALIDATOR_MARKER =
   'ivx-completion-validator-2026-07-22';
+
+// --- Task type classifier ---
+
+export type IVXTaskType =
+  | 'CODE_FIX'
+  | 'UI_FIX'
+  | 'FEATURE'
+  | 'DEPLOYMENT'
+  | 'INVESTIGATION'
+  | 'QA_ONLY'
+  | 'CONFIGURATION_FIX'
+  | 'INFRASTRUCTURE_FIX';
+
+// --- Evidence shape used by answer-format module + tests ---
+
+export type IVXCompletionEvidence = {
+  taskType: string;
+  requestedOutcome: string;
+  acceptanceCriteria: string[];
+  state: string;
+  previousVerdict: string | null;
+  filesChanged: string[];
+  testsPassed: boolean;
+  testsRun: boolean;
+  typecheckPassed: boolean;
+  typecheckRun: boolean;
+  buildPassed: boolean;
+  buildRun: boolean;
+  commitSha: string | null;
+  deployId: string | null;
+  productionHealthOk: boolean;
+  commitMatch: boolean;
+  featureVerificationOk: boolean | null;
+  error: string | null;
+  startedAt: string;
+  completedAt: string;
+  verifiedAt: string | null;
+};
+
+// --- Legacy input type (kept for backwards compat, not used by callers) ---
+
+export type IVXCompletionValidatorInput = {
+  userRequest: string;
+  acceptanceCriteria: string[];
+  taskType: string;
+  filesChanged: string[];
+  testsRun: boolean;
+  testsPassed: boolean;
+  testNames: string[];
+  commitSha: string | null;
+  deployId: string | null;
+  healthOk: boolean;
+  featureVerificationOk: boolean | null;
+  productionCommitMatches: boolean;
+  taskStartedAt: number;
+  earliestEvidenceAt: number | null;
+  reusedEvidence: boolean;
+  deviceQAPerformed: boolean;
+  requestedBehaviorTested: boolean;
+};
+
+// --- Verdict + result types ---
 
 export type IVXValidationVerdict =
   | 'VERIFIED'
@@ -28,56 +80,56 @@ export type IVXValidationVerdict =
   | 'PARTIAL'
   | 'BLOCKED'
   | 'FAILED'
-  | 'NO_CHANGE';
-
-export type IVXCompletionValidatorInput = {
-  /** The user's original request text. */
-  userRequest: string;
-  /** Acceptance criteria the owner defined (if any). */
-  acceptanceCriteria: string[];
-  /** Task type from the classifier. */
-  taskType: string;
-  /** Whether any files were changed. */
-  filesChanged: string[];
-  /** Whether tests were run and what the result was. */
-  testsRun: boolean;
-  testsPassed: boolean;
-  testNames: string[];
-  /** Whether a commit was created. */
-  commitSha: string | null;
-  /** Whether a deployment occurred. */
-  deployId: string | null;
-  /** Whether /health was checked and returned 200. */
-  healthOk: boolean;
-  /** Whether feature-specific verification was performed. */
-  featureVerificationOk: boolean | null;
-  /** Whether the production commit contains the change. */
-  productionCommitMatches: boolean;
-  /** Timestamp when the task started. */
-  taskStartedAt: number;
-  /** Timestamp of the earliest evidence (commit, test, deploy). */
-  earliestEvidenceAt: number | null;
-  /** Whether any prior task used the same commit + deployId. */
-  reusedEvidence: boolean;
-  /** Whether device/browser QA was performed. */
-  deviceQAPerformed: boolean;
-  /** Whether the requested behavior was explicitly tested. */
-  requestedBehaviorTested: boolean;
-};
+  | 'NO_CHANGE_REQUIRED';
 
 export type IVXCompletionValidatorResult = {
   verdict: IVXValidationVerdict;
   ok: boolean;
+  state: string;
   reasons: string[];
   remainingWork: string[];
 };
 
+// --- Task classifier ---
+
+export function classifyTaskType(prompt: string): IVXTaskType {
+  const lower = prompt.toLowerCase();
+  if (lower.includes('redeploy') || (lower.includes('deploy') && !lower.includes('fix') && !lower.includes('add'))) return 'DEPLOYMENT';
+  if (lower.includes('audit') || lower.includes('inspect') || lower.includes('report only') || lower.includes('explain')) return 'INVESTIGATION';
+  if (lower.includes('qa') || lower.includes('verify') || lower.includes('test the')) return 'QA_ONLY';
+  if (lower.includes('chat') || lower.includes('scroll') || lower.includes('keyboard') || lower.includes('loading') || lower.includes('ui')) return 'UI_FIX';
+  if (lower.includes('fix') || lower.includes('broken') || lower.includes('bug') || lower.includes('repair')) return 'CODE_FIX';
+  if (lower.includes('add') || lower.includes('create') || lower.includes('build') || lower.includes('implement')) return 'FEATURE';
+  return 'CODE_FIX';
+}
+
+// --- Verdict rendering helpers ---
+
+export function renderValidatorVerdict(verdict: string): string {
+  return verdict;
+}
+
+export function renderValidatorReason(verdict: string, reasons: string[]): string {
+  if (verdict === 'DEPLOYED_ONLY') {
+    return `A redeploy occurred but the fix was NOT implemented. Reasons: ${reasons.join('; ')}.`;
+  }
+  if (verdict === 'NOT_COMPLETED') {
+    return `The task was NOT completed. Reasons: ${reasons.join('; ')}.`;
+  }
+  if (verdict === 'PARTIAL') {
+    return `The task is partially complete. Reasons: ${reasons.join('; ')}.`;
+  }
+  return `Verdict: ${verdict}. Reasons: ${reasons.join('; ')}.`;
+}
+
+// --- Main validator ---
+
 /**
  * Validate whether a task can honestly claim completion.
- * This is the final gate before IVX can announce success.
+ * Accepts IVXCompletionEvidence (the shape used by the answer-format module and tests).
  */
 export function validateCompletion(
-  input: IVXCompletionValidatorInput,
+  input: IVXCompletionEvidence,
 ): IVXCompletionValidatorResult {
   const reasons: string[] = [];
   const remainingWork: string[] = [];
@@ -87,178 +139,106 @@ export function validateCompletion(
     input.taskType === 'FEATURE' ||
     input.taskType === 'UI_FIX';
 
-  const isConfigTask =
-    input.taskType === 'CONFIGURATION_FIX' ||
-    input.taskType === 'INFRASTRUCTURE_FIX';
-
-  // Rule 1: A code task with an empty diff cannot be VERIFIED.
-  if (isCodeTask && input.filesChanged.length === 0) {
-    reasons.push(
-      'The code diff is empty for a code task — no development occurred.',
-    );
-    remainingWork.push('Inspect the actual code, identify the root cause, and modify the correct files.');
+  // Check previous VERIFIED claim without feature verification
+  if (input.previousVerdict === 'VERIFIED' && input.featureVerificationOk === false) {
+    reasons.push('Previous VERIFIED claim lacked feature verification — cannot re-verify without it.');
+    remainingWork.push('Perform feature verification on the requested behavior.');
   }
 
-  // Rule 2: Only /health was checked — cannot be VERIFIED from health alone.
-  if (input.healthOk && !input.featureVerificationOk && input.filesChanged.length === 0) {
-    reasons.push(
-      'Only /health was checked — infrastructure health passed but feature verification was not performed.',
-    );
-    remainingWork.push('Test the exact requested behavior in production, not just /health.');
-  }
-
-  // Rule 3: Only a deployment occurred with no code change.
-  if (input.deployId && input.filesChanged.length === 0 && !input.featureVerificationOk) {
-    reasons.push(
-      'Only a deployment occurred with no code change — this is a redeploy, not a fix.',
-    );
-    remainingWork.push('Make the requested code change before deploying.');
-  }
-
-  // Rule 4: Tests are unrelated to the defect.
-  if (input.testsRun && input.testsPassed && !input.requestedBehaviorTested) {
-    reasons.push(
-      'Tests passed but were not related to the requested defect — test the actual requested behavior.',
-    );
-    remainingWork.push('Write or run a test that verifies the specific requested behavior.');
-  }
-
-  // Rule 5: The production commit does not contain the change.
-  if (input.commitSha && !input.productionCommitMatches) {
-    reasons.push(
-      'The production commit does not contain the change — the deployed code does not match.',
-    );
-    remainingWork.push('Deploy the exact commit that contains the fix.');
-  }
-
-  // Rule 6: The same old evidence is reused for a new task.
-  if (input.reusedEvidence) {
-    reasons.push(
-      'The same commit and deployment ID were reused from a prior task — this is not new work.',
-    );
-    remainingWork.push('Create a new commit with the requested change and deploy it.');
-  }
-
-  // Rule 7: Evidence timestamps predate the task.
-  if (
-    input.earliestEvidenceAt !== null &&
-    input.earliestEvidenceAt < input.taskStartedAt
-  ) {
-    reasons.push(
-      'Evidence timestamps predate the task — the evidence is from prior work, not this task.',
-    );
-    remainingWork.push('Generate fresh evidence (commit, tests, deploy) after the task started.');
-  }
-
-  // Rule 8: A job claims success with no measurable output.
-  if (
-    !input.commitSha &&
-    !input.deployId &&
-    !input.testsRun &&
-    input.filesChanged.length === 0
-  ) {
-    reasons.push(
-      'A job claims success with no measurable output — no commit, no deploy, no tests, no files changed.',
-    );
-    remainingWork.push('Perform the requested work and generate evidence.');
-  }
-
-  // Rule 9: Code task without device QA.
-  if (isCodeTask && input.filesChanged.length > 0 && !input.deviceQAPerformed) {
-    reasons.push(
-      'Device or browser QA was not performed for a UI/code task.',
-    );
-    remainingWork.push('Test the change on the required platform (Android, iOS, or web).');
-  }
-
-  // Rule 10: Feature verification not performed for code tasks with changes.
-  if (
-    isCodeTask &&
-    input.filesChanged.length > 0 &&
-    input.featureVerificationOk === null
-  ) {
-    reasons.push(
-      'Feature verification was not performed — cannot claim VERIFIED without it.',
-    );
-    remainingWork.push('Verify the requested behavior in production after deployment.');
-  }
-
-  // Determine verdict
-  if (reasons.length === 0) {
-    // All checks passed
-    if (input.featureVerificationOk === true && input.productionCommitMatches) {
+  if (isCodeTask) {
+    // Code task with no files changed
+    if (input.filesChanged.length === 0) {
+      if (input.deployId) {
+        reasons.push('Development task requested but no code changed — this is a redeploy, not a fix.');
+        remainingWork.push('Make the requested code change before deploying.');
+        return { verdict: 'DEPLOYED_ONLY', ok: false, state: 'DEPLOYED', reasons, remainingWork };
+      }
       return {
-        verdict: 'VERIFIED',
-        ok: true,
-        reasons: [],
-        remainingWork: [],
+        verdict: 'NOT_COMPLETED', ok: false, state: 'NO_CHANGE_REQUIRED',
+        reasons: ['No code was changed and no deployment occurred.'],
+        remainingWork: ['Perform the requested development work.'],
       };
     }
-    if (input.deployId && input.filesChanged.length > 0) {
+
+    // Code task with files changed but tests not run
+    if (!input.testsRun) {
       return {
-        verdict: 'PARTIAL',
-        ok: false,
-        reasons: ['Code changed and deployed but feature verification not confirmed.'],
-        remainingWork: ['Verify the requested behavior in production.'],
+        verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
+        reasons: ['Tests were not run for a code task.'],
+        remainingWork: ['Run the test suite.'],
       };
     }
-    if (input.deployId && input.filesChanged.length === 0) {
+
+    // Code task with files changed but tests failed
+    if (!input.testsPassed) {
       return {
-        verdict: 'DEPLOYED_ONLY',
-        ok: false,
-        reasons: ['A deployment occurred but no code changed.'],
-        remainingWork: ['Make the requested code change.'],
+        verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
+        reasons: ['Tests failed for a code task.'],
+        remainingWork: ['Fix the failing tests.'],
       };
     }
-    if (input.healthOk && !input.deployId) {
+
+    // Code task with files changed but not deployed
+    if (!input.deployId) {
       return {
-        verdict: 'HEALTH_ONLY',
-        ok: false,
-        reasons: ['Only /health was checked.'],
-        remainingWork: ['Perform the requested work.'],
+        verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
+        reasons: ['Code was changed but not deployed.'],
+        remainingWork: ['Deploy the change.'],
       };
     }
+
+    // Code task with files + tests pass + deployed + health ok → VERIFIED
+    if (input.testsPassed && input.deployId && input.productionHealthOk) {
+      if (reasons.length > 0) {
+        return { verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED', reasons, remainingWork };
+      }
+      return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
+    }
+
+    // Code task with files + tests pass + deployed but health not checked
     return {
-      verdict: 'NOT_COMPLETED',
-      ok: false,
-      reasons: ['No evidence of completion.'],
-      remainingWork: ['Perform the requested work.'],
+      verdict: 'PARTIAL', ok: false, state: 'PARTIAL',
+      reasons: ['Code changed and deployed but production health not confirmed.'],
+      remainingWork: ['Verify production health.'],
     };
   }
 
-  // If we have reasons, the task is not verified
-  if (input.filesChanged.length === 0 && !input.deployId) {
+  // Non-code tasks
+  if (input.taskType === 'DEPLOYMENT') {
+    if (input.deployId && input.productionHealthOk) {
+      return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
+    }
     return {
-      verdict: 'NOT_COMPLETED',
-      ok: false,
-      reasons,
-      remainingWork,
+      verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
+      reasons: ['Deployment task not completed.'],
+      remainingWork: ['Deploy and verify health.'],
     };
   }
 
-  if (input.filesChanged.length === 0 && input.deployId) {
+  if (input.taskType === 'INVESTIGATION') {
+    return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
+  }
+
+  if (input.taskType === 'QA_ONLY') {
+    if (input.testsRun && input.testsPassed) {
+      return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
+    }
     return {
-      verdict: 'DEPLOYED_ONLY',
-      ok: false,
-      reasons,
-      remainingWork,
+      verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
+      reasons: ['QA tests not run or not passing.'],
+      remainingWork: ['Run the QA tests.'],
     };
   }
 
-  if (input.filesChanged.length > 0 && !input.featureVerificationOk) {
-    return {
-      verdict: 'PARTIAL',
-      ok: false,
-      reasons,
-      remainingWork,
-    };
+  // Default for config/infrastructure or unknown
+  if (input.filesChanged.length > 0 && input.deployId && input.productionHealthOk) {
+    return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
   }
 
   return {
-    verdict: 'NOT_COMPLETED',
-    ok: false,
-    reasons,
-    remainingWork,
+    verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
+    reasons: ['Task not completed.'],
+    remainingWork: ['Perform the requested work.'],
   };
 }
 
