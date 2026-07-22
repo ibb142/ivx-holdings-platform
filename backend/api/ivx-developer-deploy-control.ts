@@ -43,6 +43,7 @@ type DeveloperDeployAction =
   | 'github_create_repository'
   | 'github_list_workflow_runs'
   | 'github_get_workflow_run'
+  | 'github_token_scopes'
   | 'verify_url_sha256'
   | 'render_trigger_deploy'
   | 'render_restart_service'
@@ -121,6 +122,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'github_create_repository'
     || normalized === 'github_list_workflow_runs'
     || normalized === 'github_get_workflow_run'
+    || normalized === 'github_token_scopes'
     || normalized === 'verify_url_sha256'
     || normalized === 'render_trigger_deploy'
     || normalized === 'render_restart_service'
@@ -153,6 +155,7 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'get_supabase_auth_config'
     || action === 'github_list_workflow_runs'
     || action === 'github_get_workflow_run'
+    || action === 'github_token_scopes'
     || action === 'verify_url_sha256';
 }
 
@@ -1333,6 +1336,64 @@ export async function runGithubGetWorkflowRun(input: Record<string, unknown>): P
   };
 }
 
+/**
+ * Read-only: reports the runtime GITHUB_TOKEN's identity, kind, and granted scopes
+ * WITHOUT ever returning the token value. Used to diagnose scope/permission failures
+ * (e.g. workflow-file commits rejected with HTTP 404) so the owner can edit the right token.
+ */
+export async function runGithubTokenScopes(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const token = await getGithubToken();
+  const tokenKind = token.startsWith('github_pat_')
+    ? 'fine-grained'
+    : token.startsWith('ghp_')
+      ? 'classic'
+      : token.startsWith('gho_') || token.startsWith('ghs_')
+        ? 'oauth-or-app'
+        : 'unknown-format';
+  const headers = await githubHeaders();
+  const userResponse = await fetch('https://api.github.com/user', { method: 'GET', headers });
+  const userData = readRecord(await parseJsonResponse(userResponse));
+  const scopesHeader = userResponse.headers.get('x-oauth-scopes') ?? '';
+  const scopes = scopesHeader.split(',').map((scope) => scope.trim()).filter(Boolean);
+  let repoAccessible: boolean | null = null;
+  let repoPermissions: Record<string, unknown> | null = null;
+  let repoOwner: string | null = null;
+  let repoName: string | null = null;
+  try {
+    const repoInfo = await getGithubRepoInfo(input);
+    repoOwner = repoInfo.owner;
+    repoName = repoInfo.repo;
+    const repoResponse = await fetchJson(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`, { method: 'GET', headers });
+    repoAccessible = repoResponse.ok;
+    const repoData = readRecord(repoResponse.data);
+    repoPermissions = repoResponse.ok ? readRecord(repoData.permissions) : null;
+  } catch {
+    repoAccessible = null;
+  }
+  const hasWorkflowScope = tokenKind === 'classic' ? scopes.includes('workflow') : null;
+  return {
+    provider: 'github',
+    action: 'github_token_scopes',
+    tokenKind,
+    tokenLogin: readTrimmed(userData.login) || null,
+    tokenUserId: typeof userData.id === 'number' ? userData.id : null,
+    tokenValid: userResponse.ok,
+    scopes,
+    scopesHeaderPresent: Boolean(scopesHeader),
+    hasWorkflowScope,
+    workflowScopeNote: tokenKind === 'classic'
+      ? (hasWorkflowScope ? 'Classic token HAS the workflow scope.' : 'Classic token is MISSING the workflow scope — .github/workflows commits will fail with HTTP 404.')
+      : 'Fine-grained/app tokens do not expose scopes via header; check Workflows read/write permission in GitHub settings.',
+    repoOwner,
+    repoName,
+    repoAccessible,
+    repoPermissions,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 const ARTIFACT_VERIFY_HOST_SUFFIXES = ['ivxholding.com', 'github.com', 'githubusercontent.com', 'amazonaws.com', 'supabase.co', 'cloudfront.net'];
 const MAX_ARTIFACT_VERIFY_BYTES = 524_288_000;
 
@@ -1782,8 +1843,8 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'verify_url_sha256'],
-      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'verify_url_sha256'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256'],
       ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -1968,6 +2029,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'github_get_workflow_run') {
     return await runGithubGetWorkflowRun(input);
+  }
+  if (action === 'github_token_scopes') {
+    return await runGithubTokenScopes(input);
   }
   if (action === 'verify_url_sha256') {
     return await runVerifyUrlSha256(input);
