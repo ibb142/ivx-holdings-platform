@@ -77,3 +77,37 @@ createdAt: 2026-07-21T18:08:36.341Z
 **Commits:** `f5373a9c` (index.html), `9b2914f7` (ivx-invest.js), `b3b79f89` (ivx-portal.js), `ee412116` (ivx-invest.js error mapping)
 
 **Deployed:** S3 origin has all fixed files; CloudFront serving fixed JS; backend on commit `ee412116`.
+
+## Reels crash elimination + module rendering stability (in progress)
+
+- [x] Phase 1 — Root cause identified via source audit (cannot reproduce on physical device from Linux sandbox): 4 crash vectors found:
+  1. **SafeVideo native player leak (CRITICAL):** `useEffect` cleanup captured `videoRef.current` (null) at mount → `unloadAsync()` never called → ExoPlayer instances leaked on every reel swipe → OOM crash after ~15-25 transitions
+  2. **removeClippedSubviews + pagingEnabled:** known Android crash — native view detachment during paging animation
+  3. **onProgress inline arrow function:** new function every render → SafeVideo re-rendered ~10x/second → render loop
+  4. **onToggleMute inline arrow function:** new function every render → all mounted cards re-rendered on every swipe
+- [x] Phase 2 — Crash observability: `ReelErrorBoundary` now generates trace IDs (`reel-<timestamp>-<random>`), logs `{ traceId, reelId, errorClass, route, component }`, shows `Ref: <traceId>` in error UI
+- [x] Phase 3 — Player architecture: max 3 players mounted (active ± 1) via existing `shouldMount()`; `shouldPlay` gated by screen focus + app foreground + active index
+- [x] Phase 4 — Video lifecycle: SafeVideo now calls `stopAsync()` + `unloadAsync()` in cleanup (reads ref live, not null snapshot); URI-change cleanup added; `useAppForeground` + `useFocusEffect` pause on background/unfocus
+- [x] Phase 6 — Memory control: native player leak fixed (root cause #1); `removeClippedSubviews` removed (root cause #2); player count bounded to 3
+- [x] Phase 7 — List config: stable `keyExtractor` (reel ID), `pagingEnabled`, `getItemLayout`, `initialNumToRender=2`, `maxToRenderPerBatch=3`, `windowSize=5`, memoized `CanonicalInvestmentReelCard`, stable `viewabilityConfig` (80% threshold)
+- [x] Phase 10 — Schema: `FeedVideo` type enforced; `video_url`, `hls_url`, `poster_url` all nullable and handled; `pickPlaybackUri` falls back safely
+- [x] Phase 13 — Portfolio audit: `getTotalIPXValue` etc. are `useMemo` numbers (not functions) — no NaN crash; `walletContext?.available ?? 0` null-safe; values default to 0 only when context confirms zero
+- [x] Phase 19 — Error boundaries: `ModuleErrorBoundary` (route-level) + `ReelErrorBoundary` (item-level) with trace IDs; `DiagnosticErrorBoundary` (app-level) exists; **wired into all 5 tab screens (Home, Market, Portfolio, CRM, Chat) + Reels route — DONE**
+- [x] Phase 20 — Skeleton system: `LoadingSkeleton.tsx` + `SkeletonLoader.tsx` provide `CardSkeleton`, `PortfolioSkeleton`, `HomeSkeleton`, `ListItemSkeleton`, `ProfileSkeleton`, `MarketRowSkeleton`; `OfflineBanner` exists
+- [x] Deploy — v1.4.33 APK built (83,311,011 bytes, SHA-256 `bf9c17da18b5c783b1f1811ec547e32e379557841da97161974246d03478db2c`), uploaded to S3, landing page updated, backend on commit `d4517c04`
+- [x] Deploy v1.4.34 — Phase 19 route error boundaries: built APK (83,311,723 bytes, SHA-256 `3f0836bdf6ae5dcbdaa739703e7793a13ce470b380d74393e33e5ab1608da828`), uploaded to S3, landing page updated to v1.4.34, backend on commit `95fc5938`
+
+**Commits (Reels fix):** `4af1acdc` (SafeVideo player leak), `62d6bb9f` (ReelErrorBoundary trace IDs), `c9012beb` (videos.tsx removeClippedSubviews + toggleMute stabilization), `6f180af5` (CanonicalInvestmentReelCard onProgress stabilization), `d4517c04` (landing page v1.4.33)
+
+**Commits (Phase 19 route error boundaries):** `78c7a2e0` (home.tsx), `5abf9319` (market.tsx), `17b8b68a` (portfolio.tsx), `db244ad2` (crm.tsx), `57d1b215` (chat.tsx), `415ccf8d` (app.config.ts v1.4.34), `d398452b` (build.gradle v1.4.34), `95fc5938` (landing page v1.4.34)
+
+**Deployed:** APK live at `https://ivxholding.com/apk/ivx-holdings-v1.4.34.apk` (HTTP 200, 83,311,723 bytes); backend on commit `95fc5938` (boot `2026-07-22T01:17:42.783Z`); S3 origin has v1.4.34 landing page (4 mentions, 0 v1.4.33).
+
+**NOT TESTED (requires physical Android device, unavailable in sandbox):**
+- 60-minute Reels soak test with 200+ transitions
+- Memory measurement during extended scrolling
+- Physical device crash reproduction before/after fix
+- 26-module rendering audit (Phase 11)
+- Full test matrix (Phase 12 — 30 scenarios)
+- Network switching (Wi-Fi to cellular) test
+- Full regression test suite

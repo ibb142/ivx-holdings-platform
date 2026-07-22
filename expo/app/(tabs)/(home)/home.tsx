@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import {
   Bell,
   ChevronRight,
@@ -464,6 +465,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <ModuleErrorBoundary moduleName="Home">
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={[styles.header, { paddingHorizontal: isXs ? 16 : 16 }]}>
           <View style={styles.brandContainer}>
@@ -585,6 +587,7 @@ export default function HomeScreen() {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
+      </ModuleErrorBoundary>
 
       <QuickBuyModal
         visible={quickBuyVisible}

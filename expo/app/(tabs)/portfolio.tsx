@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { useRouter } from 'expo-router';
 import { TrendingUp, TrendingDown, Wallet, Building2, ChevronRight, PiggyBank, Percent, Globe, DollarSign, Activity, Tag, ShoppingCart } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -417,6 +418,7 @@ export default function PortfolioScreen() {
 
   return (
     <View style={styles.container}>
+      <ModuleErrorBoundary moduleName="Portfolio">
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={[styles.header, { paddingHorizontal: responsiveStyles.cardMargin }]}>
           <Text style={[styles.headerTitle, { fontSize: responsiveStyles.headerTitle }]}>{t('portfolio')}</Text>
@@ -619,6 +621,7 @@ export default function PortfolioScreen() {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
+      </ModuleErrorBoundary>
     </View>
   );
 }

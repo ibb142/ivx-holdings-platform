@@ -11,6 +11,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { TrendingUp, TrendingDown, Activity, BarChart3, Clock, Zap, Globe, ArrowUpRight, ArrowDownRight, ChevronRight, Tag, ShoppingCart } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -756,6 +757,7 @@ export default function MarketScreen() {
 
   return (
     <View style={styles.container}>
+      <ModuleErrorBoundary moduleName="Market">
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
           <View>
@@ -1013,6 +1015,7 @@ export default function MarketScreen() {
         userShares={selectedTradeProperty ? getUserShares(selectedTradeProperty.id) : 0}
         onTradeComplete={handleTradeComplete}
       />
+      </ModuleErrorBoundary>
     </View>
   );
 }

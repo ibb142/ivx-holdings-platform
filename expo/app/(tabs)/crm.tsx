@@ -19,6 +19,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -197,6 +198,7 @@ export default function CrmScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ModuleErrorBoundary moduleName="CRM">
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -272,6 +274,7 @@ export default function CrmScreen() {
 
         <View style={styles.footerSpace} />
       </ScrollView>
+      </ModuleErrorBoundary>
     </SafeAreaView>
   );
 }

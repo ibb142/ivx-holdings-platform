@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Clock, HelpCircle, MessageCircle, Radio, ScanLine, User, X, Sparkles } from 'lucide-react-native';
@@ -342,6 +343,7 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      <ModuleErrorBoundary moduleName="Chat">
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={[styles.header, { paddingHorizontal: isXs ? 16 : 20 }]}> 
           <View style={styles.headerTop}>
@@ -547,6 +549,7 @@ export default function ChatScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
+      </ModuleErrorBoundary>
     </View>
   );
 }
