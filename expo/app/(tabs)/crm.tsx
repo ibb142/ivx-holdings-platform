@@ -239,7 +239,7 @@ export default function CrmScreen() {
               <ListItemSkeleton key={i} />
             ))}
           </View>
-        )
+        )}
 
         {badgesQuery.isError && (
           <Text style={styles.errorNote}>

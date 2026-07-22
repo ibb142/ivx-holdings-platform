@@ -356,3 +356,64 @@ createdAt: 2026-07-21T18:08:36.341Z
 - Commit `264c63336621` — deployed to Render, runtime SHA verified = 264c63336621
 - Gate verified live: calling the action without confirm returns HTTP 409 with confirmTextRequired=CONFIRM_IVX_CREATE_REPOSITORY; repo existence re-check after the call: still 404 (nothing created)
 - STATUS: ACTION READY — blocked solely on owner typing CONFIRM_IVX_CREATE_REPOSITORY
+
+## FINAL PENDING-ITEM EXECUTION — PHASE 2 (CURRENT IVX APK v1.4.36) — COMPLETE (2026-07-22)
+
+### Phase 2.1 — Mobile changes verified (no rewrites needed)
+
+- version 1.4.36 + versionCode 68 in app.config.ts ✓; build.gradle versionName was 1.4.35 → fixed to 1.4.36 (commit `5e0dfae3370b`)
+- expo-image in DealVideoCard/HoldingCard/TrustDealCard ✓; QueryClient config in _layout ✓; Home skeleton (2 refs) + CRM skeleton (3 refs) ✓
+- Invest screens hardcoded hex = 0 ✓; profit-tools hardcoded hex = 0 ✓
+- IVX branding: IVXBrandLogo/IVXBrandIcon used in 24 files; chat.tsx has IVX Deal Intelligence + Welcome to IVX branding ✓; assets/images/icon.png present ✓
+
+### Phase 2.2 — Build environment fixed (2 real failures found + fixed)
+
+- Watchman disabled (renamed to .disabled); clean bun install (1311 packages); stale bundle none; JS bundle reached 100%
+- FAILURE 1: `app/(tabs)/crm.tsx` JSX syntax error — skeleton block missing closing `}` (line 242 `)` → `)}`) broke `:app:createBundleReleaseJsAndAssets`. Fixed, commit `d234c6b49ac1`
+- FAILURE 2: `drawable/splashscreen_logo` + `mipmap ic_launcher*` resources missing — untracked prebuild outputs lost to sandbox recycle. Regenerated 20 PNGs from committed brand assets (icon.png, adaptive-icon.png, ivx-splash-logo.png) via ffmpeg at all densities; committed all 20 to GitHub (last `8c981279422e`) so release builds are reproducible
+- BUILD_COMMAND (exact): `cd expo/android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.13+11 ANDROID_HOME=/opt/android-sdk ./gradlew assembleRelease --no-daemon -x lint`
+
+### Phase 2.3 — APK produced
+
+- APK_FILENAME: ivx-holdings-v1.4.36.apk | VERSION: 1.4.36 | VERSION_CODE: 68 | PACKAGE: com.ivxholdings.app
+- BUILD_HOST: Rork sandbox (local Gradle 8.14.3, JDK 17) | BUILD_DURATION: 37s (final run) | ANDROID_COMPILE_RESULT: BUILD SUCCESSFUL
+- FILE_SIZE: 83,404,207 bytes | SHA256: 58463484b6e2001b2cb1479a0fd5ab2afc9c0d2c705198002d59f14dd1f7441f
+- JS_BUNDLE_PERCENT: 100% (assets/index.android.bundle = 12,788,016 bytes in APK); signed (same cert lineage as prior releases, SHA-256 digest fac61745…)
+- SOURCE_COMMIT: 8c981279422e (crm fix d234c6b4 + versionName 5e0dfae3 + res assets)
+
+### Phase 2.4 — APK uploaded + verified live
+
+- Presign via POST /api/ivx/apk/presign-upload (CONFIRM_IVX_APK_UPLOAD) → PUT HTTP 200
+- Live: https://ivxholding.com/apk/ivx-holdings-v1.4.36.apk → HTTP 200, content-length 83,404,207, ETag "6ae12924107c60ece7a37cf63764af29", content-type application/vnd.android.package-archive
+- Download-back SHA-256 = 58463484… EXACT MATCH with local build
+- Old v1.4.35 URL differs (83,311,987 bytes, ETag f3ec901e…) — new URL does NOT serve the old file
+- Landing updated: 4 refs v1.4.35 → v1.4.36 (commit `2bb6405ea011`), S3 PUT 200, CloudFront invalidation `IDT9WZCBBGRKOYCI4FE0YC9I23`; live: 4× v1.4.36, 0× v1.4.35
+
+### Production parity after Phase 2
+
+- GitHub HEAD = `8c981279422e` = Render runtime SHA (verified live after sync deploy) — /health healthy
+
+### Phase 3.1 — SMTP configuration check (COMPLETE — MISSING, owner-only credentials)
+
+- Live Supabase auth config read: smtp_host=None, smtp_port=None, smtp_user=None, smtp_pass=None, smtp_admin_email=None, smtp_sender_name=None; mailer_autoconfirm=True; external_email_enabled=True; rate_limit_email_sent=2/hr
+- MISSING: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_SENDER_EMAIL, SMTP_SENDER_NAME
+- DNS records required once provider chosen (recommend Amazon SES — AWS account already active): SPF `v=spf1 include:amazonses.com ~all`; DKIM 3× CNAME from SES domain verification; DMARC `_dmarc.ivxholding.com TXT v=DMARC1; p=quarantine; rua=mailto:iperez4242@gmail.com`
+- Backend already has update_supabase_auth_config PATCH capability — configuration is one action away once credentials exist
+
+### Phase 6.1 — Rate limits (COMPLETE — live evidence 2026-07-22)
+
+- forgot-password (`POST /api/members/forgot-password`, limiter `member-forgot` burst 3, refill 0.1/s): attempts 1-2 HTTP 200 → attempt 3+ HTTP 429 with body `retryAfterSec=10` AND `Retry-After: 10` header (decrementing 10→9) ✓
+- login (`POST /api/members/login`) wrong password ×6 rapid: consistent HTTP 401, no account lockout, no system-wide block ✓
+- member registration: invalid payloads → HTTP 400 INVALID_EMAIL with traceId (validation before any DB work); real-registration bursts previously produced 429 during QA (recorded — 3-4s spacing required) ✓
+- owner APIs unauthenticated: HTTP 401 (metrics + developer-deploy owner-only gate) ✓
+- IVX IA Chat + uploads: gated behind member/owner auth (unauthenticated rejected) ✓
+- No accidental system-wide lockout observed: health stayed 200 throughout probes ✓
+
+### Remaining approval/physical gates (unchanged)
+
+- Phase 1 (items 206-245): CONFIRM_IVX_CREATE_REPOSITORY — action deployed + verified gated, one call away
+- Phase 2.5: physical APK install — owner action (v1.4.36 live)
+- Phase 3.2-3.3: SMTP credentials — owner-only (SMTP_HOST/PORT/USER/PASSWORD/SENDER_EMAIL/SENDER_NAME)
+- Phase 4-5: physical Android device — unavailable in sandbox (NOT_RUN, not PASS)
+- Phase 6.2: cloud load test at 100-10,000 concurrent — no owner-controlled load VM configured (NOT_RUN)
+- Phase 7: CONFIRM_IVX_ROLLBACK — live rollback drill ready (github_create_rollback_tag + render deploy path exists)
