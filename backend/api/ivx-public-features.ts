@@ -39,7 +39,7 @@ export async function handleFeaturedProperties(req: Request): Promise<Response> 
   try {
     const sb = await getSB();
     // Query jv_deals with published=true as featured, fall back to properties
-    const { data, error } = await sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,created_at').eq('published', true).eq('status', 'active').order('created_at', { ascending: false }).limit(20);
+    const { data, error } = await sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).eq('status', 'active').order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(20);
     if (error) {
       // Fallback: try property_controls for featured IDs
       const { data: featuredIds } = await sb.from('property_controls').select('property_id').eq('is_featured', true);
@@ -134,7 +134,7 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 export async function handleJVDealsList(req: Request): Promise<Response> {
   try {
     const sb = await getSB();
-    const { data, error, count } = await sb.from('jv_deals').select('*', { count: 'exact', head: false }).eq('published', true).order('created_at', { ascending: false }).limit(50);
+    const { data, error, count } = await sb.from('jv_deals').select('*', { count: 'exact', head: false }).eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(50);
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ deals: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }

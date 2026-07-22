@@ -550,7 +550,7 @@ function toHomeFeedDeal(row: Record<string, unknown>, meta: DealMeta): HomeFeedD
     url: `https://ivxholding.com/?deal=${id}#deals`,
     is_featured: meta.is_featured,
     priority: meta.priority,
-    display_order: meta.display_order,
+    display_order: (row.display_order != null ? Number(row.display_order) : meta.display_order),
     created_at: (row.created_at ?? null) as string | null,
   };
 }
@@ -562,8 +562,7 @@ function toHomeFeedDeal(row: Record<string, unknown>, meta: DealMeta): HomeFeedD
  */
 function sortHomeFeedDeals(deals: HomeFeedDeal[]): HomeFeedDeal[] {
   return [...deals].sort((a, b) => {
-    if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
-    if (a.priority !== b.priority) return b.priority - a.priority;
+    /* display_order is the OWNER-CONTROLLED canonical sort — always first. */
     const ao = a.display_order;
     const bo = b.display_order;
     if (ao !== null || bo !== null) {
@@ -571,6 +570,9 @@ function sortHomeFeedDeals(deals: HomeFeedDeal[]): HomeFeedDeal[] {
       if (bo === null) return -1;
       if (ao !== bo) return ao - bo;
     }
+    /* Secondary: featured flag (within same display_order only). */
+    if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
+    if (a.priority !== b.priority) return b.priority - a.priority;
     const cmp = String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''));
     if (cmp !== 0) return cmp;
     return a.id.localeCompare(b.id);
@@ -597,7 +599,7 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
 
     /* ---- deals: published jv_deals + admin deal meta controls ---- */
     const [{ data: dealRows, error: dealsError }, dealMetaDoc] = await Promise.all([
-      sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,created_at').eq('published', true).order('created_at', { ascending: false }).limit(100),
+      sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100),
       getDealMetaDoc(),
     ]);
     if (dealsError) return json({ error: dealsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
