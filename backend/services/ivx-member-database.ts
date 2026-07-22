@@ -87,7 +87,7 @@ export async function registerMember(input: MemberRegistrationInput): Promise<Me
       const { data: authData, error } = await supabase.auth.admin.createUser({
         email: input.email,
         password: input.password,
-        email_confirm: false, // We handle verification ourselves
+        email_confirm: true, // Auto-confirm: no SMTP configured, users get instant access
         user_metadata: userMetadata,
       });
       authUserId = authData.user?.id;
@@ -205,10 +205,10 @@ export async function registerMember(input: MemberRegistrationInput): Promise<Me
     console.log('[MemberDB] Member registered:', userId, input.email);
     return {
       success: true,
-      message: 'Account created successfully. Please verify your email and phone.',
+      message: 'Account created successfully. You can now sign in.',
       userId,
       email: input.email,
-      requiresVerification: true,
+      requiresVerification: false,
       deploymentMarker: DEPLOYMENT_MARKER,
     };
   } catch (err) {

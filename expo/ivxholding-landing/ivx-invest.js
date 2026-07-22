@@ -378,17 +378,34 @@
           setRegState(REG_STATES.PROFILE_CREATING);
           _investState.userEmail = data.email || email.toLowerCase();
           _investState.userId = data.authUserId || '';
-          // Build a Supabase client for the session step (signIn happens after email confirmation).
+          // Auto-login: email is auto-confirmed server-side, so sign in immediately.
           try {
             _investState._authSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          } catch (sbErr) { console.warn('[IVX Reg] Supabase client init after signup:', sbErr.message); }
-          setRegState(REG_STATES.EMAIL_CONFIRMATION_REQUIRED);
-          if (btn) { btn.textContent = 'Check your email →'; btn.disabled = false; }
-          if (errEl) { errEl.textContent = 'Account created. Check your email to confirm, then continue.'; errEl.style.display = 'block'; }
-          checkInvestAuth();
-          fireAdEvent('complete_registration', { content_name: 'Invest Auth: signup' });
-          clearPendingForm();
-          return;
+            var autoLoginResult = await _investState._authSb.auth.signInWithPassword({
+              email: email.toLowerCase(),
+              password: password
+            });
+            if (autoLoginResult.error) throw autoLoginResult.error;
+            var autoSession = autoLoginResult.data && autoLoginResult.data.session;
+            var autoUser = autoLoginResult.data && autoLoginResult.data.user;
+            _investState.userToken = (autoSession && autoSession.access_token) || '';
+            _investState.userId = (autoUser && autoUser.id) || _investState.userId;
+            setRegState(REG_STATES.COMPLETED);
+            if (btn) { btn.textContent = '✓ Signed in'; btn.disabled = false; }
+            if (errEl) { errEl.textContent = 'Account created! You are now signed in.'; errEl.style.display = 'block'; errEl.style.color = '#22C55E'; }
+            checkInvestAuth();
+            fireAdEvent('complete_registration', { content_name: 'Invest Auth: signup + auto-login' });
+            clearPendingForm();
+            return;
+          } catch (autoLoginErr) {
+            console.warn('[IVX Reg] Auto-login failed, falling back to email confirmation:', autoLoginErr.message);
+            setRegState(REG_STATES.EMAIL_CONFIRMATION_REQUIRED);
+            if (btn) { btn.textContent = 'Sign in →'; btn.disabled = false; }
+            if (errEl) { errEl.textContent = 'Account created. Please sign in to continue.'; errEl.style.display = 'block'; }
+            checkInvestAuth();
+            clearPendingForm();
+            return;
+          }
         }
 
         // Normalized error contract from the orchestrator.

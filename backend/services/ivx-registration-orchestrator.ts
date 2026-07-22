@@ -341,12 +341,12 @@ export async function orchestrateRegistration(
     // Duplicate submission for an already-completed request → return the same result.
     return {
       ok: true,
-      stage: 'EMAIL_CONFIRMATION_REQUIRED',
+      stage: 'COMPLETED',
       registrationRequestId,
       traceId,
       authUserId: existing.authUserId,
       email: normalizedEmail,
-      requiresVerification: true,
+      requiresVerification: false,
       resumeToken: existing.registrationRequestId,
     };
   }
@@ -490,12 +490,12 @@ export async function orchestrateRegistration(
 
       return {
         ok: true,
-        stage: 'EMAIL_CONFIRMATION_REQUIRED',
+        stage: 'COMPLETED',
         registrationRequestId,
         traceId,
         authUserId,
         email: normalizedEmail,
-        requiresVerification: result.requiresVerification,
+        requiresVerification: false,
         resumeToken: registrationRequestId,
       };
     }
