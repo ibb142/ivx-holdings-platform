@@ -1,9 +1,31 @@
+/**
+ * Safe numeric value: returns 0 for null/undefined/NaN/invalid.
+ * Use this as the first gate before any formatter to prevent $NaN.
+ */
+export const safeNumber = (value: unknown): number => {
+  if (value === null || value === undefined || value === '') return 0;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+/**
+ * Checks if a numeric value is present and valid (not null/undefined/NaN).
+ * Returns true ONLY when the value exists and is a finite number.
+ */
+export const isValidNumber = (value: unknown): value is number => {
+  if (value === null || value === undefined || value === '') return false;
+  const num = Number(value);
+  return Number.isFinite(num);
+};
+
 export const formatCurrency = (amount: number, compact = false): string => {
+  // Guard against NaN/undefined/null — never render "$NaN"
+  const safe = Number.isFinite(amount) ? amount : 0;
   if (compact) {
-    if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(2)}B`;
-    if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
-    if (amount >= 1000) return `${(amount / 1000).toFixed(1)}K`;
-    return `${amount.toFixed(2)}`;
+    if (safe >= 1000000000) return `${(safe / 1000000000).toFixed(2)}B`;
+    if (safe >= 1000000) return `${(safe / 1000000).toFixed(2)}M`;
+    if (safe >= 1000) return `${(safe / 1000).toFixed(1)}K`;
+    return `${safe.toFixed(2)}`;
   }
 
   return new Intl.NumberFormat('en-US', {
@@ -11,54 +33,60 @@ export const formatCurrency = (amount: number, compact = false): string => {
     currency: 'USD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(safe);
 };
 
 export const formatCurrencyWithDecimals = (amount: number): string => {
+  const safe = Number.isFinite(amount) ? amount : 0;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
-};
-
-export const formatNumber = (value: number): string => {
-  return new Intl.NumberFormat('en-US').format(value);
-};
-
-export const formatCompactNumber = (value: number): string => {
-  if (value >= 1000000000) return `${(value / 1000000000).toFixed(1)}B`;
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-  return new Intl.NumberFormat('en-US').format(value);
+  }).format(safe);
 };
 
 export const formatCurrencyCompact = (amount: number): string => {
-  if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(2)}B`;
-  if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
-  if (amount >= 1000) return `${new Intl.NumberFormat('en-US').format(Math.round(amount))}`;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  const safe = Number.isFinite(amount) ? amount : 0;
+  if (safe >= 1000000000) return `${(safe / 1000000000).toFixed(2)}B`;
+  if (safe >= 1000000) return `${(safe / 1000000).toFixed(2)}M`;
+  if (safe >= 1000) return `${new Intl.NumberFormat('en-US').format(Math.round(safe))}`;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(safe);
 };
 
 export const formatDollar = (amount: number): string => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  const safe = Number.isFinite(amount) ? amount : 0;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(safe);
 };
 
 export const formatDollarWhole = (amount: number): string => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+  const safe = Number.isFinite(amount) ? amount : 0;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(safe);
 };
 
 export const formatDollarCompact = (amount: number): string => {
-  if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(2)}B`;
-  if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
-  if (amount >= 1000) return `${new Intl.NumberFormat('en-US').format(Math.round(amount))}`;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  const safe = Number.isFinite(amount) ? amount : 0;
+  if (safe >= 1000000000) return `${(safe / 1000000000).toFixed(2)}B`;
+  if (safe >= 1000000) return `${(safe / 1000000).toFixed(2)}M`;
+  if (safe >= 1000) return `${new Intl.NumberFormat('en-US').format(Math.round(safe))}`;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(safe);
+};
+
+export const formatNumber = (value: number): string => {
+  const safe = Number.isFinite(value) ? value : 0;
+  return new Intl.NumberFormat('en-US').format(safe);
+};
+
+export const formatCompactNumber = (value: number): string => {
+  const safe = Number.isFinite(value) ? value : 0;
+  if (safe >= 1000000000) return `${(safe / 1000000000).toFixed(1)}B`;
+  if (safe >= 1000000) return `${(safe / 1000000).toFixed(1)}M`;
+  if (safe >= 1000) return `${(safe / 1000).toFixed(1)}K`;
+  return new Intl.NumberFormat('en-US').format(safe);
 };
 
 export const formatDate = (dateString: string): string => {
   const { formatTimestamp, loadTimezoneProfile } = require('./time-service');
-  // Synchronous fallback for immediate rendering, async for timezone-aware
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
     month: 'short',
@@ -121,7 +149,31 @@ export const formatRelativeTime = (dateString: string): string => {
 };
 
 export const formatPercentage = (value: number, decimals = 2): string => {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+  const safe = Number.isFinite(value) ? value : 0;
+  return `${safe >= 0 ? '+' : ''}${safe.toFixed(decimals)}%`;
+};
+
+/**
+ * Safe percentage formatter — never renders "NaN%" or "undefined%".
+ * Returns "Not entered" when the value is missing, "Invalid data" when malformed.
+ */
+export const formatPercentageSafe = (value: unknown, decimals = 2): string => {
+  if (value === null || value === undefined || value === '') return 'Not entered';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 'Invalid data';
+  return `${num >= 0 ? '+' : ''}${num.toFixed(decimals)}%`;
+};
+
+/**
+ * Safe currency formatter — never renders "$NaN" or "$undefined".
+ * Returns "Not entered" when the value is missing, "Invalid data" when malformed.
+ * Confirmed zero → "$0".
+ */
+export const formatCurrencySafe = (value: unknown, compact = false): string => {
+  if (value === null || value === undefined || value === '') return 'Not entered';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 'Invalid data';
+  return formatCurrency(num, compact);
 };
 
 export const formatPhoneNumber = (phone: string): string => {
@@ -136,19 +188,22 @@ export const formatPhoneNumber = (phone: string): string => {
 };
 
 export const truncateText = (text: string, maxLength: number): string => {
+  if (!text) return '';
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 3)}...`;
 };
 
 export const capitalize = (text: string): string => {
+  if (!text) return '';
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 };
 
 export const formatFileSize = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  const safe = Number.isFinite(bytes) ? bytes : 0;
+  if (safe < 1024) return `${safe} B`;
+  if (safe < 1024 * 1024) return `${(safe / 1024).toFixed(1)} KB`;
+  if (safe < 1024 * 1024 * 1024) return `${(safe / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(safe / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 };
 
 export const formatAmountInput = (value: string): string => {
