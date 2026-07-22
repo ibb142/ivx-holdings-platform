@@ -252,7 +252,12 @@ export async function handleRegistrationStatusRequest(request: Request): Promise
 }
 
 // GET /api/ivx/registration/health
-export async function handleRegistrationHealthRequest(_request: Request): Promise<Response> {
+export async function handleRegistrationHealthRequest(request: Request): Promise<Response> {
+  const authHeader = request.headers.get('Authorization') || '';
+  const hasBearer = /^Bearer\s+.+$/i.test(authHeader);
+  if (!hasBearer) {
+    return jsonResponse({ ok: false, message: 'Owner authentication required for health.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
+  }
   const health = await checkRegistrationHealth();
   return jsonResponse(health, health.status === 'healthy' ? 200 : 503);
 }

@@ -43,7 +43,8 @@
  */
 
 import React, { memo, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { TrendingUp, TrendingDown } from 'lucide-react-native';
 import { useRouter, Href } from 'expo-router';
 import { Holding } from '@/types';

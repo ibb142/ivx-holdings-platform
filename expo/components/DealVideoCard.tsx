@@ -7,7 +7,8 @@
  * with a gold "View Deal" / "Invest Now" CTA.
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, Alert, AppState, Image, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Alert, AppState, Platform, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import SafeVideo from './SafeVideo';
