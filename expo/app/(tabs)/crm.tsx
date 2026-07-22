@@ -42,6 +42,7 @@ import {
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
+import { Skeleton, ListItemSkeleton } from '@/components/SkeletonLoader';
 import { listInvestors } from '@/src/modules/ivx-developer/investorCrmService';
 import { listPipelineEntries } from '@/src/modules/ivx-developer/capitalPipelineService';
 import { listOutreachMessages } from '@/src/modules/ivx-developer/outreachService';
@@ -222,8 +223,8 @@ export default function CrmScreen() {
         <View style={styles.statsRow}>
           {STAT_TILES.map((tile) => (
             <View key={tile.key} style={styles.statTile} testID={`crm-stat-${tile.key}`}>
-              {badgesQuery.isLoading ? (
-                <ActivityIndicator color={Colors.gold} size="small" />
+              {badgesQuery.isLoading && !badges ? (
+                <Skeleton width={40} height={20} borderRadius={6} />
               ) : (
                 <Text style={styles.statValue}>{badges ? badges[tile.key] : 0}</Text>
               )}
@@ -231,6 +232,14 @@ export default function CrmScreen() {
             </View>
           ))}
         </View>
+
+        {badgesQuery.isLoading && !badges && (
+          <View style={{ paddingHorizontal: 0, gap: 8 }}>
+            {[1, 2, 3].map((i) => (
+              <ListItemSkeleton key={i} />
+            ))}
+          </View>
+        )
 
         {badgesQuery.isError && (
           <Text style={styles.errorNote}>

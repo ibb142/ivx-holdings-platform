@@ -293,7 +293,7 @@ const TrustDealCard = memo(function TrustDealCard({
           </View>
           {verifiedCount >= 3 && (
             <View style={styles.verifiedBadgeOverlay}>
-              <Shield size={10} color="#00C48C" />
+              <Shield size={10} color={Colors.success} />
               <Text style={styles.verifiedBadgeText}>VERIFIED</Text>
             </View>
           )}
@@ -364,13 +364,13 @@ const TrustDealCard = memo(function TrustDealCard({
         <View style={styles.trustIndicators}>
           {trust.titleVerified && (
             <View style={styles.trustBadge}>
-              <CheckCircle2 size={10} color="#00C48C" />
+              <CheckCircle2 size={10} color={Colors.success} />
               <Text style={styles.trustBadgeText}>Title Verified</Text>
             </View>
           )}
           {trust.insuranceCoverage && (
             <View style={styles.trustBadge}>
-              <Shield size={10} color="#4A90D9" />
+              <Shield size={10} color={Colors.info} />
               <Text style={styles.trustBadgeText}>Insured</Text>
             </View>
           )}
@@ -382,7 +382,7 @@ const TrustDealCard = memo(function TrustDealCard({
           )}
           {trust.permitStatus === 'approved' && (
             <View style={styles.trustBadge}>
-              <FileText size={10} color="#00C48C" />
+              <FileText size={10} color={Colors.success} />
               <Text style={styles.trustBadgeText}>Permitted</Text>
             </View>
           )}
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: Colors.overlay,
   },
   photoDotActive: {
     width: 18,
@@ -468,13 +468,13 @@ const styles = StyleSheet.create({
     position: 'absolute' as const,
     bottom: 10,
     right: 10,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: Colors.overlay,
     borderRadius: 10,
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
   photoCounterText: {
-    color: '#FFFFFF',
+    color: Colors.white,
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.3,
@@ -486,9 +486,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(0,196,140,0.2)',
+    backgroundColor: Colors.success + '20',
     borderWidth: 1,
-    borderColor: 'rgba(0,196,140,0.4)',
+    borderColor: Colors.success + '40',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -497,10 +497,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00C48C',
+    backgroundColor: Colors.success,
   },
   liveBadgeText: {
-    color: '#00C48C',
+    color: Colors.success,
     fontSize: 9,
     fontWeight: '900' as const,
     letterSpacing: 1.5,
@@ -512,15 +512,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0,196,140,0.15)',
+    backgroundColor: Colors.success + '15',
     borderWidth: 1,
-    borderColor: 'rgba(0,196,140,0.3)',
+    borderColor: Colors.success + '30',
     borderRadius: 10,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
   verifiedBadgeText: {
-    color: '#00C48C',
+    color: Colors.success,
     fontSize: 9,
     fontWeight: '800' as const,
     letterSpacing: 0.5,
@@ -549,9 +549,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     maxWidth: 130,
     alignItems: 'flex-end',
-    backgroundColor: 'rgba(255, 215, 0, 0.08)',
+    backgroundColor: Colors.gold + '08',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.24)',
+    borderColor: Colors.gold + '24',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   salePriceChipSubtext: {
-    color: '#00C48C',
+    color: Colors.success,
     fontSize: 11,
     fontWeight: '700' as const,
     marginTop: 4,
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   investBtnText: {
-    color: '#000',
+    color: Colors.black,
     fontSize: 15,
     fontWeight: '900' as const,
   },

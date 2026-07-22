@@ -171,7 +171,7 @@ export default function InvestScreen() {
     <View style={styles.liveJvSection}>
       <View style={styles.liveJvHeader}>
         <View style={styles.liveJvTitleRow}>
-          <Handshake size={20} color="#FFD700" />
+          <Handshake size={20} color={Colors.gold} />
           <Text style={styles.liveJvSectionTitle}>Investment Opportunities</Text>
         </View>
         {opportunitiesCount > 0 && (
@@ -314,14 +314,14 @@ export default function InvestScreen() {
           <View style={styles.profitToolsInner}>
             <View style={styles.profitToolsLeft}>
               <View style={styles.profitToolsIconRow}>
-                <View style={[styles.profitToolsMiniIcon, { backgroundColor: '#00C48C20' }]}>
-                  <Shield size={14} color="#00C48C" />
+                <View style={[styles.profitToolsMiniIcon, { backgroundColor: Colors.success + '20' }]}>
+                  <Shield size={14} color={Colors.success} />
                 </View>
-                <View style={[styles.profitToolsMiniIcon, { backgroundColor: '#FFD70020' }]}>
-                  <TrendingUp size={14} color="#FFD700" />
+                <View style={[styles.profitToolsMiniIcon, { backgroundColor: Colors.gold + '20' }]}>
+                  <TrendingUp size={14} color={Colors.gold} />
                 </View>
-                <View style={[styles.profitToolsMiniIcon, { backgroundColor: '#4A90D920' }]}>
-                  <Star size={14} color="#4A90D9" />
+                <View style={[styles.profitToolsMiniIcon, { backgroundColor: Colors.info + '20' }]}>
+                  <Star size={14} color={Colors.info} />
                 </View>
               </View>
               <Text style={styles.profitToolsTitle}>10 Profit Tools</Text>
@@ -332,7 +332,7 @@ export default function InvestScreen() {
               <Text style={styles.profitToolsReturnLabel}>Annual Returns</Text>
               <View style={styles.profitToolsCta}>
                 <Text style={styles.profitToolsCtaText}>Explore</Text>
-                <ChevronRight size={14} color="#000" />
+                <ChevronRight size={14} color={Colors.black} />
               </View>
             </View>
           </View>
@@ -448,9 +448,9 @@ export default function InvestScreen() {
           </View>
           <View style={styles.guaranteeList}>
             {[
-              { icon: <FileText size={16} color="#4ECDC4" />, text: t('guaranteeTitleLien') },
+              { icon: <FileText size={16} color={Colors.teal} />, text: t('guaranteeTitleLien') },
               { icon: <CheckCircle2 size={16} color={Colors.success} />, text: t('guaranteeEquity') },
-              { icon: <Eye size={16} color="#45B7D1" />, text: t('guaranteeIdentity') },
+              { icon: <Eye size={16} color={Colors.info} />, text: t('guaranteeIdentity') },
               { icon: <DollarSign size={16} color={Colors.primary} />, text: t('guaranteeRental') },
             ].map((item, i) => (
               <View key={i} style={styles.guaranteeItem}>
@@ -645,10 +645,10 @@ const styles = StyleSheet.create({
   profitToolsCard: {
     marginHorizontal: 20,
     marginBottom: 16,
-    backgroundColor: '#0A1628',
+    backgroundColor: Colors.background,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#4A90D930',
+    borderColor: Colors.info + '30',
     overflow: 'hidden',
   },
   profitToolsInner: {
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   debtAcquisitionGradient: {
-    backgroundColor: '#0D2818',
+    backgroundColor: Colors.backgroundSecondary,
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   landPartnerGradient: {
-    backgroundColor: '#1A1500',
+    backgroundColor: Colors.backgroundSecondary,
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
@@ -1064,7 +1064,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#00C48C20',
+    backgroundColor: Colors.success + '20',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1073,7 +1073,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#00C48C',
+    backgroundColor: Colors.success,
   },
   liveJvGallery: {
     position: 'relative' as const,
@@ -1098,7 +1098,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: Colors.overlay,
   },
   liveJvPhotoDotActive: {
     width: 18,
@@ -1112,13 +1112,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: Colors.overlay,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   liveJvPhotoCountText: {
-    color: '#fff',
+    color: Colors.white,
     fontSize: 10,
     fontWeight: '700' as const,
   },
@@ -1129,9 +1129,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(0,196,140,0.2)',
+    backgroundColor: Colors.success + '20',
     borderWidth: 1,
-    borderColor: 'rgba(0,196,140,0.4)',
+    borderColor: Colors.success + '40',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1140,10 +1140,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00C48C',
+    backgroundColor: Colors.success,
   },
   liveJvLiveBadgeOverlayText: {
-    color: '#00C48C',
+    color: Colors.success,
     fontSize: 9,
     fontWeight: '900' as const,
     letterSpacing: 1.5,
@@ -1195,7 +1195,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   liveJvBadgeText: {
-    color: '#00C48C',
+    color: Colors.success,
     fontSize: 11,
     fontWeight: '800' as const,
     letterSpacing: 0.5,
@@ -1228,13 +1228,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   liveJvTypeBadge: {
-    backgroundColor: '#FFD70015',
+    backgroundColor: Colors.gold + '15',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   liveJvTypeText: {
-    color: '#FFD700',
+    color: Colors.gold,
     fontSize: 11,
     fontWeight: '700' as const,
   },
@@ -1242,13 +1242,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#00C48C15',
+    backgroundColor: Colors.success + '15',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   liveJvRoiText: {
-    color: '#00C48C',
+    color: Colors.success,
     fontSize: 11,
     fontWeight: '700' as const,
   },
@@ -1333,7 +1333,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   liveJvInvestBtnText: {
-    color: '#000',
+    color: Colors.black,
     fontSize: 13,
     fontWeight: '800' as const,
   },
@@ -1348,7 +1348,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   liveJvQuickBuyBtnText: {
-    color: '#000',
+    color: Colors.black,
     fontSize: 13,
     fontWeight: '800' as const,
   },

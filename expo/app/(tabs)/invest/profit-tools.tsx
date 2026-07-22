@@ -54,8 +54,8 @@ interface ProfitTool {
 const TOOLS: ProfitTool[] = [
   {
     id: 1,
-    iconBg: '#00C48C20',
-    accentColor: '#00C48C',
+    iconBg: Colors.success + '20',
+    accentColor: Colors.success,
     title: 'Private Mortgage Lending',
     subtitle: 'Lend directly against real estate with 1st lien protection',
     stats: [
@@ -77,8 +77,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 2,
-    iconBg: '#FFD70020',
-    accentColor: '#FFD700',
+    iconBg: Colors.gold + '20',
+    accentColor: Colors.gold,
     title: 'Fractional Property Ownership',
     subtitle: 'Own shares of premium income-generating properties',
     stats: [
@@ -100,8 +100,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 3,
-    iconBg: '#4A90D920',
-    accentColor: '#4A90D9',
+    iconBg: Colors.info + '20',
+    accentColor: Colors.info,
     title: 'Tokenized Debt Acquisition',
     subtitle: 'Buy discounted mortgage notes at 60–80 cents on the dollar',
     stats: [
@@ -123,8 +123,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 4,
-    iconBg: '#FFD70020',
-    accentColor: '#FFD700',
+    iconBg: Colors.gold + '20',
+    accentColor: Colors.gold,
     title: 'Land Partnership Program',
     subtitle: 'Partner with developers — land + capital = profit split',
     stats: [
@@ -146,8 +146,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 5,
-    iconBg: '#4ECDC420',
-    accentColor: '#4ECDC4',
+    iconBg: Colors.teal + '20',
+    accentColor: Colors.teal,
     title: 'Rental Income Sharing',
     subtitle: 'Earn passive monthly distributions from rental cash flow',
     stats: [
@@ -169,8 +169,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 6,
-    iconBg: '#FF6B3520',
-    accentColor: '#FF6B35',
+    iconBg: Colors.coral + '20',
+    accentColor: Colors.coral,
     title: 'Bridge Loan Financing',
     subtitle: 'Short-term high-yield loans for fix-and-flip investors',
     stats: [
@@ -192,8 +192,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 7,
-    iconBg: '#00C48C20',
-    accentColor: '#00C48C',
+    iconBg: Colors.success + '20',
+    accentColor: Colors.success,
     title: 'Auto-Reinvestment Engine',
     subtitle: 'Compound your returns automatically — set and forget',
     stats: [
@@ -215,8 +215,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 8,
-    iconBg: '#A78BFA20',
-    accentColor: '#A78BFA',
+    iconBg: Colors.purple + '20',
+    accentColor: Colors.purple,
     title: 'Copy Investing',
     subtitle: 'Mirror the exact portfolio of top-performing investors',
     stats: [
@@ -238,8 +238,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 9,
-    iconBg: '#FFD70020',
-    accentColor: '#FFD700',
+    iconBg: Colors.gold + '20',
+    accentColor: Colors.gold,
     title: 'IVXHOLDINGS Yield Farming',
     subtitle: 'Earn a share of all platform transaction fees via IVXHOLDINGS holdings',
     stats: [
@@ -261,8 +261,8 @@ const TOOLS: ProfitTool[] = [
   },
   {
     id: 10,
-    iconBg: '#F59E0B20',
-    accentColor: '#F59E0B',
+    iconBg: Colors.warning + '20',
+    accentColor: Colors.warning,
     title: 'Smart Portfolio Builder',
     subtitle: 'AI builds and rebalances your ideal investment mix',
     stats: [
@@ -285,22 +285,22 @@ const TOOLS: ProfitTool[] = [
 ];
 
 const TOOL_ICONS: Record<number, React.ReactNode> = {
-  1: <Building2 size={26} color="#00C48C" />,
-  2: <Layers size={26} color="#FFD700" />,
-  3: <DollarSign size={26} color="#4A90D9" />,
-  4: <Handshake size={26} color="#FFD700" />,
-  5: <Home size={26} color="#4ECDC4" />,
-  6: <Zap size={26} color="#FF6B35" />,
-  7: <RefreshCw size={26} color="#00C48C" />,
-  8: <Copy size={26} color="#A78BFA" />,
-  9: <TrendingUp size={26} color="#FFD700" />,
-  10: <Brain size={26} color="#F59E0B" />,
+  1: <Building2 size={26} color={Colors.success} />,
+  2: <Layers size={26} color={Colors.gold} />,
+  3: <DollarSign size={26} color={Colors.info} />,
+  4: <Handshake size={26} color={Colors.gold} />,
+  5: <Home size={26} color={Colors.teal} />,
+  6: <Zap size={26} color={Colors.coral} />,
+  7: <RefreshCw size={26} color={Colors.success} />,
+  8: <Copy size={26} color={Colors.purple} />,
+  9: <TrendingUp size={26} color={Colors.gold} />,
+  10: <Brain size={26} color={Colors.warning} />,
 };
 
 const AUDIENCE_COLORS = {
-  lender: { bg: '#00C48C20', text: '#00C48C', label: 'Private Lender' },
-  investor: { bg: '#FFD70020', text: '#FFD700', label: 'Regular Investor' },
-  both: { bg: '#4A90D920', text: '#4A90D9', label: 'Lender & Investor' },
+  lender: { bg: Colors.success + '20', text: Colors.success, label: 'Private Lender' },
+  investor: { bg: Colors.gold + '20', text: Colors.gold, label: 'Regular Investor' },
+  both: { bg: Colors.info + '20', text: Colors.info, label: 'Lender & Investor' },
 };
 
 function ToolCard({ tool, onPress }: { tool: ProfitTool; onPress: () => void }) {
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     margin: 20,
-    backgroundColor: '#0D1F0D',
+    backgroundColor: Colors.backgroundSecondary,
     borderRadius: 22,
     padding: 24,
     borderWidth: 1,
@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: Colors.overlay,
   },
   modalSheet: {
     backgroundColor: Colors.surface,

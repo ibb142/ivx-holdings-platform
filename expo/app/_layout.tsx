@@ -21,6 +21,7 @@ import { WalletProvider } from "@/lib/wallet-context";
 import { EarnProvider } from "@/lib/earn-context";
 import { EmailProvider } from "@/lib/email-context";
 import { NetworkProvider } from "@/lib/network-context";
+import Colors from "@/constants/colors";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -220,7 +221,7 @@ export default function RootLayout() {
                                 <Stack
                                   screenOptions={{
                                     headerShown: false,
-                                    contentStyle: { backgroundColor: "#0A0A0F" },
+                                    contentStyle: { backgroundColor: Colors.background },
                                   }}
                                 >
                                   <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -256,42 +257,42 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#0A0A0F" },
+  root: { flex: 1, backgroundColor: Colors.background },
   providerError: {
     flex: 1,
-    backgroundColor: "#0A0A0F",
+    backgroundColor: Colors.background,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
   },
   providerErrorName: {
-    color: "#FF6B6B",
+    color: Colors.error,
     fontSize: 16,
     fontWeight: "700" as const,
     marginBottom: 8,
   },
   providerErrorMsg: {
-    color: "#888",
+    color: Colors.textSecondary,
     fontSize: 12,
     fontFamily: "monospace" as const,
     textAlign: "center" as const,
     marginBottom: 8,
   },
   providerErrorTrace: {
-    color: "#555",
+    color: Colors.textTertiary,
     fontSize: 10,
     fontFamily: "monospace" as const,
     textAlign: "center" as const,
     marginBottom: 16,
   },
   providerErrorButton: {
-    backgroundColor: "#FFD700",
+    backgroundColor: Colors.gold,
     borderRadius: 12,
     paddingHorizontal: 32,
     paddingVertical: 14,
   },
   providerErrorButtonText: {
-    color: "#000",
+    color: Colors.black,
     fontSize: 16,
     fontWeight: "700" as const,
   },

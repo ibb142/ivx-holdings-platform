@@ -25,6 +25,9 @@ const error = '#FF4D4D' as const;
 const success = '#00C48C' as const;
 const warning = '#F59E0B' as const;
 const info = '#4A90D9' as const;
+const teal = '#4ECDC4' as const;
+const coral = '#FF6B35' as const;
+const purple = '#A78BFA' as const;
 
 const tintColorLight = officialGold;
 
@@ -87,6 +90,9 @@ type AppColors = {
   goldLight: string;
   textWhite: string;
   mutedGray: string;
+  teal: string;
+  coral: string;
+  purple: string;
 };
 
 const Colors: AppColors = {
@@ -151,6 +157,9 @@ const Colors: AppColors = {
   goldLight,
   textWhite,
   mutedGray,
+  teal,
+  coral,
+  purple,
 };
 
 export default Colors;

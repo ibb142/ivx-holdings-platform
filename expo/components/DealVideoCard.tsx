@@ -252,23 +252,23 @@ export default function DealVideoCard({ video }: { video: FeedVideo }) {
             testID={`deal-video-player-${video.id}`}
           />
         ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#111' }]}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surfaceElevated }]}>
             {posterUri ? (
               <React.Fragment>
                 <Image source={{ uri: posterUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 <View style={styles.playOverlay}>
                   <View style={styles.playCircle}>
-                    <Play size={20} color="#000" fill="#000" />
+                    <Play size={20} color={Colors.black} fill={Colors.black} />
                   </View>
                 </View>
               </React.Fragment>
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a1a' }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surfaceElevated }]} />
             )}
           </View>
         )}
         <TouchableOpacity style={styles.muteBtn} onPress={toggleMute} testID={`deal-video-mute-${video.id}`}>
-          {isMuted ? <VolumeX size={14} color="#fff" /> : <Volume2 size={14} color="#fff" />}
+          {isMuted ? <VolumeX size={14} color={Colors.white} /> : <Volume2 size={14} color={Colors.white} />}
         </TouchableOpacity>
       </TouchableOpacity>
 
@@ -277,21 +277,21 @@ export default function DealVideoCard({ video }: { video: FeedVideo }) {
         <TouchableOpacity onPress={handleLike} testID={`deal-video-like-${video.id}`}>
           <Heart
             size={24}
-            color={liked ? Colors.error : '#fff'}
+            color={liked ? Colors.error : Colors.white}
             fill={liked ? Colors.error : 'transparent'}
           />
         </TouchableOpacity>
         <TouchableOpacity onPress={handleComment} testID={`deal-video-comment-${video.id}`}>
-          <MessageCircle size={24} color="#fff" />
+          <MessageCircle size={24} color={Colors.white} />
         </TouchableOpacity>
         <TouchableOpacity onPress={handleShare} testID={`deal-video-share-${video.id}`}>
-          <Send size={24} color="#fff" />
+          <Send size={24} color={Colors.white} />
         </TouchableOpacity>
         <View style={styles.railSpacer} />
         <TouchableOpacity onPress={handleSave} testID={`deal-video-save-${video.id}`}>
           <Bookmark
             size={24}
-            color={saved ? Colors.primary : '#fff'}
+            color={saved ? Colors.primary : Colors.white}
             fill={saved ? Colors.primary : 'transparent'}
           />
         </TouchableOpacity>
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '66',
   },
   avatarText: {
-    color: '#000',
+    color: Colors.black,
     fontSize: 10,
     fontWeight: '900' as const,
   },
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   },
   media: {
     height: MEDIA_HEIGHT,
-    backgroundColor: '#000',
+    backgroundColor: Colors.background,
   },
   muteBtn: {
     position: 'absolute' as const,
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: Colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: Colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   investNowText: {
-    color: '#000',
+    color: Colors.black,
     fontSize: 14,
     fontWeight: '800' as const,
   },
@@ -523,13 +523,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: Colors.overlay,
   },
   playCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: Colors.surfaceLight,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
