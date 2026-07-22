@@ -41,6 +41,9 @@ type DeveloperDeployAction =
   | 'github_create_rollback_tag'
   | 'github_dispatch_workflow'
   | 'github_create_repository'
+  | 'github_list_workflow_runs'
+  | 'github_get_workflow_run'
+  | 'verify_url_sha256'
   | 'render_trigger_deploy'
   | 'render_restart_service'
   | 'render_upsert_env_var'
@@ -116,6 +119,9 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'github_create_rollback_tag'
     || normalized === 'github_dispatch_workflow'
     || normalized === 'github_create_repository'
+    || normalized === 'github_list_workflow_runs'
+    || normalized === 'github_get_workflow_run'
+    || normalized === 'verify_url_sha256'
     || normalized === 'render_trigger_deploy'
     || normalized === 'render_restart_service'
     || normalized === 'render_upsert_env_var'
@@ -143,7 +149,11 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
 
 /** Read-only actions that inspect state without mutating anything; no owner confirmation required. */
 function isReadOnlyAction(action: DeveloperDeployAction): boolean {
-  return action === 'github_pull_request_status' || action === 'get_supabase_auth_config';
+  return action === 'github_pull_request_status'
+    || action === 'get_supabase_auth_config'
+    || action === 'github_list_workflow_runs'
+    || action === 'github_get_workflow_run'
+    || action === 'verify_url_sha256';
 }
 
 /** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
@@ -1225,6 +1235,174 @@ async function runGithubDispatchWorkflow(input: Record<string, unknown>): Promis
   };
 }
 
+function mapWorkflowRun(run: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: typeof run.id === 'number' ? run.id : null,
+    name: readTrimmed(run.name) || null,
+    status: readTrimmed(run.status) || null,
+    conclusion: readTrimmed(run.conclusion) || null,
+    event: readTrimmed(run.event) || null,
+    headSha: readTrimmed(run.head_sha) || null,
+    headBranch: readTrimmed(run.head_branch) || null,
+    runNumber: typeof run.run_number === 'number' ? run.run_number : null,
+    htmlUrl: readTrimmed(run.html_url) || null,
+    createdAt: readTrimmed(run.created_at) || null,
+    updatedAt: readTrimmed(run.updated_at) || null,
+  };
+}
+
+/** Read-only: lists recent GitHub Actions runs so the runtime can observe CI state. */
+export async function runGithubListWorkflowRuns(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const workflowId = readTrimmed(input.workflowId) || readTrimmed(input.workflowFileName);
+  const perPageRaw = Number(input.perPage);
+  const perPage = Number.isFinite(perPageRaw) && perPageRaw >= 1 ? Math.min(Math.trunc(perPageRaw), 20) : 5;
+  const baseUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`;
+  const url = workflowId
+    ? `${baseUrl}/actions/workflows/${encodeURIComponent(workflowId)}/runs?per_page=${perPage}`
+    : `${baseUrl}/actions/runs?per_page=${perPage}`;
+  const response = await fetchJson(url, { method: 'GET', headers: await githubHeaders() });
+  if (!response.ok) {
+    throw new Error(`GitHub workflow runs lookup failed with HTTP ${response.status}.`);
+  }
+  const data = readRecord(response.data);
+  const rawRuns = Array.isArray(data.workflow_runs) ? data.workflow_runs : [];
+  return {
+    provider: 'github',
+    action: 'github_list_workflow_runs',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    workflowId: workflowId || null,
+    totalCount: typeof data.total_count === 'number' ? data.total_count : rawRuns.length,
+    runs: rawRuns.map((run) => mapWorkflowRun(readRecord(run))),
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: fetches one GitHub Actions run with per-job, per-step results so the runtime can diagnose CI failures. */
+export async function runGithubGetWorkflowRun(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const runIdRaw = Number(input.runId);
+  const runId = Number.isFinite(runIdRaw) ? Math.trunc(runIdRaw) : 0;
+  if (runId <= 0) {
+    throw new Error('runId (numeric GitHub Actions run id) is required.');
+  }
+  const baseUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`;
+  const headers = await githubHeaders();
+  const runResponse = await fetchJson(`${baseUrl}/actions/runs/${runId}`, { method: 'GET', headers });
+  if (!runResponse.ok) {
+    throw new Error(`GitHub workflow run lookup failed with HTTP ${runResponse.status}.`);
+  }
+  const jobsResponse = await fetchJson(`${baseUrl}/actions/runs/${runId}/jobs?per_page=20`, { method: 'GET', headers });
+  const jobsData = readRecord(jobsResponse.data);
+  const rawJobs = Array.isArray(jobsData.jobs) ? jobsData.jobs : [];
+  const jobs = rawJobs.map((jobValue) => {
+    const job = readRecord(jobValue);
+    const rawSteps = Array.isArray(job.steps) ? job.steps : [];
+    return {
+      name: readTrimmed(job.name) || null,
+      status: readTrimmed(job.status) || null,
+      conclusion: readTrimmed(job.conclusion) || null,
+      startedAt: readTrimmed(job.started_at) || null,
+      completedAt: readTrimmed(job.completed_at) || null,
+      steps: rawSteps.map((stepValue) => {
+        const step = readRecord(stepValue);
+        return {
+          number: typeof step.number === 'number' ? step.number : null,
+          name: readTrimmed(step.name) || null,
+          status: readTrimmed(step.status) || null,
+          conclusion: readTrimmed(step.conclusion) || null,
+        };
+      }),
+    };
+  });
+  return {
+    provider: 'github',
+    action: 'github_get_workflow_run',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    runId,
+    run: mapWorkflowRun(readRecord(runResponse.data)),
+    jobs,
+    jobsHttpStatus: jobsResponse.status,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+const ARTIFACT_VERIFY_HOST_SUFFIXES = ['ivxholding.com', 'github.com', 'githubusercontent.com', 'amazonaws.com', 'supabase.co', 'cloudfront.net'];
+const MAX_ARTIFACT_VERIFY_BYTES = 524_288_000;
+
+/** Read-only: streams an artifact URL and returns its SHA-256 so releases can be verified without trusting the client. */
+export async function runVerifyUrlSha256(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { createHash } = await import('node:crypto');
+  const url = readTrimmed(input.url);
+  const expectedSha256 = readTrimmed(input.expectedSha256).toLowerCase();
+  if (!url.startsWith('https://')) {
+    throw new Error('An https:// artifact URL is required.');
+  }
+  let hostname = '';
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    throw new Error('Invalid artifact URL.');
+  }
+  const hostAllowed = ARTIFACT_VERIFY_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
+  if (!hostAllowed) {
+    throw new Error(`Host "${hostname}" is not in the artifact verification allowlist.`);
+  }
+  const response = await fetch(url, { method: 'GET', redirect: 'follow' });
+  if (!response.ok || !response.body) {
+    return {
+      provider: 'artifact-verification',
+      action: 'verify_url_sha256',
+      ok: false,
+      url,
+      httpStatus: response.status,
+      error: `Artifact fetch failed with HTTP ${response.status}.`,
+      readOnly: true,
+      secretValuesReturned: false,
+      timestamp: nowIso(),
+    };
+  }
+  const hash = createHash('sha256');
+  const reader = response.body.getReader();
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      bytes += value.byteLength;
+      if (bytes > MAX_ARTIFACT_VERIFY_BYTES) {
+        await reader.cancel();
+        throw new Error('Artifact exceeds the 500 MB verification limit.');
+      }
+      hash.update(value);
+    }
+  }
+  const sha256 = hash.digest('hex');
+  return {
+    provider: 'artifact-verification',
+    action: 'verify_url_sha256',
+    ok: true,
+    url,
+    httpStatus: response.status,
+    contentType: response.headers.get('content-type'),
+    bytes,
+    sha256,
+    expectedSha256: expectedSha256 || null,
+    match: expectedSha256 ? sha256 === expectedSha256 : null,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 async function getRenderApiKey(): Promise<string> {
   const apiKey = readEnv('RENDER_API_KEY') || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY');
   if (!apiKey) {
@@ -1604,8 +1782,9 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository'],
-      readOnlyActions: ['github_pull_request_status'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'verify_url_sha256'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'verify_url_sha256'],
+      ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
     },
@@ -1784,6 +1963,15 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   if (action === 'github_create_repository') {
     return await runGithubCreateRepository(input);
   }
+  if (action === 'github_list_workflow_runs') {
+    return await runGithubListWorkflowRuns(input);
+  }
+  if (action === 'github_get_workflow_run') {
+    return await runGithubGetWorkflowRun(input);
+  }
+  if (action === 'verify_url_sha256') {
+    return await runVerifyUrlSha256(input);
+  }
   if (action === 'render_trigger_deploy') {
     return await runRenderTriggerDeploy(input);
   }
@@ -1885,7 +2073,7 @@ export async function handleIVXDeveloperDeployActionRequest(request: Request): P
     const action = normalizeAction(body.action);
     const input = readRecord(body.input);
     const requiredText = requiredConfirmationText(action);
-    if (body.confirm !== true || readTrimmed(body.confirmText) !== requiredText) {
+    if (!isReadOnlyAction(action) && (body.confirm !== true || readTrimmed(body.confirmText) !== requiredText)) {
       return ownerOnlyJson({
         ok: false,
         ownerOnly: true,
@@ -1899,7 +2087,9 @@ export async function handleIVXDeveloperDeployActionRequest(request: Request): P
       }, 409);
     }
 
-    assertConfirmed(action, body);
+    if (!isReadOnlyAction(action)) {
+      assertConfirmed(action, body);
+    }
     // ─── Pre-Execution Feasibility Gate (Stage 0) ───────────────────────────
     // Runs BEFORE runAction executes any deploy/migration/push. Owner session is
     // verified above (assertIVXOwnerOnly succeeded), so ownerSessionPresent=true.

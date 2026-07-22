@@ -431,3 +431,29 @@ createdAt: 2026-07-21T18:08:36.341Z
 - LIMITING_RESOURCE: single Render web instance request concurrency — server saturates and returns 503 on /health under sustained ≥50 concurrent connections; NOT rate limiting (no 429s observed), NOT the database (landing-config reads kept succeeding at low concurrency)
 - Caveats recorded honestly: single-IP client inflates per-connection latency vs distributed load; Render CPU/memory internal charts + DB connection counts not accessible from sandbox (owner-dashboard-only); a distributed multi-region load service would be needed for the 500–10,000 stages
 - Recommendation for owner: enable Render autoscaling / min 2 instances before any marketing push; re-run 500+ stages from a distributed load service (e.g. k6 cloud/Artillery) if higher capacity certification is needed
+
+## SENIOR-DEV GAP CLOSURE — CI OBSERVABILITY + ARTIFACT VERIFICATION (COMPLETE, 2026-07-22)
+
+### What was built (all deployed + live-verified on api.ivxholding.com)
+
+- New runtime actions in `backend/api/ivx-developer-deploy-control.ts` (commit `20fed28a7730`, deployed runtime `63493eb56f2f`):
+  - `github_list_workflow_runs` (read-only) — lists recent GitHub Actions runs with normalized status/conclusion/sha fields
+  - `github_get_workflow_run` (read-only) — one run drilled into per-job, per-step results: the CI diagnostic feedback loop
+  - `verify_url_sha256` (read-only) — server-side streaming SHA-256 of any artifact URL (https-only, host allowlist: ivxholding.com/github.com/githubusercontent.com/amazonaws.com/supabase.co/cloudfront.net, 500 MB cap)
+- Activated the previously-dead `isReadOnlyAction` exemption: read-only actions now run WITHOUT a confirm phrase; all write actions still hard-gated (verified live: dispatch without confirm → HTTP 409 with confirmTextRequired)
+- Tests: `backend/ivx-ci-build-runner.test.ts` (commit `f01cc11be19c`) — 7 pass / 1 token-skip / 0 fail locally; regression sweep 109 pass / 0 fail (4 files)
+- CI workflow authored: `.github/workflows/ivx-ci.yml` (backend-tests job with env-free default test set proven 82 pass / 0 fail with zero env vars, + optional Android APK build job with artifact upload + SHA-256 recording); staged in repo at `.github/ivx-ci-staged.yml` (commit `63493eb56f2f`)
+
+### Live proof (2026-07-22, runtime 63493eb56f2f)
+
+- P1 status endpoint advertises readOnlyActions incl. all 3 new actions + ciWorkflow path
+- P2 `github_list_workflow_runs` with NO confirm phrase → HTTP 200, totalCount=715 real runs
+- P3 `github_dispatch_workflow` with NO confirm → HTTP 409 (write gate intact)
+- P6 `github_get_workflow_run` on run 29456974601 → per-step results of 'Render Auto-Deploy on Push' (success)
+- P7 REAL DIAGNOSTIC WIN: drilled into failing 'IVX E2E Acceptance Pipeline' run 29456974517 → exact failing step identified in both jobs: `bun install --frozen-lockfile --cwd expo` (stale expo/bun.lock — actionable fix identified through the runtime's own feedback loop)
+- P8 `verify_url_sha256` on live APK v1.4.36 → 83,404,207 bytes streamed + hashed server-side in 4.9s, sha256 `58463484b6e2001b2cb1479a0fd5ab2afc9c0d2c705198002d59f14dd1f7441f`, match=TRUE vs build-time hash
+
+### Blocked items (owner-only)
+
+- Committing `.github/workflows/ivx-ci.yml` via API fails with GitHub HTTP 404 — isolated definitively: identical content commits fine to `.github/ivx-ci-staged.yml`, so the runtime GITHUB_TOKEN lacks the `workflow` scope. OWNER ACTION: add `workflow` scope (classic PAT) or Workflows read/write permission (fine-grained token) to GITHUB_TOKEN; then one `github_commit_file` call promotes the staged file to `.github/workflows/ivx-ci.yml` and `github_dispatch_workflow` becomes fully usable for self-serve CI builds
+- Known pre-existing CI failure surfaced by the new loop: 'IVX E2E Acceptance Pipeline' fails at `bun install --frozen-lockfile --cwd expo` — fix candidate: refresh committed `expo/bun.lock` or drop `--frozen-lockfile` in that pipeline
