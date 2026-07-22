@@ -43,7 +43,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TIER_ICONS: Record<string, React.ComponentType<any>> = {
   shield: Shield,
   award: Award,
-  crown:   gem: Gem,
+  crown: IVXBrandIcon,
+  gem: Gem,
 };
 
 const TIER_GRADIENTS: Record<VIPTierLevel, [string, string]> = {

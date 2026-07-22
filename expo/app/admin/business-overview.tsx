@@ -32,12 +32,14 @@ import {
   FileEdit,
   DollarSign,
   BarChart3,
+  Brain,
   Clock,
   AlertCircle,
   Activity,
   Server,
   HardDrive,
   ArrowLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact } from '@/lib/formatters';
@@ -57,6 +59,8 @@ interface BusinessOverviewData {
   liveDeals: number;
   draftDeals: number;
   fundedDeals: number;
+  totalDeals: number;
+  activeOpportunities: number;
   capitalRaised: number;
   annualizedReturn: string;
   pendingRegistrations: number;
@@ -143,7 +147,14 @@ export default function BusinessOverviewScreen() {
           .from('jv_deals')
           .select('id, status, published')
           .eq('published', true);
+        let totalDeals = 0;
+        let activeOpportunities = 0;
         if (Array.isArray(deals)) {
+          totalDeals = deals.length;
+          activeOpportunities = deals.filter((d) => {
+            const status = (d as { status?: string }).status;
+            return status !== 'trashed' && status !== 'archived' && status !== 'permanently_deleted';
+          }).length;
           liveDeals = deals.filter((d) => (d as { status?: string }).status === 'live').length;
           draftDeals = deals.filter((d) => (d as { status?: string }).status === 'draft').length;
           fundedDeals = deals.filter((d) => (d as { status?: string }).status === 'funded').length;
@@ -213,6 +224,8 @@ export default function BusinessOverviewScreen() {
         liveDeals,
         draftDeals,
         fundedDeals,
+        totalDeals,
+        activeOpportunities,
         capitalRaised,
         annualizedReturn: 'Up to 22%',
         pendingRegistrations,
@@ -291,6 +304,51 @@ export default function BusinessOverviewScreen() {
             isLoading={isLoading}
             tint={Colors.success ?? '#22c55e'}
           />
+        </View>
+
+        {/* Activity Snapshot — moved from member Home screen to admin-only view */}
+        <Text style={styles.sectionTitle}>Activity Snapshot</Text>
+        <View style={styles.grid}>
+          <MetricTile
+            icon={<TrendingUp size={18} color={Colors.primary} />}
+            label="Open Opportunities"
+            value={data?.activeOpportunities ?? 0}
+            isLoading={isLoading}
+            tint={Colors.primary}
+          />
+          <MetricTile
+            icon={<Building2 size={18} color={Colors.accent ?? '#3b82f6'} />}
+            label="Available Deals"
+            value={data?.totalDeals ?? 0}
+            isLoading={isLoading}
+            tint={Colors.accent ?? '#3b82f6'}
+          />
+          <TouchableOpacity
+            style={styles.ctaTile}
+            onPress={() => router.push('/(tabs)/portfolio' as any)}
+            activeOpacity={0.8}
+            testID="admin-portfolio-summary"
+          >
+            <View style={[styles.ctaTileIcon, { backgroundColor: Colors.primary + '15' }]}>
+              <BarChart3 size={18} color={Colors.primary} />
+            </View>
+            <Text style={styles.ctaTileTitle}>Portfolio</Text>
+            <Text style={styles.ctaTileSubtitle}>Track investments</Text>
+            <ChevronRight size={14} color={Colors.textTertiary} style={styles.ctaTileArrow} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.ctaTile}
+            onPress={() => router.push('/(tabs)/chat' as any)}
+            activeOpacity={0.8}
+            testID="admin-ai-advisor"
+          >
+            <View style={[styles.ctaTileIcon, { backgroundColor: (Colors.success ?? '#22c55e') + '15' }]}>
+              <Brain size={18} color={Colors.success ?? '#22c55e'} />
+            </View>
+            <Text style={styles.ctaTileTitle}>AI Advisor</Text>
+            <Text style={styles.ctaTileSubtitle}>Smart deal matching</Text>
+            <ChevronRight size={14} color={Colors.textTertiary} style={styles.ctaTileArrow} />
+          </TouchableOpacity>
         </View>
 
         {/* Deals Section */}
@@ -534,5 +592,38 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
+  },
+  ctaTile: {
+    flex: 1,
+    minWidth: '46%',
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    padding: 14,
+    gap: 6,
+  },
+  ctaTileIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  ctaTileTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700' as const,
+  },
+  ctaTileSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  ctaTileArrow: {
+    position: 'absolute',
+    right: 12,
+    top: 14,
   },
 });
