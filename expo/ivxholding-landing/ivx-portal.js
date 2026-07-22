@@ -35,8 +35,8 @@
 
   async function handlePortalLogin(e) {
     e.preventDefault();
-    var SUPABASE_URL = window.IVX_SUPABASE_URL || '';
-    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || '';
+    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     var errEl = document.getElementById('portal-login-error');
     var btn = document.getElementById('portal-login-btn');
     errEl.style.display = 'none';
@@ -85,8 +85,8 @@
   }
 
   async function loadPortalProfile() {
-    var SUPABASE_URL = window.IVX_SUPABASE_URL || '';
-    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || '';
+    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     if (!_portalState.token || isPlaceholder(SUPABASE_URL)) return;
     try {
       var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/profiles?id=eq.' + _portalState.userId + '&select=*';
@@ -121,8 +121,8 @@
   }
 
   async function loadPortalInvestments() {
-    var SUPABASE_URL = window.IVX_SUPABASE_URL || '';
-    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || '';
+    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     if (!_portalState.token || isPlaceholder(SUPABASE_URL)) return;
     try {
       var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_investments?investor_id=eq.' + _portalState.userId + '&select=*&order=created_at.desc';

@@ -173,8 +173,8 @@
 
   async function handleInvestAuth(e) {
     e.preventDefault();
-    var SUPABASE_URL = window.IVX_SUPABASE_URL || '';
-    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || '';
+    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     var errEl = document.getElementById('invest-auth-error');
     var btn = document.getElementById('invest-auth-btn');
     if (errEl) errEl.style.display = 'none';
@@ -190,6 +190,19 @@
         _authSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       }
     } catch(sbErr) { console.warn('[IVX Invest] Supabase client init failed:', sbErr.message); }
+
+    function mapAuthError(msg) {
+      var m = (msg || '').toLowerCase();
+      if (m.indexOf('already') !== -1 && m.indexOf('registered') !== -1) return 'An account already exists for this email. Log in or reset your password.';
+      if (m.indexOf('invalid credentials') !== -1 || m.indexOf('wrong password') !== -1 || m.indexOf('invalid login') !== -1) return 'Incorrect email or password. Please try again.';
+      if (m.indexOf('rate limit') !== -1 || m.indexOf('429') !== -1) return 'Too many attempts. Please wait a moment and try again.';
+      if (m.indexOf('weak') !== -1 && m.indexOf('password') !== -1) return 'Use a stronger password (8+ chars, uppercase, number).';
+      if (m.indexOf('email') !== -1 && (m.indexOf('invalid') !== -1 || m.indexOf('not confirmed') !== -1)) return 'Enter a valid email address.';
+      if (m.indexOf('network') !== -1 || m.indexOf('timeout') !== -1 || m.indexOf('fetch') !== -1) return 'We could not reach the server. Check your connection and try again.';
+      return msg || 'Authentication failed. Please try again.';
+    }
+    function setAuthError(text) { if (errEl) { errEl.textContent = text; errEl.style.display = 'block'; } }
+    function resetBtn() { if (btn) { btn.textContent = _investState.authMode === 'signup' ? 'Create Account & Continue \u2192' : 'Log In & Continue \u2192'; btn.disabled = false; } }
 
     if (_authSb) {
       try {
@@ -217,17 +230,19 @@
         checkInvestAuth();
         fireAdEvent('complete_registration', { content_name: 'Invest Auth: ' + _investState.authMode });
         console.log('[IVX Invest] Real Supabase auth successful for:', _investState.userEmail);
+        if (btn) { btn.textContent = 'Account created'; btn.disabled = false; }
         if (window.createInvestorProfile) window.createInvestorProfile(_investState.userId, _investState.userEmail, _investState.userToken, _investState.authMode === 'signup' ? (document.getElementById('invest-first').value.trim() || '') : '', _investState.authMode === 'signup' ? (document.getElementById('invest-last').value.trim() || '') : '');
       } catch(authErr) {
         console.error('[IVX Invest] Supabase auth failed:', authErr.message);
-        if (errEl) { errEl.textContent = authErr.message || 'Authentication failed. Please try again.'; errEl.style.display = 'block'; }
-        if (btn) { btn.textContent = _investState.authMode === 'signup' ? 'Create Account & Continue \u2192' : 'Log In & Continue \u2192'; btn.disabled = false; }
+        setAuthError(mapAuthError(authErr.message));
+        resetBtn();
         return;
       }
     } else {
-      if (errEl) { errEl.textContent = 'Service temporarily unavailable. Please try again in a moment.'; errEl.style.display = 'block'; }
-      if (btn) { btn.textContent = _investState.authMode === 'signup' ? 'Create Account & Continue \u2192' : 'Log In & Continue \u2192'; btn.disabled = false; }
-      console.error('[IVX Invest] Cannot authenticate — Supabase not available');
+      var traceId = 'ivx-auth-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8);
+      console.error('[IVX Invest] Cannot authenticate — Supabase not available. Trace:', traceId, 'URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 40) : 'empty', 'Key:', SUPABASE_ANON_KEY ? 'present' : 'empty', 'lib:', !!window.supabase);
+      setAuthError('Registration is temporarily unavailable. Reference: ' + traceId);
+      resetBtn();
       return;
     }
     if (btn) { btn.textContent = 'Continue \u2192'; btn.disabled = false; }
@@ -253,8 +268,8 @@
   }
 
   async function submitInvestment() {
-    var SUPABASE_URL = window.IVX_SUPABASE_URL || '';
-    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || '';
+    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     if (!_investState.termsAgreed || !_investState.userToken || isPlaceholder(SUPABASE_URL)) {
       var errEl = document.getElementById('invest-step-error');
       if (errEl) { errEl.textContent = 'Authentication or terms not completed.'; errEl.style.display = 'block'; }

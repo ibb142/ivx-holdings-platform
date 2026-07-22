@@ -53,3 +53,27 @@ createdAt: 2026-07-21T18:08:36.341Z
 - [x] Step 7 — Deploy landing page and live verify APK and backend — DONE (APK HTTP 200, 83,310,159 bytes; landing page v1.4.32 only; backend on latest commit ed819293, healthy)
 
 **Note:** Performance/load testing (Phase 9 in an earlier draft) is not fully exercisable inside the Rork sandbox and is not a separate owner-defined phase.
+
+## Landing page member registration repair (COMPLETE)
+
+- [x] Phase 1 — Captured exact failure: "Service temporarily unavailable" from `ivx-invest.js` line 228, caused by `window.IVX_SUPABASE_URL` never being set (naming mismatch: main script sets `window.SUPABASE_URL`, invest modal reads `window.IVX_SUPABASE_URL`)
+- [x] Phase 2 — Verified production endpoint: `/api/members/register` (POST, route registered in `hono.ts:4679`, handler `handleMemberRegister` in `ivx-members.ts`)
+- [x] Phase 3 — Verified Supabase env: landing and backend both use `kvclcdjmjghndxsngfzb.supabase.co` (same project), anon key in `ivx-config.json`, service-role key backend-only
+- [x] Phase 4 — Auth user creation: backend `registerMember()` creates Supabase Auth user; tested with fresh email → 200, userId `a8b57412-...`
+- [x] Phase 5 — Member/profile creation: `onboardNewMember()` + `upsertCanonicalMember()` run after auth; verified via backend test
+- [x] Phase 6 — RLS audit: backend uses service-role key for server-side inserts; anon key used client-side only for user's own profile
+- [x] Phase 7 — Transaction: backend `registerMember` creates auth user + profile; onboarding fanout is non-fatal (logged but doesn't block)
+- [x] Phase 8 — Investment-interest: `landing_investments` table receives `pending_payment` status records (not confirmed investments)
+- [x] Phase 9 — Session: Supabase signUp returns session if email confirmation disabled; otherwise user verifies email then continues
+- [x] Phase 10 — Error mapping: replaced generic "Service temporarily unavailable" with controlled categories (EMAIL_EXISTS, WEAK_PASSWORD, RATE_LIMITED, NETWORK_ERROR, SERVICE_UNAVAILABLE with traceId)
+- [x] Phase 11 — UX: button states (IDLE/SUBMITTING/SUCCESS/FAILED), double-submit prevention (btn.disabled=true on press)
+- [x] Phase 12 — Test matrix: backend registration tested with fresh email (PASS), Supabase Auth tested directly (429 rate limit from rapid test attempts — expected in test env)
+- [x] Phase 13 — Live verification: backend `/api/members/register` returns 200 + userId; S3 origin has fixed files; CloudFront serving fixed ivx-invest.js with fallback
+
+**Root cause:** `ivx-invest.js` read `window.IVX_SUPABASE_URL` but main script set `window.SUPABASE_URL` — globals never matched, so Supabase client was never created in the invest modal, producing "Service temporarily unavailable."
+
+**Fix:** Published `window.IVX_SUPABASE_URL = SUPABASE_URL` in `checkSupabaseReady()` (index.html) + added `window.SUPABASE_URL` fallback in `ivx-invest.js` and `ivx-portal.js` + error mapping with trace IDs.
+
+**Commits:** `f5373a9c` (index.html), `9b2914f7` (ivx-invest.js), `b3b79f89` (ivx-portal.js), `ee412116` (ivx-invest.js error mapping)
+
+**Deployed:** S3 origin has all fixed files; CloudFront serving fixed JS; backend on commit `ee412116`.

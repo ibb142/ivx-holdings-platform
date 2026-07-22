@@ -422,7 +422,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"AWS_ACCESS_KEY_ID set: $([ -n \\\"$AWS_ACCESS_KEY_ID\\\" ] && echo YES || echo NO)\\\" && echo \\\"AWS_SECRET_ACCESS_KEY set: $([ -n \\\"$AWS_SECRET_ACCESS_KEY\\\" ] && echo YES || echo NO)\\\" && echo \\\"AWS_REGION: $AWS_REGION\\\" && echo \\\"CLOUDFRONT_DISTRIBUTION_ID: $CLOUDFRONT_DISTRIBUTION_ID\\\" && echo \\\"---\\\" && which aws 2>/dev/null || echo \\\"aws CLI not found, will use python boto3\\\" && python3 -c \\\"import boto3; print('boto3 available:', boto3.__version__)\\\" 2>/dev/null || echo \\\"boto3 not found either\\\"\"}",
       "createdAt": 1784671531840,
-      "completedAt": 1784671533281
+      "completedAt": 1784671533281,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -452,7 +453,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"cloudFront\\\\|CloudFront\\\\|createCloudFrontInvalidation\\\\|invalidat\\\" backend/api/ivx-landing-deploy.ts 2>/dev/null | head -20; echo \\\"---\\\"; grep -n \\\"cloudFront\\\\|CloudFront\\\\|invalidat\\\" backend/hono.ts | head -10; echo \\\"---\\\"; ls backend/api/ivx-landing*.ts backend/services/ivx-landing*.ts backend/services/ivx-cloudfront*.ts 2>/dev/null\"}",
       "createdAt": 1784671543398,
-      "completedAt": 1784671543413
+      "completedAt": 1784671543413,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -482,7 +484,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"handleIVXAutonomyCloudFrontInvalidate\\\\|autonomy/cloudfront\\\" backend/api/ivx-autonomy*.ts backend/api/ivx-*.ts 2>/dev/null | head -10; echo \\\"---\\\"; grep -rln \\\"handleIVXAutonomyCloudFrontInvalidateRequest\\\" backend/ 2>/dev/null\"}",
       "createdAt": 1784671548672,
-      "completedAt": 1784671549593
+      "completedAt": 1784671549593,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -513,7 +516,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-autonomy.ts\", \"offset\": 115, \"limit\": 70}",
       "createdAt": 1784671555482,
-      "completedAt": 1784671555486
+      "completedAt": 1784671555486,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -543,7 +547,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\n# 1. Dry-run first to confirm AWS creds + distribution ID are configured on Render\\nprint(\\\"[1] CloudFront invalidation dry-run:\\\")\\npayload = {\\\"paths\\\":[\\\"/ivx-reels.js\\\",\\\"/index.html\\\"],\\\"apply\\\":False}\\nreq = urllib.request.Request('https://api.ivxholding.com/api/ivx/autonomy/cloudfront/invalidate',\\n    data=json.dumps(payload).encode(),\\n    headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'},\\n    method='POST')\\ntry:\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        resp = json.loads(r.read())\\n    print(f\\\"  HTTP {r.status} ok={resp.get('ok')}\\\")\\n    wi = resp.get('wouldInvalidate', {})\\n    print(f\\\"  distributionIdConfigured: {wi.get('distributionIdConfigured')}\\\")\\n    print(f\\\"  awsCredentialsConfigured: {wi.get('awsCredentialsConfigured')}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"  HTTP {e.code}: {e.read().decode()[:300]}\\\")\\n\\n# 2. Apply the invalidation\\nprint(\\\"\\\\n[2] CloudFront invalidation APPLY:\\\")\\npayload2 = {\\\"paths\\\":[\\\"/ivx-reels.js\\\",\\\"/index.html\\\",\\\"/\\\"],\\\"apply\\\":True,\\\"callerReference\\\":\\\"ivx-reels-sync-2026-07-21\\\"}\\nreq2 = urllib.request.Request('https://api.ivxholding.com/api/ivx/autonomy/cloudfront/invalidate',\\n    data=json.dumps(payload2).encode(),\\n    headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'},\\n    method='POST')\\ntry:\\n    with urllib.request.urlopen(req2, timeout=30) as r:\\n        resp2 = json.loads(r.read())\\n    print(f\\\"  HTTP {r.status} ok={resp2.get('ok')}\\\")\\n    result = resp2.get('result', {})\\n    print(f\\\"  invalidationId: {result.get('invalidationId','?')}\\\")\\n    print(f\\\"  status: {result.get('status','?')}\\\")\\n    print(f\\\"  paths: {result.get('paths','?')}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"  HTTP {e.code}: {e.read().decode()[:300]}\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784671561507,
-      "completedAt": 1784671565607
+      "completedAt": 1784671565607,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -573,7 +578,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\nprint(\\\"Waiting for: (a) runtime to propagate to 6256cde1fd2474, (b) CloudFront cache expiry (s-maxage=600)\\\")\\nprint(\\\"S3 upload was at 22:04:40 UTC. Cache expires ~22:14:40 UTC. Current time:\\\")\\nprint(f\\\"  {time.strftime('%H:%M:%S UTC', time.gmtime())}\\\")\\n\\n# Wait in chunks to respect 60s bash timeout\\nprint(\\\"\\\\n[wait 50s]...\\\")\\ntime.sleep(50)\\n\\n# Check runtime propagation\\nprint(\\\"\\\\n[check] runtime + CF cache:\\\")\\nwith urllib.request.urlopen('https://api.ivxholding.com/health', timeout=15) as r:\\n    h = json.loads(r.read())\\nrt = (h.get('commit','') or '')[:14]\\nwith urllib.request.urlopen('https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/HEAD', timeout=15) as r:\\n    g = json.loads(r.read())\\ngh = (g.get('sha','') or '')[:14]\\nprint(f\\\"  Runtime: {rt}  GitHub HEAD: {gh}  Match: {'YES ✓' if rt==gh else 'NO (deploy pending)'}\\\")\\n\\n# Check CF cache age on ivx-reels.js\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = r.headers.get('Age','?')\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"  ivx-reels.js: Age={age}s Last-Modified={lm} X-Cache={cache}\\\")\\nprint(f\\\"  (cache expires at Age=600s; current Age={age}s)\\\")\\nPYEOF\"}",
       "createdAt": 1784671575133,
-      "completedAt": 1784671627290
+      "completedAt": 1784671627290,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -603,7 +609,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current time: {time.strftime('%H:%M:%S UTC', time.gmtime())}\\\")\\nprint(\\\"S3 upload at 22:04:40 UTC. CF cache s-maxage=600 → expires ~22:14:40 UTC\\\")\\nprint(\\\"Waiting 55s for cache to approach expiry...\\\")\\ntime.sleep(55)\\n\\n# Check CF cache age\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"\\\\nCF cache: Age={age}s X-Cache={cache} (expires at 600s)\\\")\\nprint(f\\\"Remaining: {max(0, 600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671635461,
-      "completedAt": 1784671690255
+      "completedAt": 1784671690255,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -633,7 +640,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:14:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671696740,
-      "completedAt": 1784671753196
+      "completedAt": 1784671753196,
+      "compactedAt": 1784679425296
     },
     {
       "type": "text",
@@ -656,7 +664,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:14:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671756631,
-      "completedAt": 1784671812083
+      "completedAt": 1784671812083,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -686,7 +695,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:14:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671817478,
-      "completedAt": 1784671871833
+      "completedAt": 1784671871833,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -716,7 +726,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:14:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    cache = r.headers.get('X-Cache','?')\\n    lm = r.headers.get('Last-Modified','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671880794,
-      "completedAt": 1784671935349
+      "completedAt": 1784671935349,
+      "compactedAt": 1784679425296
     },
     {
       "type": "text",
@@ -739,7 +750,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:14:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    cache = r.headers.get('X-Cache','?')\\n    lm = r.headers.get('Last-Modified','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671939454,
-      "completedAt": 1784671996174
+      "completedAt": 1784671996174,
+      "compactedAt": 1784679425296
     },
     {
       "type": "text",
@@ -762,7 +774,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:14:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    cache = r.headers.get('X-Cache','?')\\n    lm = r.headers.get('Last-Modified','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784671999377,
-      "completedAt": 1784672054588
+      "completedAt": 1784672054588,
+      "compactedAt": 1784679425296
     },
     {
       "type": "text",
@@ -785,7 +798,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expired at ~22:14:40 UTC\\\")\\ntime.sleep(40)\\n\\n# Verify the new ivx-reels.js is now live on CloudFront (cache should have expired)\\nprint(\\\"\\\\n[REELS SYNC VERIFICATION] ivx-reels.js on CloudFront:\\\")\\ntry:\\n    req = urllib.request.Request('https://ivxholding.com/ivx-reels.js',\\n        headers={'User-Agent':'IVX-Cert-Bot','Cache-Control':'no-cache','Pragma':'no-cache'})\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        js = r.read().decode('utf-8', errors='replace')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js\\n    has_old_flow = '/api/ivx/video-pipeline/upload' in js\\n    has_badge = 'ivxr-invest-badge' in js\\n    has_add_reel = '/api/ivx/video-platform/admin/add-reel' in js\\n    has_circle = '44px;height:44px;border-radius:50%' in js\\n    has_subtitle = 'parsed.subtitle' in js\\n    print(f\\\"  HTTP {r.status}, size={len(js)} bytes\\\")\\n    print(f\\\"  New presigned S3 flow (/admin/upload):    {'YES ✓' if has_presigned else 'NO ✗'}\\\")\\n    print(f\\\"  Old broken flow (/video-pipeline/upload): {'REMOVED ✓' if not has_old_flow else 'STILL PRESENT ✗'}\\\")\\n    print(f\\\"  DB record step (/admin/add-reel):         {'YES ✓' if has_add_reel else 'NO ✗'}\\\")\\n    print(f\\\"  INVESTMENT badge synced:                  {'YES ✓' if has_badge else 'NO ✗'}\\\")\\n    print(f\\\"  Rail icon circles (44px):                 {'YES ✓' if has_circle else 'NO ✗'}\\\")\\n    print(f\\\"  Subtitle always shown:                    {'YES ✓' if has_subtitle else 'NO ✗'}\\\")\\n    all_pass = has_presigned and not has_old_flow and has_add_reel and has_badge and has_circle\\n    print(f\\\"\\\\n  REELS SYNC + UPLOAD FIX: {'LIVE ✓' if all_pass else 'NOT YET LIVE ✗'}\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784672058075,
-      "completedAt": 1784672100865
+      "completedAt": 1784672100865,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -815,7 +829,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\n# Confirm runtime is at new commit\\nprint(\\\"[1] Runtime check:\\\")\\nwith urllib.request.urlopen('https://api.ivxholding.com/health', timeout=15) as r:\\n    h = json.loads(r.read())\\nrt = (h.get('commit','') or '')[:14]\\nprint(f\\\"  Runtime: {rt} (expect 6256cde1fd2474)\\\")\\n\\n# Re-deploy landing NOW that runtime has the new ivx-reels.js\\nprint(\\\"\\\\n[2] Re-deploy landing to S3 (with NEW ivx-reels.js):\\\")\\ndeploy_req = urllib.request.Request('https://api.ivxholding.com/api/ivx/landing-deploy',\\n    data=json.dumps({\\\"confirm\\\":\\\"DEPLOY_IVX_LANDING_FULL\\\"}).encode(),\\n    headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'},\\n    method='POST')\\ntry:\\n    with urllib.request.urlopen(deploy_req, timeout=50) as r:\\n        deploy_resp = json.loads(r.read())\\n    print(f\\\"  ok={deploy_resp.get('ok')}\\\")\\n    up = deploy_resp.get('uploads') or []\\n    print(f\\\"  uploads: {len(up) if isinstance(up, list) else up}\\\")\\n    # Find the reels file in uploads to check its size\\n    if isinstance(up, list):\\n        for u in up:\\n            if 'reels' in str(u).lower():\\n                print(f\\\"  reels upload: {u}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"  HTTP {e.code}: {e.read().decode()[:300]}\\\")\\n\\n# Check the new S3 file directly (cache-buster to bypass CF)\\nprint(\\\"\\\\n[3] Verify S3 origin has NEW ivx-reels.js:\\\")\\ntime.sleep(3)\\ntry:\\n    req = urllib.request.Request(f'https://ivxholding.com/ivx-reels.js?_cb={int(time.time())}',\\n        headers={'User-Agent':'IVX-Cert-Bot','Cache-Control':'no-cache','Pragma':'no-cache'})\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        js = r.read().decode('utf-8', errors='replace')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js\\n    has_old_flow = '/api/ivx/video-pipeline/upload' in js\\n    has_badge = 'ivxr-invest-badge' in js\\n    has_add_reel = '/api/ivx/video-platform/admin/add-reel' in js\\n    has_circle = '44px;height:44px;border-radius:50%' in js\\n    print(f\\\"  HTTP {r.status}, size={len(js)} bytes (expect ~58584)\\\")\\n    print(f\\\"  New presigned S3 flow:    {'YES ✓' if has_presigned else 'NO ✗'}\\\")\\n    print(f\\\"  Old broken flow removed:  {'YES ✓' if not has_old_flow else 'NO ✗'}\\\")\\n    print(f\\\"  DB record step:           {'YES ✓' if has_add_reel else 'NO ✗'}\\\")\\n    print(f\\\"  INVESTMENT badge:         {'YES ✓' if has_badge else 'NO ✗'}\\\")\\n    print(f\\\"  Rail icon circles:        {'YES ✓' if has_circle else 'NO ✗'}\\\")\\n    all_pass = has_presigned and not has_old_flow and has_add_reel and has_badge and has_circle\\n    print(f\\\"\\\\n  REELS SYNC + UPLOAD FIX: {'LIVE ✓' if all_pass else 'NOT YET LIVE ✗'}\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\n\\n# Check CF cache age\\nprint(\\\"\\\\n[4] CF cache status:\\\")\\nreq2 = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req2, timeout=15) as r:\\n    age = r.headers.get('Age','?')\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"  Age={age}s Last-Modified={lm} X-Cache={cache}\\\")\\nPYEOF\"}",
       "createdAt": 1784672115621,
-      "completedAt": 1784672125470
+      "completedAt": 1784672125470,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -845,7 +860,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"ivx-reels\\\\|reels\\\\.js\\\\|uploadFile\\\\|putObject\\\\|S3_BUCKET\\\\|bucket\\\\|Key:\\\" backend/api/ivx-landing-full-deploy.ts | head -30\"}",
       "createdAt": 1784672144487,
-      "completedAt": 1784672144500
+      "completedAt": 1784672144500,
+      "compactedAt": 1784679425296
     },
     {
       "type": "tool",
@@ -863,7 +879,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && wc -l backend/api/ivx-landing-full-deploy.ts && head -80 backend/api/ivx-landing-full-deploy.ts\"}",
       "createdAt": 1784672144493,
-      "completedAt": 1784672144501
+      "completedAt": 1784672144501,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -893,7 +910,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bun test backend/ 2>&1 | tail -6\"}",
       "createdAt": 1784672169273,
-      "completedAt": 1784672175496
+      "completedAt": 1784672175496,
+      "compactedAt": 1784679425296
     },
     {
       "type": "tool",
@@ -911,7 +929,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time, uuid\\n\\n# Force CF to fetch from S3 origin with a never-before-seen query string\\nunique = uuid.uuid4().hex\\nprint(f\\\"[CF origin fetch] unique query: ?v={unique}\\\")\\ntry:\\n    req = urllib.request.Request(f'https://ivxholding.com/ivx-reels.js?v={unique}',\\n        headers={'User-Agent':'IVX-Cert-Bot/2.0'})\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        js = r.read().decode('utf-8', errors='replace')\\n        age = r.headers.get('Age','?')\\n        cache = r.headers.get('X-Cache','?')\\n        lm = r.headers.get('Last-Modified','?')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js\\n    has_old_flow = '/api/ivx/video-pipeline/upload' in js\\n    has_badge = 'ivxr-invest-badge' in js\\n    has_add_reel = '/api/ivx/video-platform/admin/add-reel' in js\\n    has_circle = '44px;height:44px;border-radius:50%' in js\\n    print(f\\\"  HTTP {r.status}, size={len(js)} bytes (new=58584, old=55998)\\\")\\n    print(f\\\"  Age={age} X-Cache={cache} Last-Modified={lm}\\\")\\n    print(f\\\"  New presigned S3 flow:    {'YES ✓' if has_presigned else 'NO ✗'}\\\")\\n    print(f\\\"  Old broken flow removed:  {'YES ✓' if not has_old_flow else 'NO ✗'}\\\")\\n    print(f\\\"  DB record step:           {'YES ✓' if has_add_reel else 'NO ✗'}\\\")\\n    print(f\\\"  INVESTMENT badge:         {'YES ✓' if has_badge else 'NO ✗'}\\\")\\n    print(f\\\"  Rail icon circles:        {'YES ✓' if has_circle else 'NO ✗'}\\\")\\n    all_pass = has_presigned and not has_old_flow and has_add_reel and has_badge and has_circle\\n    print(f\\\"\\\\n  REELS SYNC + UPLOAD FIX: {'LIVE ✓' if all_pass else 'NOT YET LIVE (CF cache pending)'}\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784672169278,
-      "completedAt": 1784672175687
+      "completedAt": 1784672175687,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -941,7 +960,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\n# 1. Try fetching directly from S3 (bypass CloudFront entirely)\\nprint(\\\"[1] S3 direct fetch (bypass CloudFront):\\\")\\ns3_urls = [\\n    'https://ivxholding.com.s3.amazonaws.com/ivx-reels.js',\\n    'https://s3.amazonaws.com/ivxholding.com/ivx-reels.js',\\n]\\nfor s3url in s3_urls:\\n    try:\\n        req = urllib.request.Request(s3url + f'?_cb={int(time.time())}',\\n            headers={'User-Agent':'IVX-Cert-Bot'})\\n        with urllib.request.urlopen(req, timeout=15) as r:\\n            js = r.read().decode('utf-8', errors='replace')\\n        has_presigned = '/api/ivx/video-platform/admin/upload' in js\\n        has_old_flow = '/api/ivx/video-pipeline/upload' in js\\n        has_badge = 'ivxr-invest-badge' in js\\n        print(f\\\"  {s3url}\\\")\\n        print(f\\\"    HTTP {r.status}, size={len(js)} bytes (new=58584, old=55998)\\\")\\n        print(f\\\"    New presigned S3 flow: {'YES ✓' if has_presigned else 'NO ✗'}\\\")\\n        print(f\\\"    Old flow removed: {'YES ✓' if not has_old_flow else 'NO ✗'}\\\")\\n        print(f\\\"    INVESTMENT badge: {'YES ✓' if has_badge else 'NO ✗'}\\\")\\n        if has_presigned:\\n            print(f\\\"    S3 ORIGIN HAS NEW FILE ✓\\\")\\n            break\\n    except Exception as e:\\n        print(f\\\"  {s3url}: {str(e)[:100]}\\\")\\n\\n# 2. CF cache age check\\nprint(\\\"\\\\n[2] CF cache status:\\\")\\nreq2 = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req2, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"  Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\n\\n# 3. Gather ALL certification evidence in one pass\\nAT = json.load(open('/tmp/owner_at.json'))['accessToken']\\n\\nprint(\\\"\\\\n\\\" + \\\"=\\\" * 72)\\nprint(\\\"12-PHASE CERTIFICATION EVIDENCE (while CF cache expires)\\\")\\nprint(\\\"=\\\" * 72)\\n\\n# P11: Production validation\\nprint(\\\"\\\\n--- PHASE 11: PRODUCTION VALIDATION ---\\\")\\nwith urllib.request.urlopen('https://api.ivxholding.com/health', timeout=15) as r:\\n    h = json.loads(r.read())\\nrt = (h.get('commit','') or '')[:14]\\nprint(f\\\"/health: HTTP {r.status} commit={rt} status={h.get('status')} bootTime={h.get('bootTime','?')[:19]}\\\")\\nwith urllib.request.urlopen('https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/HEAD', timeout=15) as r:\\n    g = json.loads(r.read())\\ngh = (g.get('sha','') or '')[:14]\\nmsg = ((g.get('commit') or {}).get('message') or '')[:70]\\nprint(f\\\"GitHub HEAD: {gh}  msg: {msg}\\\")\\nprint(f\\\"runtime === GitHub: {'PASS ✓' if rt==gh else 'FAIL ✗'}\\\")\\nreq2 = urllib.request.Request('https://ivxholding.com/apk/ivx-holdings-v1.4.31.apk', method='HEAD')\\nwith urllib.request.urlopen(req2, timeout=15) as r:\\n    print(f\\\"APK v1.4.31(63): HTTP {r.status} Content-Length={r.headers.get('Content-Length')} bytes\\\")\\nimport ssl, socket\\nctx = ssl.create_default_context()\\nwith socket.create_connection(('api.ivxholding.com',443), timeout=10) as sock:\\n    with ctx.wrap_socket(sock, server_hostname='api.ivxholding.com') as ssock:\\n        cert = ssock.getpeercert()\\nprint(f\\\"SSL: valid until {cert.get('notAfter','?')}\\\")\\n\\n# P2: Security probes\\nprint(\\\"\\\\n--- PHASE 2: SECURITY (live probes) ---\\\")\\ntry:\\n    urllib.request.urlopen('https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs', timeout=10)\\n    print(\\\"no-token → worker/jobs: ALLOWED ✗ FAIL\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"no-token → worker/jobs: HTTP {e.code} ✓ (rejected)\\\")\\ntry:\\n    urllib.request.urlopen('https://api.ivxholding.com/api/ivx/certification/run', timeout=10)\\n    print(\\\"no-token → cert/run: ALLOWED ✗ FAIL\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"no-token → cert/run: HTTP {e.code} ✓ (rejected)\\\")\\ntry:\\n    req = urllib.request.Request('https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n        data=json.dumps({\\\"action\\\":\\\"render_trigger_deploy\\\",\\\"input\\\":{},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"WRONG\\\"}).encode(),\\n        headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'}, method='POST')\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        print(f\\\"wrong confirmText → action: HTTP {r.status} (ALLOWED ✗)\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"wrong confirmText → action: HTTP {e.code} ✓ (rejected)\\\")\\n\\n# P4: Chat\\nprint(\\\"\\\\n--- PHASE 4: CHAT ---\\\")\\ntry:\\n    req = urllib.request.Request('https://api.ivxholding.com/api/ivx/owner-ai',\\n        data=json.dumps({\\\"message\\\":\\\"cert probe\\\"}).encode(),\\n        headers={'Content-Type':'application/json'}, method='POST')\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        print(f\\\"chat no-token: HTTP {r.status} (ALLOWED ✗)\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"chat no-token: HTTP {e.code} ✓ (protected)\\\")\\n\\n# P5: Autonomous coder\\nprint(\\\"\\\\n--- PHASE 5: AUTONOMOUS CODER ---\\\")\\nTID = 'ivx-worker-3effa344-dd8c-414f-b92d-4deb89f2afe0'\\nreq = urllib.request.Request(f'https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/{TID}',\\n    headers={'Authorization':f'Bearer {AT}'})\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    d = json.loads(r.read())\\nj = d.get('job') or d\\nres = j.get('result') or {}\\nprint(f\\\"probe job: status={j.get('status')} progress={j.get('progressPercent')}% commitSha={(res.get('commitSha') or '')[:14]} testsPassed={res.get('testsPassed')} deployId={res.get('deployId')}\\\")\\n\\n# Reels upload fix (this session)\\nprint(\\\"\\\\n--- REELS UPLOAD FIX (this session) ---\\\")\\ntry:\\n    req = urllib.request.Request('https://api.ivxholding.com/api/ivx/video-platform/admin/upload',\\n        data=json.dumps({\\\"fileName\\\":\\\"cert-test.mp4\\\",\\\"contentType\\\":\\\"video/mp4\\\"}).encode(),\\n        headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'}, method='POST')\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        resp = json.loads(r.read())\\n    print(f\\\"/admin/upload: HTTP {r.status} ok={resp.get('ok')} uploadUrl={'present ✓' if resp.get('uploadUrl') else 'absent ✗'} videoId={resp.get('videoId','?')[:8]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"/admin/upload: HTTP {e.code}\\\")\\n\\n# Landing QR (prior session fix)\\nprint(\\\"\\\\n--- LANDING QR (prior session fix) ---\\\")\\nreq3 = urllib.request.Request('https://ivxholding.com/', headers={'User-Agent':'IVX-Cert-Bot','Cache-Control':'no-cache'})\\nwith urllib.request.urlopen(req3, timeout=15) as r:\\n    html = r.read().decode('utf-8', errors='replace')\\nprint(f\\\"QR codes: {html.count('api.qrserver.com')} instances  Download Now: {'YES' if 'Download Now' in html else 'NO'}  APK link: {'YES' if '/apk/ivx-holdings-v1.4.31.apk' in html else 'NO'}\\\")\\n\\n# P12: Certification gate\\nprint(\\\"\\\\n--- PHASE 12: CONTINUOUS CERTIFICATION GATE ---\\\")\\nwith urllib.request.urlopen('https://api.ivxholding.com/api/ivx/certification/status', timeout=15) as r:\\n    cs = json.loads(r.read())\\nprint(f\\\"certification/status: HTTP {r.status} certified={cs.get('certified')} overallVerdict={cs.get('overallVerdict')}\\\")\\nreq = urllib.request.Request('https://api.ivxholding.com/api/ivx/certification/run',\\n    data=b'', headers={'Content-Type':'application/json','Authorization':f'Bearer {AT}'}, method='POST')\\nt0 = time.time()\\nwith urllib.request.urlopen(req, timeout=55) as r:\\n    resp = json.loads(r.read())\\ndur = round(time.time()-t0,1)\\nreport = resp.get('report') or {}\\nprint(f\\\"fresh run: HTTP {r.status} duration={dur}s reportId={report.get('reportId')}\\\")\\nprint(f\\\"verdict: {report.get('overallVerdict')} pass={report.get('passCount')} fail={report.get('failCount')} warn={report.get('warnCount')} notRun={report.get('notRunCount')} certifiable={report.get('certifiable')}\\\")\\nfor m in report.get('modules', []):\\n    sym = {'PASS':'✓','FAIL':'✗','WARN':'!','NOT_RUN':'-'}[m.get('verdict','NOT_RUN')]\\n    print(f\\\"  {sym} {m.get('verdict'):7} {m.get('id'):22} {m.get('summary')}\\\")\\nPYEOF\"}",
       "createdAt": 1784672197487,
-      "completedAt": 1784672229215
+      "completedAt": 1784672229215,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -971,7 +991,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC (re-deploy at ~22:14:40)\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672240536,
-      "completedAt": 1784672292844
+      "completedAt": 1784672292844,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -1001,7 +1022,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672298659,
-      "completedAt": 1784672353719
+      "completedAt": 1784672353719,
+      "compactedAt": 1784679425296
     },
     {
       "type": "text",
@@ -1024,7 +1046,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672358137,
-      "completedAt": 1784672413166
+      "completedAt": 1784672413166,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -1054,7 +1077,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672417676,
-      "completedAt": 1784672473112
+      "completedAt": 1784672473112,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -1084,7 +1108,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672482325,
-      "completedAt": 1784672535203
+      "completedAt": 1784672535203,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -1114,7 +1139,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672540971,
-      "completedAt": 1784672595840
+      "completedAt": 1784672595840,
+      "compactedAt": 1784679425296
     },
     {
       "type": "text",
@@ -1137,7 +1163,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(55)\\nreq = urllib.request.Request('https://ivxholding.com/ivx-reels.js', method='HEAD')\\nwith urllib.request.urlopen(req, timeout=15) as r:\\n    age = int(r.headers.get('Age','0'))\\n    lm = r.headers.get('Last-Modified','?')\\n    cache = r.headers.get('X-Cache','?')\\nprint(f\\\"CF cache: Age={age}s X-Cache={cache} Last-Modified={lm}  Remaining: {max(0,600-age)}s\\\")\\nPYEOF\"}",
       "createdAt": 1784672601168,
-      "completedAt": 1784672656563
+      "completedAt": 1784672656563,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -1162,7 +1189,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}  CF cache expires ~22:24:40 UTC\\\")\\ntime.sleep(50)\\n\\n# Verify the new ivx-reels.js is now live on CloudFront (cache should have expired)\\nprint(\\\"\\\\n[REELS SYNC FINAL VERIFICATION] ivx-reels.js on CloudFront:\\\")\\ntry:\\n    req = urllib.request.Request('https://ivxholding.com/ivx-reels.js',\\n        headers={'User-Agent':'IVX-Cert-Bot','Cache-Control':'no-cache','Pragma':'no-cache'})\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        js = r.read().decode('utf-8', errors='replace')\\n        age = r.headers.get('Age','?')\\n        lm = r.headers.get('Last-Modified','?')\\n        cache = r.headers.get('X-Cache','?')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js\\n    has_old_flow = '/api/ivx/video-pipeline/upload' in js\\n    has_badge = 'ivxr-invest-badge' in js\\n    has_add_reel = '/api/ivx/video-platform/admin/add-reel' in js\\n    has_circle = '44px;height:44px;border-radius:50%' in js\\n    has_subtitle = 'parsed.subtitle' in js\\n    print(f\\\"  HTTP {r.status}, size={len(js)} bytes (new=58499, old=55998)\\\")\\n    print(f\\\"  Age={age}s X-Cache={cache} Last-Modified={lm}\\\")\\n    print(f\\\"  New presigned S3 flow (/admin/upload):    {'YES ✓' if has_presigned else 'NO ✗'}\\\")\\n    print(f\\\"  Old broken flow (/video-pipeline/upload): {'REMOVED ✓' if not has_old_flow else 'STILL PRESENT ✗'}\\\")\\n    print(f\\\"  DB record step (/admin/add-reel):         {'YES ✓' if has_add_reel else 'NO ✗'}\\\")\\n    print(f\\\"  INVESTMENT badge synced:                  {'YES ✓' if has_badge else 'NO ✗'}\\\")\\n    print(f\\\"  Rail icon circles (44px):                 {'YES ✓' if has_circle else 'NO ✗'}\\\")\\n    print(f\\\"  Subtitle always shown:                    {'YES ✓' if has_subtitle else 'NO ✗'}\\\")\\n    all_pass = has_presigned and not has_old_flow and has_add_reel and has_badge and has_circle\\n    print(f\\\"\\\\n  REELS SYNC + UPLOAD FIX: {'LIVE ✓' if all_pass else 'NOT YET LIVE ✗'}\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784672659671,
-      "completedAt": 1784672714412
+      "completedAt": 1784672714412,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
@@ -1192,7 +1220,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 << 'PYEOF'\\nimport json, urllib.request, time\\n\\n# Final check - CF should be revalidating now\\nprint(f\\\"Current: {time.strftime('%H:%M:%S UTC', time.gmtime())}\\\")\\n\\n# Try fetching with a completely unique path that CF has never seen\\n# CF treats different query strings as different cache keys (depends on config)\\nimport uuid\\nu1 = uuid.uuid4().hex\\nu2 = uuid.uuid4().hex\\n\\nprint(f\\\"\\\\n[1] Fetch with double cache-buster: ?v={u1}&t={u2}\\\")\\ntry:\\n    req = urllib.request.Request(f'https://ivxholding.com/ivx-reels.js?v={u1}&t={u2}',\\n        headers={'User-Agent':'IVX-Cert-Final','Accept':'*/*','Accept-Encoding':'identity'})\\n    with urllib.request.urlopen(req, timeout=20) as r:\\n        js = r.read().decode('utf-8', errors='replace')\\n        age = r.headers.get('Age','?')\\n        cache = r.headers.get('X-Cache','?')\\n        lm = r.headers.get('Last-Modified','?')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js\\n    has_badge = 'ivxr-invest-badge' in js\\n    has_circle = '44px;height:44px;border-radius:50%' in js\\n    has_old = '/api/ivx/video-pipeline/upload' in js\\n    print(f\\\"  HTTP {r.status} size={len(js)} bytes Age={age} X-Cache={cache} Last-Modified={lm}\\\")\\n    print(f\\\"  New flow: {has_presigned}  Badge: {has_badge}  Circles: {has_circle}  Old removed: {not has_old}\\\")\\n    if has_presigned and has_badge:\\n        print(\\\"  ✓ REELS SYNC LIVE ON CLOUDFRONT\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\n\\n# Also re-verify S3 origin has new file\\nprint(f\\\"\\\\n[2] S3 origin re-check:\\\")\\ntry:\\n    req = urllib.request.Request(f'https://s3.amazonaws.com/ivxholding.com/ivx-reels.js?_t={int(time.time())}',\\n        headers={'User-Agent':'IVX-S3-Check'})\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        js2 = r.read().decode('utf-8', errors='replace')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js2\\n    has_badge = 'ivxr-invest-badge' in js2\\n    print(f\\\"  HTTP {r.status} size={len(js2)} bytes\\\")\\n    print(f\\\"  New flow: {has_presigned}  Badge: {has_badge}\\\")\\n    if has_presigned and has_badge:\\n        print(\\\"  ✓ S3 ORIGIN CONFIRMED NEW FILE\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\n\\n# Check default URL once more\\nprint(f\\\"\\\\n[3] Default URL check:\\\")\\ntry:\\n    req = urllib.request.Request('https://ivxholding.com/ivx-reels.js',\\n        headers={'User-Agent':'IVX-Cert-Final2'})\\n    with urllib.request.urlopen(req, timeout=15) as r:\\n        js3 = r.read().decode('utf-8', errors='replace')\\n        age = r.headers.get('Age','?')\\n        cache = r.headers.get('X-Cache','?')\\n        lm = r.headers.get('Last-Modified','?')\\n    has_presigned = '/api/ivx/video-platform/admin/upload' in js3\\n    print(f\\\"  HTTP {r.status} size={len(js3)} bytes Age={age} X-Cache={cache} Last-Modified={lm}\\\")\\n    print(f\\\"  New flow: {'YES ✓' if has_presigned else 'NO (stale-while-revalidate serving old)'}\\\")\\nexcept Exception as e:\\n    print(f\\\"  Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1784672733329,
-      "completedAt": 1784672736490
+      "completedAt": 1784672736490,
+      "compactedAt": 1784679425296
     },
     {
       "type": "reasoning",
