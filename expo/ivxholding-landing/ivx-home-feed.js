@@ -99,8 +99,8 @@
 
   /* ---------- styles ---------- */
   var css = ''
-    + '.ivx-hf-video{grid-column:1/-1;position:relative;background:#000;border-radius:16px;overflow:hidden;'
-    + 'min-height:360px;max-height:520px;display:flex;flex-direction:column}'
+    + '.ivx-hf-video{grid-column:1/-1;position:relative;background:#000;border-radius:18px;overflow:hidden;'
+    + 'width:100%;max-width:480px;margin:0 auto;aspect-ratio:9/16;min-height:560px;max-height:88vh;display:flex;flex-direction:column}'
     + '.ivx-hf-media{position:absolute;inset:0;background:#000;overflow:hidden}'
     + '.ivx-hf-media img,.ivx-hf-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}'
     + '.ivx-hf-gradient{position:absolute;left:0;right:0;bottom:0;height:320px;'

@@ -154,8 +154,9 @@
   /* ---------- styles ---------- */
   var css = ''
     + '#ivxReelsBtn{position:fixed;left:16px;bottom:18px;z-index:99990;display:flex;align-items:center;gap:8px;'
-    + 'background:linear-gradient(135deg,#E6C200,#E6C200);color:#fff;border:none;border-radius:999px;padding:12px 20px;'
-    + 'font:600 15px/1 -apple-system,Segoe UI,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35);cursor:pointer;transition:transform .15s}'
+    + 'background:#E6C200;color:#000;border:none;border-radius:999px;padding:12px 20px;'
+    + 'font:800 15px/1 -apple-system,Segoe UI,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.45);cursor:pointer;transition:transform .15s}'
+    + '#ivxReelsBtn svg{display:block}'
     + '#ivxReelsBtn:active{transform:scale(.94)}'
     + '#ivxReels{position:fixed;inset:0;z-index:99991;background:#000;display:none;flex-direction:column}'
     + '#ivxReels.open{display:flex}'
@@ -268,7 +269,7 @@
   /* ---------- DOM scaffold ---------- */
   var launch = document.createElement('button');
   launch.id = 'ivxReelsBtn';
-  launch.innerHTML = '&#9654;&#65039; <span>Reels</span>';
+  launch.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> <span>Reels</span>';
   launch.setAttribute('aria-label', 'Open IVX video reels');
   document.body.appendChild(launch);
 
@@ -1188,6 +1189,7 @@
     document.body.style.overflow = '';
   }
   launch.addEventListener('click', openReels);
+  window.IVXOpenReels = openReels;
   el('close').addEventListener('click', closeReels);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('open')) closeReels(); });
 

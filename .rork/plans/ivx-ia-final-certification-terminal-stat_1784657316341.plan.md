@@ -308,3 +308,27 @@ createdAt: 2026-07-21T18:08:36.341Z
 - `upsertCanonicalMember` dedupes by phone (last 10 digits) — users sharing a phone number merge into one canonical member row (by design; QA must use unique phones)
 - App-side Supabase signUp bypasses the orchestrator — profile/member rows are created on first backend interaction (by design)
 - SMTP still owner-only infrastructure (registration works via auto-confirm)
+
+## LANDING PAGE REELS FIX — INSTAGRAM SIZE + APP-MATCHING ICON (COMPLETE, 2026-07-22)
+
+### Root cause (why previous asks didn't stick)
+
+`ivx-reels.js` (the full Reels module with the Reels button) was uploaded to the CDN but **never included in index.html** — no `<script>` tag existed, so the Reels button/icon never rendered no matter what was fixed inside the module. Additionally, feed reel cards were a 360–520px landscape box, not Instagram portrait.
+
+### Fixes (all deployed + verified live)
+
+1. **index.html** — added `<script src="/ivx-reels.js?v=20260722r" defer>` (root cause); added nav Clapperboard reels icon button (gold #E6C200, 42px, same lucide Clapperboard as the app's home header `home-reels-button`) that calls `window.IVXOpenReels()`; cache-busted home-feed script to v20260722r. Commit `b735f42e8259`.
+2. **ivx-home-feed.js** — `.ivx-hf-video` feed reel card: was `min-height:360px;max-height:520px` landscape box → now Instagram portrait `aspect-ratio:9/16; max-width:480px; min-height:560px; max-height:88vh; margin:0 auto` — matches app reel proportions. Commit `a24e4fdab6d8`.
+3. **ivx-reels.js** — floating Reels button now uses the same lucide Clapperboard SVG as the app (was ▶️ emoji), gold pill with black text; exposed `window.IVXOpenReels` so the nav icon opens the full-screen reels module. Commit `4dc5b49068a3`.
+
+### Deploy + live proof
+
+- GitHub commits: `a24e4fda` (home-feed), `4dc5b490` (reels), `b735f42e` (index.html)
+- S3 uploads via presign: index.html PUT 200 (476,556 B), ivx-home-feed.js PUT 200 (22,467 B), ivx-reels.js PUT 200 (58,990 B)
+- CloudFront invalidation `I8BVOF592IZ1YS5HBQ3HPYJZU` (E1C0DEI0VKCUYN): /index.html, /, /ivx-home-feed.js, /ivx-reels.js
+- Live verified on ivxholding.com: both script tags served; navReelsBtn + nav-reels-btn present; `aspect-ratio:9/16;min-height:560px;max-height:88vh` served; Clapperboard SVG path + window.IVXOpenReels present in served JS; all 3 files HTTP 200
+
+### App sync parity
+
+- App: Clapperboard (gold, Colors.primary) in home header opens `/videos` reels module; feed reel card 520px full-bleed portrait
+- Landing now: Clapperboard (gold #E6C200) in nav opens full-screen reels module (`ivx-reels.js`); feed reel card 9:16 portrait 560px–88vh — same icon, same placement pattern, same reel proportions
