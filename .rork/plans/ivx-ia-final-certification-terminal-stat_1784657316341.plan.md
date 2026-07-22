@@ -261,3 +261,23 @@ createdAt: 2026-07-21T18:08:36.341Z
 | min_investment | $50,000 | $50,000 | $50,000 | 50000 | ✓ (FIXED — was NULL) |
 | photos | 8 | 8 | 8 | 8 (8 unique) | ✓ |
 | display_order | 3 | 3 | 3 | 3 | ✓ |
+
+### Deployment (v1.4.35) — COMPLETE
+
+- [x] APK v1.4.35 built — BUILD SUCCESSFUL in 1m 27s, 83,311,987 bytes, versionCode 67 (commits `9ce1e4ae` app.config.ts, `a116ab9a` build.gradle)
+- [x] APK uploaded to S3 via owner-approved `POST /api/ivx/apk/presign-upload` (AWS creds stay server-side on Render runtime — never in bash sandbox); presigned PUT URL mints short-lived signed URL; HTTP 200, 83,311,987 bytes uploaded to `s3.us-east-1.amazonaws.com/ivxholding.com/apk/ivx-holdings-v1.4.35.apk`
+- [x] Landing page updated — `expo/ivxholding-landing/index.html` 4 references v1.4.34→v1.4.35 (download links + QR codes); committed to GitHub (`1852c15a`); uploaded to S3 via presigned URL (HTTP 200, 455,952 bytes)
+- [x] CloudFront invalidated — `I8E1DYGB3XOPK2F3G4Y19H8IFB` (APK + landing assets) + `IJFR42FR4T7RVVDTKUA9ZLOS8` (index.html + root); distribution `E1C0DEI0VKCUYN` auto-discovered
+- [x] Live verification:
+  - APK v1.4.35: HTTP/2 200, content-length 83,311,987, content-type application/vnd.android.package-archive, x-cache Hit from cloudfront
+  - Landing page: serves `ivx-holdings-v1.4.35.apk` (0 references to v1.4.34)
+  - Backend: `/health` status=healthy ok=true; `/api/ivx/version` commit=`a116ab9a` (backend runtime unchanged — no backend code changed for JV Deal task)
+  - DB: 3 deals present, 0 NULL fields, all min_investment set (perez=50000, casa-rosario=50, jacksonville=50000), all locations correct (Jacksonville FL US 32206, not Puerto Rico)
+
+### Deep audit: AWS credentials location
+
+- AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, CLOUDFRONT_DISTRIBUTION_ID) live in the **backend Render runtime environment**, NOT the bash sandbox
+- The bash sandbox never has direct AWS access — by design, AWS secrets never leave the runtime
+- Upload path: `POST /api/ivx/apk/presign-upload` (owner-approved, `CONFIRM_IVX_APK_UPLOAD` phrase) mints a 15-min presigned S3 PUT URL restricted to `apk/` prefix or whitelisted landing files; the signed URL is returned to the caller, who PUTs the file directly to S3
+- Invalidation path: `POST /api/ivx/autonomy/cloudfront/invalidate` (owner-approved, `CONFIRM_IVX_CLOUDFRONT_INVALIDATE` phrase, `apply:true`) — backend uses its AWS creds to call CloudFront CreateInvalidation
+- This is the correct, audited path — no AWS credentials need to be injected into the bash sandbox
