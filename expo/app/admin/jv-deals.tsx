@@ -61,7 +61,7 @@ import { useProgressiveList } from '@/lib/use-progressive-list';
 import { EmptyState, ErrorState, ListFooter } from '@/components/ProgressiveStates';
 import { fetchDealsPage, invalidateDealsCache } from '@/lib/canonical-query';
 import { useDealsRealtime } from '@/lib/canonical-realtime';
-import { formatCurrency, parseAmountInput, formatAmountInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencySafe, parseAmountInput, formatAmountInput } from '@/lib/formatters';
 import { buildOwnershipSnapshot } from '@/lib/ownership-math';
 import { extractExplicitDealSalePrice } from '@/lib/parse-deal';
 import { syncToLandingPage } from '@/lib/landing-sync';
@@ -1155,7 +1155,7 @@ export default function AdminJVDealsScreen() {
               <Text style={styles.statLabel}>Active</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={[styles.statValue, styles.statValueYellow]}>{formatCurrency(stats.totalInvestment)}</Text>
+              <Text style={[styles.statValue, styles.statValueYellow]}>{formatCurrencySafe(stats.totalInvestment, true)}</Text>
               <Text style={styles.statLabel}>Total Value</Text>
             </View>
           </View>
@@ -1291,11 +1291,11 @@ export default function AdminJVDealsScreen() {
                   <View style={styles.dealMetrics}>
                     <View style={styles.dealMetric}>
                       <DollarSign size={12} color={Colors.primary} />
-                      <Text style={styles.dealMetricValue}>{formatCurrency(deal.totalInvestment)}</Text>
+                      <Text style={styles.dealMetricValue}>{formatCurrencySafe(deal.totalInvestment, true)}</Text>
                     </View>
                     <View style={styles.dealMetric}>
                       <TrendingUp size={12} color="#00C48C" />
-                      <Text style={styles.dealMetricValue}>{deal.expectedROI}% ROI</Text>
+                      <Text style={styles.dealMetricValue}>{deal.expectedROI != null && Number.isFinite(Number(deal.expectedROI)) ? `${deal.expectedROI}% ROI` : 'Not entered'}</Text>
                     </View>
                     <View style={styles.dealMetric}>
                       <Users size={12} color="#4A90D9" />

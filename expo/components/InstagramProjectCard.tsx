@@ -416,7 +416,7 @@ const InstagramProjectCard = memo(function InstagramProjectCard({
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
             <Text style={[styles.metricValue, styles.metricHighlight]}>
-              {deal.expectedROI}%
+              {deal.expectedROI != null && Number.isFinite(Number(deal.expectedROI)) ? `${deal.expectedROI}%` : 'N/A'}
             </Text>
             <Text style={styles.metricLabel}>Target ROI</Text>
           </View>
