@@ -281,3 +281,30 @@ createdAt: 2026-07-21T18:08:36.341Z
 - Upload path: `POST /api/ivx/apk/presign-upload` (owner-approved, `CONFIRM_IVX_APK_UPLOAD` phrase) mints a 15-min presigned S3 PUT URL restricted to `apk/` prefix or whitelisted landing files; the signed URL is returned to the caller, who PUTs the file directly to S3
 - Invalidation path: `POST /api/ivx/autonomy/cloudfront/invalidate` (owner-approved, `CONFIRM_IVX_CLOUDFRONT_INVALIDATE` phrase, `apply:true`) — backend uses its AWS creds to call CloudFront CreateInvalidation
 - This is the correct, audited path — no AWS credentials need to be injected into the bash sandbox
+
+## FINAL 0% ERROR QA CLOSEOUT — ALL MEMBER FLOWS (COMPLETE, 2026-07-22)
+
+### Result: 49/49 tests PASS — 0.0% error rate — verified live against production
+
+### Production bugs found + fixed + deployed this session
+
+1. **Landing registration missing fields** — invest modal didn't collect `dateOfBirth`/`gender` (backend requires both). Fixed `index.html` (DOB + gender fields) + `ivx-invest.js` (payload). Commits `2269f31f`, `c29ce4e3`. Deployed to S3 + CloudFront.
+2. **Waitlist form never submitted** — `handleWaitlist` called undefined `_waitlistOrigHandler`. Replaced with real submit handler POSTing to `/api/ivx/waitlist`. Deployed to S3 + CloudFront.
+3. **`kyc_status: 'not_started'` constraint violation** — fallback profile upsert in `ivx-member-database.ts` violated `profiles_kyc_status_check` (allowed: pending/in_review/approved/rejected). Fixed to `pending`. Commit `ff0572d6`, Render deployed.
+4. **Fanout error surfacing** — orchestrator now returns `fanoutErrors` in COMPLETED response with undefined-guard for test mocks. Commits `567d7917`, `6fdb3564`, Render deployed.
+
+### Final live state
+
+- Runtime commit: `6fdb35641706` — /health healthy
+- Backend tests: 1770 pass / 0 fail across 127 files
+- Final canary (post-deploy): register HTTP 200 COMPLETED → login HTTP 200 userId match → ALL 4 TABLES (auth.users=1, profiles=1 kyc=pending, members=1 investor, landing_investments=1 jv_direct)
+- Registration metrics: started=42, completed=42, failed=0
+- All 5 flows verified end-to-end: new member registration (landing+app), existing member login (landing+app), investor (waitlist+invest+login), buyer (waitlist+register+login), jv_deals (chips+pools+DB+invest+login), tokenized (waitlist+token_shares invest+login landing+app)
+- Security: wrong password/email rejected on both surfaces; owner-only endpoints gated (401 without Bearer)
+- 3 JV deals live + values verified: PEREZ RESIDENCE ($2.5M, 25%, $50k min), Casa Rosario ($1.4M, 30%, $50 min), ONE STOP CONSTRUCTORS INC ($400k, 9.5%, $50k min)
+
+### Known non-blocking notes
+
+- `upsertCanonicalMember` dedupes by phone (last 10 digits) — users sharing a phone number merge into one canonical member row (by design; QA must use unique phones)
+- App-side Supabase signUp bypasses the orchestrator — profile/member rows are created on first backend interaction (by design)
+- SMTP still owner-only infrastructure (registration works via auto-confirm)

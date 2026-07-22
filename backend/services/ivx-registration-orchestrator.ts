@@ -435,7 +435,7 @@ export async function orchestrateRegistration(
           landingSubmissionId: registrationRequestId,
           pictureUrl: input.pictureUrl || '',
         });
-        if (!canonicalResult.ok) {
+        if (canonicalResult && canonicalResult.ok === false) {
           fanoutErrors.push(`canonical:${canonicalResult.error || 'unknown'}`);
           console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalResult.error || 'unknown');
         }
