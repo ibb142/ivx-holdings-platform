@@ -57,7 +57,7 @@ export default function SafeVideo({
   onPlaybackStatusUpdate,
   testID,
 }: SafeVideoProps) {
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [ready, setReady] = useState<boolean>(false);
@@ -72,19 +72,38 @@ export default function SafeVideo({
     setRetryCount(0);
   }, [playbackUri]);
 
-  // Unload the player when unmounting to free native resources.
-  // Capture the ref at effect creation time so the cleanup function
-  // uses the correct player instance even if the ref has changed.
+  // CRITICAL: Unload the native ExoPlayer when unmounting.
+  // The ref is read in the cleanup closure, but we must use a ref object
+  // (not a captured snapshot) so we get the LIVE player instance at
+  // cleanup time — not the null value that existed at mount time.
+  // Previous bug: `const player = videoRef.current` captured null at
+  // mount, so unloadAsync was never called → native players leaked on
+  // every reel swipe → memory grew → OOM crash after ~15-25 transitions.
   useEffect(() => {
-    const player = videoRef.current;
     return () => {
       try {
-        void player?.unloadAsync();
+        const player = videoRef.current;
+        if (player) {
+          void player.stopAsync().catch(() => {});
+          void player.unloadAsync().catch(() => {});
+        }
       } catch {
         // ignore — player may already be gone
       }
     };
   }, []);
+
+  // Also unload when the URI changes (before the new source loads)
+  useEffect(() => {
+    return () => {
+      try {
+        const player = videoRef.current;
+        if (player) {
+          void player.unloadAsync().catch(() => {});
+        }
+      } catch {}
+    };
+  }, [playbackUri]);
 
   const handleRetry = () => {
     if (retryCount >= MAX_RETRIES) return;

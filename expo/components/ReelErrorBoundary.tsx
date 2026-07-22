@@ -7,7 +7,7 @@
  * with a poster thumbnail so the user can continue scrolling.
  */
 import React, { Component, type ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { RefreshCw, AlertCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
@@ -21,29 +21,43 @@ interface Props {
 interface State {
   hasError: boolean;
   errorCount: number;
+  traceId: string;
+  errorMessage: string;
 }
 
 const MAX_RETRIES = 3;
 
-export default class ReelErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, errorCount: 0 };
+/** Generate a short trace ID for crash observability (Phase 2). */
+function generateTraceId(): string {
+  return 'reel-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8);
+}
 
-  static getDerivedStateFromError(_error: Error): State {
-    return { hasError: true, errorCount: 0 };
+export default class ReelErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false, errorCount: 0, traceId: '', errorMessage: '' };
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, errorCount: 0, traceId: generateTraceId(), errorMessage: error.message || 'unknown' };
   }
 
   componentDidCatch(error: Error) {
-    if (__DEV__) {
-      console.warn('[ReelErrorBoundary] caught error for reel:', this.props.videoId, error.message);
-    }
-    this.setState((prev) => ({ errorCount: prev.errorCount + 1 }));
+    // Production-safe observability: logs trace ID + reel ID + error
+    // class without exposing internal stack traces or tokens.
+    const traceId = this.state.traceId || generateTraceId();
+    console.warn('[ReelErrorBoundary] crash isolated', {
+      traceId,
+      reelId: this.props.videoId,
+      errorClass: error?.constructor?.name || 'Error',
+      route: '/videos',
+      component: 'ReelVideoPlayer',
+    });
+    this.setState((prev) => ({ errorCount: prev.errorCount + 1, traceId }));
   }
 
   handleRetry = () => {
     if (this.state.errorCount >= MAX_RETRIES) {
       return;
     }
-    this.setState({ hasError: false });
+    this.setState({ hasError: false, traceId: '', errorMessage: '' });
     this.props.onRetry?.();
   };
 
@@ -67,6 +81,7 @@ export default class ReelErrorBoundary extends Component<Props, State> {
                 ? 'This video could not be played after multiple attempts.'
                 : 'Tap to retry or scroll to the next video.'}
             </Text>
+            <Text style={styles.traceId}>Ref: {this.state.traceId}</Text>
             {!exhausted && (
               <TouchableOpacity style={styles.retryBtn} onPress={this.handleRetry} activeOpacity={0.8}>
                 <RefreshCw size={16} color="#000" />
@@ -125,5 +140,11 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 14,
     fontWeight: '700' as const,
+  },
+  traceId: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+    marginTop: 10,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
   },
 });

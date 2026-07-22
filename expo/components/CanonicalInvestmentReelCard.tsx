@@ -219,6 +219,12 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
   const [isInViewport, setIsInViewport] = useState<boolean>(false);
   const lastTapRef = useRef<number>(0);
   const viewRef = useRef<View>(null);
+  // Stable progress handler — avoids creating a new arrow function on
+  // every render, which would cause ReelVideoPlayer/SafeVideo to
+  // re-render ~10x/second during playback.
+  const handleProgress = useCallback((p: number) => {
+    setProgress(p);
+  }, []);
 
   const isReel = mode === 'reel';
   const cardHeight = isReel ? screenHeight : feedHeight;
@@ -360,7 +366,7 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
               previewBlurUri={data.previewBlurUrl}
               shouldPlay={shouldPlay}
               isMuted={isMuted}
-              onProgress={(p) => setProgress(p)}
+              onProgress={handleProgress}
               testID={`${testIDPrefix}-player-${data.reelId}`}
             />
           );

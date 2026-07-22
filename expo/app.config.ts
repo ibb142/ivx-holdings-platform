@@ -17,13 +17,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.4.32",
+  version: "1.4.33",
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_07_21_BUILD_63_CHAT_COMPOSER_LOADING_REMOVED',
-    buildTimestamp: "2026-07-21T01:15:00.000000+00:00",
+    buildMarker: 'IVX_BUNDLE_2026_07_22_BUILD_65_REELS_CRASH_FIX_PLAYER_LEAK',
+    buildTimestamp: "2026-07-22T00:45:00.000000+00:00",
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',
@@ -51,7 +51,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.ivxholdings.app',
-    buildNumber: '2',
+    buildNumber: '3',
   },
   android: {
     adaptiveIcon: {
@@ -59,7 +59,7 @@ const config: ExpoConfig = {
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 64,
+    versionCode: 65,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {

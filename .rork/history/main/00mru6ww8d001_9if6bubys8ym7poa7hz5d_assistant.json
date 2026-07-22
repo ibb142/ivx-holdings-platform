@@ -2883,7 +2883,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/deploy_urllist.py << 'PYEOF'\\nimport json, urllib.request, time, urllib.error\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['accessToken']\\n\\nnew_sha = '18628111a57a554b46bcc0eb4db9f49bc296a799'\\n\\npayload = json.dumps({\\n    'action': 'render_update_source',\\n    'input': {'branch': 'main', 'commitSha': new_sha},\\n    'confirm': True,\\n    'confirmText': 'CONFIRM_IVX_RENDER_SERVICE_UPDATE'\\n}).encode('utf-8')\\nreq = urllib.request.Request('https://api.ivxholding.com/api/ivx/developer-deploy/action', data=payload, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'}, method='POST')\\ntry:\\n    resp = urllib.request.urlopen(req, timeout=60)\\n    print('UPDATE SOURCE:', json.loads(resp.read().decode())['result'])\\nexcept Exception as e:\\n    print('UPDATE SOURCE ERROR:', e)\\n\\nfor i in range(60):\\n    time.sleep(10)\\n    try:\\n        req = urllib.request.Request('https://api.ivxholding.com/health', method='GET')\\n        resp = urllib.request.urlopen(req, timeout=30)\\n        data = json.loads(resp.read().decode())\\n        commit = data.get('commit', '')\\n        boot = data.get('bootTime', '?')\\n        print(f'{i} commit={commit[:12]} boot={boot}')\\n        if commit.startswith(new_sha):\\n            print('URL LIST FIX LIVE')\\n            break\\n    except Exception as e:\\n        print(f'{i} health error: {e}')\\nPYEOF\\nnohup python3 /tmp/deploy_urllist.py > /tmp/deploy_urllist.log 2>&1 &\\necho \\\"Monitor PID: $!\\\"\\nsleep 3\\ntail -10 /tmp/deploy_urllist.log\"}",
       "createdAt": 1784609535025,
-      "completedAt": 1784609540441
+      "completedAt": 1784609540441,
+      "compactedAt": 1784680856873
     },
     {
       "type": "reasoning",

@@ -83,6 +83,10 @@ export default function VideosScreen() {
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [channel, setChannel] = useState<ReelChannel>('all');
 
+  // Stable mute toggle — hoisted so renderItem never creates a new
+  // callback identity, which would re-render all mounted cards.
+  const toggleMute = useCallback(() => setMuted(m => !m), []);
+
   const [commentsVideo, setCommentsVideo] = useState<FeedVideo | null>(null);
   const [comments, setComments] = useState<ProjectComment[]>([]);
   const [commentsTotal, setCommentsTotal] = useState<number>(0);
@@ -373,7 +377,7 @@ export default function VideosScreen() {
           shouldMountVideo={playback.shouldMount(index, filteredVideos.length)}
           isMuted={muted}
           feedHeight={windowHeight}
-          onToggleMute={() => setMuted(m => !m)}
+          onToggleMute={toggleMute}
           onLike={(d) => handleLike(item)}
           onComment={(d) => handleComment(item)}
           onSave={(d) => handleSave(item)}
@@ -440,7 +444,12 @@ export default function VideosScreen() {
           initialNumToRender={2}
           maxToRenderPerBatch={3}
           windowSize={5}
-          removeClippedSubviews
+          // NOTE: removeClippedSubviews intentionally DISABLED.
+          // On Android, removeClippedSubviews + pagingEnabled causes native
+          // view detachment during paging animation → crashes during fast
+          // scroll. The shouldMount() window (active ± 1) already limits
+          // mounted video players to 3, so clipped-subview removal is
+          // unnecessary for memory control.
           getItemLayout={(_data, index) => ({ length: itemHeight, offset: itemHeight * index, index })}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
