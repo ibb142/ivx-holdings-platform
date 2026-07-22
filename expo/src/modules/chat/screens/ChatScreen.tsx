@@ -684,11 +684,25 @@ export function ChatScreen({
     return shouldShowRuntimeDebugDetails(runtimeDashboard) || auditCards.length > 0 || primaryRoomState.state === 'degraded';
   }, [auditCards.length, primaryRoomState.state, runtimeDashboard]);
 
+  const isNearBottomRef = useRef<boolean>(true);
+  const [showScrollToLatest, setShowScrollToLatest] = useState<boolean>(false);
+  const hasScrolledToLatestRef = useRef<boolean>(false);
+
   const scrollToBottom = useCallback((animated: boolean) => {
     requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated });
+      isNearBottomRef.current = true;
+      setShowScrollToLatest(false);
     });
   }, []);
+
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+    const nearBottom = distanceFromBottom < 100;
+    isNearBottomRef.current = nearBottom;
+    setShowScrollToLatest(!nearBottom && messages.length > 0);
+  }, [messages.length]);
 
   const updateScreenFrame = useCallback(() => {
     if (Platform.OS === 'web') {
@@ -1710,16 +1724,30 @@ export function ChatScreen({
     };
   }, [isOwnerRoomConversation, stableConversationId, stableCurrentUserId]);
 
+  // Auto-scroll to latest only on initial load or when near the bottom.
+  // Do NOT force-scroll when the user is reading older messages.
   useEffect(() => {
     if (messages.length === 0) {
       return;
     }
 
-    const timeout = setTimeout(() => {
-      scrollToBottom(true);
-    }, 80);
+    // First load: scroll to bottom without animation to avoid visible jump
+    if (!hasScrolledToLatestRef.current) {
+      const timeout = setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: false });
+        hasScrolledToLatestRef.current = true;
+        isNearBottomRef.current = true;
+      }, 50);
+      return () => clearTimeout(timeout);
+    }
 
-    return () => clearTimeout(timeout);
+    // Subsequent messages: only auto-scroll if user is near the bottom
+    if (isNearBottomRef.current) {
+      const timeout = setTimeout(() => {
+        scrollToBottom(true);
+      }, 80);
+      return () => clearTimeout(timeout);
+    }
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
@@ -1858,6 +1886,11 @@ export function ChatScreen({
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             showsVerticalScrollIndicator={false}
             onEndReachedThreshold={0.1}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            maxToRenderPerBatch={10}
+            initialNumToRender={15}
+            windowSize={10}
 
             refreshControl={
               <RefreshControl
@@ -1869,13 +1902,14 @@ export function ChatScreen({
               />
             }
             onContentSizeChange={() => {
-              if (!isLoadingOlder) {
+              if (!isLoadingOlder && isNearBottomRef.current) {
                 scrollToBottom(visibleMessages.length > 1);
               }
             }}
             onLayout={() => {
-              if (!isLoadingOlder) {
-                scrollToBottom(false);
+              if (!isLoadingOlder && !hasScrolledToLatestRef.current) {
+                listRef.current?.scrollToEnd({ animated: false });
+                hasScrolledToLatestRef.current = true;
               }
             }}
             ListEmptyComponent={
@@ -1925,6 +1959,17 @@ export function ChatScreen({
               bottomInset={composerBottomInset}
             />
           </View>
+
+          {showScrollToLatest ? (
+            <Pressable
+              style={styles.scrollToLatestButton}
+              onPress={() => scrollToBottom(true)}
+              testID="chat-scroll-to-latest"
+            >
+              <ChevronUp size={16} color={Colors.black} />
+              <Text style={styles.scrollToLatestText}>Latest</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -2421,5 +2466,27 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.84,
+  },
+  scrollToLatestButton: {
+    position: 'absolute' as const,
+    bottom: 80,
+    right: 16,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  scrollToLatestText: {
+    color: Colors.black,
+    fontSize: 12,
+    fontWeight: '700' as const,
   },
 });

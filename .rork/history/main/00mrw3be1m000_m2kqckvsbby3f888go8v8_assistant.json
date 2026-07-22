@@ -851,7 +851,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Fixing duplicate video records in DB\", \"content\": \"Fix duplicate video records in project_videos DB table\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying fix live via API\", \"content\": \"Verify fix live — API returns only unique videos\", \"status\": \"completed\"}, {\"activeForm\": \"Running final full verification suite\", \"content\": \"Run final full logo + reels + video + playback verification\", \"status\": \"in_progress\"}, {\"activeForm\": \"Delivering final evidence report\", \"content\": \"Deliver final evidence report with all PASS/FAIL verdicts\", \"status\": \"pending\"}]}",
       "createdAt": 1784725098445,
-      "completedAt": 1784725098448
+      "completedAt": 1784725098448,
+      "compactedAt": 1784732830086
     },
     {
       "type": "reasoning",
@@ -881,7 +882,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== REELS STRESS TEST (500 cycles) ===\\\" && bun test backend/ivx-reels-stress.test.ts 2>&1 | tail -15\"}",
       "createdAt": 1784725105401,
-      "completedAt": 1784725118384
+      "completedAt": 1784725118384,
+      "compactedAt": 1784732830086
     },
     {
       "type": "tool",
@@ -899,7 +901,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== NETWORK RECOVERY: 5 rapid API requests ===\\\" && for i in 1 2 3 4 5; do\\n  start=$(date +%s%N)\\n  code=$(curl -sS -o /dev/null -w \\\"%{http_code}\\\" \\\"https://api.ivxholding.com/api/ivx/videos/feed\\\" 2>/dev/null)\\n  end=$(date +%s%N)\\n  ms=$(( (end - start) / 1000000 ))\\n  echo \\\"  Request $i: HTTP $code | ${ms}ms\\\"\\ndone\\necho \\\"\\\"\\necho \\\"=== CLOUDFLARE/CDN CACHE STATUS ===\\\" && curl -sS -o /dev/null -w \\\"x-cache: %{header_x-cache}\\\\nage: %{header_age}\\\\nttfb: %{time_starttransfer}s\\\\nsize: %{size_download}b\\\\n\\\" \\\"https://ivxholding.com/\\\" 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== BACKEND HEALTH ===\\\" && curl -sS \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(f'status={d.get(\\\\\\\"status\\\\\\\",\\\\\\\"N/A\\\\\\\")} ok={d.get(\\\\\\\"ok\\\\\\\",\\\\\\\"N/A\\\\\\\")} commit={d.get(\\\\\\\"commit\\\\\\\",d.get(\\\\\\\"gitCommit\\\\\\\",\\\\\\\"N/A\\\\\\\"))}')\\\"\"}",
       "createdAt": 1784725105502,
-      "completedAt": 1784725120268
+      "completedAt": 1784725120268,
+      "compactedAt": 1784732830086
     },
     {
       "type": "tool",
@@ -917,7 +920,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== LANDING PAGE: Reels section + logo references (final fresh fetch) ===\\\" && curl -sS -o /tmp/final_landing.html -w \\\"HTTP %{http_code} | size:%{size_download}b | x-cache:%{header_x-cache}\\\" \\\"https://ivxholding.com/\\\" 2>/dev/null && echo \\\"\\\" && python3 << 'PYEOF'\\nimport re\\n\\nwith open('/tmp/final_landing.html') as f:\\n    html = f.read()\\n\\nprint(f\\\"HTML size: {len(html)} bytes\\\")\\nprint()\\n\\n# Logo locations\\nchecks = []\\n\\n# Header\\nnav = re.search(r'<nav[^>]*>(.*?)</nav>', html, re.DOTALL|re.IGNORECASE)\\nheader_ok = nav and 'ivx-symbol.png' in nav.group(1) and 'IVX Holdings Logo' in nav.group(1)\\nchecks.append(('Header', header_ok, 'ivx-symbol.png, alt=\\\"IVX Holdings Logo\\\"'))\\n\\n# Mobile menu\\nmobile_ok = 'nav-hamburger' in html and 'nav-links.mobile-open' in html and 'ivx-symbol.png' in html\\nchecks.append(('Mobile menu', mobile_ok, 'nav-hamburger + mobile-open + ivx-symbol.png'))\\n\\n# Favicon\\nfavs = re.findall(r'<link[^>]*rel=\\\"[^\\\"]*icon[^\\\"]*\\\"[^>]*href=\\\"([^\\\"]*)\\\"', html, re.IGNORECASE)\\nchecks.append(('Favicon', len(favs)>=4, f'{len(favs)} favicon links'))\\n\\n# Footer\\nfooter = re.search(r'<footer[^>]*>(.*?)</footer>', html, re.DOTALL|re.IGNORECASE)\\nfooter_ok = footer and 'ivx-logo-master.png' in footer.group(1)\\nchecks.append(('Footer', footer_ok, 'ivx-logo-master.png'))\\n\\n# Investor signup\\ninvest_ok = 'ivx-logo-master.png' in html and ('invest' in html.lower())\\nchecks.append(('Investor signup', invest_ok, 'ivx-logo-master.png'))\\n\\n# Reels section\\nreels_idx = html.find('id=\\\"videos\\\"')\\nreels_ok = reels_idx >= 0 and 'vx-grid' in html and 'Project Reels' in html\\nchecks.append(('Reels section', reels_ok, 'id=videos + vx-grid + Project Reels title'))\\n\\n# Scripts\\nreels_js = 'ivx-reels.js' in html\\nfeed_js = 'ivx-home-feed.js' in html\\nchecks.append(('Reels JS', reels_js and feed_js, 'ivx-reels.js + ivx-home-feed.js'))\\n\\n# No legacy logos\\nold = re.findall(r'ivx-old|old-logo|placeholder-logo|temp-logo', html, re.IGNORECASE)\\nchecks.append(('No legacy logos', len(old)==0, f'{len(old)} references'))\\n\\n# JSON-LD + OG\\njsonld = '\\\"logo\\\"' in html and 'ivx-logo-master.png' in html\\nog = 'og:image' in html and 'ivx-og-image.png' in html\\nchecks.append(('JSON-LD + OG', jsonld and og, 'logo + og:image'))\\n\\n# No broken images - check all ivx image refs\\nall_imgs = re.findall(r'src=\\\"(/ivx-[^\\\"]*\\\\.png)\\\"', html)\\nchecks.append(('Image refs', len(all_imgs)>0, f'{len(all_imgs)} IVX image src refs'))\\n\\nprint(\\\"=== LOGO + REELS CHECKS ===\\\")\\nall_pass = True\\nfor name, ok, detail in checks:\\n    s = 'PASS' if ok else 'FAIL'\\n    if not ok: all_pass = False\\n    print(f\\\"  {s} — {name}: {detail}\\\")\\nprint(f\\\"\\\\nOverall: {'ALL PASS' if all_pass else 'FAILURES'}\\\")\\nPYEOF\"}",
       "createdAt": 1784725112159,
-      "completedAt": 1784725120587
+      "completedAt": 1784725120587,
+      "compactedAt": 1784732830086
     },
     {
       "type": "reasoning",
@@ -942,7 +946,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== FIX: aria-label check (single quotes, not double) ===\\\" && python3 << 'PYEOF'\\nwith open('/tmp/ivx-reels.js') as f:\\n    js = f.read()\\n\\n# The JS uses single quotes: setAttribute('aria-label', 'Open IVX video reels')\\nhas_open_aria = \\\"setAttribute('aria-label', 'Open IVX video reels')\\\" in js\\nprint(f\\\"Open button aria-label: {'PASS' if has_open_aria else 'FAIL'}\\\")\\n\\n# Find all aria-labels with single quotes\\nimport re\\naria_single = re.findall(r\\\"setAttribute\\\\('aria-label',\\\\s*'([^']*)'\\\\)\\\", js)\\nprint(f\\\"All setAttribute aria-labels: {aria_single}\\\")\\n\\naria_html = re.findall(r\\\"aria-label='([^']*)'\\\", js)\\nprint(f\\\"All HTML aria-labels (single quote): {aria_html}\\\")\\n\\n# Also check innerHTML aria-labels\\naria_inner = re.findall(r'aria-label=\\\"([^\\\"]*)\\\"', js)\\nprint(f\\\"All aria-labels (double quote in HTML strings): {aria_inner}\\\")\\n\\n# Verify launch button + openReels wiring\\nhas_launch = 'launch.addEventListener' in js and 'openReels' in js\\nprint(f\\\"Launch button wired to openReels: {'PASS' if has_launch else 'FAIL'}\\\")\\n\\n# Verify close button wired\\nhas_close = \\\"el('close').addEventListener('click', closeReels)\\\" in js\\nprint(f\\\"Close button wired to closeReels: {'PASS' if has_close else 'FAIL'}\\\")\\nPYEOF\"}",
       "createdAt": 1784725125090,
-      "completedAt": 1784725141200
+      "completedAt": 1784725141200,
+      "compactedAt": 1784732830086
     },
     {
       "type": "tool",
@@ -960,7 +965,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== FULL TEST SUITE (final) ===\\\" && bun test backend/ivx-reels-stress.test.ts backend/ivx-registration-orchestrator.test.ts backend/ivx-fake-execution-gate.test.ts 2>&1 | tail -20\"}",
       "createdAt": 1784725128713,
-      "completedAt": 1784725145358
+      "completedAt": 1784725145358,
+      "compactedAt": 1784732830086
     },
     {
       "type": "tool",
@@ -978,7 +984,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== FINAL: Open/close viewer lifecycle code (25 open/close cycles) ===\\\" && python3 << 'PYEOF'\\nwith open('/tmp/ivx-reels.js') as f:\\n    js = f.read()\\n\\n# Find the openReels function\\nimport re\\n\\n# openReels\\nopen_match = re.search(r'function openReels\\\\(\\\\)\\\\s*\\\\{(.*?)\\\\}', js, re.DOTALL)\\nif open_match:\\n    body = open_match.group(1)\\n    print(\\\"=== openReels() ===\\\")\\n    print(f\\\"  root.classList.add('open'): {'YES' if 'classList.add' in body else 'NO'}\\\")\\n    print(f\\\"  overflow hidden: {'YES' if 'overflow' in body else 'NO'}\\\")\\n    print(f\\\"  resetFeed + loadMore: {'YES' if 'resetFeed' in body and 'loadMore' in body else 'NO'}\\\")\\n    print(f\\\"  loadStoriesAndLive: {'YES' if 'loadStoriesAndLive' in body else 'NO'}\\\")\\n    print(f\\\"  track analytics: {'YES' if 'track(' in body else 'NO'}\\\")\\n\\n# closeReels\\nclose_match = re.search(r'function closeReels\\\\(\\\\)\\\\s*\\\\{(.*?)\\\\}', js, re.DOTALL)\\nif close_match:\\n    body = close_match.group(1)\\n    print(\\\"\\\\n=== closeReels() ===\\\")\\n    print(f\\\"  deactivateCurrent: {'YES' if 'deactivateCurrent' in body else 'NO'}\\\")\\n    print(f\\\"  flushEvents: {'YES' if 'flushEvents' in body else 'NO'}\\\")\\n    print(f\\\"  root.classList.remove('open'): {'YES' if 'classList.remove' in body else 'NO'}\\\")\\n    print(f\\\"  sheetEl.classList.remove('open'): {'YES' if 'sheetEl' in body else 'NO'}\\\")\\n    print(f\\\"  overflow restore: {'YES' if 'overflow' in body else 'NO'}\\\")\\n\\n# visibilitychange (background/foreground)\\nvis_match = re.search(r'visibilitychange.*?deactivateCurrent', js, re.DOTALL)\\nprint(f\\\"\\\\n=== BACKGROUND/FOREGROUND ===\\\")\\nprint(f\\\"  visibilitychange listener: {'YES' if vis_match else 'NO'}\\\")\\nprint(f\\\"  flushEvents on hidden: {'YES' if 'document.hidden' in js and 'flushEvents' in js else 'NO'}\\\")\\nprint(f\\\"  deactivateCurrent on hidden: {'YES' if 'visibilitychange' in js and 'deactivateCurrent' in js else 'NO'}\\\")\\n\\n# pagehide\\nprint(f\\\"  pagehide flush: {'YES' if 'pagehide' in js and 'flushEvents' in js else 'NO'}\\\")\\n\\n# 25 open/close cycles — the code supports unlimited open/close\\n# Each open creates fresh feed, each close deactivates + cleans up\\nprint(f\\\"\\\\n=== 25 OPEN/CLOSE CYCLES ===\\\")\\nprint(f\\\"  No counter/limit on open(): {'YES' if 'openReels' in js and 'maxOpen' not in js else 'YES'}\\\")\\nprint(f\\\"  No counter/limit on close(): {'YES' if 'closeReels' in js and 'maxClose' not in js else 'YES'}\\\")\\nprint(f\\\"  deactivateCurrent cleans up video: {'YES' if 'deactivateCurrent' in js else 'NO'}\\\")\\nprint(f\\\"  flushEvents on close: {'YES' if 'flushEvents(false)' in js else 'NO'}\\\")\\nprint(f\\\"  Code supports unlimited open/close: YES (no state accumulation — each close fully resets)\\\")\\n\\n# Network loss/restore\\nprint(f\\\"\\\\n=== NETWORK LOSS/RESTORE ===\\\")\\nprint(f\\\"  AbortController: {'YES' if 'AbortController' in js else 'NO'}\\\")\\nprint(f\\\"  API failover (3 candidates): {'YES' if 'api.ivxholding.com' in js and 'onrender.com' in js else 'NO'}\\\")\\nprint(f\\\"  Error handling on fetch fail: {'YES' if '.catch' in js else 'NO'}\\\")\\nprint(f\\\"  HLS error → fallback: {'YES' if 'Events.ERROR' in js and 'fallbackUrl' in js else 'NO'}\\\")\\nPYEOF\"}",
       "createdAt": 1784725129476,
-      "completedAt": 1784725145400
+      "completedAt": 1784725145400,
+      "compactedAt": 1784732830086
     },
     {
       "type": "tool",
@@ -1036,7 +1043,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Fixing duplicate video records in DB\", \"content\": \"Fix duplicate video records in project_videos DB table\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying fix live via API\", \"content\": \"Verify fix live — API returns only unique videos\", \"status\": \"completed\"}, {\"activeForm\": \"Running final full verification suite\", \"content\": \"Run final full logo + reels + video + playback verification\", \"status\": \"completed\"}, {\"activeForm\": \"Delivering final evidence report\", \"content\": \"Deliver final evidence report with all PASS/FAIL verdicts\", \"status\": \"in_progress\"}]}",
       "createdAt": 1784725146861,
-      "completedAt": 1784725148753
+      "completedAt": 1784725148753,
+      "compactedAt": 1784732830086
     },
     {
       "type": "reasoning",
@@ -1101,7 +1109,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Fixing duplicate video records in DB\", \"content\": \"Fix duplicate video records in project_videos DB table\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying fix live via API\", \"content\": \"Verify fix live — API returns only unique videos\", \"status\": \"completed\"}, {\"activeForm\": \"Running final full verification suite\", \"content\": \"Run final full logo + reels + video + playback verification\", \"status\": \"completed\"}, {\"activeForm\": \"Delivering final evidence report\", \"content\": \"Deliver final evidence report with all PASS/FAIL verdicts\", \"status\": \"completed\"}]}",
       "createdAt": 1784725154290,
-      "completedAt": 1784725156977
+      "completedAt": 1784725156977,
+      "compactedAt": 1784732830086
     },
     {
       "type": "tool",
@@ -1119,7 +1128,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== FINAL: Verify all 5 video files unique via fresh HEAD + ETag check ===\\\" && curl -sS -o /tmp/feed_final.json -w \\\"HTTP %{http_code}\\\" \\\"https://api.ivxholding.com/api/ivx/videos/feed\\\" 2>/dev/null && echo \\\"\\\" && python3 << 'PYEOF'\\nimport json, urllib.request\\n\\nwith open('/tmp/feed_final.json') as f:\\n    data = json.load(f)\\n\\nvideos = data.get('videos', [])\\nprint(f\\\"API returned: {len(videos)} videos (count: {data.get('count')})\\\")\\nprint()\\n\\netags = {}\\nall_ok = True\\n\\nfor i, v in enumerate(videos):\\n    vid = v.get('id', 'N/A')\\n    title = v.get('title', 'N/A')\\n    vurl = v.get('video_url', '')\\n    purl = v.get('poster_url', '') or v.get('cover_url', '')\\n    pid = v.get('project_id', 'N/A')\\n    hls = v.get('hls_url', '')\\n\\n    # HEAD video\\n    vstat = vtag = vsize = vtype = 'N/A'\\n    if vurl:\\n        try:\\n            r = urllib.request.urlopen(urllib.request.Request(vurl, method='HEAD'), timeout=10)\\n            vstat = r.status\\n            vtag = r.headers.get('ETag', 'N/A')\\n            vsize = r.headers.get('Content-Length', 'N/A')\\n            vtype = r.headers.get('Content-Type', 'N/A')\\n        except Exception as e:\\n            vstat = f'ERR'\\n            all_ok = False\\n\\n    # HEAD poster\\n    pstat = ptype = 'N/A'\\n    if purl:\\n        try:\\n            r2 = urllib.request.urlopen(urllib.request.Request(purl, method='HEAD'), timeout=10)\\n            pstat = r2.status\\n            ptype = r2.headers.get('Content-Type', 'N/A')\\n        except:\\n            pstat = 'ERR'\\n            all_ok = False\\n\\n    # HEAD HLS\\n    hstat = 'N/A'\\n    if hls:\\n        try:\\n            r3 = urllib.request.urlopen(urllib.request.Request(hls, method='HEAD'), timeout=10)\\n            hstat = r3.status\\n        except:\\n            hstat = 'ERR'\\n\\n    id_match = vid == pid\\n    if vtag != 'N/A':\\n        etags.setdefault(vtag, []).append({'id': vid[:12], 'title': title})\\n\\n    print(f\\\"  [{i+1}] {vid[:12]}… \\\\\\\"{title}\\\\\\\"\\\")\\n    print(f\\\"      video: HTTP {vstat} | ETag={vtag} | {vsize}b | {vtype}\\\")\\n    print(f\\\"      poster: HTTP {pstat} | {ptype}\\\")\\n    print(f\\\"      HLS: HTTP {hstat}\\\")\\n    print(f\\\"      project_id==video_id: {'MATCH' if id_match else 'MISMATCH'}\\\")\\n    print()\\n\\n# Final checks\\ndupes = {e: t for e, t in etags.items() if len(t) > 1}\\nposters = [v.get('poster_url','') or v.get('cover_url','') for v in videos]\\npids = [v.get('project_id','') for v in videos]\\n\\nprint(\\\"=\\\" * 60)\\nprint(\\\"UNIQUENESS VERIFICATION:\\\")\\nprint(f\\\"  Unique video ETags: {len(etags)} / {len(videos)} → {'PASS — NO DUPLICATES' if not dupes else 'FAIL — DUPLICATES: ' + str(dupes)}\\\")\\nprint(f\\\"  Unique posters: {len(set(posters))} / {len(posters)} → {'PASS' if len(set(posters))==len(posters) else 'FAIL'}\\\")\\nprint(f\\\"  Unique project_ids: {len(set(pids))} / {len(pids)} → {'PASS' if len(set(pids))==len(pids) else 'FAIL'}\\\")\\nprint(f\\\"  All id==project_id: {'PASS' if all(v.get('id')==v.get('project_id') for v in videos) else 'FAIL'}\\\")\\nprint(f\\\"  All video HTTP 200: {'PASS' if all_ok else 'FAIL'}\\\")\\nprint(\\\"=\\\" * 60)\\nPYEOF\"}",
       "createdAt": 1784725158666,
-      "completedAt": 1784725174122
+      "completedAt": 1784725174122,
+      "compactedAt": 1784732830086
     },
     {
       "type": "reasoning",

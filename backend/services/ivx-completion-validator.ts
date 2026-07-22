@@ -1,351 +1,284 @@
 /**
  * IVX Completion Validator
  *
- * Final, deterministic gate before IVX can claim a task is COMPLETE, VERIFIED,
- * or DEPLOYED. It compares the owner-requested outcome against the actual
- * evidence captured during execution. This prevents the false-completion
- * pattern where a deploy-only redeploy or a health check is reported as a
- * fixed defect.
+ * Prevents false completion claims by comparing user-requested outcomes
+ * against actual execution evidence. The validator rejects VERIFIED
+ * when:
+ *   - The requested outcome was not tested
+ *   - The diff is empty for a code task
+ *   - Tests are unrelated to the defect
+ *   - Only /health was checked
+ *   - Only a deployment occurred
+ *   - The production commit does not contain the change
+ *   - The same old evidence is reused for a new task
+ *   - Evidence timestamps predate the task
+ *   - A job claims success with no measurable output
  *
- * Rules (owner mandate 2026-07-20):
- *   - DEPLOYED means a deployment occurred; it does NOT mean a defect is fixed.
- *   - VERIFIED means the requested acceptance tests passed.
- *   - A CODE_FIX/UI_FIX/FEATURE task cannot be VERIFIED when no code changed
- *     unless the root cause was genuinely external (config/data/infra).
- *   - If no work was completed, status must be NO_CHANGE_REQUIRED, BLOCKED,
- *     or FAILED — never "DEPLOYED" or "COMPLETE".
- *   - Never display "development completed" when the code diff is empty.
- *
- * This module is intentionally runtime-free and does NOT import worker types,
- * to avoid circular dependencies with ivx-senior-developer-worker.
+ * Pure — no I/O, no AI, fully unit-testable.
  */
 
-export const IVX_COMPLETION_VALIDATOR_MARKER = 'ivx-completion-validator-2026-07-20';
-
-export type IVXTaskType =
-  | 'CODE_FIX'
-  | 'FEATURE'
-  | 'UI_FIX'
-  | 'DATA_FIX'
-  | 'CONFIGURATION_FIX'
-  | 'INFRASTRUCTURE_FIX'
-  | 'DEPLOYMENT'
-  | 'QA_ONLY'
-  | 'INVESTIGATION'
-  | 'CONTENT_REQUEST'
-  | 'BUSINESS_ANALYSIS';
-
-export type IVXTaskState =
-  | 'RECEIVED'
-  | 'ANALYZING'
-  | 'REPRODUCING'
-  | 'ROOT_CAUSE_IDENTIFIED'
-  | 'IMPLEMENTING'
-  | 'CODE_CHANGED'
-  | 'TESTING'
-  | 'QA_REQUIRED'
-  | 'QA_IN_PROGRESS'
-  | 'READY_TO_DEPLOY'
-  | 'DEPLOYING'
-  | 'DEPLOYED'
-  | 'PRODUCTION_VERIFYING'
-  | 'VERIFIED'
-  | 'BLOCKED'
-  | 'FAILED'
-  | 'NO_CHANGE_REQUIRED';
+export const IVX_COMPLETION_VALIDATOR_MARKER =
+  'ivx-completion-validator-2026-07-22';
 
 export type IVXValidationVerdict =
   | 'VERIFIED'
   | 'DEPLOYED_ONLY'
-  | 'NO_CHANGE_REQUIRED'
+  | 'HEALTH_ONLY'
+  | 'NOT_COMPLETED'
+  | 'PARTIAL'
   | 'BLOCKED'
   | 'FAILED'
-  | 'NOT_COMPLETED';
+  | 'NO_CHANGE';
 
-export type IVXCompletionEvidence = {
-  taskType: IVXTaskType;
-  requestedOutcome: string;
+export type IVXCompletionValidatorInput = {
+  /** The user's original request text. */
+  userRequest: string;
+  /** Acceptance criteria the owner defined (if any). */
   acceptanceCriteria: string[];
-  state: IVXTaskState;
-  previousVerdict: string | null;
+  /** Task type from the classifier. */
+  taskType: string;
+  /** Whether any files were changed. */
   filesChanged: string[];
-  testsPassed: boolean;
+  /** Whether tests were run and what the result was. */
   testsRun: boolean;
-  typecheckPassed: boolean;
-  typecheckRun: boolean;
-  buildPassed: boolean;
-  buildRun: boolean;
+  testsPassed: boolean;
+  testNames: string[];
+  /** Whether a commit was created. */
   commitSha: string | null;
+  /** Whether a deployment occurred. */
   deployId: string | null;
-  productionHealthOk: boolean;
-  commitMatch: boolean;
+  /** Whether /health was checked and returned 200. */
+  healthOk: boolean;
+  /** Whether feature-specific verification was performed. */
   featureVerificationOk: boolean | null;
-  error: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  verifiedAt: string | null;
+  /** Whether the production commit contains the change. */
+  productionCommitMatches: boolean;
+  /** Timestamp when the task started. */
+  taskStartedAt: number;
+  /** Timestamp of the earliest evidence (commit, test, deploy). */
+  earliestEvidenceAt: number | null;
+  /** Whether any prior task used the same commit + deployId. */
+  reusedEvidence: boolean;
+  /** Whether device/browser QA was performed. */
+  deviceQAPerformed: boolean;
+  /** Whether the requested behavior was explicitly tested. */
+  requestedBehaviorTested: boolean;
 };
 
-export type IVXCompletionValidationResult = {
-  ok: boolean;
+export type IVXCompletionValidatorResult = {
   verdict: IVXValidationVerdict;
-  state: IVXTaskState;
+  ok: boolean;
   reasons: string[];
-  evidence: IVXCompletionEvidence;
-  marker: typeof IVX_COMPLETION_VALIDATOR_MARKER;
+  remainingWork: string[];
 };
 
-const DEVELOPMENT_TASK_TYPES: ReadonlySet<IVXTaskType> = new Set([
-  'CODE_FIX',
-  'FEATURE',
-  'UI_FIX',
-  'DATA_FIX',
-]);
-
-const DEPLOYMENT_TASK_TYPES: ReadonlySet<IVXTaskType> = new Set([
-  'DEPLOYMENT',
-  'INFRASTRUCTURE_FIX',
-  'CONFIGURATION_FIX',
-]);
-
-export function classifyTaskType(goal: string): IVXTaskType {
-  const normalized = (goal ?? '').toLowerCase();
-  if (/(audit|inspect|investigate|trace|root cause|diagnose|find why|report|explain|understand|analyze|analysis|why is|why does|why are|what is causing|what causes)/i.test(normalized)
-      && !/(fix|deploy|change|edit|apply|implement|patch|build|upgrade|create|repair|resolve|correct)/i.test(normalized)) {
-    return 'INVESTIGATION';
-  }
-  if (/\b(deploy|redeploy|push live|release|rollout|render deploy)\b/i.test(normalized)
-      && !/(fix|bug|patch|feature|implement|ui|scroll|loading|chat|screen)/i.test(normalized)) {
-    return 'DEPLOYMENT';
-  }
-  if (/(qa|test|verify|acceptance|regression|check|validate|measure)/i.test(normalized)
-      && !/(fix|deploy|change|edit|apply|implement|patch|build|upgrade)/i.test(normalized)) {
-    return 'QA_ONLY';
-  }
-  if (/(configuration|config|env|environment variable|render env|setting|toggle)/i.test(normalized)) {
-    return 'CONFIGURATION_FIX';
-  }
-  if (/(infrastructure|server|database|redis|queue|render service|supabase project|migrate schema)/i.test(normalized)) {
-    return 'INFRASTRUCTURE_FIX';
-  }
-  if (/(data fix|clean data|delete test|fix data|sanitize data|merge records|deduplicate)/i.test(normalized)) {
-    return 'DATA_FIX';
-  }
-  if (/(content|copy|text|wording|label|title|placeholder|typo|document|pdf|attachment)/i.test(normalized)) {
-    return 'CONTENT_REQUEST';
-  }
-  if (/(business model|pricing|roi|investor|deal structure|capital|workflow|process|kpi|metric)/i.test(normalized)) {
-    return 'BUSINESS_ANALYSIS';
-  }
-  if (/(ui|interface|screen|component|button|modal|scroll|loading|keyboard|composer|chat|flatlist|scrollview|view|color|theme|style|layout|icon|animation)/i.test(normalized)) {
-    return 'UI_FIX';
-  }
-  if (/(fix|bug|repair|correct|resolve|patch|issue|error|crash|exception|broken|not working|failed|slow|timeout|stuck|hang|leak|race|deadlock)/i.test(normalized)) {
-    return 'CODE_FIX';
-  }
-  if (/(feature|implement|add|build|create|introduce|support|enable|new capability|new module|new app|new screen)/i.test(normalized)) {
-    return 'FEATURE';
-  }
-  return 'INVESTIGATION';
-}
-
+/**
+ * Validate whether a task can honestly claim completion.
+ * This is the final gate before IVX can announce success.
+ */
 export function validateCompletion(
-  evidence: IVXCompletionEvidence,
-): IVXCompletionValidationResult {
+  input: IVXCompletionValidatorInput,
+): IVXCompletionValidatorResult {
   const reasons: string[] = [];
+  const remainingWork: string[] = [];
 
-  if (evidence.previousVerdict === 'VERIFIED' && !evidence.featureVerificationOk) {
-    reasons.push('Previous VERIFIED claim has no feature-verification evidence');
+  const isCodeTask =
+    input.taskType === 'CODE_FIX' ||
+    input.taskType === 'FEATURE' ||
+    input.taskType === 'UI_FIX';
+
+  const isConfigTask =
+    input.taskType === 'CONFIGURATION_FIX' ||
+    input.taskType === 'INFRASTRUCTURE_FIX';
+
+  // Rule 1: A code task with an empty diff cannot be VERIFIED.
+  if (isCodeTask && input.filesChanged.length === 0) {
+    reasons.push(
+      'The code diff is empty for a code task — no development occurred.',
+    );
+    remainingWork.push('Inspect the actual code, identify the root cause, and modify the correct files.');
   }
-  if (evidence.verifiedAt && evidence.completedAt && evidence.verifiedAt < evidence.completedAt) {
-    reasons.push('Verification timestamp predates task completion');
+
+  // Rule 2: Only /health was checked — cannot be VERIFIED from health alone.
+  if (input.healthOk && !input.featureVerificationOk && input.filesChanged.length === 0) {
+    reasons.push(
+      'Only /health was checked — infrastructure health passed but feature verification was not performed.',
+    );
+    remainingWork.push('Test the exact requested behavior in production, not just /health.');
   }
 
-  const isDevelopment = DEVELOPMENT_TASK_TYPES.has(evidence.taskType);
-  const isDeployment = DEPLOYMENT_TASK_TYPES.has(evidence.taskType);
+  // Rule 3: Only a deployment occurred with no code change.
+  if (input.deployId && input.filesChanged.length === 0 && !input.featureVerificationOk) {
+    reasons.push(
+      'Only a deployment occurred with no code change — this is a redeploy, not a fix.',
+    );
+    remainingWork.push('Make the requested code change before deploying.');
+  }
 
-  // A development task with no code change cannot be VERIFIED or DEPLOYED as a fix.
-  if (isDevelopment && evidence.filesChanged.length === 0) {
-    if (evidence.deployId && evidence.productionHealthOk && evidence.commitMatch) {
-      reasons.push('Development task requested but no code changed; redeploy is not a fix');
+  // Rule 4: Tests are unrelated to the defect.
+  if (input.testsRun && input.testsPassed && !input.requestedBehaviorTested) {
+    reasons.push(
+      'Tests passed but were not related to the requested defect — test the actual requested behavior.',
+    );
+    remainingWork.push('Write or run a test that verifies the specific requested behavior.');
+  }
+
+  // Rule 5: The production commit does not contain the change.
+  if (input.commitSha && !input.productionCommitMatches) {
+    reasons.push(
+      'The production commit does not contain the change — the deployed code does not match.',
+    );
+    remainingWork.push('Deploy the exact commit that contains the fix.');
+  }
+
+  // Rule 6: The same old evidence is reused for a new task.
+  if (input.reusedEvidence) {
+    reasons.push(
+      'The same commit and deployment ID were reused from a prior task — this is not new work.',
+    );
+    remainingWork.push('Create a new commit with the requested change and deploy it.');
+  }
+
+  // Rule 7: Evidence timestamps predate the task.
+  if (
+    input.earliestEvidenceAt !== null &&
+    input.earliestEvidenceAt < input.taskStartedAt
+  ) {
+    reasons.push(
+      'Evidence timestamps predate the task — the evidence is from prior work, not this task.',
+    );
+    remainingWork.push('Generate fresh evidence (commit, tests, deploy) after the task started.');
+  }
+
+  // Rule 8: A job claims success with no measurable output.
+  if (
+    !input.commitSha &&
+    !input.deployId &&
+    !input.testsRun &&
+    input.filesChanged.length === 0
+  ) {
+    reasons.push(
+      'A job claims success with no measurable output — no commit, no deploy, no tests, no files changed.',
+    );
+    remainingWork.push('Perform the requested work and generate evidence.');
+  }
+
+  // Rule 9: Code task without device QA.
+  if (isCodeTask && input.filesChanged.length > 0 && !input.deviceQAPerformed) {
+    reasons.push(
+      'Device or browser QA was not performed for a UI/code task.',
+    );
+    remainingWork.push('Test the change on the required platform (Android, iOS, or web).');
+  }
+
+  // Rule 10: Feature verification not performed for code tasks with changes.
+  if (
+    isCodeTask &&
+    input.filesChanged.length > 0 &&
+    input.featureVerificationOk === null
+  ) {
+    reasons.push(
+      'Feature verification was not performed — cannot claim VERIFIED without it.',
+    );
+    remainingWork.push('Verify the requested behavior in production after deployment.');
+  }
+
+  // Determine verdict
+  if (reasons.length === 0) {
+    // All checks passed
+    if (input.featureVerificationOk === true && input.productionCommitMatches) {
       return {
+        verdict: 'VERIFIED',
+        ok: true,
+        reasons: [],
+        remainingWork: [],
+      };
+    }
+    if (input.deployId && input.filesChanged.length > 0) {
+      return {
+        verdict: 'PARTIAL',
         ok: false,
+        reasons: ['Code changed and deployed but feature verification not confirmed.'],
+        remainingWork: ['Verify the requested behavior in production.'],
+      };
+    }
+    if (input.deployId && input.filesChanged.length === 0) {
+      return {
         verdict: 'DEPLOYED_ONLY',
-        state: 'DEPLOYED',
-        reasons,
-        evidence,
-        marker: IVX_COMPLETION_VALIDATOR_MARKER,
-      };
-    }
-    reasons.push('Development task requested but no code changed and no deployment proof');
-    return {
-      ok: false,
-      verdict: 'NOT_COMPLETED',
-      state: 'NO_CHANGE_REQUIRED',
-      reasons,
-      evidence,
-      marker: IVX_COMPLETION_VALIDATOR_MARKER,
-    };
-  }
-
-  // Deployment-only task with a redeploy and health OK -> VERIFIED only if infra/config was the actual cause.
-  if (isDeployment && evidence.filesChanged.length === 0) {
-    if (evidence.deployId && evidence.productionHealthOk && evidence.commitMatch) {
-      return {
-        ok: true,
-        verdict: 'VERIFIED',
-        state: 'VERIFIED',
-        reasons: ['Deployment-only task completed with a live redeploy and health confirmation'],
-        evidence,
-        marker: IVX_COMPLETION_VALIDATOR_MARKER,
-      };
-    }
-    return {
-      ok: false,
-      verdict: 'NOT_COMPLETED',
-      state: 'NO_CHANGE_REQUIRED',
-      reasons: ['Deployment-only task but no live deployment proof'],
-      evidence,
-      marker: IVX_COMPLETION_VALIDATOR_MARKER,
-    };
-  }
-
-  // QA-only task needs actual test results.
-  if (evidence.taskType === 'QA_ONLY') {
-    if (evidence.testsRun && evidence.testsPassed) {
-      return {
-        ok: true,
-        verdict: 'VERIFIED',
-        state: 'VERIFIED',
-        reasons: ['QA-only task completed with passing tests'],
-        evidence,
-        marker: IVX_COMPLETION_VALIDATOR_MARKER,
-      };
-    }
-    return {
-      ok: false,
-      verdict: 'NOT_COMPLETED',
-      state: 'QA_REQUIRED',
-      reasons: ['QA-only task but no tests were run or tests failed'],
-      evidence,
-      marker: IVX_COMPLETION_VALIDATOR_MARKER,
-    };
-  }
-
-  // Investigation/read-only task does not require code changes.
-  if (evidence.taskType === 'INVESTIGATION') {
-    return {
-      ok: true,
-      verdict: 'VERIFIED',
-      state: 'VERIFIED',
-      reasons: ['Investigation task completed; no code change required'],
-      evidence,
-      marker: IVX_COMPLETION_VALIDATOR_MARKER,
-    };
-  }
-
-  // Content/business analysis tasks do not require deployment.
-  if (evidence.taskType === 'CONTENT_REQUEST' || evidence.taskType === 'BUSINESS_ANALYSIS') {
-    if (evidence.filesChanged.length > 0 || evidence.testsPassed) {
-      return {
-        ok: true,
-        verdict: 'VERIFIED',
-        state: 'VERIFIED',
-        reasons: ['Task completed with required evidence'],
-        evidence,
-        marker: IVX_COMPLETION_VALIDATOR_MARKER,
-      };
-    }
-    return {
-      ok: false,
-      verdict: 'NOT_COMPLETED',
-      state: 'NO_CHANGE_REQUIRED',
-      reasons: ['No deliverable or evidence produced for this task type'],
-      evidence,
-      marker: IVX_COMPLETION_VALIDATOR_MARKER,
-    };
-  }
-
-  // General development task with real code change and deployed+health OK -> VERIFIED.
-  if (evidence.filesChanged.length > 0) {
-    if (!evidence.testsRun) {
-      reasons.push('Files changed but tests were not run');
-    } else if (!evidence.testsPassed) {
-      reasons.push('Files changed but tests failed');
-    }
-    if (!evidence.deployId) {
-      reasons.push('Files changed but no deployment occurred');
-    }
-    if (!evidence.productionHealthOk) {
-      reasons.push('Files changed but production health is not confirmed');
-    }
-    if (!evidence.commitMatch) {
-      reasons.push('Files changed but production commit does not match the deployed commit');
-    }
-    if (reasons.length > 0) {
-      return {
         ok: false,
-        verdict: 'NOT_COMPLETED',
-        state: evidence.deployId ? 'PRODUCTION_VERIFYING' : 'READY_TO_DEPLOY',
-        reasons,
-        evidence,
-        marker: IVX_COMPLETION_VALIDATOR_MARKER,
+        reasons: ['A deployment occurred but no code changed.'],
+        remainingWork: ['Make the requested code change.'],
+      };
+    }
+    if (input.healthOk && !input.deployId) {
+      return {
+        verdict: 'HEALTH_ONLY',
+        ok: false,
+        reasons: ['Only /health was checked.'],
+        remainingWork: ['Perform the requested work.'],
       };
     }
     return {
-      ok: true,
-      verdict: 'VERIFIED',
-      state: 'VERIFIED',
-      reasons: ['Code changed, tested, deployed, and production health/commit verified'],
-      evidence,
-      marker: IVX_COMPLETION_VALIDATOR_MARKER,
+      verdict: 'NOT_COMPLETED',
+      ok: false,
+      reasons: ['No evidence of completion.'],
+      remainingWork: ['Perform the requested work.'],
     };
   }
 
-  // Fallback: nothing meaningful happened.
-  reasons.push('No code changed, no deployment, and no task-specific evidence produced');
+  // If we have reasons, the task is not verified
+  if (input.filesChanged.length === 0 && !input.deployId) {
+    return {
+      verdict: 'NOT_COMPLETED',
+      ok: false,
+      reasons,
+      remainingWork,
+    };
+  }
+
+  if (input.filesChanged.length === 0 && input.deployId) {
+    return {
+      verdict: 'DEPLOYED_ONLY',
+      ok: false,
+      reasons,
+      remainingWork,
+    };
+  }
+
+  if (input.filesChanged.length > 0 && !input.featureVerificationOk) {
+    return {
+      verdict: 'PARTIAL',
+      ok: false,
+      reasons,
+      remainingWork,
+    };
+  }
+
   return {
-    ok: false,
     verdict: 'NOT_COMPLETED',
-    state: 'NO_CHANGE_REQUIRED',
+    ok: false,
     reasons,
-    evidence,
-    marker: IVX_COMPLETION_VALIDATOR_MARKER,
+    remainingWork,
   };
 }
 
-export function renderValidatorVerdict(verdict: IVXValidationVerdict): string {
-  switch (verdict) {
-    case 'VERIFIED':
-      return 'VERIFIED';
-    case 'DEPLOYED_ONLY':
-      return 'DEPLOYED_ONLY';
-    case 'NO_CHANGE_REQUIRED':
-      return 'NO_CHANGE_REQUIRED';
-    case 'BLOCKED':
-      return 'BLOCKED';
-    case 'FAILED':
-      return 'FAILED';
-    case 'NOT_COMPLETED':
-    default:
-      return 'NOT_COMPLETED';
+/**
+ * Build the "STATUS: NOT COMPLETED" message when validation fails.
+ */
+export function buildNotCompletedMessage(
+  result: IVXCompletionValidatorResult,
+): string {
+  const lines: string[] = [];
+  lines.push(`STATUS: NOT COMPLETED`);
+  lines.push('');
+  lines.push('REASONS:');
+  for (const reason of result.reasons) {
+    lines.push(` - ${reason}`);
   }
-}
-
-export function renderValidatorReason(verdict: IVXValidationVerdict, reasons: string[]): string {
-  switch (verdict) {
-    case 'VERIFIED':
-      return reasons[0] ?? 'Validation accepted.';
-    case 'DEPLOYED_ONLY':
-      return 'A redeploy occurred, but no code changed. The requested fix/feature was NOT implemented.';
-    case 'NO_CHANGE_REQUIRED':
-      return reasons[0] ?? 'No code change was required and no deployment was requested.';
-    case 'BLOCKED':
-      return reasons[0] ?? 'Blocked before execution.';
-    case 'FAILED':
-      return reasons[0] ?? 'Execution failed.';
-    case 'NOT_COMPLETED':
-    default:
-      return reasons.join('; ') || 'Task not completed.';
+  lines.push('');
+  lines.push('REMAINING WORK:');
+  for (const work of result.remainingWork) {
+    lines.push(` - ${work}`);
   }
+  return lines.join('\n');
 }

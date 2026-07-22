@@ -83,9 +83,14 @@ export type IVXGuardTaskType =
   | 'FEATURE'
   | 'UI_FIX'
   | 'DATA_FIX'
-  | 'INVESTIGATION'
-  | 'QA_ONLY'
+  | 'CONFIGURATION_FIX'
+  | 'INFRASTRUCTURE_FIX'
+  | 'DEPLOYMENT'
   | 'DEPLOY_ONLY'
+  | 'QA_ONLY'
+  | 'INVESTIGATION'
+  | 'CONTENT_REQUEST'
+  | 'BUSINESS_ANALYSIS'
   | 'FACTORY';
 
 /**
