@@ -231,6 +231,8 @@ import {
   handleMemberForgotPassword,
   handleMemberResetPassword,
   handleUpdateMemberProfile,
+  handleRegistrationStatusRequest,
+  handleRegistrationHealthRequest,
 } from './api/ivx-members';
 import {
   OPTIONS as ownerRecoverySmsOptions,
@@ -4688,6 +4690,12 @@ app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-log
 app.post('/api/members/forgot-password', async (c) => withRateLimit(c.req.raw, 'member-forgot', 3, 0.1, () => handleMemberForgotPassword(c.req.raw)) as Promise<Response>);
 app.post('/api/members/reset-password', async (c) => handleMemberResetPassword(c.req.raw));
 app.post('/api/members/profile', async (c) => handleUpdateMemberProfile(c.req.raw));
+
+// ---- Registration reliability (Phase 2) — idempotency, status, health ----
+app.options('/api/ivx/registration/status', () => membersOptions());
+app.options('/api/ivx/registration/health', () => membersOptions());
+app.get('/api/ivx/registration/status', async (c) => handleRegistrationStatusRequest(c.req.raw));
+app.get('/api/ivx/registration/health', async (c) => handleRegistrationHealthRequest(c.req.raw));
 
 // ---- IVX Canonical Members registry (landing → Members module sync) ----
 app.options('/api/ivx/members/registry', () => membersOptions());

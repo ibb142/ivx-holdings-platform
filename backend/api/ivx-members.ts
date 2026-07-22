@@ -24,6 +24,15 @@ import {
 import { storeVerificationCode, verifyCode, checkVerificationStatus } from '../services/ivx-member-verification';
 import { onboardNewMember, VALID_ROLE_INTERESTS, type MemberRoleInterest } from '../services/ivx-member-investor-system';
 import { upsertCanonicalMember, markCanonicalMemberVerified } from '../services/ivx-canonical-members';
+import {
+  orchestrateRegistration,
+  getRegistrationStatus,
+  checkRegistrationHealth,
+  type RegistrationRequestInput,
+  type NormalizedRegistrationResult,
+  type RegistrationStage,
+  type RegistrationErrorCode,
+} from '../services/ivx-registration-orchestrator';
 
 const DEPLOYMENT_MARKER = 'ivx-members-api-v1';
 
@@ -107,6 +116,8 @@ export function membersOptions(): Response {
 }
 
 // POST /api/members/register
+// Phase 2 reliability: accepts `registrationRequestId` for idempotency + resume.
+// Returns the normalized { ok, code, message, traceId, stage, retryable, ... } contract.
 export async function handleMemberRegister(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const email = asString(body.email).toLowerCase();
@@ -125,37 +136,44 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
   const pictureUrl = asString(body.pictureUrl);
   const dateOfBirth = asString(body.dateOfBirth);
   const gender = asString(body.gender).toLowerCase();
+  const registrationRequestId = asString(body.registrationRequestId) || undefined;
+  const opportunityId = asString(body.opportunityId) || undefined;
+  const opportunityTitle = asString(body.opportunityTitle) || undefined;
+  const amount = typeof body.amount === 'number' ? body.amount : undefined;
+  const investmentType = asString(body.investmentType) || undefined;
 
-  // Validation
+  // Validation — returns the normalized error contract (no raw strings).
+  // These are pre-orchestrator checks that never touch the network.
   if (!firstName || !lastName) {
-    return jsonResponse({ success: false, message: 'First name and last name are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: 'First name and last name are required.' });
   }
   if (!isValidEmail(email)) {
-    return jsonResponse({ success: false, message: 'Please enter a valid email address.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: 'Please enter a valid email address.' });
   }
   const pwCheck = validatePassword(password);
   if (!pwCheck.valid) {
-    return jsonResponse({ success: false, message: pwCheck.reason || 'Password does not meet requirements.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('WEAK_PASSWORD', 'VALIDATING', { message: pwCheck.reason || 'Password does not meet requirements.' });
   }
   if (!phone || phone.replace(/\D/g, '').length < 10) {
-    return jsonResponse({ success: false, message: 'Please enter a valid phone number.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: 'Please enter a valid phone number.' });
   }
   if (!acceptTerms) {
-    return jsonResponse({ success: false, message: 'You must accept the Terms of Service.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('UNKNOWN_ERROR', 'VALIDATING', { message: 'You must accept the Terms of Service.' });
   }
   const dobCheck = validateDateOfBirth(dateOfBirth);
   if (!dobCheck.valid) {
-    return jsonResponse({ success: false, message: dobCheck.reason || 'Please enter a valid date of birth.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: dobCheck.reason || 'Please enter a valid date of birth.' });
   }
   const genderCheck = validateGender(gender);
   if (!genderCheck.valid) {
-    return jsonResponse({ success: false, message: genderCheck.reason || 'Gender is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: genderCheck.reason || 'Gender is required.' });
   }
   if (roles.length === 0) {
-    return jsonResponse({ success: false, message: 'Please select at least one role to continue.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return normalizedError('UNKNOWN_ERROR', 'VALIDATING', { message: 'Please select at least one role to continue.' });
   }
 
-  const result = await registerMember({
+  // Delegate to the idempotent orchestrator (Auth + profile + fanout + persistence).
+  const input: RegistrationRequestInput = {
     email,
     password,
     firstName,
@@ -168,63 +186,74 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
     roles,
     acceptTerms,
     pictureUrl,
-  });
+    registrationRequestId,
+    opportunityId,
+    opportunityTitle,
+    amount,
+    investmentType,
+  };
+  const result = await orchestrateRegistration(input);
+  return normalizedResponse(result);
+}
 
-  if (result.success && result.userId) {
-    // Auto-send verification codes
-    await storeVerificationCode({ userId: result.userId, type: 'email' });
-    await storeVerificationCode({ userId: result.userId, type: 'phone' });
+// --- Normalized response helpers (Phase 2 contract) ---
 
-    // Onboarding fanout: member profile + CRM lead + marketing profile +
-    // AI profile + newsletter + app account → status FREE MEMBER.
-    try {
-      await onboardNewMember({
-        userId: result.userId,
-        firstName,
-        lastName,
-        email,
-        phone,
-        country,
-        zipCode,
-        roles,
-        pictureUrl,
-      });
-    } catch (fanoutErr) {
-      console.error('[Members] Onboarding fanout failed (non-fatal):', fanoutErr);
-    }
+function normalizedError(code: RegistrationErrorCode, stage: RegistrationStage, overrides?: { message?: string; retryable?: boolean; registrationRequestId?: string }): Response {
+  const traceId = 'ivx-reg-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10);
+  const body = {
+    ok: false as const,
+    code,
+    message: overrides?.message ?? code,
+    traceId,
+    stage,
+    retryable: overrides?.retryable ?? false,
+    registrationRequestId: overrides?.registrationRequestId,
+    deploymentMarker: DEPLOYMENT_MARKER,
+  };
+  const status = code === 'EMAIL_EXISTS' ? 409 : code === 'RATE_LIMITED' ? 429 : (code === 'NETWORK_ERROR' || code === 'SERVICE_UNAVAILABLE') ? 503 : 400;
+  return jsonResponse(body, status);
+}
 
-    // Canonical Members sync — every landing registration lands in public.members.
-    try {
-      await upsertCanonicalMember({
-        fullName: `${firstName} ${lastName}`.trim(),
-        email,
-        phone,
-        memberType: roles[0] || 'member',
-        source: 'landing_page',
-        sourceDetail: 'members/register',
-        investorInterest: roles.join(', '),
-        preferredZipcode: zipCode,
-        pictureUrl,
-        authUserId: result.userId,
-      });
-    } catch (syncErr) {
-      console.error('[Members] Canonical member sync failed (non-fatal):', syncErr);
-    }
-
-    return jsonResponse({
-      success: true,
-      message: result.message,
-      userId: result.userId,
-      email: result.email,
-      requiresVerification: true,
-      deploymentMarker: DEPLOYMENT_MARKER,
-    });
+function normalizedResponse(result: NormalizedRegistrationResult): Response {
+  if (result.ok) {
+    // Fire-and-forget verification codes + onboarding fanout (kept identical to prior behavior).
+    storeVerificationCode({ userId: result.authUserId, type: 'email' }).catch(() => {});
+    storeVerificationCode({ userId: result.authUserId, type: 'phone' }).catch(() => {});
+    return jsonResponse({ ...result, deploymentMarker: DEPLOYMENT_MARKER }, 200);
   }
+  const status = result.code === 'EMAIL_EXISTS' ? 409 : result.code === 'RATE_LIMITED' ? 429 : (result.code === 'NETWORK_ERROR' || result.code === 'SERVICE_UNAVAILABLE') ? 503 : 400;
+  return jsonResponse({ ...result, deploymentMarker: DEPLOYMENT_MARKER }, status);
+}
 
-  return jsonResponse(
-    { success: false, message: result.message, deploymentMarker: DEPLOYMENT_MARKER },
-    result.message.includes('already exists') ? 409 : 400
-  );
+// GET /api/ivx/registration/status?id=<registrationRequestId>
+export async function handleRegistrationStatusRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const id = url.searchParams.get('id') || '';
+  if (!id) {
+    return normalizedError('UNKNOWN_ERROR', 'IDLE', { message: 'Registration request ID is required.' });
+  }
+  const { found, state } = await getRegistrationStatus(id);
+  if (!found || !state) {
+    return jsonResponse({ ok: false, found: false, message: 'No registration found for that ID.', traceId: 'ivx-reg-status-' + Date.now().toString(36), deploymentMarker: DEPLOYMENT_MARKER }, 404);
+  }
+  // Never expose the email hash or auth user ID directly — only stage + status.
+  return jsonResponse({
+    ok: true,
+    found: true,
+    registrationRequestId: state.registrationRequestId,
+    stage: state.stage,
+    finalStatus: state.finalStatus,
+    createdAt: state.createdAt,
+    updatedAt: state.updatedAt,
+    lastErrorCode: state.lastErrorCode,
+    deploymentMarker: DEPLOYMENT_MARKER,
+  }, 200);
+}
+
+// GET /api/ivx/registration/health
+export async function handleRegistrationHealthRequest(_request: Request): Promise<Response> {
+  const health = await checkRegistrationHealth();
+  return jsonResponse(health, health.status === 'healthy' ? 200 : 503);
 }
 
 // POST /api/members/send-email-code

@@ -5053,6 +5053,48 @@
   }
   checkSupabaseReady();
 
+  // STEP 2b: Phase 2 registration reliability — canonical auth configuration validation.
+  // Runs at startup, disables signup if config is invalid, never throws.
+  window.IVX_REGISTRATION_AVAILABLE = false;
+  function runRegistrationConfigCheck() {
+    try {
+      if (typeof window.IVXValidateAuthConfiguration === 'function') {
+        var check = window.IVXValidateAuthConfiguration();
+        window.IVX_REGISTRATION_AVAILABLE = check.ok;
+        if (!check.ok) {
+          console.warn('[IVX] Registration disabled — auth config invalid:', check.problems.join(', '), 'trace:', check.traceId);
+          // Disable signup buttons so users don't hit a broken flow.
+          document.querySelectorAll('[data-ivx-signup-cta]').forEach(function(el) { el.setAttribute('disabled', 'disabled'); el.classList.add('ivx-reg-unavailable'); });
+        } else {
+          console.log('[IVX] Registration config OK — signup enabled.');
+        }
+      } else {
+        // ivx-invest.js lazy-loads later — recheck after it loads.
+        setTimeout(runRegistrationConfigCheck, 1500);
+      }
+    } catch (e) {
+      console.warn('[IVX] Registration config check threw (suppressed):', e.message);
+    }
+  }
+  runRegistrationConfigCheck();
+
+  // Phase 2 §13: registration error boundary — catches render errors in the invest modal
+  // so a broken registration never crashes the whole landing page.
+  window.IVXRegErrorBoundary = function(targetFn, fallbackMsg) {
+    return function() {
+      try { return targetFn.apply(this, arguments); }
+      catch (err) {
+        var traceId = 'ivx-reg-boundary-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8);
+        console.error('[IVX Reg Boundary] Caught render error:', err.message, 'trace:', traceId);
+        var errEl = document.getElementById('invest-auth-error');
+        if (errEl) { errEl.textContent = (fallbackMsg || 'Registration is temporarily unavailable.') + ' Reference: ' + traceId; errEl.style.display = 'block'; }
+        var btn = document.getElementById('invest-auth-btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+        return null;
+      }
+    };
+  };
+
   // STEP 3: Cache credentials when we get them
   function cacheCredentials() {
     if (_supabaseReady) {
