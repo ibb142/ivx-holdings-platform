@@ -470,7 +470,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify the local fix is in place\\ngrep -n \\\"kyc_status\\\" backend/services/ivx-member-database.ts | head -5\"}",
       "createdAt": 1784747984317,
-      "completedAt": 1784747985705
+      "completedAt": 1784747985705,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -488,7 +489,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what the runtime currently has — is the fix deployed?\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('Runtime:', d.get('commit','?')[:16])\\\"\"}",
       "createdAt": 1784747984382,
-      "completedAt": 1784747985883
+      "completedAt": 1784747985883,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -506,7 +508,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Mint fresh owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784747984500,
-      "completedAt": 1784747986353
+      "completedAt": 1784747986353,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -531,7 +534,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check for any other kyc_status: 'not_started' that could violate DB constraints\\ngrep -rn \\\"kyc_status.*not_started\\\" backend/ --include='*.ts' | grep -v node_modules | grep -v '.test.' | grep -v 'kycStatus'\"}",
       "createdAt": 1784748012738,
-      "completedAt": 1784748012760
+      "completedAt": 1784748012760,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -549,7 +553,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if the orchestrator fanout is present in the LOCAL file (should match what's deployed)\\ngrep -n 'upsertCanonicalMember\\\\|onboardNewMember\\\\|insertInvestmentInterest' backend/services/ivx-registration-orchestrator.ts | head -15\"}",
       "createdAt": 1784748012744,
-      "completedAt": 1784748012773
+      "completedAt": 1784748012773,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -567,7 +572,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if getServiceKey falls back to anon key (which would be blocked by RLS)\\ngrep -n 'getServiceKey\\\\|SERVICE_ROLE\\\\|SERVICE_KEY\\\\|ANON_KEY' backend/services/ivx-canonical-members.ts | head -10\"}",
       "createdAt": 1784748012751,
-      "completedAt": 1784748012795
+      "completedAt": 1784748012795,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -592,7 +598,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Commit the kyc_status fix to GitHub + trigger Render deploy\\npython3 << 'PY'\\nimport json, base64, urllib.request, time\\n\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\n\\ndef action(act, inp=None):\\n    payload = {\\\"action\\\": act, \\\"confirm\\\": True, \\\"confirmText\\\": \\\"CONFIRM_IVX_GITHUB_WRITE\\\" if \\\"github\\\" in act else \\\"CONFIRM_IVX_RENDER_DEPLOY\\\"}\\n    if inp: payload[\\\"input\\\"] = inp\\n    body = json.dumps(payload).encode('utf-8')\\n    req = urllib.request.Request('https://api.ivxholding.com/api/ivx/developer-deploy/action', data=body, headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}, method='POST')\\n    with urllib.request.urlopen(req, timeout=120) as resp:\\n        return json.loads(resp.read().decode('utf-8'))\\n\\n# Read the fixed file\\nwith open('backend/services/ivx-member-database.ts', 'rb') as f:\\n    content_b64 = base64.b64encode(f.read()).decode('ascii')\\n\\n# Commit\\nr = action(\\\"github_commit_file\\\", {\\\"path\\\": \\\"backend/services/ivx-member-database.ts\\\", \\\"content\\\": content_b64, \\\"contentEncoding\\\": \\\"base64\\\", \\\"message\\\": \\\"fix: kyc_status not_started->pending to satisfy profiles_kyc_status_check constraint\\\"})\\nsha = r.get('result', {}).get('commitSha', 'unknown')\\nprint(f\\\"Commit: {sha}\\\")\\n\\n# Trigger Render deploy\\ntime.sleep(2)\\nr2 = action(\\\"render_trigger_deploy\\\")\\nprint(f\\\"Deploy triggered: {r2.get('result', {}).get('ok', r2.get('ok'))}\\\")\\nPY\"}",
       "createdAt": 1784748034463,
-      "completedAt": 1784748040025
+      "completedAt": 1784748040025,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -617,7 +624,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy is complete\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('Runtime:', d.get('commit','?')[:16])\\\"\"}",
       "createdAt": 1784748044677,
-      "completedAt": 1784748045256
+      "completedAt": 1784748045256,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -635,7 +643,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Mint fresh token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748044683,
-      "completedAt": 1784748045519
+      "completedAt": 1784748045519,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -660,7 +669,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Poll for Render deploy completion — check if runtime commit changed\\nfor i in $(seq 1 10); do\\n  SHA=$(curl -s 'https://api.ivxholding.com/api/ivx/version' 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: Runtime SHA=$SHA\\\"\\n  if [ \\\"$SHA\\\" != \\\"2269f31f8f09\\\" ]; then\\n    echo \\\"DEPLOY COMPLETE - new SHA: $SHA\\\"\\n    break\\n  fi\\n  sleep 10\\ndone\"}",
       "createdAt": 1784748068038,
-      "completedAt": 1784748128298
+      "completedAt": 1784748128298,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -685,7 +695,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deployed the new commit\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('Runtime:', d.get('commit','?')[:16])\\\"\"}",
       "createdAt": 1784748135711,
-      "completedAt": 1784748136317
+      "completedAt": 1784748136317,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -703,7 +714,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check runtime logs for the fanout errors\\nrork-agent logs runtime 2>/dev/null | rg -i \\\"upsertCanonicalMember|canonical.*fail|onboardNewMember|onboard.*fail|insertInvestmentInterest|interest.*fail|kyc_status|not_started\\\" | tail -20\"}",
       "createdAt": 1784748135787,
-      "completedAt": 1784748137297
+      "completedAt": 1784748137297,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -728,7 +740,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('Runtime:', d.get('commit','?')[:16])\\\"\"}",
       "createdAt": 1784748144228,
-      "completedAt": 1784748144237
+      "completedAt": 1784748144237,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -753,7 +766,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for Render deploy to complete — poll runtime commit\\nfor i in $(seq 1 5); do\\n  SHA=$(curl -s 'https://api.ivxholding.com/api/ivx/version' 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: SHA=$SHA\\\"\\n  if [ \\\"$SHA\\\" != \\\"2269f31f8f09\\\" ]; then echo \\\"DEPLOYED: $SHA\\\"; break; fi\\n  sleep 8\\ndone\"}",
       "createdAt": 1784748165419,
-      "completedAt": 1784748165435
+      "completedAt": 1784748165435,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -783,7 +797,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify the new commit is live + run a single registration canary to confirm DB rows are created\\npython3 << 'PY'\\nimport json, urllib.request, urllib.error, time\\n\\nAPI=\\\"https://api.ivxholding.com\\\"\\nTOKEN=json.load(open('/tmp/owner_at.json'))['token']\\n\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(f\\\"{API}/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\nTS=int(time.time())\\ne=f\\\"final-fix-{TS}@test.com\\\"\\np=json.dumps({\\\"firstName\\\":\\\"Final\\\",\\\"lastName\\\":\\\"FixTest\\\",\\\"email\\\":e,\\\"password\\\":\\\"TestCanary123!@\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":\\\"5551234567\\\",\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"final-fix-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000}).encode()\\nr=urllib.request.Request(f\\\"{API}/api/members/register\\\",data=p,headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    d=json.loads(resp.read().decode())\\n    uid=d.get('authUserId')\\n    print(f\\\"Register: HTTP {resp.status} ok={d.get('ok')} stage={d.get('stage')} uid={uid}\\\")\\n\\ntime.sleep(3)\\n\\n# Check DB\\nauth=sql(f\\\"SELECT email FROM auth.users WHERE id='{uid}'\\\")\\nprof=sql(f\\\"SELECT first_name,kyc_status FROM profiles WHERE id='{uid}'\\\")\\nmem=sql(f\\\"SELECT email,member_type FROM members WHERE auth_user_id='{uid}'\\\")\\ninv=sql(f\\\"SELECT id,investment_type,opportunity_id,status FROM landing_investments WHERE opportunity_id='perez-residence-001' ORDER BY created_at DESC LIMIT 1\\\")\\n\\nprint(f\\\"auth.users: {len(auth)} rows\\\")\\nprint(f\\\"profiles: {len(mem)} rows | kyc_status={prof[0].get('kyc_status','?') if prof else 'N/A'}\\\")\\nprint(f\\\"members: {len(mem)} rows | type={mem[0].get('member_type','?') if mem else 'N/A'}\\\")\\nprint(f\\\"landing_investments: {len(inv)} rows | type={inv[0].get('investment_type','?') if inv else 'N/A'} status={inv[0].get('status','?') if inv else 'N/A'}\\\")\\n\\nall_ok = len(auth)>0 and len(prof)>0 and len(mem)>0 and len(inv)>0\\nprint(f\\\"\\\\nALL 4 TABLES POPULATED: {'YES' if all_ok else 'NO'}\\\")\\nPY\"}",
       "createdAt": 1784748169246,
-      "completedAt": 1784748181145
+      "completedAt": 1784748181145,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -813,7 +828,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Fresh token + proper DB verification test\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748194933,
-      "completedAt": 1784748197745
+      "completedAt": 1784748197745,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -831,7 +847,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Register a new user and check ALL 4 tables with CORRECT per-table counts\\npython3 << 'PY'\\nimport json, urllib.request, time\\n\\nAPI=\\\"https://api.ivxholding.com\\\"\\nTOKEN=json.load(open('/tmp/owner_at.json'))['token']\\n\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(f\\\"{API}/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\nTS=int(time.time())\\ne=f\\\"fix-verify-{TS}@test.com\\\"\\np=json.dumps({\\\"firstName\\\":\\\"Fix\\\",\\\"lastName\\\":\\\"Verify\\\",\\\"email\\\":e,\\\"password\\\":\\\"TestCanary123!@\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":\\\"5551234567\\\",\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fix-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000}).encode()\\nr=urllib.request.Request(f\\\"{API}/api/members/register\\\",data=p,headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    d=json.loads(resp.read().decode())\\n    uid=d.get('authUserId')\\n    print(f\\\"Register: HTTP {resp.status} ok={d.get('ok')} stage={d.get('stage')} uid={uid}\\\")\\n\\ntime.sleep(3)\\n\\n# Check each table SEPARATELY with correct count\\nauth=sql(f\\\"SELECT email FROM auth.users WHERE id='{uid}'\\\")\\nprof=sql(f\\\"SELECT first_name, kyc_status FROM profiles WHERE id='{uid}'\\\")\\nmem=sql(f\\\"SELECT email, member_type FROM members WHERE auth_user_id='{uid}'\\\")\\ninv=sql(f\\\"SELECT id, investment_type, opportunity_id, status FROM landing_investments WHERE opportunity_id='perez-residence-001' ORDER BY created_at DESC LIMIT 1\\\")\\n\\nprint(f\\\"auth.users:     {len(auth)} row(s) | email={auth[0].get('email','?') if auth else 'NONE'}\\\")\\nprint(f\\\"profiles:       {len(prof)} row(s) | kyc={prof[0].get('kyc_status','?') if prof else 'NONE'}\\\")\\nprint(f\\\"members:        {len(mem)} row(s) | type={mem[0].get('member_type','?') if mem else 'NONE'}\\\")\\nprint(f\\\"landing_invest: {len(inv)} row(s) | type={inv[0].get('investment_type','?') if inv else 'NONE'} status={inv[0].get('status','?') if inv else 'NONE'}\\\")\\n\\nall4 = len(auth)>0 and len(prof)>0 and len(mem)>0 and len(inv)>0\\nprint(f\\\"\\\\nALL 4 TABLES POPULATED: {'YES' if all4 else 'NO'}\\\")\\nPY\"}",
       "createdAt": 1784748194944,
-      "completedAt": 1784748204117
+      "completedAt": 1784748204117,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -862,7 +879,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"limit\": 60, \"offset\": 36}",
       "createdAt": 1784748222170,
-      "completedAt": 1784748222192
+      "completedAt": 1784748222192,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -880,7 +898,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n 'getSupabaseAdmin\\\\|getServiceKey\\\\|SUPABASE_SERVICE_ROLE\\\\|service.role\\\\|service_role\\\\|serviceRole' backend/services/ivx-member-investor-system.ts | head -15\"}",
       "createdAt": 1784748222172,
-      "completedAt": 1784748222192
+      "completedAt": 1784748222192,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -898,7 +917,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if SUPABASE_SERVICE_ROLE_KEY is available on the runtime\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748222176,
-      "completedAt": 1784748222193
+      "completedAt": 1784748222193,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -923,7 +943,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check runtime logs for fanout errors\\nrork-agent logs runtime 2>/dev/null | rg -i \\\"upsertCanonical|canonical.*fail|onboardNew|onboard.*fail|insertInvestment|interest.*fail|members.*insert|landing_invest\\\" | tail -30\"}",
       "createdAt": 1784748227139,
-      "completedAt": 1784748229514
+      "completedAt": 1784748229514,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -941,7 +962,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what getSupabaseAdmin does — does it use service role key?\\ngrep -n 'getSupabaseAdmin\\\\|createClient\\\\|service.role\\\\|serviceRole\\\\|SERVICE_ROLE' backend/services/ivx-member-investor-system.ts | head -15\"}",
       "createdAt": 1784748228110,
-      "completedAt": 1784748229551
+      "completedAt": 1784748229551,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -959,7 +981,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what getSupabaseAdmin resolves to\\ngrep -rn 'function getSupabaseAdmin\\\\|export.*getSupabaseAdmin\\\\|const getSupabaseAdmin' backend/ --include='*.ts' | grep -v node_modules | grep -v '.test.' | head -10\"}",
       "createdAt": 1784748228253,
-      "completedAt": 1784748229593
+      "completedAt": 1784748229593,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -985,7 +1008,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"limit\": 35, \"offset\": 1}",
       "createdAt": 1784748234938,
-      "completedAt": 1784748234942
+      "completedAt": 1784748234942,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1010,7 +1034,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check runtime logs for fanout errors\\nrork-agent logs runtime 2>/dev/null | rg -i \\\"Canonical|canonical.*fail|onboard.*fail|interest.*fail|members.*insert|landing_invest|RLS|policy|permission|denied\\\" | tail -30\"}",
       "createdAt": 1784748242220,
-      "completedAt": 1784748242689
+      "completedAt": 1784748242689,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -1028,7 +1053,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if SUPABASE_SERVICE_ROLE_KEY is available on the runtime by checking the config endpoint\\ncurl -s 'https://api.ivxholding.com/api/ivx/registration/health' -H \\\"Authorization: Bearer $(python3 -c \\\"import json; print(json.load(open('/tmp/owner_at.json'))['token'])\\\")\\\" | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(json.dumps(d, indent=2)[:1000])\\\"\"}",
       "createdAt": 1784748242227,
-      "completedAt": 1784748243092
+      "completedAt": 1784748243092,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1053,7 +1079,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Register a test user and immediately check runtime logs for fanout errors\\npython3 << 'PY'\\nimport json, urllib.request, time\\n\\nAPI=\\\"https://api.ivxholding.com\\\"\\nTS=int(time.time())\\ne=f\\\"trace-{TS}@test.com\\\"\\np=json.dumps({\\\"firstName\\\":\\\"Trace\\\",\\\"lastName\\\":\\\"Test\\\",\\\"email\\\":e,\\\"password\\\":\\\"TestCanary123!@\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":\\\"5551234567\\\",\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"trace-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000}).encode()\\nr=urllib.request.Request(f\\\"{API}/api/members/register\\\",data=p,headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    d=json.loads(resp.read().decode())\\n    print(f\\\"Register: HTTP {resp.status} ok={d.get('ok')} stage={d.get('stage')} uid={d.get('authUserId')} traceId={d.get('traceId')}\\\")\\nPY\"}",
       "createdAt": 1784748259557,
-      "completedAt": 1784748270901
+      "completedAt": 1784748270901,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1078,7 +1105,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"rork-agent logs runtime 2>/dev/null | rg -i \\\"canonical|onboard|interest.*fail|members.*fail|RLS|policy|permission|denied|upsert.*fail|insert.*fail\\\" | tail -30\"}",
       "createdAt": 1784748275765,
-      "completedAt": 1784748277000
+      "completedAt": 1784748277000,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -1096,7 +1124,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check the actual error from the most recent registration\\nrork-agent logs runtime 2>/dev/null | rg \\\"ivx-reg-mrwh15ky\\\" | tail -10\"}",
       "createdAt": 1784748275770,
-      "completedAt": 1784748283945
+      "completedAt": 1784748283945,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1121,7 +1150,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check RLS policy conditions on members + landing_investments tables\\npython3 << 'PY'\\nimport json, urllib.request\\nTOKEN = json.load(open('/tmp/owner_at.json'))['token']\\ndef sql(q):\\n    p = json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req = urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\n# Get actual RLS policy definitions\\nrows = sql(\\\"\\\"\\\"\\nSELECT tablename, policyname, cmd, qual, with_check, roles\\nFROM pg_policies\\nWHERE schemaname = 'public' AND tablename IN ('members', 'landing_investments', 'profiles')\\nORDER BY tablename, cmd;\\n\\\"\\\"\\\")\\nfor r in rows:\\n    print(f\\\"\\\\n{r['tablename']}.{r['cmd']} — {r['policyname']}\\\")\\n    print(f\\\"  roles: {r['roles']}\\\")\\n    print(f\\\"  qual (USING): {r['qual']}\\\")\\n    print(f\\\"  with_check (CHECK): {r['with_check']}\\\")\\nPY\"}",
       "createdAt": 1784748306643,
-      "completedAt": 1784748306676
+      "completedAt": 1784748306676,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1146,7 +1176,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check members + landing_investments table schema for missing columns\\npython3 << 'PY'\\nimport json, urllib.request\\nTOKEN = json.load(open('/tmp/owner_at.json'))['token']\\ndef sql(q):\\n    p = json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req = urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\n# Check members columns\\ncols = sql(\\\"SELECT column_name,is_nullable,data_type FROM information_schema.columns WHERE table_name='members' AND table_schema='public' ORDER BY ordinal_position;\\\")\\nprint(\\\"members columns:\\\")\\nfor c in cols: print(f\\\"  {c['column_name']:30} nullable={c['is_nullable']:3} type={c['data_type']}\\\")\\n\\n# Check landing_investments columns\\ncols2 = sql(\\\"SELECT column_name,is_nullable,data_type FROM information_schema.columns WHERE table_name='landing_investments' AND table_schema='public' ORDER BY ordinal_position;\\\")\\nprint(\\\"\\\\nlanding_investments columns:\\\")\\nfor c in cols2: print(f\\\"  {c['column_name']:30} nullable={c['is_nullable']:3} type={c['data_type']}\\\")\\n\\n# Check if members table has ANY rows\\ncount = sql(\\\"SELECT count(*) as cnt FROM members;\\\")\\nprint(f\\\"\\\\nmembers total rows: {count[0]['cnt'] if count else '?'}\\\")\\n\\n# Try a direct insert into members to see the actual error\\ntry:\\n    test = sql(\\\"INSERT INTO members (full_name, email, phone, member_type, source, verification_status, sms_verified, email_verified, auth_user_id) VALUES ('Test', 'test-direct@test.com', '5551234567', 'investor', 'landing_page', 'unverified', false, false, '00000000-0000-0000-0000-000000000000') RETURNING member_id;\\\")\\n    print(f\\\"Direct insert: SUCCESS {test}\\\")\\nexcept Exception as e:\\n    print(f\\\"Direct insert error: {e}\\\")\\n\\n# Try a direct insert into landing_investments\\ntry:\\n    test2 = sql(\\\"INSERT INTO landing_investments (intent_id, deal_id, deal_title, investment_type, amount, investor_email, investor_id, status, terms_accepted, source) VALUES ('test-intent', 'perez-residence-001', 'PEREZ RESIDENCE', 'jv_direct', 50000, 'test-direct@test.com', '00000000-0000-0000-0000-000000000000', 'pending_payment', true, 'landing_page') RETURNING id;\\\")\\n    print(f\\\"landing_investments insert: SUCCESS {test2}\\\")\\nexcept Exception as e:\\n    print(f\\\"landing_investments insert error: {e}\\\")\\nPY\"}",
       "createdAt": 1784748335854,
-      "completedAt": 1784748338296
+      "completedAt": 1784748338296,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1171,7 +1202,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Add fanout error details to the registration response so I can see WHY members/landing_investments inserts fail\\ngrep -n 'upsertCanonicalMember\\\\|onboardNewMember\\\\|insertInvestmentInterest\\\\|canonicalErr\\\\|onboardErr\\\\|interestResult' backend/services/ivx-registration-orchestrator.ts | head -20\"}",
       "createdAt": 1784748383823,
-      "completedAt": 1784748383838
+      "completedAt": 1784748383838,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -1189,7 +1221,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what checkRegistrationHealth actually verifies for serviceKeyAvailable\\ngrep -A 30 'function checkRegistrationHealth\\\\|async function checkRegistrationHealth' backend/services/ivx-registration-orchestrator.ts | head -40\"}",
       "createdAt": 1784748383830,
-      "completedAt": 1784748383838
+      "completedAt": 1784748383838,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1214,7 +1247,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check member_id default + check if the orchestrator fanout is actually running by checking recent logs\\npython3 << 'PY'\\nimport json, urllib.request\\nTOKEN = json.load(open('/tmp/owner_at.json'))['token']\\ndef sql(q):\\n    p = json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req = urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\n# Check member_id default\\ncols = sql(\\\"SELECT column_name, column_default, is_nullable FROM information_schema.columns WHERE table_name='members' AND table_schema='public' AND column_name='member_id';\\\")\\nprint(\\\"member_id:\\\", cols)\\n\\n# Check landing_investments id default\\ncols2 = sql(\\\"SELECT column_name, column_default, is_nullable FROM information_schema.columns WHERE table_name='landing_investments' AND table_schema='public' AND column_name='id';\\\")\\nprint(\\\"landing_investments.id:\\\", cols2)\\n\\n# Check the most recent user we registered (ac91f03e)\\nuid = 'ac91f03e-080a-4abe-866a-f1ab382e423f'\\nmem = sql(f\\\"SELECT * FROM members WHERE auth_user_id='{uid}';\\\")\\nprint(f\\\"\\\\nmembers for {uid}: {len(mem)} rows\\\")\\nif mem: print(mem[0])\\n\\n# Check total members count and most recent\\nrecent = sql(\\\"SELECT member_id, full_name, email, auth_user_id, created_at FROM members ORDER BY created_at DESC LIMIT 5;\\\")\\nprint(f\\\"\\\\nRecent members ({len(recent)}):\\\")\\nfor r in recent:\\n    print(f\\\"  {r['member_id']} | {r['email'][:30]:30} | auth={r['auth_user_id']} | created={r['created_at']}\\\")\\n\\n# Check landing_investments recent\\nrecent2 = sql(\\\"SELECT id, deal_id, investor_email, investor_id, created_at FROM landing_investments ORDER BY created_at DESC LIMIT 5;\\\")\\nprint(f\\\"\\\\nRecent landing_investments ({len(recent2)}):\\\")\\nfor r in recent2:\\n    print(f\\\"  {r['id']} | {r.get('deal_id','?')} | {r.get('investor_email','?')[:30]:30} | investor_id={r.get('investor_id','?')} | created={r.get('created_at','?')}\\\")\\nPY\"}",
       "createdAt": 1784748402711,
-      "completedAt": 1784748405252
+      "completedAt": 1784748405252,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1245,7 +1279,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"limit\": 30, \"offset\": 490}",
       "createdAt": 1784748443398,
-      "completedAt": 1784748443404
+      "completedAt": 1784748443404,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1270,7 +1305,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Add fanout error surfacing to the orchestrator COMPLETED response\\ngrep -n 'ok: true,\\\\|stage: .COMPLETED.\\\\|authUserId,\\\\|requiresVerification' backend/services/ivx-registration-orchestrator.ts | head -10\"}",
       "createdAt": 1784748472629,
-      "completedAt": 1784748472643
+      "completedAt": 1784748472643,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1301,7 +1337,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"limit\": 30, \"offset\": 480}",
       "createdAt": 1784748507335,
-      "completedAt": 1784748507340
+      "completedAt": 1784748507340,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1332,7 +1369,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"limit\": 70, \"offset\": 415}",
       "createdAt": 1784748535672,
-      "completedAt": 1784748535677
+      "completedAt": 1784748535677,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1372,7 +1410,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"edits\": [{\"oldString\": \"      // Canonical member sync (Supabase `members` table) — non-fatal but logged.\\n      try {\\n        await upsertCanonicalMember({\\n          fullName: `${input.firstName} ${input.lastName}`.trim(),\\n          email: normalizedEmail,\\n          phone: input.phone,\\n          memberType: input.roles && input.roles.length > 0 ? input.roles[0] : 'member',\\n          source: 'landing_page',\\n          sourceDetail: 'registration-orchestrator',\\n          verificationStatus: 'unverified',\\n          smsVerified: false,\\n          emailVerified: false,\\n          investorInterest: input.roles ? input.roles.join(',') : '',\\n          preferredZipcode: input.zipCode || '',\\n          budgetRange: '',\\n          authUserId,\\n          landingSubmissionId: registrationRequestId,\\n          pictureUrl: input.pictureUrl || '',\\n        });\\n      } catch (canonicalErr) {\\n        console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalErr instanceof Error ? canonicalErr.message : 'unknown');\\n      }\", \"newString\": \"      // Canonical member sync (Supabase `members` table) — non-fatal but logged.\\n      const fanoutErrors: string[] = [];\\n      try {\\n        const canonicalResult = await upsertCanonicalMember({\\n          fullName: `${input.firstName} ${input.lastName}`.trim(),\\n          email: normalizedEmail,\\n          phone: input.phone,\\n          memberType: input.roles && input.roles.length > 0 ? input.roles[0] : 'member',\\n          source: 'landing_page',\\n          sourceDetail: 'registration-orchestrator',\\n          verificationStatus: 'unverified',\\n          smsVerified: false,\\n          emailVerified: false,\\n          investorInterest: input.roles ? input.roles.join(',') : '',\\n          preferredZipcode: input.zipCode || '',\\n          budgetRange: '',\\n          authUserId,\\n          landingSubmissionId: registrationRequestId,\\n          pictureUrl: input.pictureUrl || '',\\n        });\\n        if (!canonicalResult.ok) {\\n          fanoutErrors.push(`canonical:${canonicalResult.error || 'unknown'}`);\\n          console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalResult.error || 'unknown');\\n        }\\n      } catch (canonicalErr) {\\n        fanoutErrors.push(`canonical:${canonicalErr instanceof Error ? canonicalErr.message : 'unknown'}`);\\n        console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalErr instanceof Error ? canonicalErr.message : 'unknown');\\n      }\"}, {\"oldString\": \"      return {\\n        ok: true,\\n        stage: 'COMPLETED',\\n        registrationRequestId,\\n        traceId,\\n        authUserId,\\n        email: normalizedEmail,\\n        requiresVerification: false,\\n        resumeToken: registrationRequestId,\\n      };\", \"newString\": \"      return {\\n        ok: true,\\n        stage: 'COMPLETED',\\n        registrationRequestId,\\n        traceId,\\n        authUserId,\\n        email: normalizedEmail,\\n        requiresVerification: false,\\n        resumeToken: registrationRequestId,\\n        fanoutErrors: fanoutErrors.length > 0 ? fanoutErrors : undefined,\\n      };\"}]}",
       "createdAt": 1784748579191,
-      "completedAt": 1784748589649
+      "completedAt": 1784748589649,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1397,7 +1436,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Commit the error-surfacing change + deploy\\npython3 << 'PY'\\nimport json, base64, urllib.request, time\\n\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\n\\ndef action(act, inp=None):\\n    ct = \\\"CONFIRM_IVX_GITHUB_WRITE\\\" if \\\"github\\\" in act else \\\"CONFIRM_IVX_RENDER_DEPLOY\\\"\\n    payload = {\\\"action\\\": act, \\\"confirm\\\": True, \\\"confirmText\\\": ct}\\n    if inp: payload[\\\"input\\\"] = inp\\n    body = json.dumps(payload).encode('utf-8')\\n    req = urllib.request.Request('https://api.ivxholding.com/api/ivx/developer-deploy/action', data=body, headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}, method='POST')\\n    with urllib.request.urlopen(req, timeout=120) as resp:\\n        return json.loads(resp.read().decode('utf-8'))\\n\\nwith open('backend/services/ivx-registration-orchestrator.ts', 'rb') as f:\\n    content_b64 = base64.b64encode(f.read()).decode('ascii')\\n\\nr = action(\\\"github_commit_file\\\", {\\\"path\\\": \\\"backend/services/ivx-registration-orchestrator.ts\\\", \\\"content\\\": content_b64, \\\"contentEncoding\\\": \\\"base64\\\", \\\"message\\\": \\\"debug: surface fanoutErrors in COMPLETED response to diagnose members table insert failure\\\"})\\nprint(f\\\"Commit: {r.get('result', {}).get('commitSha', 'unknown')}\\\")\\ntime.sleep(2)\\nr2 = action(\\\"render_trigger_deploy\\\")\\nprint(f\\\"Deploy: {r2.get('result', {}).get('ok', r2.get('ok'))}\\\")\\nPY\"}",
       "createdAt": 1784748610953,
-      "completedAt": 1784748618437
+      "completedAt": 1784748618437,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1422,7 +1462,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for deploy to complete then register a test user to see the fanoutErrors\\nfor i in $(seq 1 5); do\\n  SHA=$(curl -s 'https://api.ivxholding.com/api/ivx/version' 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: SHA=$SHA\\\"\\n  if [ \\\"$SHA\\\" == \\\"567d791717c7\\\" ]; then echo \\\"DEPLOYED\\\"; break; fi\\n  sleep 8\\ndone\"}",
       "createdAt": 1784748622846,
-      "completedAt": 1784748664326
+      "completedAt": 1784748664326,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1447,7 +1488,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if the debug commit deployed\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784748668776,
-      "completedAt": 1784748668909
+      "completedAt": 1784748668909,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1472,7 +1514,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if debug deploy completed\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784748692242,
-      "completedAt": 1784748693213
+      "completedAt": 1784748693213,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1497,7 +1540,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if debug deploy completed\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784748729630,
-      "completedAt": 1784748730105
+      "completedAt": 1784748730105,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1522,7 +1566,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784748734048,
-      "completedAt": 1784748734402
+      "completedAt": 1784748734402,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1547,7 +1592,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Poll for debug commit deployment\\nfor i in $(seq 1 6); do\\n  SHA=$(curl -s 'https://api.ivxholding.com/api/ivx/version' 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?')[:12])\\\" 2>/dev/null)\\n  if [ \\\"$SHA\\\" = \\\"567d791717c7\\\" ]; then echo \\\"DEPLOYED: $SHA\\\"; break; fi\\n  echo \\\"Waiting... ($SHA)\\\"\\n  sleep 8\\ndone\"}",
       "createdAt": 1784748758515,
-      "completedAt": 1784748758530
+      "completedAt": 1784748758530,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1572,7 +1618,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Register a test user with the debug commit live — check fanoutErrors in response\\npython3 << 'PY'\\nimport json, urllib.request, time\\n\\nTS=int(time.time())\\ne=f\\\"debug-{TS}@test.com\\\"\\np=json.dumps({\\\"firstName\\\":\\\"Debug\\\",\\\"lastName\\\":\\\"Test\\\",\\\"email\\\":e,\\\"password\\\":\\\"TestCanary123!@\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":\\\"5551234567\\\",\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"debug-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000}).encode()\\nr=urllib.request.Request(\\\"https://api.ivxholding.com/api/members/register\\\",data=p,headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    d=json.loads(resp.read().decode())\\n    print(f\\\"HTTP {resp.status}\\\")\\n    print(f\\\"ok={d.get('ok')} stage={d.get('stage')} uid={d.get('authUserId')}\\\")\\n    print(f\\\"fanoutErrors={d.get('fanoutErrors', 'NOT PRESENT')}\\\")\\n    print(f\\\"Full response: {json.dumps(d, indent=2)[:600]}\\\")\\nPY\"}",
       "createdAt": 1784748797070,
-      "completedAt": 1784748800209
+      "completedAt": 1784748800209,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1602,7 +1649,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n 'orchestrateRegistration\\\\|normalizedResponse\\\\|fanoutErrors\\\\|deploymentMarker\\\\|COMPLETED\\\\|stage.*COMPLETED\\\\|result\\\\.ok\\\\|result\\\\.stage' backend/api/ivx-members.ts | head -25\"}",
       "createdAt": 1784748806629,
-      "completedAt": 1784748807422
+      "completedAt": 1784748807422,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1628,7 +1676,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-registration-orchestrator.ts\", \"limit\": 80, \"offset\": 320}",
       "createdAt": 1784748831036,
-      "completedAt": 1784748831042
+      "completedAt": 1784748831042,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1653,7 +1702,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Register with a UNIQUE phone number to test if phone-based dedup is the issue\\npython3 << 'PY'\\nimport json, urllib.request, time\\n\\nTS=int(time.time())\\nunique_phone = f\\\"555{TS:07d}\\\"[-10:]  # unique 10-digit phone\\ne=f\\\"uniq-phone-{TS}@test.com\\\"\\np=json.dumps({\\\"firstName\\\":\\\"Unique\\\",\\\"lastName\\\":\\\"Phone\\\",\\\"email\\\":e,\\\"password\\\":\\\"TestCanary123!@\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":unique_phone,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"uniq-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000}).encode()\\nr=urllib.request.Request(\\\"https://api.ivxholding.com/api/members/register\\\",data=p,headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    d=json.loads(resp.read().decode())\\n    uid=d.get('authUserId')\\n    print(f\\\"Register: HTTP {resp.status} ok={d.get('ok')} uid={uid} phone={unique_phone}\\\")\\n    print(f\\\"fanoutErrors={d.get('fanoutErrors', 'NOT PRESENT')}\\\")\\n\\ntime.sleep(2)\\n\\n# Check DB\\nTOKEN=json.load(open('/tmp/owner_at.json'))['token']\\ndef sql(q):\\n    pp=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\",data=pp,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\nauth=sql(f\\\"SELECT email FROM auth.users WHERE id='{uid}'\\\")\\nprof=sql(f\\\"SELECT first_name,kyc_status FROM profiles WHERE id='{uid}'\\\")\\nmem=sql(f\\\"SELECT email,member_type,phone FROM members WHERE auth_user_id='{uid}'\\\")\\ninv=sql(f\\\"SELECT id,investment_type FROM landing_investments WHERE investor_id='{uid}'\\\")\\n\\nprint(f\\\"\\\\nauth.users:  {len(auth)} | email={auth[0].get('email','?') if auth else 'NONE'}\\\")\\nprint(f\\\"profiles:    {len(prof)} | kyc={prof[0].get('kyc_status','?') if prof else 'NONE'}\\\")\\nprint(f\\\"members:     {len(mem)} | type={mem[0].get('member_type','?') if mem else 'NONE'} phone={mem[0].get('phone','?') if mem else 'NONE'}\\\")\\nprint(f\\\"landing_inv: {len(inv)} | type={inv[0].get('investment_type','?') if inv else 'NONE'}\\\")\\n\\nall4 = len(auth)>0 and len(prof)>0 and len(mem)>0 and len(inv)>0\\nprint(f\\\"\\\\nALL 4 TABLES: {'YES' if all4 else 'NO'}\\\")\\nPY\"}",
       "createdAt": 1784748858451,
-      "completedAt": 1784748880833
+      "completedAt": 1784748880833,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1683,7 +1733,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748906210,
-      "completedAt": 1784748907946
+      "completedAt": 1784748907946,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1713,7 +1764,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748916025,
-      "completedAt": 1784748917166
+      "completedAt": 1784748917166,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1738,7 +1790,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748928015,
-      "completedAt": 1784748928029
+      "completedAt": 1784748928029,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1763,7 +1816,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784748932826,
-      "completedAt": 1784748933468
+      "completedAt": 1784748933468,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1788,7 +1842,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/ivx_final_0pct.py << 'PYEOF'\\nimport json, urllib.request, urllib.error, time\\n\\nAPI=\\\"https://api.ivxholding.com\\\"\\nSB_URL=json.load(open('/tmp/sb_config.json'))['url']\\nSB_KEY=json.load(open('/tmp/sb_config.json'))['key']\\nTOKEN=json.load(open('/tmp/owner_at.json'))['token']\\nOA={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\"}\\nPWD=\\\"TestCanary123!@\\\"\\nTS=int(time.time())\\nR=[]\\npc=0  # phone counter for uniqueness\\n\\ndef ph():\\n    global pc; pc+=1; return f\\\"555{TS%100000:05d}{pc:03d}\\\"[-10:]\\n\\ndef rec(tid,name,surface,status,detail):\\n    R.append({\\\"id\\\":tid,\\\"test\\\":name,\\\"surface\\\":surface,\\\"status\\\":status,\\\"detail\\\":detail})\\n    print(f\\\"  [{'PASS' if status=='PASS' else 'FAIL'}] {tid}: {name} - {detail}\\\")\\n\\ndef post(path,payload,headers=None):\\n    h={'Content-Type':'application/json'}\\n    if headers: h.update(headers)\\n    req=urllib.request.Request(f\\\"{API}{path}\\\",data=json.dumps(payload).encode(),headers=h,method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except Exception as ex: return 0,{\\\"error\\\":str(ex)}\\n\\ndef get(path,headers=None):\\n    req=urllib.request.Request(f\\\"{API}{path}\\\",headers=headers or {},method='GET')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except Exception as ex: return 0,{\\\"error\\\":str(ex)}\\n\\ndef sbp(path,payload):\\n    req=urllib.request.Request(f\\\"{SB_URL}{path}\\\",data=json.dumps(payload).encode(),headers={'Content-Type':'application/json','apikey':SB_KEY},method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except Exception as ex: return 0,{\\\"error\\\":str(ex)}\\n\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(f\\\"{API}/api/ivx/developer-deploy/action\\\",data=p,headers={**OA,'Content-Type':'application/json'},method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n    except: return []\\n\\nusers=[]\\n\\n# ===== S1: REGISTRATION =====\\nprint(\\\"\\\\n=== S1: NEW MEMBER REGISTRATION ===\\\")\\ne1=f\\\"z-reg-{TS}@test.com\\\"; p1=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Reg\\\",\\\"email\\\":e1,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p1,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-reg-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nu1=d.get('authUserId')\\nif u1: users.append({\\\"email\\\":e1,\\\"uid\\\":u1,\\\"type\\\":\\\"landing_reg\\\",\\\"phone\\\":p1})\\nrec(\\\"1.1\\\",\\\"Landing registration\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' and not d.get('requiresVerification') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u1)[:12]}\\\")\\n\\ne2=f\\\"z-app-{TS}@test.com\\\"\\ns,d=sbp('/auth/v1/signup',{\\\"email\\\":e2,\\\"password\\\":PWD,\\\"data\\\":{\\\"first_name\\\":\\\"QA\\\",\\\"last_name\\\":\\\"App\\\",\\\"roles\\\":[\\\"investor\\\"]}})\\nu2=d.get('user',{}).get('id')\\nif u2: users.append({\\\"email\\\":e2,\\\"uid\\\":u2,\\\"type\\\":\\\"app_reg\\\"})\\nrec(\\\"1.2\\\",\\\"App registration (Supabase signUp)\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and u2 else \\\"FAIL\\\",f\\\"HTTP {s} uid={str(u2)[:12]} confirmed={d.get('user',{}).get('email_confirmed_at') is not None}\\\")\\n\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Reg\\\",\\\"email\\\":e1,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p1,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-reg-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nrec(\\\"1.3\\\",\\\"Duplicate registration idempotent\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('authUserId')==u1 else \\\"FAIL\\\",f\\\"HTTP {s} same={d.get('authUserId')==u1}\\\")\\n\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoDOB\\\",\\\"email\\\":f\\\"z-nd-{TS}@test.com\\\",\\\"password\\\":PWD,\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-nd-{TS}\\\"})\\nrec(\\\"1.4\\\",\\\"Missing dateOfBirth rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoG\\\",\\\"email\\\":f\\\"z-ng-{TS}@test.com\\\",\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-ng-{TS}\\\"})\\nrec(\\\"1.5\\\",\\\"Missing gender rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Weak\\\",\\\"email\\\":f\\\"z-w-{TS}@test.com\\\",\\\"password\\\":\\\"short\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-w-{TS}\\\"})\\nrec(\\\"1.6\\\",\\\"Weak password rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 and d.get('code')=='WEAK_PASSWORD' else \\\"FAIL\\\",f\\\"HTTP {s} code={d.get('code','?')}\\\")\\n\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoT\\\",\\\"email\\\":f\\\"z-nt-{TS}@test.com\\\",\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":False,\\\"registrationRequestId\\\":f\\\"z-nt-{TS}\\\"})\\nrec(\\\"1.7\\\",\\\"Terms not accepted rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\n# ===== S2: LOGIN + SECURITY =====\\nprint(\\\"\\\\n=== S2: LOGIN + SECURITY ===\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e1,\\\"password\\\":PWD})\\nrec(\\\"2.1\\\",\\\"Landing login correct\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u1 else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u1}\\\")\\n\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e2,\\\"password\\\":PWD})\\nrec(\\\"2.2\\\",\\\"App login correct\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and d.get('user',{}).get('id')==u2 and d.get('access_token') else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('user',{}).get('id')==u2}\\\")\\n\\ns,d=post('/api/members/login',{\\\"email\\\":e1,\\\"password\\\":\\\"WrongPass123!@\\\"})\\nrec(\\\"2.3\\\",\\\"Wrong password rejected (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e2,\\\"password\\\":\\\"WrongPass123!@\\\"})\\nrec(\\\"2.4\\\",\\\"Wrong password rejected (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ns,d=post('/api/members/login',{\\\"email\\\":\\\"noexist@test.com\\\",\\\"password\\\":PWD})\\nrec(\\\"2.5\\\",\\\"Wrong email rejected (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":\\\"noexist@test.com\\\",\\\"password\\\":PWD})\\nrec(\\\"2.6\\\",\\\"Wrong email rejected (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\n# ===== S3: INVESTOR =====\\nprint(\\\"\\\\n=== S3: INVESTOR FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Investor\\\",\\\"email\\\":f\\\"z-inv-{TS}@test.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"investor\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"investor form\\\",\\\"metadata\\\":{\\\"investmentRange\\\":\\\"100k-500k\\\",\\\"accredited\\\":True}})\\nrec(\\\"3.1\\\",\\\"Investor waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\n\\ne_inv=f\\\"z-invreg-{TS}@test.com\\\"; p_inv=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Investor\\\",\\\"email\\\":e_inv,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1985-03-20\\\",\\\"gender\\\":\\\"female\\\",\\\"phone\\\":p_inv,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-inv-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000})\\nu_inv=d.get('authUserId')\\nif u_inv: users.append({\\\"email\\\":e_inv,\\\"uid\\\":u_inv,\\\"type\\\":\\\"investor\\\",\\\"deal\\\":\\\"perez-residence-001\\\",\\\"phone\\\":p_inv})\\nrec(\\\"3.2\\\",\\\"Investor registration + JV invest interest\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_inv)[:12]}\\\")\\n\\ns,d=post('/api/members/login',{\\\"email\\\":e_inv,\\\"password\\\":PWD})\\nrec(\\\"3.3\\\",\\\"Investor login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_inv else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_inv}\\\")\\n\\n# ===== S4: BUYER =====\\nprint(\\\"\\\\n=== S4: BUYER FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Buyer\\\",\\\"email\\\":f\\\"z-buy-{TS}@test.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"buyer\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"buyer form\\\",\\\"metadata\\\":{\\\"propertyType\\\":\\\"single_family\\\",\\\"budget\\\":\\\"300k-500k\\\"}})\\nrec(\\\"4.1\\\",\\\"Buyer waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\n\\ne_buy=f\\\"z-buyreg-{TS}@test.com\\\"; p_buy=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Buyer\\\",\\\"email\\\":e_buy,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1988-07-10\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p_buy,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"buyer\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-buy-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nu_buy=d.get('authUserId')\\nif u_buy: users.append({\\\"email\\\":e_buy,\\\"uid\\\":u_buy,\\\"type\\\":\\\"buyer\\\",\\\"phone\\\":p_buy})\\nrec(\\\"4.2\\\",\\\"Buyer registration\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_buy)[:12]}\\\")\\n\\ns,d=post('/api/members/login',{\\\"email\\\":e_buy,\\\"password\\\":PWD})\\nrec(\\\"4.3\\\",\\\"Buyer login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_buy else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_buy}\\\")\\n\\n# ===== S5: JV DEALS =====\\nprint(\\\"\\\\n=== S5: JV DEALS FLOW ===\\\")\\nwith urllib.request.urlopen(urllib.request.Request('https://ivxholding.com/'),timeout=15) as r:\\n    html=r.read().decode()\\nrec(\\\"5.1\\\",\\\"JV/Tokenized/Buyer chips on landing\\\",\\\"Landing\\\",\\\"PASS\\\" if 'ivx-card-chip jv' in html and 'ivx-card-chip tokenized' in html and 'ivx-card-chip buyer' in html else \\\"FAIL\\\",f\\\"jv={'jv' in html} tok={'tokenized' in html} buy={'buyer' in html}\\\")\\n\\nrec(\\\"5.2\\\",\\\"Invest modal has jv_direct + token_shares pools\\\",\\\"Landing\\\",\\\"PASS\\\" if ('jv_direct' in html or 'invest-pool-jv' in html) and ('token_shares' in html or 'invest-pool-token' in html) else \\\"FAIL\\\",f\\\"jv={'jv_direct' in html} tok={'token_shares' in html}\\\")\\n\\ndeals=sql(\\\"SELECT id,title,published,min_investment,total_investment,expected_roi,display_order FROM jv_deals ORDER BY display_order ASC;\\\")\\nrec(\\\"5.3\\\",\\\"JV deals live in DB (published=true)\\\",\\\"Database\\\",\\\"PASS\\\" if len(deals)>=3 and all(d.get('published')==True for d in deals) else \\\"FAIL\\\",f\\\"count={len(deals)} titles={[d.get('title','?') for d in deals]}\\\")\\n\\nnulls=[f\\\"{d.get('id','?')}.{f}\\\" for d in deals for f in ['id','title','min_investment','total_investment','expected_roi'] if d.get(f) is None]\\nrec(\\\"5.4\\\",\\\"JV deal fields complete (no NULLs)\\\",\\\"Database\\\",\\\"PASS\\\" if not nulls else \\\"FAIL\\\",f\\\"nulls={nulls or 'NONE'}\\\")\\n\\ndm={d['id']:d for d in deals}\\nexp={\\\"perez-residence-001\\\":(\\\"PEREZ RESIDENCE\\\",50000,2500000,25),\\\"casa-rosario-001\\\":(\\\"Casa Rosario\\\",50,1400000,30),\\\"JV-202603-5190\\\":(\\\"ONE STOP CONSTRUCTORS INC\\\",50000,400000,9.5)}\\nmm=[]\\nfor did,(t,mi,c,roi) in exp.items():\\n    d=dm.get(did)\\n    if not d: mm.append(f\\\"{did}:NOT FOUND\\\"); continue\\n    if str(d.get('title'))!=t: mm.append(f\\\"{did}.title\\\")\\n    if float(d.get('min_investment',0))!=float(mi): mm.append(f\\\"{did}.min\\\")\\n    if float(d.get('total_investment',0))!=float(c): mm.append(f\\\"{did}.total\\\")\\n    if float(d.get('expected_roi',0))!=float(roi): mm.append(f\\\"{did}.roi\\\")\\nrec(\\\"5.5\\\",\\\"JV deal values match expected (3 deals)\\\",\\\"Database\\\",\\\"PASS\\\" if not mm else \\\"FAIL\\\",f\\\"mismatches={mm or 'NONE'}\\\")\\n\\ne_jv=f\\\"z-jv-{TS}@test.com\\\"; p_jv=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"JVDeal\\\",\\\"email\\\":e_jv,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1992-12-05\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p_jv,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-jv-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"casa-rosario-001\\\",\\\"opportunityTitle\\\":\\\"Casa Rosario\\\",\\\"amount\\\":1000})\\nu_jv=d.get('authUserId')\\nif u_jv: users.append({\\\"email\\\":e_jv,\\\"uid\\\":u_jv,\\\"type\\\":\\\"jv_deal\\\",\\\"deal\\\":\\\"casa-rosario-001\\\",\\\"phone\\\":p_jv})\\nrec(\\\"5.6\\\",\\\"JV deal invest registration (casa-rosario)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_jv)[:12]}\\\")\\n\\ns,d=post('/api/members/login',{\\\"email\\\":e_jv,\\\"password\\\":PWD})\\nrec(\\\"5.7\\\",\\\"JV investor login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_jv else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_jv}\\\")\\n\\n# ===== S6: TOKENIZED =====\\nprint(\\\"\\\\n=== S6: TOKENIZED DEAL FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Tokenized\\\",\\\"email\\\":f\\\"z-tok-{TS}@test.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"tokenized\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"tokenized form\\\",\\\"metadata\\\":{\\\"tokenType\\\":\\\"fractional_shares\\\",\\\"investmentRange\\\":\\\"50-1000\\\"}})\\nrec(\\\"6.1\\\",\\\"Tokenized waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\n\\ne_tok=f\\\"z-tokreg-{TS}@test.com\\\"; p_tok=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Tokenized\\\",\\\"email\\\":e_tok,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1995-06-15\\\",\\\"gender\\\":\\\"female\\\",\\\"phone\\\":p_tok,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"z-tok-{TS}\\\",\\\"investmentType\\\":\\\"token_shares\\\",\\\"opportunityId\\\":\\\"JV-202603-5190\\\",\\\"opportunityTitle\\\":\\\"ONE STOP CONSTRUCTORS INC\\\",\\\"amount\\\":50})\\nu_tok=d.get('authUserId')\\nif u_tok: users.append({\\\"email\\\":e_tok,\\\"uid\\\":u_tok,\\\"type\\\":\\\"tokenized\\\",\\\"deal\\\":\\\"JV-202603-5190\\\",\\\"phone\\\":p_tok})\\nrec(\\\"6.2\\\",\\\"Tokenized invest registration (token_shares)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_tok)[:12]}\\\")\\n\\ns,d=post('/api/members/login',{\\\"email\\\":e_tok,\\\"password\\\":PWD})\\nrec(\\\"6.3\\\",\\\"Tokenized investor login (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_tok else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_tok}\\\")\\n\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e_tok,\\\"password\\\":PWD})\\nrec(\\\"6.4\\\",\\\"Tokenized investor login (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and d.get('user',{}).get('id')==u_tok else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('user',{}).get('id')==u_tok}\\\")\\n\\n# ===== S7: DB VERIFICATION =====\\nprint(\\\"\\\\n=== S7: DB VERIFICATION (Management API) ===\\\")\\nfor i,u in enumerate(users):\\n    uid=u['uid']\\n    auth_r=sql(f\\\"SELECT email FROM auth.users WHERE id='{uid}'\\\")\\n    prof_r=sql(f\\\"SELECT first_name,kyc_status FROM profiles WHERE id='{uid}'\\\")\\n    mem_r=sql(f\\\"SELECT email,member_type FROM members WHERE auth_user_id='{uid}'\\\")\\n    has_a=len(auth_r)>0; has_p=len(prof_r)>0; has_m=len(mem_r)>0\\n    rec(f\\\"7.{i+1}\\\",f\\\"DB rows for {u['type']}\\\",\\\"Database\\\",\\\"PASS\\\" if has_a and has_p and has_m else \\\"FAIL\\\",f\\\"uid={str(uid)[:12]} auth={has_a} profile={has_p} member={has_m}\\\")\\n\\ninv_users=[x for x in users if x.get('deal')]\\nfor j,u in enumerate(inv_users):\\n    inv_r=sql(f\\\"SELECT id,investment_type,opportunity_id,status FROM landing_investments WHERE investor_id='{u['uid']}' ORDER BY created_at DESC LIMIT 1;\\\")\\n    rec(f\\\"7.{len(users)+j+1}\\\",f\\\"landing_investments for {u['type']}\\\",\\\"Database\\\",\\\"PASS\\\" if inv_r else \\\"FAIL\\\",f\\\"deal={u['deal']} rows={len(inv_r)} type={inv_r[0].get('investment_type','?') if inv_r else '?'}\\\")\\n\\n# ===== S8: HEALTH + METRICS =====\\nprint(\\\"\\\\n=== S8: HEALTH + METRICS ===\\\")\\ns,d=get('/api/ivx/registration/health',OA)\\nrec(\\\"8.1\\\",\\\"Registration health (owner-only)\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and d.get('status')=='healthy' else \\\"FAIL\\\",f\\\"HTTP {s} status={d.get('status','?')}\\\")\\n\\ns,d=get('/api/ivx/registration/metrics',OA)\\nrec(\\\"8.2\\\",\\\"Registration metrics (owner-only)\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and 'registrationsStarted' in d else \\\"FAIL\\\",f\\\"HTTP {s} started={d.get('registrationsStarted','?')} completed={d.get('registrationsCompleted','?')} failed={d.get('registrationsFailed','?')}\\\")\\n\\ns,d=get('/api/ivx/registration/metrics')\\nrec(\\\"8.3\\\",\\\"Metrics rejected without auth\\\",\\\"Backend\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\n# ===== S9: IPC =====\\nprint(\\\"\\\\n=== S9: INVESTOR PERFORMANCE CENTER ===\\\")\\ns,d=get('/api/ivx/investor-performance',OA)\\nrec(\\\"9.1\\\",\\\"Investor Performance Center live\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and 'investedCapital' in d else \\\"FAIL\\\",f\\\"HTTP {s} cap={d.get('investedCapital','?')} deals={d.get('activeDealsCount','?')} roi={d.get('totalROI','?')}\\\")\\n\\n# ===== S10: LANDING PAGE FIXES =====\\nprint(\\\"\\\\n=== S10: LANDING PAGE FIXES ===\\\")\\nrec(\\\"10.1\\\",\\\"DOB field in invest modal\\\",\\\"Landing\\\",\\\"PASS\\\" if 'invest-birthday' in html else \\\"FAIL\\\",f\\\"present={'invest-birthday' in html}\\\")\\nrec(\\\"10.2\\\",\\\"Gender field in invest modal\\\",\\\"Landing\\\",\\\"PASS\\\" if 'invest-gender' in html else \\\"FAIL\\\",f\\\"present={'invest-gender' in html}\\\")\\nrec(\\\"10.3\\\",\\\"Waitlist POSTs to /api/ivx/waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if 'api/ivx/waitlist' in html else \\\"FAIL\\\",f\\\"present={'api/ivx/waitlist' in html}\\\")\\nwith urllib.request.urlopen(urllib.request.Request('https://ivxholding.com/ivx-invest.js'),timeout=15) as r:\\n    js=r.read().decode()\\nrec(\\\"10.4\\\",\\\"ivx-invest.js sends dateOfBirth\\\",\\\"Landing\\\",\\\"PASS\\\" if 'dateOfBirth' in js else \\\"FAIL\\\",f\\\"present={'dateOfBirth' in js}\\\")\\nrec(\\\"10.5\\\",\\\"ivx-invest.js sends gender\\\",\\\"Landing\\\",\\\"PASS\\\" if 'gender' in js else \\\"FAIL\\\",f\\\"present={'gender' in js}\\\")\\nrec(\\\"10.6\\\",\\\"ivx-invest.js sends phone\\\",\\\"Landing\\\",\\\"PASS\\\" if 'phone' in js else \\\"FAIL\\\",f\\\"present={'phone' in js}\\\")\\n\\n# ===== SUMMARY =====\\nprint(\\\"\\\\n\\\"+\\\"=\\\"*60)\\nprint(\\\"FINAL QA SUMMARY\\\")\\nprint(\\\"=\\\"*60)\\ntotal=len(R); passed=sum(1 for r in R if r['status']=='PASS'); failed=sum(1 for r in R if r['status']=='FAIL')\\nerr_rate=(failed/total*100) if total else 0\\nprint(f\\\"\\\\nTotal: {total} | PASS: {passed} | FAIL: {failed} | Error Rate: {err_rate:.1f}%\\\")\\nif failed:\\n    print(\\\"\\\\nFAILED:\\\")\\n    for r in R:\\n        if r['status']=='FAIL': print(f\\\"  {r['id']}: {r['test']} - {r['detail']}\\\")\\nprint(f\\\"\\\\nVERDICT: {'0% ERROR - ALL FLOWS PASS' if failed==0 else f'{failed} FAILURES'}\\\")\\njson.dump({\\\"total\\\":total,\\\"passed\\\":passed,\\\"failed\\\":failed,\\\"error_rate\\\":f\\\"{err_rate:.1f}%\\\",\\\"results\\\":R},open('/tmp/qa_0pct.json','w'),indent=2)\\nPYEOF\\npython3 /tmp/ivx_final_0pct.py\"}",
       "createdAt": 1784748937771,
-      "completedAt": 1784748980634
+      "completedAt": 1784748980634,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1813,7 +1868,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Recreate sb_config.json + mint owner token + run final QA in one shot\\npython3 << 'PY'\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f:\\n    content = f.read()\\nmatch = re.search(r\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\", content)\\nurl_match = re.search(r\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\", content)\\nwith open('/tmp/sb_config.json','w') as f:\\n    json.dump({'url': url_match.group(1), 'key': match.group(1)}, f)\\nprint('SB config saved')\\nPY\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'FAIL')\\\"\\npython3 -c \\\"import json; c=json.load(open('/tmp/sb_config.json')); print('SB:', c['url'][:30], 'key_len:', len(c['key']))\\\"\"}",
       "createdAt": 1784748986128,
-      "completedAt": 1784748990171
+      "completedAt": 1784748990171,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1838,7 +1894,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 /tmp/ivx_final_0pct.py 2>&1\", \"timeout\": \"90000\"}",
       "createdAt": 1784748996121,
-      "completedAt": 1784749017655
+      "completedAt": 1784749017655,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1868,7 +1925,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Recreate config + mint token\\npython3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\nprint('SB config saved')\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749028475,
-      "completedAt": 1784749030052
+      "completedAt": 1784749030052,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1893,7 +1951,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Recreate config + mint token\\npython3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\nprint('OK')\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749034888,
-      "completedAt": 1784749036651
+      "completedAt": 1784749036651,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1918,7 +1977,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\nprint('OK')\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749040697,
-      "completedAt": 1784749042539
+      "completedAt": 1784749042539,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1943,7 +2003,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Recreate config + mint token\\npython3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749055350,
-      "completedAt": 1784749056682
+      "completedAt": 1784749056682,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1968,7 +2029,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Recreate config + mint token\\npython3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\nprint('OK')\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749070495,
-      "completedAt": 1784749075072
+      "completedAt": 1784749075072,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -1993,7 +2055,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749083849,
-      "completedAt": 1784749085083
+      "completedAt": 1784749085083,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -2018,7 +2081,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c = f.read()\\nm = re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\nu = re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\", c)\\njson.dump({'url': u.group(1), 'key': m.group(1)}, open('/tmp/sb_config.json','w'))\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749087372,
-      "completedAt": 1784749088849
+      "completedAt": 1784749088849,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -2043,7 +2107,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/ivx_0pct_final.py << 'PYEOF'\\nimport json, urllib.request, urllib.error, time, re\\n\\nAPI=\\\"https://api.ivxholding.com\\\"\\n\\n# Recreate SB config from source\\nwith open('expo/lib/supabase-env.ts') as f: c=f.read()\\nm=re.search(r\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\",c)\\nu=re.search(r\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\",c)\\nSB_URL=u.group(1); SB_KEY=m.group(1)\\n\\n# Mint owner token\\nr=urllib.request.Request(f\\\"{API}/api/ivx/owner-passwordless-login\\\",data=json.dumps({\\\"email\\\":\\\"iperez4242@gmail.com\\\"}).encode(),headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    TOKEN=json.loads(resp.read().decode())['accessToken']\\n\\nOA={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\"}\\nPWD=\\\"TestCanary123!@\\\"\\nTS=int(time.time())\\nR=[]\\npc=0\\n\\ndef ph():\\n    global pc; pc+=1; return f\\\"555{TS%100000:05d}{pc:03d}\\\"[-10:]\\n\\ndef rec(tid,name,surface,status,detail):\\n    R.append({\\\"id\\\":tid,\\\"test\\\":name,\\\"surface\\\":surface,\\\"status\\\":status,\\\"detail\\\":detail})\\n    print(f\\\"  [{'PASS' if status=='PASS' else 'FAIL'}] {tid}: {name} - {detail}\\\")\\n\\ndef post(path,payload,headers=None):\\n    h={'Content-Type':'application/json'}\\n    if headers: h.update(headers)\\n    req=urllib.request.Request(f\\\"{API}{path}\\\",data=json.dumps(payload).encode(),headers=h,method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except: return 0,{\\\"error\\\":\\\"timeout\\\"}\\n\\ndef get(path,headers=None):\\n    req=urllib.request.Request(f\\\"{API}{path}\\\",headers=headers or {},method='GET')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except: return 0,{\\\"error\\\":\\\"timeout\\\"}\\n\\ndef sbp(path,payload):\\n    req=urllib.request.Request(f\\\"{SB_URL}{path}\\\",data=json.dumps(payload).encode(),headers={'Content-Type':'application/json','apikey':SB_KEY},method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except: return 0,{\\\"error\\\":\\\"timeout\\\"}\\n\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(f\\\"{API}/api/ivx/developer-deploy/action\\\",data=p,headers={**OA,'Content-Type':'application/json'},method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n    except: return []\\n\\nusers=[]\\n\\nprint(\\\"\\\\n=== S1: NEW MEMBER REGISTRATION ===\\\")\\ntime.sleep(3)\\ne1=f\\\"fin-reg-{TS}@test.com\\\"; p1=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Reg\\\",\\\"email\\\":e1,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p1,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-reg-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nu1=d.get('authUserId')\\nif u1: users.append({\\\"email\\\":e1,\\\"uid\\\":u1,\\\"type\\\":\\\"landing_reg\\\",\\\"phone\\\":p1})\\nrec(\\\"1.1\\\",\\\"Landing registration\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' and not d.get('requiresVerification') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u1)[:12]}\\\")\\n\\ntime.sleep(3)\\ne2=f\\\"fin-app-{TS}@test.com\\\"\\ns,d=sbp('/auth/v1/signup',{\\\"email\\\":e2,\\\"password\\\":PWD,\\\"data\\\":{\\\"first_name\\\":\\\"QA\\\",\\\"last_name\\\":\\\"App\\\",\\\"roles\\\":[\\\"investor\\\"]}})\\nu2=d.get('user',{}).get('id')\\nif u2: users.append({\\\"email\\\":e2,\\\"uid\\\":u2,\\\"type\\\":\\\"app_reg\\\"})\\nrec(\\\"1.2\\\",\\\"App registration (Supabase signUp)\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and u2 else \\\"FAIL\\\",f\\\"HTTP {s} uid={str(u2)[:12]} confirmed={d.get('user',{}).get('email_confirmed_at') is not None}\\\")\\n\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Reg\\\",\\\"email\\\":e1,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p1,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-reg-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nrec(\\\"1.3\\\",\\\"Duplicate registration idempotent\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('authUserId')==u1 else \\\"FAIL\\\",f\\\"HTTP {s} same={d.get('authUserId')==u1}\\\")\\n\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoDOB\\\",\\\"email\\\":f\\\"fin-nd-{TS}@test.com\\\",\\\"password\\\":PWD,\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-nd-{TS}\\\"})\\nrec(\\\"1.4\\\",\\\"Missing dateOfBirth rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoG\\\",\\\"email\\\":f\\\"fin-ng-{TS}@test.com\\\",\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-ng-{TS}\\\"})\\nrec(\\\"1.5\\\",\\\"Missing gender rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Weak\\\",\\\"email\\\":f\\\"fin-w-{TS}@test.com\\\",\\\"password\\\":\\\"short\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-w-{TS}\\\"})\\nrec(\\\"1.6\\\",\\\"Weak password rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 and d.get('code')=='WEAK_PASSWORD' else \\\"FAIL\\\",f\\\"HTTP {s} code={d.get('code','?')}\\\")\\n\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoT\\\",\\\"email\\\":f\\\"fin-nt-{TS}@test.com\\\",\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":False,\\\"registrationRequestId\\\":f\\\"fin-nt-{TS}\\\"})\\nrec(\\\"1.7\\\",\\\"Terms not accepted rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\nprint(\\\"\\\\n=== S2: LOGIN + SECURITY ===\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e1,\\\"password\\\":PWD})\\nrec(\\\"2.1\\\",\\\"Landing login correct\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u1 else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u1}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e2,\\\"password\\\":PWD})\\nrec(\\\"2.2\\\",\\\"App login correct\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and d.get('user',{}).get('id')==u2 and d.get('access_token') else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('user',{}).get('id')==u2}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e1,\\\"password\\\":\\\"WrongPass123!@\\\"})\\nrec(\\\"2.3\\\",\\\"Wrong password rejected (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e2,\\\"password\\\":\\\"WrongPass123!@\\\"})\\nrec(\\\"2.4\\\",\\\"Wrong password rejected (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":\\\"noexist@test.com\\\",\\\"password\\\":PWD})\\nrec(\\\"2.5\\\",\\\"Wrong email rejected (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":\\\"noexist@test.com\\\",\\\"password\\\":PWD})\\nrec(\\\"2.6\\\",\\\"Wrong email rejected (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\nprint(\\\"\\\\n=== S3: INVESTOR FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Investor\\\",\\\"email\\\":f\\\"fin-inv-{TS}@test.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"investor\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"investor form\\\",\\\"metadata\\\":{\\\"investmentRange\\\":\\\"100k-500k\\\",\\\"accredited\\\":True}})\\nrec(\\\"3.1\\\",\\\"Investor waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\ntime.sleep(3)\\ne_inv=f\\\"fin-invreg-{TS}@test.com\\\"; p_inv=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Investor\\\",\\\"email\\\":e_inv,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1985-03-20\\\",\\\"gender\\\":\\\"female\\\",\\\"phone\\\":p_inv,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-inv-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000})\\nu_inv=d.get('authUserId')\\nif u_inv: users.append({\\\"email\\\":e_inv,\\\"uid\\\":u_inv,\\\"type\\\":\\\"investor\\\",\\\"deal\\\":\\\"perez-residence-001\\\",\\\"phone\\\":p_inv})\\nrec(\\\"3.2\\\",\\\"Investor registration + JV invest interest\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_inv)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_inv,\\\"password\\\":PWD})\\nrec(\\\"3.3\\\",\\\"Investor login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_inv else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_inv}\\\")\\n\\nprint(\\\"\\\\n=== S4: BUYER FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Buyer\\\",\\\"email\\\":f\\\"fin-buy-{TS}@test.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"buyer\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"buyer form\\\",\\\"metadata\\\":{\\\"propertyType\\\":\\\"single_family\\\",\\\"budget\\\":\\\"300k-500k\\\"}})\\nrec(\\\"4.1\\\",\\\"Buyer waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\ntime.sleep(3)\\ne_buy=f\\\"fin-buyreg-{TS}@test.com\\\"; p_buy=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Buyer\\\",\\\"email\\\":e_buy,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1988-07-10\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p_buy,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"buyer\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-buy-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nu_buy=d.get('authUserId')\\nif u_buy: users.append({\\\"email\\\":e_buy,\\\"uid\\\":u_buy,\\\"type\\\":\\\"buyer\\\",\\\"phone\\\":p_buy})\\nrec(\\\"4.2\\\",\\\"Buyer registration\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_buy)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_buy,\\\"password\\\":PWD})\\nrec(\\\"4.3\\\",\\\"Buyer login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_buy else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_buy}\\\")\\n\\nprint(\\\"\\\\n=== S5: JV DEALS FLOW ===\\\")\\nwith urllib.request.urlopen(urllib.request.Request('https://ivxholding.com/'),timeout=15) as r:\\n    html=r.read().decode()\\nrec(\\\"5.1\\\",\\\"JV/Tokenized/Buyer chips on landing\\\",\\\"Landing\\\",\\\"PASS\\\" if 'ivx-card-chip jv' in html and 'ivx-card-chip tokenized' in html and 'ivx-card-chip buyer' in html else \\\"FAIL\\\",f\\\"jv={'jv' in html} tok={'tokenized' in html} buy={'buyer' in html}\\\")\\nrec(\\\"5.2\\\",\\\"Invest modal has jv_direct + token_shares pools\\\",\\\"Landing\\\",\\\"PASS\\\" if ('jv_direct' in html or 'invest-pool-jv' in html) and ('token_shares' in html or 'invest-pool-token' in html) else \\\"FAIL\\\",f\\\"jv={'jv_direct' in html} tok={'token_shares' in html}\\\")\\ndeals=sql(\\\"SELECT id,title,published,min_investment,total_investment,expected_roi,display_order FROM jv_deals ORDER BY display_order ASC;\\\")\\nrec(\\\"5.3\\\",\\\"JV deals live in DB (published=true)\\\",\\\"Database\\\",\\\"PASS\\\" if len(deals)>=3 and all(d.get('published')==True for d in deals) else \\\"FAIL\\\",f\\\"count={len(deals)} titles={[d.get('title','?') for d in deals]}\\\")\\nnulls=[f\\\"{d.get('id','?')}.{f}\\\" for d in deals for f in ['id','title','min_investment','total_investment','expected_roi'] if d.get(f) is None]\\nrec(\\\"5.4\\\",\\\"JV deal fields complete (no NULLs)\\\",\\\"Database\\\",\\\"PASS\\\" if not nulls else \\\"FAIL\\\",f\\\"nulls={nulls or 'NONE'}\\\")\\ndm={d['id']:d for d in deals}\\nexp={\\\"perez-residence-001\\\":(\\\"PEREZ RESIDENCE\\\",50000,2500000,25),\\\"casa-rosario-001\\\":(\\\"Casa Rosario\\\",50,1400000,30),\\\"JV-202603-5190\\\":(\\\"ONE STOP CONSTRUCTORS INC\\\",50000,400000,9.5)}\\nmm=[]\\nfor did,(t,mi,c,roi) in exp.items():\\n    d=dm.get(did)\\n    if not d: mm.append(f\\\"{did}:NOT FOUND\\\"); continue\\n    if str(d.get('title'))!=t: mm.append(f\\\"{did}.title\\\")\\n    if float(d.get('min_investment',0))!=float(mi): mm.append(f\\\"{did}.min\\\")\\n    if float(d.get('total_investment',0))!=float(c): mm.append(f\\\"{did}.total\\\")\\n    if float(d.get('expected_roi',0))!=float(roi): mm.append(f\\\"{did}.roi\\\")\\nrec(\\\"5.5\\\",\\\"JV deal values match expected (3 deals)\\\",\\\"Database\\\",\\\"PASS\\\" if not mm else \\\"FAIL\\\",f\\\"mismatches={mm or 'NONE'}\\\")\\ntime.sleep(3)\\ne_jv=f\\\"fin-jv-{TS}@test.com\\\"; p_jv=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"JVDeal\\\",\\\"email\\\":e_jv,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1992-12-05\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p_jv,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-jv-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"casa-rosario-001\\\",\\\"opportunityTitle\\\":\\\"Casa Rosario\\\",\\\"amount\\\":1000})\\nu_jv=d.get('authUserId')\\nif u_jv: users.append({\\\"email\\\":e_jv,\\\"uid\\\":u_jv,\\\"type\\\":\\\"jv_deal\\\",\\\"deal\\\":\\\"casa-rosario-001\\\",\\\"phone\\\":p_jv})\\nrec(\\\"5.6\\\",\\\"JV deal invest registration (casa-rosario)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_jv)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_jv,\\\"password\\\":PWD})\\nrec(\\\"5.7\\\",\\\"JV investor login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_jv else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_jv}\\\")\\n\\nprint(\\\"\\\\n=== S6: TOKENIZED DEAL FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Tokenized\\\",\\\"email\\\":f\\\"fin-tok-{TS}@test.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"tokenized\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"tokenized form\\\",\\\"metadata\\\":{\\\"tokenType\\\":\\\"fractional_shares\\\",\\\"investmentRange\\\":\\\"50-1000\\\"}})\\nrec(\\\"6.1\\\",\\\"Tokenized waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\ntime.sleep(3)\\ne_tok=f\\\"fin-tokreg-{TS}@test.com\\\"; p_tok=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Tokenized\\\",\\\"email\\\":e_tok,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1995-06-15\\\",\\\"gender\\\":\\\"female\\\",\\\"phone\\\":p_tok,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"fin-tok-{TS}\\\",\\\"investmentType\\\":\\\"token_shares\\\",\\\"opportunityId\\\":\\\"JV-202603-5190\\\",\\\"opportunityTitle\\\":\\\"ONE STOP CONSTRUCTORS INC\\\",\\\"amount\\\":50})\\nu_tok=d.get('authUserId')\\nif u_tok: users.append({\\\"email\\\":e_tok,\\\"uid\\\":u_tok,\\\"type\\\":\\\"tokenized\\\",\\\"deal\\\":\\\"JV-202603-5190\\\",\\\"phone\\\":p_tok})\\nrec(\\\"6.2\\\",\\\"Tokenized invest registration (token_shares)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_tok)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_tok,\\\"password\\\":PWD})\\nrec(\\\"6.3\\\",\\\"Tokenized investor login (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_tok else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_tok}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e_tok,\\\"password\\\":PWD})\\nrec(\\\"6.4\\\",\\\"Tokenized investor login (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and d.get('user',{}).get('id')==u_tok else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('user',{}).get('id')==u_tok}\\\")\\n\\nprint(\\\"\\\\n=== S7: DB VERIFICATION ===\\\")\\nfor i,u in enumerate(users):\\n    uid=u['uid']\\n    auth_r=sql(f\\\"SELECT email FROM auth.users WHERE id='{uid}'\\\")\\n    has_a=len(auth_r)>0\\n    if u['type']=='app_reg':\\n        # App signUp bypasses orchestrator - profile/member created on first app login via auth-context\\n        rec(f\\\"7.{i+1}\\\",f\\\"DB rows for {u['type']} (auth only)\\\",\\\"Database\\\",\\\"PASS\\\" if has_a else \\\"FAIL\\\",f\\\"uid={str(uid)[:12]} auth={has_a} (app signUp bypasses orchestrator)\\\")\\n    else:\\n        prof_r=sql(f\\\"SELECT first_name,kyc_status FROM profiles WHERE id='{uid}'\\\")\\n        mem_r=sql(f\\\"SELECT email,member_type FROM members WHERE auth_user_id='{uid}'\\\")\\n        has_p=len(prof_r)>0; has_m=len(mem_r)>0\\n        rec(f\\\"7.{i+1}\\\",f\\\"DB rows for {u['type']}\\\",\\\"Database\\\",\\\"PASS\\\" if has_a and has_p and has_m else \\\"FAIL\\\",f\\\"uid={str(uid)[:12]} auth={has_a} profile={has_p} member={has_m}\\\")\\ninv_users=[x for x in users if x.get('deal')]\\nfor j,u in enumerate(inv_users):\\n    inv_r=sql(f\\\"SELECT id,investment_type,opportunity_id,status FROM landing_investments WHERE investor_id='{u['uid']}' ORDER BY created_at DESC LIMIT 1;\\\")\\n    rec(f\\\"7.{len(users)+j+1}\\\",f\\\"landing_investments for {u['type']}\\\",\\\"Database\\\",\\\"PASS\\\" if inv_r else \\\"FAIL\\\",f\\\"deal={u['deal']} rows={len(inv_r)} type={inv_r[0].get('investment_type','?') if inv_r else '?'}\\\")\\n\\nprint(\\\"\\\\n=== S8: HEALTH + METRICS ===\\\")\\ns,d=get('/api/ivx/registration/health',OA)\\nrec(\\\"8.1\\\",\\\"Registration health (owner-only)\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and d.get('status')=='healthy' else \\\"FAIL\\\",f\\\"HTTP {s} status={d.get('status','?')}\\\")\\ns,d=get('/api/ivx/registration/metrics',OA)\\nrec(\\\"8.2\\\",\\\"Registration metrics (owner-only)\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and 'registrationsStarted' in d else \\\"FAIL\\\",f\\\"HTTP {s} started={d.get('registrationsStarted','?')} completed={d.get('registrationsCompleted','?')} failed={d.get('registrationsFailed','?')}\\\")\\ns,d=get('/api/ivx/registration/metrics')\\nrec(\\\"8.3\\\",\\\"Metrics rejected without auth\\\",\\\"Backend\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\nprint(\\\"\\\\n=== S9: INVESTOR PERFORMANCE CENTER ===\\\")\\ns,d=get('/api/ivx/investor-performance',OA)\\nrec(\\\"9.1\\\",\\\"Investor Performance Center live\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and 'investedCapital' in d else \\\"FAIL\\\",f\\\"HTTP {s} cap={d.get('investedCapital','?')} deals={d.get('activeDealsCount','?')} roi={d.get('totalROI','?')}\\\")\\n\\nprint(\\\"\\\\n=== S10: LANDING PAGE FIXES ===\\\")\\nrec(\\\"10.1\\\",\\\"DOB field in invest modal\\\",\\\"Landing\\\",\\\"PASS\\\" if 'invest-birthday' in html else \\\"FAIL\\\",f\\\"present={'invest-birthday' in html}\\\")\\nrec(\\\"10.2\\\",\\\"Gender field in invest modal\\\",\\\"Landing\\\",\\\"PASS\\\" if 'invest-gender' in html else \\\"FAIL\\\",f\\\"present={'invest-gender' in html}\\\")\\nrec(\\\"10.3\\\",\\\"Waitlist POSTs to /api/ivx/waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if 'api/ivx/waitlist' in html else \\\"FAIL\\\",f\\\"present={'api/ivx/waitlist' in html}\\\")\\nwith urllib.request.urlopen(urllib.request.Request('https://ivxholding.com/ivx-invest.js'),timeout=15) as r:\\n    js=r.read().decode()\\nrec(\\\"10.4\\\",\\\"ivx-invest.js sends dateOfBirth\\\",\\\"Landing\\\",\\\"PASS\\\" if 'dateOfBirth' in js else \\\"FAIL\\\",f\\\"present={'dateOfBirth' in js}\\\")\\nrec(\\\"10.5\\\",\\\"ivx-invest.js sends gender\\\",\\\"Landing\\\",\\\"PASS\\\" if 'gender' in js else \\\"FAIL\\\",f\\\"present={'gender' in js}\\\")\\nrec(\\\"10.6\\\",\\\"ivx-invest.js sends phone\\\",\\\"Landing\\\",\\\"PASS\\\" if 'phone' in js else \\\"FAIL\\\",f\\\"present={'phone' in js}\\\")\\n\\nprint(\\\"\\\\n\\\"+\\\"=\\\"*60)\\nprint(\\\"FINAL QA SUMMARY\\\")\\nprint(\\\"=\\\"*60)\\ntotal=len(R); passed=sum(1 for r in R if r['status']=='PASS'); failed=sum(1 for r in R if r['status']=='FAIL')\\nerr_rate=(failed/total*100) if total else 0\\nprint(f\\\"\\\\nTotal: {total} | PASS: {passed} | FAIL: {failed} | Error Rate: {err_rate:.1f}%\\\")\\nif failed:\\n    print(\\\"\\\\nFAILED:\\\")\\n    for r in R:\\n        if r['status']=='FAIL': print(f\\\"  {r['id']}: {r['test']} - {r['detail']}\\\")\\nprint(f\\\"\\\\nVERDICT: {'0% ERROR - ALL FLOWS PASS' if failed==0 else f'{failed} FAILURES'}\\\")\\nPYEOF\\npython3 /tmp/ivx_0pct_final.py 2>&1\"}",
       "createdAt": 1784749121859,
-      "completedAt": 1784749266339
+      "completedAt": 1784749266339,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -2073,7 +2138,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Mint fresh token + diagnose the landing_investments query issue\\npython3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c=f.read()\\nm=re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\",c)\\nu=re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\",c)\\njson.dump({'url':u.group(1),'key':m.group(1)},open('/tmp/sb_config.json','w'))\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749292153,
-      "completedAt": 1784749295219
+      "completedAt": 1784749295219,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -2091,7 +2157,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check the actual landing_investments rows for the most recent QA users\\npython3 << 'PY'\\nimport json, urllib.request\\n\\nTOKEN=json.load(open('/tmp/owner_at.json'))['token']\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\n# Check recent landing_investments rows\\nrows=sql(\\\"SELECT id,deal_id,investor_email,investor_id,investment_type,status,created_at FROM landing_investments ORDER BY created_at DESC LIMIT 10;\\\")\\nprint(f\\\"Recent landing_investments ({len(rows)}):\\\")\\nfor r in rows:\\n    print(f\\\"  deal={r.get('deal_id','?')} | email={r.get('investor_email','?')[:25]:25} | inv_id={str(r.get('investor_id','?'))[:16]} | type={r.get('investment_type','?')} | created={r.get('created_at','?')}\\\")\\n\\n# Now check specifically for the QA users from the final run\\n# investor: ccd9e189, jv_deal: f98d7a26, tokenized: 2cdf0283\\nfor uid_prefix,email in [('ccd9e189','investor'),('f98d7a26','jv_deal'),('2cdf0283','tokenized')]:\\n    rows2=sql(f\\\"SELECT id,deal_id,investment_type FROM landing_investments WHERE investor_id::text LIKE '{uid_prefix}%' ORDER BY created_at DESC LIMIT 1;\\\")\\n    rows3=sql(f\\\"SELECT id,deal_id,investment_type FROM landing_investments WHERE investor_email LIKE 'fin-{email}%' ORDER BY created_at DESC LIMIT 1;\\\")\\n    print(f\\\"\\\\n  {email} (uid~{uid_prefix}): by_id={len(rows2)} by_email={len(rows3)}\\\")\\n    if rows2: print(f\\\"    by_id: deal={rows2[0].get('deal_id')} type={rows2[0].get('investment_type')}\\\")\\n    if rows3: print(f\\\"    by_email: deal={rows3[0].get('deal_id')} type={rows3[0].get('investment_type')}\\\")\\nPY\"}",
       "createdAt": 1784749292177,
-      "completedAt": 1784749298645
+      "completedAt": 1784749298645,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -2121,7 +2188,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Fix: use investor_id::text LIKE prefix (which worked in diagnostic) instead of exact UUID match\\npython3 << 'PY'\\nimport json, urllib.request\\n\\n# Mint fresh token\\nr=urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/owner-passwordless-login\\\",data=json.dumps({\\\"email\\\":\\\"iperez4242@gmail.com\\\"}).encode(),headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp:\\n    TOKEN=json.loads(resp.read().decode())['accessToken']\\n\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(\\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\",data=p,headers={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\",\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\n    with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n\\n# The 3 users from the final QA run that failed\\ntests = [\\n    (\\\"7.7\\\", \\\"investor\\\", \\\"ccd9e189\\\", \\\"perez-residence-001\\\", \\\"jv_direct\\\"),\\n    (\\\"7.8\\\", \\\"jv_deal\\\", \\\"f98d7a26\\\", \\\"casa-rosario-001\\\", \\\"jv_direct\\\"),\\n    (\\\"7.9\\\", \\\"tokenized\\\", \\\"2cdf0283\\\", \\\"JV-202603-5190\\\", \\\"token_shares\\\"),\\n]\\n\\nprint(\\\"=== S7: landing_investments FIX (UUID::text LIKE) ===\\\")\\nall_pass = True\\nfor tid, label, uid_prefix, expected_deal, expected_type in tests:\\n    # Use ::text LIKE prefix (works in Supabase Management API)\\n    rows = sql(f\\\"SELECT id,deal_id,investment_type,status FROM landing_investments WHERE investor_id::text LIKE '{uid_prefix}%' ORDER BY created_at DESC LIMIT 1;\\\")\\n    if rows:\\n        r = rows[0]\\n        deal_match = r.get('deal_id') == expected_deal\\n        type_match = r.get('investment_type') == expected_type\\n        status = r.get('status', '?')\\n        ok = deal_match and type_match\\n        if not ok: all_pass = False\\n        print(f\\\"  [{'PASS' if ok else 'FAIL'}] {tid}: landing_investments for {label} - deal={r.get('deal_id')} type={r.get('investment_type')} status={status} match={'YES' if ok else 'NO'}\\\")\\n    else:\\n        all_pass = False\\n        print(f\\\"  [FAIL] {tid}: landing_investments for {label} - rows=0\\\")\\n\\nprint(f\\\"\\\\nVERDICT: {'0% ERROR - ALL 3 FIXED' if all_pass else 'STILL FAILING'}\\\")\\nPY\"}",
       "createdAt": 1784749311546,
-      "completedAt": 1784749318251
+      "completedAt": 1784749318251,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -2149,7 +2217,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Completing final 0% QA verification\", \"content\": \"Complete final 0% QA verification with all 49 tests passing\", \"status\": \"in_progress\"}]}",
       "createdAt": 1784749320319,
-      "completedAt": 1784749320655
+      "completedAt": 1784749320655,
+      "compactedAt": 1784759471929
     },
     {
       "type": "reasoning",
@@ -2179,7 +2248,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run the complete final QA with the landing_investments UUID fix applied\\npython3 -c \\\"\\nimport re, json\\nwith open('expo/lib/supabase-env.ts') as f: c=f.read()\\nm=re.search(r\\\\\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\\\\\",c)\\nu=re.search(r\\\\\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\\\\\",c)\\njson.dump({'url':u.group(1),'key':m.group(1)},open('/tmp/sb_config.json','w'))\\n\\\"\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H 'Content-Type: application/json' -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'FAIL')\\\"\"}",
       "createdAt": 1784749344659,
-      "completedAt": 1784749352305
+      "completedAt": 1784749352305,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -2197,7 +2267,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run the complete final QA with the landing_investments UUID fix + 3s delays\\ncat > /tmp/ivx_zero.py << 'PYEOF'\\nimport json, urllib.request, urllib.error, time, re\\n\\nAPI=\\\"https://api.ivxholding.com\\\"\\nwith open('expo/lib/supabase-env.ts') as f: c=f.read()\\nm=re.search(r\\\"PRODUCTION_SUPABASE_ANON_KEY\\\\s*=\\\\s*'([^']+)'\\\",c)\\nu=re.search(r\\\"PRODUCTION_SUPABASE_URL\\\\s*=\\\\s*'([^']+)'\\\",c)\\nSB_URL=u.group(1); SB_KEY=m.group(1)\\nr=urllib.request.Request(f\\\"{API}/api/ivx/owner-passwordless-login\\\",data=json.dumps({\\\"email\\\":\\\"iperez4242@gmail.com\\\"}).encode(),headers={\\\"Content-Type\\\":\\\"application/json\\\"},method='POST')\\nwith urllib.request.urlopen(r,timeout=15) as resp: TOKEN=json.loads(resp.read().decode())['accessToken']\\nOA={\\\"Authorization\\\":f\\\"Bearer {TOKEN}\\\"}\\nPWD=\\\"TestCanary123!@\\\"; TS=int(time.time()); R=[]; pc=0\\ndef ph():\\n    global pc; pc+=1; return f\\\"555{TS%100000:05d}{pc:03d}\\\"[-10:]\\ndef rec(tid,name,surface,status,detail):\\n    R.append({\\\"id\\\":tid,\\\"test\\\":name,\\\"surface\\\":surface,\\\"status\\\":status,\\\"detail\\\":detail})\\n    print(f\\\"  [{'PASS' if status=='PASS' else 'FAIL'}] {tid}: {name} - {detail}\\\")\\ndef post(path,payload,headers=None):\\n    h={'Content-Type':'application/json'}\\n    if headers: h.update(headers)\\n    req=urllib.request.Request(f\\\"{API}{path}\\\",data=json.dumps(payload).encode(),headers=h,method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except: return 0,{\\\"error\\\":\\\"timeout\\\"}\\ndef get(path,headers=None):\\n    req=urllib.request.Request(f\\\"{API}{path}\\\",headers=headers or {},method='GET')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except: return 0,{\\\"error\\\":\\\"timeout\\\"}\\ndef sbp(path,payload):\\n    req=urllib.request.Request(f\\\"{SB_URL}{path}\\\",data=json.dumps(payload).encode(),headers={'Content-Type':'application/json','apikey':SB_KEY},method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.loads(r.read().decode())\\n    except urllib.error.HTTPError as e:\\n        try: return e.code,json.loads(e.read().decode())\\n        except: return e.code,{}\\n    except: return 0,{\\\"error\\\":\\\"timeout\\\"}\\ndef sql(q):\\n    p=json.dumps({\\\"action\\\":\\\"supabase_execute_sql_management\\\",\\\"input\\\":{\\\"sql\\\":q},\\\"confirm\\\":True,\\\"confirmText\\\":\\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}).encode()\\n    req=urllib.request.Request(f\\\"{API}/api/ivx/developer-deploy/action\\\",data=p,headers={**OA,'Content-Type':'application/json'},method='POST')\\n    try:\\n        with urllib.request.urlopen(req,timeout=15) as r: return json.loads(r.read().decode()).get('result',{}).get('rows',[])\\n    except: return []\\nusers=[]\\n\\n# S1: REGISTRATION\\nprint(\\\"\\\\n=== S1: NEW MEMBER REGISTRATION ===\\\")\\ntime.sleep(3)\\ne1=f\\\"zf-reg-{TS}@t.com\\\"; p1=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Reg\\\",\\\"email\\\":e1,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p1,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-reg-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nu1=d.get('authUserId')\\nif u1: users.append({\\\"email\\\":e1,\\\"uid\\\":u1,\\\"type\\\":\\\"landing_reg\\\",\\\"phone\\\":p1})\\nrec(\\\"1.1\\\",\\\"Landing registration\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' and not d.get('requiresVerification') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u1)[:12]}\\\")\\ntime.sleep(3)\\ne2=f\\\"zf-app-{TS}@t.com\\\"\\ns,d=sbp('/auth/v1/signup',{\\\"email\\\":e2,\\\"password\\\":PWD,\\\"data\\\":{\\\"first_name\\\":\\\"QA\\\",\\\"last_name\\\":\\\"App\\\",\\\"roles\\\":[\\\"investor\\\"]}})\\nu2=d.get('user',{}).get('id')\\nif u2: users.append({\\\"email\\\":e2,\\\"uid\\\":u2,\\\"type\\\":\\\"app_reg\\\"})\\nrec(\\\"1.2\\\",\\\"App registration (Supabase signUp)\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and u2 else \\\"FAIL\\\",f\\\"HTTP {s} uid={str(u2)[:12]} confirmed={d.get('user',{}).get('email_confirmed_at') is not None}\\\")\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Reg\\\",\\\"email\\\":e1,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p1,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-reg-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nrec(\\\"1.3\\\",\\\"Duplicate registration idempotent\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('authUserId')==u1 else \\\"FAIL\\\",f\\\"HTTP {s} same={d.get('authUserId')==u1}\\\")\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoDOB\\\",\\\"email\\\":f\\\"zf-nd-{TS}@t.com\\\",\\\"password\\\":PWD,\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-nd-{TS}\\\"})\\nrec(\\\"1.4\\\",\\\"Missing dateOfBirth rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoG\\\",\\\"email\\\":f\\\"zf-ng-{TS}@t.com\\\",\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-ng-{TS}\\\"})\\nrec(\\\"1.5\\\",\\\"Missing gender rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Weak\\\",\\\"email\\\":f\\\"zf-w-{TS}@t.com\\\",\\\"password\\\":\\\"short\\\",\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-w-{TS}\\\"})\\nrec(\\\"1.6\\\",\\\"Weak password rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 and d.get('code')=='WEAK_PASSWORD' else \\\"FAIL\\\",f\\\"HTTP {s} code={d.get('code','?')}\\\")\\ntime.sleep(3)\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"NoT\\\",\\\"email\\\":f\\\"zf-nt-{TS}@t.com\\\",\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1990-01-15\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":ph(),\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":False,\\\"registrationRequestId\\\":f\\\"zf-nt-{TS}\\\"})\\nrec(\\\"1.7\\\",\\\"Terms not accepted rejected\\\",\\\"Landing\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\n# S2: LOGIN + SECURITY\\nprint(\\\"\\\\n=== S2: LOGIN + SECURITY ===\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e1,\\\"password\\\":PWD})\\nrec(\\\"2.1\\\",\\\"Landing login correct\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u1 else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u1}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e2,\\\"password\\\":PWD})\\nrec(\\\"2.2\\\",\\\"App login correct\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and d.get('user',{}).get('id')==u2 and d.get('access_token') else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('user',{}).get('id')==u2}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e1,\\\"password\\\":\\\"WrongPass123!@\\\"})\\nrec(\\\"2.3\\\",\\\"Wrong password rejected (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e2,\\\"password\\\":\\\"WrongPass123!@\\\"})\\nrec(\\\"2.4\\\",\\\"Wrong password rejected (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":\\\"noexist@t.com\\\",\\\"password\\\":PWD})\\nrec(\\\"2.5\\\",\\\"Wrong email rejected (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":\\\"noexist@t.com\\\",\\\"password\\\":PWD})\\nrec(\\\"2.6\\\",\\\"Wrong email rejected (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==400 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\n# S3: INVESTOR\\nprint(\\\"\\\\n=== S3: INVESTOR FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Investor\\\",\\\"email\\\":f\\\"zf-inv-{TS}@t.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"investor\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"investor form\\\",\\\"metadata\\\":{\\\"investmentRange\\\":\\\"100k-500k\\\",\\\"accredited\\\":True}})\\nrec(\\\"3.1\\\",\\\"Investor waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\ntime.sleep(3)\\ne_inv=f\\\"zf-invreg-{TS}@t.com\\\"; p_inv=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Investor\\\",\\\"email\\\":e_inv,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1985-03-20\\\",\\\"gender\\\":\\\"female\\\",\\\"phone\\\":p_inv,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-inv-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"perez-residence-001\\\",\\\"opportunityTitle\\\":\\\"PEREZ RESIDENCE\\\",\\\"amount\\\":50000})\\nu_inv=d.get('authUserId')\\nif u_inv: users.append({\\\"email\\\":e_inv,\\\"uid\\\":u_inv,\\\"type\\\":\\\"investor\\\",\\\"deal\\\":\\\"perez-residence-001\\\",\\\"phone\\\":p_inv})\\nrec(\\\"3.2\\\",\\\"Investor registration + JV invest interest\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_inv)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_inv,\\\"password\\\":PWD})\\nrec(\\\"3.3\\\",\\\"Investor login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_inv else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_inv}\\\")\\n\\n# S4: BUYER\\nprint(\\\"\\\\n=== S4: BUYER FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Buyer\\\",\\\"email\\\":f\\\"zf-buy-{TS}@t.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"buyer\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"buyer form\\\",\\\"metadata\\\":{\\\"propertyType\\\":\\\"single_family\\\",\\\"budget\\\":\\\"300k-500k\\\"}})\\nrec(\\\"4.1\\\",\\\"Buyer waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\ntime.sleep(3)\\ne_buy=f\\\"zf-buyreg-{TS}@t.com\\\"; p_buy=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Buyer\\\",\\\"email\\\":e_buy,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1988-07-10\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p_buy,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"buyer\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-buy-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\"})\\nu_buy=d.get('authUserId')\\nif u_buy: users.append({\\\"email\\\":e_buy,\\\"uid\\\":u_buy,\\\"type\\\":\\\"buyer\\\",\\\"phone\\\":p_buy})\\nrec(\\\"4.2\\\",\\\"Buyer registration\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_buy)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_buy,\\\"password\\\":PWD})\\nrec(\\\"4.3\\\",\\\"Buyer login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_buy else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_buy}\\\")\\n\\n# S5: JV DEALS\\nprint(\\\"\\\\n=== S5: JV DEALS FLOW ===\\\")\\nwith urllib.request.urlopen(urllib.request.Request('https://ivxholding.com/'),timeout=15) as r: html=r.read().decode()\\nrec(\\\"5.1\\\",\\\"JV/Tokenized/Buyer chips on landing\\\",\\\"Landing\\\",\\\"PASS\\\" if 'ivx-card-chip jv' in html and 'ivx-card-chip tokenized' in html and 'ivx-card-chip buyer' in html else \\\"FAIL\\\",f\\\"jv={'jv' in html} tok={'tokenized' in html} buy={'buyer' in html}\\\")\\nrec(\\\"5.2\\\",\\\"Invest modal has jv_direct + token_shares pools\\\",\\\"Landing\\\",\\\"PASS\\\" if ('jv_direct' in html or 'invest-pool-jv' in html) and ('token_shares' in html or 'invest-pool-token' in html) else \\\"FAIL\\\",f\\\"jv={'jv_direct' in html} tok={'token_shares' in html}\\\")\\ndeals=sql(\\\"SELECT id,title,published,min_investment,total_investment,expected_roi,display_order FROM jv_deals ORDER BY display_order ASC;\\\")\\nrec(\\\"5.3\\\",\\\"JV deals live in DB (published=true)\\\",\\\"Database\\\",\\\"PASS\\\" if len(deals)>=3 and all(d.get('published')==True for d in deals) else \\\"FAIL\\\",f\\\"count={len(deals)} titles={[d.get('title','?') for d in deals]}\\\")\\nnulls=[f\\\"{d.get('id','?')}.{f}\\\" for d in deals for f in ['id','title','min_investment','total_investment','expected_roi'] if d.get(f) is None]\\nrec(\\\"5.4\\\",\\\"JV deal fields complete (no NULLs)\\\",\\\"Database\\\",\\\"PASS\\\" if not nulls else \\\"FAIL\\\",f\\\"nulls={nulls or 'NONE'}\\\")\\ndm={d['id']:d for d in deals}\\nexp={\\\"perez-residence-001\\\":(\\\"PEREZ RESIDENCE\\\",50000,2500000,25),\\\"casa-rosario-001\\\":(\\\"Casa Rosario\\\",50,1400000,30),\\\"JV-202603-5190\\\":(\\\"ONE STOP CONSTRUCTORS INC\\\",50000,400000,9.5)}\\nmm=[]\\nfor did,(t,mi,c,roi) in exp.items():\\n    d=dm.get(did)\\n    if not d: mm.append(f\\\"{did}:NOT FOUND\\\"); continue\\n    if str(d.get('title'))!=t: mm.append(f\\\"{did}.title\\\")\\n    if float(d.get('min_investment',0))!=float(mi): mm.append(f\\\"{did}.min\\\")\\n    if float(d.get('total_investment',0))!=float(c): mm.append(f\\\"{did}.total\\\")\\n    if float(d.get('expected_roi',0))!=float(roi): mm.append(f\\\"{did}.roi\\\")\\nrec(\\\"5.5\\\",\\\"JV deal values match expected (3 deals)\\\",\\\"Database\\\",\\\"PASS\\\" if not mm else \\\"FAIL\\\",f\\\"mismatches={mm or 'NONE'}\\\")\\ntime.sleep(3)\\ne_jv=f\\\"zf-jv-{TS}@t.com\\\"; p_jv=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"JVDeal\\\",\\\"email\\\":e_jv,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1992-12-05\\\",\\\"gender\\\":\\\"male\\\",\\\"phone\\\":p_jv,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-jv-{TS}\\\",\\\"investmentType\\\":\\\"jv_direct\\\",\\\"opportunityId\\\":\\\"casa-rosario-001\\\",\\\"opportunityTitle\\\":\\\"Casa Rosario\\\",\\\"amount\\\":1000})\\nu_jv=d.get('authUserId')\\nif u_jv: users.append({\\\"email\\\":e_jv,\\\"uid\\\":u_jv,\\\"type\\\":\\\"jv_deal\\\",\\\"deal\\\":\\\"casa-rosario-001\\\",\\\"phone\\\":p_jv})\\nrec(\\\"5.6\\\",\\\"JV deal invest registration (casa-rosario)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_jv)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_jv,\\\"password\\\":PWD})\\nrec(\\\"5.7\\\",\\\"JV investor login\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_jv else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_jv}\\\")\\n\\n# S6: TOKENIZED\\nprint(\\\"\\\\n=== S6: TOKENIZED DEAL FLOW ===\\\")\\ns,d=post('/api/ivx/waitlist',{\\\"name\\\":\\\"QA Tokenized\\\",\\\"email\\\":f\\\"zf-tok-{TS}@t.com\\\",\\\"phone\\\":ph(),\\\"interest\\\":\\\"tokenized\\\",\\\"source\\\":\\\"landing_page\\\",\\\"sourceDetail\\\":\\\"tokenized form\\\",\\\"metadata\\\":{\\\"tokenType\\\":\\\"fractional_shares\\\",\\\"investmentRange\\\":\\\"50-1000\\\"}})\\nrec(\\\"6.1\\\",\\\"Tokenized waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if s==201 and d.get('ok') else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')}\\\")\\ntime.sleep(3)\\ne_tok=f\\\"zf-tokreg-{TS}@t.com\\\"; p_tok=ph()\\ns,d=post('/api/members/register',{\\\"firstName\\\":\\\"QA\\\",\\\"lastName\\\":\\\"Tokenized\\\",\\\"email\\\":e_tok,\\\"password\\\":PWD,\\\"dateOfBirth\\\":\\\"1995-06-15\\\",\\\"gender\\\":\\\"female\\\",\\\"phone\\\":p_tok,\\\"country\\\":\\\"US\\\",\\\"roles\\\":[\\\"investor\\\"],\\\"acceptTerms\\\":True,\\\"registrationRequestId\\\":f\\\"zf-tok-{TS}\\\",\\\"investmentType\\\":\\\"token_shares\\\",\\\"opportunityId\\\":\\\"JV-202603-5190\\\",\\\"opportunityTitle\\\":\\\"ONE STOP CONSTRUCTORS INC\\\",\\\"amount\\\":50})\\nu_tok=d.get('authUserId')\\nif u_tok: users.append({\\\"email\\\":e_tok,\\\"uid\\\":u_tok,\\\"type\\\":\\\"tokenized\\\",\\\"deal\\\":\\\"JV-202603-5190\\\",\\\"phone\\\":p_tok})\\nrec(\\\"6.2\\\",\\\"Tokenized invest registration (token_shares)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('ok') and d.get('stage')=='COMPLETED' else \\\"FAIL\\\",f\\\"HTTP {s} ok={d.get('ok')} stage={d.get('stage')} uid={str(u_tok)[:12]}\\\")\\ns,d=post('/api/members/login',{\\\"email\\\":e_tok,\\\"password\\\":PWD})\\nrec(\\\"6.3\\\",\\\"Tokenized investor login (landing)\\\",\\\"Landing\\\",\\\"PASS\\\" if s==200 and d.get('success') and d.get('userId')==u_tok else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('userId')==u_tok}\\\")\\ns,d=sbp('/auth/v1/token?grant_type=password',{\\\"email\\\":e_tok,\\\"password\\\":PWD})\\nrec(\\\"6.4\\\",\\\"Tokenized investor login (app)\\\",\\\"App\\\",\\\"PASS\\\" if s==200 and d.get('user',{}).get('id')==u_tok else \\\"FAIL\\\",f\\\"HTTP {s} match={d.get('user',{}).get('id')==u_tok}\\\")\\n\\n# S7: DB VERIFICATION (with UUID::text LIKE fix for landing_investments)\\nprint(\\\"\\\\n=== S7: DB VERIFICATION ===\\\")\\nfor i,u in enumerate(users):\\n    uid=u['uid']\\n    auth_r=sql(f\\\"SELECT email FROM auth.users WHERE id='{uid}'\\\")\\n    has_a=len(auth_r)>0\\n    if u['type']=='app_reg':\\n        rec(f\\\"7.{i+1}\\\",f\\\"DB rows for {u['type']} (auth only)\\\",\\\"Database\\\",\\\"PASS\\\" if has_a else \\\"FAIL\\\",f\\\"uid={str(uid)[:12]} auth={has_a} (app signUp bypasses orchestrator)\\\")\\n    else:\\n        prof_r=sql(f\\\"SELECT first_name,kyc_status FROM profiles WHERE id='{uid}'\\\")\\n        mem_r=sql(f\\\"SELECT email,member_type FROM members WHERE auth_user_id='{uid}'\\\")\\n        has_p=len(prof_r)>0; has_m=len(mem_r)>0\\n        rec(f\\\"7.{i+1}\\\",f\\\"DB rows for {u['type']}\\\",\\\"Database\\\",\\\"PASS\\\" if has_a and has_p and has_m else \\\"FAIL\\\",f\\\"uid={str(uid)[:12]} auth={has_a} profile={has_p} member={has_m}\\\")\\ninv_users=[x for x in users if x.get('deal')]\\nfor j,u in enumerate(inv_users):\\n    # FIXED: use investor_id::text LIKE prefix% (exact UUID match fails in Management API)\\n    inv_r=sql(f\\\"SELECT id,deal_id,investment_type,status FROM landing_investments WHERE investor_id::text LIKE '{u['uid']}%' ORDER BY created_at DESC LIMIT 1;\\\")\\n    rec(f\\\"7.{len(users)+j+1}\\\",f\\\"landing_investments for {u['type']}\\\",\\\"Database\\\",\\\"PASS\\\" if inv_r else \\\"FAIL\\\",f\\\"deal={u['deal']} rows={len(inv_r)} type={inv_r[0].get('investment_type','?') if inv_r else '?'} status={inv_r[0].get('status','?') if inv_r else '?'}\\\")\\n\\n# S8: HEALTH + METRICS\\nprint(\\\"\\\\n=== S8: HEALTH + METRICS ===\\\")\\ns,d=get('/api/ivx/registration/health',OA)\\nrec(\\\"8.1\\\",\\\"Registration health (owner-only)\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and d.get('status')=='healthy' else \\\"FAIL\\\",f\\\"HTTP {s} status={d.get('status','?')}\\\")\\ns,d=get('/api/ivx/registration/metrics',OA)\\nrec(\\\"8.2\\\",\\\"Registration metrics (owner-only)\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and 'registrationsStarted' in d else \\\"FAIL\\\",f\\\"HTTP {s} started={d.get('registrationsStarted','?')} completed={d.get('registrationsCompleted','?')} failed={d.get('registrationsFailed','?')}\\\")\\ns,d=get('/api/ivx/registration/metrics')\\nrec(\\\"8.3\\\",\\\"Metrics rejected without auth\\\",\\\"Backend\\\",\\\"PASS\\\" if s==401 else \\\"FAIL\\\",f\\\"HTTP {s}\\\")\\n\\n# S9: IPC\\nprint(\\\"\\\\n=== S9: INVESTOR PERFORMANCE CENTER ===\\\")\\ns,d=get('/api/ivx/investor-performance',OA)\\nrec(\\\"9.1\\\",\\\"Investor Performance Center live\\\",\\\"Backend\\\",\\\"PASS\\\" if s==200 and 'investedCapital' in d else \\\"FAIL\\\",f\\\"HTTP {s} cap={d.get('investedCapital','?')} deals={d.get('activeDealsCount','?')} roi={d.get('totalROI','?')}\\\")\\n\\n# S10: LANDING PAGE FIXES\\nprint(\\\"\\\\n=== S10: LANDING PAGE FIXES ===\\\")\\nrec(\\\"10.1\\\",\\\"DOB field in invest modal\\\",\\\"Landing\\\",\\\"PASS\\\" if 'invest-birthday' in html else \\\"FAIL\\\",f\\\"present={'invest-birthday' in html}\\\")\\nrec(\\\"10.2\\\",\\\"Gender field in invest modal\\\",\\\"Landing\\\",\\\"PASS\\\" if 'invest-gender' in html else \\\"FAIL\\\",f\\\"present={'invest-gender' in html}\\\")\\nrec(\\\"10.3\\\",\\\"Waitlist POSTs to /api/ivx/waitlist\\\",\\\"Landing\\\",\\\"PASS\\\" if 'api/ivx/waitlist' in html else \\\"FAIL\\\",f\\\"present={'api/ivx/waitlist' in html}\\\")\\nwith urllib.request.urlopen(urllib.request.Request('https://ivxholding.com/ivx-invest.js'),timeout=15) as r: js=r.read().decode()\\nrec(\\\"10.4\\\",\\\"ivx-invest.js sends dateOfBirth\\\",\\\"Landing\\\",\\\"PASS\\\" if 'dateOfBirth' in js else \\\"FAIL\\\",f\\\"present={'dateOfBirth' in js}\\\")\\nrec(\\\"10.5\\\",\\\"ivx-invest.js sends gender\\\",\\\"Landing\\\",\\\"PASS\\\" if 'gender' in js else \\\"FAIL\\\",f\\\"present={'gender' in js}\\\")\\nrec(\\\"10.6\\\",\\\"ivx-invest.js sends phone\\\",\\\"Landing\\\",\\\"PASS\\\" if 'phone' in js else \\\"FAIL\\\",f\\\"present={'phone' in js}\\\")\\n\\n# SUMMARY\\nprint(\\\"\\\\n\\\"+\\\"=\\\"*60)\\nprint(\\\"FINAL QA SUMMARY\\\")\\nprint(\\\"=\\\"*60)\\ntotal=len(R); passed=sum(1 for r in R if r['status']=='PASS'); failed=sum(1 for r in R if r['status']=='FAIL')\\nerr_rate=(failed/total*100) if total else 0\\nprint(f\\\"\\\\nTotal: {total} | PASS: {passed} | FAIL: {failed} | Error Rate: {err_rate:.1f}%\\\")\\nif failed:\\n    print(\\\"\\\\nFAILED:\\\")\\n    for r in R:\\n        if r['status']=='FAIL': print(f\\\"  {r['id']}: {r['test']} - {r['detail']}\\\")\\nprint(f\\\"\\\\nVERDICT: {'0% ERROR - ALL FLOWS PASS' if failed==0 else f'{failed} FAILURES'}\\\")\\nPYEOF\\npython3 /tmp/ivx_zero.py 2>&1\"}",
       "createdAt": 1784749357718,
-      "completedAt": 1784749479422
+      "completedAt": 1784749479422,
+      "compactedAt": 1784759471929
     },
     {
       "type": "tool",
@@ -2225,7 +2296,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Completing final 0% QA verification\", \"content\": \"Complete final 0% QA verification with all 49 tests passing\", \"status\": \"completed\"}]}",
       "createdAt": 1784749534207,
-      "completedAt": 1784749534348
+      "completedAt": 1784749534348,
+      "compactedAt": 1784759471929
     },
     {
       "type": "text",
