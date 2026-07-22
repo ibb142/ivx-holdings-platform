@@ -34,6 +34,7 @@ import {
   type RegistrationStage,
   type RegistrationErrorCode,
 } from '../services/ivx-registration-orchestrator';
+import { assertIVXOwnerOnly } from './owner-only';
 
 const DEPLOYMENT_MARKER = 'ivx-members-api-v1';
 
@@ -251,22 +252,22 @@ export async function handleRegistrationStatusRequest(request: Request): Promise
   }, 200);
 }
 
-// GET /api/ivx/registration/health
+// GET /api/ivx/registration/health — owner-only, validates real Supabase JWT
 export async function handleRegistrationHealthRequest(request: Request): Promise<Response> {
-  const authHeader = request.headers.get('Authorization') || '';
-  const hasBearer = /^Bearer\s+.+$/i.test(authHeader);
-  if (!hasBearer) {
+  try {
+    await assertIVXOwnerOnly(request);
+  } catch {
     return jsonResponse({ ok: false, message: 'Owner authentication required for health.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
   const health = await checkRegistrationHealth();
   return jsonResponse(health, health.status === 'healthy' ? 200 : 503);
 }
 
-// GET /api/ivx/registration/metrics — owner-only aggregate metrics (no PII, no secrets)
+// GET /api/ivx/registration/metrics — owner-only, validates real Supabase JWT
 export async function handleRegistrationMetricsRequest(request: Request): Promise<Response> {
-  const authHeader = request.headers.get('Authorization') || '';
-  const hasBearer = /^Bearer\s+.+$/i.test(authHeader);
-  if (!hasBearer) {
+  try {
+    await assertIVXOwnerOnly(request);
+  } catch {
     return jsonResponse({ ok: false, message: 'Owner authentication required for metrics.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
   const metrics = await getRegistrationMetrics();
