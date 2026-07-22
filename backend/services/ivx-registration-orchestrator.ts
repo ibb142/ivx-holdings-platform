@@ -416,8 +416,9 @@ export async function orchestrateRegistration(
       });
 
       // Canonical member sync (Supabase `members` table) — non-fatal but logged.
+      const fanoutErrors: string[] = [];
       try {
-        await upsertCanonicalMember({
+        const canonicalResult = await upsertCanonicalMember({
           fullName: `${input.firstName} ${input.lastName}`.trim(),
           email: normalizedEmail,
           phone: input.phone,
@@ -434,7 +435,12 @@ export async function orchestrateRegistration(
           landingSubmissionId: registrationRequestId,
           pictureUrl: input.pictureUrl || '',
         });
+        if (!canonicalResult.ok) {
+          fanoutErrors.push(`canonical:${canonicalResult.error || 'unknown'}`);
+          console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalResult.error || 'unknown');
+        }
       } catch (canonicalErr) {
+        fanoutErrors.push(`canonical:${canonicalErr instanceof Error ? canonicalErr.message : 'unknown'}`);
         console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalErr instanceof Error ? canonicalErr.message : 'unknown');
       }
 
@@ -497,6 +503,7 @@ export async function orchestrateRegistration(
         email: normalizedEmail,
         requiresVerification: false,
         resumeToken: registrationRequestId,
+        fanoutErrors: fanoutErrors.length > 0 ? fanoutErrors : undefined,
       };
     }
 

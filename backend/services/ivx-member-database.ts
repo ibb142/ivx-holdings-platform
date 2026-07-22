@@ -351,7 +351,7 @@ async function registerFallbackMember(input: MemberRegistrationInput): Promise<M
           phone: input.phone,
           country: input.country,
           role: 'investor',
-          kyc_status: 'not_started',
+          kyc_status: 'pending',
           picture_url: input.pictureUrl ?? '',
           created_at: now,
           updated_at: now,
