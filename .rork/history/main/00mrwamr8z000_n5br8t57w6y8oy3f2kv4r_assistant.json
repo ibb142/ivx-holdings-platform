@@ -1166,7 +1166,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat /tmp/owner_at.json 2>/dev/null || echo 'NO_TOKEN_FILE'\"}",
       "createdAt": 1784737311426,
-      "completedAt": 1784737311431
+      "completedAt": 1784737311431,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1191,7 +1192,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"base64 -w 0 expo/ivxholding-landing/index.html > /tmp/index_html_b64.txt && echo \\\"BASE64_SIZE=$(stat -c%s /tmp/index_html_b64.txt)\\\" && echo \\\"SHA256=$(sha256sum expo/ivxholding-landing/index.html | awk '{print $1}')\\\"\"}",
       "createdAt": 1784737332599,
-      "completedAt": 1784737332610
+      "completedAt": 1784737332610,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1217,7 +1219,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/commit_landing.py << 'PY'\\nimport json, base64, urllib.request, os\\n\\ntoken_path = '/tmp/owner_at.json'\\nwith open(token_path) as f:\\n    token = json.load(f)['token']\\n\\nwith open('expo/ivxholding-landing/index.html', 'rb') as f:\\n    content_b64 = base64.b64encode(f.read()).decode('ascii')\\n\\npayload = {\\n    \\\"action\\\": \\\"github_commit_file\\\",\\n    \\\"input\\\": {\\n        \\\"path\\\": \\\"expo/ivxholding-landing/index.html\\\",\\n        \\\"content\\\": content_b64,\\n        \\\"contentEncoding\\\": \\\"base64\\\",\\n        \\\"message\\\": \\\"feat(landing): unify Featured Deals feed with app InvestmentCard layout\\\"\\n    },\\n    \\\"confirm\\\": True,\\n    \\\"confirmText\\\": \\\"CONFIRM_IVX_GITHUB_WRITE\\\"\\n}\\n\\nbody = json.dumps(payload).encode('utf-8')\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n    data=body,\\n    headers={\\n        'Authorization': 'Bearer ' + token,\\n        'Content-Type': 'application/json'\\n    },\\n    method='POST'\\n)\\n\\nwith urllib.request.urlopen(req, timeout=120) as resp:\\n    print(resp.status)\\n    print(resp.read().decode('utf-8'))\\nPY\\npython3 /tmp/commit_landing.py\\n\", \"cwd\": \".\"}",
       "createdAt": 1784737346318,
-      "completedAt": 1784737346361
+      "completedAt": 1784737346361,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1242,7 +1245,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' \\\\\\n  -s | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(json.dumps({'accessToken': d.get('accessToken','')[:30]+'...' if d.get('accessToken') else 'MISSING'}, indent=2)); open('/tmp/owner_at.json','w').write(json.dumps({'token': d.get('accessToken','')}))\\\" 2>&1 || echo 'LOGIN_FAILED'\"}",
       "createdAt": 1784737353996,
-      "completedAt": 1784737354846
+      "completedAt": 1784737354846,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1268,7 +1272,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 /tmp/commit_landing.py\", \"cwd\": \".\"}",
       "createdAt": 1784737358721,
-      "completedAt": 1784737361397
+      "completedAt": 1784737361397,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1312,7 +1317,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"presign-upload|landing.*upload|s3.*landing|upload.*landing\", \"path\": \"backend\", \"include\": \"*.ts\"}",
       "createdAt": 1784737365796,
-      "completedAt": 1784737365801
+      "completedAt": 1784737365801,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1337,7 +1343,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-apk-distribution.ts\", \"limit\": 200}",
       "createdAt": 1784737372034,
-      "completedAt": 1784737372038
+      "completedAt": 1784737372038,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1363,7 +1370,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/upload_landing.py << 'PY'\\nimport json, urllib.request, http.client\\n\\ntoken_path = '/tmp/owner_at.json'\\nwith open(token_path) as f:\\n    token = json.load(f)['token']\\n\\ndef api_post(path, payload):\\n    body = json.dumps(payload).encode('utf-8')\\n    req = urllib.request.Request(\\n        'https://api.ivxholding.com' + path,\\n        data=body,\\n        headers={\\n            'Authorization': 'Bearer ' + token,\\n            'Content-Type': 'application/json'\\n        },\\n        method='POST'\\n    )\\n    with urllib.request.urlopen(req, timeout=120) as resp:\\n        return resp.status, json.loads(resp.read().decode('utf-8'))\\n\\ndef s3_put(url, file_path, content_type):\\n    with open(file_path, 'rb') as f:\\n        data = f.read()\\n    req = urllib.request.Request(url, data=data, method='PUT')\\n    req.add_header('Content-Type', content_type)\\n    req.add_header('x-amz-acl', 'public-read')\\n    req.add_header('Cache-Control', 'no-cache, max-age=0')\\n    with urllib.request.urlopen(req, timeout=300) as resp:\\n        return resp.status, resp.headers\\n\\nprint('Minting presigned URL for index.html...')\\nstatus, result = api_post('/api/ivx/apk/presign-upload', {\\n    'key': 'index.html',\\n    'confirm': True,\\n    'confirmText': 'CONFIRM_IVX_LANDING_UPLOAD'\\n})\\nprint('presign status:', status)\\nprint('presign result:', json.dumps(result, indent=2))\\nif status != 200 or 'uploadUrl' not in result:\\n    raise SystemExit('Failed to mint presigned URL')\\n\\nupload_url = result['uploadUrl']\\nprint('Uploading to S3...')\\nup_status, up_headers = s3_put(upload_url, 'expo/ivxholding-landing/index.html', 'text/html; charset=utf-8')\\nprint('S3 PUT status:', up_status)\\nprint('S3 ETag:', up_headers.get('ETag'))\\nprint('Public URL:', result.get('publicUrl'))\\nPY\\npython3 /tmp/upload_landing.py\", \"cwd\": \".\"}",
       "createdAt": 1784737383200,
-      "completedAt": 1784737385415
+      "completedAt": 1784737385415,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1389,7 +1397,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/upload_landing2.py << 'PY'\\nimport json, urllib.request, urllib.error\\n\\ntoken_path = '/tmp/owner_at.json'\\nwith open(token_path) as f:\\n    token = json.load(f)['token']\\n\\ndef api_post(path, payload):\\n    body = json.dumps(payload).encode('utf-8')\\n    req = urllib.request.Request(\\n        'https://api.ivxholding.com' + path,\\n        data=body,\\n        headers={\\n            'Authorization': 'Bearer ' + token,\\n            'Content-Type': 'application/json'\\n        },\\n        method='POST'\\n    )\\n    with urllib.request.urlopen(req, timeout=120) as resp:\\n        return resp.status, json.loads(resp.read().decode('utf-8'))\\n\\nprint('Minting presigned URL for index.html...')\\nstatus, result = api_post('/api/ivx/apk/presign-upload', {\\n    'key': 'index.html',\\n    'confirm': True,\\n    'confirmText': 'CONFIRM_IVX_LANDING_UPLOAD'\\n})\\nprint('presign status:', status)\\nif status != 200 or 'uploadUrl' not in result:\\n    print('presign result:', json.dumps(result, indent=2))\\n    raise SystemExit('Failed to mint presigned URL')\\n\\nupload_url = result['uploadUrl']\\nprint('Uploading to S3...')\\nwith open('expo/ivxholding-landing/index.html', 'rb') as f:\\n    data = f.read()\\nreq = urllib.request.Request(upload_url, data=data, method='PUT')\\nreq.add_header('Content-Type', 'text/html; charset=utf-8')\\ntry:\\n    with urllib.request.urlopen(req, timeout=300) as resp:\\n        print('S3 PUT status:', resp.status)\\n        print('S3 ETag:', resp.headers.get('ETag'))\\nexcept urllib.error.HTTPError as e:\\n    body = e.read().decode('utf-8')\\n    print('S3 PUT error:', e.code, body)\\n    raise\\nprint('Public URL:', result.get('publicUrl'))\\nPY\\npython3 /tmp/upload_landing2.py\", \"cwd\": \".\"}",
       "createdAt": 1784737394696,
-      "completedAt": 1784737398675
+      "completedAt": 1784737398675,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1415,7 +1424,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/invalidate_cf.py << 'PY'\\nimport json, urllib.request\\n\\ntoken_path = '/tmp/owner_at.json'\\nwith open(token_path) as f:\\n    token = json.load(f)['token']\\n\\npayload = {\\n    'action': 'cloudfront_invalidate',\\n    'input': {\\n        'paths': ['/', '/index.html', '/ivx-home-feed.js', '/ivx-reels.js'],\\n        'apply': True\\n    },\\n    'confirm': True,\\n    'confirmText': 'CONFIRM_IVX_CLOUDFRONT_INVALIDATE'\\n}\\n\\nbody = json.dumps(payload).encode('utf-8')\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/autonomy/cloudfront/invalidate',\\n    data=body,\\n    headers={\\n        'Authorization': 'Bearer ' + token,\\n        'Content-Type': 'application/json'\\n    },\\n    method='POST'\\n)\\n\\nwith urllib.request.urlopen(req, timeout=120) as resp:\\n    print('status:', resp.status)\\n    print(json.dumps(json.loads(resp.read().decode('utf-8')), indent=2))\\nPY\\npython3 /tmp/invalidate_cf.py\", \"cwd\": \".\"}",
       "createdAt": 1784737402085,
-      "completedAt": 1784737404543
+      "completedAt": 1784737404543,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1494,7 +1504,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"cloudfront.*invalidate|autonomy/cloudfront\", \"path\": \"backend\", \"include\": \"*.ts\"}",
       "createdAt": 1784737411088,
-      "completedAt": 1784737411094
+      "completedAt": 1784737411094,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1520,7 +1531,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-autonomy.ts\", \"offset\": 100, \"limit\": 120}",
       "createdAt": 1784737416404,
-      "completedAt": 1784737416768
+      "completedAt": 1784737416768,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1546,7 +1558,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/invalidate_cf2.py << 'PY'\\nimport json, urllib.request, urllib.error\\n\\ntoken_path = '/tmp/owner_at.json'\\nwith open(token_path) as f:\\n    token = json.load(f)['token']\\n\\npayload = {\\n    'paths': ['/', '/index.html', '/ivx-home-feed.js', '/ivx-reels.js'],\\n    'apply': True\\n}\\n\\nbody = json.dumps(payload).encode('utf-8')\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/autonomy/cloudfront/invalidate',\\n    data=body,\\n    headers={\\n        'Authorization': 'Bearer ' + token,\\n        'Content-Type': 'application/json'\\n    },\\n    method='POST'\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, timeout=120) as resp:\\n        print('status:', resp.status)\\n        print(json.dumps(json.loads(resp.read().decode('utf-8')), indent=2))\\nexcept urllib.error.HTTPError as e:\\n    print('error:', e.code)\\n    print(e.read().decode('utf-8'))\\nPY\\npython3 /tmp/invalidate_cf2.py\", \"cwd\": \".\"}",
       "createdAt": 1784737426599,
-      "completedAt": 1784737427280
+      "completedAt": 1784737427280,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1572,7 +1585,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -L -o /tmp/live_index.html https://ivxholding.com/ && grep -o 'Featured Deals\\\\|Project Reels\\\\|ivx-app-card\\\\|ivx-hf-video\\\\|Investor First\\\\|Investor-first feed' /tmp/live_index.html | sort | uniq -c\", \"cwd\": \".\"}",
       "createdAt": 1784737434215,
-      "completedAt": 1784737434352
+      "completedAt": 1784737434352,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1598,7 +1612,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n 'Project Reels' /tmp/live_index.html | head -20\", \"cwd\": \".\"}",
       "createdAt": 1784737439568,
-      "completedAt": 1784737439573
+      "completedAt": 1784737439573,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1624,7 +1639,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/video-platform/home-feed?limit=12' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('pattern:', d.get('pattern','?')); print('blocks:', len(d.get('blocks',[]))); print('types:', [b.get('type') for b in d.get('blocks',[])][:12])\\\"\", \"cwd\": \".\"}",
       "createdAt": 1784737447373,
-      "completedAt": 1784737447431
+      "completedAt": 1784737447431,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1650,7 +1666,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -L -H 'Cache-Control: no-cache' -o /tmp/live_index_busted.html 'https://ivxholding.com/?nocache=1' && echo '--- header ---' && grep -o '<h2 class=\\\"live-deals-title\\\">[^<]*</h2>' /tmp/live_index_busted.html | head -5 && echo '--- app card ---' && grep -o 'ivx-app-card' /tmp/live_index_busted.html | wc -l && echo '--- status badge ---' && grep -o 'ivx-card-status-badge' /tmp/live_index_busted.html | wc -l && echo '--- live fetch status ---' && curl -s -o /dev/null -w '%{http_code} %{size_download}' 'https://ivxholding.com/?check=1'\", \"cwd\": \".\"}",
       "createdAt": 1784737458192,
-      "completedAt": 1784737458212
+      "completedAt": 1784737458212,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1676,7 +1693,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -I -o /dev/null -w 'HTTP %{http_code} | X-Cache: %{header_x_cache} | Age: %{header_age} | ETag: %{header_etag}\\\\n' 'https://ivxholding.com/?cache_check=1' && echo '--- S3 origin ETag ---' && curl -s -I 'https://s3.us-east-1.amazonaws.com/ivxholding.com/index.html' | grep -iE 'etag|content-length' | head -5\", \"cwd\": \".\"}",
       "createdAt": 1784737467144,
-      "completedAt": 1784737467157
+      "completedAt": 1784737467157,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1702,7 +1720,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -L -o /tmp/live_check.html 'https://ivxholding.com/?v=latest' && echo 'New card body:' && grep -o 'ivx-card-body' /tmp/live_check.html | wc -l && echo 'Old card content:' && grep -o 'live-deal-content' /tmp/live_check.html | wc -l && echo 'New summary panel:' && grep -o 'ivx-card-summary' /tmp/live_check.html | wc -l && echo 'New timeline:' && grep -o 'ivx-card-timeline' /tmp/live_check.html | wc -l && echo 'New actions row:' && grep -o 'ivx-card-actions' /tmp/live_check.html | wc -l && echo 'CTAs:' && grep -o 'ivx-card-ctas' /tmp/live_check.html | wc -l && echo 'Chips:' && grep -o 'ivx-card-chip' /tmp/live_check.html | wc -l\", \"cwd\": \".\"}",
       "createdAt": 1784737473408,
-      "completedAt": 1784737473743
+      "completedAt": 1784737473743,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
@@ -1728,7 +1747,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"grep -n 'live-deal-content' /tmp/live_check.html | head -10\", \"cwd\": \".\"}",
       "createdAt": 1784737482765,
-      "completedAt": 1784737482770
+      "completedAt": 1784737482770,
+      "compactedAt": 1784744964088
     },
     {
       "type": "reasoning",
