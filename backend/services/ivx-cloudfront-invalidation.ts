@@ -24,6 +24,7 @@ export type CloudFrontInvalidationResult = {
   error?: string;
   missingEnvNames: string[];
   createdAt: string;
+  distributionAutoDiscovered?: boolean;
 };
 
 function readEnv(name: string): string {
@@ -94,10 +95,10 @@ export async function createCloudFrontInvalidation(input: {
   const paths = normalizePaths(input.paths);
 
   const missingEnvNames: string[] = [];
-  if (!distributionId) missingEnvNames.push('CLOUDFRONT_DISTRIBUTION_ID');
   if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
   if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
 
+  // If AWS creds are missing, we can't do anything (not even auto-discovery).
   if (missingEnvNames.length > 0) {
     return {
       ok: false,
@@ -106,7 +107,7 @@ export async function createCloudFrontInvalidation(input: {
       distributionId: distributionId || undefined,
       missingEnvNames,
       createdAt,
-      error: 'CloudFront credentials not configured.',
+      error: 'CloudFront AWS credentials not configured.',
     };
   }
   if (paths.length === 0) {
@@ -121,6 +122,73 @@ export async function createCloudFrontInvalidation(input: {
     };
   }
 
+  // Auto-discover distribution ID by listing distributions if not provided.
+  // Looks for a distribution whose origin domain matches ivxholding.com's S3 bucket.
+  let distributionAutoDiscovered = false;
+  let resolvedDistributionId = distributionId;
+  if (!resolvedDistributionId && accessKey && secretKey) {
+    try {
+      const listUrl = `https://${CLOUDFRONT_HOST}/${CLOUDFRONT_API_VERSION}/distribution?MaxItems=100`;
+      const listAmzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
+      const listDateStamp = listAmzDate.slice(0, 8);
+      const listCanonicalUri = `/${CLOUDFRONT_API_VERSION}/distribution`;
+      const listCanonicalQuery = 'MaxItems=100';
+      const listHeaderLines: [string, string][] = [
+        ['host', CLOUDFRONT_HOST],
+        ['x-amz-content-sha256', hash('')],
+        ['x-amz-date', listAmzDate],
+      ];
+      if (sessionToken) listHeaderLines.push(['x-amz-security-token', sessionToken]);
+      const listCanonicalHeaders = listHeaderLines.map(([k, v]) => `${k}:${v}\n`).join('');
+      const listSignedHeaders = listHeaderLines.map(([k]) => k).join(';');
+      const listCanonicalRequest = ['GET', listCanonicalUri, listCanonicalQuery, listCanonicalHeaders, listSignedHeaders, hash('')].join('\n');
+      const listCredentialScope = `${listDateStamp}/${AWS_REGION}/${AWS_SERVICE}/aws4_request`;
+      const listStringToSign = ['AWS4-HMAC-SHA256', listAmzDate, listCredentialScope, hash(listCanonicalRequest)].join('\n');
+      const listSigningKey = buildSigningKey(secretKey, listDateStamp);
+      const listSignature = createHmac('sha256', listSigningKey).update(listStringToSign, 'utf8').digest('hex');
+      const listAuthorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${listCredentialScope}, SignedHeaders=${listSignedHeaders}, Signature=${listSignature}`;
+      const listHeaders: Record<string, string> = {
+        Host: CLOUDFRONT_HOST,
+        'X-Amz-Content-Sha256': hash(''),
+        'X-Amz-Date': listAmzDate,
+        Authorization: listAuthorization,
+      };
+      if (sessionToken) listHeaders['X-Amz-Security-Token'] = sessionToken;
+      const listResp = await fetch(`https://${CLOUDFRONT_HOST}${listCanonicalUri}?MaxItems=100`, { headers: listHeaders });
+      const listText = await listResp.text();
+      if (listResp.ok) {
+        // Parse distribution items — look for ivxholding.com in origins/aliases
+        const idMatches = /<Id>([^<]+)<\/Id>/g.exec(listText);
+        const itemRegex = /<DistributionSummary>[\s\S]*?<\/DistributionSummary>/g;
+        let itemMatch: RegExpExecArray | null;
+        while ((itemMatch = itemRegex.exec(listText)) !== null) {
+          const item = itemMatch[0];
+          const itemHasIvx = /ivxholding\.com/i.test(item) || /ivxholding/i.test(item);
+          if (itemHasIvx) {
+            const idMatch = /<Id>([^<]+)<\/Id>/.exec(item);
+            if (idMatch && idMatch[1]) {
+              resolvedDistributionId = idMatch[1];
+              distributionAutoDiscovered = true;
+              break;
+            }
+          }
+        }
+      }
+    } catch {
+      // Auto-discovery failed — fall through to missing_access error
+    }
+  }
+  if (!resolvedDistributionId) {
+    return {
+      ok: false,
+      status: 'missing_access',
+      paths,
+      distributionId: undefined,
+      missingEnvNames: ['CLOUDFRONT_DISTRIBUTION_ID'],
+      createdAt,
+      error: 'CloudFront distribution ID not configured and auto-discovery found no matching distribution.',
+    };
+  }
   const callerReference = (input.callerReference?.trim()) || `ivx-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const body = buildInvalidationXml(paths, callerReference);
   const bodyHash = hash(body);
@@ -128,7 +196,7 @@ export async function createCloudFrontInvalidation(input: {
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const dateStamp = amzDate.slice(0, 8);
-  const canonicalUri = `/${CLOUDFRONT_API_VERSION}/distribution/${encodeURIComponent(distributionId)}/invalidation`;
+  const canonicalUri = `/${CLOUDFRONT_API_VERSION}/distribution/${encodeURIComponent(resolvedDistributionId)}/invalidation`;
   const canonicalQuery = '';
   const headerLines: [string, string][] = [
     ['host', CLOUDFRONT_HOST],
@@ -166,11 +234,12 @@ export async function createCloudFrontInvalidation(input: {
         ok: false,
         status: 'failed',
         paths,
-        distributionId,
+        distributionId: resolvedDistributionId,
         httpStatus: response.status,
         missingEnvNames,
         createdAt,
         error: text.slice(0, 400) || `CloudFront responded ${response.status}`,
+        distributionAutoDiscovered,
       };
     }
     const idMatch = /<Id>([^<]+)<\/Id>/.exec(text);
@@ -178,21 +247,23 @@ export async function createCloudFrontInvalidation(input: {
       ok: true,
       status: 'invalidated',
       paths,
-      distributionId,
+      distributionId: resolvedDistributionId,
       invalidationId: idMatch ? idMatch[1] : undefined,
       httpStatus: response.status,
       missingEnvNames,
       createdAt,
+      distributionAutoDiscovered,
     };
   } catch (error) {
     return {
       ok: false,
       status: 'failed',
       paths,
-      distributionId,
+      distributionId: resolvedDistributionId,
       missingEnvNames,
       createdAt,
       error: error instanceof Error ? error.message : 'CloudFront invalidation request failed.',
+      distributionAutoDiscovered,
     };
   }
 }

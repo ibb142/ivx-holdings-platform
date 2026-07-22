@@ -1,8 +1,9 @@
 import { gunzipSync } from 'node:zlib';
 import { createClient } from '@supabase/supabase-js';
 import { buildIVXCredentialRequestManifestSnapshot, IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES } from '../config/ivx-credential-request-manifest';
-import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
+import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue, getRawOwnerVariableValue } from './ivx-owner-variables';
 import { sendSesEmail, verifySesEmailIdentity, listSesIdentities } from '../services/ivx-ses-email';
+import { createCloudFrontInvalidation } from '../services/ivx-cloudfront-invalidation';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 
@@ -54,7 +55,9 @@ type DeveloperDeployAction =
   | 'list_ses_identities'
   | 'get_supabase_auth_config'
   | 'disable_supabase_mfa_aal2_enforcement'
-  | 'unenroll_owner_mfa_factor';
+  | 'unenroll_owner_mfa_factor'
+  | 'cloudfront_invalidate'
+  | 'supabase_execute_sql_management';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -125,6 +128,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'get_supabase_auth_config'
     || normalized === 'disable_supabase_mfa_aal2_enforcement'
     || normalized === 'unenroll_owner_mfa_factor'
+    || normalized === 'cloudfront_invalidate'
+    || normalized === 'supabase_execute_sql_management'
  ) {
     return normalized;
   }
@@ -135,6 +140,9 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
 function isReadOnlyAction(action: DeveloperDeployAction): boolean {
   return action === 'github_pull_request_status' || action === 'get_supabase_auth_config';
 }
+
+/** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
+const CLOUDFRONT_CONFIRM_TEXT = 'CONFIRM_IVX_CLOUDFRONT_INVALIDATE';
 
 function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'github_merge_pull_request') {
@@ -148,6 +156,9 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   }
   if (action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source') {
     return RENDER_SERVICE_CONFIRM_TEXT;
+  }
+  if (action === 'cloudfront_invalidate') {
+    return CLOUDFRONT_CONFIRM_TEXT;
   }
   return SUPABASE_SQL_CONFIRM_TEXT;
 }
@@ -1495,6 +1506,118 @@ async function buildStatus(): Promise<Record<string, unknown>> {
   };
 }
 
+async function runCloudFrontInvalidate(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const rawPaths = input.paths;
+  const paths: string[] = Array.isArray(rawPaths)
+    ? rawPaths.filter((p): p is string => typeof p === 'string')
+    : typeof rawPaths === 'string' ? [rawPaths] : ['/index.html', '/ivx-invest.js', '/ivx-portal.js', '/'];
+  if (paths.length === 0) {
+    paths.push('/index.html', '/ivx-invest.js', '/ivx-portal.js', '/');
+  }
+  // Resolve credentials: process.env first, then Owner Variables table (same pattern as landing-full-deploy)
+  let distributionId = readTrimmed(input.distributionId) || readEnv('CLOUDFRONT_DISTRIBUTION_ID');
+  if (!distributionId) {
+    distributionId = await getRawOwnerVariableValue('CLOUDFRONT_DISTRIBUTION_ID');
+  }
+  // Temporarily inject resolved credentials into process.env so createCloudFrontInvalidation picks them up
+  if (distributionId && !readEnv('CLOUDFRONT_DISTRIBUTION_ID')) {
+    process.env.CLOUDFRONT_DISTRIBUTION_ID = distributionId;
+  }
+  if (!readEnv('AWS_ACCESS_KEY_ID')) {
+    const ak = await getRawOwnerVariableValue('AWS_ACCESS_KEY_ID');
+    if (ak) process.env.AWS_ACCESS_KEY_ID = ak;
+  }
+  if (!readEnv('AWS_SECRET_ACCESS_KEY')) {
+    const sk = await getRawOwnerVariableValue('AWS_SECRET_ACCESS_KEY');
+    if (sk) process.env.AWS_SECRET_ACCESS_KEY = sk;
+  }
+  const result = await createCloudFrontInvalidation({
+    paths,
+    callerReference: readTrimmed(input.callerReference) || undefined,
+    distributionId: distributionId || undefined,
+  });
+  return {
+    provider: 'cloudfront',
+    action: 'cloudfront_invalidate',
+    ok: result.ok,
+    status: result.status,
+    invalidationId: result.invalidationId,
+    distributionId: result.distributionId,
+    paths: result.paths,
+    httpStatus: result.httpStatus,
+    error: result.error,
+    missingEnvNames: result.missingEnvNames,
+    createdAt: result.createdAt,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+async function runSupabaseExecuteSqlViaManagement(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const managementToken = readEnv('SUPABASE_ACCESS_TOKEN');
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  if (!managementToken) {
+    throw new Error('SUPABASE_ACCESS_TOKEN not configured in runtime. Required for supabase_execute_sql_management.');
+  }
+  if (!supabaseUrl) {
+    throw new Error('Supabase URL is not configured.');
+  }
+  const projectRefMatch = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
+  const projectRef = projectRefMatch?.[1] ?? null;
+  if (!projectRef) {
+    throw new Error(`Could not extract project ref from Supabase URL: ${supabaseUrl}`);
+  }
+  const sql = readTrimmed(input.sql);
+  if (!sql) {
+    throw new Error('SQL is required for supabase_execute_sql_management.');
+  }
+  if (sql.length > MAX_SQL_LENGTH) {
+    throw new Error(`SQL exceeds the guarded maximum length of ${MAX_SQL_LENGTH} characters.`);
+  }
+
+  // Supabase Management API: POST /v1/projects/{ref}/database/query
+  // Uses the access token (not a DB connection string). Returns JSON rows.
+  const queryUrl = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
+  const queryResp = await fetch(queryUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${managementToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ query: sql }),
+  });
+  const queryText = await queryResp.text();
+  if (!queryResp.ok) {
+    return {
+      provider: 'supabase',
+      action: 'supabase_execute_sql_management',
+      ok: false,
+      projectRef,
+      httpStatus: queryResp.status,
+      error: queryText.slice(0, 500) || `Query failed: HTTP ${queryResp.status}`,
+      secretValuesReturned: false,
+      timestamp: nowIso(),
+    };
+  }
+  let rows: unknown = null;
+  try {
+    rows = JSON.parse(queryText);
+  } catch {
+    rows = queryText.slice(0, 1000);
+  }
+  return {
+    provider: 'supabase',
+    action: 'supabase_execute_sql_management',
+    ok: true,
+    projectRef,
+    httpStatus: queryResp.status,
+    rows,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 async function runAction(action: DeveloperDeployAction, input: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (action === 'github_commit_file') {
     return await runGithubCommitFile(input);
@@ -1561,6 +1684,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'unenroll_owner_mfa_factor') {
     return await runUnenrollOwnerMfaFactor(input);
+  }
+  if (action === 'cloudfront_invalidate') {
+    return await runCloudFrontInvalidate(input);
+  }
+  if (action === 'supabase_execute_sql_management') {
+    return await runSupabaseExecuteSqlViaManagement(input);
   }
   return await runSupabaseExecuteSql(input);
 }
