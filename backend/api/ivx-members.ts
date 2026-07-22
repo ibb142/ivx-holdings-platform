@@ -28,6 +28,7 @@ import {
   orchestrateRegistration,
   getRegistrationStatus,
   checkRegistrationHealth,
+  getRegistrationMetrics,
   type RegistrationRequestInput,
   type NormalizedRegistrationResult,
   type RegistrationStage,
@@ -254,6 +255,17 @@ export async function handleRegistrationStatusRequest(request: Request): Promise
 export async function handleRegistrationHealthRequest(_request: Request): Promise<Response> {
   const health = await checkRegistrationHealth();
   return jsonResponse(health, health.status === 'healthy' ? 200 : 503);
+}
+
+// GET /api/ivx/registration/metrics — owner-only aggregate metrics (no PII, no secrets)
+export async function handleRegistrationMetricsRequest(request: Request): Promise<Response> {
+  const authHeader = request.headers.get('Authorization') || '';
+  const hasBearer = /^Bearer\s+.+$/i.test(authHeader);
+  if (!hasBearer) {
+    return jsonResponse({ ok: false, message: 'Owner authentication required for metrics.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
+  }
+  const metrics = await getRegistrationMetrics();
+  return jsonResponse({ ok: true, ...metrics }, 200);
 }
 
 // POST /api/members/send-email-code

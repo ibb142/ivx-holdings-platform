@@ -233,6 +233,7 @@ import {
   handleUpdateMemberProfile,
   handleRegistrationStatusRequest,
   handleRegistrationHealthRequest,
+  handleRegistrationMetricsRequest,
 } from './api/ivx-members';
 import {
   OPTIONS as ownerRecoverySmsOptions,
@@ -4696,6 +4697,8 @@ app.options('/api/ivx/registration/status', () => membersOptions());
 app.options('/api/ivx/registration/health', () => membersOptions());
 app.get('/api/ivx/registration/status', async (c) => handleRegistrationStatusRequest(c.req.raw));
 app.get('/api/ivx/registration/health', async (c) => handleRegistrationHealthRequest(c.req.raw));
+app.options('/api/ivx/registration/metrics', () => membersOptions());
+app.get('/api/ivx/registration/metrics', async (c) => handleRegistrationMetricsRequest(c.req.raw));
 
 // ---- IVX Canonical Members registry (landing → Members module sync) ----
 app.options('/api/ivx/members/registry', () => membersOptions());

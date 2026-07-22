@@ -446,4 +446,92 @@ export async function checkRegistrationHealth(): Promise<{
   };
 }
 
+/**
+ * Registration metrics — owner-only aggregate over persisted registration state.
+ * (Phase 2 §18 — no PII, no passwords, no tokens. Only counts + durations + stages.)
+ */
+export interface RegistrationMetrics {
+  registrationsStarted: number;
+  registrationsCompleted: number;
+  registrationsFailed: number;
+  abandonmentRate: number;
+  failureByStage: Record<string, number>;
+  failureByCode: Record<string, number>;
+  averageCompletionTimeMs: number | null;
+  duplicateAttempts: number;
+  rateLimitedAttempts: number;
+  emailConfirmationCompletionRate: number | null;
+  windowStart: string;
+  windowEnd: string;
+  deploymentMarker: string;
+}
+
+export async function getRegistrationMetrics(): Promise<RegistrationMetrics> {
+  if (!isDurableStoreConfigured()) {
+    return {
+      registrationsStarted: 0, registrationsCompleted: 0, registrationsFailed: 0,
+      abandonmentRate: 0, failureByStage: {}, failureByCode: {}, averageCompletionTimeMs: null,
+      duplicateAttempts: 0, rateLimitedAttempts: 0, emailConfirmationCompletionRate: null,
+      windowStart: new Date().toISOString(), windowEnd: new Date().toISOString(),
+      deploymentMarker: DEPLOYMENT_MARKER,
+    };
+  }
+  const all = await readDurableJson<Record<string, PersistedRegistrationState>>(REGISTRATION_STORE_FILE, {});
+  const states = Object.values(all);
+  const started = states.length;
+  const completed = states.filter((s) => s.finalStatus === 'completed').length;
+  const failed = states.filter((s) => s.finalStatus === 'failed').length;
+  const rateLimited = states.filter((s) => s.lastErrorCode === 'RATE_LIMITED').length;
+  const abandoned = states.filter((s) => s.finalStatus === 'pending' && (Date.now() - new Date(s.updatedAt).getTime()) > 30 * 60 * 1000).length;
+  const abandonedRate = started > 0 ? abandoned / started : 0;
+
+  const failureByStage: Record<string, number> = {};
+  const failureByCode: Record<string, number> = {};
+  for (const s of states) {
+    if (s.finalStatus === 'failed') {
+      failureByStage[s.stage] = (failureByStage[s.stage] || 0) + 1;
+      if (s.lastErrorCode) failureByCode[s.lastErrorCode] = (failureByCode[s.lastErrorCode] || 0) + 1;
+    }
+  }
+
+  // Average completion time (created → updated for completed)
+  let totalMs = 0, completedCount = 0;
+  for (const s of states) {
+    if (s.finalStatus === 'completed') {
+      const dur = new Date(s.updatedAt).getTime() - new Date(s.createdAt).getTime();
+      if (dur >= 0 && dur < 30 * 60 * 1000) { totalMs += dur; completedCount++; }
+    }
+  }
+  const avgMs = completedCount > 0 ? Math.round(totalMs / completedCount) : null;
+
+  // Email-confirmation completion rate: completed / (completed + pending at EMAIL_CONFIRMATION_REQUIRED)
+  const emailConfirmPending = states.filter((s) => s.stage === 'EMAIL_CONFIRMATION_REQUIRED' && s.finalStatus === 'pending').length;
+  const emailConfirmRate = (completed + emailConfirmPending) > 0 ? completed / (completed + emailConfirmPending) : null;
+
+  // Duplicate attempts: requests that were submitted more than once (by email hash)
+  const emailHashCounts: Record<string, number> = {};
+  for (const s of states) { emailHashCounts[s.normalizedEmailHash] = (emailHashCounts[s.normalizedEmailHash] || 0) + 1; }
+  const duplicateAttempts = Object.values(emailHashCounts).filter((c) => c > 1).reduce((a, c) => a + (c - 1), 0);
+
+  const timestamps = states.map((s) => new Date(s.createdAt).getTime()).sort();
+  const windowStart = timestamps.length > 0 ? new Date(timestamps[0]).toISOString() : new Date().toISOString();
+  const windowEnd = timestamps.length > 0 ? new Date(timestamps[timestamps.length - 1]).toISOString() : new Date().toISOString();
+
+  return {
+    registrationsStarted: started,
+    registrationsCompleted: completed,
+    registrationsFailed: failed,
+    abandonmentRate: Math.round(abandonedRate * 100) / 100,
+    failureByStage,
+    failureByCode,
+    averageCompletionTimeMs: avgMs,
+    duplicateAttempts,
+    rateLimitedAttempts: rateLimited,
+    emailConfirmationCompletionRate: emailConfirmRate !== null ? Math.round(emailConfirmRate * 100) / 100 : null,
+    windowStart,
+    windowEnd,
+    deploymentMarker: DEPLOYMENT_MARKER,
+  };
+}
+
 export { DEPLOYMENT_MARKER as REGISTRATION_ORCHESTRATOR_MARKER };
