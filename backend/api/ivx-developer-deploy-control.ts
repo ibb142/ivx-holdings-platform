@@ -788,22 +788,22 @@ function sanitizeRepoPath(value: unknown): string {
  * contentEncoding="gzip-base64" for large source files that edge protection
  * would otherwise block when sent as plain text (payload arrives compressed).
  */
-function decodeCommitContent(input: Record<string, unknown>): string {
+function decodeCommitContent(input: Record<string, unknown>): Buffer {
   const raw = readTrimmed(input.content);
   const encoding = readTrimmed(input.contentEncoding).toLowerCase();
   if (!raw || !encoding) {
-    return raw;
+    return Buffer.from(raw, 'utf8');
   }
   if (encoding === 'gzip-base64') {
-    const decoded = gunzipSync(Buffer.from(raw, 'base64')).toString('utf8');
-    if (!decoded.trim()) {
+    const decoded = gunzipSync(Buffer.from(raw, 'base64'));
+    if (decoded.length === 0) {
       throw new Error('Decoded gzip-base64 commit content is empty.');
     }
     return decoded;
   }
   if (encoding === 'base64') {
-    const decoded = Buffer.from(raw, 'base64').toString('utf8');
-    if (!decoded.trim()) {
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length === 0) {
       throw new Error('Decoded base64 commit content is empty.');
     }
     return decoded;
@@ -817,7 +817,7 @@ async function runGithubCommitFile(input: Record<string, unknown>): Promise<Reco
   const repoPath = sanitizeRepoPath(input.path);
   const content = decodeCommitContent(input);
   const message = readTrimmed(input.message) || `IVX Owner AI update ${repoPath}`;
-  if (!content) {
+  if (!content || content.length === 0) {
     throw new Error('File content is required for GitHub commit action.');
   }
   if (content.length > MAX_COMMIT_CONTENT_LENGTH) {
@@ -835,7 +835,7 @@ async function runGithubCommitFile(input: Record<string, unknown>): Promise<Reco
     headers: await githubHeaders(),
     body: JSON.stringify({
       message,
-      content: Buffer.from(content, 'utf8').toString('base64'),
+      content: content.toString('base64'),
       branch,
       ...(existingSha ? { sha: existingSha } : {}),
     }),
