@@ -4798,8 +4798,17 @@
               <input type="text" class="invest-auth-input" id="invest-first" placeholder="First name" />
               <input type="text" class="invest-auth-input" id="invest-last" placeholder="Last name" />
             </div>
+            <div class="invest-auth-form-row" id="invest-dob-row">
+              <input type="date" class="invest-auth-input" id="invest-birthday" placeholder="Date of birth" max="2008-01-01" min="1905-01-01" />
+              <select class="invest-auth-input" id="invest-gender">
+                <option value="">Gender</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
             <input type="email" class="invest-auth-input" id="invest-email" placeholder="Email address" required />
-            <input type="password" class="invest-auth-input" id="invest-password" placeholder="Password (min 6 chars)" required minlength="6" />
+            <input type="password" class="invest-auth-input" id="invest-password" placeholder="Password (min 12 chars)" required minlength="12" />
             <div class="invest-auth-error" id="invest-auth-error"></div>
             <button type="submit" class="invest-cta" id="invest-auth-btn">Create Account &amp; Continue &#8594;</button>
           </form>
@@ -5697,12 +5706,106 @@
     }
   });
 
-  var _waitlistOrigHandler = window.handleWaitlist;
+  // ── Real waitlist submit handler ──
+  // Collects all fields from the rich intake form and POSTs to the backend.
   window.handleWaitlist = function(e) {
+    e.preventDefault();
     ivxTrack('waitlist_attempt', { source: 'landing_form' });
     ivxTrack('registration_start', { source: 'landing_form' });
     try { if (typeof fireAdEvent === 'function') fireAdEvent('initiate_checkout', { category: 'registration' }); } catch(x) {}
-    if (typeof _waitlistOrigHandler === 'function') return _waitlistOrigHandler(e);
+
+    var errEl = document.getElementById('waitlist-error');
+    var successEl = document.getElementById('waitlist-success');
+    var btn = document.getElementById('waitlist-submit-btn');
+    var form = document.getElementById('waitlist-form');
+    if (errEl) errEl.style.display = 'none';
+    if (successEl) successEl.style.display = 'none';
+
+    // Gather form fields
+    var firstName = (document.getElementById('waitlist-first-name') || {}).value || '';
+    var lastName = (document.getElementById('waitlist-last-name') || {}).value || '';
+    var email = (document.getElementById('waitlist-email') || {}).value || '';
+    var phone = (document.getElementById('waitlist-phone') || {}).value || '';
+    var investmentRange = (document.getElementById('waitlist-investment-range') || {}).value || '';
+    var returnExpectation = (document.getElementById('waitlist-return-expectation') || {}).value || '';
+    var callTime = (document.getElementById('waitlist-call-time') || {}).value || '';
+    var accreditedStatus = (document.getElementById('waitlist-accredited-status') || {}).value || 'unsure';
+    var entityType = (document.getElementById('waitlist-entity-type') || {}).value || 'individual';
+    var primaryIdType = (document.getElementById('waitlist-primary-id-type') || {}).value || '';
+    var primaryIdRef = (document.getElementById('waitlist-primary-id-reference') || {}).value || '';
+    var secondaryIdType = (document.getElementById('waitlist-secondary-id-type') || {}).value || '';
+    var secondaryIdRef = (document.getElementById('waitlist-secondary-id-reference') || {}).value || '';
+    var docCountry = (document.getElementById('waitlist-document-country') || {}).value || '';
+    var taxCountry = (document.getElementById('waitlist-tax-country') || {}).value || '';
+    var taxIdRef = (document.getElementById('waitlist-tax-id-reference') || {}).value || '';
+    var signatureName = (document.getElementById('waitlist-signature-name') || {}).value || '';
+    var consent = (document.getElementById('waitlist-consent') || {}).checked || false;
+
+    // Validate required fields
+    if (!firstName || !lastName) { if (errEl) { errEl.textContent = 'First and last name are required.'; errEl.style.display = 'block'; } return; }
+    if (!email || email.indexOf('@') === -1) { if (errEl) { errEl.textContent = 'A valid email is required.'; errEl.style.display = 'block'; } return; }
+    if (!phone) { if (errEl) { errEl.textContent = 'Phone number is required.'; errEl.style.display = 'block'; } return; }
+    if (!investmentRange) { if (errEl) { errEl.textContent = 'Please select an investment range.'; errEl.style.display = 'block'; } return; }
+    if (!primaryIdRef || !secondaryIdRef) { if (errEl) { errEl.textContent = 'Both ID references are required.'; errEl.style.display = 'block'; } return; }
+    if (!docCountry || !taxCountry) { if (errEl) { errEl.textContent = 'Document and tax residency countries are required.'; errEl.style.display = 'block'; } return; }
+    if (!signatureName || signatureName.trim().toLowerCase() !== (firstName + ' ' + lastName).trim().toLowerCase()) {
+      if (errEl) { errEl.textContent = 'Your typed signature must match your first and last name.'; errEl.style.display = 'block'; } return;
+    }
+    if (!consent) { if (errEl) { errEl.textContent = 'Please authorize IVX to contact you.'; errEl.style.display = 'block'; } return; }
+
+    // Build payload for backend
+    var fullName = (firstName + ' ' + lastName).trim();
+    var interest = 'investor';
+    if (entityType === 'corporate') interest = 'investor';
+
+    var payload = {
+      name: fullName,
+      email: email.trim().toLowerCase(),
+      phone: phone,
+      interest: interest,
+      source: 'landing_page',
+      sourceDetail: 'investor intake form',
+      metadata: {
+        firstName: firstName, lastName: lastName, entityType: entityType,
+        investmentRange: investmentRange, returnExpectation: returnExpectation,
+        callTime: callTime, accreditedStatus: accreditedStatus,
+        primaryIdType: primaryIdType, primaryIdRef: primaryIdRef,
+        secondaryIdType: secondaryIdType, secondaryIdRef: secondaryIdRef,
+        docCountry: docCountry, taxCountry: taxCountry, taxIdRef: taxIdRef,
+        signatureName: signatureName
+      }
+    };
+
+    // Submit to backend
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+    var apiBase = (window.IVX_API || window.__IVX_BACKEND_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
+    fetch(apiBase + '/api/ivx/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(res) { return res.json(); }).then(function(data) {
+      if (data.ok) {
+        if (form) form.style.display = 'none';
+        if (successEl) successEl.style.display = 'block';
+        ivxTrack('waitlist_submit', { source: 'landing_form', status: 'success' });
+        try { if (typeof fireAdEvent === 'function') fireAdEvent('purchase', { category: 'registration' }); } catch(x) {}
+        // Also mirror to IVX CRM lead capture
+        try {
+          mirrorLeadToIVXCRM({
+            firstName: firstName, lastName: lastName, email: email, phone: phone,
+            investmentInterest: interest, source: 'ivxholding_landing'
+          });
+        } catch(x) {}
+      } else {
+        if (errEl) { errEl.textContent = (data.error || data.message || 'Submission failed. Please try again.'); errEl.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit investor intake \u2192'; }
+        ivxTrack('waitlist_submit', { source: 'landing_form', status: 'error' });
+      }
+    }).catch(function(err) {
+      if (errEl) { errEl.textContent = 'Network error. Please check your connection and try again.'; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit investor intake \u2192'; }
+      ivxTrack('waitlist_submit', { source: 'landing_form', status: 'network_error' });
+    });
   };
 
   var _funnelOrigOpen = window.openFunnel;

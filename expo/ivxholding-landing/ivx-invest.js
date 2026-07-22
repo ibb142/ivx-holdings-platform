@@ -266,6 +266,9 @@
     var password = document.getElementById('invest-password').value;
     var fn = _investState.authMode === 'signup' ? (document.getElementById('invest-first').value.trim() || '') : '';
     var ln = _investState.authMode === 'signup' ? (document.getElementById('invest-last').value.trim() || '') : '';
+    var dob = _investState.authMode === 'signup' ? (document.getElementById('invest-birthday') ? document.getElementById('invest-birthday').value : '') : '';
+    var gender = _investState.authMode === 'signup' ? (document.getElementById('invest-gender') ? document.getElementById('invest-gender').value : '') : '';
+    var phoneInput = _investState.authMode === 'signup' ? (document.getElementById('invest-phone') ? document.getElementById('invest-phone').value.trim() : '555-000-0000') : '';
 
     // Inline field validation — never calls backend.
     if (!email || email.indexOf('@') === -1) {
@@ -275,6 +278,8 @@
     if (_investState.authMode === 'signup') {
       if (!fn) { if (errEl) { errEl.textContent = 'Enter your first name'; errEl.style.display = 'block'; } setRegState(REG_STATES.IDLE); return; }
       if (!ln) { if (errEl) { errEl.textContent = 'Enter your last name'; errEl.style.display = 'block'; } setRegState(REG_STATES.IDLE); return; }
+      if (!dob) { if (errEl) { errEl.textContent = 'Enter your date of birth'; errEl.style.display = 'block'; } setRegState(REG_STATES.IDLE); return; }
+      if (!gender) { if (errEl) { errEl.textContent = 'Select your gender'; errEl.style.display = 'block'; } setRegState(REG_STATES.IDLE); return; }
       if (!password || password.length < 12) {
         if (errEl) { errEl.textContent = 'Password must be at least 12 characters'; errEl.style.display = 'block'; }
         setRegState(REG_STATES.IDLE); return;
@@ -328,7 +333,8 @@
           email: email.toLowerCase(),
           password: password,  // sent over HTTPS, never logged, never persisted locally
           firstName: fn, lastName: ln,
-          phone: '', country: 'US', zipCode: '',
+          dateOfBirth: dob, gender: gender,
+          phone: phoneInput || '555-000-0000', country: 'US', zipCode: '',
           roles: ['investor'],
           acceptTerms: true,
           registrationRequestId: registrationRequestId,
