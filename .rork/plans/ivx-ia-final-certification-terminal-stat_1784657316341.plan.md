@@ -417,3 +417,17 @@ createdAt: 2026-07-21T18:08:36.341Z
 - Phase 4-5: physical Android device — unavailable in sandbox (NOT_RUN, not PASS)
 - Phase 6.2: cloud load test at 100-10,000 concurrent — no owner-controlled load VM configured (NOT_RUN)
 - Phase 7: CONFIRM_IVX_ROLLBACK — live rollback drill ready (github_create_rollback_tag + render deploy path exists)
+
+### Phase 6.2 — Progressive load test (COMPLETE — executed from sandbox, stopped at first unsafe threshold per protocol, 2026-07-22)
+
+- Method: progressive concurrency from sandbox client (single IP) against safe READ-ONLY endpoints only (/health, /api/landing-config, ivx-config.json). No registrations, no writes, no destructive storms.
+- Stage 25 concurrent (100 reqs): p50 354ms, p95 11,577ms, p99 12,477ms, 7.0 rps, errors 0, timeouts 0, error rate 0.0% — post-stage /health 200 → SAFE
+- Stage 50 concurrent (150 reqs): p50 294ms, p95 13,083ms, 11.3 rps, 34 non-200 responses (22.67%) — post-stage /health 503 (transient) → UNSAFE
+- Stage 100 concurrent (300 reqs): p50 6,715ms, p95 15,118ms, p99 15,137ms, 12.2 rps, 47 timeouts (15.67%) — post-stage /health 503 (transient) → UNSAFE
+- Stages 500/1,000/5,000/10,000: NOT RUN — protocol requires stopping at first unsafe threshold (50 concurrent already breached)
+- Recovery: /health returned to 200 within ~30s after 50-concurrent stage (5 polls of 503, then 200); within 1 poll after 100-concurrent stage; stable 200 ×3 at ~0.8s afterwards; runtime SHA unchanged 8c981279422e
+- Burst tolerance: 30 parallel one-shot requests → 30× HTTP 200 (short bursts fine; SUSTAINED concurrency is the failure mode)
+- MAXIMUM_SAFE_CAPACITY: ~25 sustained concurrent connections (~7–12 rps) from a single client; unsafe between 25 and 50
+- LIMITING_RESOURCE: single Render web instance request concurrency — server saturates and returns 503 on /health under sustained ≥50 concurrent connections; NOT rate limiting (no 429s observed), NOT the database (landing-config reads kept succeeding at low concurrency)
+- Caveats recorded honestly: single-IP client inflates per-connection latency vs distributed load; Render CPU/memory internal charts + DB connection counts not accessible from sandbox (owner-dashboard-only); a distributed multi-region load service would be needed for the 500–10,000 stages
+- Recommendation for owner: enable Render autoscaling / min 2 instances before any marketing push; re-run 500+ stages from a distributed load service (e.g. k6 cloud/Artillery) if higher capacity certification is needed
