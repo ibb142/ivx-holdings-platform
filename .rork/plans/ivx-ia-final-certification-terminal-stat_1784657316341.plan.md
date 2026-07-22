@@ -332,3 +332,27 @@ createdAt: 2026-07-21T18:08:36.341Z
 
 - App: Clapperboard (gold, Colors.primary) in home header opens `/videos` reels module; feed reel card 520px full-bleed portrait
 - Landing now: Clapperboard (gold #E6C200) in nav opens full-screen reels module (`ivx-reels.js`); feed reel card 9:16 portrait 560px–88vh — same icon, same placement pattern, same reel proportions
+
+## FINAL PENDING-ITEM EXECUTION — PHASE 1 (IVX PROPERTY INSPECTION) — IN PROGRESS
+
+### Phase 1.1 — Owner variable verification (COMPLETE, live checks 2026-07-22)
+
+- OWNER_TOKEN: AVAILABLE (passwordless login mint OK)
+- GITHUB_TOKEN: AVAILABLE (github_commit_file succeeded today; backend status reports configured)
+- GitHub owner account (ibb142): AVAILABLE (live API check, account exists)
+- SUPABASE_ACCESS_TOKEN (Management API): AVAILABLE (SELECT 1 via supabase_execute_sql_management OK)
+- Supabase organization ID: MISSING (no backend action exposes org listing or project creation; isolated-schema fallback available in existing project kvclcdjmjghndxsngfzb)
+- RENDER_API_KEY: AVAILABLE (render_trigger_deploy succeeded today; runtime SHA advanced)
+- AWS/S3 credentials: AVAILABLE (presign-upload + CloudFront invalidation succeeded today); list_ses_identities returned HTTP_409 (action requires confirm phrase — not a credential failure)
+- AI provider key: AVAILABLE (IVX IA Chat live in production)
+- Expo/EAS credentials: MISSING (EAS not configured; local Gradle builds proven working — v1.4.35 built in sandbox)
+
+### Phase 1.2 — Repository creation preparation (COMPLETE — awaiting owner approval phrase)
+
+- Repo check: ibb142/ivx-property-inspection does NOT exist (GitHub API 404)
+- Backend had NO repo-creation capability — implemented `github_create_repository` action in `backend/api/ivx-developer-deploy-control.ts`, gated by its own approval phrase CONFIRM_IVX_CREATE_REPOSITORY (stricter than routine CONFIRM_IVX_GITHUB_WRITE)
+- Behavior: inspects existing repo first (returns mode=already_exists without creating a duplicate); creates private repo with auto_init on main; attempts branch protection (graceful if plan-unavailable); returns repoUrl + initialCommitSha
+- Backend tests: 1770 pass / 0 fail (127 files)
+- Commit `264c63336621` — deployed to Render, runtime SHA verified = 264c63336621
+- Gate verified live: calling the action without confirm returns HTTP 409 with confirmTextRequired=CONFIRM_IVX_CREATE_REPOSITORY; repo existence re-check after the call: still 404 (nothing created)
+- STATUS: ACTION READY — blocked solely on owner typing CONFIRM_IVX_CREATE_REPOSITORY

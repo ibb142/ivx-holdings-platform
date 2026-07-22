@@ -40,6 +40,7 @@ type DeveloperDeployAction =
   | 'github_merge_pull_request'
   | 'github_create_rollback_tag'
   | 'github_dispatch_workflow'
+  | 'github_create_repository'
   | 'render_trigger_deploy'
   | 'render_restart_service'
   | 'render_upsert_env_var'
@@ -75,6 +76,7 @@ type GithubRepoInfo = {
 
 const GITHUB_CONFIRM_TEXT = 'CONFIRM_IVX_GITHUB_WRITE';
 const GITHUB_MERGE_CONFIRM_TEXT = 'CONFIRM_IVX_GITHUB_MERGE';
+const CREATE_REPOSITORY_CONFIRM_TEXT = 'CONFIRM_IVX_CREATE_REPOSITORY';
 const RENDER_DEPLOY_CONFIRM_TEXT = 'CONFIRM_IVX_RENDER_DEPLOY';
 const RENDER_SERVICE_CONFIRM_TEXT = 'CONFIRM_IVX_RENDER_SERVICE_UPDATE';
 const SUPABASE_SQL_CONFIRM_TEXT = 'CONFIRM_IVX_SUPABASE_MIGRATION';
@@ -113,6 +115,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'github_merge_pull_request'
     || normalized === 'github_create_rollback_tag'
     || normalized === 'github_dispatch_workflow'
+    || normalized === 'github_create_repository'
     || normalized === 'render_trigger_deploy'
     || normalized === 'render_restart_service'
     || normalized === 'render_upsert_env_var'
@@ -149,6 +152,9 @@ const CLOUDFRONT_CONFIRM_TEXT = 'CONFIRM_IVX_CLOUDFRONT_INVALIDATE';
 function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'github_merge_pull_request') {
     return GITHUB_MERGE_CONFIRM_TEXT;
+  }
+  if (action === 'github_create_repository') {
+    return CREATE_REPOSITORY_CONFIRM_TEXT;
   }
   if (action.startsWith('github_')) {
     return GITHUB_CONFIRM_TEXT;
@@ -916,6 +922,86 @@ async function runGithubCommitFile(input: Record<string, unknown>): Promise<Reco
   };
 }
 
+/**
+ * Creates a new owner-controlled GitHub repository. Gated by its own approval
+ * phrase (CONFIRM_IVX_CREATE_REPOSITORY) — stricter than routine file commits.
+ * If the repository already exists it is inspected and returned without
+ * creating a duplicate.
+ */
+async function runGithubCreateRepository(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const name = readTrimmed(input.name);
+  if (!name || !/^[A-Za-z0-9._-]{1,100}$/.test(name)) {
+    throw new Error('A valid repository name is required (letters, digits, dots, hyphens, underscores).');
+  }
+  const isPrivate = input.private === undefined ? true : parseBoolean(input.private);
+  const description = readTrimmed(input.description) || 'IVX owner-controlled application repository.';
+  const baseRepo = await getGithubRepoInfo({});
+  const owner = readTrimmed(input.owner) || baseRepo.owner;
+  const headers = await githubHeaders();
+
+  const existing = await fetchJson(`https://api.github.com/repos/${owner}/${encodeURIComponent(name)}`, { method: 'GET', headers }).catch(() => null);
+  if (existing?.ok === true) {
+    const record = readRecord(existing.data);
+    return {
+      provider: 'github',
+      action: 'github_create_repository',
+      mode: 'already_exists',
+      owner,
+      repo: name,
+      repoUrl: readTrimmed(record.html_url) || `https://github.com/${owner}/${name}`,
+      defaultBranch: readTrimmed(record.default_branch) || null,
+      private: record.private === true,
+      createdAt: readTrimmed(record.created_at) || null,
+      timestamp: nowIso(),
+    };
+  }
+
+  const created = await fetchJson('https://api.github.com/user/repos', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name, private: isPrivate, description, auto_init: true }),
+  });
+  if (!created.ok) {
+    throw new Error(`GitHub repository creation failed with HTTP ${created.status}.`);
+  }
+  const repoRecord = readRecord(created.data);
+  const defaultBranch = readTrimmed(repoRecord.default_branch) || 'main';
+
+  let initialCommitSha: string | null = null;
+  const headCommit = await fetchJson(`https://api.github.com/repos/${owner}/${encodeURIComponent(name)}/commits/${encodeURIComponent(defaultBranch)}`, { method: 'GET', headers }).catch(() => null);
+  if (headCommit?.ok === true) {
+    initialCommitSha = readTrimmed(readRecord(headCommit.data).sha) || null;
+  }
+
+  const protection = await fetchJson(`https://api.github.com/repos/${owner}/${encodeURIComponent(name)}/branches/${encodeURIComponent(defaultBranch)}/protection`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      required_status_checks: null,
+      enforce_admins: false,
+      required_pull_request_reviews: null,
+      restrictions: null,
+      allow_force_pushes: false,
+      allow_deletions: false,
+    }),
+  }).catch(() => null);
+  const branchProtection = protection?.ok === true ? 'applied' : `unavailable_http_${protection?.status ?? 'error'}`;
+
+  return {
+    provider: 'github',
+    action: 'github_create_repository',
+    mode: 'created',
+    owner,
+    repo: name,
+    repoUrl: readTrimmed(repoRecord.html_url) || `https://github.com/${owner}/${name}`,
+    defaultBranch,
+    private: repoRecord.private === true,
+    initialCommitSha,
+    branchProtection,
+    timestamp: nowIso(),
+  };
+}
+
 async function runGithubCreatePullRequest(input: Record<string, unknown>): Promise<Record<string, unknown>> {
   const repoInfo = await getGithubRepoInfo(input);
   const title = readTrimmed(input.title);
@@ -1518,7 +1604,7 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository'],
       readOnlyActions: ['github_pull_request_status'],
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -1694,6 +1780,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'github_dispatch_workflow') {
     return await runGithubDispatchWorkflow(input);
+  }
+  if (action === 'github_create_repository') {
+    return await runGithubCreateRepository(input);
   }
   if (action === 'render_trigger_deploy') {
     return await runRenderTriggerDeploy(input);

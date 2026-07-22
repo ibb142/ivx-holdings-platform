@@ -5397,7 +5397,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/investor-performance.tsx\", \"content\": \"/**\\n * IVX Investor Performance Center\\n *\\n * Displays real investor performance data: invested capital, active deals,\\n * distributions, unrealized value, realized return, ROI, and last activity.\\n * Pulls from the backend /api/ivx/investor-performance endpoint.\\n */\\nimport React, { useState, useMemo, useCallback } from 'react';\\nimport {\\n  View,\\n  Text,\\n  StyleSheet,\\n  ScrollView,\\n  RefreshControl,\\n  TouchableOpacity,\\n  TextInput,\\n  ActivityIndicator,\\n  SafeAreaView,\\n} from 'react-native';\\nimport { useRouter } from 'expo-router';\\nimport {\\n  TrendingUp,\\n  TrendingDown,\\n  DollarSign,\\n  Building2,\\n  ArrowUpRight,\\n  ArrowDownRight,\\n  Search,\\n  Filter,\\n  Calendar,\\n  Percent,\\n  Wallet,\\n  Target,\\n} from 'lucide-react-native';\\nimport Colors from '@/constants/colors';\\nimport { useAuth } from '@/lib/auth-context';\\n\\n// ---------------------------------------------------------------------------\\n// Types\\n// ---------------------------------------------------------------------------\\n\\ntype PerformanceMetric = {\\n  label: string;\\n  value: number;\\n  formatted: string;\\n  trend: 'up' | 'down' | 'flat';\\n  trendPercent: number | null;\\n  icon: 'wallet' | 'building' | 'target' | 'percent' | 'dollar' | 'calendar';\\n};\\n\\ntype ActiveDeal = {\\n  id: string;\\n  title: string;\\n  investedAmount: number;\\n  currentValue: number;\\n  unrealizedGain: number;\\n  unrealizedPercent: number;\\n  status: string;\\n  lastActivityDate: string;\\n};\\n\\ntype Distribution = {\\n  id: string;\\n  dealTitle: string;\\n  amount: number;\\n  date: string;\\n  type: 'dividend' | 'interest' | 'profit' | 'refund';\\n};\\n\\ntype InvestorPerformanceData = {\\n  investedCapital: number;\\n  activeDealsCount: number;\\n  totalDistributions: number;\\n  unrealizedValue: number;\\n  realizedReturn: number;\\n  totalROI: number;\\n  lastActivityDate: string;\\n  activeDeals: ActiveDeal[];\\n  distributions: Distribution[];\\n};\\n\\ntype FilterType = 'all' | 'active' | 'completed' | 'distributions';\\n\\n// ---------------------------------------------------------------------------\\n// Component\\n// ---------------------------------------------------------------------------\\n\\nexport default function InvestorPerformanceScreen() {\\n  const router = useRouter();\\n  const { user, isAuthenticated } = useAuth();\\n  const [data, setData] = useState<InvestorPerformanceData | null>(null);\\n  const [isLoading, setIsLoading] = useState(true);\\n  const [isRefreshing, setIsRefreshing] = useState(false);\\n  const [error, setError] = useState<string | null>(null);\\n  const [searchQuery, setSearchQuery] = useState('');\\n  const [activeFilter, setActiveFilter] = useState<FilterType>('all');\\n\\n  const fetchData = useCallback(async () => {\\n    try {\\n      setError(null);\\n      const response = await fetch('https://api.ivxholding.com/api/ivx/investor-performance', {\\n        headers: {\\n          'Content-Type': 'application/json',\\n          ...(user?.id ? { 'x-user-id': user.id } : {}),\\n        },\\n      });\\n      if (!response.ok) {\\n        throw new Error(`HTTP ${response.status}`);\\n      }\\n      const json = await response.json();\\n      setData(json);\\n    } catch (err) {\\n      setError(err instanceof Error ? err.message : 'Failed to load performance data');\\n    } finally {\\n      setIsLoading(false);\\n      setIsRefreshing(false);\\n    }\\n  }, [user?.id]);\\n\\n  React.useEffect(() => {\\n    void fetchData();\\n  }, [fetchData]);\\n\\n  const handleRefresh = useCallback(() => {\\n    setIsRefreshing(true);\\n    void fetchData();\\n  }, [fetchData]);\\n\\n  // Filter deals based on search + filter\\n  const filteredDeals = useMemo(() => {\\n    if (!data?.activeDeals) return [];\\n    return data.activeDeals.filter((deal) => {\\n      const matchesSearch = !searchQuery || deal.title.toLowerCase().includes(searchQuery.toLowerCase());\\n      const matchesFilter =\\n        activeFilter === 'all' ||\\n        (activeFilter === 'active' && deal.status === 'active') ||\\n        (activeFilter === 'completed' && deal.status === 'completed');\\n      return matchesSearch && matchesFilter;\\n    });\\n  }, [data, searchQuery, activeFilter]);\\n\\n  const filteredDistributions = useMemo(() => {\\n    if (!data?.distributions) return [];\\n    if (activeFilter !== 'all' && activeFilter !== 'distributions') return [];\\n    if (!searchQuery) return data.distributions;\\n    return data.distributions.filter((d) => d.dealTitle.toLowerCase().includes(searchQuery.toLowerCase()));\\n  }, [data, searchQuery, activeFilter]);\\n\\n  // Build metric cards\\n  const metrics: PerformanceMetric[] = useMemo(() => {\\n    if (!data) return [];\\n    return [\\n      {\\n        label: 'Invested Capital',\\n        value: data.investedCapital,\\n        formatted: formatCurrency(data.investedCapital),\\n        trend: 'flat',\\n        trendPercent: null,\\n        icon: 'wallet',\\n      },\\n      {\\n        label: 'Active Deals',\\n        value: data.activeDealsCount,\\n        formatted: String(data.activeDealsCount),\\n        trend: 'flat',\\n        trendPercent: null,\\n        icon: 'building',\\n      },\\n      {\\n        label: 'Total Distributions',\\n        value: data.totalDistributions,\\n        formatted: formatCurrency(data.totalDistributions),\\n        trend: 'up',\\n        trendPercent: null,\\n        icon: 'dollar',\\n      },\\n      {\\n        label: 'Unrealized Value',\\n        value: data.unrealizedValue,\\n        formatted: formatCurrency(data.unrealizedValue),\\n        trend: data.unrealizedValue >= 0 ? 'up' : 'down',\\n        trendPercent: null,\\n        icon: 'target',\\n      },\\n      {\\n        label: 'Realized Return',\\n        value: data.realizedReturn,\\n        formatted: formatCurrency(data.realizedReturn),\\n        trend: data.realizedReturn >= 0 ? 'up' : 'down',\\n        trendPercent: null,\\n        icon: 'trending',\\n      },\\n      {\\n        label: 'Total ROI',\\n        value: data.totalROI,\\n        formatted: `${data.totalROI.toFixed(2)}%`,\\n        trend: data.totalROI >= 0 ? 'up' : 'down',\\n        trendPercent: null,\\n        icon: 'percent',\\n      },\\n    ];\\n  }, [data]);\\n\\n  // Loading state\\n  if (isLoading) {\\n    return (\\n      <SafeAreaView style={styles.container} edges={['top']}>\\n        <View style={styles.loadingContainer}>\\n          <ActivityIndicator size=\\\"large\\\" color={Colors.primary} />\\n          <Text style={styles.loadingText}>Loading performance data…</Text>\\n        </View>\\n      </SafeAreaView>\\n    );\\n  }\\n\\n  // Error state\\n  if (error && !data) {\\n    return (\\n      <SafeAreaView style={styles.container} edges={['top']}>\\n        <View style={styles.errorContainer}>\\n          <Text style={styles.errorTitle}>Unable to load</Text>\\n          <Text style={styles.errorMessage}>{error}</Text>\\n          <TouchableOpacity style={styles.retryButton} onPress={fetchData}>\\n            <Text style={styles.retryButtonText}>Retry</Text>\\n          </TouchableOpacity>\\n        </View>\\n      </SafeAreaView>\\n    );\\n  }\\n\\n  // Empty state\\n  if (data && data.investedCapital === 0 && data.activeDealsCount === 0) {\\n    return (\\n      <SafeAreaView style={styles.container} edges={['top']}>\\n        <ScrollView\\n          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}\\n        >\\n          <View style={styles.header}>\\n            <Text style={styles.headerTitle}>Investor Performance</Text>\\n            <Text style={styles.headerSubtitle}>Track your portfolio in real time</Text>\\n          </View>\\n          <View style={styles.emptyState}>\\n            <Wallet size={48} color={Colors.muted} />\\n            <Text style={styles.emptyTitle}>No investments yet</Text>\\n            <Text style={styles.emptySubtitle}>\\n              Your performance metrics will appear here once you start investing.\\n            </Text>\\n            <TouchableOpacity\\n              style={styles.emptyCta}\\n              onPress={() => router.push('/(tabs)/invest' as any)}\\n            >\\n              <Text style={styles.emptyCtaText}>Browse Deals</Text>\\n            </TouchableOpacity>\\n          </View>\\n        </ScrollView>\\n      </SafeAreaView>\\n    );\\n  }\\n\\n  // Partial error state (data loaded but refresh failed)\\n  const showPartialError = error && data;\\n\\n  return (\\n    <SafeAreaView style={styles.container} edges={['top']}>\\n      <ScrollView\\n        showsVerticalScrollIndicator={false}\\n        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}\\n      >\\n        {/* Header */}\\n        <View style={styles.header}>\\n          <Text style={styles.headerTitle}>Investor Performance</Text>\\n          <Text style={styles.headerSubtitle}>Track your portfolio in real time</Text>\\n        </View>\\n\\n        {showPartialError && (\\n          <View style={styles.partialErrorBanner}>\\n            <Text style={styles.partialErrorText}>Some data may be stale: {error}</Text>\\n          </View>\\n        )}\\n\\n        {/* Metric Cards Grid */}\\n        <View style={styles.metricsGrid}>\\n          {metrics.map((metric, index) => (\\n            <View key={index} style={styles.metricCard}>\\n              <View style={styles.metricIconRow}>\\n                {renderMetricIcon(metric.icon)}\\n                {metric.trend === 'up' && <ArrowUpRight size={14} color={Colors.success} />}\\n                {metric.trend === 'down' && <ArrowDownRight size={14} color={Colors.error} />}\\n              </View>\\n              <Text style={styles.metricValue}>{metric.formatted}</Text>\\n              <Text style={styles.metricLabel}>{metric.label}</Text>\\n            </View>\\n          ))}\\n        </View>\\n\\n        {/* Last Activity */}\\n        {data?.lastActivityDate && (\\n          <View style={styles.lastActivityRow}>\\n            <Calendar size={14} color={Colors.muted} />\\n            <Text style={styles.lastActivityText}>\\n              Last activity: {formatDate(data.lastActivityDate)}\\n            </Text>\\n          </View>\\n        )}\\n\\n        {/* Search + Filters */}\\n        <View style={styles.controlsContainer}>\\n          <View style={styles.searchContainer}>\\n            <Search size={16} color={Colors.muted} style={styles.searchIcon} />\\n            <TextInput\\n              style={styles.searchInput}\\n              placeholder=\\\"Search deals…\\\"\\n              placeholderTextColor={Colors.muted}\\n              value={searchQuery}\\n              onChangeText={setSearchQuery}\\n            />\\n          </View>\\n          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>\\n            {(['all', 'active', 'completed', 'distributions'] as FilterType[]).map((filter) => (\\n              <TouchableOpacity\\n                key={filter}\\n                style={[styles.filterChip, activeFilter === filter && styles.filterChipActive]}\\n                onPress={() => setActiveFilter(filter)}\\n              >\\n                <Text style={[styles.filterChipText, activeFilter === filter && styles.filterChipTextActive]}>\\n                  {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}\\n                </Text>\\n              </TouchableOpacity>\\n            ))}\\n          </ScrollView>\\n        </View>\\n\\n        {/* Active Deals */}\\n        {(activeFilter === 'all' || activeFilter === 'active' || activeFilter === 'completed') && (\\n          <View style={styles.section}>\\n            <Text style={styles.sectionTitle}>Active Deals</Text>\\n            {filteredDeals.length === 0 ? (\\n              <Text style={styles.emptySectionText}>No deals match your filters.</Text>\\n            ) : (\\n              filteredDeals.map((deal) => (\\n                <View key={deal.id} style={styles.dealCard}>\\n                  <View style={styles.dealCardHeader}>\\n                    <Text style={styles.dealTitle}>{deal.title}</Text>\\n                    <View style={[styles.statusBadge, deal.status === 'active' ? styles.statusActive : styles.statusCompleted]}>\\n                      <Text style={styles.statusText}>{deal.status}</Text>\\n                    </View>\\n                  </View>\\n                  <View style={styles.dealMetricsRow}>\\n                    <View style={styles.dealMetric}>\\n                      <Text style={styles.dealMetricLabel}>Invested</Text>\\n                      <Text style={styles.dealMetricValue}>{formatCurrency(deal.investedAmount)}</Text>\\n                    </View>\\n                    <View style={styles.dealMetric}>\\n                      <Text style={styles.dealMetricLabel}>Current Value</Text>\\n                      <Text style={styles.dealMetricValue}>{formatCurrency(deal.currentValue)}</Text>\\n                    </View>\\n                    <View style={styles.dealMetric}>\\n                      <Text style={styles.dealMetricLabel}>Unrealized</Text>\\n                      <Text style={[styles.dealMetricValue, deal.unrealizedGain >= 0 ? styles.valuePositive : styles.valueNegative]}>\\n                        {deal.unrealizedGain >= 0 ? '+' : ''}{formatCurrency(deal.unrealizedGain)}\\n                      </Text>\\n                      <Text style={[styles.dealMetricSub, deal.unrealizedPercent >= 0 ? styles.valuePositive : styles.valueNegative]}>\\n                        {deal.unrealizedPercent >= 0 ? '+' : ''}{deal.unrealizedPercent.toFixed(1)}%\\n                      </Text>\\n                    </View>\\n                  </View>\\n                </View>\\n              ))\\n            )}\\n          </View>\\n        )}\\n\\n        {/* Distributions */}\\n        {(activeFilter === 'all' || activeFilter === 'distributions') && (\\n          <View style={styles.section}>\\n            <Text style={styles.sectionTitle}>Distributions</Text>\\n            {filteredDistributions.length === 0 ? (\\n              <Text style={styles.emptySectionText}>No distributions yet.</Text>\\n            ) : (\\n              filteredDistributions.map((dist) => (\\n                <View key={dist.id} style={styles.distributionRow}>\\n                  <View style={styles.distributionInfo}>\\n                    <Text style={styles.distributionTitle}>{dist.dealTitle}</Text>\\n                    <Text style={styles.distributionDate}>{formatDate(dist.date)}</Text>\\n                    <View style={styles.distributionTypeBadge}>\\n                      <Text style={styles.distributionTypeText}>{dist.type}</Text>\\n                    </View>\\n                  </View>\\n                  <Text style={styles.distributionAmount}>{formatCurrency(dist.amount)}</Text>\\n                </View>\\n              ))\\n            )}\\n          </View>\\n        )}\\n\\n        <View style={{ height: 40 }} />\\n      </ScrollView>\\n    </SafeAreaView>\\n  );\\n}\\n\\n// ---------------------------------------------------------------------------\\n// Helpers\\n// ---------------------------------------------------------------------------\\n\\nfunction formatCurrency(value: number): string {\\n  if (!Number.isFinite(value)) return '$0';\\n  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);\\n}\\n\\nfunction formatDate(iso: string): string {\\n  if (!iso) return '—';\\n  try {\\n    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });\\n  } catch {\\n    return iso;\\n  }\\n}\\n\\nfunction renderMetricIcon(icon: PerformanceMetric['icon']) {\\n  const color = Colors.primary;\\n  const size = 18;\\n  switch (icon) {\\n    case 'wallet': return <Wallet size={size} color={color} />;\\n    case 'building': return <Building2 size={size} color={color} />;\\n    case 'target': return <Target size={size} color={color} />;\\n    case 'percent': return <Percent size={size} color={color} />;\\n    case 'dollar': return <DollarSign size={size} color={color} />;\\n    default: return <TrendingUp size={size} color={color} />;\\n  }\\n}\\n\\n// ---------------------------------------------------------------------------\\n// Styles\\n// ---------------------------------------------------------------------------\\n\\nconst styles = StyleSheet.create({\\n  container: {\\n    flex: 1,\\n    backgroundColor: Colors.background,\\n  },\\n  loadingContainer: {\\n    flex: 1,\\n    justifyContent: 'center',\\n    alignItems: 'center',\\n    gap: 16,\\n  },\\n  loadingText: {\\n    color: Colors.muted,\\n    fontSize: 14,\\n  },\\n  errorContainer: {\\n    flex: 1,\\n    justifyContent: 'center',\\n    alignItems: 'center',\\n    paddingHorizontal: 32,\\n    gap: 12,\\n  },\\n  errorTitle: {\\n    color: Colors.text,\\n    fontSize: 18,\\n    fontWeight: '700' as const,\\n  },\\n  errorMessage: {\\n    color: Colors.muted,\\n    fontSize: 14,\\n    textAlign: 'center',\\n  },\\n  retryButton: {\\n    marginTop: 8,\\n    paddingHorizontal: 24,\\n    paddingVertical: 12,\\n    backgroundColor: Colors.primary,\\n    borderRadius: 12,\\n  },\\n  retryButtonText: {\\n    color: Colors.primaryBlack,\\n    fontSize: 14,\\n    fontWeight: '700' as const,\\n  },\\n  header: {\\n    paddingHorizontal: 20,\\n    paddingTop: 16,\\n    paddingBottom: 12,\\n  },\\n  headerTitle: {\\n    color: Colors.text,\\n    fontSize: 24,\\n    fontWeight: '700' as const,\\n  },\\n  headerSubtitle: {\\n    color: Colors.muted,\\n    fontSize: 14,\\n    marginTop: 4,\\n  },\\n  partialErrorBanner: {\\n    marginHorizontal: 20,\\n    marginBottom: 8,\\n    paddingHorizontal: 12,\\n    paddingVertical: 8,\\n    backgroundColor: 'rgba(245, 158, 11, 0.1)',\\n    borderRadius: 8,\\n    borderWidth: 1,\\n    borderColor: 'rgba(245, 158, 11, 0.3)',\\n  },\\n  partialErrorText: {\\n    color: Colors.warning,\\n    fontSize: 12,\\n  },\\n  metricsGrid: {\\n    flexDirection: 'row',\\n    flexWrap: 'wrap',\\n    paddingHorizontal: 12,\\n    gap: 8,\\n  },\\n  metricCard: {\\n    width: '48%',\\n    flexGrow: 1,\\n    backgroundColor: Colors.surfaceElevated,\\n    borderRadius: 14,\\n    padding: 14,\\n    borderWidth: 1,\\n    borderColor: Colors.surfaceBorder,\\n  },\\n  metricIconRow: {\\n    flexDirection: 'row',\\n    alignItems: 'center',\\n    gap: 6,\\n    marginBottom: 8,\\n  },\\n  metricValue: {\\n    color: Colors.text,\\n    fontSize: 20,\\n    fontWeight: '700' as const,\\n  },\\n  metricLabel: {\\n    color: Colors.muted,\\n    fontSize: 12,\\n    marginTop: 4,\\n  },\\n  lastActivityRow: {\\n    flexDirection: 'row',\\n    alignItems: 'center',\\n    gap: 6,\\n    paddingHorizontal: 20,\\n    paddingVertical: 8,\\n  },\\n  lastActivityText: {\\n    color: Colors.muted,\\n    fontSize: 12,\\n  },\\n  controlsContainer: {\\n    paddingHorizontal: 20,\\n    paddingVertical: 12,\\n    gap: 10,\\n  },\\n  searchContainer: {\\n    flexDirection: 'row',\\n    alignItems: 'center',\\n    backgroundColor: Colors.surfaceElevated,\\n    borderRadius: 10,\\n    paddingHorizontal: 12,\\n    borderWidth: 1,\\n    borderColor: Colors.surfaceBorder,\\n  },\\n  searchIcon: {\\n    marginRight: 8,\\n  },\\n  searchInput: {\\n    flex: 1,\\n    color: Colors.text,\\n    fontSize: 14,\\n    paddingVertical: 10,\\n  },\\n  filterRow: {\\n    flexDirection: 'row',\\n    gap: 8,\\n  },\\n  filterChip: {\\n    paddingHorizontal: 14,\\n    paddingVertical: 6,\\n    backgroundColor: Colors.surfaceElevated,\\n    borderRadius: 20,\\n    borderWidth: 1,\\n    borderColor: Colors.surfaceBorder,\\n    marginRight: 8,\\n  },\\n  filterChipActive: {\\n    backgroundColor: Colors.primary,\\n    borderColor: Colors.primary,\\n  },\\n  filterChipText: {\\n    color: Colors.muted,\\n    fontSize: 12,\\n    fontWeight: '600' as const,\\n  },\\n  filterChipTextActive: {\\n    color: Colors.primaryBlack,\\n  },\\n  section: {\\n    paddingHorizontal: 20,\\n    paddingTop: 16,\\n  },\\n  sectionTitle: {\\n    color: Colors.text,\\n    fontSize: 16,\\n    fontWeight: '700' as const,\\n    marginBottom: 12,\\n  },\\n  emptySectionText: {\\n    color: Colors.muted,\\n    fontSize: 13,\\n    fontStyle: 'italic' as const,\\n  },\\n  dealCard: {\\n    backgroundColor: Colors.surfaceElevated,\\n    borderRadius: 14,\\n    padding: 16,\\n    marginBottom: 10,\\n    borderWidth: 1,\\n    borderColor: Colors.surfaceBorder,\\n  },\\n  dealCardHeader: {\\n    flexDirection: 'row',\\n    justifyContent: 'space-between',\\n    alignItems: 'center',\\n    marginBottom: 12,\\n  },\\n  dealTitle: {\\n    color: Colors.text,\\n    fontSize: 15,\\n    fontWeight: '600' as const,\\n    flex: 1,\\n  },\\n  statusBadge: {\\n    paddingHorizontal: 8,\\n    paddingVertical: 3,\\n    borderRadius: 6,\\n  },\\n  statusActive: {\\n    backgroundColor: 'rgba(0, 196, 140, 0.15)',\\n  },\\n  statusCompleted: {\\n    backgroundColor: 'rgba(74, 144, 217, 0.15)',\\n  },\\n  statusText: {\\n    color: Colors.success,\\n    fontSize: 10,\\n    fontWeight: '700' as const,\\n    textTransform: 'uppercase' as const,\\n  },\\n  dealMetricsRow: {\\n    flexDirection: 'row',\\n    gap: 12,\\n  },\\n  dealMetric: {\\n    flex: 1,\\n  },\\n  dealMetricLabel: {\\n    color: Colors.muted,\\n    fontSize: 10,\\n    marginBottom: 2,\\n  },\\n  dealMetricValue: {\\n    color: Colors.text,\\n    fontSize: 13,\\n    fontWeight: '600' as const,\\n  },\\n  dealMetricSub: {\\n    fontSize: 10,\\n    marginTop: 1,\\n  },\\n  valuePositive: {\\n    color: Colors.success,\\n  },\\n  valueNegative: {\\n    color: Colors.error,\\n  },\\n  distributionRow: {\\n    flexDirection: 'row',\\n    justifyContent: 'space-between',\\n    alignItems: 'center',\\n    backgroundColor: Colors.surfaceElevated,\\n    borderRadius: 12,\\n    padding: 14,\\n    marginBottom: 8,\\n    borderWidth: 1,\\n    borderColor: Colors.surfaceBorder,\\n  },\\n  distributionInfo: {\\n    flex: 1,\\n  },\\n  distributionTitle: {\\n    color: Colors.text,\\n    fontSize: 14,\\n    fontWeight: '600' as const,\\n  },\\n  distributionDate: {\\n    color: Colors.muted,\\n    fontSize: 11,\\n    marginTop: 2,\\n  },\\n  distributionTypeBadge: {\\n    marginTop: 4,\\n    paddingHorizontal: 6,\\n    paddingVertical: 2,\\n    backgroundColor: 'rgba(230, 194, 0, 0.1)',\\n    borderRadius: 4,\\n    alignSelf: 'flex-start',\\n  },\\n  distributionTypeText: {\\n    color: Colors.primary,\\n    fontSize: 9,\\n    fontWeight: '700' as const,\\n    textTransform: 'uppercase' as const,\\n  },\\n  distributionAmount: {\\n    color: Colors.success,\\n    fontSize: 15,\\n    fontWeight: '700' as const,\\n  },\\n  emptyState: {\\n    alignItems: 'center',\\n    justifyContent: 'center',\\n    paddingTop: 80,\\n    paddingHorizontal: 32,\\n    gap: 12,\\n  },\\n  emptyTitle: {\\n    color: Colors.text,\\n    fontSize: 18,\\n    fontWeight: '700' as const,\\n  },\\n  emptySubtitle: {\\n    color: Colors.muted,\\n    fontSize: 14,\\n    textAlign: 'center',\\n  },\\n  emptyCta: {\\n    marginTop: 12,\\n    paddingHorizontal: 28,\\n    paddingVertical: 14,\\n    backgroundColor: Colors.primary,\\n    borderRadius: 14,\\n  },\\n  emptyCtaText: {\\n    color: Colors.primaryBlack,\\n    fontSize: 14,\\n    fontWeight: '700' as const,\\n  },\\n});\\n\"}",
       "createdAt": 1784741866236,
-      "completedAt": 1784741950121
+      "completedAt": 1784741950121,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5427,7 +5428,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check existing API route patterns for consistency\\ncd /home/user/rork-app && grep -n 'investor-performance\\\\|investor_performance' backend/hono.ts 2>/dev/null | head -5; echo \\\"---\\\"; grep -n 'app\\\\.\\\\(get\\\\|post\\\\)\\\\(.*/api/ivx/investor' backend/hono.ts 2>/dev/null | head -10\"}",
       "createdAt": 1784741956853,
-      "completedAt": 1784741958793
+      "completedAt": 1784741958793,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5445,7 +5447,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check how existing routes are registered\\ncd /home/user/rork-app && grep -n 'app\\\\.get.*api/ivx' backend/hono.ts 2>/dev/null | tail -20\"}",
       "createdAt": 1784741958323,
-      "completedAt": 1784741958835
+      "completedAt": 1784741958835,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5475,7 +5478,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check where to add the backend route in hono.ts\\ncd /home/user/rork-app && grep -n 'handleOwnerDashboard\\\\|handleEnterpriseHealth' backend/hono.ts 2>/dev/null | head -5\"}",
       "createdAt": 1784741966858,
-      "completedAt": 1784741969013
+      "completedAt": 1784741969013,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5493,7 +5497,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check imports at top of hono.ts for pattern\\ncd /home/user/rork-app && grep -n 'import.*from.*api/ivx-' backend/hono.ts 2>/dev/null | tail -10\"}",
       "createdAt": 1784741967300,
-      "completedAt": 1784741969054
+      "completedAt": 1784741969054,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5523,7 +5528,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check existing investor/portfolio API patterns in hono.ts\\ncd /home/user/rork-app && grep -n 'portfolio\\\\|investor-dashboard\\\\|investor-performance' backend/hono.ts 2>/dev/null | head -10\"}",
       "createdAt": 1784741980742,
-      "completedAt": 1784741987129
+      "completedAt": 1784741987129,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5541,7 +5547,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check where routes are registered near the end of hono.ts\\ncd /home/user/rork-app && tail -30 backend/hono.ts\"}",
       "createdAt": 1784741982563,
-      "completedAt": 1784741987162
+      "completedAt": 1784741987162,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5559,7 +5566,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check treasury system for investor account data we can use\\ncd /home/user/rork-app && grep -n 'export function\\\\|export async' backend/services/ivx-treasury-system.ts 2>/dev/null | head -15\"}",
       "createdAt": 1784741984361,
-      "completedAt": 1784741987187
+      "completedAt": 1784741987187,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5589,7 +5597,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check existing API handler patterns\\ncd /home/user/rork-app && head -40 backend/api/ivx-owner-dashboard.ts 2>/dev/null | head -30\"}",
       "createdAt": 1784742006828,
-      "completedAt": 1784742008610
+      "completedAt": 1784742008610,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5607,7 +5616,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check how routes are imported at the end of hono.ts  \\ncd /home/user/rork-app && grep -n 'import.*handle.*Dashboard\\\\|import.*handle.*Enterprise' backend/hono.ts 2>/dev/null | head -5\"}",
       "createdAt": 1784742007345,
-      "completedAt": 1784742008653
+      "completedAt": 1784742008653,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5625,7 +5635,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check line count of hono.ts for adding route near the end\\nwc -l backend/hono.ts\"}",
       "createdAt": 1784742007984,
-      "completedAt": 1784742008677
+      "completedAt": 1784742008677,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5655,7 +5666,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check existing API handler patterns for the backend endpoint\\ncd /home/user/rork-app && grep -n 'export.*function.*handle\\\\|export.*async.*function.*handle' backend/api/ivx-owner-dashboard.ts 2>/dev/null | head -5; echo \\\"---\\\"; ls backend/api/ivx-*dashboard* 2>/dev/null\"}",
       "createdAt": 1784742015569,
-      "completedAt": 1784742016818
+      "completedAt": 1784742016818,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5673,7 +5685,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check how treasury functions can provide investor performance data\\ncd /home/user/rork-app && grep -n 'getFinancialDashboard\\\\|getAccountSummary\\\\|listInvestorAccounts\\\\|listLedger' backend/services/ivx-treasury-system.ts backend/services/ivx-treasury-finance.ts 2>/dev/null | head -10\"}",
       "createdAt": 1784742016048,
-      "completedAt": 1784742016859
+      "completedAt": 1784742016859,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5702,7 +5715,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"/**\\n * IVX Investor Performance Center — backend endpoint.\\n *\\n * GET /api/ivx/investor-performance\\n *\\n * Returns real investor performance data aggregated from the treasury system:\\n * invested capital, active deals, distributions, unrealized value, realized\\n * return, ROI, and last activity date.\\n *\\n * Owner-only: requires Bearer token. When no userId is provided, returns\\n * aggregate dashboard data for the owner.\\n */\\nimport { listInvestorAccounts, getAccountSummary, listLedger } from '../services/ivx-treasury-system';\\n\\nexport type InvestorPerformanceResponse = {\\n  ok: boolean;\\n  investedCapital: number;\\n  activeDealsCount: number;\\n  totalDistributions: number;\\n  unrealizedValue: number;\\n  realizedReturn: number;\\n  totalROI: number;\\n  lastActivityDate: string;\\n  activeDeals: Array<{\\n    id: string;\\n    title: string;\\n    investedAmount: number;\\n    currentValue: number;\\n    unrealizedGain: number;\\n    unrealizedPercent: number;\\n    status: string;\\n    lastActivityDate: string;\\n  }>;\\n  distributions: Array<{\\n    id: string;\\n    dealTitle: string;\\n    amount: number;\\n    date: string;\\n    type: 'dividend' | 'interest' | 'profit' | 'refund';\\n  }>;\\n};\\n\\nfunction formatCurrency(value: number): string {\\n  if (!Number.isFinite(value)) return '0';\\n  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);\\n}\\n\\nfunction parseBearerToken(req: Request): string | null {\\n  const auth = req.headers.get('authorization') || req.headers.get('Authorization');\\n  if (!auth || !auth.startsWith('Bearer ')) return null;\\n  return auth.slice(7).trim();\\n}\\n\\nexport async function handleInvestorPerformanceRequest(req: Request): Promise<Response> {\\n  const token = parseBearerToken(req);\\n  if (!token) {\\n    return new Response(\\n      JSON.stringify({ ok: false, error: 'Authentication required', message: 'Bearer token required.' }),\\n      { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },\\n    );\\n  }\\n\\n  try {\\n    // Get all investor accounts\\n    const accounts = await listInvestorAccounts();\\n\\n    // Aggregate metrics\\n    let investedCapital = 0;\\n    let totalDistributions = 0;\\n    let unrealizedValue = 0;\\n    let realizedReturn = 0;\\n    let lastActivityDate = '';\\n    const activeDeals: InvestorPerformanceResponse['activeDeals'] = [];\\n    const distributions: InvestorPerformanceResponse['distributions'] = [];\\n\\n    for (const account of accounts) {\\n      const summary = await getAccountSummary(account.accountId);\\n      if (summary) {\\n        investedCapital += summary.totalInvested || 0;\\n        unrealizedValue += summary.portfolioValue || 0;\\n        realizedReturn += summary.realizedGainLoss || 0;\\n        totalDistributions += summary.totalDistributions || 0;\\n\\n        if (summary.lastActivityDate && (!lastActivityDate || summary.lastActivityDate > lastActivityDate)) {\\n          lastActivityDate = summary.lastActivityDate;\\n        }\\n      }\\n\\n      // Get ledger entries for this account to build deal-level detail\\n      const entries = await listLedger({ accountId: account.accountId, limit: 500 });\\n\\n      for (const entry of entries) {\\n        if (entry.type === 'investment' && entry.propertyId) {\\n          const existing = activeDeals.find((d) => d.id === entry.propertyId!);\\n          if (existing) {\\n            existing.investedAmount += entry.amount;\\n            existing.currentValue += entry.amount;\\n          } else {\\n            activeDeals.push({\\n              id: entry.propertyId!,\\n              title: entry.propertyId || 'Investment',\\n              investedAmount: entry.amount,\\n              currentValue: entry.amount,\\n              unrealizedGain: 0,\\n              unrealizedPercent: 0,\\n              status: 'active',\\n              lastActivityDate: entry.date || '',\\n            });\\n          }\\n        }\\n\\n        if (entry.type === 'distribution' || entry.type === 'dividend' || entry.type === 'interest' || entry.type === 'profit') {\\n          distributions.push({\\n            id: entry.id,\\n            dealTitle: entry.propertyId || 'Portfolio',\\n            amount: entry.amount,\\n            date: entry.date || '',\\n            type: entry.type as 'dividend' | 'interest' | 'profit' | 'refund',\\n          });\\n        }\\n      }\\n    }\\n\\n    // Calculate unrealized gain per deal\\n    for (const deal of activeDeals) {\\n      deal.unrealizedGain = deal.currentValue - deal.investedAmount;\\n      deal.unrealizedPercent = deal.investedAmount > 0\\n        ? (deal.unrealizedGain / deal.investedAmount) * 100\\n        : 0;\\n    }\\n\\n    // Calculate overall ROI\\n    const totalROI = investedCapital > 0\\n      ? ((realizedReturn + unrealizedValue) / investedCapital) * 100\\n      : 0;\\n\\n    const response: InvestorPerformanceResponse = {\\n      ok: true,\\n      investedCapital,\\n      activeDealsCount: activeDeals.length,\\n      totalDistributions,\\n      unrealizedValue,\\n      realizedReturn,\\n      totalROI,\\n      lastActivityDate,\\n      activeDeals: activeDeals.slice(0, 50),\\n      distributions: distributions.slice(0, 50),\\n    };\\n\\n    return new Response(JSON.stringify(response), {\\n      status: 200,\\n      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },\\n    });\\n  } catch (err) {\\n    const message = err instanceof Error ? err.message : 'Unknown error';\\n    return new Response(\\n      JSON.stringify({ ok: false, error: 'INTERNAL_ERROR', message }),\\n      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },\\n    );\\n  }\\n}\\n\\nexport function investorPerformanceOptions(): Response {\\n  return new Response(null, {\\n    status: 204,\\n    headers: {\\n      'Access-Control-Allow-Origin': '*',\\n      'Access-Control-Allow-Methods': 'GET, OPTIONS',\\n      'Access-Control-Allow-Headers': 'Content-Type, Authorization',\\n    },\\n  });\\n}\\n\", \"filePath\": \"backend/api/ivx-investor-performance.ts\"}",
       "createdAt": 1784742022629,
-      "completedAt": 1784742046020
+      "completedAt": 1784742046020,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5733,7 +5747,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"limit\": 15, \"offset\": 5770}",
       "createdAt": 1784742054743,
-      "completedAt": 1784742054772
+      "completedAt": 1784742054772,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5751,7 +5766,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n 'import.*from.*api/ivx-zero-data-loss' backend/hono.ts 2>/dev/null\"}",
       "createdAt": 1784742054745,
-      "completedAt": 1784742054797
+      "completedAt": 1784742054797,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5786,7 +5802,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"import { handleZeroDataLossMigration, zeroDataLossMigrationOptions } from './api/ivx-zero-data-loss-migration';\", \"newString\": \"import { handleZeroDataLossMigration, zeroDataLossMigrationOptions } from './api/ivx-zero-data-loss-migration';\\nimport { handleInvestorPerformanceRequest, investorPerformanceOptions } from './api/ivx-investor-performance';\"}], \"filePath\": \"backend/hono.ts\"}",
       "createdAt": 1784742062121,
-      "completedAt": 1784742063876
+      "completedAt": 1784742063876,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5817,7 +5834,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"limit\": 15, \"offset\": 5770}",
       "createdAt": 1784742077292,
-      "completedAt": 1784742077554
+      "completedAt": 1784742077554,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5848,7 +5866,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"limit\": 15, \"offset\": 5770}",
       "createdAt": 1784742090108,
-      "completedAt": 1784742090309
+      "completedAt": 1784742090309,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5879,7 +5898,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"limit\": 15, \"offset\": 5770}",
       "createdAt": 1784742106296,
-      "completedAt": 1784742106518
+      "completedAt": 1784742106518,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5914,7 +5934,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"// Enterprise metrics endpoint — observability dashboard data\\napp.get('/api/ivx/enterprise/metrics', (context) => {\\n  const metrics = getEnterpriseMetrics();\\n  return context.json({\\n    ok: true,\\n    marker: IVX_ENTERPRISE_MIDDLEWARE_MARKER,\\n    timestamp: new Date().toISOString(),\\n    metrics,\\n  });\\n});\\n\\nexport default app;\", \"newString\": \"// Enterprise metrics endpoint — observability dashboard data\\napp.get('/api/ivx/enterprise/metrics', (context) => {\\n  const metrics = getEnterpriseMetrics();\\n  return context.json({\\n    ok: true,\\n    marker: IVX_ENTERPRISE_MIDDLEWARE_MARKER,\\n    timestamp: new Date().toISOString(),\\n    metrics,\\n  });\\n});\\n\\n// ============================================================\\n// IVX Investor Performance Center — real portfolio metrics\\n// ============================================================\\napp.get('/api/ivx/investor-performance', async (context) => handleInvestorPerformanceRequest(context.req.raw));\\napp.options('/api/ivx/investor-performance', () => investorPerformanceOptions());\\n\\nexport default app;\"}], \"filePath\": \"backend/hono.ts\"}",
       "createdAt": 1784742125453,
-      "completedAt": 1784742128177
+      "completedAt": 1784742128177,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -5944,7 +5965,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check how portfolio is linked in the app for navigation pattern\\ncd /home/user/rork-app && grep -n 'portfolio\\\\|investor-performance\\\\|InvestorPerformance' expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/home.tsx 2>/dev/null | head -10\"}",
       "createdAt": 1784742138572,
-      "completedAt": 1784742147715
+      "completedAt": 1784742147715,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5962,7 +5984,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check profile screen for navigation links\\ncd /home/user/rork-app && grep -n 'router.push\\\\|router.navigate\\\\|Link.*href' expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/profile.tsx 2>/dev/null | head -10\"}",
       "createdAt": 1784742144099,
-      "completedAt": 1784742147741
+      "completedAt": 1784742147741,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -5980,7 +6003,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check how the tab layout works for adding navigation\\ncd /home/user/rork-app && grep -n 'portfolio\\\\|profile' expo/app/\\\\(tabs\\\\)/_layout.tsx 2>/dev/null | head -10\"}",
       "createdAt": 1784742146224,
-      "completedAt": 1784742147764
+      "completedAt": 1784742147764,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6010,7 +6034,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Add navigation link from portfolio screen to Investor Performance Center\\ncd /home/user/rork-app && grep -n 'router.push\\\\|onPress.*portfolio\\\\|Performance' expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/portfolio.tsx 2>/dev/null | head -10\"}",
       "createdAt": 1784742159912,
-      "completedAt": 1784742164172
+      "completedAt": 1784742164172,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6028,7 +6053,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check portfolio screen for where to add navigation link\\ncd /home/user/rork-app && head -80 expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/portfolio.tsx 2>/dev/null\"}",
       "createdAt": 1784742162226,
-      "completedAt": 1784742164183
+      "completedAt": 1784742164183,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6046,7 +6072,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run backend tests to verify nothing broke\\ncd /home/user/rork-app && timeout 120 bun test backend/ --reporter=dots 2>&1 | grep -E '^[0-9]+ pass|[0-9]+ fail|[0-9]+ error|Ran [0-9]+'\"}",
       "createdAt": 1784742162730,
-      "completedAt": 1784742171248
+      "completedAt": 1784742171248,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6076,7 +6103,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Add navigation link from portfolio screen to Investor Performance Center\\ncd /home/user/rork-app && grep -n 'router.push\\\\|onPress.*portfolio\\\\|Performance\\\\|useRouter' expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/portfolio.tsx 2>/dev/null | head -10\"}",
       "createdAt": 1784742183790,
-      "completedAt": 1784742188264
+      "completedAt": 1784742188264,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6094,7 +6122,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if portfolio.tsx exists and its structure\\nls -la expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/portfolio.tsx 2>/dev/null && wc -l expo/app/\\\\(tabs\\\\)/\\\\(home\\\\)/portfolio.tsx 2>/dev/null\"}",
       "createdAt": 1784742187300,
-      "completedAt": 1784742188276
+      "completedAt": 1784742188276,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6124,7 +6153,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"ls \\\"expo/app/(tabs)/(home)/\\\" 2>/dev/null\"}",
       "createdAt": 1784742204099,
-      "completedAt": 1784742213876
+      "completedAt": 1784742213876,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6142,7 +6172,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check home.tsx for navigation pattern to add link to Investor Performance Center\\ncd /home/user/rork-app && grep -n 'router.push\\\\|onPress.*push\\\\|navigate.*portfolio' \\\"expo/app/(tabs)/(home)/home.tsx\\\" 2>/dev/null | head -10\"}",
       "createdAt": 1784742204202,
-      "completedAt": 1784742213903
+      "completedAt": 1784742213903,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6160,7 +6191,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run backend tests to verify hono.ts changes didn't break anything\\ncd /home/user/rork-app && timeout 120 bun test backend/ --reporter=dots 2>&1 | grep -E '^[0-9]+ pass|[0-9]+ fail|[0-9]+ error|Ran [0-9]+'\"}",
       "createdAt": 1784742207619,
-      "completedAt": 1784742220777
+      "completedAt": 1784742220777,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6178,7 +6210,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if portfolio screen exists  \\ncd /home/user/rork-app && find expo/app -name 'portfolio*' 2>/dev/null\"}",
       "createdAt": 1784742210630,
-      "completedAt": 1784742220804
+      "completedAt": 1784742220804,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6208,7 +6241,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Add navigation link from portfolio screen to Investor Performance Center\\ncd /home/user/rork-app && grep -n 'useRouter\\\\|router.push\\\\|onPress' \\\"expo/app/(tabs)/portfolio.tsx\\\" 2>/dev/null | head -15\"}",
       "createdAt": 1784742228593,
-      "completedAt": 1784742235610
+      "completedAt": 1784742235610,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6226,7 +6260,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check portfolio screen structure for where to add the link\\ncd /home/user/rork-app && head -60 \\\"expo/app/(tabs)/portfolio.tsx\\\" 2>/dev/null\"}",
       "createdAt": 1784742233001,
-      "completedAt": 1784742235637
+      "completedAt": 1784742235637,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6244,7 +6279,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check home.tsx for the portfolio navigation pattern (line 103)\\ncd /home/user/rork-app && sed -n '95,115p' \\\"expo/app/(tabs)/(home)/home.tsx\\\" 2>/dev/null\"}",
       "createdAt": 1784742234068,
-      "completedAt": 1784742235662
+      "completedAt": 1784742235662,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6274,7 +6310,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n 'router.push.*portfolio\\\\|onPress.*portfolio\\\\|Explore.*Deals\\\\|explore-investor-dashboard' \\\"expo/app/(tabs)/(home)/home.tsx\\\" 2>/dev/null | head -10\"}",
       "createdAt": 1784742240756,
-      "completedAt": 1784742246308
+      "completedAt": 1784742246308,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6292,7 +6329,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the portfolio navigation section in home.tsx\\ncd /home/user/rork-app && sed -n '96,115p' \\\"expo/app/(tabs)/(home)/home.tsx\\\" 2>/dev/null\"}",
       "createdAt": 1784742245005,
-      "completedAt": 1784742246337
+      "completedAt": 1784742246337,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6323,7 +6361,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/(home)/home.tsx\", \"limit\": 30, \"offset\": 95}",
       "createdAt": 1784742256406,
-      "completedAt": 1784742256412
+      "completedAt": 1784742256412,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6354,7 +6393,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/(home)/home.tsx\", \"limit\": 30, \"offset\": 95}",
       "createdAt": 1784742260447,
-      "completedAt": 1784742260529
+      "completedAt": 1784742260529,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6385,7 +6425,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/(home)/home.tsx\", \"limit\": 20, \"offset\": 95}",
       "createdAt": 1784742271374,
-      "completedAt": 1784742271380
+      "completedAt": 1784742271380,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6420,7 +6461,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"      {\\n        icon: BarChart3,\\n        title: 'Investor Dashboard',\\n        subtitle: 'Track performance & distributions',\\n        tint: Colors.orange,\\n        onPress: () => router.push('/(tabs)/portfolio' as any),\\n        testID: 'explore-investor-dashboard',\\n      },\\n    ],\", \"newString\": \"      {\\n        icon: BarChart3,\\n        title: 'Investor Dashboard',\\n        subtitle: 'Track performance & distributions',\\n        tint: Colors.orange,\\n        onPress: () => router.push('/(tabs)/portfolio' as any),\\n        testID: 'explore-investor-dashboard',\\n      },\\n      {\\n        icon: TrendingUp,\\n        title: 'Performance Center',\\n        subtitle: 'ROI, distributions & deal metrics',\\n        tint: Colors.primary,\\n        onPress: () => router.push('/investor-performance' as any),\\n        testID: 'explore-investor-performance',\\n      },\\n    ],\"}], \"filePath\": \"expo/app/(tabs)/(home)/home.tsx\"}",
       "createdAt": 1784742281283,
-      "completedAt": 1784742282938
+      "completedAt": 1784742282938,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6450,7 +6492,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 120 bun test backend/ --reporter=dots 2>&1 | grep -E '^[0-9]+ pass|[0-9]+ fail|[0-9]+ error|Ran [0-9]+'\"}",
       "createdAt": 1784742290775,
-      "completedAt": 1784742303423
+      "completedAt": 1784742303423,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6468,7 +6511,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742291224,
-      "completedAt": 1784742304307
+      "completedAt": 1784742304307,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6498,7 +6542,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/commit_module.py << 'PY'\\nimport json, base64, urllib.request\\n\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\n\\ndef commit_file(path, message):\\n    with open(path, 'rb') as f:\\n        content_b64 = base64.b64encode(f.read()).decode('ascii')\\n    payload = {\\n        \\\"action\\\": \\\"github_commit_file\\\",\\n        \\\"input\\\": {\\\"path\\\": path, \\\"content\\\": content_b64, \\\"contentEncoding\\\": \\\"base64\\\", \\\"message\\\": message},\\n        \\\"confirm\\\": True,\\n        \\\"confirmText\\\": \\\"CONFIRM_IVX_GITHUB_WRITE\\\"\\n    }\\n    body = json.dumps(payload).encode('utf-8')\\n    req = urllib.request.Request(\\n        'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n        data=body,\\n        headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},\\n        method='POST'\\n    )\\n    with urllib.request.urlopen(req, timeout=120) as resp:\\n        result = json.loads(resp.read().decode('utf-8'))\\n        sha = result.get('result', {}).get('commitSha', 'unknown')\\n        print(f'  {path}: sha={sha}')\\n\\nprint('Committing Investor Performance Center module...')\\ncommit_file('expo/app/investor-performance.tsx', 'feat: Investor Performance Center module — real portfolio metrics (invested capital, active deals, distributions, unrealized value, realized return, ROI) with search, filters, loading/empty/error states')\\ncommit_file('backend/api/ivx-investor-performance.ts', 'feat: backend endpoint GET /api/ivx/investor-performance — aggregates treasury data into investor performance metrics')\\ncommit_file('backend/hono.ts', 'feat: wire investor-performance route in hono.ts')\\ncommit_file('expo/app/(tabs)/(home)/home.tsx', 'feat: add Performance Center navigation link to home screen Explore Deals section')\\nprint('All commits done.')\\nPY\\npython3 /tmp/commit_module.py\"}",
       "createdAt": 1784742310461,
-      "completedAt": 1784742320010
+      "completedAt": 1784742320010,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6528,7 +6573,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token + trigger Render deploy\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742327241,
-      "completedAt": 1784742329486
+      "completedAt": 1784742329486,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6546,7 +6592,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/trigger_deploy5.py << 'PY'\\nimport json, urllib.request\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\npayload = {\\\"action\\\": \\\"render_trigger_deploy\\\", \\\"input\\\": {}, \\\"confirm\\\": True, \\\"confirmText\\\": \\\"CONFIRM_IVX_RENDER_DEPLOY\\\"}\\nbody = json.dumps(payload).encode('utf-8')\\nreq = urllib.request.Request('https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n    data=body, headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}, method='POST')\\nwith urllib.request.urlopen(req, timeout=120) as resp:\\n    print('status:', resp.status)\\n    print(json.dumps(json.loads(resp.read().decode('utf-8')).get('result', {}), indent=2))\\nPY\\npython3 /tmp/trigger_deploy5.py\"}",
       "createdAt": 1784742327256,
-      "completedAt": 1784742329872
+      "completedAt": 1784742329872,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6564,7 +6611,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check current runtime SHA\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742328897,
-      "completedAt": 1784742329999
+      "completedAt": 1784742329999,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6594,7 +6642,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742337383,
-      "completedAt": 1784742338295
+      "completedAt": 1784742338295,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6612,7 +6661,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742337396,
-      "completedAt": 1784742338723
+      "completedAt": 1784742338723,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6642,7 +6692,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742343846,
-      "completedAt": 1784742344270
+      "completedAt": 1784742344270,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6660,7 +6711,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742343853,
-      "completedAt": 1784742344535
+      "completedAt": 1784742344535,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6690,7 +6742,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742349927,
-      "completedAt": 1784742350059
+      "completedAt": 1784742350059,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6708,7 +6761,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742349949,
-      "completedAt": 1784742350358
+      "completedAt": 1784742350358,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6738,7 +6792,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742389266,
-      "completedAt": 1784742392134
+      "completedAt": 1784742392134,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6756,7 +6811,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742391290,
-      "completedAt": 1784742392432
+      "completedAt": 1784742392432,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6786,7 +6842,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742400494,
-      "completedAt": 1784742400692
+      "completedAt": 1784742400692,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6804,7 +6861,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742400509,
-      "completedAt": 1784742400951
+      "completedAt": 1784742400951,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6834,7 +6892,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742406981,
-      "completedAt": 1784742407303
+      "completedAt": 1784742407303,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6852,7 +6911,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742406990,
-      "completedAt": 1784742407538
+      "completedAt": 1784742407538,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6882,7 +6942,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742412861,
-      "completedAt": 1784742413593
+      "completedAt": 1784742413593,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6900,7 +6961,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742412870,
-      "completedAt": 1784742413842
+      "completedAt": 1784742413842,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6930,7 +6992,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742423833,
-      "completedAt": 1784742426976
+      "completedAt": 1784742426976,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6948,7 +7011,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742424548,
-      "completedAt": 1784742427245
+      "completedAt": 1784742427245,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -6978,7 +7042,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742432357,
-      "completedAt": 1784742433489
+      "completedAt": 1784742433489,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -6996,7 +7061,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742432792,
-      "completedAt": 1784742434214
+      "completedAt": 1784742434214,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7026,7 +7092,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742444244,
-      "completedAt": 1784742445199
+      "completedAt": 1784742445199,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7044,7 +7111,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742444482,
-      "completedAt": 1784742445667
+      "completedAt": 1784742445667,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7074,7 +7142,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify the Investor Performance Center endpoint is live\\ncurl -s 'https://api.ivxholding.com/api/ivx/investor-performance' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('ok:', d.get('ok')); print('investedCapital:', d.get('investedCapital')); print('activeDealsCount:', d.get('activeDealsCount')); print('totalROI:', d.get('totalROI'))\\\"\"}",
       "createdAt": 1784742454252,
-      "completedAt": 1784742454280
+      "completedAt": 1784742454280,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7092,7 +7161,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify runtime SHA matches latest commit\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742454264,
-      "completedAt": 1784742454423
+      "completedAt": 1784742454423,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7122,7 +7192,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify endpoint with owner token\\ncat > /tmp/verify_endpoint.py << 'PY'\\nimport json, urllib.request\\n\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\n\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/investor-performance',\\n    headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},\\n    method='GET'\\n)\\ntry:\\n    with urllib.request.urlopen(req, timeout=30) as resp:\\n        data = json.loads(resp.read().decode('utf-8'))\\n        print('HTTP', resp.status)\\n        print('ok:', data.get('ok'))\\n        print('investedCapital:', data.get('investedCapital'))\\n        print('activeDealsCount:', data.get('activeDealsCount'))\\n        print('totalDistributions:', data.get('totalDistributions'))\\n        print('unrealizedValue:', data.get('unrealizedValue'))\\n        print('realizedReturn:', data.get('realizedReturn'))\\n        print('totalROI:', data.get('totalROI'))\\n        print('lastActivityDate:', data.get('lastActivityDate'))\\n        print('activeDeals:', len(data.get('activeDeals', [])))\\n        print('distributions:', len(data.get('distributions', [])))\\nexcept urllib.error.HTTPError as e:\\n    body = e.read().decode('utf-8')\\n    print(f'HTTP {e.code}: {body[:200]}')\\nPY\\npython3 /tmp/verify_endpoint.py\"}",
       "createdAt": 1784742461476,
-      "completedAt": 1784742467771
+      "completedAt": 1784742467771,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7152,7 +7223,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742488582,
-      "completedAt": 1784742489130
+      "completedAt": 1784742489130,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7170,7 +7242,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742488590,
-      "completedAt": 1784742489423
+      "completedAt": 1784742489423,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7200,7 +7273,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742494650,
-      "completedAt": 1784742495499
+      "completedAt": 1784742495499,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7218,7 +7292,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742494751,
-      "completedAt": 1784742495840
+      "completedAt": 1784742495840,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7248,7 +7323,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742508534,
-      "completedAt": 1784742509481
+      "completedAt": 1784742509481,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7266,7 +7342,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742508542,
-      "completedAt": 1784742509757
+      "completedAt": 1784742509757,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7296,7 +7373,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742516482,
-      "completedAt": 1784742517688
+      "completedAt": 1784742517688,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7314,7 +7392,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742517315,
-      "completedAt": 1784742517946
+      "completedAt": 1784742517946,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7344,7 +7423,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742533137,
-      "completedAt": 1784742533163
+      "completedAt": 1784742533163,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7362,7 +7442,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742533144,
-      "completedAt": 1784742533344
+      "completedAt": 1784742533344,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7392,7 +7473,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742541486,
-      "completedAt": 1784742543700
+      "completedAt": 1784742543700,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7410,7 +7492,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742542732,
-      "completedAt": 1784742544091
+      "completedAt": 1784742544091,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7440,7 +7523,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742550392,
-      "completedAt": 1784742550417
+      "completedAt": 1784742550417,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7458,7 +7542,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742550399,
-      "completedAt": 1784742550418
+      "completedAt": 1784742550418,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7488,7 +7573,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742558513,
-      "completedAt": 1784742562935
+      "completedAt": 1784742562935,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7506,7 +7592,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Re-mint owner token\\ncurl -s -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); t=d.get('accessToken',''); open('/tmp/owner_at.json','w').write(json.dumps({'token':t})); print('TOKEN:', 'OK' if t else 'MISSING')\\\"\"}",
       "createdAt": 1784742561069,
-      "completedAt": 1784742564204
+      "completedAt": 1784742564204,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7536,7 +7623,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify Investor Performance Center endpoint is live\\ncat > /tmp/verify_ipc.py << 'PY'\\nimport json, urllib.request\\n\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\n\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/investor-performance',\\n    headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},\\n    method='GET'\\n)\\ntry:\\n    with urllib.request.urlopen(req, timeout=30) as resp:\\n        data = json.loads(resp.read().decode('utf-8'))\\n        print('HTTP', resp.status)\\n        print('ok:', data.get('ok'))\\n        print('investedCapital:', data.get('investedCapital'))\\n        print('activeDealsCount:', data.get('activeDealsCount'))\\n        print('totalDistributions:', data.get('totalDistributions'))\\n        print('unrealizedValue:', data.get('unrealizedValue'))\\n        print('realizedReturn:', data.get('realizedReturn'))\\n        print('totalROI:', data.get('totalROI'))\\n        print('lastActivityDate:', data.get('lastActivityDate'))\\n        print('activeDeals:', len(data.get('activeDeals', [])))\\n        print('distributions:', len(data.get('distributions', [])))\\n        print('VERDICT: ENDPOINT LIVE')\\nexcept urllib.error.HTTPError as e:\\n    body = e.read().decode('utf-8')\\n    print(f'HTTP {e.code}: {body[:300]}')\\n    print('VERDICT: ENDPOINT NOT LIVE')\\nPY\\npython3 /tmp/verify_ipc.py\"}",
       "createdAt": 1784742578503,
-      "completedAt": 1784742580561
+      "completedAt": 1784742580561,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7554,7 +7642,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify runtime SHA\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742578922,
-      "completedAt": 1784742580682
+      "completedAt": 1784742580682,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7572,7 +7661,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run full test suite one final time\\ncd /home/user/rork-app && timeout 120 bun test backend/ --reporter=dots 2>&1 | grep -E '^[0-9]+ pass|[0-9]+ fail|[0-9]+ error|Ran [0-9]+'\"}",
       "createdAt": 1784742579392,
-      "completedAt": 1784742587818
+      "completedAt": 1784742587818,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7602,7 +7692,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check existing apps to determine if we can create a new one\\ncd /home/user/rork-app && cat rork.json 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); apps=d.get('apps',[]); [print(f\\\\\\\"  {a.get('name','?')} ({a.get('framework','?')}) → {a.get('path','?')}\\\\\\\") for a in apps]\\\" 2>/dev/null || echo \\\"no rork.json\\\"\"}",
       "createdAt": 1784742604345,
-      "completedAt": 1784742605079
+      "completedAt": 1784742605079,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7632,7 +7723,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 12: Check mobile source fixes are committed\\ncd /home/user/rork-app && grep -c 'expo-image' expo/components/DealVideoCard.tsx 2>/dev/null && echo \\\"DealVideoCard: expo-image OK\\\" || echo \\\"DealVideoCard: CHECK\\\"\\ngrep -c 'expo-image' expo/components/TrustDealCard.tsx 2>/dev/null && echo \\\"TrustDealCard: expo-image OK\\\" || echo \\\"TrustDealCard: CHECK\\\"\\ngrep -c 'expo-image' expo/components/IPXHoldingCard.tsx 2>/dev/null && echo \\\"HoldingCard: expo-image OK\\\" || echo \\\"HoldingCard: CHECK\\\"\"}",
       "createdAt": 1784742633176,
-      "completedAt": 1784742638626
+      "completedAt": 1784742638626,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7650,7 +7742,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 13: Check SMTP state\\ncat > /tmp/check_smtp.py << 'PY'\\nimport json, urllib.request\\nwith open('/tmp/owner_at.json') as f:\\n    token = json.load(f)['token']\\npayload = {\\\"action\\\": \\\"get_supabase_auth_config\\\", \\\"input\\\": {}, \\\"confirm\\\": True, \\\"confirmText\\\": \\\"CONFIRM_IVX_SUPABASE_MIGRATION\\\"}\\nbody = json.dumps(payload).encode('utf-8')\\nreq = urllib.request.Request('https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n    data=body, headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}, method='POST')\\nwith urllib.request.urlopen(req, timeout=30) as resp:\\n    result = json.loads(resp.read().decode('utf-8'))\\n    config = result.get('result', {}).get('config', {})\\n    print('smtp_host:', config.get('smtp_host'))\\n    print('smtp_port:', config.get('smtp_port'))\\n    print('smtp_user:', config.get('smtp_user'))\\n    print('mailer_autoconfirm:', config.get('mailer_autoconfirm'))\\n    print('smtp_admin_email:', config.get('smtp_admin_email'))\\n    print('smtp_sender_name:', config.get('smtp_sender_name'))\\nPY\\npython3 /tmp/check_smtp.py\"}",
       "createdAt": 1784742633227,
-      "completedAt": 1784742639650
+      "completedAt": 1784742639650,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7668,7 +7761,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 15: Test rate limits via API\\ncurl -s -w '\\\\n%{http_code}' -X POST 'https://api.ivxholding.com/api/members/login' -H 'Content-Type: application/json' -d '{\\\"email\\\":\\\"test@example.com\\\",\\\"password\\\":\\\"wrong\\\"}' 2>&1 | tail -5\"}",
       "createdAt": 1784742634653,
-      "completedAt": 1784742639919
+      "completedAt": 1784742639919,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7686,7 +7780,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 19: Production parity check\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\"}",
       "createdAt": 1784742635578,
-      "completedAt": 1784742640031
+      "completedAt": 1784742640031,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7704,7 +7799,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 19: Verify landing page asset hash\\ncurl -sI 'https://ivxholding.com/' 2>&1 | grep -iE 'HTTP|etag|content-length' | head -5\"}",
       "createdAt": 1784742637421,
-      "completedAt": 1784742640148
+      "completedAt": 1784742640148,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7722,7 +7818,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 19: Verify Investor Performance Center module is live\\ncurl -s -H \\\"Authorization: Bearer $(python3 -c \\\"import json; print(json.load(open('/tmp/owner_at.json'))['token'])\\\")\\\" 'https://api.ivxholding.com/api/ivx/investor-performance' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('IPC_LIVE:', d.get('ok'), 'investedCapital:', d.get('investedCapital'))\\\"\"}",
       "createdAt": 1784742637757,
-      "completedAt": 1784742642364
+      "completedAt": 1784742642364,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
@@ -7752,7 +7849,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 12: Verify mobile source fixes\\ncd /home/user/rork-app && echo \\\"=== DealVideoCard expo-image ===\\\" && grep -c 'expo-image' expo/components/DealVideoCard.tsx 2>/dev/null && echo \\\"=== TrustDealCard expo-image ===\\\" && grep -c 'expo-image' expo/components/TrustDealCard.tsx 2>/dev/null && echo \\\"=== IPXHoldingCard expo-image ===\\\" && grep -c 'expo-image' expo/components/IPXHoldingCard.tsx 2>/dev/null; echo \\\"=== Home skeleton ===\\\" && grep -c 'Skeleton\\\\|skeleton' \\\"expo/app/(tabs)/(home)/home.tsx\\\" 2>/dev/null; echo \\\"=== CRM skeleton ===\\\" && grep -c 'Skeleton\\\\|skeleton' \\\"expo/app/(tabs)/crm.tsx\\\" 2>/dev/null; echo \\\"=== Invest hardcoded colors ===\\\" && grep -c \\\"'#[0-9A-Fa-f]\\\" \\\"expo/app/(tabs)/invest/index.tsx\\\" 2>/dev/null; echo \\\"=== Profit tools hardcoded colors ===\\\" && grep -c \\\"'#[0-9A-Fa-f]\\\" \\\"expo/app/(tabs)/invest/profit-tools.tsx\\\" 2>/dev/null\"}",
       "createdAt": 1784742660356,
-      "completedAt": 1784742668471
+      "completedAt": 1784742668471,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7770,7 +7868,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 13: Auth verification — login rate limit, member login, owner login\\n# Test member login\\ncurl -s -X POST 'https://api.ivxholding.com/api/members/login' -H 'Content-Type: application/json' -d '{\\\"email\\\":\\\"test@example.com\\\",\\\"password\\\":\\\"wrong\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('MEMBER_LOGIN_WRONG:', d.get('success'), d.get('message','')[:60])\\\"\"}",
       "createdAt": 1784742661555,
-      "completedAt": 1784742668750
+      "completedAt": 1784742668750,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7788,7 +7887,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 13: Test owner login\\ncurl -s -X POST 'https://api.ivxholding.com/api/ivx/owner-passwordless-login' -H 'Content-Type: application/json' -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\"}' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('OWNER_LOGIN:', 'OK' if d.get('accessToken') else 'FAIL')\\\"\"}",
       "createdAt": 1784742664455,
-      "completedAt": 1784742669280
+      "completedAt": 1784742669280,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7806,7 +7906,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 19: Production parity\\ncurl -s 'https://api.ivxholding.com/api/ivx/version' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('RUNTIME_SHA:', d.get('commit','?')[:12])\\\"\\necho \\\"---\\\"\\ncurl -sI 'https://ivxholding.com/' 2>&1 | grep -iE 'HTTP|etag' | head -3\\necho \\\"---\\\"\\ncurl -s -H \\\"Authorization: Bearer $(python3 -c \\\"import json; print(json.load(open('/tmp/owner_at.json'))['token'])\\\")\\\" 'https://api.ivxholding.com/api/ivx/investor-performance' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('IPC_LIVE:', d.get('ok'))\\\"\"}",
       "createdAt": 1784742665789,
-      "completedAt": 1784742670914
+      "completedAt": 1784742670914,
+      "compactedAt": 1784752457903
     },
     {
       "type": "tool",
@@ -7824,7 +7925,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Stage 12: Check current APK version\\ncurl -sI 'https://ivxholding.com/apk/ivx-holdings-v1.4.35.apk' 2>&1 | grep -iE 'HTTP|content-length|etag' | head -5\\necho \\\"---\\\"\\ngrep 'versionCode\\\\|versionName' expo/app.config.ts 2>/dev/null | head -5\"}",
       "createdAt": 1784742666832,
-      "completedAt": 1784742670976
+      "completedAt": 1784742670976,
+      "compactedAt": 1784752457903
     },
     {
       "type": "reasoning",
