@@ -2200,13 +2200,37 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           console.log('[Auth] Timezone auto-detect failed (non-blocking):', (tzError as Error)?.message);
         }
 
+        // If signUp did not return a session (email confirmation still active at project level),
+        // try to sign in immediately — the backend auto-confirms emails, so signInWithPassword
+        // should succeed right away.
+        if (!authData.session && authData.user) {
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password: data.password,
+          });
+          if (!signInError && signInData.session) {
+            const handledSession = await handleSession(signInData.session);
+            if (!handledSession.accepted) {
+              return {
+                success: false,
+                message: handledSession.blockedReason ?? getAdminAccessLockMessage(),
+                requiresLogin: false,
+                email: normalizedEmail,
+                accountType,
+                ownerReviewRequired,
+              };
+            }
+            authData.session = signInData.session;
+          }
+        }
+
         console.log('[Auth] Registration successful for:', authData.user.id);
         return {
           success: true,
           message: isOwnerSignup
             ? (authData.session
               ? 'Owner account created and approved. You can open Owner Access now with this account.'
-              : 'Owner account created and approved. Please sign in with this email after confirmation.')
+              : 'Owner account created and approved. Please sign in with this email.')
             : (authData.session
               ? 'Registration successful.'
               : 'Registration successful. Please sign in with your account.'),

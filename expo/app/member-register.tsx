@@ -268,8 +268,9 @@ export default function MemberRegisterScreen() {
       });
 
       if (result.success && result.userId) {
+        // Email is auto-confirmed server-side — skip Verify step, go to Dashboard
         setUserId(result.userId);
-        setStep('Verify');
+        setStep('Dashboard');
       } else {
         Alert.alert('Registration Failed', result.message || 'Could not create account. Please try again.');
       }

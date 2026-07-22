@@ -54,6 +54,7 @@ type DeveloperDeployAction =
   | 'verify_ses_email_identity'
   | 'list_ses_identities'
   | 'get_supabase_auth_config'
+  | 'update_supabase_auth_config'
   | 'disable_supabase_mfa_aal2_enforcement'
   | 'unenroll_owner_mfa_factor'
   | 'cloudfront_invalidate'
@@ -126,6 +127,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'verify_ses_email_identity'
     || normalized === 'list_ses_identities'
     || normalized === 'get_supabase_auth_config'
+    || normalized === 'update_supabase_auth_config'
     || normalized === 'disable_supabase_mfa_aal2_enforcement'
     || normalized === 'unenroll_owner_mfa_factor'
     || normalized === 'cloudfront_invalidate'
@@ -395,6 +397,59 @@ async function getSupabaseAuthConfig(): Promise<{
     return { ok: true, projectRef, config, getStatus: getResp.status, message: 'Supabase auth config retrieved.' };
   } catch (err) {
     return { ok: false, projectRef, config: null, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function updateSupabaseAuthConfig(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const managementToken = readEnv('SUPABASE_ACCESS_TOKEN');
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  if (!managementToken) {
+    return { ok: false, message: 'SUPABASE_ACCESS_TOKEN not configured in runtime.' };
+  }
+  if (!supabaseUrl) {
+    return { ok: false, message: 'Supabase URL is not configured.' };
+  }
+  const projectRefMatch = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
+  const projectRef = projectRefMatch?.[1] ?? null;
+  if (!projectRef) {
+    return { ok: false, message: `Could not extract project ref from Supabase URL: ${supabaseUrl}` };
+  }
+  const patchBody: Record<string, unknown> = {};
+  if (input.mailer_autoconfirm === true || input.mailer_autoconfirm === 'true') {
+    patchBody.mailer_autoconfirm = true;
+  }
+  if (input.enable_signup === true || input.enable_signup === 'true') {
+    patchBody.enable_signup = true;
+  }
+  if (Object.keys(patchBody).length === 0) {
+    return { ok: false, message: 'No valid config fields to update. Supported: mailer_autoconfirm, enable_signup.' };
+  }
+  try {
+    const authUrl = `https://api.supabase.com/v1/projects/${projectRef}/config/auth`;
+    const patchResp = await fetch(authUrl, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${managementToken}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(patchBody),
+    });
+    const patchText = await patchResp.text();
+    if (!patchResp.ok) {
+      return { ok: false, projectRef, patchStatus: patchResp.status, patchError: patchText.slice(0, 300), patchBody, message: `PATCH auth config failed: HTTP ${patchResp.status}` };
+    }
+    // Re-read to verify
+    const getResp = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
+    const getText = await getResp.text();
+    const afterConfig = JSON.parse(getText) as Record<string, unknown>;
+    return {
+      ok: true,
+      projectRef,
+      patchStatus: patchResp.status,
+      patchBody,
+      afterMailerAutoconfirm: afterConfig.mailer_autoconfirm,
+      afterEnableSignup: afterConfig.enable_signup,
+      message: 'Supabase auth config updated successfully.',
+    };
+  } catch (err) {
+    return { ok: false, projectRef, message: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -1678,6 +1733,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'get_supabase_auth_config') {
     return await getSupabaseAuthConfig();
+  }
+  if (action === 'update_supabase_auth_config') {
+    return await updateSupabaseAuthConfig(input);
   }
   if (action === 'disable_supabase_mfa_aal2_enforcement') {
     return await runDisableSupabaseMfaAal2Enforcement();

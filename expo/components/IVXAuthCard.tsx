@@ -649,16 +649,12 @@ export function IVXAuthCard({
       });
 
       if (result.success && result.userId) {
+        // Email is auto-confirmed server-side — skip verification, go straight to complete
         setMemberUserId(result.userId);
-        setStep('verify_email');
+        setStep('complete');
         if (Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-        // Auto-send email verification code
-        try {
-          await MemberService.sendEmailCode(result.userId);
-        } catch {}
-        setResendTimer(60);
       } else {
         // Fallback to auth context register
         const authResult = await register({

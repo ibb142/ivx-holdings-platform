@@ -377,9 +377,14 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
           return;
         }
 
+        // Email is auto-confirmed server-side — skip verification, go straight to complete
         setEmailVerified(true);
         setPhoneVerified(true);
         setCurrentStep('complete');
+        // Auto-navigate to login after a brief success display
+        setTimeout(() => {
+          navigateToLogin(result.email ?? formData.email, true);
+        }, 1500);
       } else if (result.alreadyExists) {
         console.warn('[Signup] Existing account routed to sign-in:', result.message);
         setExistingAccountDetected(true);
