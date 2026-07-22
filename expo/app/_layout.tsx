@@ -20,8 +20,25 @@ import { IPXProvider } from "@/lib/ipx-context";
 import { WalletProvider } from "@/lib/wallet-context";
 import { EarnProvider } from "@/lib/earn-context";
 import { EmailProvider } from "@/lib/email-context";
+import { NetworkProvider } from "@/lib/network-context";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 2,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: false,
+      networkMode: 'online',
+    },
+    mutations: {
+      retry: 1,
+      networkMode: 'online',
+    },
+  },
+});
 
 // Prevent native splash from auto-hiding before React renders.
 // Without this, Android dismisses the native splash before the JS bundle
@@ -196,6 +213,8 @@ export default function RootLayout() {
                                 <EarnProvider>
                                   <ProviderBoundary name="Email">
                                     <EmailProvider>
+                              <ProviderBoundary name="Network">
+                                    <NetworkProvider>
                               <ProviderMountProbe>
                                 <StatusBar style="light" />
                                 <Stack
@@ -214,6 +233,8 @@ export default function RootLayout() {
                                   <Stack.Screen name="modal" options={{ presentation: "modal" }} />
                                 </Stack>
                               </ProviderMountProbe>
+                                    </NetworkProvider>
+                                  </ProviderBoundary>
                                     </EmailProvider>
                                   </ProviderBoundary>
                                 </EarnProvider>
