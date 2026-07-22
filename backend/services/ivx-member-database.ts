@@ -155,7 +155,7 @@ export async function registerMember(input: MemberRegistrationInput): Promise<Me
         // NOTE: production profiles table has no status/email_verified/phone_verified
         // columns — including them made every registration profile insert fail silently.
         role: 'investor',
-        kyc_status: 'not_started',
+        kyc_status: 'pending', // DB check constraint only allows: pending, in_review, approved, rejected
         total_invested: 0,
         total_returns: 0,
         picture_url: input.pictureUrl ?? '',

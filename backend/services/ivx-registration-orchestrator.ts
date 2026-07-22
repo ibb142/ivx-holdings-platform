@@ -21,10 +21,56 @@
  *  - GET  /api/ivx/registration/health      (config + Supabase + tables reachable)
  */
 import { randomUUID, createHash } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 import { registerMember, type MemberRegistrationInput } from './ivx-member-database';
 import { onboardNewMember, VALID_ROLE_INTERESTS, type MemberRoleInterest } from './ivx-member-investor-system';
 import { upsertCanonicalMember } from './ivx-canonical-members';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
+
+function getSupabaseAdmin() {
+  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+async function insertInvestmentInterest(input: {
+  authUserId: string;
+  email: string;
+  registrationRequestId: string;
+  opportunityId?: string;
+  opportunityTitle?: string;
+  amount?: number;
+  investmentType?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!input.opportunityId && !input.opportunityTitle && !input.amount) {
+    return { ok: true }; // No opportunity context — skip interest row
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('landing_investments').insert({
+      intent_id: input.registrationRequestId,
+      deal_id: input.opportunityId || null,
+      deal_title: input.opportunityTitle || null,
+      investment_type: input.investmentType || null,
+      amount: input.amount || 0,
+      investor_email: input.email,
+      investor_id: input.authUserId,
+      status: 'pending_payment',
+      terms_accepted: true,
+      source: 'landing_page',
+      registration_request_id: input.registrationRequestId,
+    });
+    if (error) {
+      console.error('[RegistrationOrchestrator] landing_investments insert failed:', error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[RegistrationOrchestrator] landing_investments insert exception:', msg);
+    return { ok: false, error: msg };
+  }
+}
 
 const DEPLOYMENT_MARKER = 'ivx-registration-orchestrator-v1';
 
@@ -359,11 +405,84 @@ export async function orchestrateRegistration(
     });
 
     if (result.success && result.userId) {
-      // Profile / interest / session fanout — the existing handler already calls
-      // onboardNewMember + upsertCanonicalMember non-fatally. We record success.
+      const authUserId = result.userId;
+
+      // --- PROFILE_CREATING stage ---
       await saveRegistrationState({
         ...initialState,
-        authUserId: result.userId,
+        authUserId,
+        stage: 'PROFILE_CREATING',
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Canonical member sync (Supabase `members` table) — non-fatal but logged.
+      try {
+        await upsertCanonicalMember({
+          fullName: `${input.firstName} ${input.lastName}`.trim(),
+          email: normalizedEmail,
+          phone: input.phone,
+          memberType: input.roles && input.roles.length > 0 ? input.roles[0] : 'member',
+          source: 'landing_page',
+          sourceDetail: 'registration-orchestrator',
+          verificationStatus: 'unverified',
+          smsVerified: false,
+          emailVerified: false,
+          investorInterest: input.roles ? input.roles.join(',') : '',
+          preferredZipcode: input.zipCode || '',
+          budgetRange: '',
+          authUserId,
+          landingSubmissionId: registrationRequestId,
+          pictureUrl: input.pictureUrl || '',
+        });
+      } catch (canonicalErr) {
+        console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalErr instanceof Error ? canonicalErr.message : 'unknown');
+      }
+
+      // Onboarding fanout (file-based member store) — non-fatal but logged.
+      try {
+        await onboardNewMember({
+          userId: authUserId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: normalizedEmail,
+          phone: input.phone,
+          country: input.country || '',
+          zipCode: input.zipCode || '',
+          roles: (input.roles || []).filter((r): r is MemberRoleInterest => VALID_ROLE_INTERESTS.has(r as MemberRoleInterest)),
+          pictureUrl: input.pictureUrl,
+        });
+      } catch (onboardErr) {
+        console.error('[RegistrationOrchestrator] onboardNewMember failed:', onboardErr instanceof Error ? onboardErr.message : 'unknown');
+      }
+
+      // --- INTEREST_CREATING stage ---
+      await saveRegistrationState({
+        ...initialState,
+        authUserId,
+        stage: 'INTEREST_CREATING',
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Investment interest row (Supabase `landing_investments` table) — non-fatal but logged.
+      if (input.opportunityId || input.opportunityTitle || input.amount) {
+        const interestResult = await insertInvestmentInterest({
+          authUserId,
+          email: normalizedEmail,
+          registrationRequestId,
+          opportunityId: input.opportunityId,
+          opportunityTitle: input.opportunityTitle,
+          amount: input.amount,
+          investmentType: input.investmentType,
+        });
+        if (!interestResult.ok) {
+          console.error('[RegistrationOrchestrator] insertInvestmentInterest failed:', interestResult.error);
+        }
+      }
+
+      // --- COMPLETED ---
+      await saveRegistrationState({
+        ...initialState,
+        authUserId,
         stage: 'COMPLETED',
         finalStatus: 'completed',
         updatedAt: new Date().toISOString(),
@@ -374,7 +493,7 @@ export async function orchestrateRegistration(
         stage: 'EMAIL_CONFIRMATION_REQUIRED',
         registrationRequestId,
         traceId,
-        authUserId: result.userId,
+        authUserId,
         email: normalizedEmail,
         requiresVerification: result.requiresVerification,
         resumeToken: registrationRequestId,
