@@ -1196,6 +1196,26 @@ import {
   handleListDealPathways,
 } from './api/ivx-deal-pathways';
 import {
+  handleGetPaymentConfig,
+  handleCreatePayment,
+  handleGetPayment,
+  handleCreateBankLink,
+  handleStripeWebhook,
+  handleRefundPayment,
+  handleGetPortfolio,
+  handleGetTransactions,
+  handleGetReceipt,
+  handleAdminGetAllPayments,
+  handleAdminGetPaymentStats,
+  handleJVApplication,
+  handleBuyerOffer,
+  handleListJVApplications,
+  handleListBuyerOffers,
+  handleReviewJVApplication,
+  handleReviewBuyerOffer,
+  handlePaymentOptions,
+} from './api/ivx-payment-api';
+import {
   videoFeedOptions,
   handleVideoFeed,
   handleVideoDownload,
@@ -5046,6 +5066,41 @@ app.post('/api/ivx/deals/:dealId/publish', async (c) => {
 });
 app.get('/api/ivx/deals/:dealId/sync-report', async (c) => handleGetSyncReport(c.req.raw, c.req.param('dealId')));
 app.get('/api/ivx/deals/:dealId/audit-trail', async (c) => handleGetAuditTrail(c.req.raw, c.req.param('dealId')));
+
+// ── Payment Infrastructure (Stripe) ──
+app.options('/api/ivx/payments/config', () => handlePaymentOptions());
+app.get('/api/ivx/payments/config', async (c) => handleGetPaymentConfig());
+app.options('/api/ivx/payments/create', () => handlePaymentOptions());
+app.post('/api/ivx/payments/create', async (c) => handleCreatePayment(c.req.raw));
+app.options('/api/ivx/payments/bank-link', () => handlePaymentOptions());
+app.post('/api/ivx/payments/bank-link', async (c) => handleCreateBankLink(c.req.raw));
+app.options('/api/ivx/payments/webhook', () => handlePaymentOptions());
+app.post('/api/ivx/payments/webhook', async (c) => handleStripeWebhook(c.req.raw));
+app.options('/api/ivx/payments/portfolio', () => handlePaymentOptions());
+app.get('/api/ivx/payments/portfolio', async (c) => handleGetPortfolio(c.req.raw));
+app.options('/api/ivx/payments/transactions', () => handlePaymentOptions());
+app.get('/api/ivx/payments/transactions', async (c) => handleGetTransactions(c.req.raw));
+app.options('/api/ivx/payments/receipts/:receiptId', () => handlePaymentOptions());
+app.get('/api/ivx/payments/receipts/:receiptId', async (c) => handleGetReceipt(c.req.raw, c.req.param('receiptId')));
+app.get('/api/ivx/payments/:paymentId', async (c) => handleGetPayment(c.req.raw, c.req.param('paymentId')));
+app.options('/api/ivx/payments/:paymentId/refund', () => handlePaymentOptions());
+app.post('/api/ivx/payments/:paymentId/refund', async (c) => handleRefundPayment(c.req.raw, c.req.param('paymentId')));
+app.options('/api/ivx/payments/admin/all', () => handlePaymentOptions());
+app.get('/api/ivx/payments/admin/all', async (c) => handleAdminGetAllPayments(c.req.raw));
+app.options('/api/ivx/payments/admin/stats', () => handlePaymentOptions());
+app.get('/api/ivx/payments/admin/stats', async (c) => handleAdminGetPaymentStats(c.req.raw));
+app.options('/api/ivx/payments/jv-application', () => handlePaymentOptions());
+app.post('/api/ivx/payments/jv-application', async (c) => handleJVApplication(c.req.raw));
+app.options('/api/ivx/payments/buyer-offer', () => handlePaymentOptions());
+app.post('/api/ivx/payments/buyer-offer', async (c) => handleBuyerOffer(c.req.raw));
+app.options('/api/ivx/payments/jv-applications', () => handlePaymentOptions());
+app.get('/api/ivx/payments/jv-applications', async (c) => handleListJVApplications(c.req.raw));
+app.options('/api/ivx/payments/buyer-offers', () => handlePaymentOptions());
+app.get('/api/ivx/payments/buyer-offers', async (c) => handleListBuyerOffers(c.req.raw));
+app.options('/api/ivx/payments/jv-applications/:appId/review', () => handlePaymentOptions());
+app.post('/api/ivx/payments/jv-applications/:appId/review', async (c) => handleReviewJVApplication(c.req.raw, c.req.param('appId')));
+app.options('/api/ivx/payments/buyer-offers/:offerId/review', () => handlePaymentOptions());
+app.post('/api/ivx/payments/buyer-offers/:offerId/review', async (c) => handleReviewBuyerOffer(c.req.raw, c.req.param('offerId')));
 
 // Property Admin (public-features alias)
 app.options('/api/ivx/property-admin', () => publicFeatureOptions());
