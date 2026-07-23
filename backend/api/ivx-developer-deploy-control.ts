@@ -75,7 +75,19 @@ type DeveloperDeployAction =
   | 'ai_generate_fix'
   | 'ai_review_architecture'
   | 'analyze_dependencies'
-  | 'autonomous_fix_cycle';
+  | 'autonomous_fix_cycle'
+  | 'ai_design_feature'
+  | 'ai_generate_code'
+  | 'ai_generate_tests'
+  | 'ai_refactor_code'
+  | 'ai_debug_runtime'
+  | 'ai_security_audit'
+  | 'ai_performance_analysis'
+  | 'ai_generate_docs'
+  | 'test_api_endpoint'
+  | 'render_get_logs'
+  | 'autonomous_feature_cycle'
+  | 'github_commit_multi_file';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -166,6 +178,18 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'ai_review_architecture'
     || normalized === 'analyze_dependencies'
     || normalized === 'autonomous_fix_cycle'
+    || normalized === 'ai_design_feature'
+    || normalized === 'ai_generate_code'
+    || normalized === 'ai_generate_tests'
+    || normalized === 'ai_refactor_code'
+    || normalized === 'ai_debug_runtime'
+    || normalized === 'ai_security_audit'
+    || normalized === 'ai_performance_analysis'
+    || normalized === 'ai_generate_docs'
+    || normalized === 'test_api_endpoint'
+    || normalized === 'render_get_logs'
+    || normalized === 'autonomous_feature_cycle'
+    || normalized === 'github_commit_multi_file'
  ) {
     return normalized;
   }
@@ -189,7 +213,17 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'ai_analyze_code'
     || action === 'ai_generate_fix'
     || action === 'ai_review_architecture'
-    || action === 'analyze_dependencies';
+    || action === 'analyze_dependencies'
+    || action === 'ai_design_feature'
+    || action === 'ai_generate_code'
+    || action === 'ai_generate_tests'
+    || action === 'ai_refactor_code'
+    || action === 'ai_debug_runtime'
+    || action === 'ai_security_audit'
+    || action === 'ai_performance_analysis'
+    || action === 'ai_generate_docs'
+    || action === 'test_api_endpoint'
+    || action === 'render_get_logs';
 }
 
 /** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
@@ -203,6 +237,12 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
     return CREATE_REPOSITORY_CONFIRM_TEXT;
   }
   if (action === 'autonomous_fix_cycle') {
+    return GITHUB_CONFIRM_TEXT;
+  }
+  if (action === 'autonomous_feature_cycle') {
+    return GITHUB_CONFIRM_TEXT;
+  }
+  if (action === 'github_commit_multi_file') {
     return GITHUB_CONFIRM_TEXT;
   }
   if (action.startsWith('github_')) {
@@ -1879,8 +1919,8 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle'],
-      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'autonomous_feature_cycle', 'github_commit_multi_file'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs'],
       ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -1890,7 +1930,7 @@ async function buildStatus(): Promise<Record<string, unknown>> {
       serviceIdConfigured: renderServiceConfigured,
       credentialSource: renderCredentialSource,
       serviceName: readEnv('RENDER_SERVICE_NAME') || 'ivx-holdings-platform',
-      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_update_subdomain_policy', 'render_update_source'],
+      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs'],
       deployConfirmationTextRequired: RENDER_DEPLOY_CONFIRM_TEXT,
       serviceUpdateConfirmationTextRequired: RENDER_SERVICE_CONFIRM_TEXT,
     },
@@ -2573,6 +2613,757 @@ async function runAutonomousFixCycle(input: Record<string, unknown>): Promise<Re
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GENERAL-PURPOSE SENIOR DEVELOPER ACTIONS (Rork-level parity)
+// 12 new actions: design, implement, debug, deploy, verify across full stack
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Read-only: AI-powered feature design — generates implementation plan from a feature description. */
+export async function runAiDesignFeature(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const featureDescription = readTrimmed(input.featureDescription) || readTrimmed(input.description);
+  const projectContext = readTrimmed(input.projectContext) || readTrimmed(input.context);
+  const targetPlatform = readTrimmed(input.platform) || readTrimmed(input.targetPlatform) || 'general';
+  if (!featureDescription || featureDescription.length < 10) {
+    throw new Error('featureDescription or description (at least 10 characters) is required for ai_design_feature.');
+  }
+  const system = 'You are a senior software engineer designing a feature implementation plan. Provide:\n1. OVERVIEW: What the feature does and why (2-3 sentences)\n2. COMPONENTS: List of components/modules to create or modify (with file paths)\n3. DATA MODEL: Database schema changes, types, or API contracts needed\n4. IMPLEMENTATION STEPS: Ordered, numbered steps with specific code changes\n5. TESTING STRATEGY: What to test and how (unit, integration, E2E)\n6. RISKS: Edge cases, security concerns, performance risks\n7. ESTIMATED COMPLEXITY: low | medium | high (with justification)\n\nBe specific with file paths and code patterns. This plan must be directly actionable.';
+  const prompt = `Feature Design Request:\nPlatform: ${targetPlatform}\n${projectContext ? `Project Context:\n${projectContext.slice(0, 10_000)}\n` : ''}\nFeature Description:\n${featureDescription.slice(0, 15_000)}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 3000,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_design_feature',
+    featureDescription: featureDescription.slice(0, 200),
+    targetPlatform,
+    designPlan: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered code generation — generates new code from a specification. */
+export async function runAiGenerateCode(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const specification = readTrimmed(input.specification) || readTrimmed(input.spec);
+  const language = readTrimmed(input.language) || readTrimmed(input.lang) || 'typescript';
+  const framework = readTrimmed(input.framework) || '';
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath) || '';
+  const existingCode = readTrimmed(input.existingCode) || readTrimmed(input.context) || '';
+  if (!specification || specification.length < 10) {
+    throw new Error('specification or spec (at least 10 characters) is required for ai_generate_code.');
+  }
+  const system = 'You are a senior software engineer generating production-quality code. Output ONLY the code file content with a brief comment at the top. No markdown fences. The code must be complete, type-safe, and directly usable. Follow best practices for the specified language and framework.';
+  const prompt = `Code Generation Request:\nLanguage: ${language}\n${framework ? `Framework: ${framework}\n` : ''}${filePath ? `Target File: ${filePath}\n` : ''}\nSpecification:\n${specification.slice(0, 20_000)}\n${existingCode ? `\nExisting Code Context:\n${existingCode.slice(0, 10_000)}\n` : ''}Output the complete code file. No markdown fences.`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 4000,
+  });
+  let generatedCode = result.text.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_generate_code',
+    language,
+    framework: framework || null,
+    path: filePath || null,
+    generatedCode,
+    generatedCodeLength: generatedCode.length,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered test generation — generates test cases for given code. */
+export async function runAiGenerateTests(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath) || '';
+  const testFramework = readTrimmed(input.testFramework) || readTrimmed(input.framework) || 'bun:test';
+  const language = readTrimmed(input.language) || 'typescript';
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_generate_tests.');
+  }
+  const system = 'You are a senior software engineer generating comprehensive test suites. Output ONLY the test file content. No markdown fences. Include:\n- Happy path tests\n- Edge case tests (null, undefined, empty, boundary)\n- Error handling tests\n- Integration tests where applicable\nUse the specified test framework conventions.';
+  const prompt = `Test Generation Request:\nLanguage: ${language}\nTest Framework: ${testFramework}\n${filePath ? `Source File: ${filePath}\n` : ''}\nCode to Test:\n${code.slice(0, 30_000)}\n\nOutput the complete test file. No markdown fences.`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 4000,
+  });
+  let testCode = result.text.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_generate_tests',
+    path: filePath || null,
+    testFramework,
+    testCode,
+    testCodeLength: testCode.length,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered code refactoring — refactors code for better structure, maintainability. */
+export async function runAiRefactorCode(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath) || '';
+  const refactorGoal = readTrimmed(input.goal) || readTrimmed(input.refactorGoal) || 'improve readability and maintainability';
+  const language = readTrimmed(input.language) || '';
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_refactor_code.');
+  }
+  const system = 'You are a senior software engineer refactoring code. Output ONLY the refactored code. No markdown fences. Preserve all existing functionality while improving:\n- Code organization and separation of concerns\n- Naming clarity\n- Error handling\n- Type safety\n- Performance\nAdd a brief comment at the top explaining what was refactored and why.';
+  const prompt = `Refactor Request:\n${language ? `Language: ${language}\n` : ''}${filePath ? `File: ${filePath}\n` : ''}Goal: ${refactorGoal}\n\nOriginal Code:\n${code.slice(0, 30_000)}\n\nOutput the complete refactored code. No markdown fences.`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 4000,
+  });
+  let refactoredCode = result.text.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_refactor_code',
+    path: filePath || null,
+    refactorGoal,
+    refactoredCode,
+    refactoredCodeLength: refactoredCode.length,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered runtime error diagnosis — diagnoses from stack traces and error messages. */
+export async function runAiDebugRuntime(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const errorStack = readTrimmed(input.errorStack) || readTrimmed(input.stackTrace) || readTrimmed(input.error);
+  const errorMessage = readTrimmed(input.errorMessage) || readTrimmed(input.message) || '';
+  const codeContext = readTrimmed(input.codeContext) || readTrimmed(input.code) || '';
+  const runtimeContext = readTrimmed(input.runtimeContext) || readTrimmed(input.context) || '';
+  if (!errorStack && !errorMessage) {
+    throw new Error('errorStack or errorMessage is required for ai_debug_runtime.');
+  }
+  const system = 'You are a senior software engineer debugging a runtime error. Analyze the error and provide:\n1. ERROR TYPE: Classification (TypeError, ReferenceError, LogicError, RaceCondition, etc.)\n2. ROOT CAUSE: Most likely cause (1-3 sentences)\n3. STACK TRACE ANALYSIS: Walk through the key frames and what they tell us\n4. AFFECTED CODE: Which lines/files are likely the source\n5. FIX: Specific code changes needed (with snippets)\n6. PREVENTION: How to prevent this class of error in the future\n\nBe precise and technical.';
+  const prompt = `Runtime Debug Request:\n${errorMessage ? `Error Message: ${errorMessage}\n` : ''}${errorStack ? `\nStack Trace:\n${errorStack.slice(0, 10_000)}\n` : ''}${codeContext ? `\nCode Context:\n${codeContext.slice(0, 15_000)}\n` : ''}${runtimeContext ? `\nRuntime Context:\n${runtimeContext.slice(0, 5_000)}\n` : ''}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 2500,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_debug_runtime',
+    errorMessage: errorMessage.slice(0, 200) || null,
+    diagnosis: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered security audit — scans code for vulnerabilities and security issues. */
+export async function runAiSecurityAudit(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath) || '';
+  const language = readTrimmed(input.language) || '';
+  const auditScope = readTrimmed(input.scope) || readTrimmed(input.auditScope) || 'general';
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_security_audit.');
+  }
+  const system = 'You are a senior security engineer performing a code security audit. Analyze for:\n1. INJECTION RISKS: SQL injection, command injection, XSS, path traversal\n2. AUTH/AUTHZ: Broken access control, missing auth checks, privilege escalation\n3. SECRETS: Hardcoded credentials, tokens, API keys in code\n4. DATA EXPOSURE: Sensitive data in logs, responses, or error messages\n5. DEPENDENCY RISKS: Known vulnerable patterns or outdated APIs\n6. CRYPTO: Weak hashing, insecure random, hardcoded IVs\n7. SEVERITY: Rate each finding as critical | high | medium | low\n\nBe thorough. Report only real vulnerabilities, not false positives.';
+  const prompt = `Security Audit Request:\n${filePath ? `File: ${filePath}\n` : ''}${language ? `Language: ${language}\n` : ''}Audit Scope: ${auditScope}\n\nCode:\n${code.slice(0, 30_000)}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 3000,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_security_audit',
+    path: filePath || null,
+    auditScope,
+    auditReport: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered performance analysis — identifies bottlenecks and optimization opportunities. */
+export async function runAiPerformanceAnalysis(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath) || '';
+  const perfContext = readTrimmed(input.perfContext) || readTrimmed(input.context) || '';
+  const language = readTrimmed(input.language) || '';
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_performance_analysis.');
+  }
+  const system = 'You are a senior performance engineer analyzing code for bottlenecks. Provide:\n1. BOTTLENECKS: Identify specific performance issues (N+1 queries, unnecessary re-renders, blocking I/O, memory leaks, algorithmic complexity)\n2. IMPACT: Rate each as critical | high | medium | low with estimated affected user scenarios\n3. OPTIMIZATIONS: Specific code changes to fix each bottleneck (with snippets)\n4. METRICS: What to measure to verify the improvement\n5. TRADE-OFFS: Any readability/maintainability trade-offs from the optimizations\n\nFocus on real, measurable improvements, not micro-optimizations.';
+  const prompt = `Performance Analysis Request:\n${filePath ? `File: ${filePath}\n` : ''}${language ? `Language: ${language}\n` : ''}${perfContext ? `Performance Context:\n${perfContext.slice(0, 5_000)}\n` : ''}\nCode:\n${code.slice(0, 30_000)}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 2500,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_performance_analysis',
+    path: filePath || null,
+    analysis: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered documentation generation — generates docs from code. */
+export async function runAiGenerateDocs(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath) || '';
+  const language = readTrimmed(input.language) || '';
+  const docFormat = readTrimmed(input.format) || readTrimmed(input.docFormat) || 'markdown';
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_generate_docs.');
+  }
+  const system = 'You are a senior software engineer generating documentation from code. Output ONLY the documentation. Provide:\n1. OVERVIEW: What the code does (2-3 sentences)\n2. API/INTERFACE: Public functions, classes, types with signatures and descriptions\n3. PARAMETERS: All parameters with types and descriptions\n4. RETURN VALUES: What the code returns and in what format\n5. EXAMPLES: Usage examples\n6. EDGE CASES: Important behavior on edge cases\n\nBe clear and concise. Output in the requested format.';
+  const prompt = `Documentation Request:\n${filePath ? `File: ${filePath}\n` : ''}${language ? `Language: ${language}\n` : ''}Format: ${docFormat}\n\nCode:\n${code.slice(0, 30_000)}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 2500,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_generate_docs',
+    path: filePath || null,
+    docFormat,
+    documentation: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: API endpoint probe — tests any API endpoint with method, headers, body, and timing. */
+export async function runTestApiEndpoint(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const url = readTrimmed(input.url);
+  const method = (readTrimmed(input.method) || 'GET').toUpperCase();
+  const headersInput = input.headers;
+  const body = readTrimmed(input.body) || '';
+  const timeoutMs = Math.min(Number(input.timeoutMs) || 15_000, 30_000);
+  if (!url || !url.startsWith('http')) {
+    throw new Error('A valid http(s) URL is required for test_api_endpoint.');
+  }
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method)) {
+    throw new Error(`Unsupported HTTP method: ${method}`);
+  }
+  const headers: Record<string, string> = { 'User-Agent': 'IVX-IA-Senior-Dev/1.0' };
+  if (headersInput && typeof headersInput === 'object' && !Array.isArray(headersInput)) {
+    for (const [key, value] of Object.entries(headersInput as Record<string, unknown>)) {
+      const headerName = readTrimmed(key);
+      const headerValue = readTrimmed(value);
+      if (headerName && headerValue) {
+        headers[headerName] = headerValue;
+      }
+    }
+  }
+  if (body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const startTime = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body || undefined,
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    const elapsed = Date.now() - startTime;
+    return {
+      provider: 'ivx',
+      action: 'test_api_endpoint',
+      url,
+      method,
+      ok: false,
+      error: err instanceof Error ? err.message : 'fetch failed',
+      elapsedMs: elapsed,
+      timedOut: err instanceof Error && err.name === 'AbortError',
+      readOnly: true,
+      secretValuesReturned: false,
+      timestamp: nowIso(),
+    };
+  }
+  clearTimeout(timeout);
+  const elapsed = Date.now() - startTime;
+  const responseHeaders: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    responseHeaders[key] = value.slice(0, 500);
+  });
+  const responseText = await response.text();
+  const truncated = responseText.length > 10_000;
+  const responseBody = truncated ? responseText.slice(0, 10_000) + '\n... [TRUNCATED]' : responseText;
+  let parsedJson: unknown = null;
+  try {
+    if (!truncated && responseText) {
+      parsedJson = JSON.parse(responseText);
+    }
+  } catch { /* not JSON */ }
+  return {
+    provider: 'ivx',
+    action: 'test_api_endpoint',
+    url,
+    method,
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    elapsedMs: elapsed,
+    responseHeaders: Object.keys(responseHeaders).length > 0 ? responseHeaders : null,
+    responseBody: parsedJson ?? responseBody,
+    responseIsJson: parsedJson !== null,
+    responseSize: responseText.length,
+    truncated,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: Render service logs — fetches recent log lines via Render Logs API (/v1/logs). */
+export async function runRenderGetLogs(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const renderApiKey = readEnv('RENDER_API_KEY') || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY');
+  if (!renderApiKey) {
+    throw new Error('RENDER_API_KEY is not configured in the backend runtime.');
+  }
+  const serviceId = readEnv('RENDER_SERVICE_ID') || await getIVXOwnerVariableRuntimeValue('RENDER_SERVICE_ID') || readTrimmed(input.serviceId);
+  if (!serviceId) {
+    throw new Error('RENDER_SERVICE_ID is not configured and no serviceId was provided in input.');
+  }
+  const ownerId = readTrimmed(input.ownerId) || readEnv('RENDER_OWNER_ID');
+  const logType = readTrimmed(input.type) || 'app';
+  const endTime = Math.floor(Date.now() / 1000);
+  const startTime = Math.floor((Date.now() - 3600_000) / 1000); // last 1 hour
+  // Render Logs API: GET /v1/logs with ownerId + resource query params
+  const params = new URLSearchParams();
+  if (ownerId) {
+    params.set('ownerId', ownerId);
+  }
+  params.set('resource', serviceId);
+  params.set('startTime', String(startTime));
+  params.set('endTime', String(endTime));
+  params.set('direction', 'backward');
+  params.set('type', logType);
+  const url = `${RENDER_API_BASE_URL}/logs?${params.toString()}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${renderApiKey}`,
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    // Fallback: try GET /v1/services/{id} for service info if logs endpoint fails
+    if (response.status === 404 || response.status === 400) {
+      const svcUrl = `${RENDER_API_BASE_URL}/services/${serviceId}`;
+      const svcResp = await fetch(svcUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json', Authorization: `Bearer ${renderApiKey}` },
+      });
+      if (svcResp.ok) {
+        const svcData = readRecord(await svcResp.json().catch(() => ({})));
+        return {
+          provider: 'render',
+          action: 'render_get_logs',
+          serviceId,
+          ownerId: ownerId || null,
+          logsEndpointAvailable: false,
+          fallback: 'service_info',
+          serviceName: readTrimmed(svcData.name) || null,
+          serviceStatus: readTrimmed(svcData.status) || null,
+          serviceCreatedAt: readTrimmed(svcData.createdAt) || null,
+          message: 'Render logs API requires ownerId parameter. Service info returned as fallback. Pass ownerId in input to fetch actual logs.',
+          readOnly: true,
+          secretValuesReturned: false,
+          timestamp: nowIso(),
+        };
+      }
+    }
+    throw new Error(`Render logs fetch failed: HTTP ${response.status} — ${errorText.slice(0, 300)}`);
+  }
+  const data = await response.text();
+  let logEntries: Array<{ timestamp?: string; message?: string; level?: string; raw?: string }> = [];
+  try {
+    const parsed = JSON.parse(data) as unknown;
+    if (Array.isArray(parsed)) {
+      logEntries = parsed.map((entry: unknown) => {
+        const rec = readRecord(entry);
+        return {
+          timestamp: readTrimmed(rec.timestamp) || readTrimmed(rec.time) || null,
+          message: readTrimmed(rec.message) || readTrimmed(rec.text) || readTrimmed(rec.msg) || null,
+          level: readTrimmed(rec.level) || null,
+          raw: JSON.stringify(entry).slice(0, 500),
+        };
+      });
+    } else if (typeof parsed === 'object' && parsed !== null) {
+      const record = parsed as Record<string, unknown>;
+      const logsArray = Array.isArray(record.logs) ? record.logs : Array.isArray(record.entries) ? record.entries : Array.isArray(record.data) ? record.data : [];
+      logEntries = logsArray.map((entry: unknown) => {
+        const rec = readRecord(entry);
+        return {
+          timestamp: readTrimmed(rec.timestamp) || readTrimmed(rec.time) || null,
+          message: readTrimmed(rec.message) || readTrimmed(rec.text) || readTrimmed(rec.msg) || null,
+          level: readTrimmed(rec.level) || null,
+          raw: JSON.stringify(entry).slice(0, 500),
+        };
+      });
+    }
+  } catch {
+    logEntries = data.split('\n').filter(Boolean).map((line) => ({ raw: line.slice(0, 500) }));
+  }
+  const truncated = logEntries.length > 200;
+  const resultEntries = truncated ? logEntries.slice(0, 200) : logEntries;
+  const logsText = resultEntries.map((e) => {
+    const parts: string[] = [];
+    if (e.timestamp) parts.push(e.timestamp);
+    if (e.level) parts.push(`[${e.level}]`);
+    if (e.message) parts.push(e.message);
+    return parts.length > 0 ? parts.join(' ') : (e.raw || '');
+  }).filter(Boolean).join('\n');
+  return {
+    provider: 'render',
+    action: 'render_get_logs',
+    serviceId,
+    ownerId: ownerId || null,
+    logType,
+    timeRange: `last 1 hour (${startTime} to ${endTime})`,
+    logsEndpointAvailable: true,
+    entriesReturned: resultEntries.length,
+    truncated,
+    logs: logsText,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/**
+ * Write action (owner-approved): autonomous feature cycle — designs a feature via AI,
+ * generates the code via AI, commits it to GitHub, optionally deploys to Render,
+ * and optionally verifies the deployment via API probe.
+ * Requires CONFIRM_IVX_GITHUB_WRITE confirmation phrase.
+ */
+async function runAutonomousFeatureCycle(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const featureDescription = readTrimmed(input.featureDescription) || readTrimmed(input.description);
+  const targetPath = sanitizeRepoPath(input.path);
+  const language = readTrimmed(input.language) || 'typescript';
+  const framework = readTrimmed(input.framework) || '';
+  const commitMessage = readTrimmed(input.commitMessage) || `feat: autonomous feature — ${targetPath}`;
+  const skipDeploy = parseBoolean(input.skipDeploy);
+  const skipVerify = parseBoolean(input.skipVerify);
+  if (!featureDescription || featureDescription.length < 10) {
+    throw new Error('featureDescription or description (at least 10 characters) is required for autonomous_feature_cycle.');
+  }
+  const headers = await githubHeaders();
+  const steps: Array<{ step: string; status: string; detail?: string }> = [];
+
+  // Step 1: AI design the feature
+  steps.push({ step: 'ai_design', status: 'started' });
+  const designResult = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system: 'You are a senior software engineer designing a feature. Provide a concise implementation plan with file paths, data models, and steps. Keep it under 2000 chars.',
+    prompt: `Feature: ${featureDescription}\nTarget File: ${targetPath}\nLanguage: ${language}\n${framework ? `Framework: ${framework}\n` : ''}Provide a concise implementation plan.`,
+    maxOutputTokens: 2000,
+  });
+  const designPlan = designResult.text;
+  steps.push({ step: 'ai_design', status: 'success', detail: `${designPlan.length} chars` });
+
+  // Step 2: AI generate the code
+  steps.push({ step: 'ai_generate_code', status: 'started' });
+  const codeResult = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system: 'You are a senior software engineer generating production code. Output ONLY the code file content. No markdown fences. The code must be complete, type-safe, and directly usable.',
+    prompt: `Feature: ${featureDescription}\nDesign Plan: ${designPlan}\nTarget File: ${targetPath}\nLanguage: ${language}\n${framework ? `Framework: ${framework}\n` : ''}Output the complete code file. No markdown fences.`,
+    maxOutputTokens: 4000,
+  });
+  let generatedCode = codeResult.text.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+  if (!generatedCode || generatedCode.length < 5) {
+    steps.push({ step: 'ai_generate_code', status: 'failed', detail: 'AI returned empty code' });
+    throw new Error('Autonomous feature: AI generated empty code content.');
+  }
+  steps.push({ step: 'ai_generate_code', status: 'success', detail: `${generatedCode.length} bytes generated` });
+
+  // Step 3: Commit to GitHub
+  steps.push({ step: 'commit_code', status: 'started' });
+  const encodedPath = targetPath.split('/').map((part) => encodeURIComponent(part)).join('/');
+  // Check if file already exists (for sha)
+  const readUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
+  const readResponse = await fetchJson(readUrl, { method: 'GET', headers }).catch(() => null);
+  const existingSha = readResponse?.ok === true ? readTrimmed(readRecord(readResponse.data).sha) : undefined;
+  const commitBody: Record<string, unknown> = {
+    message: commitMessage,
+    content: Buffer.from(generatedCode, 'utf8').toString('base64'),
+    branch,
+  };
+  if (existingSha) {
+    commitBody.sha = existingSha;
+  }
+  const commitUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}`;
+  const commitResponse = await fetchJson(commitUrl, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(commitBody),
+  });
+  if (!commitResponse.ok) {
+    steps.push({ step: 'commit_code', status: 'failed', detail: `HTTP ${commitResponse.status}` });
+    throw new Error(`Autonomous feature: GitHub commit failed with HTTP ${commitResponse.status}.`);
+  }
+  const commitData = readRecord(commitResponse.data);
+  const commitRecord = readRecord(commitData.commit);
+  const commitSha = readTrimmed(commitRecord.sha) || null;
+  steps.push({ step: 'commit_code', status: 'success', detail: `commit ${commitSha?.slice(0, 8) ?? 'unknown'}` });
+
+  // Step 4: Optionally deploy to Render
+  let deployTriggered = false;
+  if (!skipDeploy) {
+    steps.push({ step: 'render_deploy', status: 'started' });
+    try {
+      const renderApiKey = readEnv('RENDER_API_KEY') || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY');
+      const serviceId = readEnv('RENDER_SERVICE_ID') || await getIVXOwnerVariableRuntimeValue('RENDER_SERVICE_ID');
+      if (renderApiKey && serviceId) {
+        const deployResp = await fetch(`${RENDER_API_BASE_URL}/services/${serviceId}/deploys`, {
+          method: 'POST',
+          headers: { Accept: 'application/json', Authorization: `Bearer ${renderApiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        deployTriggered = deployResp.ok;
+        steps.push({ step: 'render_deploy', status: deployResp.ok ? 'success' : 'skipped', detail: deployResp.ok ? 'deploy triggered' : `HTTP ${deployResp.status}` });
+      } else {
+        steps.push({ step: 'render_deploy', status: 'skipped', detail: 'RENDER_API_KEY or RENDER_SERVICE_ID not configured' });
+      }
+    } catch (err) {
+      steps.push({ step: 'render_deploy', status: 'skipped', detail: err instanceof Error ? err.message : 'error' });
+    }
+  }
+
+  // Step 5: Optionally verify deployment
+  let verifyResult: Record<string, unknown> | null = null;
+  if (!skipDeploy && !skipVerify) {
+    steps.push({ step: 'verify_deploy', status: 'started' });
+    try {
+      const healthUrl = readTrimmed(input.verifyUrl) || 'https://api.ivxholding.com/health';
+      const healthResp = await fetch(healthUrl, { method: 'GET', signal: AbortSignal.timeout(15_000) });
+      const healthBody = await healthResp.text();
+      verifyResult = {
+        url: healthUrl,
+        status: healthResp.status,
+        ok: healthResp.ok,
+        body: healthBody.slice(0, 500),
+      };
+      steps.push({ step: 'verify_deploy', status: 'success', detail: `HTTP ${healthResp.status}` });
+    } catch (err) {
+      steps.push({ step: 'verify_deploy', status: 'skipped', detail: err instanceof Error ? err.message : 'error' });
+    }
+  }
+
+  return {
+    provider: 'github',
+    action: 'autonomous_feature_cycle',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    path: targetPath,
+    featureDescription: featureDescription.slice(0, 200),
+    designPlan: designPlan.slice(0, 500),
+    generatedCodeLength: generatedCode.length,
+    commitSha,
+    commitUrl: readTrimmed(commitRecord.html_url) || null,
+    deployTriggered,
+    verifyResult,
+    steps,
+    readOnly: false,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/**
+ * Write action (owner-approved): commit multiple files to GitHub in a single operation.
+ * Uses the Git Data API (create blob → create tree → create commit → update ref).
+ * Requires CONFIRM_IVX_GITHUB_WRITE confirmation phrase.
+ */
+async function runGithubCommitMultiFile(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const message = readTrimmed(input.message) || readTrimmed(input.commitMessage);
+  const filesRaw = input.files;
+  if (!message) {
+    throw new Error('A commit message is required for github_commit_multi_file.');
+  }
+  if (!Array.isArray(filesRaw) || filesRaw.length === 0) {
+    throw new Error('files (non-empty array of {path, content}) is required for github_commit_multi_file.');
+  }
+  if (filesRaw.length > 20) {
+    throw new Error('Maximum 20 files per github_commit_multi_file call.');
+  }
+  const headers = await githubHeaders();
+
+  // Validate and sanitize all file paths
+  const files: Array<{ path: string; content: string }> = [];
+  for (const fileEntry of filesRaw) {
+    const record = readRecord(fileEntry);
+    const filePath = sanitizeRepoPath(record.path);
+    const content = readTrimmed(record.content);
+    if (!content) {
+      throw new Error(`File ${filePath} has empty content.`);
+    }
+    if (content.length > MAX_COMMIT_CONTENT_LENGTH) {
+      throw new Error(`File ${filePath} content exceeds max length of ${MAX_COMMIT_CONTENT_LENGTH} chars.`);
+    }
+    files.push({ path: filePath, content });
+  }
+
+  // Step 1: Get the current commit SHA for the branch
+  const refUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/refs/heads/${encodeURIComponent(branch)}`;
+  const refResponse = await fetchJson(refUrl, { method: 'GET', headers });
+  if (!refResponse.ok) {
+    throw new Error(`Could not get branch ref: HTTP ${refResponse.status}`);
+  }
+  const refData = readRecord(refResponse.data);
+  const refObject = readRecord(refData.object);
+  const baseSha = readTrimmed(refObject.sha);
+  if (!baseSha) {
+    throw new Error('Could not extract base commit SHA from branch ref.');
+  }
+
+  // Step 2: Get the base tree
+  const commitUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/commits/${baseSha}`;
+  const commitResponse = await fetchJson(commitUrl, { method: 'GET', headers });
+  if (!commitResponse.ok) {
+    throw new Error(`Could not get base commit: HTTP ${commitResponse.status}`);
+  }
+  const commitData = readRecord(commitResponse.data);
+  const baseTree = readRecord(commitData.tree);
+  const baseTreeSha = readTrimmed(baseTree.sha);
+  if (!baseTreeSha) {
+    throw new Error('Could not extract base tree SHA.');
+  }
+
+  // Step 3: Create blobs for all files
+  const treeEntries: Array<{ path: string; mode: string; type: string; sha: string }> = [];
+  for (const file of files) {
+    const blobUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/blobs`;
+    const blobResponse = await fetchJson(blobUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        content: file.content,
+        encoding: 'utf-8',
+      }),
+    });
+    if (!blobResponse.ok) {
+      throw new Error(`Could not create blob for ${file.path}: HTTP ${blobResponse.status}`);
+    }
+    const blobData = readRecord(blobResponse.data);
+    const blobSha = readTrimmed(blobData.sha);
+    if (!blobSha) {
+      throw new Error(`Could not extract blob SHA for ${file.path}.`);
+    }
+    treeEntries.push({ path: file.path, mode: '100644', type: 'blob', sha: blobSha });
+  }
+
+  // Step 4: Create the new tree
+  const treeUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees`;
+  const treeResponse = await fetchJson(treeUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      base_tree: baseTreeSha,
+      tree: treeEntries,
+    }),
+  });
+  if (!treeResponse.ok) {
+    throw new Error(`Could not create tree: HTTP ${treeResponse.status}`);
+  }
+  const treeData = readRecord(treeResponse.data);
+  const newTreeSha = readTrimmed(treeData.sha);
+  if (!newTreeSha) {
+    throw new Error('Could not extract new tree SHA.');
+  }
+
+  // Step 5: Create the commit
+  const newCommitUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/commits`;
+  const newCommitResponse = await fetchJson(newCommitUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      message,
+      tree: newTreeSha,
+      parents: [baseSha],
+    }),
+  });
+  if (!newCommitResponse.ok) {
+    throw new Error(`Could not create commit: HTTP ${newCommitResponse.status}`);
+  }
+  const newCommitData = readRecord(newCommitResponse.data);
+  const newCommitSha = readTrimmed(newCommitData.sha);
+  if (!newCommitSha) {
+    throw new Error('Could not extract new commit SHA.');
+  }
+
+  // Step 6: Update the branch ref
+  const updateRefResponse = await fetchJson(refUrl, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ sha: newCommitSha }),
+  });
+  if (!updateRefResponse.ok) {
+    throw new Error(`Could not update branch ref: HTTP ${updateRefResponse.status}`);
+  }
+
+  return {
+    provider: 'github',
+    action: 'github_commit_multi_file',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    message,
+    fileCount: files.length,
+    files: files.map((f) => f.path),
+    commitSha: newCommitSha,
+    commitUrl: `https://github.com/${repoInfo.owner}/${repoInfo.repo}/commit/${newCommitSha}`,
+    readOnly: false,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 async function runAction(action: DeveloperDeployAction, input: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (action === 'github_commit_file') {
     return await runGithubCommitFile(input);
@@ -2693,6 +3484,42 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'autonomous_fix_cycle') {
     return await runAutonomousFixCycle(input);
+  }
+  if (action === 'ai_design_feature') {
+    return await runAiDesignFeature(input);
+  }
+  if (action === 'ai_generate_code') {
+    return await runAiGenerateCode(input);
+  }
+  if (action === 'ai_generate_tests') {
+    return await runAiGenerateTests(input);
+  }
+  if (action === 'ai_refactor_code') {
+    return await runAiRefactorCode(input);
+  }
+  if (action === 'ai_debug_runtime') {
+    return await runAiDebugRuntime(input);
+  }
+  if (action === 'ai_security_audit') {
+    return await runAiSecurityAudit(input);
+  }
+  if (action === 'ai_performance_analysis') {
+    return await runAiPerformanceAnalysis(input);
+  }
+  if (action === 'ai_generate_docs') {
+    return await runAiGenerateDocs(input);
+  }
+  if (action === 'test_api_endpoint') {
+    return await runTestApiEndpoint(input);
+  }
+  if (action === 'render_get_logs') {
+    return await runRenderGetLogs(input);
+  }
+  if (action === 'autonomous_feature_cycle') {
+    return await runAutonomousFeatureCycle(input);
+  }
+  if (action === 'github_commit_multi_file') {
+    return await runGithubCommitMultiFile(input);
   }
   if (action === 'supabase_execute_sql_management') {
     return await runSupabaseExecuteSqlViaManagement(input);
