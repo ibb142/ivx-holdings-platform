@@ -399,6 +399,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     userRole,
     auditOwnerDirectAccess,
     ownerDirectAccess,
+    loginOwnerPasswordless,
   } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -411,6 +412,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
   const [liveOwnerAuditLoading, setLiveOwnerAuditLoading] = useState<boolean>(false);
   const [passwordResetLoading, setPasswordResetLoading] = useState<boolean>(false);
   const [serverPasswordRepairLoading, setServerPasswordRepairLoading] = useState<boolean>(false);
+  const [passwordlessLoading, setPasswordlessLoading] = useState<boolean>(false);
   // "Remember Me" is OFF by default — the owner must manually sign in every launch.
   const [rememberMe, setRememberMe] = useState<boolean>(false);
   // Amazon/Instagram-level UX: all diagnostic/recovery machinery is collapsed
@@ -643,6 +645,59 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       },
     } as Href);
   }, [email, router]);
+
+  const handlePasswordlessLogin = useCallback(async () => {
+    const normalizedEmailForLogin = sanitizeEmail(email);
+    if (!normalizedEmailForLogin) {
+      Alert.alert('Email Required', 'Enter your owner email above, then tap \u201cSign in without password\u201d to receive a secure login link.');
+      return;
+    }
+    setPasswordlessLoading(true);
+    try {
+      const result = await loginOwnerPasswordless(normalizedEmailForLogin);
+      if (result.success) {
+        setLastFailureReason(null);
+        setAttemptState({
+          status: 'success',
+          title: 'Owner session verified',
+          detail: 'Signed in securely without a password. Opening your workspace.',
+          email: normalizedEmailForLogin,
+          tone: 'success',
+        });
+        navigateAfterSuccessfulLogin('password');
+      } else if (result.requiresTwoFactor) {
+        setLastFailureReason(null);
+        setAttemptState({
+          status: 'success',
+          title: 'Second factor required',
+          detail: 'Your identity was verified. Enter the verification code to complete sign-in.',
+          email: normalizedEmailForLogin,
+          tone: 'neutral',
+        });
+      } else {
+        shake();
+        const userMessage = 'Owner login is not available right now. Please try again or use email and password sign-in.';
+        setFailedLoginMessage(userMessage);
+        setLastFailureReason(result.failureReason ?? 'service_unavailable');
+        setAttemptState({
+          status: 'failed',
+          title: 'Owner login unavailable',
+          detail: userMessage,
+          email: normalizedEmailForLogin,
+          tone: 'warning',
+        });
+        Alert.alert('Owner Login Unavailable', userMessage);
+      }
+    } catch (error: unknown) {
+      shake();
+      const userMessage = 'Owner login encountered an error. Please try again or use email and password sign-in.';
+      setFailedLoginMessage(userMessage);
+      setLastFailureReason('unknown');
+      Alert.alert('Owner Login Error', userMessage);
+    } finally {
+      setPasswordlessLoading(false);
+    }
+  }, [email, loginOwnerPasswordless, navigateAfterSuccessfulLogin]);
 
   const navigateAfterSuccessfulLogin = useCallback((source: 'password' | 'two-factor') => {
     pushTelemetry('7. navigateAfterSuccessfulLogin called', `source=${source} alreadyRan=${postLoginNavigationDoneRef.current}`);
@@ -1395,9 +1450,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
             : result.failureReason === 'service_unavailable'
               ? 'Live sign-in temporarily unavailable'
               : 'Server rejected this sign-in',
-      detail: result.supabaseErrorMessage
-        ? `${msg}\n\nExact Supabase auth error: ${supabaseFailureDetail}${result.supabaseErrorCode ? ` (code: ${result.supabaseErrorCode})` : ''}${result.supabaseErrorStatus ? ` (HTTP ${result.supabaseErrorStatus})` : ''}`
-        : msg,
+      detail: msg,
       email: identifier,
       tone: 'warning',
       supabaseErrorMessage: result.supabaseErrorMessage,
@@ -1418,11 +1471,20 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       return;
     }
 
+    const userFriendlyMessage = result.failureReason === 'invalid_credentials'
+      ? 'Email or password is incorrect. Please try again or reset your password.'
+      : result.failureReason === 'email_not_confirmed'
+        ? 'Please confirm your email before signing in.'
+        : result.failureReason === 'rate_limited'
+          ? 'Too many sign-in attempts. Please wait a moment and try again.'
+          : msg;
     Alert.alert(
       'Sign In Failed',
-      result.supabaseErrorMessage
-        ? `${msg}\n\nExact Supabase auth error: ${supabaseFailureDetail}${result.supabaseErrorCode ? `\nCode: ${result.supabaseErrorCode}` : ''}${result.supabaseErrorStatus ? `\nHTTP status: ${result.supabaseErrorStatus}` : ''}${result.supabaseErrorName ? `\nType: ${result.supabaseErrorName}` : ''}`
-        : msg,
+      userFriendlyMessage,
+      [
+        { text: 'Try Again', style: 'default' },
+        { text: 'Forgot Password', onPress: () => { void handlePasswordReset(); } },
+      ]
     );
     } finally {
       loginSubmitInFlightRef.current = false;
@@ -1926,6 +1988,25 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                   <>
                     <Text style={styles.signInBtnText}>{signInButtonLabel}</Text>
                     <ChevronRight size={20} color={Colors.black} />
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Passwordless owner login — the working path for owners who
+                  don't know their programmatically-set password. */}
+              <TouchableOpacity
+                style={[styles.passwordlessSignInBtn, passwordlessLoading && styles.signInBtnDisabled]}
+                onPress={handlePasswordlessLogin}
+                disabled={passwordlessLoading || isLoading}
+                activeOpacity={0.85}
+                testID="login-passwordless-btn"
+              >
+                {passwordlessLoading ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <>
+                    <Shield size={18} color={Colors.primary} />
+                    <Text style={styles.passwordlessSignInBtnText}>Sign in without password</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -2660,6 +2741,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800' as const,
     letterSpacing: 0.3,
+  },
+  passwordlessSignInBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '60',
+    backgroundColor: Colors.primary + '08',
+    marginTop: 10,
+  },
+  passwordlessSignInBtnText: {
+    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: '700' as const,
   },
   ownerNormalSignInButton: {
     marginTop: 10,
