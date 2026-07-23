@@ -438,6 +438,123 @@ export async function sendSesEmail(input: {
   }
 }
 
+/**
+ * Derive the Amazon SES SMTP password from an AWS Secret Access Key using the
+ * AWS-published algorithm. The SMTP username is the AWS Access Key ID.
+ *
+ * Reference: https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html
+ */
+export function deriveSesSmtpPassword(secretAccessKey: string): string {
+  const version = Buffer.from([0x02]);
+  const signature = createHmac('sha256', secretAccessKey).update('SendRawEmail', 'utf8').digest();
+  return Buffer.concat([version, signature]).toString('base64');
+}
+
+/**
+ * Return the AWS SES v2 account status, sending quota, and whether the account
+ * has production access (out of sandbox). Never throws.
+ */
+export async function getSesAccountStatus(): Promise<{
+  ok: boolean;
+  region?: string;
+  productionAccessEnabled?: boolean;
+  sendingPaused?: boolean;
+  max24HourSend?: number;
+  maxSendRate?: number;
+  sentLast24Hours?: number;
+  enforcementStatus?: string;
+  httpStatus?: number;
+  error?: string;
+  missingEnvNames: string[];
+  sentAt: string;
+}> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+  if (missingEnvNames.length > 0) {
+    return { ok: false, region, missingEnvNames, error: 'AWS credentials not configured.', sentAt };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/v2/email/account';
+  const payload = '';
+  const bodyHash = hash(payload);
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const headerLines: [string, string][] = [
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['GET', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, { method: 'GET', headers });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        region,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 500) || `SES account status responded ${response.status}`,
+        sentAt,
+      };
+    }
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // ignore
+    }
+    const sendQuota = readRecord(parsed.SendQuota);
+    return {
+      ok: true,
+      region,
+      productionAccessEnabled: parsed.ProductionAccessEnabled === true,
+      sendingPaused: parsed.SendingPaused === true,
+      max24HourSend: typeof sendQuota.Max24HourSend === 'number' ? sendQuota.Max24HourSend : undefined,
+      maxSendRate: typeof sendQuota.MaxSendRate === 'number' ? sendQuota.MaxSendRate : undefined,
+      sentLast24Hours: typeof sendQuota.SentLast24Hours === 'number' ? sendQuota.SentLast24Hours : undefined,
+      enforcementStatus: typeof parsed.EnforcementStatus === 'string' ? parsed.EnforcementStatus : undefined,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      region,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES account status request failed.',
+      sentAt,
+    };
+  }
+}
+
 /** True when SES has everything it needs to actually send (creds + verified from). */
 export function isSesConfigured(): boolean {
   return Boolean(readEnv('AWS_ACCESS_KEY_ID') && readEnv('AWS_SECRET_ACCESS_KEY') && resolveSesFromEmail());

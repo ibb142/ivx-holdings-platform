@@ -3,7 +3,7 @@ import { requestIVXAIText } from '../ivx-ai-runtime';
 import { createClient } from '@supabase/supabase-js';
 import { buildIVXCredentialRequestManifestSnapshot, IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES } from '../config/ivx-credential-request-manifest';
 import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue, getRawOwnerVariableValue } from './ivx-owner-variables';
-import { sendSesEmail, verifySesEmailIdentity, listSesIdentities } from '../services/ivx-ses-email';
+import { sendSesEmail, verifySesEmailIdentity, listSesIdentities, getSesAccountStatus, deriveSesSmtpPassword } from '../services/ivx-ses-email';
 import { createCloudFrontInvalidation } from '../services/ivx-cloudfront-invalidation';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
@@ -61,6 +61,8 @@ type DeveloperDeployAction =
   | 'list_ses_identities'
   | 'get_supabase_auth_config'
   | 'update_supabase_auth_config'
+  | 'get_ses_account_status'
+  | 'configure_ses_smtp'
   | 'disable_supabase_mfa_aal2_enforcement'
   | 'unenroll_owner_mfa_factor'
   | 'cloudfront_invalidate'
@@ -163,6 +165,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'list_ses_identities'
     || normalized === 'get_supabase_auth_config'
     || normalized === 'update_supabase_auth_config'
+    || normalized === 'get_ses_account_status'
+    || normalized === 'configure_ses_smtp'
     || normalized === 'disable_supabase_mfa_aal2_enforcement'
     || normalized === 'unenroll_owner_mfa_factor'
     || normalized === 'cloudfront_invalidate'
@@ -200,6 +204,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
 function isReadOnlyAction(action: DeveloperDeployAction): boolean {
   return action === 'github_pull_request_status'
     || action === 'get_supabase_auth_config'
+    || action === 'get_ses_account_status'
     || action === 'github_list_workflow_runs'
     || action === 'github_get_workflow_run'
     || action === 'github_token_scopes'
@@ -513,11 +518,33 @@ async function updateSupabaseAuthConfig(input: Record<string, unknown>): Promise
   if (input.mailer_autoconfirm === true || input.mailer_autoconfirm === 'true') {
     patchBody.mailer_autoconfirm = true;
   }
+  if (input.mailer_autoconfirm === false || input.mailer_autoconfirm === 'false') {
+    patchBody.mailer_autoconfirm = false;
+  }
   if (input.enable_signup === true || input.enable_signup === 'true') {
     patchBody.enable_signup = true;
   }
+  if (input.enable_signup === false || input.enable_signup === 'false') {
+    patchBody.enable_signup = false;
+  }
+  const smtpFields = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_admin_email', 'smtp_sender_name', 'smtp_max_frequency'];
+  for (const field of smtpFields) {
+    if (field in input) {
+      const value = input[field];
+      if (field === 'smtp_max_frequency') {
+        const num = Number(value);
+        if (Number.isFinite(num) && num > 0) {
+          patchBody[field] = num;
+        }
+      } else if (typeof value === 'string' && value.length > 0) {
+        patchBody[field] = value;
+      } else if (value === null) {
+        patchBody[field] = null;
+      }
+    }
+  }
   if (Object.keys(patchBody).length === 0) {
-    return { ok: false, message: 'No valid config fields to update. Supported: mailer_autoconfirm, enable_signup.' };
+    return { ok: false, message: 'No valid config fields to update. Supported: mailer_autoconfirm, enable_signup, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_admin_email, smtp_sender_name, smtp_max_frequency.' };
   }
   try {
     const authUrl = `https://api.supabase.com/v1/projects/${projectRef}/config/auth`;
@@ -528,7 +555,7 @@ async function updateSupabaseAuthConfig(input: Record<string, unknown>): Promise
     });
     const patchText = await patchResp.text();
     if (!patchResp.ok) {
-      return { ok: false, projectRef, patchStatus: patchResp.status, patchError: patchText.slice(0, 300), patchBody, message: `PATCH auth config failed: HTTP ${patchResp.status}` };
+      return { ok: false, projectRef, patchStatus: patchResp.status, patchError: patchText.slice(0, 300), patchBody: Object.fromEntries(Object.entries(patchBody).map(([k, v]) => [k, typeof v === 'string' && k === 'smtp_pass' ? '[redacted]' : v])), message: `PATCH auth config failed: HTTP ${patchResp.status}` };
     }
     // Re-read to verify
     const getResp = await fetch(authUrl, { headers: { Authorization: `Bearer ${managementToken}`, Accept: 'application/json' } });
@@ -538,14 +565,76 @@ async function updateSupabaseAuthConfig(input: Record<string, unknown>): Promise
       ok: true,
       projectRef,
       patchStatus: patchResp.status,
-      patchBody,
+      patchBody: Object.fromEntries(Object.entries(patchBody).map(([k, v]) => [k, typeof v === 'string' && k === 'smtp_pass' ? '[redacted]' : v])),
       afterMailerAutoconfirm: afterConfig.mailer_autoconfirm,
       afterEnableSignup: afterConfig.enable_signup,
+      afterSmtpHost: afterConfig.smtp_host,
+      afterSmtpPort: afterConfig.smtp_port,
+      afterSmtpUser: afterConfig.smtp_user ? '[redacted]' : null,
+      afterSmtpSenderName: afterConfig.smtp_sender_name,
+      afterSmtpAdminEmail: afterConfig.smtp_admin_email,
       message: 'Supabase auth config updated successfully.',
     };
   } catch (err) {
     return { ok: false, projectRef, message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+async function runGetSesAccountStatus(): Promise<Record<string, unknown>> {
+  const status = await getSesAccountStatus();
+  return {
+    provider: 'ses',
+    action: 'get_ses_account_status',
+    ...status,
+    timestamp: nowIso(),
+    secretValuesReturned: false,
+  };
+}
+
+async function runConfigureSesSmtp(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const region = readEnv('AWS_REGION') || 'us-east-1';
+  const fromEmail = readTrimmed(input.fromEmail) || readEnv('IVX_SES_FROM_EMAIL') || 'no-reply@ivxholding.com';
+  const fromName = readTrimmed(input.fromName) || readEnv('IVX_SES_FROM_NAME') || 'IVX Holdings';
+  const adminEmail = readTrimmed(input.adminEmail) || fromEmail;
+  const port = Number(input.smtpPort) || 587;
+  const host = readTrimmed(input.smtpHost) || `email-smtp.${region}.amazonaws.com`;
+  const maxFrequency = Number(input.smtpMaxFrequency) || 60;
+  const disableAutoconfirm = input.disableAutoconfirm !== false && input.disableAutoconfirm !== 'false';
+
+  if (!accessKey || !secretKey) {
+    return { ok: false, message: 'AWS credentials are not configured in the runtime.' };
+  }
+
+  const smtpPassword = deriveSesSmtpPassword(secretKey);
+  const updateResult = await updateSupabaseAuthConfig({
+    smtp_host: host,
+    smtp_port: port,
+    smtp_user: accessKey,
+    smtp_pass: smtpPassword,
+    smtp_admin_email: adminEmail,
+    smtp_sender_name: fromName,
+    smtp_max_frequency: maxFrequency,
+    ...(disableAutoconfirm ? { mailer_autoconfirm: false } : {}),
+  });
+
+  return {
+    provider: 'ses+supabase',
+    action: 'configure_ses_smtp',
+    region,
+    fromEmail,
+    fromName,
+    adminEmail,
+    smtpHost: host,
+    smtpPort: port,
+    smtpUsername: accessKey ? `${accessKey.slice(0, 8)}...` : null,
+    smtpPasswordDerived: Boolean(smtpPassword),
+    mailerAutoconfirmDisabled: disableAutoconfirm,
+    supabaseUpdate: updateResult,
+    timestamp: nowIso(),
+    secretValuesReturned: false,
+  };
 }
 
 async function runUnenrollOwnerMfaFactor(input: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -3442,6 +3531,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'update_supabase_auth_config') {
     return await updateSupabaseAuthConfig(input);
+  }
+  if (action === 'get_ses_account_status') {
+    return await runGetSesAccountStatus();
+  }
+  if (action === 'configure_ses_smtp') {
+    return await runConfigureSesSmtp(input);
   }
   if (action === 'disable_supabase_mfa_aal2_enforcement') {
     return await runDisableSupabaseMfaAal2Enforcement();
