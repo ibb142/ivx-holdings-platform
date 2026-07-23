@@ -5784,4 +5784,234 @@ app.get('/api/ivx/enterprise/metrics', (context) => {
 app.get('/api/ivx/investor-performance', async (context) => handleInvestorPerformanceRequest(context.req.raw));
 app.options('/api/ivx/investor-performance', () => investorPerformanceOptions());
 
+// ============================================================
+// IVX Growth Engine — Prospect Discovery + Compliance + Reporting
+// ============================================================
+
+// Growth Engine: Prospect endpoints (lazy imports inside handlers — matches existing pattern)
+app.options('/api/ivx/growth/prospects', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/prospects', async (c) => {
+  const { listProspects } = await import('./services/ivx-prospect-engine');
+  const url = new URL(c.req.url);
+  const category = url.searchParams.get('category') || undefined;
+  const minScore = url.searchParams.get('minScore') ? parseInt(url.searchParams.get('minScore')!) : undefined;
+  const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : undefined;
+  const prospects = await listProspects({ category: category as any, minScore, limit });
+  return c.json({ ok: true, count: prospects.length, prospects });
+});
+
+app.options('/api/ivx/growth/prospects/create', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/growth/prospects/create', async (c) => {
+  const { createProspect } = await import('./services/ivx-prospect-engine');
+  const body = await c.req.json().catch(() => ({}));
+  const result = await createProspect(body);
+  return c.json({ ok: true, prospect: result.prospect, isDuplicate: result.isDuplicate, duplicateOf: result.duplicateOfProspectId });
+});
+
+app.options('/api/ivx/growth/prospects/:id/qualify', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/growth/prospects/:id/qualify', async (c) => {
+  const { updateQualificationStatus } = await import('./services/ivx-prospect-engine');
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const updated = await updateQualificationStatus(id, body.status);
+    return c.json({ ok: true, prospect: updated });
+  } catch (err: any) {
+    return c.json({ ok: false, error: err.message }, 400);
+  }
+});
+
+app.options('/api/ivx/growth/prospects/summary', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/prospects/summary', async (c) => {
+  const { getProspectSummary } = await import('./services/ivx-prospect-engine');
+  const summary = await getProspectSummary();
+  return c.json({ ok: true, summary });
+});
+
+app.options('/api/ivx/growth/daily-target', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/daily-target', async (c) => {
+  const { getDailyTargetResult } = await import('./services/ivx-prospect-engine');
+  const url = new URL(c.req.url);
+  const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+  const target = (url.searchParams.get('target') as 'MINIMUM' | 'STANDARD' | 'MAXIMUM') || 'STANDARD';
+  const result = await getDailyTargetResult(date, target);
+  return c.json({ ok: true, result });
+});
+
+app.options('/api/ivx/growth/categories', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/categories', async (c) => {
+  const { ALL_PROSPECT_CATEGORIES } = await import('./services/ivx-prospect-engine');
+  return c.json({ ok: true, categories: ALL_PROSPECT_CATEGORIES, count: ALL_PROSPECT_CATEGORIES.length });
+});
+
+// Growth Engine: Compliance endpoints
+app.options('/api/ivx/growth/compliance/validate-outreach', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/growth/compliance/validate-outreach', async (c) => {
+  const { validateOutreachMessage } = await import('./services/ivx-compliance-gate');
+  const body = await c.req.json().catch(() => ({}));
+  const result = validateOutreachMessage(body);
+  return c.json({ ok: result.valid, violations: result.violations, message: result.message });
+});
+
+app.options('/api/ivx/growth/compliance/offerings', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/compliance/offerings', async (c) => {
+  const { listOfferings } = await import('./services/ivx-compliance-gate');
+  const offerings = await listOfferings();
+  return c.json({ ok: true, offerings });
+});
+
+app.options('/api/ivx/growth/compliance/suppression', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/compliance/suppression', async (c) => {
+  const { listSuppressed } = await import('./services/ivx-compliance-gate');
+  const suppressed = await listSuppressed();
+  return c.json({ ok: true, count: suppressed.length, suppressed });
+});
+
+app.options('/api/ivx/growth/compliance/approvals', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/compliance/approvals', async (c) => {
+  const { listPendingApprovals } = await import('./services/ivx-compliance-gate');
+  const pending = await listPendingApprovals();
+  return c.json({ ok: true, count: pending.length, pendingApprovals: pending });
+});
+
+// Growth Engine: Content + News endpoints
+app.options('/api/ivx/growth/content', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/content', async (c) => {
+  const { listContent } = await import('./services/ivx-content-news-engine');
+  const url = new URL(c.req.url);
+  const status = url.searchParams.get('status') || undefined;
+  const content = await listContent({ status: status as any });
+  return c.json({ ok: true, count: content.length, content });
+});
+
+app.options('/api/ivx/growth/news', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/news', async (c) => {
+  const { listNews } = await import('./services/ivx-content-news-engine');
+  const url = new URL(c.req.url);
+  const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : 50;
+  const news = await listNews({ limit });
+  return c.json({ ok: true, count: news.length, news });
+});
+
+// Growth Engine: Reporting endpoints
+app.options('/api/ivx/growth/daily-report', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/daily-report', async (c) => {
+  const { generateDailyReport } = await import('./services/ivx-growth-reporting');
+  const url = new URL(c.req.url);
+  const date = url.searchParams.get('date') || undefined;
+  const report = await generateDailyReport(date);
+  return c.json({ ok: true, report });
+});
+
+app.options('/api/ivx/growth/checkpoint', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/checkpoint', async (c) => {
+  const { generateTwoHourCheckpoint } = await import('./services/ivx-growth-reporting');
+  const checkpoint = await generateTwoHourCheckpoint();
+  return c.json({ ok: true, checkpoint });
+});
+
+app.options('/api/ivx/growth/metrics', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/metrics', async (c) => {
+  const { getGrowthPerformanceMetrics } = await import('./services/ivx-growth-reporting');
+  const url = new URL(c.req.url);
+  const date = url.searchParams.get('date') || undefined;
+  const metrics = await getGrowthPerformanceMetrics(date);
+  return c.json({ ok: true, metrics });
+});
+
+app.options('/api/ivx/growth/dashboard', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/growth/dashboard', async (c) => {
+  const { getGrowthDashboardData } = await import('./services/ivx-growth-reporting');
+  const dashboard = await getGrowthDashboardData();
+  return c.json({ ok: true, dashboard });
+});
+
+// ============================================================
+// IVX Autonomous Ops — 24/7 Task Queue + Monitoring + Dashboard
+// ============================================================
+
+// Autonomous Ops: Task endpoints (lazy imports inside handlers)
+app.options('/api/ivx/autonomous/tasks', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/tasks', async (c) => {
+  const { listTasks } = await import('./services/ivx-autonomous-ops');
+  const url = new URL(c.req.url);
+  const status = url.searchParams.get('status') || undefined;
+  const priority = url.searchParams.get('priority') as any || undefined;
+  const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : undefined;
+  const tasks = await listTasks({ status: status as any, priority, limit });
+  return c.json({ ok: true, count: tasks.length, tasks });
+});
+
+app.options('/api/ivx/autonomous/tasks/create', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/autonomous/tasks/create', async (c) => {
+  const { createTask, enqueueTask } = await import('./services/ivx-autonomous-ops');
+  const body = await c.req.json().catch(() => ({}));
+  const task = createTask(body);
+  await enqueueTask(task);
+  return c.json({ ok: true, task });
+});
+
+app.options('/api/ivx/autonomous/tasks/:id/cancel', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/autonomous/tasks/:id/cancel', async (c) => {
+  const { cancelTask } = await import('./services/ivx-autonomous-ops');
+  const id = c.req.param('id');
+  try {
+    const task = await cancelTask(id);
+    return c.json({ ok: true, task });
+  } catch (err: any) {
+    return c.json({ ok: false, error: err.message }, 404);
+  }
+});
+
+// Autonomous Ops: Dashboard
+app.options('/api/ivx/autonomous/dashboard', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/dashboard', async (c) => {
+  const { getAutonomousDashboard } = await import('./services/ivx-autonomous-ops');
+  const dashboard = await getAutonomousDashboard();
+  return c.json({ ok: true, dashboard });
+});
+
+// Autonomous Ops: Approval phrases
+app.options('/api/ivx/autonomous/approval-phrases', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/approval-phrases', async (c) => {
+  const { ALL_APPROVAL_PHRASES } = await import('./services/ivx-autonomous-ops');
+  return c.json({ ok: true, phrases: ALL_APPROVAL_PHRASES, count: ALL_APPROVAL_PHRASES.length });
+});
+
+// Autonomous Ops: Daily cycle
+app.options('/api/ivx/autonomous/daily-cycle', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/daily-cycle', async (c) => {
+  const { DAILY_CYCLE } = await import('./services/ivx-autonomous-ops');
+  return c.json({ ok: true, cycle: DAILY_CYCLE });
+});
+
+// Autonomous Ops: Production Monitor
+app.options('/api/ivx/autonomous/monitor/dashboard', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/monitor/dashboard', async (c) => {
+  const { getMonitorDashboard } = await import('./services/ivx-production-monitor');
+  const state = await getMonitorDashboard();
+  return c.json({ ok: true, monitor: state });
+});
+
+app.options('/api/ivx/autonomous/monitor/run', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/autonomous/monitor/run', async (c) => {
+  const { runChecksForCadence } = await import('./services/ivx-production-monitor');
+  const body = await c.req.json().catch(() => ({}));
+  const cadence = body.cadence || '5min';
+  const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://api.ivxholding.com';
+  const results = await runChecksForCadence(cadence, {
+    baseUrl,
+    landingUrl: 'https://ivxholding.com',
+    apkUrl: 'https://ivxholding.com/apk/ivx-holdings-v1.4.36.apk',
+    githubSha: body.githubSha || null,
+  });
+  return c.json({ ok: true, cadence, results });
+});
+
+app.options('/api/ivx/autonomous/monitor/schedule', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/monitor/schedule', async (c) => {
+  const { CHECK_SCHEDULE } = await import('./services/ivx-production-monitor');
+  return c.json({ ok: true, schedule: CHECK_SCHEDULE });
+});
+
 export default app;
