@@ -1185,7 +1185,7 @@ export async function handlePlatformAdminUpload(req: Request): Promise<Response>
     const accessKey = (process.env.AWS_ACCESS_KEY_ID || '').trim();
     const secretKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
     const region = (process.env.AWS_REGION || 'us-east-1').trim();
-    const bucket = (process.env.S3_BUCKET_NAME || 'ivx-landing').trim();
+    const bucket = (process.env.S3_BUCKET_NAME || 'ivxholding.com').trim();
     if (!accessKey || !secretKey) {
       return json({ ok: false, error: 'S3 upload unavailable: AWS credentials not configured on server. Set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY.', marker: VIDEO_PLATFORM_MARKER }, 503);
     }
@@ -1214,7 +1214,6 @@ export async function handlePlatformAdminUpload(req: Request): Promise<Response>
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
-      ACL: 'public-read',
     });
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 600 }); // 10 min
 
