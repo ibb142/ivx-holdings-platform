@@ -67,6 +67,7 @@ import {
   getTimelineStatusColor,
   formatTimelineDate,
 } from '@/lib/timeline-stages';
+import { getPathwayBadges, getPrimaryCTALabel, type PathwayBadge, type DealPathwayConfig } from '@/lib/deal-pathways';
 
 export interface InvestmentCardData {
   dealId: string;
@@ -96,6 +97,18 @@ export interface InvestmentCardData {
   developerLogo: string | null;
   investmentDetails: string | null;
   timelineSummary: TimelineSummary | null;
+  // ── Admin-controlled pathway fields ──
+  tokenizedEnabled?: boolean;
+  tokenizedStatus?: string;
+  sharePrice?: number;
+  jvEnabled?: boolean;
+  jvStatus?: string;
+  jvMinimumContribution?: number;
+  buyerEnabled?: boolean;
+  buyerStatus?: string;
+  buyerAskingPrice?: number;
+  publishState?: string;
+  featured?: boolean;
 }
 
 export interface InvestmentCardProps {
@@ -116,45 +129,28 @@ interface CategoryChip {
   tint: string;
 }
 
-function useCategoryChips(dealType: string | null | undefined): CategoryChip[] {
-  const t = (dealType ?? '').toLowerCase();
-
-  // Tokenized is COMING SOON — not legally/technically production-ready
-  const tokenized: CategoryChip = {
-    id: 'tokenized',
-    label: 'Tokenized',
-    icon: <Hexagon size={13} color={Colors.textTertiary} />,
-    tint: Colors.textTertiary,
+/** Build data-driven pathway badges from admin-controlled deal fields. */
+function usePathwayChips(data: InvestmentCardData): CategoryChip[] {
+  const config: Partial<DealPathwayConfig> = {
+    tokenized_enabled: data.tokenizedEnabled ?? false,
+    tokenized_status: (data.tokenizedStatus as any) ?? 'TOKENIZED_COMING_SOON',
+    jv_enabled: data.jvEnabled ?? true,
+    jv_status: (data.jvStatus as any) ?? 'JV_OPEN',
+    buyer_enabled: data.buyerEnabled ?? true,
+    buyer_status: (data.buyerStatus as any) ?? 'BUYER_OPEN',
   };
-  const jv: CategoryChip = {
-    id: 'jv',
-    label: 'JV Deal',
-    icon: <Users size={13} color={Colors.blue} />,
-    tint: Colors.blue,
-  };
-  const buyer: CategoryChip = {
-    id: 'buyer',
-    label: 'Buyer',
-    icon: <HomeIcon size={13} color={Colors.green} />,
-    tint: Colors.green,
-  };
-
-  // Only show badges relevant to the deal type
-  // Tokenized shows as greyed-out (COMING SOON) on all deals
-  switch (t) {
-    case 'jv':
-    case 'equity_split':
-    case 'hybrid':
-      return [jv, tokenized, buyer];
-    case 'development':
-    case 'new_construction':
-    case 'rehab_construction':
-      return [jv, buyer, tokenized];
-    case 'profit_sharing':
-      return [buyer, tokenized, jv];
-    default:
-      return [jv, buyer, tokenized];
-  }
+  const badges = getPathwayBadges(config);
+  return badges.map((badge: PathwayBadge) => {
+    const icon = badge.id === 'tokenized'
+      ? <Hexagon size={13} color={badge.state === 'active' ? Colors.primary : badge.state === 'coming_soon' ? Colors.textTertiary : Colors.textTertiary} />
+      : badge.id === 'jv'
+        ? <Users size={13} color={badge.state === 'active' ? Colors.blue : Colors.textTertiary} />
+        : <HomeIcon size={13} color={badge.state === 'active' ? Colors.green : Colors.textTertiary} />;
+    const tint = badge.state === 'active'
+      ? (badge.id === 'tokenized' ? Colors.primary : badge.id === 'jv' ? Colors.blue : Colors.green)
+      : Colors.textTertiary;
+    return { id: badge.id, label: badge.label, icon, tint };
+  });
 }
 
 /** Safe display helper — never show null/undefined/NaN. */
@@ -197,7 +193,15 @@ const InvestmentCard = memo(function InvestmentCard({
   const [saveCount, setSaveCount] = useState(data.saveCount);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
-  const categoryChips = useCategoryChips(data.category);
+  const categoryChips = usePathwayChips(data);
+  const primaryCTALabel = getPrimaryCTALabel({
+    tokenized_enabled: data.tokenizedEnabled ?? false,
+    tokenized_status: (data.tokenizedStatus as any) ?? 'TOKENIZED_COMING_SOON',
+    jv_enabled: data.jvEnabled ?? true,
+    jv_status: (data.jvStatus as any) ?? 'JV_OPEN',
+    buyer_enabled: data.buyerEnabled ?? true,
+    buyer_status: (data.buyerStatus as any) ?? 'BUYER_OPEN',
+  });
   const isActiveStatus = (data.status ?? 'published') === 'published';
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { x: number }; layoutMeasurement: { width: number } } }) => {
@@ -577,7 +581,7 @@ const InvestmentCard = memo(function InvestmentCard({
             activeOpacity={0.85}
             testID={`${testIDPrefix}-invest-${data.dealId}`}
           >
-            <Text style={styles.investNowText}>Invest Now</Text>
+            <Text style={styles.investNowText}>{primaryCTALabel}</Text>
           </TouchableOpacity>
         </View>
 

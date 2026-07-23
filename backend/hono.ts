@@ -1187,6 +1187,14 @@ import {
   handleAnalytics,
 } from './api/ivx-public-features';
 import {
+  handleGetDealPathways,
+  handleUpdateDealPathways,
+  handlePublishDeal,
+  handleGetSyncReport,
+  handleGetAuditTrail,
+  handleListDealPathways,
+} from './api/ivx-deal-pathways';
+import {
   videoFeedOptions,
   handleVideoFeed,
   handleVideoDownload,
@@ -5015,6 +5023,26 @@ app.options('/api/properties', () => publicFeatureOptions());
 app.get('/api/properties', async (c) => handleFeaturedProperties(c.req.raw));
 app.options('/api/properties/:propertyId', () => publicFeatureOptions());
 app.get('/api/properties/:propertyId', async (c) => handlePropertyDetails(c.req.raw, c.req.param('propertyId')));
+
+// Deal Pathways (admin-controlled, owner-only writes)
+app.options('/api/ivx/deals/pathways', () => publicFeatureOptions());
+app.get('/api/ivx/deals/pathways', async (c) => handleListDealPathways(c.req.raw));
+app.options('/api/ivx/deals/:dealId/pathways', () => publicFeatureOptions());
+app.get('/api/ivx/deals/:dealId/pathways', async (c) => handleGetDealPathways(c.req.raw, c.req.param('dealId')));
+app.put('/api/ivx/deals/:dealId/pathways', async (c) => {
+  const { assertIVXRegisteredOwnerBearer } = await import('./api/owner-only');
+  const authResult = await assertIVXRegisteredOwnerBearer(c.req.raw);
+  if (!authResult.ok) return authResult.response!;
+  return handleUpdateDealPathways(c.req.raw, c.req.param('dealId'), authResult.userId);
+});
+app.post('/api/ivx/deals/:dealId/publish', async (c) => {
+  const { assertIVXRegisteredOwnerBearer } = await import('./api/owner-only');
+  const authResult = await assertIVXRegisteredOwnerBearer(c.req.raw);
+  if (!authResult.ok) return authResult.response!;
+  return handlePublishDeal(c.req.raw, c.req.param('dealId'), authResult.userId);
+});
+app.get('/api/ivx/deals/:dealId/sync-report', async (c) => handleGetSyncReport(c.req.raw, c.req.param('dealId')));
+app.get('/api/ivx/deals/:dealId/audit-trail', async (c) => handleGetAuditTrail(c.req.raw, c.req.param('dealId')));
 
 // Property Admin (public-features alias)
 app.options('/api/ivx/property-admin', () => publicFeatureOptions());

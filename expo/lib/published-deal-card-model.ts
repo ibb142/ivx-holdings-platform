@@ -42,6 +42,21 @@ export interface PublishedDealCardModel {
   ownershipPercentAtMinimum: number;
   ownershipText: string;
   timelineSummary: TimelineSummary;
+  // ── Pathway fields (admin-controlled) ──
+  tokenizedEnabled: boolean;
+  tokenizedStatus: string;
+  sharePrice: number;
+  jvEnabled: boolean;
+  jvStatus: string;
+  jvMinimumContribution: number;
+  buyerEnabled: boolean;
+  buyerStatus: string;
+  buyerAskingPrice: number;
+  publishState: string;
+  slug: string | null;
+  capitalRaised: number;
+  progressPercentage: number;
+  featured: boolean;
 }
 
 export const CANONICAL_MIN_INVESTMENT = 50;
@@ -273,6 +288,21 @@ export function mapDealToCardModel(deal: Record<string, unknown>): PublishedDeal
       (deal.timeline_stages as any) ?? null,
       str(deal.created_at) || str(deal.createdAt) || str(deal.publishedAt) || str(deal.published_at) || null,
     ),
+    // ── Pathway fields (admin-controlled, from jv_deals columns) ──
+    tokenizedEnabled: Boolean(deal.tokenized_enabled ?? false),
+    tokenizedStatus: str(deal.tokenized_status, 'TOKENIZED_COMING_SOON'),
+    sharePrice: Number(deal.share_price ?? 50),
+    jvEnabled: Boolean(deal.jv_enabled ?? true),
+    jvStatus: str(deal.jv_status, 'JV_OPEN'),
+    jvMinimumContribution: Number(deal.jv_minimum_contribution ?? 20000),
+    buyerEnabled: Boolean(deal.buyer_enabled ?? true),
+    buyerStatus: str(deal.buyer_status, 'BUYER_OPEN'),
+    buyerAskingPrice: Number(deal.buyer_asking_price ?? trustMarket.salePrice ?? 0),
+    publishState: str(deal.publish_state, 'published'),
+    slug: deal.slug ? str(deal.slug) : null,
+    capitalRaised: Number(deal.capital_raised ?? 0),
+    progressPercentage: Number(deal.progress_percentage ?? 0),
+    featured: Boolean(deal.featured ?? false),
   };
 }
 
