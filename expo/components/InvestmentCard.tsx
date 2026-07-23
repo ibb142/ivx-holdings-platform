@@ -118,11 +118,13 @@ interface CategoryChip {
 
 function useCategoryChips(dealType: string | null | undefined): CategoryChip[] {
   const t = (dealType ?? '').toLowerCase();
+
+  // Tokenized is COMING SOON — not legally/technically production-ready
   const tokenized: CategoryChip = {
     id: 'tokenized',
     label: 'Tokenized',
-    icon: <Hexagon size={13} color={Colors.primary} />,
-    tint: Colors.primary,
+    icon: <Hexagon size={13} color={Colors.textTertiary} />,
+    tint: Colors.textTertiary,
   };
   const jv: CategoryChip = {
     id: 'jv',
@@ -136,19 +138,22 @@ function useCategoryChips(dealType: string | null | undefined): CategoryChip[] {
     icon: <HomeIcon size={13} color={Colors.green} />,
     tint: Colors.green,
   };
+
+  // Only show badges relevant to the deal type
+  // Tokenized shows as greyed-out (COMING SOON) on all deals
   switch (t) {
     case 'jv':
     case 'equity_split':
     case 'hybrid':
-      return [tokenized, jv, buyer];
+      return [jv, tokenized, buyer];
     case 'development':
     case 'new_construction':
     case 'rehab_construction':
-      return [jv, tokenized, buyer];
+      return [jv, buyer, tokenized];
     case 'profit_sharing':
-      return [tokenized, buyer, jv];
+      return [buyer, tokenized, jv];
     default:
-      return [tokenized, jv, buyer];
+      return [jv, buyer, tokenized];
   }
 }
 
@@ -292,7 +297,7 @@ const InvestmentCard = memo(function InvestmentCard({
   const summaryItems = useMemo(() => [
     { icon: <DollarSign size={12} color={Colors.primary} />, label: 'SALE PRICE', value: salePriceLabel },
     { icon: <PieChart size={12} color={Colors.blue} />, label: 'TOTAL INVESTMENT', value: totalInvestmentLabel },
-    { icon: <TrendingUp size={12} color={Colors.success} />, label: 'ROI', value: roiLabel },
+    { icon: <TrendingUp size={12} color={Colors.success} />, label: 'TARGET ROI', value: roiLabel },
     { icon: <Clock size={12} color={Colors.warning} />, label: 'TIMELINE', value: timelineLabel },
   ], [salePriceLabel, totalInvestmentLabel, roiLabel, timelineLabel]);
 
@@ -483,8 +488,23 @@ const InvestmentCard = memo(function InvestmentCard({
             {data.investmentDetails ? (
               <Text style={styles.detailsText}>{data.investmentDetails}</Text>
             ) : (
-              <Text style={styles.detailsText}>Investment details pending verification.</Text>
+              <Text style={styles.detailsText}>Project overview, investment structure, use of funds, and disclosures are available on the deal detail page.</Text>
             )}
+
+            {/* Investment structure summary */}
+            <View style={styles.detailsSubSection}>
+              <Text style={styles.detailsSubTitle}>Investment Structure</Text>
+              <Text style={styles.detailsRow}>• Minimum investment: {minInvestmentLabel}</Text>
+              <Text style={styles.detailsRow}>• Minimum ownership: {minOwnershipLabel}</Text>
+              <Text style={styles.detailsRow}>• Target ROI: {roiLabel} (projected, not guaranteed)</Text>
+              <Text style={styles.detailsRow}>• Timeline: {timelineLabel}</Text>
+            </View>
+
+            {/* Risk disclosure */}
+            <View style={styles.detailsSubSection}>
+              <Text style={styles.detailsSubTitle}>Risk Disclosure</Text>
+              <Text style={styles.detailsRisk}>All investments involve risk. Past performance is not indicative of future results. Target ROI is a projection based on underwriting assumptions and may change based on project performance, market conditions, and execution. Not FDIC insured. May lose value.</Text>
+            </View>
 
             {/* Full timeline stages */}
             {data.timelineSummary && data.timelineSummary.stages.length > 0 && (
@@ -914,6 +934,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginBottom: 12,
+  },
+  // ── Details sub-sections ──
+  detailsSubSection: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceBorder,
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  detailsSubTitle: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '700' as const,
+    marginBottom: 6,
+  },
+  detailsRow: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  detailsRisk: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontStyle: 'italic' as const,
   },
   // ── Timeline stages ──
   stagesContainer: {

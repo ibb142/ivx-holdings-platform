@@ -571,7 +571,7 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           {data.roi != null && data.roi > 0 ? (
             <View style={styles.metric}>
               <Text style={styles.metricValue}>{data.roi}%</Text>
-              <Text style={styles.metricLabel}>ROI</Text>
+              <Text style={styles.metricLabel}>TARGET ROI</Text>
             </View>
           ) : null}
           {data.minimumInvestment != null && data.minimumInvestment > 0 ? (
