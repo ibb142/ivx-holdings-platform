@@ -27,6 +27,85 @@ import { onboardNewMember, VALID_ROLE_INTERESTS, type MemberRoleInterest } from 
 import { upsertCanonicalMember } from './ivx-canonical-members';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
 
+// ---------------------------------------------------------------------------
+// Role-specific record creation — inserts into jv_partners, brokers, agents,
+// land_owners, tokenized_investors, investors, buyers based on selected roles.
+// Non-fatal: logs errors but does not block registration completion.
+// ---------------------------------------------------------------------------
+
+const ROLE_TABLE_MAP: Record<string, string> = {
+  investor: 'investors',
+  buyer: 'buyers',
+  jv_partner: 'jv_partners',
+  broker: 'brokers',
+  agent: 'agents',
+  land_owner: 'land_owners',
+  tokenized: 'tokenized_investors',
+};
+
+/** Per-table row builder — each role table has a different schema. */
+function buildRoleRow(role: string, tableName: string, authUserId: string, email: string): Record<string, unknown> {
+  const now = new Date().toISOString();
+  const base = { status: 'active', created_at: now, updated_at: now };
+
+  switch (tableName) {
+    case 'investors':
+      // investors table: user_id (uuid), full_name (NOT NULL), email (NOT NULL), accreditation, investment_tier, status
+      return { user_id: authUserId, full_name: email.split('@')[0], email, status: 'active', accreditation: 'pending', investment_tier: 'standard', created_at: now, updated_at: now };
+    case 'buyers':
+      // buyers table: id (text, NOT NULL), name (NOT NULL), email, buyer_type, status
+      return { id: authUserId, name: email.split('@')[0], email, status: 'active', buyer_type: 'individual', created_at: now, updated_at: now };
+    default:
+      // jv_partners, brokers, agents, land_owners, tokenized_investors: auth_user_id (uuid), status, created_at, updated_at
+      return { auth_user_id: authUserId, ...base };
+  }
+}
+
+function getConflictColumn(tableName: string): string {
+  switch (tableName) {
+    case 'investors': return 'user_id';
+    case 'buyers': return 'id';
+    default: return 'auth_user_id';
+  }
+}
+
+async function insertRoleSpecificRecords(input: {
+  authUserId: string;
+  email: string;
+  roles: MemberRoleInterest[];
+  registrationRequestId: string;
+}): Promise<{ ok: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  const supabase = getSupabaseAdmin();
+
+  for (const role of input.roles) {
+    const tableName = ROLE_TABLE_MAP[role];
+    if (!tableName) continue; // Skip 'jv_deals' and unknown roles
+
+    try {
+      const row = buildRoleRow(role, tableName, input.authUserId, input.email);
+      const conflictCol = getConflictColumn(tableName);
+      // Use insert for investors table — PostgREST schema cache may not recognize
+      // the new unique index on user_id. New registrations always create new auth
+      // users, so insert is safe (no conflict expected).
+      const useInsert = tableName === 'investors';
+      const { error } = useInsert
+        ? await supabase.from(tableName).insert(row)
+        : await supabase.from(tableName).upsert(row, { onConflict: conflictCol });
+
+      if (error) {
+        console.error(`[RegistrationOrchestrator] ${tableName} ${useInsert ? 'insert' : 'upsert'} failed:`, error.message);
+        errors.push(`${role}:${error.message}`);
+      }
+    } catch (err) {
+      console.error(`[RegistrationOrchestrator] ${tableName} upsert exception:`, err instanceof Error ? err.message : 'unknown');
+      errors.push(`${role}:${err instanceof Error ? err.message : 'unknown'}`);
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -459,6 +538,25 @@ export async function orchestrateRegistration(
         });
       } catch (onboardErr) {
         console.error('[RegistrationOrchestrator] onboardNewMember failed:', onboardErr instanceof Error ? onboardErr.message : 'unknown');
+      }
+
+      // --- ROLE_PROFILE_CREATING stage ---
+      // Insert role-specific records into investors, buyers, jv_partners, brokers,
+      // agents, land_owners, tokenized_investors based on selected roles.
+      // Non-fatal: logs errors but does not block registration completion.
+      const roleRoles = (input.roles || []).filter((r): r is MemberRoleInterest => VALID_ROLE_INTERESTS.has(r as MemberRoleInterest));
+      if (roleRoles.length > 0) {
+        const roleResult = await insertRoleSpecificRecords({
+          authUserId,
+          email: normalizedEmail,
+          roles: roleRoles,
+          registrationRequestId,
+        });
+        if (!roleResult.ok) {
+          for (const re of roleResult.errors) {
+            fanoutErrors.push(`role_specific:${re}`);
+          }
+        }
       }
 
       // --- INTEREST_CREATING stage ---
