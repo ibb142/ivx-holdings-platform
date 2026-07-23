@@ -126,7 +126,7 @@ function getStripe(): any | null {
   const secretKey = (process.env.STRIPE_SECRET_KEY || '').trim();
   if (!secretKey) return null;
   try {
-    // Dynamic import to avoid crash if stripe not installed
+    // require works in Bun/Node — stripe is in package.json dependencies
     const Stripe = require('stripe');
     _stripe = Stripe(secretKey, { apiVersion: '2025-06-30.basil' as any });
     return _stripe;

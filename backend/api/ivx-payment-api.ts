@@ -282,7 +282,7 @@ export async function handleGetPortfolio(req: Request): Promise<Response> {
   if (error) return json({ ok: false, code: 'DB_ERROR', traceId, error: error.message }, 500);
 
   // Get deal titles
-  const dealIds = [...new Set((positions || []).map((p: any) => p.deal_id))];
+  const dealIds = Array.from(new Set((positions || []).map((p: any) => p.deal_id)));
   const { data: deals } = await sb.from('jv_deals')
     .select('id, title, slug')
     .in('id', dealIds);
