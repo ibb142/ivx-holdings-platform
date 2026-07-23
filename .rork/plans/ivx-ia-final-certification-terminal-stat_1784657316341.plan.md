@@ -1,8 +1,12 @@
 ---
 name: "IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict"
-overview: "Certification completed. The project is now executing IVX Global Brand Standardization as the next owner-approved task."
+overview: "Certification completed. The project is now executing FINAL IVX REGISTRATION + SIGN-UP + SIGN-IN CERTIFICATION with temporary Amazon SES activation."
 createdAt: 2026-07-21T18:08:36.341Z
+updatedAt: 2026-07-23T17:00:00.000Z
 ---
+
+> **ACTIVE TASK CHANGE (2026-07-23):** FINAL IVX REGISTRATION + SIGN-UP + SIGN-IN CERTIFICATION with temporary Amazon SES activation is now the P0 priority. All other work is paused: payments, Tokenized transactions, JV funding, buyer payments, Reels enhancements, new modules, growth automation, visual polish, and remaining brand standardization phases. This section will be archived once auth certification is VERIFIED.
+
 # IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict
 
 > **STATUS: COMPLETE** — IVX IA is now a certified senior software engineer end-to-end with Rork-level general-purpose parity AND a full intelligence layer (19 phases). 35 developer actions + 19-phase intelligence upgrade (model gateway, context engine, memory, retrieval, intent classifier, planner, specialist router, BRV separation, uncertainty, self-critique, response quality, conversation intelligence, business reasoning, code intelligence, 108-question evaluation suite, learning loop, performance tracking, security). ALL built, deployed, and live-verified on api.ivxholding.com (commit `189fb5d448d7`, runtime `189fb5d4`). 210 tests pass / 0 fail. 8/8 live intelligence proof tests pass. **IVX IA = context-aware, memory-enabled, retrieval-grounded, owner-controlled intelligent engineering + business assistant.**
