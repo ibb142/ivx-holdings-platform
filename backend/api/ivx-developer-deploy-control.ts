@@ -1,4 +1,5 @@
 import { gunzipSync } from 'node:zlib';
+import { requestIVXAIText } from '../ivx-ai-runtime';
 import { createClient } from '@supabase/supabase-js';
 import { buildIVXCredentialRequestManifestSnapshot, IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES } from '../config/ivx-credential-request-manifest';
 import { getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue, getRawOwnerVariableValue } from './ivx-owner-variables';
@@ -63,7 +64,18 @@ type DeveloperDeployAction =
   | 'disable_supabase_mfa_aal2_enforcement'
   | 'unenroll_owner_mfa_factor'
   | 'cloudfront_invalidate'
-  | 'supabase_execute_sql_management';
+  | 'supabase_execute_sql_management'
+  | 'github_read_file'
+  | 'github_search_code'
+  | 'github_list_directory'
+  | 'github_get_file_tree'
+  | 'github_get_workflow_logs'
+  | 'ai_diagnose_failure'
+  | 'ai_analyze_code'
+  | 'ai_generate_fix'
+  | 'ai_review_architecture'
+  | 'analyze_dependencies'
+  | 'autonomous_fix_cycle';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -143,6 +155,17 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'unenroll_owner_mfa_factor'
     || normalized === 'cloudfront_invalidate'
     || normalized === 'supabase_execute_sql_management'
+    || normalized === 'github_read_file'
+    || normalized === 'github_search_code'
+    || normalized === 'github_list_directory'
+    || normalized === 'github_get_file_tree'
+    || normalized === 'github_get_workflow_logs'
+    || normalized === 'ai_diagnose_failure'
+    || normalized === 'ai_analyze_code'
+    || normalized === 'ai_generate_fix'
+    || normalized === 'ai_review_architecture'
+    || normalized === 'analyze_dependencies'
+    || normalized === 'autonomous_fix_cycle'
  ) {
     return normalized;
   }
@@ -156,7 +179,17 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'github_list_workflow_runs'
     || action === 'github_get_workflow_run'
     || action === 'github_token_scopes'
-    || action === 'verify_url_sha256';
+    || action === 'verify_url_sha256'
+    || action === 'github_read_file'
+    || action === 'github_search_code'
+    || action === 'github_list_directory'
+    || action === 'github_get_file_tree'
+    || action === 'github_get_workflow_logs'
+    || action === 'ai_diagnose_failure'
+    || action === 'ai_analyze_code'
+    || action === 'ai_generate_fix'
+    || action === 'ai_review_architecture'
+    || action === 'analyze_dependencies';
 }
 
 /** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
@@ -168,6 +201,9 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   }
   if (action === 'github_create_repository') {
     return CREATE_REPOSITORY_CONFIRM_TEXT;
+  }
+  if (action === 'autonomous_fix_cycle') {
+    return GITHUB_CONFIRM_TEXT;
   }
   if (action.startsWith('github_')) {
     return GITHUB_CONFIRM_TEXT;
@@ -1843,8 +1879,8 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256'],
-      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies'],
       ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -1999,6 +2035,544 @@ async function runSupabaseExecuteSqlViaManagement(input: Record<string, unknown>
   };
 }
 
+function sanitizeReadPath(value: unknown): string {
+  const repoPath = readTrimmed(value).replace(/^\/+/, '');
+  if (!repoPath || repoPath.includes('..') || repoPath.endsWith('/')) {
+    throw new Error('A safe repository file path is required.');
+  }
+  const lower = repoPath.toLowerCase();
+  const blocked = lower === '.env'
+    || lower.startsWith('.env.')
+    || lower.endsWith('.pem')
+    || lower.endsWith('.key')
+    || lower.endsWith('.p12')
+    || lower.endsWith('.pfx')
+    || lower.includes('/.env')
+    || lower.includes('secret')
+    || lower.includes('private-key');
+  if (blocked && lower !== '.env.example') {
+    throw new Error('Refusing to read likely secret-bearing repository paths.');
+  }
+  return repoPath;
+}
+
+/** Read-only: reads any source file from the repository (GitHub Contents API). */
+export async function runGithubReadFile(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const filePath = sanitizeReadPath(input.path);
+  const encodedPath = filePath.split('/').map((part) => encodeURIComponent(part)).join('/');
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
+  const response = await fetchJson(url, { method: 'GET', headers: await githubHeaders() });
+  if (!response.ok) {
+    throw new Error(`GitHub read file failed with HTTP ${response.status}.`);
+  }
+  const data = readRecord(response.data);
+  const contentBase64 = readTrimmed(data.content).replace(/\n/g, '');
+  const encoding = readTrimmed(data.encoding);
+  let content = '';
+  if (encoding === 'base64' && contentBase64) {
+    content = Buffer.from(contentBase64, 'base64').toString('utf8');
+  }
+  // Cap returned content at 100,000 chars to keep response manageable
+  const truncated = content.length > 100_000;
+  if (truncated) {
+    content = content.slice(0, 100_000) + '\n\n... [TRUNCATED — file is ' + content.length + ' chars]';
+  }
+  return {
+    provider: 'github',
+    action: 'github_read_file',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    path: filePath,
+    sha: readTrimmed(data.sha) || null,
+    size: typeof data.size === 'number' ? data.size : content.length,
+    encoding,
+    content,
+    contentLength: content.length,
+    truncated,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: searches code across the repository (GitHub Code Search API). */
+export async function runGithubSearchCode(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const query = readTrimmed(input.query);
+  if (!query || query.length < 2) {
+    throw new Error('A search query of at least 2 characters is required for github_search_code.');
+  }
+  const perPageRaw = Number(input.perPage);
+  const perPage = Number.isFinite(perPageRaw) && perPageRaw >= 1 ? Math.min(Math.trunc(perPageRaw), 30) : 10;
+  const url = `https://api.github.com/search/code?q=${encodeURIComponent(query)}+repo:${repoInfo.owner}/${repoInfo.repo}&per_page=${perPage}`;
+  const response = await fetchJson(url, { method: 'GET', headers: await githubHeaders() });
+  if (!response.ok) {
+    throw new Error(`GitHub code search failed with HTTP ${response.status}.`);
+  }
+  const data = readRecord(response.data);
+  const items = Array.isArray(data.items) ? data.items : [];
+  return {
+    provider: 'github',
+    action: 'github_search_code',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    query,
+    totalCount: typeof data.total_count === 'number' ? data.total_count : items.length,
+    results: items.map((itemValue: unknown) => {
+      const record = readRecord(itemValue);
+      return {
+        path: readTrimmed(record.path) || null,
+        name: readTrimmed(record.name) || null,
+        sha: readTrimmed(record.sha) || null,
+        url: readTrimmed(record.html_url) || null,
+        score: typeof record.score === 'number' ? record.score : null,
+      };
+    }),
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: lists directory contents from the repository. */
+export async function runGithubListDirectory(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const dirPath = readTrimmed(input.path).replace(/\/+$/, '').replace(/^\/+/, '');
+  const encodedPath = dirPath ? dirPath.split('/').map((part) => encodeURIComponent(part)).join('/') + '/' : '';
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
+  const response = await fetchJson(url, { method: 'GET', headers: await githubHeaders() });
+  if (!response.ok) {
+    throw new Error(`GitHub list directory failed with HTTP ${response.status}.`);
+  }
+  if (!Array.isArray(response.data)) {
+    throw new Error('Expected directory listing (array), got a file. Use github_read_file for individual files.');
+  }
+  const entries = (response.data as unknown[]).map((itemValue) => {
+    const record = readRecord(itemValue);
+    return {
+      name: readTrimmed(record.name) || null,
+      path: readTrimmed(record.path) || null,
+      type: readTrimmed(record.type) || null,
+      size: typeof record.size === 'number' ? record.size : null,
+      sha: readTrimmed(record.sha) || null,
+    };
+  });
+  return {
+    provider: 'github',
+    action: 'github_list_directory',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    path: dirPath || '/',
+    entries,
+    entryCount: entries.length,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: gets the full recursive file tree (filtered to source files, capped at 500). */
+export async function runGithubGetFileTree(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
+  const response = await fetchJson(url, { method: 'GET', headers: await githubHeaders() });
+  if (!response.ok) {
+    throw new Error(`GitHub file tree failed with HTTP ${response.status}.`);
+  }
+  const data = readRecord(response.data);
+  const rawTree = Array.isArray(data.tree) ? data.tree : [];
+  const entries = rawTree
+    .filter((itemValue: unknown) => {
+      const record = readRecord(itemValue);
+      const path = readTrimmed(record.path).toLowerCase();
+      const type = readTrimmed(record.type);
+      if (type !== 'blob') return false;
+      if (path.includes('node_modules/') || path.includes('.git/') || path.includes('/dist/') || path.includes('/.next/')) return false;
+      return true;
+    })
+    .slice(0, 500)
+    .map((itemValue: unknown) => {
+      const record = readRecord(itemValue);
+      return {
+        path: readTrimmed(record.path) || null,
+        type: readTrimmed(record.type) || null,
+        size: typeof record.size === 'number' ? record.size : null,
+      };
+    });
+  return {
+    provider: 'github',
+    action: 'github_get_file_tree',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    totalEntries: rawTree.length,
+    filteredEntries: entries.length,
+    truncated: rawTree.length > 500,
+    tree: entries,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: fetches GitHub Actions job logs (plain text, capped at 50KB). */
+export async function runGithubGetWorkflowLogs(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const jobIdRaw = Number(input.jobId);
+  const jobId = Number.isFinite(jobIdRaw) ? Math.trunc(jobIdRaw) : 0;
+  if (jobId <= 0) {
+    throw new Error('A valid jobId (numeric GitHub Actions job id) is required for github_get_workflow_logs.');
+  }
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/actions/jobs/${jobId}/logs`;
+  const headers = await githubHeaders();
+  const response = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
+  if (!response.ok) {
+    throw new Error(`GitHub workflow logs failed with HTTP ${response.status}.`);
+  }
+  const logText = await response.text();
+  const truncated = logText.length > 50_000;
+  const logs = truncated ? logText.slice(0, 50_000) + '\n\n... [TRUNCATED]' : logText;
+  return {
+    provider: 'github',
+    action: 'github_get_workflow_logs',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    jobId,
+    logLength: logText.length,
+    truncated,
+    logs,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered CI failure diagnosis — feeds failure context to the AI runtime for root-cause analysis. */
+export async function runAiDiagnoseFailure(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const failureContext = readTrimmed(input.failureContext) || readTrimmed(input.logs);
+  const stepName = readTrimmed(input.stepName);
+  const workflowName = readTrimmed(input.workflowName);
+  const runId = readTrimmed(input.runId);
+  if (!failureContext || failureContext.length < 10) {
+    throw new Error('failureContext or logs (at least 10 characters) is required for ai_diagnose_failure.');
+  }
+  const system = 'You are a senior software engineer diagnosing a CI/CD pipeline failure. Analyze the provided failure context (logs, step names, error messages) and provide:\n1. ROOT CAUSE: The most likely cause of the failure (1-2 sentences)\n2. AFFECTED FILES: Which files are likely involved (list paths)\n3. FIX STRATEGY: Concrete steps to fix the issue (numbered list)\n4. SEVERITY: critical | high | medium | low\n5. CONFIDENCE: high | medium | low\n\nBe concise and technical. Do not speculate beyond what the evidence supports.';
+  const prompt = `CI Failure Analysis Request:\n${workflowName ? `Workflow: ${workflowName}\n` : ''}${runId ? `Run ID: ${runId}\n` : ''}${stepName ? `Failing Step: ${stepName}\n` : ''}\nFailure Context / Logs:\n${failureContext.slice(0, 20_000)}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 2000,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_diagnose_failure',
+    workflowName: workflowName || null,
+    runId: runId || null,
+    stepName: stepName || null,
+    diagnosis: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered code review — analyzes code for bugs, security, performance, and best practices. */
+export async function runAiAnalyzeCode(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath);
+  const language = readTrimmed(input.language);
+  const analysisType = readTrimmed(input.analysisType) || 'general';
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_analyze_code.');
+  }
+  const system = 'You are a senior software engineer performing a code review. Analyze the provided code for:\n1. BUGS: Logic errors, null/undefined risks, race conditions, edge cases\n2. SECURITY: Vulnerabilities, injection risks, secret exposure, auth issues\n3. PERFORMANCE: N+1 queries, unnecessary re-renders, memory leaks, blocking operations\n4. BEST PRACTICES: Framework conventions, patterns, naming, structure\n5. RECOMMENDATIONS: Specific actionable improvements (with code snippets where helpful)\n\nBe concise and technical. Focus on real issues, not style nitpicks.';
+  const prompt = `Code Analysis Request:\n${filePath ? `File: ${filePath}\n` : ''}${language ? `Language: ${language}\n` : ''}Analysis Focus: ${analysisType}\n\nCode:\n${code.slice(0, 30_000)}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 2500,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_analyze_code',
+    path: filePath || null,
+    language: language || null,
+    analysisType,
+    analysis: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered code fix generation — produces fixed code content from a diagnosis + current code. */
+export async function runAiGenerateFix(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const code = readTrimmed(input.code) || readTrimmed(input.content);
+  const filePath = readTrimmed(input.path) || readTrimmed(input.filePath);
+  const issue = readTrimmed(input.issue) || readTrimmed(input.diagnosis);
+  const language = readTrimmed(input.language);
+  if (!code || code.length < 10) {
+    throw new Error('code or content (at least 10 characters) is required for ai_generate_fix.');
+  }
+  if (!issue || issue.length < 10) {
+    throw new Error('issue or diagnosis (at least 10 characters) is required for ai_generate_fix.');
+  }
+  const system = 'You are a senior software engineer generating a code fix. Output ONLY the fixed code, with a brief comment at the top explaining the fix. Do not wrap in markdown code fences. The output must be directly usable as file content.';
+  const prompt = `Generate a fix for the following issue:\n\nFile: ${filePath || 'unknown'}\n${language ? `Language: ${language}\n` : ''}\nIssue/Diagnosis:\n${issue.slice(0, 5_000)}\n\nCurrent Code:\n${code.slice(0, 30_000)}\n\nOutput the complete fixed file content. Do not use markdown code fences.`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 4000,
+  });
+  let fixedCode = result.text.trim();
+  // Strip markdown code fences if the model added them despite instructions
+  fixedCode = fixedCode.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_generate_fix',
+    path: filePath || null,
+    issue: issue.slice(0, 200),
+    fixedCode,
+    fixedCodeLength: fixedCode.length,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: AI-powered architecture review — analyzes project structure, scalability, maintainability, and risks. */
+export async function runAiReviewArchitecture(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const fileTree = readTrimmed(input.fileTree) || readTrimmed(input.tree);
+  const description = readTrimmed(input.description) || readTrimmed(input.context);
+  const codeSamples = readTrimmed(input.codeSamples) || readTrimmed(input.code);
+  if (!fileTree && !description && !codeSamples) {
+    throw new Error('At least one of fileTree, description, or codeSamples is required for ai_review_architecture.');
+  }
+  const system = 'You are a senior software architect reviewing the architecture of a codebase. Provide:\n1. ARCHITECTURE ASSESSMENT: Is the structure sound? (monolith vs modular, separation of concerns)\n2. SCALABILITY: Will this scale? What are the bottlenecks?\n3. MAINTAINABILITY: How easy is this to maintain and extend?\n4. RISKS: Technical debt, coupling issues, missing abstractions\n5. RECOMMENDATIONS: Specific architectural improvements (prioritized)\n\nBe concise and technical.';
+  const prompt = `Architecture Review Request:\n${description ? `\nProject Description:\n${description.slice(0, 5_000)}` : ''}${fileTree ? `\nFile Tree:\n${fileTree.slice(0, 10_000)}` : ''}${codeSamples ? `\nKey Code Samples:\n${codeSamples.slice(0, 15_000)}` : ''}`;
+  const result = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system,
+    prompt,
+    maxOutputTokens: 3000,
+  });
+  return {
+    provider: 'ivx-ai',
+    action: 'ai_review_architecture',
+    review: result.text,
+    model: result.providerMetadata.model,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Read-only: dependency analysis — reads package.json files from the repo and analyzes dependencies. */
+export async function runAnalyzeDependencies(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const headers = await githubHeaders();
+  const pathsToCheck = ['package.json', 'expo/package.json', 'backend/package.json'];
+  const packageJsons: Array<{ path: string; content: Record<string, unknown> }> = [];
+  for (const pkgPath of pathsToCheck) {
+    const encodedPath = pkgPath.split('/').map((part) => encodeURIComponent(part)).join('/');
+    const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
+    const response = await fetchJson(url, { method: 'GET', headers }).catch(() => null);
+    if (response?.ok === true) {
+      const data = readRecord(response.data);
+      const contentBase64 = readTrimmed(data.content).replace(/\n/g, '');
+      if (contentBase64) {
+        try {
+          const content = JSON.parse(Buffer.from(contentBase64, 'base64').toString('utf8')) as Record<string, unknown>;
+          packageJsons.push({ path: pkgPath, content });
+        } catch { /* skip unparseable */ }
+      }
+    }
+  }
+  if (packageJsons.length === 0) {
+    throw new Error('No package.json files found in the repository.');
+  }
+  const analyses = packageJsons.map(({ path, content }) => {
+    const deps = readRecord(content.dependencies);
+    const devDeps = readRecord(content.devDependencies);
+    const peerDeps = readRecord(content.peerDependencies);
+    const allDeps = { ...deps, ...devDeps, ...peerDeps };
+    const depCount = Object.keys(allDeps).length;
+    const issues: string[] = [];
+    for (const [name, version] of Object.entries(allDeps)) {
+      const ver = readTrimmed(version);
+      if (ver.startsWith('0.')) {
+        issues.push(`${name}@${ver} — pre-1.0 version (API may be unstable)`);
+      }
+    }
+    return {
+      path,
+      name: readTrimmed(content.name) || path,
+      version: readTrimmed(content.version) || null,
+      dependencyCount: depCount,
+      dependencies: Object.keys(deps).sort(),
+      devDependencies: Object.keys(devDeps).sort(),
+      peerDependencies: Object.keys(peerDeps).sort(),
+      issues,
+    };
+  });
+  const allDepNames = new Map<string, string[]>();
+  for (const analysis of analyses) {
+    const allDeps = [...analysis.dependencies, ...analysis.devDependencies];
+    for (const dep of allDeps) {
+      const existing = allDepNames.get(dep) ?? [];
+      existing.push(analysis.path);
+      allDepNames.set(dep, existing);
+    }
+  }
+  const sharedDeps = Array.from(allDepNames.entries())
+    .filter(([, locations]) => locations.length > 1)
+    .map(([name, locations]) => ({ name, locations }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    provider: 'ivx',
+    action: 'analyze_dependencies',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    packages: analyses,
+    sharedDependencies: sharedDeps,
+    totalPackages: packageJsons.length,
+    totalUniqueDependencies: allDepNames.size,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/**
+ * Write action (owner-approved): autonomous fix cycle — reads a file, AI-diagnoses the issue,
+ * AI-generates a fix, commits it to GitHub, and optionally dispatches CI.
+ * Requires CONFIRM_IVX_GITHUB_WRITE confirmation phrase.
+ */
+async function runAutonomousFixCycle(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const filePath = sanitizeRepoPath(input.path);
+  const issue = readTrimmed(input.issue) || readTrimmed(input.diagnosis);
+  const commitMessage = readTrimmed(input.commitMessage) || `fix: autonomous repair — ${filePath}`;
+  const skipCi = parseBoolean(input.skipCi);
+  if (!issue || issue.length < 10) {
+    throw new Error('issue or diagnosis (at least 10 characters) is required for autonomous_fix_cycle.');
+  }
+  const headers = await githubHeaders();
+  const steps: Array<{ step: string; status: string; detail?: string }> = [];
+
+  // Step 1: Read the current file
+  steps.push({ step: 'read_file', status: 'started' });
+  const encodedPath = filePath.split('/').map((part) => encodeURIComponent(part)).join('/');
+  const readUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
+  const readResponse = await fetchJson(readUrl, { method: 'GET', headers });
+  if (!readResponse.ok) {
+    steps.push({ step: 'read_file', status: 'failed', detail: `HTTP ${readResponse.status}` });
+    throw new Error(`Autonomous fix: could not read ${filePath} (HTTP ${readResponse.status}).`);
+  }
+  const fileData = readRecord(readResponse.data);
+  const fileSha = readTrimmed(fileData.sha);
+  const currentContent = Buffer.from(readTrimmed(fileData.content).replace(/\n/g, ''), 'base64').toString('utf8');
+  steps.push({ step: 'read_file', status: 'success', detail: `${currentContent.length} bytes read` });
+
+  // Step 2: AI-diagnose the issue
+  steps.push({ step: 'ai_diagnose', status: 'started' });
+  const diagnosisResult = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system: 'You are a senior software engineer diagnosing a code issue. Provide a concise root cause and fix strategy.',
+    prompt: `File: ${filePath}\nIssue: ${issue}\n\nCurrent Code:\n${currentContent.slice(0, 25_000)}\n\nProvide ROOT CAUSE and FIX STRATEGY only.`,
+    maxOutputTokens: 1500,
+  });
+  const diagnosis = diagnosisResult.text;
+  steps.push({ step: 'ai_diagnose', status: 'success', detail: `${diagnosis.length} chars` });
+
+  // Step 3: AI-generate the fix
+  steps.push({ step: 'ai_generate_fix', status: 'started' });
+  const fixResult = await requestIVXAIText({
+    module: 'ivx-ia-senior-dev',
+    system: 'You are a senior software engineer generating a code fix. Output ONLY the fixed code content, no markdown fences, no explanations. The output must be directly usable as file content.',
+    prompt: `File: ${filePath}\nIssue: ${issue}\nDiagnosis: ${diagnosis}\n\nCurrent Code:\n${currentContent.slice(0, 25_000)}\n\nOutput the complete fixed file content. No markdown fences.`,
+    maxOutputTokens: 4000,
+  });
+  let fixedContent = fixResult.text.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+  if (!fixedContent || fixedContent.length < 5) {
+    steps.push({ step: 'ai_generate_fix', status: 'failed', detail: 'AI returned empty fix' });
+    throw new Error('Autonomous fix: AI generated empty fix content.');
+  }
+  steps.push({ step: 'ai_generate_fix', status: 'success', detail: `${fixedContent.length} bytes generated` });
+
+  // Step 4: Commit the fix
+  steps.push({ step: 'commit_fix', status: 'started' });
+  const commitUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${encodedPath}`;
+  const commitResponse = await fetchJson(commitUrl, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      message: commitMessage,
+      content: Buffer.from(fixedContent, 'utf8').toString('base64'),
+      branch,
+      sha: fileSha,
+    }),
+  });
+  if (!commitResponse.ok) {
+    steps.push({ step: 'commit_fix', status: 'failed', detail: `HTTP ${commitResponse.status}` });
+    throw new Error(`Autonomous fix: GitHub commit failed with HTTP ${commitResponse.status}.`);
+  }
+  const commitData = readRecord(commitResponse.data);
+  const commitRecord = readRecord(commitData.commit);
+  const commitSha = readTrimmed(commitRecord.sha) || null;
+  steps.push({ step: 'commit_fix', status: 'success', detail: `commit ${commitSha?.slice(0, 8) ?? 'unknown'}` });
+
+  // Step 5: Optionally dispatch CI
+  let ciDispatched = false;
+  if (!skipCi) {
+    steps.push({ step: 'dispatch_ci', status: 'started' });
+    try {
+      const dispatchResponse = await fetchJson(
+        `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/actions/workflows/ivx-ci.yml/dispatches`,
+        { method: 'POST', headers, body: JSON.stringify({ ref: branch, inputs: {} }) },
+      );
+      ciDispatched = dispatchResponse.ok;
+      steps.push({ step: 'dispatch_ci', status: dispatchResponse.ok ? 'success' : 'skipped', detail: dispatchResponse.ok ? 'dispatched' : `HTTP ${dispatchResponse.status}` });
+    } catch (err) {
+      steps.push({ step: 'dispatch_ci', status: 'skipped', detail: err instanceof Error ? err.message : 'error' });
+    }
+  }
+
+  return {
+    provider: 'github',
+    action: 'autonomous_fix_cycle',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    path: filePath,
+    issue: issue.slice(0, 200),
+    diagnosis: diagnosis.slice(0, 500),
+    fixedContentLength: fixedContent.length,
+    commitSha,
+    commitUrl: readTrimmed(commitRecord.html_url) || null,
+    ciDispatched,
+    steps,
+    readOnly: false,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 async function runAction(action: DeveloperDeployAction, input: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (action === 'github_commit_file') {
     return await runGithubCommitFile(input);
@@ -2086,6 +2660,39 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'cloudfront_invalidate') {
     return await runCloudFrontInvalidate(input);
+  }
+  if (action === 'github_read_file') {
+    return await runGithubReadFile(input);
+  }
+  if (action === 'github_search_code') {
+    return await runGithubSearchCode(input);
+  }
+  if (action === 'github_list_directory') {
+    return await runGithubListDirectory(input);
+  }
+  if (action === 'github_get_file_tree') {
+    return await runGithubGetFileTree(input);
+  }
+  if (action === 'github_get_workflow_logs') {
+    return await runGithubGetWorkflowLogs(input);
+  }
+  if (action === 'ai_diagnose_failure') {
+    return await runAiDiagnoseFailure(input);
+  }
+  if (action === 'ai_analyze_code') {
+    return await runAiAnalyzeCode(input);
+  }
+  if (action === 'ai_generate_fix') {
+    return await runAiGenerateFix(input);
+  }
+  if (action === 'ai_review_architecture') {
+    return await runAiReviewArchitecture(input);
+  }
+  if (action === 'analyze_dependencies') {
+    return await runAnalyzeDependencies(input);
+  }
+  if (action === 'autonomous_fix_cycle') {
+    return await runAutonomousFixCycle(input);
   }
   if (action === 'supabase_execute_sql_management') {
     return await runSupabaseExecuteSqlViaManagement(input);
