@@ -246,6 +246,21 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   }
   const email = sanitizeEmail(body.email);
 
+  // EMERGENCY-ONLY GATE: passwordless login is restricted to emergency recovery.
+  // The owner must use standard email + password sign-in for routine access.
+  // This endpoint is kept as a last-resort lockout recovery path only.
+  const emergency = readTrimmed(body.emergency).toLowerCase();
+  if (emergency !== 'true' && emergency !== 'ivx_emergency_recovery') {
+    const failure: OwnerSessionFailure = {
+      success: false,
+      message: 'Passwordless owner login is emergency-only. Please sign in with your email and password. If you are locked out, include { "emergency": "ivx_emergency_recovery" } in the request body.',
+      rootCause: 'passwordless_not_emergency_mode',
+      deploymentMarker: DEPLOYMENT_MARKER,
+      timestamp: nowIso(),
+    };
+    return ownerOnlyJson(failure, 403);
+  }
+
   if (!isValidEmail(email)) {
     const failure: OwnerSessionFailure = {
       success: false,

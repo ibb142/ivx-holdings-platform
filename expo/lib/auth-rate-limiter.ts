@@ -1,8 +1,14 @@
+/**
+ * Auth rate limiter — counts only real invalid credential responses.
+ * Network failures, HTTP 5xx, and timeouts do NOT count against the user.
+ * Lockout is 15 minutes (matches the login screen UX message).
+ * Successful login clears all attempts immediately.
+ */
 const AUTH_ATTEMPTS: Map<string, { count: number; firstAttempt: number; lockedUntil: number }> = new Map();
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 5 * 60 * 1000;
-const LOCKOUT_MS = 60 * 1000;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes (was 60s — fixed to match UX)
 
 export function checkAuthRateLimit(identifier: string): { allowed: boolean; remainingAttempts: number; lockedUntilMs: number } {
   const now = Date.now();
@@ -27,6 +33,11 @@ export function checkAuthRateLimit(identifier: string): { allowed: boolean; rema
   return { allowed: remaining > 0, remainingAttempts: Math.max(0, remaining), lockedUntilMs: entry.lockedUntil };
 }
 
+/**
+ * Record an auth attempt. Only real invalid credential responses (HTTP 401)
+ * should call this with success=false. Network failures, timeouts, and HTTP 5xx
+ * should NOT call this at all — they are not credential failures.
+ */
 export function recordAuthAttempt(identifier: string, success: boolean) {
   if (success) {
     AUTH_ATTEMPTS.delete(identifier);
@@ -48,10 +59,19 @@ export function recordAuthAttempt(identifier: string, success: boolean) {
 
   if (entry.count >= MAX_ATTEMPTS) {
     entry.lockedUntil = now + LOCKOUT_MS;
-    console.log(`[RateLimit] ${identifier} LOCKED for ${LOCKOUT_MS / 1000} seconds`);
+    const lockoutMin = LOCKOUT_MS / 60000;
+    console.log(`[RateLimit] ${identifier} LOCKED for ${lockoutMin} minutes`);
   }
 
   AUTH_ATTEMPTS.set(identifier, entry);
+}
+
+/**
+ * Record a non-credential failure (network error, timeout, HTTP 5xx).
+ * This does NOT count against the user's attempt limit.
+ */
+export function recordAuthNetworkFailure(identifier: string) {
+  console.log(`[RateLimit] ${identifier} network failure — NOT counted against attempt limit`);
 }
 
 export function clearAuthAttempts(identifier: string): boolean {

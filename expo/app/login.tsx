@@ -1992,24 +1992,11 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 )}
               </TouchableOpacity>
 
-              {/* Passwordless owner login — the working path for owners who
-                  don't know their programmatically-set password. */}
-              <TouchableOpacity
-                style={[styles.passwordlessSignInBtn, passwordlessLoading && styles.signInBtnDisabled]}
-                onPress={handlePasswordlessLogin}
-                disabled={passwordlessLoading || isLoading}
-                activeOpacity={0.85}
-                testID="login-passwordless-btn"
-              >
-                {passwordlessLoading ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <>
-                    <Shield size={18} color={Colors.primary} />
-                    <Text style={styles.passwordlessSignInBtnText}>Sign in without password</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {/* Passwordless owner login button REMOVED — owner now has a
+                  known password and signs in with standard email + password.
+                  The passwordless endpoint is restricted to emergency-only
+                  (requires { emergency: "ivx_emergency_recovery" } body field).
+                  The "Troubleshoot access" panel below provides recovery options. */}
 
               {/* Amazon/Instagram-level UX: a single muted "Troubleshoot access"
                   disclosure that expands the full diagnostic + recovery panel.
