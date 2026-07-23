@@ -30,7 +30,15 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Run env-independent backend tests
-        run: bun test ${{ github.event.inputs.testTarget || 'backend/ivx-registration-orchestrator.test.ts backend/ivx-timezone.test.ts' }}
+        run: |
+          TARGET="${{ github.event.inputs.testTarget || 'backend/ivx-registration-orchestrator.test.ts backend/ivx-timezone.test.ts' }}"
+          if [ "$TARGET" = "default" ] || [ "$TARGET" = "all" ]; then
+            echo "Running full backend test suite (env-independent files)..."
+            bun test backend/ivx-registration-orchestrator.test.ts backend/ivx-timezone.test.ts backend/ivx-senior-developer-capabilities.test.ts backend/ivx-ci-build-runner.test.ts backend/ivx-growth-autonomous-ops.test.ts
+          else
+            echo "Running targeted tests: $TARGET"
+            bun test $TARGET
+          fi
 
   android-apk:
     name: Android release APK
@@ -47,12 +55,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
       - name: Install root dependencies
         run: bun install
       - name: Install expo dependencies
         run: cd expo && bun install
       - name: Build release APK
         run: cd expo/android && ./gradlew assembleRelease --no-daemon -x lint
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
       - name: Record APK SHA-256
         run: sha256sum expo/android/app/build/outputs/apk/release/*.apk
       - name: Upload APK artifact
