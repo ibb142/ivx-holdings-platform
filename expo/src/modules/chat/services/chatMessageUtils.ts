@@ -118,16 +118,21 @@ export function createTransientMessageId(prefix: string): string {
  * Invalid/missing timestamps fall behind dated records without reordering equal IDs.
  */
 export function sortMessagesByCanonicalOrder<T extends { id: string; createdAt?: string | null; serverCreatedAt?: string | null }>(messages: readonly T[]): T[] {
-  return [...messages].sort((left: T, right: T): number => {
-    const leftTimestamp = left.serverCreatedAt ?? left.createdAt ?? '';
-    const rightTimestamp = right.serverCreatedAt ?? right.createdAt ?? '';
-    const leftTime = Date.parse(leftTimestamp);
-    const rightTime = Date.parse(rightTimestamp);
-    const leftValid = Number.isFinite(leftTime);
-    const rightValid = Number.isFinite(rightTime);
+  const resolveTimestamp = (message: T): number | null => {
+    const serverTime = Date.parse(message.serverCreatedAt ?? '');
+    if (Number.isFinite(serverTime)) return serverTime;
 
-    if (leftValid && rightValid && leftTime !== rightTime) return leftTime - rightTime;
-    if (leftValid !== rightValid) return leftValid ? -1 : 1;
+    const createdTime = Date.parse(message.createdAt ?? '');
+    return Number.isFinite(createdTime) ? createdTime : null;
+  };
+
+  return [...messages].sort((left: T, right: T): number => {
+    const leftTime = resolveTimestamp(left);
+    const rightTime = resolveTimestamp(right);
+
+    if (leftTime !== null && rightTime !== null && leftTime !== rightTime) return leftTime - rightTime;
+    if (leftTime !== null && rightTime === null) return -1;
+    if (leftTime === null && rightTime !== null) return 1;
     return left.id.localeCompare(right.id);
   });
 }

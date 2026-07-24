@@ -19,6 +19,8 @@ on:
       - "expo/android/app/build.gradle"
       - "expo/ivxholding-landing/index.html"
       - "expo/scripts/verify-apk-release-consistency.mjs"
+      - "expo/src/modules/chat/services/chatMessageUtils.ts"
+      - "expo/__tests__/chat-canonical-order.test.ts"
       - ".github/workflows/ivx-ci.yml"
 
 jobs:
@@ -51,8 +53,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
       - name: Validate configured APK release references
         run: node expo/scripts/verify-apk-release-consistency.mjs
+      - name: Install Expo dependencies
+        run: cd expo && bun install
+      - name: Test canonical chat ordering
+        run: cd expo && bun test __tests__/chat-canonical-order.test.ts
 
   android-apk:
     name: Android release APK

@@ -27,6 +27,15 @@ describe('sortMessagesByCanonicalOrder', () => {
     expect(ordered.map((message: TestMessage) => message.id)).toEqual(['optimistic', 'remote']);
   });
 
+  test('falls back to createdAt when a server timestamp is invalid', () => {
+    const ordered = sortMessagesByCanonicalOrder<TestMessage>([
+      { id: 'fallback', createdAt: '2026-07-24T10:01:00.000Z', serverCreatedAt: 'invalid-server-time' },
+      { id: 'later', createdAt: '2026-07-24T10:02:00.000Z', serverCreatedAt: '2026-07-24T10:02:00.000Z' },
+    ]);
+
+    expect(ordered.map((message: TestMessage) => message.id)).toEqual(['fallback', 'later']);
+  });
+
   test('uses a stable ID tiebreaker for same-time messages and duplicates', () => {
     const ordered = sortMessagesByCanonicalOrder<TestMessage>([
       { id: 'msg-b', createdAt: '2026-07-24T10:00:00.000Z' },

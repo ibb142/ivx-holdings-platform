@@ -1334,12 +1334,9 @@ function finalizeResultWithStateRecord(
     deployment_id: result.deployId,
     production_checks: result.healthOk
       ? [{
-          name: 'production /health',
-          url: 'https://api.ivxholding.com/health',
-          httpStatus: result.healthStatus,
-          ok: true,
-          detail: 'Production health endpoint returned healthy.',
-          checkedAt: result.generatedAt,
+          check: 'production /health',
+          result: result.healthStatus === null ? 'healthy' : `healthy (HTTP ${result.healthStatus})`,
+          timestamp: Date.parse(result.generatedAt),
         }]
       : [],
     evidence: [
@@ -1366,8 +1363,8 @@ function finalizeResultWithStateRecord(
       }] : []),
     ],
     remaining_work: result.error ? [result.error.slice(0, 300)] : [],
-    completed_at: result.generatedAt,
-    verified_at: result.finalStatus === 'COMPLETE' && result.endToEndProductionComplete ? result.generatedAt : null,
+    completed_at: Date.parse(result.generatedAt),
+    verified_at: result.finalStatus === 'COMPLETE' && result.endToEndProductionComplete ? Date.parse(result.generatedAt) : null,
   };
 
   // Enforce the terminal transition via the state machine.
@@ -1381,7 +1378,7 @@ function finalizeResultWithStateRecord(
   // productionHealthOk / featureVerificationOk) are what actually decide whether VERIFIED is
   // honestly earned. For non-COMPLETE terminal targets (BLOCKED/FAILED/NO_CHANGE_REQUIRED) we
   // keep the honest `from` (any state may transition to a failure terminal).
-  const isDevelopmentTask = taskType === 'CODE_FIX' || taskType === 'FEATURE' || taskType === 'UI_FIX' || taskType === 'DATA_FIX';
+  const isDevelopmentTask = taskType === 'CODE_FIX' || taskType === 'FEATURE' || taskType === 'UI_FIX';
   // Owner mandate 2026-07-21: COMPLETED is the honest success terminal for
   // commit-only CODE_CHANGE / QA_ONLY / READ_ONLY / FACTORY tasks. VERIFIED
   // remains the success terminal only when deploy was requested AND succeeded.
@@ -1411,7 +1408,6 @@ function finalizeResultWithStateRecord(
   const guardTaskType = (taskType === 'CODE_FIX' ? 'CODE_FIX'
     : taskType === 'FEATURE' ? 'FEATURE'
     : taskType === 'UI_FIX' ? 'UI_FIX'
-    : taskType === 'DATA_FIX' ? 'DATA_FIX'
     : taskType === 'INVESTIGATION' ? 'INVESTIGATION'
     : taskType === 'QA_ONLY' ? 'QA_ONLY'
     : taskType === 'DEPLOYMENT' ? 'DEPLOY_ONLY'
