@@ -125,6 +125,19 @@ const STALE_JOB_TIMEOUT_MS: number = (() => {
 /** How often to run the stale-job sweep (ms). */
 const STALE_CHECK_INTERVAL_MS = 60_000;
 
+/**
+ * IVX-CERT-INTEGRITY-001 corrective action: hard wall-clock ceiling for the
+ * VERIFYING stage. verifyLiveCommitMatch() polls Render + the live /version
+ * endpoint and could previously stall the whole job at VERIFYING/90%
+ * indefinitely if either external call hung. Configurable via
+ * IVX_WORKER_VERIFY_TIMEOUT_MS; defaults to 3 minutes.
+ */
+const VERIFY_STAGE_TIMEOUT_MS: number = (() => {
+  const env = process.env.IVX_WORKER_VERIFY_TIMEOUT_MS;
+  const parsed = env ? Number.parseInt(env, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3 * 60 * 1000;
+})();
+
 /** Granular execution stages tracked in real time. */
 export type IVXWorkerJobStage =
   | 'QUEUED'
@@ -1962,14 +1975,49 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     }
 
     // Deploy verification: if a commit landed, confirm production serves it.
+    // HARD TIMEOUT (IVX-CERT-INTEGRITY-001 corrective action): races the
+    // verification against VERIFY_STAGE_TIMEOUT_MS so a stalled Render poll or
+    // hung /version fetch can never leave the job at VERIFYING indefinitely.
+    // On timeout the job is explicitly failed with an honest, specific reason
+    // instead of hanging at 90% forever.
     let match: Awaited<ReturnType<typeof verifyLiveCommitMatch>> | null = null;
     const commitSha = proof.gitDeployOperator.github.commitSha;
     if (commitSha && proof.gitDeployOperator.status === 'executed') {
       await updateJobStage(job.jobId, 'VERIFYING', 'Verifying live commit match on production.');
-      match = await verifyLiveCommitMatch({
-        requestedCommit: commitSha,
-        deploymentId: proof.gitDeployOperator.render.deployId,
-      });
+      const verifyStartedAt = Date.now();
+      try {
+        match = await Promise.race([
+          verifyLiveCommitMatch({
+            requestedCommit: commitSha,
+            deploymentId: proof.gitDeployOperator.render.deployId,
+          }),
+          new Promise<never>((_resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('IVX_VERIFY_TIMEOUT')), VERIFY_STAGE_TIMEOUT_MS);
+            timer.unref?.();
+          }),
+        ]);
+      } catch (verifyError) {
+        const timedOut = verifyError instanceof Error && verifyError.message === 'IVX_VERIFY_TIMEOUT';
+        const elapsedMs = Date.now() - verifyStartedAt;
+        const reason = timedOut
+          ? `VERIFYING stage exceeded its ${VERIFY_STAGE_TIMEOUT_MS}ms hard timeout after ${elapsedMs}ms (commit ${commitSha.slice(0, 12)}, deploy ${proof.gitDeployOperator.render.deployId ?? 'none'}). Code was committed/deployed but live-commit verification could not complete in time.`
+          : `VERIFYING stage failed after ${elapsedMs}ms: ${verifyError instanceof Error ? verifyError.message.slice(0, 300) : 'unknown error'}`;
+        const timeoutResult = summarizeProof(job.jobId, proof, null);
+        timeoutResult.finalStatus = 'FAILED';
+        timeoutResult.error = reason;
+        await updateJob(job.jobId, {
+          status: 'failed',
+          stage: 'FAILED',
+          progressPercent: STAGE_PROGRESS.FAILED,
+          stageDetail: reason,
+          finishedAt: nowIso(),
+          result: timeoutResult,
+          error: reason,
+        });
+        await appendLedger(timeoutResult);
+        activeJobControllers.delete(job.jobId);
+        return timeoutResult;
+      }
     }
 
     const proofResult = summarizeProof(job.jobId, proof, match);
