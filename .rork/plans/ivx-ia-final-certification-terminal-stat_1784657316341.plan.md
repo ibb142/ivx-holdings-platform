@@ -5,7 +5,7 @@ createdAt: 2026-07-21T18:08:36.341Z
 updatedAt: 2026-07-23T17:00:00.000Z
 ---
 
-> **ACTIVE TASK CHANGE (2026-07-23):** FINAL IVX REGISTRATION + SIGN-UP + SIGN-IN CERTIFICATION with temporary Amazon SES activation is now the P0 priority. All other work is paused: payments, Tokenized transactions, JV funding, buyer payments, Reels enhancements, new modules, growth automation, visual polish, and remaining brand standardization phases. This section will be archived once auth certification is VERIFIED.
+> **ACTIVE TASK CHANGE (2026-07-24):** FINAL IVX MODULE LOADING + MEDIA UPLOAD + REELS STABILITY QA is now the P0 priority. The current objective is cache-first rendering, resilient uploads, bounded Reel playback, and evidence-based Android validation. Existing registration and certification records remain historical; no verification claim may be upgraded without the device and live-SHA gates.
 >
 > **P0 SUPERSEDING TASK (2026-07-23): IVX CERTIFICATION INTEGRITY REPAIR** — the prior "STATUS: COMPLETE"/"same level as Rork"/"Done" verdicts below are REVOKED per incident IVX-CERT-INTEGRITY-001 (see section below). All future status reporting on this plan must use the layered status model, not a single PASS/DONE collapse. See "IVX CERTIFICATION INTEGRITY REPAIR" section for the incident record and outstanding gates.
 
