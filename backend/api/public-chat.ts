@@ -6,6 +6,7 @@ import {
   type PublicChatSource,
 } from '../public-chat-ai';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
+import { formatPublicChatGateBlock } from '../services/ivx-public-chat-gate-response';
 import { extractDealDocuments } from '../services/ivx-deal-documents';
 import { isDeploymentCommand, routeDeploymentCommand } from '../services/ivx-deployment-chat-brain';
 import type { ChatStorage } from '../chat-storage';
@@ -396,19 +397,48 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
         ownerSessionPresent: false,
         entryPoint: 'public-chat',
       });
-      if (gate.blocked && gate.response) {
-        // Persist the blocked response so the chat thread shows the gate result.
-        await persistPublicTurn({
+      if (gate.blocked && gate.result.state === 'BLOCKED') {
+        // A policy block is a completed chat turn, not a transport failure. Returning
+        // 409 here made clients discard the truth-first blocker as a failed request,
+        // which looked like a disappearing chat response. Preserve every gate field in
+        // the visible answer while returning the normal public-chat success shape.
+        const answer = formatPublicChatGateBlock(gate.result);
+        const assistantPersistence = await persistPublicTurn({
           sessionId,
           clientId,
           role: 'assistant',
-          content: (gate.result.state === 'BLOCKED'
-            ? `STATE: BLOCKED — ${gate.result.blockerCode}. ${gate.result.exactBlocker} Next owner action: ${gate.result.nextOwnerAction}`
-            : 'Blocked by pre-execution gate.'),
+          content: answer,
           source: 'system',
           model: 'ivx-pre-execution-gate',
         });
-        return gate.response;
+        return jsonResponse({
+          ok: true,
+          requestId,
+          sessionId,
+          answer,
+          model: 'ivx-pre-execution-gate',
+          source: 'fallback' as PublicChatSource,
+          deploymentMarker: DEPLOYMENT_MARKER,
+          commit: LIVE_COMMIT_SHA,
+          commitShort: LIVE_COMMIT_SHORT,
+          rateLimitRemaining: rateLimit.remaining,
+          rateLimitResetAt: rateLimit.resetAt,
+          timestamp: nowIso(),
+          endpoint: null,
+          persistence: assistantPersistence !== 'none' ? assistantPersistence : userPersistence,
+          block17Marker: BLOCK17_MARKER,
+          gate: {
+            state: gate.result.state,
+            taskId: gate.result.taskId,
+            blockerCode: gate.result.blockerCode,
+            failedCapability: gate.result.failedCapability,
+            requiredVariable: gate.result.requiredVariable,
+            runtimeSource: gate.result.runtimeSource,
+            httpStatus: gate.result.httpStatus,
+            repeatedBlocker: gate.result.repeatedBlocker,
+            marker: gate.result.marker,
+          },
+        });
       }
     } catch (gateError) {
       console.log('[IVXPublicChat] Pre-execution gate error (non-blocking):', gateError instanceof Error ? gateError.message : 'unknown');
