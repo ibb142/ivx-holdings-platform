@@ -138,6 +138,7 @@ import {
   encodeReplyBody,
   parseReplyBody,
   normalizeComposerText,
+  sortMessagesByCanonicalOrder,
   type ParsedReplyBody,
 } from '@/src/modules/chat/services/chatMessageUtils';
 import {
@@ -1420,21 +1421,9 @@ export default function IVXOwnerChatRoute() {
         deduped.set(message.id, message);
       }
     }
-    // CANONICAL ORDER: server_created_at ASC, then id ASC as a stable tiebreak.
-    // Using only the timestamp caused visible reordering when two messages
-    // share the same millisecond (bulk inserts, fast owner+assistant turns) or
-    // when a client clock skew produced a createdAt that briefly out-ordered
-    // an earlier-arriving row. Comparing the id string as the secondary key
-    // makes the sort deterministic and stable across re-renders, reloads, and
-    // realtime duplicate events (same id always sorts to the same slot).
-    const finalMessages = Array.from(deduped.values()).sort((a, b) => {
-      const timeDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      if (timeDiff !== 0) {
-        return timeDiff;
-      }
-      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-    });
-    return finalMessages;
+    // Canonical server-created order with a stable message-ID tiebreak.
+    // This keeps reloads and realtime duplicates from moving existing bubbles.
+    return sortMessagesByCanonicalOrder(Array.from(deduped.values()));
   }, [conversationQuery.data?.id, messages, ownerId, ownerLabel, pendingOwnerMessages, transientAssistantMessages]);
 
   // DURABLE ANTI-DISAPPEAR MIRROR:

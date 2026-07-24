@@ -113,6 +113,25 @@ export function createTransientMessageId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * Sorts messages by their authoritative server timestamp and a stable ID tiebreaker.
+ * Invalid/missing timestamps fall behind dated records without reordering equal IDs.
+ */
+export function sortMessagesByCanonicalOrder<T extends { id: string; createdAt?: string | null; serverCreatedAt?: string | null }>(messages: readonly T[]): T[] {
+  return [...messages].sort((left: T, right: T): number => {
+    const leftTimestamp = left.serverCreatedAt ?? left.createdAt ?? '';
+    const rightTimestamp = right.serverCreatedAt ?? right.createdAt ?? '';
+    const leftTime = Date.parse(leftTimestamp);
+    const rightTime = Date.parse(rightTimestamp);
+    const leftValid = Number.isFinite(leftTime);
+    const rightValid = Number.isFinite(rightTime);
+
+    if (leftValid && rightValid && leftTime !== rightTime) return leftTime - rightTime;
+    if (leftValid !== rightValid) return leftValid ? -1 : 1;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 export function formatMessageTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
