@@ -148,8 +148,8 @@ export default function AdminPaymentSettings() {
             <Text style={[styles.envText, { color: environmentColor }]}>{environmentLabel}</Text>
           </View>
           <View style={styles.statusGrid}>
-            <StatusRow label="Stripe Connected" value={config?.stripeConfigured ? 'YES' : 'NO'} ok={config?.stripeConfigured} />
-            <StatusRow label="Webhook Secret" value={config?.webhookConfigured ? 'CONFIGURED' : 'MISSING'} ok={config?.webhookConfigured} />
+            <StatusRow label="Stripe Connected" value={config?.stripeConfigured ? 'YES' : 'NO'} ok={config?.stripeConfigured ?? false} />
+            <StatusRow label="Webhook Secret" value={config?.webhookConfigured ? 'CONFIGURED' : 'MISSING'} ok={config?.webhookConfigured ?? false} />
             <StatusRow label="Publishable Key" value={config?.publishableKey ? 'SET' : 'MISSING'} ok={!!config?.publishableKey} />
           </View>
         </View>

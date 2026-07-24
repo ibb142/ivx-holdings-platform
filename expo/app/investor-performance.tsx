@@ -15,8 +15,8 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   TrendingUp,
@@ -45,7 +45,7 @@ type PerformanceMetric = {
   formatted: string;
   trend: 'up' | 'down' | 'flat';
   trendPercent: number | null;
-  icon: 'wallet' | 'building' | 'target' | 'percent' | 'dollar' | 'calendar';
+  icon: 'wallet' | 'building' | 'target' | 'percent' | 'dollar' | 'calendar' | 'trending';
 };
 
 type ActiveDeal = {
@@ -426,7 +426,8 @@ function renderMetricIcon(icon: PerformanceMetric['icon']) {
     case 'target': return <Target size={size} color={color} />;
     case 'percent': return <Percent size={size} color={color} />;
     case 'dollar': return <DollarSign size={size} color={color} />;
-    default: return <TrendingUp size={size} color={color} />;
+    case 'trending': return <TrendingUp size={size} color={color} />;
+    default: return <Calendar size={size} color={color} />;
   }
 }
 

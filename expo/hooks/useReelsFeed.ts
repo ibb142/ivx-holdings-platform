@@ -64,7 +64,7 @@ export function useReelsFeed(): ReelsFeedState {
     isLoading: feedQuery.isLoading,
     isRefreshing: feedQuery.isRefetching && !feedQuery.isFetchingNextPage,
     isFetchingMore: feedQuery.isFetchingNextPage,
-    error: feedQuery.error ?? null,
+    error: feedQuery.error instanceof Error ? feedQuery.error : feedQuery.error ? new Error('Unable to load the video feed.') : null,
     loadMore,
     refresh,
   };

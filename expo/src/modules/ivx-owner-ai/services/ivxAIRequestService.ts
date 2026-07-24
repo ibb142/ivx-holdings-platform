@@ -35,7 +35,7 @@ export type IVXOwnerAIProbeResult = {
   health: ServiceRuntimeHealth;
   roomStatus: IVXOwnerAIRoomStatus | null;
   source: 'remote_api' | 'local_app_brain' | 'provider_fallback' | 'unknown';
-  provider?: 'chatgpt' | 'ivx_daily_improvement' | 'ivx_self_developer_runtime' | null;
+  provider?: 'chatgpt' | 'ivx_daily_improvement' | 'ivx_self_developer_runtime' | 'ivx_readonly_inspection_runtime' | null;
   endpoint: string | null;
   deploymentMarker: string | null;
   capabilities: IVXOwnerAIHealthProbeResponse['capabilities'] | null;
@@ -76,7 +76,7 @@ export type IVXOwnerAIRequestDiagnostics = {
 
 export type IVXOwnerAIRuntimeProof = {
   source: 'remote_api' | 'local_app_brain' | 'provider_fallback' | 'pending';
-  provider?: 'chatgpt' | 'ivx_daily_improvement' | 'ivx_self_developer_runtime' | null;
+  provider?: 'chatgpt' | 'ivx_daily_improvement' | 'ivx_self_developer_runtime' | 'ivx_readonly_inspection_runtime' | null;
   requestStage: string;
   failureClass: string;
   statusCode: number | null;

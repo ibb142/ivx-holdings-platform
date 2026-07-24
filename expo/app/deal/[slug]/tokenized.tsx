@@ -46,7 +46,7 @@ import {
   FileText,
   Loader2,
   Receipt,
-  Portfolio,
+  BriefcaseBusiness,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
@@ -299,8 +299,8 @@ export default function TokenizedParticipationPage() {
               style={styles.successButton}
               onPress={() => router.push('/(tabs)/portfolio')}
             >
-              <Portfolio color="#000" size={20} />
-              <Text style={styles.successButtonText}>View Portfolio</Text>
+              <BriefcaseBusiness color="#000" size={20} />
+              <Text style={styles.successButtonText}>View BriefcaseBusiness</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.successSecondaryButton}
