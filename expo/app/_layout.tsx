@@ -22,21 +22,22 @@ import { EarnProvider } from "@/lib/earn-context";
 import { EmailProvider } from "@/lib/email-context";
 import { NetworkProvider } from "@/lib/network-context";
 import Colors from "@/constants/colors";
+import { shouldRetryIVXRequest } from "@/lib/query-contract";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
-      retry: 2,
-      refetchOnMount: true,
+      staleTime: 60_000,
+      gcTime: 30 * 60_000,
+      retry: shouldRetryIVXRequest,
+      refetchOnMount: false,
       refetchOnReconnect: true,
       refetchOnWindowFocus: false,
-      networkMode: 'online',
+      networkMode: 'offlineFirst',
     },
     mutations: {
-      retry: 1,
-      networkMode: 'online',
+      retry: shouldRetryIVXRequest,
+      networkMode: 'offlineFirst',
     },
   },
 });
