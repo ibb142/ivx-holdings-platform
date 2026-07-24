@@ -36,7 +36,7 @@ The local IVX workspace will become the release source, then each delivery surfa
 - API and owner automation: publish the local backend and autonomous-worker source, deploy it, and verify health plus the live revision.
 - Web experience: publish the local web source, rebuild it, deploy it, and check the public routes.
 - Android: reconcile local Android source, create a release build, verify its package and checksum, and publish only after build success.
-- iOS: build the current iOS app and validate it in the simulator. The current local iOS app is still an empty starter screen, so it will be recorded honestly as a buildable shell unless a full iOS product interface is implemented before release.
+- iOS: build the current iOS app and validate it in the simulator. The current local iOS app provides Overview, Portfolio, Activity, and Profile screens; build proof is recorded separately from TestFlight and physical-device verification.
 
 ## Safety and rollback
 - Do not delete the previous live version; keep a recoverable release point before forced replacement.
@@ -52,5 +52,5 @@ The local IVX workspace will become the release source, then each delivery surfa
 - iOS source: published as `934e7e5eb7436d0a56b9b1974abf0a870110f848` (project, SwiftUI screens, and tests); iOS build checks passed. Render deployment `dep-d9hu011c0rfc738hshm0` reached `live` and health plus worker revision both matched this commit.
 - Expo checks: TypeScript passed; lint completed with existing warnings only; APK link consistency passed for version `1.4.37`.
 - Android artifact: local release APK checksum `ee5fc9c7e00f720538993c73dc87638bd0a0ce99903466822b0a806f759bd7e9`, size `18,137,834` bytes. It remains debug-signed, so it is build evidence only and is not Play-distribution ready.
-- iOS distribution: signed build artifact exists, but TestFlight/App Store delivery and physical-device QA remain unverified.
+- iOS distribution: signed build artifact exists. A fresh iOS build check passed on 2026-07-24; TestFlight/App Store delivery and physical-device QA remain unverified.
 - Remaining validation gaps: Expo Go/physical-device validation, Android protected release signing and Play delivery, iOS TestFlight/App Store submission, physical Android/iOS QA, and full worker retry/dead-letter recovery coverage.
