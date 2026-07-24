@@ -1,1 +1,568 @@
-LyoqCiAqIElWWCBBbWF6b24gU0VTIGVtYWlsIHNlbmRlciAob3duZXItb25seSBvdXRyZWFjaCBkZWxpdmVyeSkuCiAqCiAqIFJlcGxhY2VzIFNlbmRHcmlkIGFzIHRoZSBhY3RpdmUgb3V0Ym91bmQgZW1haWwgcGF0aC4gU2VuZHMgYSBzaW5nbGUgZW1haWwgdmlhCiAqIHRoZSBBV1MgU0VTIHYyIEFQSSAoYC92Mi9lbWFpbC9vdXRib3VuZC1lbWFpbHNgKSB1c2luZyBhIFNpZ1Y0LXNpZ25lZCBIVFRQUwogKiByZXF1ZXN0IOKAlCBubyBuZXcgZGVwZW5kZW5jaWVzLCBzYW1lIHNpZ25pbmcgcGF0dGVybiBhcyB0aGUgQ2xvdWRGcm9udCBhZ2VudC4KICoKICogQ3JlZGVudGlhbHMgY29tZSBmcm9tIHRoZSBleGlzdGluZyBBV1MgZW52IChBV1NfQUNDRVNTX0tFWV9JRCAvCiAqIEFXU19TRUNSRVRfQUNDRVNTX0tFWSAvIEFXU19SRUdJT04pLiBUaGUgdmVyaWZpZWQgc2VuZGVyIGFkZHJlc3MgY29tZXMgZnJvbQogKiBJVlhfU0VTX0ZST01fRU1BSUwgKGZhbGxpbmcgYmFjayB0byBPV05FUl9SRVBBSVJfRU1BSUwgLyBFWFBPX1BVQkxJQ19PV05FUl9FTUFJTCkuCiAqCiAqIFNBRkVUWTogY2FsbGVycyBtdXN0IGVuZm9yY2Ugb3duZXIgYXBwcm92YWwgYmVmb3JlIGludm9raW5nIHRoaXMuIFRoaXMgbW9kdWxlCiAqIG9ubHkgcGVyZm9ybXMgdGhlIHRyYW5zcG9ydCDigJQgaXQgbmV2ZXIgZGVjaWRlcyB3aGV0aGVyIGEgbWVzc2FnZSBtYXkgYmUgc2VudC4KICovCmltcG9ydCB7IGNyZWF0ZUhhc2gsIGNyZWF0ZUhtYWMgfSBmcm9tICdub2RlOmNyeXB0byc7Cgpjb25zdCBBV1NfU0VSVklDRSA9ICdzZXMnOwoKZXhwb3J0IHR5cGUgU2VzU2VuZFJlc3VsdCA9IHsKICBvazogYm9vbGVhbjsKICBzdGF0dXM6ICdzZW50JyB8ICdtaXNzaW5nX2NvbmZpZycgfCAnZmFpbGVkJzsKICBtZXNzYWdlSWQ/OiBzdHJpbmc7CiAgaHR0cFN0YXR1cz86IG51bWJlcjsKICByZWdpb24/OiBzdHJpbmc7CiAgZnJvbT86IHN0cmluZzsKICB0bz86IHN0cmluZzsKICAvKiogRXhhY3QgZW52IG5hbWVzIHN0aWxsIHJlcXVpcmVkIHRvIGVuYWJsZSBzZW5kaW5nLiAqLwogIG1pc3NpbmdFbnZOYW1lczogc3RyaW5nW107CiAgZXJyb3I/OiBzdHJpbmc7CiAgc2VudEF0OiBzdHJpbmc7Cn07CgpmdW5jdGlvbiByZWFkRW52KG5hbWU6IHN0cmluZyk6IHN0cmluZyB7CiAgY29uc3QgdiA9IHByb2Nlc3MuZW52W25hbWVdOwogIHJldHVybiB0eXBlb2YgdiA9PT0gJ3N0cmluZycgPyB2LnRyaW0oKSA6ICcnOwp9CgovKiogVGhlIHZlcmlmaWVkIFNFUyBzZW5kZXIgYWRkcmVzcywgd2l0aCBzYWZlIG93bmVyLWVtYWlsIGZhbGxiYWNrcy4gKi8KLy8gSW5jbHVkZXMgU3VwYWJhc2UgQXV0aCBTTVRQIHBhc3N3b3JkIGRlcml2YXRpb24gZnJvbSBBV1NfU0VDUkVUX0FDQ0VTU19LRVkuCmV4cG9ydCBmdW5jdGlvbiByZXNvbHZlU2VzRnJvbUVtYWlsKCk6IHN0cmluZyB7CiAgcmV0dXJuICgKICAgIHJlYWRFbnYoJ0lWWF9TRVNfRlJPTV9FTUFJTCcpIHx8CiAgICByZWFkRW52KCdPV05FUl9SRVBBSVJfRU1BSUwnKSB8fAogICAgcmVhZEVudignRVhQT19QVUJMSUNfT1dORVJfRU1BSUwnKQogICk7Cn0KCmZ1bmN0aW9uIHJlc29sdmVSZWdpb24oKTogc3RyaW5nIHsKICByZXR1cm4gcmVhZEVudignQVdTX1JFR0lPTicpIHx8ICd1cy1lYXN0LTEnOwp9CgpmdW5jdGlvbiBoYXNoKHBheWxvYWQ6IHN0cmluZyk6IHN0cmluZyB7CiAgcmV0dXJuIGNyZWF0ZUhhc2goJ3NoYTI1NicpLnVwZGF0ZShwYXlsb2FkLCAndXRmOCcpLmRpZ2VzdCgnaGV4Jyk7Cn0KCmZ1bmN0aW9uIGhtYWMoa2V5OiBCdWZmZXIgfCBzdHJpbmcsIGRhdGE6IHN0cmluZyk6IEJ1ZmZlciB7CiAgcmV0dXJuIGNyZWF0ZUhtYWMoJ3NoYTI1NicsIGtleSkudXBkYXRlKGRhdGEsICd1dGY4JykuZGlnZXN0KCk7Cn0KCmZ1bmN0aW9uIGJ1aWxkU2lnbmluZ0tleShzZWNyZXQ6IHN0cmluZywgZGF0ZVN0YW1wOiBzdHJpbmcsIHJlZ2lvbjogc3RyaW5nKTogQnVmZmVyIHsKICBjb25zdCBrRGF0ZSA9IGhtYWMoYEFXUzQke3NlY3JldH1gLCBkYXRlU3RhbXApOwogIGNvbnN0IGtSZWdpb24gPSBobWFjKGtEYXRlLCByZWdpb24pOwogIGNvbnN0IGtTZXJ2aWNlID0gaG1hYyhrUmVnaW9uLCBBV1NfU0VSVklDRSk7CiAgcmV0dXJuIGhtYWMoa1NlcnZpY2UsICdhd3M0X3JlcXVlc3QnKTsKfQoKZnVuY3Rpb24gaXNMaWtlbHlFbWFpbCh2YWx1ZTogc3RyaW5nKTogYm9vbGVhbiB7CiAgcmV0dXJuIC9eW15cc0BdK0BbXlxzQF0rXC5bXlxzQF0rJC8udGVzdCh2YWx1ZS50cmltKCkpOwp9CgovKioKICogUmVxdWVzdCBBV1MgU0VTIHRvIHZlcmlmeSBhbiBlbWFpbCBhZGRyZXNzIGFzIGEgc2VuZGVyL3JlY2lwaWVudCBpZGVudGl0eS4KICogQVdTIHNlbmRzIGEgdmVyaWZpY2F0aW9uIGVtYWlsIHRvIHRoZSBhZGRyZXNzOyB0aGUgcmVjaXBpZW50IG11c3QgY2xpY2sgdGhlCiAqIGxpbmsgYmVmb3JlIHRoZSBhZGRyZXNzIGNhbiBiZSB1c2VkIHRvIHNlbmQgb3IgcmVjZWl2ZSBtYWlsIGluIHNhbmRib3ggbW9kZS4KICogUmV0dXJucyBzdHJ1Y3R1cmVkIHN0YXR1czsgbmV2ZXIgdGhyb3dzLgogKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIHZlcmlmeVNlc0VtYWlsSWRlbnRpdHkoZW1haWw6IHN0cmluZyk6IFByb21pc2U8U2VzU2VuZFJlc3VsdD4gewogIGNvbnN0IHNlbnRBdCA9IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKTsKICBjb25zdCBhY2Nlc3NLZXkgPSByZWFkRW52KCdBV1NfQUNDRVNTX0tFWV9JRCcpOwogIGNvbnN0IHNlY3JldEtleSA9IHJlYWRFbnYoJ0FXU19TRUNSRVRfQUNDRVNTX0tFWScpOwogIGNvbnN0IHNlc3Npb25Ub2tlbiA9IHJlYWRFbnYoJ0FXU19TRVNTSU9OX1RPS0VOJyk7CiAgY29uc3QgcmVnaW9uID0gcmVzb2x2ZVJlZ2lvbigpOwogIGNvbnN0IHRhcmdldCA9IGVtYWlsLnRyaW0oKS50b0xvd2VyQ2FzZSgpOwoKICBjb25zdCBtaXNzaW5nRW52TmFtZXM6IHN0cmluZ1tdID0gW107CiAgaWYgKCFhY2Nlc3NLZXkpIG1pc3NpbmdFbnZOYW1lcy5wdXNoKCdBV1NfQUNDRVNTX0tFWV9JRCcpOwogIGlmICghc2VjcmV0S2V5KSBtaXNzaW5nRW52TmFtZXMucHVzaCgnQVdTX1NFQ1JFVF9BQ0NFU1NfS0VZJyk7CgogIGlmIChtaXNzaW5nRW52TmFtZXMubGVuZ3RoID4gMCkgewogICAgcmV0dXJuIHsKICAgICAgb2s6IGZhbHNlLAogICAgICBzdGF0dXM6ICdtaXNzaW5nX2NvbmZpZycsCiAgICAgIHJlZ2lvbiwKICAgICAgdG86IHRhcmdldCB8fCB1bmRlZmluZWQsCiAgICAgIG1pc3NpbmdFbnZOYW1lcywKICAgICAgZXJyb3I6ICdBbWF6b24gU0VTIGlzIG5vdCBmdWxseSBjb25maWd1cmVkLicsCiAgICAgIHNlbnRBdCwKICAgIH07CiAgfQoKICBpZiAoIWlzTGlrZWx5RW1haWwodGFyZ2V0KSkgewogICAgcmV0dXJuIHsKICAgICAgb2s6IGZhbHNlLAogICAgICBzdGF0dXM6ICdmYWlsZWQnLAogICAgICByZWdpb24sCiAgICAgIHRvOiB0YXJnZXQgfHwgdW5kZWZpbmVkLAogICAgICBtaXNzaW5nRW52TmFtZXMsCiAgICAgIGVycm9yOiAnSWRlbnRpdHkgaXMgbm90IGEgdmFsaWQgZW1haWwgYWRkcmVzcy4nLAogICAgICBzZW50QXQsCiAgICB9OwogIH0KCiAgY29uc3QgaG9zdCA9IGBlbWFpbC4ke3JlZ2lvbn0uYW1hem9uYXdzLmNvbWA7CiAgY29uc3QgY2Fub25pY2FsVXJpID0gJy8nOwogIGNvbnN0IGFjdGlvbiA9ICdWZXJpZnlFbWFpbElkZW50aXR5JzsKICBjb25zdCBwYXlsb2FkID0gYEFjdGlvbj0ke2VuY29kZVVSSUNvbXBvbmVudChhY3Rpb24pfSZFbWFpbEFkZHJlc3M9JHtlbmNvZGVVUklDb21wb25lbnQodGFyZ2V0KX0mVmVyc2lvbj0yMDEwLTEyLTAxYDsKICBjb25zdCBib2R5SGFzaCA9IGhhc2gocGF5bG9hZCk7CgogIGNvbnN0IG5vdyA9IG5ldyBEYXRlKCk7CiAgY29uc3QgYW16RGF0ZSA9IG5vdy50b0lTT1N0cmluZygpLnJlcGxhY2UoL1s6LV18XC5cZHszfS9nLCAnJyk7CiAgY29uc3QgZGF0ZVN0YW1wID0gYW16RGF0ZS5zbGljZSgwLCA4KTsKICBjb25zdCBjb250ZW50VHlwZSA9ICdhcHBsaWNhdGlvbi94LXd3dy1mb3JtLXVybGVuY29kZWQnOwogIGNvbnN0IGhlYWRlckxpbmVzOiBbc3RyaW5nLCBzdHJpbmddW10gPSBbCiAgICBbJ2NvbnRlbnQtdHlwZScsIGNvbnRlbnRUeXBlXSwKICAgIFsnaG9zdCcsIGhvc3RdLAogICAgWyd4LWFtei1jb250ZW50LXNoYTI1NicsIGJvZHlIYXNoXSwKICAgIFsneC1hbXotZGF0ZScsIGFtekRhdGVdLAogIF07CiAgaWYgKHNlc3Npb25Ub2tlbikgaGVhZGVyTGluZXMucHVzaChbJ3gtYW16LXNlY3VyaXR5LXRva2VuJywgc2Vzc2lvblRva2VuXSk7CiAgY29uc3QgY2Fub25pY2FsSGVhZGVycyA9IGhlYWRlckxpbmVzLm1hcCgoW2ssIHZdKSA9PiBgJHtrfToke3Z9XG5gKS5qb2luKCcnKTsKICBjb25zdCBzaWduZWRIZWFkZXJzID0gaGVhZGVyTGluZXMubWFwKChba10pID0+IGspLmpvaW4oJzsnKTsKICBjb25zdCBjYW5vbmljYWxSZXF1ZXN0ID0gWydQT1NUJywgY2Fub25pY2FsVXJpLCAnJywgY2Fub25pY2FsSGVhZGVycywgc2lnbmVkSGVhZGVycywgYm9keUhhc2hdLmpvaW4oJ1xuJyk7CiAgY29uc3QgY3JlZGVudGlhbFNjb3BlID0gYCR7ZGF0ZVN0YW1wfS8ke3JlZ2lvbn0vJHtBV1NfU0VSVklDRX0vYXdzNF9yZXF1ZXN0YDsKICBjb25zdCBzdHJpbmdUb1NpZ24gPSBbJ0FXUzQtSE1BQy1TSEEyNTYnLCBhbXpEYXRlLCBjcmVkZW50aWFsU2NvcGUsIGhhc2goY2Fub25pY2FsUmVxdWVzdCldLmpvaW4oJ1xuJyk7CiAgY29uc3Qgc2lnbmluZ0tleSA9IGJ1aWxkU2lnbmluZ0tleShzZWNyZXRLZXksIGRhdGVTdGFtcCwgcmVnaW9uKTsKICBjb25zdCBzaWduYXR1cmUgPSBjcmVhdGVIbWFjKCdzaGEyNTYnLCBzaWduaW5nS2V5KS51cGRhdGUoc3RyaW5nVG9TaWduLCAndXRmOCcpLmRpZ2VzdCgnaGV4Jyk7CiAgY29uc3QgYXV0aG9yaXphdGlvbiA9IGBBV1M0LUhNQUMtU0hBMjU2IENyZWRlbnRpYWw9JHthY2Nlc3NLZXl9LyR7Y3JlZGVudGlhbFNjb3BlfSwgU2lnbmVkSGVhZGVycz0ke3NpZ25lZEhlYWRlcnN9LCBTaWduYXR1cmU9JHtzaWduYXR1cmV9YDsKCiAgY29uc3QgaGVhZGVyczogUmVjb3JkPHN0cmluZywgc3RyaW5nPiA9IHsKICAgICdDb250ZW50LVR5cGUnOiBjb250ZW50VHlwZSwKICAgIEhvc3Q6IGhvc3QsCiAgICAnWC1BbXotQ29udGVudC1TaGEyNTYnOiBib2R5SGFzaCwKICAgICdYLUFtei1EYXRlJzogYW16RGF0ZSwKICAgIEF1dGhvcml6YXRpb246IGF1dGhvcml6YXRpb24sCiAgfTsKICBpZiAoc2Vzc2lvblRva2VuKSBoZWFkZXJzWydYLUFtei1TZWN1cml0eS1Ub2tlbiddID0gc2Vzc2lvblRva2VuOwoKICB0cnkgewogICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBmZXRjaChgaHR0cHM6Ly8ke2hvc3R9JHtjYW5vbmljYWxVcml9YCwgewogICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgaGVhZGVycywKICAgICAgYm9keTogcGF5bG9hZCwKICAgIH0pOwogICAgY29uc3QgdGV4dCA9IGF3YWl0IHJlc3BvbnNlLnRleHQoKTsKICAgIGlmICghcmVzcG9uc2Uub2spIHsKICAgICAgcmV0dXJuIHsKICAgICAgICBvazogZmFsc2UsCiAgICAgICAgc3RhdHVzOiAnZmFpbGVkJywKICAgICAgICByZWdpb24sCiAgICAgICAgdG86IHRhcmdldCwKICAgICAgICBodHRwU3RhdHVzOiByZXNwb25zZS5zdGF0dXMsCiAgICAgICAgbWlzc2luZ0Vudk5hbWVzLAogICAgICAgIGVycm9yOiB0ZXh0LnNsaWNlKDAsIDUwMCkgfHwgYFNFUyB2ZXJpZmljYXRpb24gcmVxdWVzdCByZXNwb25kZWQgJHtyZXNwb25zZS5zdGF0dXN9YCwKICAgICAgICBzZW50QXQsCiAgICAgIH07CiAgICB9CiAgICByZXR1cm4gewogICAgICBvazogdHJ1ZSwKICAgICAgc3RhdHVzOiAnc2VudCcsCiAgICAgIHJlZ2lvbiwKICAgICAgdG86IHRhcmdldCwKICAgICAgaHR0cFN0YXR1czogcmVzcG9uc2Uuc3RhdHVzLAogICAgICBtaXNzaW5nRW52TmFtZXMsCiAgICAgIHNlbnRBdCwKICAgIH07CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIHJldHVybiB7CiAgICAgIG9rOiBmYWxzZSwKICAgICAgc3RhdHVzOiAnZmFpbGVkJywKICAgICAgcmVnaW9uLAogICAgICB0bzogdGFyZ2V0LAogICAgICBtaXNzaW5nRW52TmFtZXMsCiAgICAgIGVycm9yOiBlcnJvciBpbnN0YW5jZW9mIEVycm9yID8gZXJyb3IubWVzc2FnZSA6ICdTRVMgdmVyaWZpY2F0aW9uIHJlcXVlc3QgZmFpbGVkLicsCiAgICAgIHNlbnRBdCwKICAgIH07CiAgfQp9CgovKioKICogTGlzdCB2ZXJpZmllZCBhbmQgcGVuZGluZyBTRVMgaWRlbnRpdGllcyAoZW1haWwgYWRkcmVzc2VzIGFuZCBkb21haW5zKS4KICogUmV0dXJucyBzdHJ1Y3R1cmVkIHN0YXR1czsgbmV2ZXIgdGhyb3dzLgogKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGxpc3RTZXNJZGVudGl0aWVzKCk6IFByb21pc2U8ewogIG9rOiBib29sZWFuOwogIGlkZW50aXRpZXM/OiBzdHJpbmdbXTsKICBlcnJvcj86IHN0cmluZzsKICByZWdpb24/OiBzdHJpbmc7CiAgaHR0cFN0YXR1cz86IG51bWJlcjsKICBtaXNzaW5nRW52TmFtZXM6IHN0cmluZ1tdOwogIHNlbnRBdDogc3RyaW5nOwp9PiB7CiAgY29uc3Qgc2VudEF0ID0gbmV3IERhdGUoKS50b0lTT1N0cmluZygpOwogIGNvbnN0IGFjY2Vzc0tleSA9IHJlYWRFbnYoJ0FXU19BQ0NFU1NfS0VZX0lEJyk7CiAgY29uc3Qgc2VjcmV0S2V5ID0gcmVhZEVudignQVdTX1NFQ1JFVF9BQ0NFU1NfS0VZJyk7CiAgY29uc3Qgc2Vzc2lvblRva2VuID0gcmVhZEVudignQVdTX1NFU1NJT05fVE9LRU4nKTsKICBjb25zdCByZWdpb24gPSByZXNvbHZlUmVnaW9uKCk7CgogIGNvbnN0IG1pc3NpbmdFbnZOYW1lczogc3RyaW5nW10gPSBbXTsKICBpZiAoIWFjY2Vzc0tleSkgbWlzc2luZ0Vudk5hbWVzLnB1c2goJ0FXU19BQ0NFU1NfS0VZX0lEJyk7CiAgaWYgKCFzZWNyZXRLZXkpIG1pc3NpbmdFbnZOYW1lcy5wdXNoKCdBV1NfU0VDUkVUX0FDQ0VTU19LRVknKTsKCiAgaWYgKG1pc3NpbmdFbnZOYW1lcy5sZW5ndGggPiAwKSB7CiAgICByZXR1cm4gewogICAgICBvazogZmFsc2UsCiAgICAgIHJlZ2lvbiwKICAgICAgbWlzc2luZ0Vudk5hbWVzLAogICAgICBlcnJvcjogJ0FtYXpvbiBTRVMgaXMgbm90IGZ1bGx5IGNvbmZpZ3VyZWQuJywKICAgICAgc2VudEF0LAogICAgfTsKICB9CgogIGNvbnN0IGhvc3QgPSBgZW1haWwuJHtyZWdpb259LmFtYXpvbmF3cy5jb21gOwogIGNvbnN0IGNhbm9uaWNhbFVyaSA9ICcvJzsKICBjb25zdCBwYXlsb2FkID0gJ0FjdGlvbj1MaXN0SWRlbnRpdGllcyZWZXJzaW9uPTIwMTAtMTItMDEnOwogIGNvbnN0IGJvZHlIYXNoID0gaGFzaChwYXlsb2FkKTsKCiAgY29uc3Qgbm93ID0gbmV3IERhdGUoKTsKICBjb25zdCBhbXpEYXRlID0gbm93LnRvSVNPU3RyaW5nKCkucmVwbGFjZSgvWzotXXxcLlxkezN9L2csICcnKTsKICBjb25zdCBkYXRlU3RhbXAgPSBhbXpEYXRlLnNsaWNlKDAsIDgpOwogIGNvbnN0IGNvbnRlbnRUeXBlID0gJ2FwcGxpY2F0aW9uL3gtd3d3LWZvcm0tdXJsZW5jb2RlZCc7CiAgY29uc3QgaGVhZGVyTGluZXM6IFtzdHJpbmcsIHN0cmluZ11bXSA9IFsKICAgIFsnY29udGVudC10eXBlJywgY29udGVudFR5cGVdLAogICAgWydob3N0JywgaG9zdF0sCiAgICBbJ3gtYW16LWNvbnRlbnQtc2hhMjU2JywgYm9keUhhc2hdLAogICAgWyd4LWFtei1kYXRlJywgYW16RGF0ZV0sCiAgXTsKICBpZiAoc2Vzc2lvblRva2VuKSBoZWFkZXJMaW5lcy5wdXNoKFsneC1hbXotc2VjdXJpdHktdG9rZW4nLCBzZXNzaW9uVG9rZW5dKTsKICBjb25zdCBjYW5vbmljYWxIZWFkZXJzID0gaGVhZGVyTGluZXMubWFwKChbaywgdl0pID0+IGAke2t9OiR7dn1cbmApLmpvaW4oJycpOwogIGNvbnN0IHNpZ25lZEhlYWRlcnMgPSBoZWFkZXJMaW5lcy5tYXAoKFtrXSkgPT4gaykuam9pbignOycpOwogIGNvbnN0IGNhbm9uaWNhbFJlcXVlc3QgPSBbJ1BPU1QnLCBjYW5vbmljYWxVcmksICcnLCBjYW5vbmljYWxIZWFkZXJzLCBzaWduZWRIZWFkZXJzLCBib2R5SGFzaF0uam9pbignXG4nKTsKICBjb25zdCBjcmVkZW50aWFsU2NvcGUgPSBgJHtkYXRlU3RhbXB9LyR7cmVnaW9ufS8ke0FXU19TRVJWSUNFfS9hd3M0X3JlcXVlc3RgOwogIGNvbnN0IHN0cmluZ1RvU2lnbiA9IFsnQVdTNC1ITUFDLVNIQTI1NicsIGFtekRhdGUsIGNyZWRlbnRpYWxTY29wZSwgaGFzaChjYW5vbmljYWxSZXF1ZXN0KV0uam9pbignXG4nKTsKICBjb25zdCBzaWduaW5nS2V5ID0gYnVpbGRTaWduaW5nS2V5KHNlY3JldEtleSwgZGF0ZVN0YW1wLCByZWdpb24pOwogIGNvbnN0IHNpZ25hdHVyZSA9IGNyZWF0ZUhtYWMoJ3NoYTI1NicsIHNpZ25pbmdLZXkpLnVwZGF0ZShzdHJpbmdUb1NpZ24sICd1dGY4JykuZGlnZXN0KCdoZXgnKTsKICBjb25zdCBhdXRob3JpemF0aW9uID0gYEFXUzQtSE1BQy1TSEEyNTYgQ3JlZGVudGlhbD0ke2FjY2Vzc0tleX0vJHtjcmVkZW50aWFsU2NvcGV9LCBTaWduZWRIZWFkZXJzPSR7c2lnbmVkSGVhZGVyc30sIFNpZ25hdHVyZT0ke3NpZ25hdHVyZX1gOwoKICBjb25zdCBoZWFkZXJzOiBSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+ID0gewogICAgJ0NvbnRlbnQtVHlwZSc6IGNvbnRlbnRUeXBlLAogICAgSG9zdDogaG9zdCwKICAgICdYLUFtei1Db250ZW50LVNoYTI1Nic6IGJvZHlIYXNoLAogICAgJ1gtQW16LURhdGUnOiBhbXpEYXRlLAogICAgQXV0aG9yaXphdGlvbjogYXV0aG9yaXphdGlvbiwKICB9OwogIGlmIChzZXNzaW9uVG9rZW4pIGhlYWRlcnNbJ1gtQW16LVNlY3VyaXR5LVRva2VuJ10gPSBzZXNzaW9uVG9rZW47CgogIHRyeSB7CiAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKGBodHRwczovLyR7aG9zdH0ke2Nhbm9uaWNhbFVyaX1gLCB7CiAgICAgIG1ldGhvZDogJ1BPU1QnLAogICAgICBoZWFkZXJzLAogICAgICBib2R5OiBwYXlsb2FkLAogICAgfSk7CiAgICBjb25zdCB0ZXh0ID0gYXdhaXQgcmVzcG9uc2UudGV4dCgpOwogICAgaWYgKCFyZXNwb25zZS5vaykgewogICAgICByZXR1cm4gewogICAgICAgIG9rOiBmYWxzZSwKICAgICAgICByZWdpb24sCiAgICAgICAgaHR0cFN0YXR1czogcmVzcG9uc2Uuc3RhdHVzLAogICAgICAgIG1pc3NpbmdFbnZOYW1lcywKICAgICAgICBlcnJvcjogdGV4dC5zbGljZSgwLCA1MDApIHx8IGBTRVMgbGlzdCBpZGVudGl0aWVzIHJlc3BvbmRlZCAke3Jlc3BvbnNlLnN0YXR1c31gLAogICAgICAgIHNlbnRBdCwKICAgICAgfTsKICAgIH0KICAgIGNvbnN0IGlkZW50aXRpZXM6IHN0cmluZ1tdID0gW107CiAgICBjb25zdCBlbWFpbE1hdGNoZXMgPSB0ZXh0Lm1hdGNoQWxsKC88bWVtYmVyPihbXjxdKyk8XC9tZW1iZXI+L2cpOwogICAgZm9yIChjb25zdCBtYXRjaCBvZiBlbWFpbE1hdGNoZXMpIHsKICAgICAgaWRlbnRpdGllcy5wdXNoKG1hdGNoWzFdLnRyaW0oKSk7CiAgICB9CiAgICByZXR1cm4gewogICAgICBvazogdHJ1ZSwKICAgICAgcmVnaW9uLAogICAgICBpZGVudGl0aWVzLAogICAgICBodHRwU3RhdHVzOiByZXNwb25zZS5zdGF0dXMsCiAgICAgIG1pc3NpbmdFbnZOYW1lcywKICAgICAgc2VudEF0LAogICAgfTsKICB9IGNhdGNoIChlcnJvcikgewogICAgcmV0dXJuIHsKICAgICAgb2s6IGZhbHNlLAogICAgICByZWdpb24sCiAgICAgIG1pc3NpbmdFbnZOYW1lcywKICAgICAgZXJyb3I6IGVycm9yIGluc3RhbmNlb2YgRXJyb3IgPyBlcnJvci5tZXNzYWdlIDogJ1NFUyBsaXN0IGlkZW50aXRpZXMgcmVxdWVzdCBmYWlsZWQuJywKICAgICAgc2VudEF0LAogICAgfTsKICB9Cn0KCi8qKgogKiBTZW5kIGEgc2luZ2xlIHRyYW5zYWN0aW9uYWwgZW1haWwgdmlhIEFtYXpvbiBTRVMuIFJldHVybnMgc3RydWN0dXJlZCBzdGF0dXM7CiAqIG5ldmVyIHRocm93cy4gT3duZXIgYXBwcm92YWwgbXVzdCBiZSBlbmZvcmNlZCBieSB0aGUgY2FsbGVyLgogKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIHNlbmRTZXNFbWFpbChpbnB1dDogewogIHRvOiBzdHJpbmc7CiAgc3ViamVjdDogc3RyaW5nOwogIGJvZHk6IHN0cmluZzsKICBmcm9tPzogc3RyaW5nOwogIHJlcGx5VG8/OiBzdHJpbmc7Cn0pOiBQcm9taXNlPFNlc1NlbmRSZXN1bHQ+IHsKICBjb25zdCBzZW50QXQgPSBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCk7CiAgY29uc3QgYWNjZXNzS2V5ID0gcmVhZEVudignQVdTX0FDQ0VTU19LRVlfSUQnKTsKICBjb25zdCBzZWNyZXRLZXkgPSByZWFkRW52KCdBV1NfU0VDUkVUX0FDQ0VTU19LRVknKTsKICBjb25zdCBzZXNzaW9uVG9rZW4gPSByZWFkRW52KCdBV1NfU0VTU0lPTl9UT0tFTicpOwogIGNvbnN0IHJlZ2lvbiA9IHJlc29sdmVSZWdpb24oKTsKICBjb25zdCBmcm9tID0gKGlucHV0LmZyb20/LnRyaW0oKSB8fCByZXNvbHZlU2VzRnJvbUVtYWlsKCkpOwogIGNvbnN0IHRvID0gaW5wdXQudG8udHJpbSgpOwoKICBjb25zdCBtaXNzaW5nRW52TmFtZXM6IHN0cmluZ1tdID0gW107CiAgaWYgKCFhY2Nlc3NLZXkpIG1pc3NpbmdFbnZOYW1lcy5wdXNoKCdBV1NfQUNDRVNTX0tFWV9JRCcpOwogIGlmICghc2VjcmV0S2V5KSBtaXNzaW5nRW52TmFtZXMucHVzaCgnQVdTX1NFQ1JFVF9BQ0NFU1NfS0VZJyk7CiAgaWYgKCFmcm9tKSBtaXNzaW5nRW52TmFtZXMucHVzaCgnSVZYX1NFU19GUk9NX0VNQUlMJyk7CgogIGlmIChtaXNzaW5nRW52TmFtZXMubGVuZ3RoID4gMCkgewogICAgcmV0dXJuIHsKICAgICAgb2s6IGZhbHNlLAogICAgICBzdGF0dXM6ICdtaXNzaW5nX2NvbmZpZycsCiAgICAgIHJlZ2lvbiwKICAgICAgZnJvbTogZnJvbSB8fCB1bmRlZmluZWQsCiAgICAgIHRvOiB0byB8fCB1bmRlZmluZWQsCiAgICAgIG1pc3NpbmdFbnZOYW1lcywKICAgICAgZXJyb3I6ICdBbWF6b24gU0VTIGlzIG5vdCBmdWxseSBjb25maWd1cmVkLicsCiAgICAgIHNlbnRBdCwKICAgIH07CiAgfQoKICBpZiAoIWlzTGlrZWx5RW1haWwodG8pKSB7CiAgICByZXR1cm4gewogICAgICBvazogZmFsc2UsCiAgICAgIHN0YXR1czogJ2ZhaWxlZCcsCiAgICAgIHJlZ2lvbiwKICAgICAgZnJvbSwKICAgICAgdG86IHRvIHx8IHVuZGVmaW5lZCwKICAgICAgbWlzc2luZ0Vudk5hbWVzLAogICAgICBlcnJvcjogJ1JlY2lwaWVudCBjb250YWN0IGlzIG5vdCBhIHZhbGlkIGVtYWlsIGFkZHJlc3MuJywKICAgICAgc2VudEF0LAogICAgfTsKICB9CgogIGNvbnN0IGhvc3QgPSBgZW1haWwuJHtyZWdpb259LmFtYXpvbmF3cy5jb21gOwogIGNvbnN0IGNhbm9uaWNhbFVyaSA9ICcvdjIvZW1haWwvb3V0Ym91bmQtZW1haWxzJzsKICBjb25zdCBwYXlsb2FkID0gSlNPTi5zdHJpbmdpZnkoewogICAgRnJvbUVtYWlsQWRkcmVzczogZnJvbSwKICAgIERlc3RpbmF0aW9uOiB7IFRvQWRkcmVzc2VzOiBbdG9dIH0sCiAgICAuLi4oaW5wdXQucmVwbHlUbyAmJiBpc0xpa2VseUVtYWlsKGlucHV0LnJlcGx5VG8pID8geyBSZXBseVRvQWRkcmVzc2VzOiBbaW5wdXQucmVwbHlUb10gfSA6IHt9KSwKICAgIENvbnRlbnQ6IHsKICAgICAgU2ltcGxlOiB7CiAgICAgICAgU3ViamVjdDogeyBEYXRhOiBpbnB1dC5zdWJqZWN0LCBDaGFyc2V0OiAnVVRGLTgnIH0sCiAgICAgICAgQm9keTogeyBUZXh0OiB7IERhdGE6IGlucHV0LmJvZHksIENoYXJzZXQ6ICdVVEYtOCcgfSB9LAogICAgICB9LAogICAgfSwKICB9KTsKICBjb25zdCBib2R5SGFzaCA9IGhhc2gocGF5bG9hZCk7CgogIGNvbnN0IG5vdyA9IG5ldyBEYXRlKCk7CiAgY29uc3QgYW16RGF0ZSA9IG5vdy50b0lTT1N0cmluZygpLnJlcGxhY2UoL1s6LV18XC5cZHszfS9nLCAnJyk7CiAgY29uc3QgZGF0ZVN0YW1wID0gYW16RGF0ZS5zbGljZSgwLCA4KTsKICBjb25zdCBoZWFkZXJMaW5lczogW3N0cmluZywgc3RyaW5nXVtdID0gWwogICAgWydjb250ZW50LXR5cGUnLCAnYXBwbGljYXRpb24vanNvbiddLAogICAgWydob3N0JywgaG9zdF0sCiAgICBbJ3gtYW16LWNvbnRlbnQtc2hhMjU2JywgYm9keUhhc2hdLAogICAgWyd4LWFtei1kYXRlJywgYW16RGF0ZV0sCiAgXTsKICBpZiAoc2Vzc2lvblRva2VuKSBoZWFkZXJMaW5lcy5wdXNoKFsneC1hbXotc2VjdXJpdHktdG9rZW4nLCBzZXNzaW9uVG9rZW5dKTsKICBjb25zdCBjYW5vbmljYWxIZWFkZXJzID0gaGVhZGVyTGluZXMubWFwKChbaywgdl0pID0+IGAke2t9OiR7dn1cbmApLmpvaW4oJycpOwogIGNvbnN0IHNpZ25lZEhlYWRlcnMgPSBoZWFkZXJMaW5lcy5tYXAoKFtrXSkgPT4gaykuam9pbignOycpOwogIGNvbnN0IGNhbm9uaWNhbFJlcXVlc3QgPSBbJ1BPU1QnLCBjYW5vbmljYWxVcmksICcnLCBjYW5vbmljYWxIZWFkZXJzLCBzaWduZWRIZWFkZXJzLCBib2R5SGFzaF0uam9pbignXG4nKTsKICBjb25zdCBjcmVkZW50aWFsU2NvcGUgPSBgJHtkYXRlU3RhbXB9LyR7cmVnaW9ufS8ke0FXU19TRVJWSUNFfS9hd3M0X3JlcXVlc3RgOwogIGNvbnN0IHN0cmluZ1RvU2lnbiA9IFsnQVdTNC1ITUFDLVNIQTI1NicsIGFtekRhdGUsIGNyZWRlbnRpYWxTY29wZSwgaGFzaChjYW5vbmljYWxSZXF1ZXN0KV0uam9pbignXG4nKTsKICBjb25zdCBzaWduaW5nS2V5ID0gYnVpbGRTaWduaW5nS2V5KHNlY3JldEtleSwgZGF0ZVN0YW1wLCByZWdpb24pOwogIGNvbnN0IHNpZ25hdHVyZSA9IGNyZWF0ZUhtYWMoJ3NoYTI1NicsIHNpZ25pbmdLZXkpLnVwZGF0ZShzdHJpbmdUb1NpZ24sICd1dGY4JykuZGlnZXN0KCdoZXgnKTsKICBjb25zdCBhdXRob3JpemF0aW9uID0gYEFXUzQtSE1BQy1TSEEyNTYgQ3JlZGVudGlhbD0ke2FjY2Vzc0tleX0vJHtjcmVkZW50aWFsU2NvcGV9LCBTaWduZWRIZWFkZXJzPSR7c2lnbmVkSGVhZGVyc30sIFNpZ25hdHVyZT0ke3NpZ25hdHVyZX1gOwoKICBjb25zdCBoZWFkZXJzOiBSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+ID0gewogICAgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJywKICAgIEhvc3Q6IGhvc3QsCiAgICAnWC1BbXotQ29udGVudC1TaGEyNTYnOiBib2R5SGFzaCwKICAgICdYLUFtei1EYXRlJzogYW16RGF0ZSwKICAgIEF1dGhvcml6YXRpb246IGF1dGhvcml6YXRpb24sCiAgfTsKICBpZiAoc2Vzc2lvblRva2VuKSBoZWFkZXJzWydYLUFtei1TZWN1cml0eS1Ub2tlbiddID0gc2Vzc2lvblRva2VuOwoKICB0cnkgewogICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBmZXRjaChgaHR0cHM6Ly8ke2hvc3R9JHtjYW5vbmljYWxVcml9YCwgewogICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgaGVhZGVycywKICAgICAgYm9keTogcGF5bG9hZCwKICAgIH0pOwogICAgY29uc3QgdGV4dCA9IGF3YWl0IHJlc3BvbnNlLnRleHQoKTsKICAgIGlmICghcmVzcG9uc2Uub2spIHsKICAgICAgcmV0dXJuIHsKICAgICAgICBvazogZmFsc2UsCiAgICAgICAgc3RhdHVzOiAnZmFpbGVkJywKICAgICAgICByZWdpb24sCiAgICAgICAgZnJvbSwKICAgICAgICB0bywKICAgICAgICBodHRwU3RhdHVzOiByZXNwb25zZS5zdGF0dXMsCiAgICAgICAgbWlzc2luZ0Vudk5hbWVzLAogICAgICAgIGVycm9yOiB0ZXh0LnNsaWNlKDAsIDQwMCkgfHwgYFNFUyByZXNwb25kZWQgJHtyZXNwb25zZS5zdGF0dXN9YCwKICAgICAgICBzZW50QXQsCiAgICAgIH07CiAgICB9CiAgICBsZXQgbWVzc2FnZUlkOiBzdHJpbmcgfCB1bmRlZmluZWQ7CiAgICB0cnkgewogICAgICBjb25zdCBwYXJzZWQgPSBKU09OLnBhcnNlKHRleHQpIGFzIHsgTWVzc2FnZUlkPzogc3RyaW5nIH07CiAgICAgIG1lc3NhZ2VJZCA9IHBhcnNlZC5NZXNzYWdlSWQ7CiAgICB9IGNhdGNoIHsKICAgICAgLyogU0VTIHJldHVybnMgSlNPTjsgaWdub3JlIHBhcnNlIGlzc3VlcyBhbmQgdHJlYXQgMjAwIGFzIHNlbnQuICovCiAgICB9CiAgICByZXR1cm4gewogICAgICBvazogdHJ1ZSwKICAgICAgc3RhdHVzOiAnc2VudCcsCiAgICAgIHJlZ2lvbiwKICAgICAgZnJvbSwKICAgICAgdG8sCiAgICAgIG1lc3NhZ2VJZCwKICAgICAgaHR0cFN0YXR1czogcmVzcG9uc2Uuc3RhdHVzLAogICAgICBtaXNzaW5nRW52TmFtZXMsCiAgICAgIHNlbnRBdCwKICAgIH07CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIHJldHVybiB7CiAgICAgIG9rOiBmYWxzZSwKICAgICAgc3RhdHVzOiAnZmFpbGVkJywKICAgICAgcmVnaW9uLAogICAgICBmcm9tLAogICAgICB0bywKICAgICAgbWlzc2luZ0Vudk5hbWVzLAogICAgICBlcnJvcjogZXJyb3IgaW5zdGFuY2VvZiBFcnJvciA/IGVycm9yLm1lc3NhZ2UgOiAnU0VTIHNlbmQgcmVxdWVzdCBmYWlsZWQuJywKICAgICAgc2VudEF0LAogICAgfTsKICB9Cn0KCi8qKgogKiBEZXJpdmUgdGhlIEFtYXpvbiBTRVMgU01UUCBwYXNzd29yZCBmcm9tIGFuIEFXUyBTZWNyZXQgQWNjZXNzIEtleSB1c2luZyB0aGUKICogQVdTLXB1Ymxpc2hlZCBhbGdvcml0aG0uIFRoZSBTTVRQIHVzZXJuYW1lIGlzIHRoZSBBV1MgQWNjZXNzIEtleSBJRC4KICoKICogUmVmZXJlbmNlOiBodHRwczovL2RvY3MuYXdzLmFtYXpvbi5jb20vc2VzL2xhdGVzdC9kZy9zbXRwLWNyZWRlbnRpYWxzLmh0bWwKICovCmV4cG9ydCBmdW5jdGlvbiBkZXJpdmVTZXNTbXRwUGFzc3dvcmQoc2VjcmV0QWNjZXNzS2V5OiBzdHJpbmcpOiBzdHJpbmcgewogIGNvbnN0IHZlcnNpb24gPSBCdWZmZXIuZnJvbShbMHgwMl0pOwogIGNvbnN0IHNpZ25hdHVyZSA9IGNyZWF0ZUhtYWMoJ3NoYTI1NicsIHNlY3JldEFjY2Vzc0tleSkudXBkYXRlKCdTZW5kUmF3RW1haWwnLCAndXRmOCcpLmRpZ2VzdCgpOwogIHJldHVybiBCdWZmZXIuY29uY2F0KFt2ZXJzaW9uLCBzaWduYXR1cmVdKS50b1N0cmluZygnYmFzZTY0Jyk7Cn0KCi8qKgogKiBSZXR1cm4gdGhlIEFXUyBTRVMgdjIgYWNjb3VudCBzdGF0dXMsIHNlbmRpbmcgcXVvdGEsIGFuZCB3aGV0aGVyIHRoZSBhY2NvdW50CiAqIGhhcyBwcm9kdWN0aW9uIGFjY2VzcyAob3V0IG9mIHNhbmRib3gpLiBOZXZlciB0aHJvd3MuCiAqLwpleHBvcnQgYXN5bmMgZnVuY3Rpb24gZ2V0U2VzQWNjb3VudFN0YXR1cygpOiBQcm9taXNlPHsKICBvazogYm9vbGVhbjsKICByZWdpb24/OiBzdHJpbmc7CiAgcHJvZHVjdGlvbkFjY2Vzc0VuYWJsZWQ/OiBib29sZWFuOwogIHNlbmRpbmdQYXVzZWQ/OiBib29sZWFuOwogIG1heDI0SG91clNlbmQ/OiBudW1iZXI7CiAgbWF4U2VuZFJhdGU/OiBudW1iZXI7CiAgc2VudExhc3QyNEhvdXJzPzogbnVtYmVyOwogIGVuZm9yY2VtZW50U3RhdHVzPzogc3RyaW5nOwogIGh0dHBTdGF0dXM/OiBudW1iZXI7CiAgZXJyb3I/OiBzdHJpbmc7CiAgbWlzc2luZ0Vudk5hbWVzOiBzdHJpbmdbXTsKICBzZW50QXQ6IHN0cmluZzsKfT4gewogIGNvbnN0IHNlbnRBdCA9IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKTsKICBjb25zdCBhY2Nlc3NLZXkgPSByZWFkRW52KCdBV1NfQUNDRVNTX0tFWV9JRCcpOwogIGNvbnN0IHNlY3JldEtleSA9IHJlYWRFbnYoJ0FXU19TRUNSRVRfQUNDRVNTX0tFWScpOwogIGNvbnN0IHNlc3Npb25Ub2tlbiA9IHJlYWRFbnYoJ0FXU19TRVNTSU9OX1RPS0VOJyk7CiAgY29uc3QgcmVnaW9uID0gcmVzb2x2ZVJlZ2lvbigpOwoKICBjb25zdCBtaXNzaW5nRW52TmFtZXM6IHN0cmluZ1tdID0gW107CiAgaWYgKCFhY2Nlc3NLZXkpIG1pc3NpbmdFbnZOYW1lcy5wdXNoKCdBV1NfQUNDRVNTX0tFWV9JRCcpOwogIGlmICghc2VjcmV0S2V5KSBtaXNzaW5nRW52TmFtZXMucHVzaCgnQVdTX1NFQ1JFVF9BQ0NFU1NfS0VZJyk7CiAgaWYgKG1pc3NpbmdFbnZOYW1lcy5sZW5ndGggPiAwKSB7CiAgICByZXR1cm4geyBvazogZmFsc2UsIHJlZ2lvbiwgbWlzc2luZ0Vudk5hbWVzLCBlcnJvcjogJ0FXUyBjcmVkZW50aWFscyBub3QgY29uZmlndXJlZC4nLCBzZW50QXQgfTsKICB9CgogIGNvbnN0IGhvc3QgPSBgZW1haWwuJHtyZWdpb259LmFtYXpvbmF3cy5jb21gOwogIGNvbnN0IGNhbm9uaWNhbFVyaSA9ICcvdjIvZW1haWwvYWNjb3VudCc7CiAgY29uc3QgcGF5bG9hZCA9ICcnOwogIGNvbnN0IGJvZHlIYXNoID0gaGFzaChwYXlsb2FkKTsKICBjb25zdCBub3cgPSBuZXcgRGF0ZSgpOwogIGNvbnN0IGFtekRhdGUgPSBub3cudG9JU09TdHJpbmcoKS5yZXBsYWNlKC9bOi1dfFwuXGR7M30vZywgJycpOwogIGNvbnN0IGRhdGVTdGFtcCA9IGFtekRhdGUuc2xpY2UoMCwgOCk7CiAgY29uc3QgaGVhZGVyTGluZXM6IFtzdHJpbmcsIHN0cmluZ11bXSA9IFsKICAgIFsnaG9zdCcsIGhvc3RdLAogICAgWyd4LWFtei1jb250ZW50LXNoYTI1NicsIGJvZHlIYXNoXSwKICAgIFsneC1hbXotZGF0ZScsIGFtekRhdGVdLAogIF07CiAgaWYgKHNlc3Npb25Ub2tlbikgaGVhZGVyTGluZXMucHVzaChbJ3gtYW16LXNlY3VyaXR5LXRva2VuJywgc2Vzc2lvblRva2VuXSk7CiAgY29uc3QgY2Fub25pY2FsSGVhZGVycyA9IGhlYWRlckxpbmVzLm1hcCgoW2ssIHZdKSA9PiBgJHtrfToke3Z9XG5gKS5qb2luKCcnKTsKICBjb25zdCBzaWduZWRIZWFkZXJzID0gaGVhZGVyTGluZXMubWFwKChba10pID0+IGspLmpvaW4oJzsnKTsKICBjb25zdCBjYW5vbmljYWxSZXF1ZXN0ID0gWydHRVQnLCBjYW5vbmljYWxVcmksICcnLCBjYW5vbmljYWxIZWFkZXJzLCBzaWduZWRIZWFkZXJzLCBib2R5SGFzaF0uam9pbignXG4nKTsKICBjb25zdCBjcmVkZW50aWFsU2NvcGUgPSBgJHtkYXRlU3RhbXB9LyR7cmVnaW9ufS8ke0FXU19TRVJWSUNFfS9hd3M0X3JlcXVlc3RgOwogIGNvbnN0IHN0cmluZ1RvU2lnbiA9IFsnQVdTNC1ITUFDLVNIQTI1NicsIGFtekRhdGUsIGNyZWRlbnRpYWxTY29wZSwgaGFzaChjYW5vbmljYWxSZXF1ZXN0KV0uam9pbignXG4nKTsKICBjb25zdCBzaWduaW5nS2V5ID0gYnVpbGRTaWduaW5nS2V5KHNlY3JldEtleSwgZGF0ZVN0YW1wLCByZWdpb24pOwogIGNvbnN0IHNpZ25hdHVyZSA9IGNyZWF0ZUhtYWMoJ3NoYTI1NicsIHNpZ25pbmdLZXkpLnVwZGF0ZShzdHJpbmdUb1NpZ24sICd1dGY4JykuZGlnZXN0KCdoZXgnKTsKICBjb25zdCBhdXRob3JpemF0aW9uID0gYEFXUzQtSE1BQy1TSEEyNTYgQ3JlZGVudGlhbD0ke2FjY2Vzc0tleX0vJHtjcmVkZW50aWFsU2NvcGV9LCBTaWduZWRIZWFkZXJzPSR7c2lnbmVkSGVhZGVyc30sIFNpZ25hdHVyZT0ke3NpZ25hdHVyZX1gOwoKICBjb25zdCBoZWFkZXJzOiBSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+ID0gewogICAgSG9zdDogaG9zdCwKICAgICdYLUFtei1Db250ZW50LVNoYTI1Nic6IGJvZHlIYXNoLAogICAgJ1gtQW16LURhdGUnOiBhbXpEYXRlLAogICAgQXV0aG9yaXphdGlvbjogYXV0aG9yaXphdGlvbiwKICB9OwogIGlmIChzZXNzaW9uVG9rZW4pIGhlYWRlcnNbJ1gtQW16LVNlY3VyaXR5LVRva2VuJ10gPSBzZXNzaW9uVG9rZW47CgogIHRyeSB7CiAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKGBodHRwczovLyR7aG9zdH0ke2Nhbm9uaWNhbFVyaX1gLCB7IG1ldGhvZDogJ0dFVCcsIGhlYWRlcnMgfSk7CiAgICBjb25zdCB0ZXh0ID0gYXdhaXQgcmVzcG9uc2UudGV4dCgpOwogICAgaWYgKCFyZXNwb25zZS5vaykgewogICAgICByZXR1cm4gewogICAgICAgIG9rOiBmYWxzZSwKICAgICAgICByZWdpb24sCiAgICAgICAgaHR0cFN0YXR1czogcmVzcG9uc2Uuc3RhdHVzLAogICAgICAgIG1pc3NpbmdFbnZOYW1lcywKICAgICAgICBlcnJvcjogdGV4dC5zbGljZSgwLCA1MDApIHx8IGBTRVMgYWNjb3VudCBzdGF0dXMgcmVzcG9uZGVkICR7cmVzcG9uc2Uuc3RhdHVzfWAsCiAgICAgICAgc2VudEF0LAogICAgICB9OwogICAgfQogICAgbGV0IHBhcnNlZDogUmVjb3JkPHN0cmluZywgdW5rbm93bj4gPSB7fTsKICAgIHRyeSB7CiAgICAgIHBhcnNlZCA9IEpTT04ucGFyc2UodGV4dCkgYXMgUmVjb3JkPHN0cmluZywgdW5rbm93bj47CiAgICB9IGNhdGNoIHsKICAgICAgLy8gaWdub3JlCiAgICB9CiAgICBjb25zdCBzZW5kUXVvdGEgPSByZWFkUmVjb3JkKHBhcnNlZC5TZW5kUXVvdGEpOwogICAgcmV0dXJuIHsKICAgICAgb2s6IHRydWUsCiAgICAgIHJlZ2lvbiwKICAgICAgcHJvZHVjdGlvbkFjY2Vzc0VuYWJsZWQ6IHBhcnNlZC5Qcm9kdWN0aW9uQWNjZXNzRW5hYmxlZCA9PT0gdHJ1ZSwKICAgICAgc2VuZGluZ1BhdXNlZDogcGFyc2VkLlNlbmRpbmdQYXVzZWQgPT09IHRydWUsCiAgICAgIG1heDI0SG91clNlbmQ6IHR5cGVvZiBzZW5kUXVvdGEuTWF4MjRIb3VyU2VuZCA9PT0gJ251bWJlcicgPyBzZW5kUXVvdGEuTWF4MjRIb3VyU2VuZCA6IHVuZGVmaW5lZCwKICAgICAgbWF4U2VuZFJhdGU6IHR5cGVvZiBzZW5kUXVvdGEuTWF4U2VuZFJhdGUgPT09ICdudW1iZXInID8gc2VuZFF1b3RhLk1heFNlbmRSYXRlIDogdW5kZWZpbmVkLAogICAgICBzZW50TGFzdDI0SG91cnM6IHR5cGVvZiBzZW5kUXVvdGEuU2VudExhc3QyNEhvdXJzID09PSAnbnVtYmVyJyA/IHNlbmRRdW90YS5TZW50TGFzdDI0SG91cnMgOiB1bmRlZmluZWQsCiAgICAgIGVuZm9yY2VtZW50U3RhdHVzOiB0eXBlb2YgcGFyc2VkLkVuZm9yY2VtZW50U3RhdHVzID09PSAnc3RyaW5nJyA/IHBhcnNlZC5FbmZvcmNlbWVudFN0YXR1cyA6IHVuZGVmaW5lZCwKICAgICAgaHR0cFN0YXR1czogcmVzcG9uc2Uuc3RhdHVzLAogICAgICBtaXNzaW5nRW52TmFtZXMsCiAgICAgIHNlbnRBdCwKICAgIH07CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIHJldHVybiB7CiAgICAgIG9rOiBmYWxzZSwKICAgICAgcmVnaW9uLAogICAgICBtaXNzaW5nRW52TmFtZXMsCiAgICAgIGVycm9yOiBlcnJvciBpbnN0YW5jZW9mIEVycm9yID8gZXJyb3IubWVzc2FnZSA6ICdTRVMgYWNjb3VudCBzdGF0dXMgcmVxdWVzdCBmYWlsZWQuJywKICAgICAgc2VudEF0LAogICAgfTsKICB9Cn0KCi8qKiBUcnVlIHdoZW4gU0VTIGhhcyBldmVyeXRoaW5nIGl0IG5lZWRzIHRvIGFjdHVhbGx5IHNlbmQgKGNyZWRzICsgdmVyaWZpZWQgZnJvbSkuICovCmV4cG9ydCBmdW5jdGlvbiBpc1Nlc0NvbmZpZ3VyZWQoKTogYm9vbGVhbiB7CiAgcmV0dXJuIEJvb2xlYW4ocmVhZEVudignQVdTX0FDQ0VTU19LRVlfSUQnKSAmJiByZWFkRW52KCdBV1NfU0VDUkVUX0FDQ0VTU19LRVknKSAmJiByZXNvbHZlU2VzRnJvbUVtYWlsKCkpOwp9Cg==
+/**
+ * IVX Amazon SES email sender (owner-only outreach delivery).
+ *
+ * Replaces SendGrid as the active outbound email path. Sends a single email via
+ * the AWS SES v2 API (`/v2/email/outbound-emails`) using a SigV4-signed HTTPS
+ * request — no new dependencies, same signing pattern as the CloudFront agent.
+ *
+ * Credentials come from the existing AWS env (AWS_ACCESS_KEY_ID /
+ * AWS_SECRET_ACCESS_KEY / AWS_REGION). The verified sender address comes from
+ * IVX_SES_FROM_EMAIL (falling back to OWNER_REPAIR_EMAIL / EXPO_PUBLIC_OWNER_EMAIL).
+ *
+ * SAFETY: callers must enforce owner approval before invoking this. This module
+ * only performs the transport — it never decides whether a message may be sent.
+ *
+ * This file must be stored as plain TypeScript source. Encoding the full module
+ * as base64 causes the production bundler to fail before the service can start.
+ */
+import { createHash, createHmac } from 'node:crypto';
+
+const AWS_SERVICE = 'ses';
+
+export type SesSendResult = {
+  ok: boolean;
+  status: 'sent' | 'missing_config' | 'failed';
+  messageId?: string;
+  httpStatus?: number;
+  region?: string;
+  from?: string;
+  to?: string;
+  /** Exact env names still required to enable sending. */
+  missingEnvNames: string[];
+  error?: string;
+  sentAt: string;
+};
+
+function readEnv(name: string): string {
+  const v = process.env[name];
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+/** The verified SES sender address, with safe owner-email fallbacks. */
+export function resolveSesFromEmail(): string {
+  return (
+    readEnv('IVX_SES_FROM_EMAIL') ||
+    readEnv('OWNER_REPAIR_EMAIL') ||
+    readEnv('EXPO_PUBLIC_OWNER_EMAIL')
+  );
+}
+
+function resolveRegion(): string {
+  return readEnv('AWS_REGION') || 'us-east-1';
+}
+
+function hash(payload: string): string {
+  return createHash('sha256').update(payload, 'utf8').digest('hex');
+}
+
+function hmac(key: Buffer | string, data: string): Buffer {
+  return createHmac('sha256', key).update(data, 'utf8').digest();
+}
+
+function buildSigningKey(secret: string, dateStamp: string, region: string): Buffer {
+  const kDate = hmac(`AWS4${secret}`, dateStamp);
+  const kRegion = hmac(kDate, region);
+  const kService = hmac(kRegion, AWS_SERVICE);
+  return hmac(kService, 'aws4_request');
+}
+
+function isLikelyEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+/**
+ * Request AWS SES to verify an email address as a sender/recipient identity.
+ * AWS sends a verification email to the address; the recipient must click the
+ * link before the address can be used to send or receive mail in sandbox mode.
+ * Returns structured status; never throws.
+ */
+export async function verifySesEmailIdentity(email: string): Promise<SesSendResult> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+  const target = email.trim().toLowerCase();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+
+  if (missingEnvNames.length > 0) {
+    return {
+      ok: false,
+      status: 'missing_config',
+      region,
+      to: target || undefined,
+      missingEnvNames,
+      error: 'Amazon SES is not fully configured.',
+      sentAt,
+    };
+  }
+
+  if (!isLikelyEmail(target)) {
+    return {
+      ok: false,
+      status: 'failed',
+      region,
+      to: target || undefined,
+      missingEnvNames,
+      error: 'Identity is not a valid email address.',
+      sentAt,
+    };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/';
+  const action = 'VerifyEmailIdentity';
+  const payload = `Action=${encodeURIComponent(action)}&EmailAddress=${encodeURIComponent(target)}&Version=2010-12-01`;
+  const bodyHash = hash(payload);
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const contentType = 'application/x-www-form-urlencoded';
+  const headerLines: [string, string][] = [
+    ['content-type', contentType],
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['POST', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: 'failed',
+        region,
+        to: target,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 500) || `SES verification request responded ${response.status}`,
+        sentAt,
+      };
+    }
+    return {
+      ok: true,
+      status: 'sent',
+      region,
+      to: target,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'failed',
+      region,
+      to: target,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES verification request failed.',
+      sentAt,
+    };
+  }
+}
+
+/**
+ * List verified and pending SES identities (email addresses and domains).
+ * Returns structured status; never throws.
+ */
+export async function listSesIdentities(): Promise<{
+  ok: boolean;
+  identities?: string[];
+  error?: string;
+  region?: string;
+  httpStatus?: number;
+  missingEnvNames: string[];
+  sentAt: string;
+}> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+
+  if (missingEnvNames.length > 0) {
+    return {
+      ok: false,
+      region,
+      missingEnvNames,
+      error: 'Amazon SES is not fully configured.',
+      sentAt,
+    };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/';
+  const payload = 'Action=ListIdentities&Version=2010-12-01';
+  const bodyHash = hash(payload);
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const contentType = 'application/x-www-form-urlencoded';
+  const headerLines: [string, string][] = [
+    ['content-type', contentType],
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['POST', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        region,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 500) || `SES list identities responded ${response.status}`,
+        sentAt,
+      };
+    }
+    const identities: string[] = [];
+    const emailMatches = text.matchAll(/<member>([^<]+)<\/member>/g);
+    for (const match of emailMatches) {
+      identities.push(match[1].trim());
+    }
+    return {
+      ok: true,
+      region,
+      identities,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      region,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES list identities request failed.',
+      sentAt,
+    };
+  }
+}
+
+/**
+ * Send a single transactional email via Amazon SES. Returns structured status;
+ * never throws. Owner approval must be enforced by the caller.
+ */
+export async function sendSesEmail(input: {
+  to: string;
+  subject: string;
+  body: string;
+  from?: string;
+  replyTo?: string;
+}): Promise<SesSendResult> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+  const from = (input.from?.trim() || resolveSesFromEmail());
+  const to = input.to.trim();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+  if (!from) missingEnvNames.push('IVX_SES_FROM_EMAIL');
+
+  if (missingEnvNames.length > 0) {
+    return {
+      ok: false,
+      status: 'missing_config',
+      region,
+      from: from || undefined,
+      to: to || undefined,
+      missingEnvNames,
+      error: 'Amazon SES is not fully configured.',
+      sentAt,
+    };
+  }
+
+  if (!isLikelyEmail(to)) {
+    return {
+      ok: false,
+      status: 'failed',
+      region,
+      from,
+      to: to || undefined,
+      missingEnvNames,
+      error: 'Recipient contact is not a valid email address.',
+      sentAt,
+    };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/v2/email/outbound-emails';
+  const payload = JSON.stringify({
+    FromEmailAddress: from,
+    Destination: { ToAddresses: [to] },
+    ...(input.replyTo && isLikelyEmail(input.replyTo) ? { ReplyToAddresses: [input.replyTo] } : {}),
+    Content: {
+      Simple: {
+        Subject: { Data: input.subject, Charset: 'UTF-8' },
+        Body: { Text: { Data: input.body, Charset: 'UTF-8' } },
+      },
+    },
+  });
+  const bodyHash = hash(payload);
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const headerLines: [string, string][] = [
+    ['content-type', 'application/json'],
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['POST', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: 'failed',
+        region,
+        from,
+        to,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 400) || `SES responded ${response.status}`,
+        sentAt,
+      };
+    }
+    let messageId: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as { MessageId?: string };
+      messageId = parsed.MessageId;
+    } catch {
+      /* SES returns JSON; ignore parse issues and treat 200 as sent. */
+    }
+    return {
+      ok: true,
+      status: 'sent',
+      region,
+      from,
+      to,
+      messageId,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'failed',
+      region,
+      from,
+      to,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES send request failed.',
+      sentAt,
+    };
+  }
+}
+
+/**
+ * Derive the Amazon SES SMTP password from an AWS Secret Access Key using the
+ * AWS-published algorithm. The SMTP username is the AWS Access Key ID.
+ *
+ * Reference: https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html
+ */
+export function deriveSesSmtpPassword(secretAccessKey: string): string {
+  const version = Buffer.from([0x02]);
+  const signature = createHmac('sha256', secretAccessKey).update('SendRawEmail', 'utf8').digest();
+  return Buffer.concat([version, signature]).toString('base64');
+}
+
+/**
+ * Return the AWS SES v2 account status, sending quota, and whether the account
+ * has production access (out of sandbox). Never throws.
+ */
+export async function getSesAccountStatus(): Promise<{
+  ok: boolean;
+  region?: string;
+  productionAccessEnabled?: boolean;
+  sendingPaused?: boolean;
+  max24HourSend?: number;
+  maxSendRate?: number;
+  sentLast24Hours?: number;
+  enforcementStatus?: string;
+  httpStatus?: number;
+  error?: string;
+  missingEnvNames: string[];
+  sentAt: string;
+}> {
+  const sentAt = new Date().toISOString();
+  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
+  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const region = resolveRegion();
+
+  const missingEnvNames: string[] = [];
+  if (!accessKey) missingEnvNames.push('AWS_ACCESS_KEY_ID');
+  if (!secretKey) missingEnvNames.push('AWS_SECRET_ACCESS_KEY');
+  if (missingEnvNames.length > 0) {
+    return { ok: false, region, missingEnvNames, error: 'AWS credentials not configured.', sentAt };
+  }
+
+  const host = `email.${region}.amazonaws.com`;
+  const canonicalUri = '/v2/email/account';
+  const payload = '';
+  const bodyHash = hash(payload);
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const headerLines: [string, string][] = [
+    ['host', host],
+    ['x-amz-content-sha256', bodyHash],
+    ['x-amz-date', amzDate],
+  ];
+  if (sessionToken) headerLines.push(['x-amz-security-token', sessionToken]);
+  const canonicalHeaders = headerLines.map(([k, v]) => `${k}:${v}\n`).join('');
+  const signedHeaders = headerLines.map(([k]) => k).join(';');
+  const canonicalRequest = ['GET', canonicalUri, '', canonicalHeaders, signedHeaders, bodyHash].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${AWS_SERVICE}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hash(canonicalRequest)].join('\n');
+  const signingKey = buildSigningKey(secretKey, dateStamp, region);
+  const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers: Record<string, string> = {
+    Host: host,
+    'X-Amz-Content-Sha256': bodyHash,
+    'X-Amz-Date': amzDate,
+    Authorization: authorization,
+  };
+  if (sessionToken) headers['X-Amz-Security-Token'] = sessionToken;
+
+  try {
+    const response = await fetch(`https://${host}${canonicalUri}`, { method: 'GET', headers });
+    const text = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        region,
+        httpStatus: response.status,
+        missingEnvNames,
+        error: text.slice(0, 500) || `SES account status responded ${response.status}`,
+        sentAt,
+      };
+    }
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // ignore
+    }
+    const sendQuota = readRecord(parsed.SendQuota);
+    return {
+      ok: true,
+      region,
+      productionAccessEnabled: parsed.ProductionAccessEnabled === true,
+      sendingPaused: parsed.SendingPaused === true,
+      max24HourSend: typeof sendQuota.Max24HourSend === 'number' ? sendQuota.Max24HourSend : undefined,
+      maxSendRate: typeof sendQuota.MaxSendRate === 'number' ? sendQuota.MaxSendRate : undefined,
+      sentLast24Hours: typeof sendQuota.SentLast24Hours === 'number' ? sendQuota.SentLast24Hours : undefined,
+      enforcementStatus: typeof parsed.EnforcementStatus === 'string' ? parsed.EnforcementStatus : undefined,
+      httpStatus: response.status,
+      missingEnvNames,
+      sentAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      region,
+      missingEnvNames,
+      error: error instanceof Error ? error.message : 'SES account status request failed.',
+      sentAt,
+    };
+  }
+}
+
+/** True when SES has everything it needs to actually send (creds + verified from). */
+export function isSesConfigured(): boolean {
+  return Boolean(readEnv('AWS_ACCESS_KEY_ID') && readEnv('AWS_SECRET_ACCESS_KEY') && resolveSesFromEmail());
+}
