@@ -243,6 +243,8 @@ export type IVXSeniorDeveloperRunProof = {
   gitDeployOperator: IVXGitDeployOperatorProof;
   productionVerification: IVXProductionVerification;
   changedRouteVerification: IVXProductionVerification;
+  /** Required evidence that the requested GitHub commit is the live runtime commit. */
+  liveCommitVerification: IVXLiveCommitMatchResult;
   memoryState: {
     stored: boolean;
     memoryKey: string;
@@ -2346,10 +2348,29 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
 
   const productionVerification = await verifyProductionHealth();
   const changedRouteVerification = await verifyChangedRouteLive();
-  log('production_verified', productionVerification.ok && changedRouteVerification.ok ? 'info' : 'warn', 'Production health and changed-route verification attempted.', { health: productionVerification, changedRoute: changedRouteVerification });
-  onPhase?.('production_verified', productionVerification.ok ? 'Production health verified.' : 'Production health verification failed.');
+  const requestedCommit = gitDeployOperator.github.commitSha ?? '';
+  const liveCommitVerification = await verifyLiveCommitMatch({
+    requestedCommit,
+    deploymentId: gitDeployOperator.render.deployId,
+  });
+  const liveVerificationOk = liveCommitVerification.match;
+  log(
+    'production_verified',
+    productionVerification.ok && changedRouteVerification.ok && liveVerificationOk ? 'info' : 'warn',
+    'Production health, changed route, and requested-commit verification attempted.',
+    { health: productionVerification, changedRoute: changedRouteVerification, liveCommit: liveCommitVerification },
+  );
+  onPhase?.(
+    'production_verified',
+    productionVerification.ok && liveVerificationOk
+      ? 'Production health and requested commit verified.'
+      : 'Production verification failed: requested GitHub commit does not match the live runtime.',
+  );
 
-  const endToEndProductionComplete = gitDeployOperator.status === 'executed' && productionVerification.ok && changedRouteVerification.ok;
+  const endToEndProductionComplete = gitDeployOperator.status === 'executed'
+    && productionVerification.ok
+    && changedRouteVerification.ok
+    && liveVerificationOk;
   const localCodingOk = validationsOk && (patchProposal.status === 'not_needed' || changedFiles.length > 0);
   const ok = productionProofRequested ? endToEndProductionComplete : localCodingOk;
   setTaskStatus(taskTree, 37, ok ? 'completed' : 'failed');
@@ -2377,6 +2398,7 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
     gitDeployOperator,
     productionVerification,
     changedRouteVerification,
+    liveCommitVerification,
     memoryState: { stored: true, memoryKey, loadedEntries: loadedMemory.length },
     logs,
     auditFiles: { json: relativeFromRoot(projectRoot, jsonPath), jsonl: relativeFromRoot(projectRoot, jsonlPath) },
