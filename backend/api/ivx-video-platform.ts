@@ -246,10 +246,10 @@ type FeedDeal = {
  * matching because project_videos.project_id is often the video's own UUID, not the
  * deal slug. Returns a map keyed by videoId. Never throws; missing deals → null.
  */
-async function loadFeedDeals(sb: any, candidates: string[], titles: Record<string, string>): Promise<Record<string, FeedDeal>> {
+async function loadFeedDeals(sb: any, candidatesByVideoId: Record<string, string[]>, titles: Record<string, string>): Promise<Record<string, FeedDeal>> {
   const out: Record<string, FeedDeal> = {};
   const idRe = /^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/;
-  const ids = Array.from(new Set(candidates.filter((c) => idRe.test(c))));
+  const ids = Array.from(new Set(Object.values(candidatesByVideoId).flat().filter((candidate) => idRe.test(candidate))));
   const allDeals: any[] = [];
 
   try {
@@ -269,12 +269,9 @@ async function loadFeedDeals(sb: any, candidates: string[], titles: Record<strin
         url: `https://ivxholding.com/?deal=${id}#deals`,
       };
       allDeals.push({ ...d, __deal: deal });
-      // Exact match by id: assign to any video whose candidate id matches the deal id
-      if (ids.includes(id)) {
-        for (const p of Object.entries(titles)) {
-          const [videoId, _title] = p;
-          if (!out[videoId]) out[videoId] = deal;
-        }
+      // Exact match only: media must be linked through its canonical property/project ID.
+      for (const [videoId, candidates] of Object.entries(candidatesByVideoId)) {
+        if (candidates.includes(id)) out[videoId] = deal;
       }
     }
 
@@ -400,15 +397,15 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     // Viewer state (liked / saved) for the page being returned.
     const page = composed.slice(offset, offset + limit);
     const pageIds = page.map((p) => p.id);
-    const dealCandidates: string[] = [];
+    const dealCandidatesByVideoId: Record<string, string[]> = {};
     const titles: Record<string, string> = {};
     for (const p of page) {
       const m = p.meta;
-      if (m.property_id) dealCandidates.push(String(m.property_id));
-      if (p.row.project_id) dealCandidates.push(String(p.row.project_id));
+      dealCandidatesByVideoId[p.id] = [m.property_id, p.row.project_id]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
       titles[p.id] = p.row.title ?? ((m as Record<string, unknown>).title as string | undefined) ?? '';
     }
-    const dealsById = await loadFeedDeals(sb, dealCandidates, titles);
+    const dealsById = await loadFeedDeals(sb, dealCandidatesByVideoId, titles);
     const viewerFollowing = new Set(followState.following);
     void profile;
     let likedSet = new Set<string>();

@@ -5,8 +5,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.rork.ivxholdings.ui.screens.HomeScreen
-import com.rork.ivxholdings.ui.screens.ReelsScreen
-import com.rork.ivxholdings.ui.screens.UploadScreen
 
 @Composable
 fun AppNavigation() {
@@ -16,8 +14,8 @@ fun AppNavigation() {
         navController = navController,
         startDestination = "home"
     ) {
-        composable("home") { HomeScreen(navController = navController) }
-        composable("reels") { ReelsScreen() }
-        composable("upload") { UploadScreen() }
+        composable("home") {
+            HomeScreen(navController = navController)
+        }
     }
 }
