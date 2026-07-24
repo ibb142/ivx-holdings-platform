@@ -9,6 +9,7 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { IVXRequestError } from '@/lib/query-contract';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 
@@ -60,28 +61,40 @@ export interface FeedVideo {
   status?: string | null;
 }
 
-/**
- * Fetches the ranked video feed with deal enrichment — the SAME endpoint the
- * landing page (ivx-reels.js) and the iOS app (VideoFeedService) consume, so
- * all three platforms show identical videos and property cards.
- */
-/**
- * Fetches the ranked video feed with deal enrichment — the SAME endpoint the
- * landing page (ivx-reels.js) and the iOS app (VideoFeedService) consume, so
- * all three platforms show identical videos and property cards.
- *
- * Pass `offset` for cursor-based pagination: the first call fetches `limit`
- * videos, subsequent calls pass `offset = limit`, `offset = limit * 2`, etc.
- */
-export async function fetchVideoFeed(limit = 24, offset = 0): Promise<FeedVideo[]> {
+export interface VideoFeedPage {
+  videos: FeedVideo[];
+  nextCursor: string | null;
+  total: number;
+}
+
+/** Fetch one canonical, cursor-paginated page of the ranked feed. */
+export async function fetchVideoFeedPage(limit = 24, cursor: string | null = null): Promise<VideoFeedPage> {
   const params = new URLSearchParams({ limit: String(limit) });
-  if (offset > 0) params.set('offset', String(offset));
-  const res = await fetch(`${API_BASE}/api/ivx/video-platform/feed?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error(`Feed request failed (${res.status})`);
+  if (cursor) params.set('cursor', cursor);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/ivx/video-platform/feed?${params.toString()}`);
+  } catch (error) {
+    throw new IVXRequestError('Unable to reach the video feed.', null);
   }
-  const data = (await res.json()) as { videos?: FeedVideo[] };
-  return Array.isArray(data.videos) ? data.videos : [];
+
+  if (!response.ok) {
+    throw new IVXRequestError(`Feed request failed (${response.status}).`, response.status);
+  }
+
+  const data = (await response.json()) as { videos?: FeedVideo[]; next_cursor?: string | null; total?: number };
+  return {
+    videos: Array.isArray(data.videos) ? data.videos : [],
+    nextCursor: data.next_cursor ?? null,
+    total: typeof data.total === 'number' ? data.total : 0,
+  };
+}
+
+/** Compatibility helper for existing non-paginated consumers. */
+export async function fetchVideoFeed(limit = 24, _offset = 0): Promise<FeedVideo[]> {
+  const page = await fetchVideoFeedPage(limit);
+  return page.videos;
 }
 
 /**

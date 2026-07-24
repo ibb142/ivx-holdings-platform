@@ -34,10 +34,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { RefreshControl } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useQuery } from '@tanstack/react-query';
-
 import Colors from '@/constants/colors';
-import { fetchVideoFeed, type FeedVideo } from '@/lib/video-feed';
+import { type FeedVideo } from '@/lib/video-feed';
+import { useReelsFeed } from '@/hooks/useReelsFeed';
 import {
   toggleVideoFollow,
   reportVideo,
@@ -94,67 +93,9 @@ export default function VideosScreen() {
   const [shareVideo, setShareVideo] = useState<FeedVideo | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Progressive loading: fetch first page of 10, then load more on scroll
-  const [allVideos, setAllVideos] = useState<FeedVideo[]>([]);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
-  const loadedIds = useRef<Set<string>>(new Set());
-  const offsetRef = useRef<number>(0);
-  const PAGE_SIZE = 10;
-
-  const feedQuery = useQuery({
-    queryKey: ['ivx-video-feed'],
-    queryFn: () => {
-      offsetRef.current = 0;
-      return fetchVideoFeed(PAGE_SIZE, 0);
-    },
-    staleTime: 60_000,
-    retry: 2,
-  });
-
-  // Sync initial query results into local state via guarded effect
-  const queryData = feedQuery.data;
-  useEffect(() => {
-    if (!queryData || queryData.length === 0 || feedQuery.isLoading) return;
-    const seen = new Set<string>();
-    const deduped = queryData.filter((v) => {
-      if (seen.has(v.id)) return false;
-      seen.add(v.id);
-      return true;
-    });
-    loadedIds.current = new Set(deduped.map((v) => v.id));
-    offsetRef.current = deduped.length;
-    setHasMore(deduped.length >= PAGE_SIZE);
-    setAllVideos(deduped);
-  }, [queryData, feedQuery.isLoading]);
-
-  const loadMore = useCallback(() => {
-    if (isFetchingMore || !hasMore || feedQuery.isLoading) return;
-    setIsFetchingMore(true);
-    const currentOffset = offsetRef.current;
-    void fetchVideoFeed(PAGE_SIZE, currentOffset)
-      .then((more) => {
-        const newItems = more.filter((v) => !loadedIds.current.has(v.id));
-        if (newItems.length === 0) {
-          setHasMore(false);
-        } else {
-          for (const v of newItems) loadedIds.current.add(v.id);
-          offsetRef.current = currentOffset + newItems.length;
-          setAllVideos((prev) => {
-            // Deduplicate by ID in the combined array
-            const combined = [...prev];
-            for (const v of newItems) {
-              if (!combined.some((existing) => existing.id === v.id)) {
-                combined.push(v);
-              }
-            }
-            return combined;
-          });
-        }
-      })
-      .catch(() => setHasMore(false))
-      .finally(() => setIsFetchingMore(false));
-  }, [isFetchingMore, hasMore, feedQuery.isLoading]);
+  const reelsFeed = useReelsFeed();
+  const allVideos = reelsFeed.videos;
+  const loadMore = reelsFeed.loadMore;
 
   const filteredVideos = useMemo(() => {
     if (channel === 'all') return allVideos;
@@ -420,7 +361,7 @@ export default function VideosScreen() {
         </View>
       </View>
 
-      {feedQuery.isLoading ? (
+      {reelsFeed.isLoading ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={GOLD} />
         </View>
@@ -454,7 +395,7 @@ export default function VideosScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={
-            isFetchingMore ? (
+            reelsFeed.isFetchingMore ? (
               <View style={{ height: windowHeight, alignItems: 'center', justifyContent: 'center' }}>
                 <ActivityIndicator size="large" color={GOLD} />
               </View>
@@ -462,13 +403,8 @@ export default function VideosScreen() {
           }
           refreshControl={
             <RefreshControl
-              refreshing={feedQuery.isRefetching}
-              onRefresh={() => {
-                loadedIds.current = new Set();
-                offsetRef.current = 0;
-                setHasMore(true);
-                void feedQuery.refetch();
-              }}
+              refreshing={reelsFeed.isRefreshing}
+              onRefresh={reelsFeed.refresh}
               tintColor={GOLD}
             />
           }
