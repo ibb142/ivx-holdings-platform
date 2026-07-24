@@ -819,12 +819,14 @@ async function generatePasswordResetLinkViaAdminApi(email: string, redirectTo: s
   } catch {
     throw new Error('Supabase admin generate_link returned invalid JSON.');
   }
-  let actionLink = parsed.action_link || parsed.action_link;
-  if (typeof actionLink !== 'string' || !actionLink) {
+  const actionLink = readTrimmed(parsed.action_link);
+  if (!actionLink) {
     throw new Error('Supabase admin generate_link response did not contain a valid action_link.');
   }
-  actionLink = replaceRedirectUrlInSupabaseActionLink(actionLink, redirectTo);
-  return { actionLink, redirectUrlStatus };
+  return {
+    actionLink: replaceRedirectUrlInSupabaseActionLink(actionLink, redirectTo),
+    redirectUrlStatus,
+  };
 }
 
 function replaceRedirectUrlInSupabaseActionLink(actionLink: string, redirectTo: string): string {
@@ -1696,14 +1698,14 @@ async function runRenderTriggerDeploy(input: Record<string, unknown>): Promise<R
   // in the certification ledger and is visible via /api/ivx/certification/*.
   // ============================================================
   try {
-    const { runDeployCertificationGate } = await import('./services/ivx-deploy-certification-gate');
+    const { runDeployCertificationGate } = await import('../services/ivx-deploy-certification-gate');
     void runDeployCertificationGate({
       triggeredBy: 'post_deploy',
       triggerSource: `render_trigger_deploy:${deployId ?? 'unknown'}`,
       deployId: deployId ?? null,
       apiBase: 'https://api.ivxholding.com',
       ownerToken: null,
-    }).catch((gateError) => {
+    }).catch((gateError: unknown) => {
       console.log('[IVXDeveloperDeployControl] post-deploy certification gate failed (non-fatal):', gateError instanceof Error ? gateError.message : 'unknown');
     });
   } catch (importError) {
@@ -3112,9 +3114,9 @@ export async function runRenderGetLogs(input: Record<string, unknown>): Promise<
       logEntries = parsed.map((entry: unknown) => {
         const rec = readRecord(entry);
         return {
-          timestamp: readTrimmed(rec.timestamp) || readTrimmed(rec.time) || null,
-          message: readTrimmed(rec.message) || readTrimmed(rec.text) || readTrimmed(rec.msg) || null,
-          level: readTrimmed(rec.level) || null,
+          timestamp: readTrimmed(rec.timestamp) || readTrimmed(rec.time) || undefined,
+          message: readTrimmed(rec.message) || readTrimmed(rec.text) || readTrimmed(rec.msg) || undefined,
+          level: readTrimmed(rec.level) || undefined,
           raw: JSON.stringify(entry).slice(0, 500),
         };
       });
@@ -3124,9 +3126,9 @@ export async function runRenderGetLogs(input: Record<string, unknown>): Promise<
       logEntries = logsArray.map((entry: unknown) => {
         const rec = readRecord(entry);
         return {
-          timestamp: readTrimmed(rec.timestamp) || readTrimmed(rec.time) || null,
-          message: readTrimmed(rec.message) || readTrimmed(rec.text) || readTrimmed(rec.msg) || null,
-          level: readTrimmed(rec.level) || null,
+          timestamp: readTrimmed(rec.timestamp) || readTrimmed(rec.time) || undefined,
+          message: readTrimmed(rec.message) || readTrimmed(rec.text) || readTrimmed(rec.msg) || undefined,
+          level: readTrimmed(rec.level) || undefined,
           raw: JSON.stringify(entry).slice(0, 500),
         };
       });
