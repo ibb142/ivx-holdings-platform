@@ -2085,7 +2085,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"ivx-senior-developer-worker\",\"path\":\"backend\",\"include\":\"*test.ts\"}",
       "createdAt": 1784924588308,
-      "completedAt": 1784924588310
+      "completedAt": 1784924588310,
+      "compactedAt": 1784926479799
     },
     {
       "type": "reasoning",
@@ -2111,7 +2112,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-worker.ts\",\"offset\":245,\"limit\":110}",
       "createdAt": 1784924593419,
-      "completedAt": 1784924593423
+      "completedAt": 1784924593423,
+      "compactedAt": 1784926479799
     },
     {
       "type": "tool",
@@ -2130,7 +2132,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"ls \\\"expo/scripts\\\" \\\"expo/__tests__\\\" \\\".github/workflows\\\"\",\"cwd\":\".\"}",
       "createdAt": 1784924601362,
-      "completedAt": 1784924601591
+      "completedAt": 1784924601591,
+      "compactedAt": 1784926479799
     },
     {
       "type": "reasoning",
@@ -2160,7 +2163,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/src/modules/chat/services/chatMessageUtils.ts\",\"edits\":[{\"oldString\":\"export function formatMessageTime(value: string): string {\\n\",\"newString\":\"/**\\n * Sorts messages by their authoritative server timestamp and a stable ID tiebreaker.\\n * Invalid/missing timestamps fall behind dated records without reordering equal IDs.\\n */\\nexport function sortMessagesByCanonicalOrder<T extends { id: string; createdAt?: string | null; serverCreatedAt?: string | null }>(messages: readonly T[]): T[] {\\n  return [...messages].sort((left: T, right: T): number => {\\n    const leftTimestamp = left.serverCreatedAt ?? left.createdAt ?? '';\\n    const rightTimestamp = right.serverCreatedAt ?? right.createdAt ?? '';\\n    const leftTime = Date.parse(leftTimestamp);\\n    const rightTime = Date.parse(rightTimestamp);\\n    const leftValid = Number.isFinite(leftTime);\\n    const rightValid = Number.isFinite(rightTime);\\n\\n    if (leftValid && rightValid && leftTime !== rightTime) return leftTime - rightTime;\\n    if (leftValid !== rightValid) return leftValid ? -1 : 1;\\n    return left.id.localeCompare(right.id);\\n  });\\n}\\n\\nexport function formatMessageTime(value: string): string {\\n\",\"replaceAll\":false}]}",
       "createdAt": 1784924606059,
-      "completedAt": 1784924606377
+      "completedAt": 1784924606377,
+      "compactedAt": 1784926479799
     },
     {
       "type": "tool",
@@ -2188,7 +2192,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/app/ivx/chat.tsx\",\"edits\":[{\"oldString\":\"  normalizeComposerText,\\n  type ParsedReplyBody,\\n} from '@/src/modules/chat/services/chatMessageUtils';\",\"newString\":\"  normalizeComposerText,\\n  sortMessagesByCanonicalOrder,\\n  type ParsedReplyBody,\\n} from '@/src/modules/chat/services/chatMessageUtils';\",\"replaceAll\":false},{\"oldString\":\"    // CANONICAL ORDER: server_created_at ASC, then id ASC as a stable tiebreak.\\n    // Using only the timestamp caused visible reordering when two messages\\n    // share the same millisecond (bulk inserts, fast owner+assistant turns) or\\n    // when a client clock skew produced a createdAt that briefly out-ordered\\n    // an earlier-arriving row. Comparing the id string as the secondary key\\n    // makes the sort deterministic and stable across re-renders, reloads, and\\n    // realtime duplicate events (same id always sorts to the same slot).\\n    const finalMessages = Array.from(deduped.values()).sort((a, b) => {\\n      const timeDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();\\n      if (timeDiff !== 0) {\\n        return timeDiff;\\n      }\\n      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;\\n    });\\n    return finalMessages;\",\"newString\":\"    // Canonical server-created order with a stable message-ID tiebreak.\\n    // This keeps reloads and realtime duplicates from moving existing bubbles.\\n    return sortMessagesByCanonicalOrder(Array.from(deduped.values()));\",\"replaceAll\":false}]}",
       "createdAt": 1784924608800,
-      "completedAt": 1784924610586
+      "completedAt": 1784924610586,
+      "compactedAt": 1784926479799
     },
     {
       "type": "tool",
@@ -2205,7 +2210,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/scripts/verify-apk-release-consistency.mjs\",\"content\":\"import { readFile } from 'node:fs/promises';\\nimport path from 'node:path';\\nimport { fileURLToPath } from 'node:url';\\n\\nconst scriptDir = path.dirname(fileURLToPath(import.meta.url));\\nconst expoRoot = path.resolve(scriptDir, '..');\\n\\nconst [appConfig, gradle, landing] = await Promise.all([\\n  readFile(path.join(expoRoot, 'app.config.ts'), 'utf8'),\\n  readFile(path.join(expoRoot, 'android/app/build.gradle'), 'utf8'),\\n  readFile(path.join(expoRoot, 'ivxholding-landing/index.html'), 'utf8'),\\n]);\\n\\nconst configVersion = appConfig.match(/version:\\\\s*[\\\"']([^\\\"']+)[\\\"']/)?.[1];\\nconst gradleVersion = gradle.match(/versionName\\\\s+[\\\"']([^\\\"']+)[\\\"']/)?.[1];\\nconst landingVersions = [...landing.matchAll(/ivx-holdings-v(\\\\d+\\\\.\\\\d+\\\\.\\\\d+)\\\\.apk/g)].map((match) => match[1]);\\nconst expectedVersion = configVersion;\\n\\nif (!expectedVersion || !gradleVersion || landingVersions.length === 0) {\\n  throw new Error('APK release consistency check could not read every required version source.');\\n}\\nif (gradleVersion !== expectedVersion) {\\n  throw new Error(`Android versionName ${gradleVersion} does not match app version ${expectedVersion}.`);\\n}\\nif (landingVersions.some((version) => version !== expectedVersion)) {\\n  throw new Error(`Landing APK URLs must all reference v${expectedVersion}; found: ${[...new Set(landingVersions)].join(', ')}.`);\\n}\\n\\nconsole.log(JSON.stringify({ status: 'ok', version: expectedVersion, landingReferences: landingVersions.length }));\\n\"}",
       "createdAt": 1784924613047,
-      "completedAt": 1784924616642
+      "completedAt": 1784924616642,
+      "compactedAt": 1784926479799
     },
     {
       "type": "reasoning",
@@ -2235,7 +2241,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/ivxholding-landing/index.html\",\"edits\":[{\"oldString\":\"ivx-holdings-v1.4.36.apk\",\"newString\":\"ivx-holdings-v1.4.37.apk\",\"replaceAll\":true}]}",
       "createdAt": 1784924620977,
-      "completedAt": 1784924620983
+      "completedAt": 1784924620983,
+      "compactedAt": 1784926479799
     },
     {
       "type": "tool",
@@ -2254,7 +2261,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/ivxholding-landing/index.html\",\"offset\":4228,\"limit\":18}",
       "createdAt": 1784924632574,
-      "completedAt": 1784924632606
+      "completedAt": 1784924632606,
+      "compactedAt": 1784926479799
     },
     {
       "type": "text",
