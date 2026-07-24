@@ -42,3 +42,15 @@ The local IVX workspace will become the release source, then each delivery surfa
 - Do not delete the previous live version; keep a recoverable release point before forced replacement.
 - Use the authorized owner-gated release actions for every source publication and production deployment.
 - If any batch cannot build, deploy, or match its live revision, halt that batch and report the exact evidence instead of claiming completion.
+
+## Release evidence ledger — 2026-07-24
+
+- Recovery point: `rollback-live-2026-07-24-4652a693` preserves the previous live revision `4652a6930a99142b339e43872c5221a04efeab21`.
+- Backend and worker source: published as `33691995d2383f1d73096c021c66e22efa51ec1e`; Render deployment `dep-d9htokkfnr2s73anlpr0` reached `live`, with the health endpoint revision matched before subsequent work.
+- Landing source: published as `30ac6344dbd728ca6de34a0e4a935194c342ba71`; deployed to S3 and CloudFront. Public root, capture routes, robots, sitemap, health, and both public deal feeds returned HTTP 200. Render subsequently reported this revision live.
+- Chat source: published as `33940e9b112ec29dded6e470ec889720040ad1dd`; Render reported it live and API health matched the revision.
+- iOS source: published as `934e7e5eb7436d0a56b9b1974abf0a870110f848` (project, SwiftUI screens, and tests); iOS build checks passed. Render deployment `dep-d9hu011c0rfc738hshm0` reached `live` and health plus worker revision both matched this commit.
+- Expo checks: TypeScript passed; lint completed with existing warnings only; APK link consistency passed for version `1.4.37`.
+- Android artifact: local release APK checksum `ee5fc9c7e00f720538993c73dc87638bd0a0ce99903466822b0a806f759bd7e9`, size `18,137,834` bytes. It remains debug-signed, so it is build evidence only and is not Play-distribution ready.
+- iOS distribution: signed build artifact exists, but TestFlight/App Store delivery and physical-device QA remain unverified.
+- Remaining validation gaps: Expo Go/physical-device validation, Android protected release signing and Play delivery, iOS TestFlight/App Store submission, physical Android/iOS QA, and full worker retry/dead-letter recovery coverage.
