@@ -11,6 +11,9 @@
  *
  * SAFETY: callers must enforce owner approval before invoking this. This module
  * only performs the transport — it never decides whether a message may be sent.
+ *
+ * This file must be stored as plain TypeScript source. Encoding the full module
+ * as base64 causes the production bundler to fail before the service can start.
  */
 import { createHash, createHmac } from 'node:crypto';
 
@@ -33,6 +36,10 @@ export type SesSendResult = {
 function readEnv(name: string): string {
   const v = process.env[name];
   return typeof v === 'string' ? v.trim() : '';
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
 /** The verified SES sender address, with safe owner-email fallbacks. */
