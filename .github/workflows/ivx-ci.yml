@@ -15,6 +15,10 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "expo/app.config.ts"
+      - "expo/android/app/build.gradle"
+      - "expo/ivxholding-landing/index.html"
+      - "expo/scripts/verify-apk-release-consistency.mjs"
       - ".github/workflows/ivx-ci.yml"
 
 jobs:
@@ -39,6 +43,16 @@ jobs:
             echo "Running targeted tests: $TARGET"
             bun test $TARGET
           fi
+
+  release-consistency:
+    name: Android release consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate configured APK release references
+        run: node expo/scripts/verify-apk-release-consistency.mjs
 
   android-apk:
     name: Android release APK

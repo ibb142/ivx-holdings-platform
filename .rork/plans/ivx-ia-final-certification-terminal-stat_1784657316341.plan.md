@@ -2,7 +2,7 @@
 name: "IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict"
 overview: "Certification completed. The project is now executing FINAL IVX REGISTRATION + SIGN-UP + SIGN-IN CERTIFICATION with temporary Amazon SES activation."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-23T17:00:00.000Z
+updatedAt: 2026-07-24T21:00:00.000Z
 ---
 
 > **ACTIVE TASK CHANGE (2026-07-24):** FINAL IVX MODULE LOADING + MEDIA UPLOAD + REELS STABILITY QA is now the P0 priority. The current objective is cache-first rendering, resilient uploads, bounded Reel playback, and evidence-based Android validation. Existing registration and certification records remain historical; no verification claim may be upgraded without the device and live-SHA gates.
@@ -51,16 +51,16 @@ Every feature/module/release must report separately: DESIGNED, CODED, UNIT_TESTE
 - TOOLING PARITY: SUPPORTED (GitHub read/write, Render deploy, CI dispatch, SHA-256 verify — proven live, repeatedly)
 - CODE TASK PARITY: PARTIAL (single-file/scoped fixes proven; no blinded multi-category task suite has been run per section 10 of the integrity spec)
 - DEPLOYMENT PARITY: SUPPORTED (GitHub HEAD ⇄ Render runtime SHA match verified repeatedly)
-- RELEASE MANAGEMENT PARITY: NOT_PROVEN (landing-page APK link was stale at last check — release process has no automated consistency check)
+- RELEASE MANAGEMENT PARITY: PARTIAL (source APK references are aligned and a CI consistency gate exists; CDN/browser verification remains outstanding)
 - PHYSICAL QA PARITY: NOT_PROVEN (zero physical-device tests ever executed)
-- PRODUCT RELIABILITY PARITY: PARTIAL (live defects open: VERIFYING hang, chat ordering, SMTP)
+- PRODUCT RELIABILITY PARITY: PARTIAL (source fixes and focused coverage exist for verification timeout and chat ordering; live UI and SMTP remain open)
 - OVERALL PARITY: **PARTIAL — ENGINEERING TOOLING STRONG, WHOLE-PRODUCT CERTIFICATION INCOMPLETE**
 
 ### Outstanding gates before any future VERIFIED verdict
 
-- [ ] Landing page APK link fixed + CloudFront invalidated + verified from 3 browser UAs
-- [ ] `VERIFYING` stage hard timeout + full state machine (VERIFYING→VERIFIED/FAILED/TIMED_OUT/RETRY_PENDING/CANCELLED/DEAD_LETTER) implemented and 10-scenario test matrix run
-- [ ] Chat message ordering fixed (canonical `server_created_at ASC, stable_message_id ASC`) with 9-scenario test matrix run
+- [ ] Landing page APK link source fixed and release-consistency CI gate added; the live landing page still serves v1.4.36 and needs deployment, CloudFront invalidation, and 3-browser-UA verification
+- [ ] `VERIFYING` hard timeout and existing terminal persistence are code-audited; the requested expanded retry/dead-letter state model and 10-scenario matrix remain incomplete
+- [ ] Chat canonical ordering is implemented and focused unit coverage added; the requested 9-scenario end-to-end matrix remains incomplete
 - [ ] Real SES/SMTP handler code pushed to GitHub main (currently only in local sandbox, never actually deployed) + Supabase SMTP configured + real mailbox 10-point test
 - [ ] Physical Android device certification (owner-only — no device in sandbox)
 - [ ] Independent verifier pass (separate from the agent that built the fixes) re-pulls GitHub HEAD, Render runtime, APK metadata, landing page, DB state fresh — not reused from a prior check
