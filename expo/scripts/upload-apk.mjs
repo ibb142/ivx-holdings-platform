@@ -42,11 +42,15 @@ async function uploadToS3() {
   console.log(`[Upload APK] File size: ${(fileSize / (1024 * 1024)).toFixed(1)} MB`);
 
   const now = new Date();
-  const amzDate = now.toISOString().replace(/[:.-]/g, '') + 'Z';
+  // ISO basic format: 20260725T165313Z (no milliseconds, single Z)
+  const iso = now.toISOString();
+  const amzDate = iso.replace(/[:.-]/g, '').replace(/\d{3}Z$/, 'Z');
   const dateStamp = amzDate.substring(0, 8);
 
-  const host = `${BUCKET}.s3.${REGION}.amazonaws.com`;
-  const url = `https://${host}/${S3_KEY}`;
+  // Use path-style addressing — required when bucket name contains a dot
+  // (virtual-hosted style fails TLS cert validation for dotted bucket names)
+  const host = `s3.${REGION}.amazonaws.com`;
+  const url = `https://${host}/${BUCKET}/${S3_KEY}`;
 
   // For PUT with body, we need to hash the payload
   const payloadHash = createHash('sha256').update(fileData).digest('hex');
