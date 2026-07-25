@@ -822,7 +822,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-internal-deploy-auth.ts\",\"offset\":1,\"limit\":260}",
       "createdAt": 1784947222133,
-      "completedAt": 1784947222135
+      "completedAt": 1784947222135,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -841,7 +842,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-deployment-approvals.ts\",\"offset\":1,\"limit\":150}",
       "createdAt": 1784947222135,
-      "completedAt": 1784947222139
+      "completedAt": 1784947222139,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -860,7 +862,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/hono.ts\",\"offset\":3135,\"limit\":55}",
       "createdAt": 1784947222137,
-      "completedAt": 1784947222139
+      "completedAt": 1784947222139,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -879,7 +882,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-proof.ts\",\"offset\":1,\"limit\":250}",
       "createdAt": 1784947222139,
-      "completedAt": 1784947222141
+      "completedAt": 1784947222141,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -898,7 +902,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-worker.ts\",\"offset\":145,\"limit\":220}",
       "createdAt": 1784947222140,
-      "completedAt": 1784947222143
+      "completedAt": 1784947222143,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -917,7 +922,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-internal-deploy-auth.test.ts\",\"offset\":1,\"limit\":210}",
       "createdAt": 1784947222142,
-      "completedAt": 1784947222144
+      "completedAt": 1784947222144,
+      "compactedAt": 1784948005729
     },
     {
       "type": "reasoning",
@@ -943,7 +949,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-git.ts\",\"offset\":1,\"limit\":230}",
       "createdAt": 1784947226528,
-      "completedAt": 1784947226533
+      "completedAt": 1784947226533,
+      "compactedAt": 1784948005729
     },
     {
       "type": "reasoning",
@@ -993,7 +1000,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-dev-worker.ts\",\"edits\":[{\"oldString\":\"import {\\n  recordApproval,\\n  type IVXSeniorDevApprovalAction,\\n} from '../services/ivx-senior-dev-proof';\",\"newString\":\"import {\\n  recordApproval,\\n  type IVXSeniorDevApprovalAction,\\n} from '../services/ivx-senior-dev-proof';\\nimport { createOwnerDeploymentApproval } from '../services/ivx-internal-deploy-auth';\",\"replaceAll\":false},{\"oldString\":\"  const requiresInternalAuthorization = new URL(request.url).pathname.includes('/autonomous-worker/');\\n  const task = await enqueueOwnerAITask({\",\"newString\":\"  const requiresInternalAuthorization = new URL(request.url).pathname.includes('/autonomous-worker/');\\n  const requestedCommitSha = readString(body.requestedCommitSha)?.toLowerCase() ?? '';\\n  const internalDeploymentApprovals = readInternalApprovalMap(body.internalDeploymentApprovals);\\n  if (requiresInternalAuthorization && (!/^[a-f0-9]{40}$/.test(requestedCommitSha) || !internalDeploymentApprovals.GITHUB_WRITE)) {\\n    return json({ error: 'Autonomous jobs require an exact requestedCommitSha and a GITHUB_WRITE approval ID.' }, 400);\\n  }\\n  const task = await enqueueOwnerAITask({\",\"replaceAll\":false},{\"oldString\":\"      internalDeploymentApprovals: body.internalDeploymentApprovals,\\n      requestedCommitSha: body.requestedCommitSha,\",\"newString\":\"      internalDeploymentApprovals,\\n      requestedCommitSha,\",\"replaceAll\":false},{\"oldString\":\"  await recordApproval({\\n    taskId,\\n    ownerId: ownerId ?? 'unknown',\\n    action,\\n    phrase,\\n    scope,\\n    commitSha,\\n    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min\\n  });\\n\\n  await patchTask(taskId, {\\n    status: 'COMMITTING',\\n    checkpoint: 'COMMITTING (approval granted)',\\n    checkpoint_history: appendCheckpoint(task.checkpoint_history, `APPROVAL_GRANTED action=${action} phrase=${phrase}`),\\n  });\",\"newString\":\"  if (isAutonomousWorkerTask(task) && action === 'RENDER_DEPLOY') {\\n    const committedSha = (task.commit_sha ?? '').trim().toLowerCase();\\n    if (!/^[a-f0-9]{40}$/.test(committedSha) || commitSha?.toLowerCase() !== committedSha) {\\n      return json({ error: 'RENDER_DEPLOY approval must be bound to this task’s committed SHA.' }, 409);\\n    }\\n    const internalApproval = await createOwnerDeploymentApproval({\\n      ownerUserId: ownerId ?? 'unknown',\\n      requestedCommitSha: committedSha,\\n      action: 'RENDER_DEPLOY',\\n      requestId: `autonomous-${taskId}-render-${Date.now()}`,\\n      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),\\n    });\\n    const existingWorkerData = readRecord(task.worker_data);\\n    const approvals = readInternalApprovalMap(existingWorkerData.internalDeploymentApprovals);\\n    await patchTask(taskId, {\\n      worker_data: {\\n        ...existingWorkerData,\\n        requestedCommitSha: committedSha,\\n        internalDeploymentApprovals: { ...approvals, RENDER_DEPLOY: internalApproval.id },\\n      },\\n    });\\n  }\\n\\n  await recordApproval({\\n    taskId,\\n    ownerId: ownerId ?? 'unknown',\\n    action,\\n    phrase,\\n    scope,\\n    commitSha,\\n    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),\\n  });\\n\\n  await patchTask(taskId, {\\n    status: 'COMMITTING',\\n    checkpoint: 'COMMITTING (approval granted)',\\n    checkpoint_history: appendCheckpoint(task.checkpoint_history, `APPROVAL_GRANTED action=${action} phrase=${phrase}`),\\n  });\",\"replaceAll\":false},{\"oldString\":\"function readString(value: unknown): string | null {\\n  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;\\n}\\n\",\"newString\":\"function readString(value: unknown): string | null {\\n  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;\\n}\\n\\nfunction readRecord(value: unknown): Record<string, unknown> {\\n  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};\\n}\\n\\nfunction readInternalApprovalMap(value: unknown): Record<string, string> {\\n  return Object.fromEntries(\\n    Object.entries(readRecord(value)).filter(([key, item]) => (\\n      (key === 'GITHUB_WRITE' || key === 'RENDER_DEPLOY' || key === 'PRODUCTION_DEPLOY')\\n      && typeof item === 'string'\\n      && item.trim().length > 0\\n    )).map(([key, item]) => [key, (item as string).trim()]),\\n  );\\n}\\n\\nfunction isAutonomousWorkerTask(task: IVXOwnerAITaskRow): boolean {\\n  return readRecord(task.worker_data).requiresInternalAuthorization === true;\\n}\\n\",\"replaceAll\":false}] }",
       "createdAt": 1784947236010,
-      "completedAt": 1784947239535
+      "completedAt": 1784947239535,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -1031,7 +1039,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-worker.ts\",\"edits\":[{\"oldString\":\"  if (localEdits.length > 0) {\\n    await consumeRequiredInternalApproval(task, workerData, 'GITHUB_WRITE', runId);\\n  }\\n  let lastCommitSha: string | null = null;\",\"newString\":\"  if (localEdits.length > 0) {\\n    await assertApprovedBaseSha(workerData);\\n    await consumeRequiredInternalApproval(task, workerData, 'GITHUB_WRITE', runId);\\n  }\\n  let lastCommitSha: string | null = null;\",\"replaceAll\":false},{\"oldString\":\"    // Re-claim the task after approval.\\n    await patchTask(task.id, { status: 'RUNNING', checkpoint: 'APPROVED — deploying' });\\n  }\\n\\n  // ─── Phase 7-8: SELF-DEPLOY HANDOFF + CLEAN EXIT ─────────────────────\",\"newString\":\"    // The Render approval is issued only after the real commit exists. Refresh\\n    // task metadata so the signed worker request binds to that exact SHA.\\n    const approvedTask = await getTask(task.id);\\n    if (!approvedTask) {\\n      await failTask(task.id, 'Task disappeared while waiting for deploy approval.');\\n      await updateProofLedger(runId, { status: 'failed', errorMessage: 'Task disappeared while waiting for deploy approval.' });\\n      return;\\n    }\\n    Object.assign(workerData, readWorkerData(approvedTask.worker_data));\\n    await patchTask(task.id, { status: 'RUNNING', checkpoint: 'APPROVED — deploying' });\\n  }\\n\\n  // ─── Phase 7-8: SELF-DEPLOY HANDOFF + CLEAN EXIT ─────────────────────\",\"replaceAll\":false},{\"oldString\":\"  const requestedCommitSha = typeof workerData.requestedCommitSha === 'string'\\n    ? workerData.requestedCommitSha.trim().toLowerCase()\\n    : '';\",\"newString\":\"  const requestedCommitSha = typeof workerData.requestedCommitSha === 'string'\\n    ? workerData.requestedCommitSha.trim().toLowerCase()\\n    : '';\",\"replaceAll\":false},{\"oldString\":\"  await logCheckpoint(task.id, runId, 'INTERNAL_APPROVAL_CONSUMED', { action, approvalId });\\n}\\n\\nasync function setPhase\",\"newString\":\"  await logCheckpoint(task.id, runId, 'INTERNAL_APPROVAL_CONSUMED', { action, approvalId });\\n}\\n\\nfunction readWorkerData(value: unknown): Record<string, unknown> {\\n  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};\\n}\\n\\nasync function assertApprovedBaseSha(workerData: Record<string, unknown>): Promise<void> {\\n  if (workerData.requiresInternalAuthorization !== true) return;\\n  const requestedCommitSha = typeof workerData.requestedCommitSha === 'string'\\n    ? workerData.requestedCommitSha.trim().toLowerCase()\\n    : '';\\n  const head = await getGitHubHeadSha();\\n  if (!/^[a-f0-9]{40}$/.test(requestedCommitSha) || !head.sha || head.sha.toLowerCase() !== requestedCommitSha) {\\n    throw new Error('GitHub write approval no longer matches the current repository HEAD. A new exact-SHA approval is required.');\\n  }\\n}\\n\\nasync function setPhase\",\"replaceAll\":false}]}",
       "createdAt": 1784947242021,
-      "completedAt": 1784947245470
+      "completedAt": 1784947245470,
+      "compactedAt": 1784948005729
     },
     {
       "type": "reasoning",
@@ -1057,7 +1066,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun test backend/services/ivx-internal-deploy-auth.test.ts backend/api/ivx-senior-developer-worker.test.ts\",\"cwd\":\".\"}",
       "createdAt": 1784947249995,
-      "completedAt": 1784947250002
+      "completedAt": 1784947250002,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -1076,7 +1086,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"git diff --check\",\"cwd\":\".\"}",
       "createdAt": 1784947249997,
-      "completedAt": 1784947250002
+      "completedAt": 1784947250002,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -1095,7 +1106,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-dev-worker.ts\",\"offset\":45,\"limit\":210}",
       "createdAt": 1784947249999,
-      "completedAt": 1784947250002
+      "completedAt": 1784947250002,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -1114,7 +1126,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-worker.ts\",\"offset\":398,\"limit\":300}",
       "createdAt": 1784947250000,
-      "completedAt": 1784947250002
+      "completedAt": 1784947250002,
+      "compactedAt": 1784948005729
     },
     {
       "type": "reasoning",
@@ -1144,7 +1157,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-worker.ts\",\"edits\":[{\"oldString\":\"    const approved = await waitForApprovals(task.id, ['GITHUB_WRITE', 'RENDER_DEPLOY'], 24 * 60 * 60 * 1000);\",\"newString\":\"    const approvalActions: IVXSeniorDevApprovalAction[] = workerData.requiresInternalAuthorization === true\\n      ? ['RENDER_DEPLOY']\\n      : ['GITHUB_WRITE', 'RENDER_DEPLOY'];\\n    const approved = await waitForApprovals(task.id, approvalActions, 24 * 60 * 60 * 1000);\",\"replaceAll\":false}]}",
       "createdAt": 1784947255021,
-      "completedAt": 1784947255036
+      "completedAt": 1784947255036,
+      "compactedAt": 1784948005729
     },
     {
       "type": "reasoning",
@@ -1209,7 +1223,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Inspect the current autonomous deployment source and release configuration\",\"activeForm\":\"Inspecting the current autonomous deployment source and release configuration\",\"status\":\"completed\"},{\"content\":\"Validate the exact-SHA approval path and production startup behavior\",\"activeForm\":\"Validating the exact-SHA approval path and production startup behavior\",\"status\":\"in_progress\"},{\"content\":\"Deploy and verify the autonomous worker end to end\",\"activeForm\":\"Deploying and verifying the autonomous worker end to end\",\"status\":\"pending\"},{\"content\":\"Record release evidence and remaining limitations\",\"activeForm\":\"Recording release evidence and remaining limitations\",\"status\":\"pending\"}]}",
       "createdAt": 1784947259925,
-      "completedAt": 1784947264547
+      "completedAt": 1784947264547,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -1228,7 +1243,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bunx tsc --noEmit --pretty false\",\"cwd\":\".\"}",
       "createdAt": 1784947268656,
-      "completedAt": 1784947284274
+      "completedAt": 1784947284274,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
@@ -1247,7 +1263,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".rork/plans/force-sync-ivx-workspace-and-release-eve_1784928084433.plan.md\",\"offset\":65,\"limit\":20}",
       "createdAt": 1784947289094,
-      "completedAt": 1784947289141
+      "completedAt": 1784947289141,
+      "compactedAt": 1784948005729
     },
     {
       "type": "tool",
