@@ -1,24 +1,44 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import {
+import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+
+// Mock @supabase/supabase-js BEFORE importing the service so this test file is
+// isolated from other test files that may mock the same module globally.
+mock.module('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    auth: {
+      admin: {
+        listUsers: async () => ({ data: { users: [] }, error: null }),
+      },
+    },
+    from: () => ({
+      insert: async () => ({ error: { message: 'Mock Supabase insert failure: no real connection in unit tests' } }),
+      update: async () => ({ error: null }),
+      select: () => ({ eq: async () => ({ data: [], error: null }) }),
+    }),
+  }),
+}));
+
+const {
   createLandingPaymentTransaction,
   confirmLandingPaymentTransaction,
   DEPLOYMENT_MARKER,
-} from './services/ivx-landing-payment-sync';
+} = require('./services/ivx-landing-payment-sync') as typeof import('./services/ivx-landing-payment-sync');
 
 describe('IVX Landing Payment Sync — real transactions only', () => {
   const originalEnv = { ...process.env };
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     // Provide a test Supabase configuration so the service can build a client.
     // Real network calls are not made in these unit tests; the assertions focus
     // on payload validation, error handling, and result/audit structure.
-    // Clear all Supabase keys first so the service definitely uses the test anon key and fails to connect.
-    delete process.env.SUPABASE_URL;
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    delete process.env.SUPABASE_SERVICE_KEY;
-    delete process.env.SUPABASE_ANON_KEY;
-    process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.test';
+    const testUrl = 'https://test.supabase.co';
+    const testKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.test';
+    process.env.SUPABASE_URL = testUrl;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = testKey;
+    process.env.SUPABASE_SERVICE_KEY = testKey;
+    process.env.SUPABASE_ANON_KEY = testKey;
+    process.env.EXPO_PUBLIC_SUPABASE_URL = testUrl;
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = testKey;
     // Ensure no payment-provider keys leak from other test files and make the provider look configured.
     delete process.env.STRIPE_SECRET_KEY;
     delete process.env.STRIPE_PUBLISHABLE_KEY;
@@ -26,10 +46,13 @@ describe('IVX Landing Payment Sync — real transactions only', () => {
     delete process.env.PLAID_CLIENT_ID;
     delete process.env.PAYPAL_CLIENT_SECRET;
     delete process.env.PAYPAL_CLIENT_ID;
+    // Restore any global fetch mock left over from earlier tests.
+    globalThis.fetch = originalFetch;
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
+    globalThis.fetch = originalFetch;
   });
 
   test('validates a real landing payment payload and produces structured IDs', async () => {
@@ -50,9 +73,9 @@ describe('IVX Landing Payment Sync — real transactions only', () => {
       userAgent: 'bun-test',
     });
 
-    // With a fake Supabase URL the network insert fails; the service still
-    // returns a structured result with the generated IDs and marks the
-    // provider state correctly.
+    // With the mocked Supabase client the insert fails deterministically; the
+    // service still returns a structured result with the generated IDs and
+    // marks the provider state correctly.
     expect(result.transactionId).toMatch(/^txn_\d+_[a-f0-9]+$/);
     expect(result.landingInvestmentId).toMatch(/^[a-f0-9-]{36}$/);
     expect(result.intentId).toMatch(/^INT-[A-Z0-9-]+$/);
