@@ -14,6 +14,13 @@ describe('IVX Landing Payment Sync — real transactions only', () => {
     // on payload validation, error handling, and result/audit structure.
     process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.test';
+    // Ensure no payment-provider keys leak from other test files and make the provider look configured.
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
+    delete process.env.PLAID_SECRET;
+    delete process.env.PLAID_CLIENT_ID;
+    delete process.env.PAYPAL_CLIENT_SECRET;
+    delete process.env.PAYPAL_CLIENT_ID;
   });
 
   afterEach(() => {
