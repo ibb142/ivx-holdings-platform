@@ -27,6 +27,7 @@ import {
   recordApproval,
   type IVXSeniorDevApprovalAction,
 } from '../services/ivx-senior-dev-proof';
+import { createOwnerDeploymentApproval } from '../services/ivx-internal-deploy-auth';
 
 const ASSIGNED_WORKER = 'IVX-SENIOR-DEV-01';
 
@@ -76,6 +77,11 @@ export async function handleSeniorDevWorkerSubmit(request: Request): Promise<Res
   const idempotencyKey = readString(body.idempotencyKey) ?? `senior-dev-${traceId}`;
 
   const requiresInternalAuthorization = new URL(request.url).pathname.includes('/autonomous-worker/');
+  const requestedCommitSha = readString(body.requestedCommitSha)?.toLowerCase() ?? '';
+  const internalDeploymentApprovals = readInternalApprovalMap(body.internalDeploymentApprovals);
+  if (requiresInternalAuthorization && (!/^[a-f0-9]{40}$/.test(requestedCommitSha) || !internalDeploymentApprovals.GITHUB_WRITE)) {
+    return json({ error: 'Autonomous jobs require an exact requestedCommitSha and a GITHUB_WRITE approval ID.' }, 400);
+  }
   const task = await enqueueOwnerAITask({
     prompt,
     conversationId,
@@ -96,8 +102,8 @@ export async function handleSeniorDevWorkerSubmit(request: Request): Promise<Res
       riskLevel: body.riskLevel,
       rollbackPlan: body.rollbackPlan,
       requestsDeploy: body.requestsDeploy,
-      internalDeploymentApprovals: body.internalDeploymentApprovals,
-      requestedCommitSha: body.requestedCommitSha,
+      internalDeploymentApprovals,
+      requestedCommitSha,
       requiresInternalAuthorization,
     },
     checkpoint: 'QUEUED',
@@ -150,6 +156,29 @@ export async function handleSeniorDevWorkerApprove(request: Request, taskId: str
     return json({ error: 'Task is not waiting for approval.', status: task.status }, 409);
   }
 
+  if (isAutonomousWorkerTask(task) && action === 'RENDER_DEPLOY') {
+    const committedSha = (task.commit_sha ?? '').trim().toLowerCase();
+    if (!/^[a-f0-9]{40}$/.test(committedSha) || commitSha?.toLowerCase() !== committedSha) {
+      return json({ error: 'RENDER_DEPLOY approval must be bound to this task’s committed SHA.' }, 409);
+    }
+    const internalApproval = await createOwnerDeploymentApproval({
+      ownerUserId: ownerId ?? 'unknown',
+      requestedCommitSha: committedSha,
+      action: 'RENDER_DEPLOY',
+      requestId: `autonomous-${taskId}-render-${Date.now()}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    });
+    const existingWorkerData = readRecord(task.worker_data);
+    const approvals = readInternalApprovalMap(existingWorkerData.internalDeploymentApprovals);
+    await patchTask(taskId, {
+      worker_data: {
+        ...existingWorkerData,
+        requestedCommitSha: committedSha,
+        internalDeploymentApprovals: { ...approvals, RENDER_DEPLOY: internalApproval.id },
+      },
+    });
+  }
+
   await recordApproval({
     taskId,
     ownerId: ownerId ?? 'unknown',
@@ -157,7 +186,7 @@ export async function handleSeniorDevWorkerApprove(request: Request, taskId: str
     phrase,
     scope,
     commitSha,
-    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
   });
 
   await patchTask(taskId, {
@@ -171,6 +200,24 @@ export async function handleSeniorDevWorkerApprove(request: Request, taskId: str
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function readInternalApprovalMap(value: unknown): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(readRecord(value)).filter(([key, item]) => (
+      (key === 'GITHUB_WRITE' || key === 'RENDER_DEPLOY' || key === 'PRODUCTION_DEPLOY')
+      && typeof item === 'string'
+      && item.trim().length > 0
+    )).map(([key, item]) => [key, (item as string).trim()]),
+  );
+}
+
+function isAutonomousWorkerTask(task: IVXOwnerAITaskRow): boolean {
+  return readRecord(task.worker_data).requiresInternalAuthorization === true;
 }
 
 function json(payload: Record<string, unknown>, status: number): Response {

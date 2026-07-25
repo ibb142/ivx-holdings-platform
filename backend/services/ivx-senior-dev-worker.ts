@@ -405,6 +405,7 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   // ─── Phase 5: COMMITTING ────────────────────────────────────────────
   await setPhase(task.id, 'COMMITTING', runId);
   if (localEdits.length > 0) {
+    await assertApprovedBaseSha(workerData);
     await consumeRequiredInternalApproval(task, workerData, 'GITHUB_WRITE', runId);
   }
   let lastCommitSha: string | null = null;
@@ -443,13 +444,24 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
       checkpoint: 'WAITING_APPROVAL for RENDER_DEPLOY',
     });
 
-    const approved = await waitForApprovals(task.id, ['GITHUB_WRITE', 'RENDER_DEPLOY'], 24 * 60 * 60 * 1000);
+    const approvalActions: IVXSeniorDevApprovalAction[] = workerData.requiresInternalAuthorization === true
+      ? ['RENDER_DEPLOY']
+      : ['GITHUB_WRITE', 'RENDER_DEPLOY'];
+    const approved = await waitForApprovals(task.id, approvalActions, 24 * 60 * 60 * 1000);
     if (!approved) {
       await failTask(task.id, 'Approval timeout or missing.');
       await updateProofLedger(runId, { status: 'failed', errorMessage: 'Approval timeout or missing.' });
       return;
     }
-    // Re-claim the task after approval.
+    // The Render approval is issued only after the real commit exists. Refresh
+    // task metadata so the signed worker request binds to that exact SHA.
+    const approvedTask = await getTask(task.id);
+    if (!approvedTask) {
+      await failTask(task.id, 'Task disappeared while waiting for deploy approval.');
+      await updateProofLedger(runId, { status: 'failed', errorMessage: 'Task disappeared while waiting for deploy approval.' });
+      return;
+    }
+    Object.assign(workerData, readWorkerData(approvedTask.worker_data));
     await patchTask(task.id, { status: 'RUNNING', checkpoint: 'APPROVED — deploying' });
   }
 
@@ -669,6 +681,21 @@ async function consumeRequiredInternalApproval(
     deploymentAction: action,
   });
   await logCheckpoint(task.id, runId, 'INTERNAL_APPROVAL_CONSUMED', { action, approvalId });
+}
+
+function readWorkerData(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function assertApprovedBaseSha(workerData: Record<string, unknown>): Promise<void> {
+  if (workerData.requiresInternalAuthorization !== true) return;
+  const requestedCommitSha = typeof workerData.requestedCommitSha === 'string'
+    ? workerData.requestedCommitSha.trim().toLowerCase()
+    : '';
+  const head = await getGitHubHeadSha();
+  if (!/^[a-f0-9]{40}$/.test(requestedCommitSha) || !head.sha || head.sha.toLowerCase() !== requestedCommitSha) {
+    throw new Error('GitHub write approval no longer matches the current repository HEAD. A new exact-SHA approval is required.');
+  }
 }
 
 async function setPhase(taskId: string, phase: IVXSeniorDevWorkerPhase, runId: string): Promise<void> {
