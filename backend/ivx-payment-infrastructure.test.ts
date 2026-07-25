@@ -21,7 +21,7 @@ import { describe, test, expect } from 'bun:test';
 describe('IVX Payment Infrastructure', () => {
   describe('Payment Configuration Status', () => {
     test('returns not_configured when no Stripe key set', () => {
-      const secretKey = '';
+      const secretKey: string = '';
       const stripeConfigured = !!secretKey;
       const testMode = !secretKey || secretKey.startsWith('sk_test_');
       const environment = stripeConfigured ? (testMode ? 'test' : 'live') : 'not_configured';
@@ -185,7 +185,7 @@ describe('IVX Payment Infrastructure', () => {
     });
 
     test('Stripe status mapping: succeeded → SUCCEEDED', () => {
-      const stripeStatus = 'succeeded';
+      const stripeStatus: string = 'succeeded';
       let newState = 'DRAFT';
       switch (stripeStatus) {
         case 'requires_payment_method':
@@ -476,7 +476,7 @@ describe('IVX Payment Infrastructure', () => {
     });
 
     test('PROCESSING payment does NOT trigger finalization', () => {
-      const paymentState = 'PROCESSING';
+      const paymentState: string = 'PROCESSING';
       const shouldFinalize = paymentState === 'SUCCEEDED';
       expect(shouldFinalize).toBe(false);
     });
@@ -494,7 +494,7 @@ describe('IVX Payment Infrastructure', () => {
     });
 
     test('partial refund does NOT revoke ownership', () => {
-      const refundState = 'PARTIALLY_REFUNDED';
+      const refundState: string = 'PARTIALLY_REFUNDED';
       const shouldRevokeOwnership = refundState === 'REFUNDED';
       expect(shouldRevokeOwnership).toBe(false);
     });

@@ -17,7 +17,7 @@
  *  13. Worker restart does not re-run completed/cancelled jobs (simulated by idempotent result).
  */
 import { describe, it, expect } from 'bun:test';
-import { runWithWatchdog, sanitizeCommand, type WatchdogResult } from './ivx-process-watchdog.ts';
+import { runWithWatchdog, sanitizeCommand, type WatchdogResult } from './ivx-process-watchdog';
 
 function sh(cmd: string): string {
   return process.platform === 'win32' ? `cmd /c ${cmd}` : `/bin/sh -c "${cmd.replace(/"/g, '\\"')}"`;

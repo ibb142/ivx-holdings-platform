@@ -42,7 +42,7 @@ describe('IVX Execution Record', () => {
   test('validateExecutionRecord rejects VERIFIED with no feature evidence for dev task', () => {
     const r = createExecutionRecord({ task_id: 't', task_type: 'CODE_FIX', user_request: 'x' });
     r.status = 'VERIFIED';
-    r.verified_at = new Date().toISOString();
+    r.verified_at = Date.now();
     r.files_changed = ['file.ts'];
     const v = validateExecutionRecord(r);
     expect(v.ok).toBe(false);
@@ -52,7 +52,7 @@ describe('IVX Execution Record', () => {
   test('validateExecutionRecord rejects VERIFIED dev task with empty diff + no external cause', () => {
     const r = createExecutionRecord({ task_id: 't', task_type: 'FEATURE', user_request: 'x' });
     r.status = 'VERIFIED';
-    r.verified_at = new Date().toISOString();
+    r.verified_at = Date.now();
     r.evidence = [{ kind: 'feature', label: 'test', value: 'ok', timestamp: '', verified: true }];
     const v = validateExecutionRecord(r);
     expect(v.ok).toBe(false);

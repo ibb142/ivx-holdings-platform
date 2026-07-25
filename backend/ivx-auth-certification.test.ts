@@ -16,7 +16,7 @@ import { describe, it, expect } from 'bun:test';
 
 describe('Auth Rate Limiter', () => {
   it('LOCKOUT_MS is 15 minutes (900000ms), not 60 seconds', async () => {
-    const mod = await import('../expo/lib/auth-rate-limiter.ts');
+    const mod = await import('../expo/lib/auth-rate-limiter');
     // The module exports functions but the constant is internal.
     // We verify behavior: after 5 failures, lockout should be ~15 minutes.
     const identifier = `test-lockout-${Date.now()}`;
@@ -34,7 +34,7 @@ describe('Auth Rate Limiter', () => {
   });
 
   it('clears attempts on successful login', async () => {
-    const mod = await import('../expo/lib/auth-rate-limiter.ts');
+    const mod = await import('../expo/lib/auth-rate-limiter');
     const identifier = `test-success-${Date.now()}`;
     mod.recordAuthAttempt(identifier, false);
     mod.recordAuthAttempt(identifier, false);
@@ -45,7 +45,7 @@ describe('Auth Rate Limiter', () => {
   });
 
   it('does not lock before 5 failures', async () => {
-    const mod = await import('../expo/lib/auth-rate-limiter.ts');
+    const mod = await import('../expo/lib/auth-rate-limiter');
     const identifier = `test-threshold-${Date.now()}`;
     for (let i = 0; i < 4; i++) {
       mod.recordAuthAttempt(identifier, false);
@@ -56,7 +56,7 @@ describe('Auth Rate Limiter', () => {
   });
 
   it('clearAuthAttempts removes the entry', async () => {
-    const mod = await import('../expo/lib/auth-rate-limiter.ts');
+    const mod = await import('../expo/lib/auth-rate-limiter');
     const identifier = `test-clear-${Date.now()}`;
     for (let i = 0; i < 5; i++) {
       mod.recordAuthAttempt(identifier, false);
@@ -68,7 +68,7 @@ describe('Auth Rate Limiter', () => {
   });
 
   it('getRateLimitMessage shows minutes for long lockouts', async () => {
-    const mod = await import('../expo/lib/auth-rate-limiter.ts');
+    const mod = await import('../expo/lib/auth-rate-limiter');
     // 15 minutes from now
     const future = Date.now() + 15 * 60 * 1000;
     const msg = mod.getRateLimitMessage(future);
@@ -81,7 +81,7 @@ describe('Auth Rate Limiter', () => {
 
 describe('Owner Set Initial Password Handler', () => {
   it('rejects missing password', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,7 +95,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('rejects password shorter than 12 characters', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('rejects password longer than 128 characters', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const longPassword = 'A'.repeat(129);
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'POST',
@@ -124,7 +124,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('rejects non-POST methods', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'GET',
     });
@@ -133,7 +133,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('rejects invalid JSON body', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -147,7 +147,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('rejects missing owner bearer (401)', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -162,7 +162,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('OPTIONS returns 204 with CORS headers', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const res = mod.ivxOwnerSetInitialPasswordOptions();
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://ivxholding.com');
@@ -170,7 +170,7 @@ describe('Owner Set Initial Password Handler', () => {
   });
 
   it('never returns secret values in response', async () => {
-    const mod = await import('../backend/api/ivx-owner-set-initial-password.ts');
+    const mod = await import('../backend/api/ivx-owner-set-initial-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-set-initial-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -193,7 +193,7 @@ describe('Owner Set Initial Password Handler', () => {
 
 describe('Passwordless Emergency-Only Gate', () => {
   it('rejects routine passwordless without emergency flag', async () => {
-    const mod = await import('../backend/api/ivx-owner-passwordless-login.ts');
+    const mod = await import('../backend/api/ivx-owner-passwordless-login');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-passwordless-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -208,7 +208,7 @@ describe('Passwordless Emergency-Only Gate', () => {
   });
 
   it('rejects non-owner email even with emergency flag', async () => {
-    const mod = await import('../backend/api/ivx-owner-passwordless-login.ts');
+    const mod = await import('../backend/api/ivx-owner-passwordless-login');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-passwordless-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -222,7 +222,7 @@ describe('Passwordless Emergency-Only Gate', () => {
   });
 
   it('rejects invalid email format', async () => {
-    const mod = await import('../backend/api/ivx-owner-passwordless-login.ts');
+    const mod = await import('../backend/api/ivx-owner-passwordless-login');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-passwordless-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -236,7 +236,7 @@ describe('Passwordless Emergency-Only Gate', () => {
   });
 
   it('rejects non-POST methods', async () => {
-    const mod = await import('../backend/api/ivx-owner-passwordless-login.ts');
+    const mod = await import('../backend/api/ivx-owner-passwordless-login');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-passwordless-login', {
       method: 'GET',
     });
@@ -245,7 +245,7 @@ describe('Passwordless Emergency-Only Gate', () => {
   });
 
   it('never returns secret values in failure responses', async () => {
-    const mod = await import('../backend/api/ivx-owner-passwordless-login.ts');
+    const mod = await import('../backend/api/ivx-owner-passwordless-login');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-passwordless-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -266,14 +266,14 @@ describe('Passwordless Emergency-Only Gate', () => {
 
 describe('Owner Update Password Handler', () => {
   it('OPTIONS returns 204 with CORS headers', async () => {
-    const mod = await import('../backend/api/ivx-owner-update-password.ts');
+    const mod = await import('../backend/api/ivx-owner-update-password');
     const res = mod.ivxOwnerUpdatePasswordOptions();
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://ivxholding.com');
   });
 
   it('rejects missing currentPassword', async () => {
-    const mod = await import('../backend/api/ivx-owner-update-password.ts');
+    const mod = await import('../backend/api/ivx-owner-update-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-update-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -287,7 +287,7 @@ describe('Owner Update Password Handler', () => {
   });
 
   it('rejects newPassword same as currentPassword', async () => {
-    const mod = await import('../backend/api/ivx-owner-update-password.ts');
+    const mod = await import('../backend/api/ivx-owner-update-password');
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-update-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

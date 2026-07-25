@@ -7,6 +7,7 @@
  * activation acceptance criteria.
  */
 
+import { describe, it, expect } from 'bun:test';
 import {
   ALL_PROSPECT_CATEGORIES,
   calculateLeadScore,
