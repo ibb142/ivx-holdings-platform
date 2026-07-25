@@ -1,34 +1,76 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var selectedTab: Tab = .overview
+
     var body: some View {
-        TabView {
-            Tab("Overview", systemImage: "square.grid.2x2.fill") {
-                IVXDashboardView()
-            }
+        TabView(selection: $selectedTab) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("IVX Holdings")
+                            .font(.largeTitle.bold())
+                        Text("Portfolio command center")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
 
-            Tab("Portfolio", systemImage: "chart.line.uptrend.xyaxis") {
-                IVXPortfolioView()
-            }
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("Live infrastructure", systemImage: "checkmark.seal.fill")
+                                .font(.headline)
+                                .foregroundStyle(.green)
+                            Text("Your release status, portfolio activity, and owner controls appear here.")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.thinMaterial, in: .rect(cornerRadius: 20))
 
-            Tab("Activity", systemImage: "bolt.horizontal.circle.fill") {
-                IVXActivityView()
+                        Text("Today")
+                            .font(.title2.bold())
+                        ForEach(["Review current holdings", "Check investment activity", "Open secure owner controls"], id: \.self) { item in
+                            Label(item, systemImage: "arrow.up.right.circle")
+                                .padding(.vertical, 8)
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle("Overview")
             }
+            .tabItem { Label("Overview", systemImage: "rectangle.3.group.fill") }
+            .tag(Tab.overview)
 
-            Tab("Profile", systemImage: "person.crop.circle") {
-                IVXProfileView()
+            NavigationStack {
+                ContentUnavailableView("Portfolio", systemImage: "chart.pie.fill", description: Text("Portfolio holdings will appear here."))
+                    .navigationTitle("Portfolio")
             }
+            .tabItem { Label("Portfolio", systemImage: "chart.pie.fill") }
+            .tag(Tab.portfolio)
+
+            NavigationStack {
+                ContentUnavailableView("Activity", systemImage: "clock.arrow.circlepath", description: Text("Recent activity will appear here."))
+                    .navigationTitle("Activity")
+            }
+            .tabItem { Label("Activity", systemImage: "clock.arrow.circlepath") }
+            .tag(Tab.activity)
+
+            NavigationStack {
+                ContentUnavailableView("Profile", systemImage: "person.crop.circle", description: Text("Owner settings will appear here."))
+                    .navigationTitle("Profile")
+            }
+            .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+            .tag(Tab.profile)
         }
-        .tint(.ivxCopper)
+        .tint(.teal)
+    }
+
+    private enum Tab: Hashable {
+        case overview
+        case portfolio
+        case activity
+        case profile
     }
 }
 
 #Preview {
     ContentView()
-}
-
-extension Color {
-    static let ivxInk: Color = Color(red: 0.055, green: 0.071, blue: 0.075)
-    static let ivxCopper: Color = Color(red: 0.76, green: 0.42, blue: 0.20)
-    static let ivxSand: Color = Color(red: 0.94, green: 0.90, blue: 0.82)
 }

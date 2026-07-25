@@ -26,6 +26,7 @@ import {
   ownerOnlyJson,
   ownerOnlyOptions,
 } from './owner-only';
+import { authorizeInternalDeploymentRequest, InternalDeployAuthError } from '../services/ivx-internal-deploy-auth';
 
 type WorkerEnqueueRequest = {
   goal?: unknown;
@@ -89,6 +90,9 @@ function statusForError(error: unknown): number {
 
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : 'IVX senior developer worker failed.';
+  if (error instanceof InternalDeployAuthError) {
+    return ownerOnlyJson({ ok: false, marker: IVX_SENIOR_DEV_WORKER_MARKER, error: message.slice(0, 500), secretValuesReturned: false, timestamp: new Date().toISOString() }, error.status);
+  }
   if (error instanceof IVXOwnerApprovalError) {
     return ownerOnlyJson({
       ok: false,
@@ -127,11 +131,27 @@ export async function handleSeniorDeveloperWorkerStatusRequest(request: Request)
 /** POST a new owner-approved job to the worker queue. */
 export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request): Promise<Response> {
   try {
-    const { approval } = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');
+    const signedWorkerRequest = request.headers.has('X-IVX-Deploy-Signature');
+    const internalAuthorization = signedWorkerRequest ? await authorizeInternalDeploymentRequest(request) : null;
+    const ownerAuthorization = internalAuthorization ? null : await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');
+    const approval = ownerAuthorization?.approval ?? {
+      ownerSessionDetected: true,
+      bearerAccepted: true,
+      ownerVerified: true,
+      ownerEmailMatched: true,
+      ownerEmailMasked: 'internal-worker',
+      userId: `worker:${internalAuthorization?.workerId ?? 'unknown'}`,
+      role: 'internal_worker',
+      guardMode: 'strict' as const,
+      allowlistConfigured: true,
+      action: 'senior_developer_worker_enqueue',
+      blocker: null,
+      secretValuesReturned: false as const,
+    };
     const body = await request.json().catch((): WorkerEnqueueRequest => ({}));
     const goal = readTrimmed(body.goal);
     const templateMode = normalizeTemplateMode(body.templateMode);
-    const isSystemMode = approval.role === 'system' && approval.guardMode === 'system_bypass';
+    const isSystemMode = (approval.role === 'system' && approval.guardMode === 'system_bypass') || internalAuthorization !== null;
     const proposedPlan = readTrimmed(body.proposedPlan);
     const filesAffected = readStringArray(body.filesAffected);
     const riskLevel = normalizeRiskLevel(body.riskLevel);
@@ -177,13 +197,14 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
         `guardMode=${approval.guardMode}`,
         `filesAffected=${filesAffected.join(', ')}`,
         `riskLevel=${riskLevel}`,
+        ...(internalAuthorization ? [`internalWorkerId=${internalAuthorization.workerId}`, `ownerApprovalId=${internalAuthorization.approvalId}`, `requestedCommitSha=${internalAuthorization.requestedCommitSha}`] : []),
       ],
       secretValuesReturned: false as const,
     };
 
     // Prefix the execution template so the worker scaffolds the right shape of
     // work (whole app, module, feature, fix, refactor, or a business workflow).
-    const ownerId = approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner';
+    const ownerId = internalAuthorization ? `worker:${internalAuthorization.workerId}` : (approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner');
     const input: IVXWorkerJobInput = {
       goal: `[TEMPLATE_MODE:${templateMode}] ${goal}`,
       ownerApproved: true,

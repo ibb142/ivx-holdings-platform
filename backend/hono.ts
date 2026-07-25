@@ -1112,6 +1112,7 @@ import {
   handleSeniorDevWorkerStatus,
   handleSeniorDevWorkerSubmit,
 } from './api/ivx-senior-dev-worker';
+import { handleCreateDeploymentApproval } from './api/ivx-deployment-approvals';
 import {
   handleVideoJobCreate,
   handleVideoJobGet,
@@ -3156,6 +3157,7 @@ app.post('/api/ivx/owner-ai', async (context) => instrumentedOwnerAIRoute(contex
 app.post('/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(context.req.raw));
 app.post('/api/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerEnqueueRequest(context.req.raw));
+app.post('/api/ivx/senior-developer/deployment-approvals', async (context) => handleCreateDeploymentApproval(context.req.raw));
 app.get('/api/ivx/senior-developer/worker/jobs/:taskId', async (context) => handleSeniorDeveloperWorkerJobRequest(context.req.raw, context.req.param('taskId')));
 app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));
 app.options('/api/ivx/owner-ai/proxy-status', () => ownerAIOptions());
