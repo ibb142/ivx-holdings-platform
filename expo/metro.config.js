@@ -13,9 +13,9 @@ const config = getDefaultConfig(__dirname);
 // and set `watchFolders` to an empty array plus `resolver.blockList` to
 // prevent recursive node_modules watches.
 config.watcher = config.watcher || {};
-// Prevent Watchman from being spawned at all by pointing watchFolders
-// only at the project root (Metro will fall back to fs.watch).
-config.watchFolders = [__dirname];
+// Watchman refuses to start in low-priority sandboxes (nice_value=19).
+// Force Metro to use Node.js fs.watch instead of Watchman.
+config.watcher.watchman = false;
 config.resolver = config.resolver || {};
 
 module.exports = config;

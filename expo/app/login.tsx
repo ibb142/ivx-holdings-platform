@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Href } from 'expo-router';
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, ChevronRight, MailCheck, Check } from 'lucide-react-native';
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, ChevronRight, MailCheck, Check, AlertTriangle } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
@@ -646,6 +646,28 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     } as Href);
   }, [email, router]);
 
+  // ── navigateAfterSuccessfulLogin must be declared before handlePasswordlessLogin ──
+  const navigateAfterSuccessfulLogin = useCallback((source: 'password' | 'two-factor') => {
+    pushTelemetry('7. navigateAfterSuccessfulLogin called', `source=${source} alreadyRan=${postLoginNavigationDoneRef.current}`);
+    if (postLoginNavigationDoneRef.current) {
+      return;
+    }
+
+    postLoginNavigationDoneRef.current = true;
+    // Always land owner + non-owner users on Home. Owner Controls is opt-in from Profile/Admin entry.
+    const target = '/(tabs)/(home)/home';
+    postLoginNavigationTimerRef.current = setTimeout(() => {
+      postLoginNavigationTimerRef.current = null;
+      pushTelemetry('8. router.replace(/(tabs)) called', `target=${target}`);
+      try {
+        router.replace(target as any);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e ?? '');
+        pushTelemetry('8b. router.replace threw', msg);
+      }
+    }, 0);
+  }, [effectiveOwnerMode, router, pushTelemetry]);
+
   const handlePasswordlessLogin = useCallback(async () => {
     const normalizedEmailForLogin = sanitizeEmail(email);
     if (!normalizedEmailForLogin) {
@@ -698,27 +720,6 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       setPasswordlessLoading(false);
     }
   }, [email, loginOwnerPasswordless, navigateAfterSuccessfulLogin]);
-
-  const navigateAfterSuccessfulLogin = useCallback((source: 'password' | 'two-factor') => {
-    pushTelemetry('7. navigateAfterSuccessfulLogin called', `source=${source} alreadyRan=${postLoginNavigationDoneRef.current}`);
-    if (postLoginNavigationDoneRef.current) {
-      return;
-    }
-
-    postLoginNavigationDoneRef.current = true;
-    // Always land owner + non-owner users on Home. Owner Controls is opt-in from Profile/Admin entry.
-    const target = '/(tabs)/(home)/home';
-    postLoginNavigationTimerRef.current = setTimeout(() => {
-      postLoginNavigationTimerRef.current = null;
-      pushTelemetry('8. router.replace(/(tabs)) called', `target=${target}`);
-      try {
-        router.replace(target as any);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e ?? '');
-        pushTelemetry('8b. router.replace threw', msg);
-      }
-    }, 0);
-  }, [effectiveOwnerMode, router, pushTelemetry]);
 
   const handleBackPress = useCallback(() => {
     if (effectiveOwnerMode) {

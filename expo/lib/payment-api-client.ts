@@ -1,1 +1,207 @@
-LyoqCiAqIElWWCBQYXltZW50IEFQSSBDbGllbnQg4oCUIG1vYmlsZS1zaWRlIGhlbHBlciBmb3IgY2FsbGluZyBwYXltZW50IGVuZHBvaW50cy4KICoKICogQWxsIGZpbmFuY2lhbCBjYWxjdWxhdGlvbnMgaGFwcGVuIHNlcnZlci1zaWRlLiBUaGlzIGNsaWVudCBvbmx5OgogKiAtIFNlbmRzIHRoZSB1c2VyJ3Mgc2VsZWN0aW9uIChwYXRod2F5LCBzaGFyZSBjb3VudCwgcGF5bWVudCBtZXRob2QpCiAqIC0gUmVjZWl2ZXMgdGhlIHNlcnZlci1jYWxjdWxhdGVkIGFtb3VudCArIFN0cmlwZSBjbGllbnQgc2VjcmV0CiAqIC0gRGlzcGxheXMgcGF5bWVudCBzdGF0dXMgZnJvbSBzZXJ2ZXIgKG5ldmVyIGFzc3VtZXMgc3VjY2VzcyBmcm9tIGNsaWVudCkKICovCgppbXBvcnQgeyBESVJFQ1RfQVBJX0JBU0VfVVJMIH0gZnJvbSAnLi9wdWJsaWMtYXBpJzsKCmV4cG9ydCBpbnRlcmZhY2UgUGF5bWVudENvbmZpZ1Jlc3BvbnNlIHsKICBvazogYm9vbGVhbjsKICBjb25maWc6IHsKICAgIHByb3ZpZGVyOiAnc3RyaXBlJzsKICAgIGVudmlyb25tZW50OiAndGVzdCcgfCAnbGl2ZScgfCAnbm90X2NvbmZpZ3VyZWQnOwogICAgc3RyaXBlQ29uZmlndXJlZDogYm9vbGVhbjsKICAgIHRlc3RNb2RlOiBib29sZWFuOwogICAgd2ViaG9va0NvbmZpZ3VyZWQ6IGJvb2xlYW47CiAgICBwdWJsaXNoYWJsZUtleTogc3RyaW5nOwogICAgY2FwYWJpbGl0aWVzOiB7CiAgICAgIGNhcmQ6IGJvb2xlYW47CiAgICAgIGFjaDogYm9vbGVhbjsKICAgICAgZmluYW5jaWFsQ29ubmVjdGlvbnM6IGJvb2xlYW47CiAgICAgIHJlZnVuZHM6IGJvb2xlYW47CiAgICB9OwogIH07Cn0KCmV4cG9ydCBpbnRlcmZhY2UgQ3JlYXRlUGF5bWVudFJlcXVlc3QgewogIGRlYWxJZDogc3RyaW5nOwogIHBhdGh3YXk6ICd0b2tlbml6ZWQnIHwgJ2p2JyB8ICdidXllcl9kZXBvc2l0JyB8ICdidXllcl9hcHBsaWNhdGlvbl9mZWUnOwogIHBheW1lbnRNZXRob2Q6ICdjYXJkJyB8ICdhY2hfZGViaXQnOwogIHNoYXJlQ291bnQ/OiBudW1iZXI7CiAgYW1vdW50Q2VudHM/OiBudW1iZXI7CiAgYWNjZXB0ZWRUZXJtczogYm9vbGVhbjsKICBpZGVtcG90ZW5jeUtleTogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIENyZWF0ZVBheW1lbnRSZXNwb25zZSB7CiAgb2s6IGJvb2xlYW47CiAgcGF5bWVudElkPzogc3RyaW5nOwogIHByb3ZpZGVyUGF5bWVudEludGVudElkPzogc3RyaW5nOwogIGNsaWVudFNlY3JldD86IHN0cmluZzsKICBhbW91bnRDZW50czogbnVtYmVyOwogIHN0YXRlOiBzdHJpbmc7CiAgdHJhY2VJZDogc3RyaW5nOwogIGVycm9yPzogc3RyaW5nOwogIGNvZGU/OiBzdHJpbmc7CiAgdGVzdE1vZGU6IGJvb2xlYW47Cn0KCmV4cG9ydCBpbnRlcmZhY2UgUGF5bWVudFN0YXR1c1Jlc3BvbnNlIHsKICBvazogYm9vbGVhbjsKICBwYXltZW50PzogewogICAgaWQ6IHN0cmluZzsKICAgIHN0YXRlOiBzdHJpbmc7CiAgICBhbW91bnRDZW50czogbnVtYmVyOwogICAgcGF0aHdheTogc3RyaW5nOwogICAgcHJvdmlkZXJQYXltZW50SW50ZW50SWQ6IHN0cmluZyB8IG51bGw7CiAgICBkZWFsSWQ6IHN0cmluZzsKICAgIHNoYXJlQ291bnQ6IG51bWJlciB8IG51bGw7CiAgfTsKICBpbnZlc3RtZW50PzogewogICAgaWQ6IHN0cmluZzsKICAgIHN0YXRlOiBzdHJpbmc7CiAgICBzaGFyZXNBbGxvY2F0ZWQ6IG51bWJlciB8IG51bGw7CiAgICBvd25lcnNoaXBQZXJjZW50OiBudW1iZXIgfCBudWxsOwogIH07CiAgdHJhY2VJZDogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIFBvcnRmb2xpb1Jlc3BvbnNlIHsKICBvazogYm9vbGVhbjsKICBwb3J0Zm9saW86IEFycmF5PHsKICAgIGlkOiBzdHJpbmc7CiAgICBkZWFsSWQ6IHN0cmluZzsKICAgIGRlYWxUaXRsZTogc3RyaW5nOwogICAgZGVhbFNsdWc6IHN0cmluZyB8IG51bGw7CiAgICBwYXRod2F5OiBzdHJpbmc7CiAgICBzaGFyZXNBbGxvY2F0ZWQ6IG51bWJlciB8IG51bGw7CiAgICBvd25lcnNoaXBQZXJjZW50OiBudW1iZXI7CiAgICBhbW91bnRDZW50czogbnVtYmVyOwogICAgc3RhdGU6IHN0cmluZzsKICAgIGludmVzdG1lbnRTdGF0ZTogc3RyaW5nOwogICAgY3JlYXRlZEF0OiBzdHJpbmc7CiAgfT47CiAgdHJhY2VJZDogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIEpWQXBwbGljYXRpb25SZXF1ZXN0IHsKICBkZWFsSWQ6IHN0cmluZzsKICBhbW91bnRDZW50czogbnVtYmVyOwogIGNvbnRyaWJ1dGlvblR5cGU/OiBzdHJpbmc7CiAgY29tcGFueT86IHN0cmluZzsKICBleHBlcmllbmNlPzogc3RyaW5nOwogIHByb3Bvc2VkVGVybXM/OiBzdHJpbmc7CiAgcmVxdWVzdGVkT3duZXJzaGlwPzogbnVtYmVyOwogIHByb2plY3RSb2xlPzogc3RyaW5nOwogIHByb29mT2ZGdW5kc1VybD86IHN0cmluZzsKICBhY2NlcHRlZFRlcm1zOiBib29sZWFuOwp9CgpleHBvcnQgaW50ZXJmYWNlIEJ1eWVyT2ZmZXJSZXF1ZXN0IHsKICBkZWFsSWQ6IHN0cmluZzsKICBvZmZlckFtb3VudENlbnRzOiBudW1iZXI7CiAgZmluYW5jaW5nVHlwZT86ICdjYXNoJyB8ICdmaW5hbmNpbmcnOwogIGRvd25QYXltZW50Q2VudHM/OiBudW1iZXI7CiAgcHJvb2ZPZkZ1bmRzVXJsPzogc3RyaW5nOwogIHByZWFwcHJvdmFsVXJsPzogc3RyaW5nOwogIGVhcm5lc3RNb25leUNlbnRzPzogbnVtYmVyOwogIGluc3BlY3Rpb25QZXJpb2REYXlzPzogbnVtYmVyOwogIGNsb3NpbmdEYXRlPzogc3RyaW5nOwogIGNvbnRpbmdlbmNpZXM/OiBzdHJpbmc7CiAgYnJva2VyTmFtZT86IHN0cmluZzsKICBvZmZlckV4cGlyYXRpb25EYXlzPzogbnVtYmVyOwogIG1lc3NhZ2U/OiBzdHJpbmc7CiAgYWNjZXB0ZWRUZXJtczogYm9vbGVhbjsKfQoKYXN5bmMgZnVuY3Rpb24gZ2V0QXV0aEhlYWRlcnMoKTogUHJvbWlzZTxSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+PiB7CiAgY29uc3QgeyBzdXBhYmFzZSB9ID0gYXdhaXQgaW1wb3J0KCcuL3N1cGFiYXNlJyk7CiAgY29uc3QgeyBkYXRhOiB7IHNlc3Npb24gfSB9ID0gYXdhaXQgc3VwYWJhc2UuYXV0aC5nZXRTZXNzaW9uKCk7CiAgY29uc3QgaGVhZGVyczogUmVjb3JkPHN0cmluZywgc3RyaW5nPiA9IHsKICAgICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicsCiAgfTsKICBpZiAoc2Vzc2lvbj8uYWNjZXNzX3Rva2VuKSB7CiAgICBoZWFkZXJzWydBdXRob3JpemF0aW9uJ10gPSBgQmVhcmVyICR7c2Vzc2lvbi5hY2Nlc3NfdG9rZW59YDsKICB9CiAgcmV0dXJuIGhlYWRlcnM7Cn0KCmZ1bmN0aW9uIGJ1aWxkVXJsKHBhdGg6IHN0cmluZyk6IHN0cmluZyB7CiAgY29uc3QgYmFzZSA9IERJUkVDVF9BUElfQkFTRV9VUkwgfHwgJ2h0dHBzOi8vYXBpLml2eGhvbGRpbmcuY29tJzsKICByZXR1cm4gYCR7YmFzZX0ke3BhdGh9YDsKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGZldGNoUGF5bWVudENvbmZpZygpOiBQcm9taXNlPFBheW1lbnRDb25maWdSZXNwb25zZT4gewogIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGJ1aWxkVXJsKCcvYXBpL2l2eC9wYXltZW50cy9jb25maWcnKSk7CiAgcmV0dXJuIHJlcy5qc29uKCkgYXMgUHJvbWlzZTxQYXltZW50Q29uZmlnUmVzcG9uc2U+Owp9CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gY3JlYXRlUGF5bWVudChyZXE6IENyZWF0ZVBheW1lbnRSZXF1ZXN0KTogUHJvbWlzZTxDcmVhdGVQYXltZW50UmVzcG9uc2U+IHsKICBjb25zdCBoZWFkZXJzID0gYXdhaXQgZ2V0QXV0aEhlYWRlcnMoKTsKICBjb25zdCByZXMgPSBhd2FpdCBmZXRjaChidWlsZFVybCgnL2FwaS9pdngvcGF5bWVudHMvY3JlYXRlJyksIHsKICAgIG1ldGhvZDogJ1BPU1QnLAogICAgaGVhZGVycywKICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHJlcSksCiAgfSk7CiAgcmV0dXJuIHJlcy5qc29uKCkgYXMgUHJvbWlzZTxDcmVhdGVQYXltZW50UmVzcG9uc2U+Owp9CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gZ2V0UGF5bWVudFN0YXR1cyhwYXltZW50SWQ6IHN0cmluZyk6IFByb21pc2U8UGF5bWVudFN0YXR1c1Jlc3BvbnNlPiB7CiAgY29uc3QgaGVhZGVycyA9IGF3YWl0IGdldEF1dGhIZWFkZXJzKCk7CiAgY29uc3QgcmVzID0gYXdhaXQgZmV0Y2goYnVpbGRVcmwoYC9hcGkvaXZ4L3BheW1lbnRzLyR7cGF5bWVudElkfWApLCB7IGhlYWRlcnMgfSk7CiAgcmV0dXJuIHJlcy5qc29uKCkgYXMgUHJvbWlzZTxQYXltZW50U3RhdHVzUmVzcG9uc2U+Owp9CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gY3JlYXRlQmFua0xpbmtTZXNzaW9uKCk6IFByb21pc2U8eyBvazogYm9vbGVhbjsgY2xpZW50U2VjcmV0Pzogc3RyaW5nOyB0cmFjZUlkOiBzdHJpbmc7IGVycm9yPzogc3RyaW5nOyB0ZXN0TW9kZTogYm9vbGVhbiB9PiB7CiAgY29uc3QgaGVhZGVycyA9IGF3YWl0IGdldEF1dGhIZWFkZXJzKCk7CiAgY29uc3QgcmVzID0gYXdhaXQgZmV0Y2goYnVpbGRVcmwoJy9hcGkvaXZ4L3BheW1lbnRzL2JhbmstbGluaycpLCB7CiAgICBtZXRob2Q6ICdQT1NUJywKICAgIGhlYWRlcnMsCiAgICBib2R5OiBKU09OLnN0cmluZ2lmeSh7fSksCiAgfSk7CiAgcmV0dXJuIHJlcy5qc29uKCk7Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBmZXRjaFBvcnRmb2xpbygpOiBQcm9taXNlPFBvcnRmb2xpb1Jlc3BvbnNlPiB7CiAgY29uc3QgaGVhZGVycyA9IGF3YWl0IGdldEF1dGhIZWFkZXJzKCk7CiAgY29uc3QgcmVzID0gYXdhaXQgZmV0Y2goYnVpbGRVcmwoJy9hcGkvaXZ4L3BheW1lbnRzL3BvcnRmb2xpbycpLCB7IGhlYWRlcnMgfSk7CiAgcmV0dXJuIHJlcy5qc29uKCkgYXMgUHJvbWlzZTxQb3J0Zm9saW9SZXNwb25zZT47Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBmZXRjaFRyYW5zYWN0aW9ucygpOiBQcm9taXNlPHsgb2s6IGJvb2xlYW47IHRyYW5zYWN0aW9uczogYW55W107IHRyYWNlSWQ6IHN0cmluZyB9PiB7CiAgY29uc3QgaGVhZGVycyA9IGF3YWl0IGdldEF1dGhIZWFkZXJzKCk7CiAgY29uc3QgcmVzID0gYXdhaXQgZmV0Y2goYnVpbGRVcmwoJy9hcGkvaXZ4L3BheW1lbnRzL3RyYW5zYWN0aW9ucycpLCB7IGhlYWRlcnMgfSk7CiAgcmV0dXJuIHJlcy5qc29uKCk7Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBzdWJtaXRKVkFwcGxpY2F0aW9uKHJlcTogSlZBcHBsaWNhdGlvblJlcXVlc3QpOiBQcm9taXNlPHsgb2s6IGJvb2xlYW47IGFwcGxpY2F0aW9uPzogYW55OyBtZXNzYWdlPzogc3RyaW5nOyB0cmFjZUlkOiBzdHJpbmc7IGVycm9yPzogc3RyaW5nOyBjb2RlPzogc3RyaW5nIH0+IHsKICBjb25zdCBoZWFkZXJzID0gYXdhaXQgZ2V0QXV0aEhlYWRlcnMoKTsKICBjb25zdCByZXMgPSBhd2FpdCBmZXRjaChidWlsZFVybCgnL2FwaS9pdngvcGF5bWVudHMvanYtYXBwbGljYXRpb24nKSwgewogICAgbWV0aG9kOiAnUE9TVCcsCiAgICBoZWFkZXJzLAogICAgYm9keTogSlNPTi5zdHJpbmdpZnkocmVxKSwKICB9KTsKICByZXR1cm4gcmVzLmpzb24oKTsKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIHN1Ym1pdEJ1eWVyT2ZmZXIocmVxOiBCdXllck9mZmVyUmVxdWVzdCk6IFByb21pc2U8eyBvazogYm9vbGVhbjsgb2ZmZXI/OiBhbnk7IG1lc3NhZ2U/OiBzdHJpbmc7IHRyYWNlSWQ6IHN0cmluZzsgZXJyb3I/OiBzdHJpbmc7IGNvZGU/OiBzdHJpbmcgfT4gewogIGNvbnN0IGhlYWRlcnMgPSBhd2FpdCBnZXRBdXRoSGVhZGVycygpOwogIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGJ1aWxkVXJsKCcvYXBpL2l2eC9wYXltZW50cy9idXllci1vZmZlcicpLCB7CiAgICBtZXRob2Q6ICdQT1NUJywKICAgIGhlYWRlcnMsCiAgICBib2R5OiBKU09OLnN0cmluZ2lmeShyZXEpLAogIH0pOwogIHJldHVybiByZXMuanNvbigpOwp9CgpleHBvcnQgZnVuY3Rpb24gZm9ybWF0Q2VudHMoY2VudHM6IG51bWJlcik6IHN0cmluZyB7CiAgcmV0dXJuIGAkJHsoY2VudHMgLyAxMDApLnRvTG9jYWxlU3RyaW5nKCdlbi1VUycsIHsgbWluaW11bUZyYWN0aW9uRGlnaXRzOiAyLCBtYXhpbXVtRnJhY3Rpb25EaWdpdHM6IDIgfSl9YDsKfQoKZXhwb3J0IGZ1bmN0aW9uIGdlbmVyYXRlSWRlbXBvdGVuY3lLZXkodXNlcklkOiBzdHJpbmcsIGRlYWxJZDogc3RyaW5nKTogc3RyaW5nIHsKICByZXR1cm4gYGl2eC1wYXktJHt1c2VySWQuc2xpY2UoMCwgMTIpfS0ke2RlYWxJZC5zbGljZSgwLCAyMCl9LSR7RGF0ZS5ub3coKX1gOwp9Cg==
+/**
+ * IVX Payment API Client — mobile-side helper for calling payment endpoints.
+ *
+ * All financial calculations happen server-side. This client only:
+ * - Sends the user's selection (pathway, share count, payment method)
+ * - Receives the server-calculated amount + Stripe client secret
+ * - Displays payment status from server (never assumes success from client)
+ */
+
+import { DIRECT_API_BASE_URL } from './public-api';
+
+export interface PaymentConfigResponse {
+  ok: boolean;
+  config: {
+    provider: 'stripe';
+    environment: 'test' | 'live' | 'not_configured';
+    stripeConfigured: boolean;
+    testMode: boolean;
+    webhookConfigured: boolean;
+    publishableKey: string;
+    capabilities: {
+      card: boolean;
+      ach: boolean;
+      financialConnections: boolean;
+      refunds: boolean;
+    };
+  };
+}
+
+export interface CreatePaymentRequest {
+  dealId: string;
+  pathway: 'tokenized' | 'jv' | 'buyer_deposit' | 'buyer_application_fee';
+  paymentMethod: 'card' | 'ach_debit';
+  shareCount?: number;
+  amountCents?: number;
+  acceptedTerms: boolean;
+  idempotencyKey: string;
+}
+
+export interface CreatePaymentResponse {
+  ok: boolean;
+  paymentId?: string;
+  providerPaymentIntentId?: string;
+  clientSecret?: string;
+  amountCents: number;
+  state: string;
+  traceId: string;
+  error?: string;
+  code?: string;
+  testMode: boolean;
+}
+
+export interface PaymentStatusResponse {
+  ok: boolean;
+  payment?: {
+    id: string;
+    state: string;
+    amountCents: number;
+    pathway: string;
+    providerPaymentIntentId: string | null;
+    dealId: string;
+    shareCount: number | null;
+  };
+  investment?: {
+    id: string;
+    state: string;
+    sharesAllocated: number | null;
+    ownershipPercent: number | null;
+  };
+  traceId: string;
+}
+
+export interface PortfolioResponse {
+  ok: boolean;
+  portfolio: Array<{
+    id: string;
+    dealId: string;
+    dealTitle: string;
+    dealSlug: string | null;
+    pathway: string;
+    sharesAllocated: number | null;
+    ownershipPercent: number;
+    amountCents: number;
+    state: string;
+    investmentState: string;
+    createdAt: string;
+  }>;
+  traceId: string;
+}
+
+export interface JVApplicationRequest {
+  dealId: string;
+  amountCents: number;
+  contributionType?: string;
+  company?: string;
+  experience?: string;
+  proposedTerms?: string;
+  requestedOwnership?: number;
+  projectRole?: string;
+  proofOfFundsUrl?: string;
+  acceptedTerms: boolean;
+}
+
+export interface BuyerOfferRequest {
+  dealId: string;
+  offerAmountCents: number;
+  financingType?: 'cash' | 'financing';
+  downPaymentCents?: number;
+  proofOfFundsUrl?: string;
+  preapprovalUrl?: string;
+  earnestMoneyCents?: number;
+  inspectionPeriodDays?: number;
+  closingDate?: string;
+  contingencies?: string;
+  brokerName?: string;
+  offerExpirationDays?: number;
+  message?: string;
+  acceptedTerms: boolean;
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { supabase } = await import('./supabase');
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
+
+function buildUrl(path: string): string {
+  const base = DIRECT_API_BASE_URL || 'https://api.ivxholding.com';
+  return `${base}${path}`;
+}
+
+export async function fetchPaymentConfig(): Promise<PaymentConfigResponse> {
+  const res = await fetch(buildUrl('/api/ivx/payments/config'));
+  return res.json() as Promise<PaymentConfigResponse>;
+}
+
+export async function createPayment(req: CreatePaymentRequest): Promise<CreatePaymentResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl('/api/ivx/payments/create'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(req),
+  });
+  return res.json() as Promise<CreatePaymentResponse>;
+}
+
+export async function getPaymentStatus(paymentId: string): Promise<PaymentStatusResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl(`/api/ivx/payments/${paymentId}`), { headers });
+  return res.json() as Promise<PaymentStatusResponse>;
+}
+
+export async function createBankLinkSession(): Promise<{ ok: boolean; clientSecret?: string; traceId: string; error?: string; testMode: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl('/api/ivx/payments/bank-link'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
+export async function fetchPortfolio(): Promise<PortfolioResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl('/api/ivx/payments/portfolio'), { headers });
+  return res.json() as Promise<PortfolioResponse>;
+}
+
+export async function fetchTransactions(): Promise<{ ok: boolean; transactions: any[]; traceId: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl('/api/ivx/payments/transactions'), { headers });
+  return res.json();
+}
+
+export async function submitJVApplication(req: JVApplicationRequest): Promise<{ ok: boolean; application?: any; message?: string; traceId: string; error?: string; code?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl('/api/ivx/payments/jv-application'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(req),
+  });
+  return res.json();
+}
+
+export async function submitBuyerOffer(req: BuyerOfferRequest): Promise<{ ok: boolean; offer?: any; message?: string; traceId: string; error?: string; code?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(buildUrl('/api/ivx/payments/buyer-offer'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(req),
+  });
+  return res.json();
+}
+
+export function formatCents(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export function generateIdempotencyKey(userId: string, dealId: string): string {
+  return `ivx-pay-${userId.slice(0, 12)}-${dealId.slice(0, 20)}-${Date.now()}`;
+}

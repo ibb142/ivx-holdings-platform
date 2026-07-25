@@ -142,13 +142,13 @@ export default function BusinessOverviewScreen() {
       let liveDeals = 0;
       let draftDeals = 0;
       let fundedDeals = 0;
+      let totalDeals = 0;
+      let activeOpportunities = 0;
       try {
         const { data: deals } = await supabase
           .from('jv_deals')
           .select('id, status, published')
           .eq('published', true);
-        let totalDeals = 0;
-        let activeOpportunities = 0;
         if (Array.isArray(deals)) {
           totalDeals = deals.length;
           activeOpportunities = deals.filter((d) => {

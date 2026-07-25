@@ -15,8 +15,8 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   TrendingUp,
@@ -45,7 +45,7 @@ type PerformanceMetric = {
   formatted: string;
   trend: 'up' | 'down' | 'flat';
   trendPercent: number | null;
-  icon: 'wallet' | 'building' | 'target' | 'percent' | 'dollar' | 'calendar';
+  icon: 'wallet' | 'building' | 'target' | 'percent' | 'dollar' | 'calendar' | 'trending';
 };
 
 type ActiveDeal = {

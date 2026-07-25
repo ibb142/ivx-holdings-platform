@@ -86,6 +86,17 @@ function homeFeedDealToInvestmentCard(
     shareCount: 0,
     isLiked: false,
     isSaved: false,
+    salePrice: null,
+    totalInvestment: null,
+    timelineMin: null,
+    timelineMax: null,
+    timelineUnit: null,
+    minimumOwnershipPercent: null,
+    fractionalStartAmount: null,
+    developerName: null,
+    developerLogo: null,
+    investmentDetails: null,
+    timelineSummary: null,
   };
 }
 

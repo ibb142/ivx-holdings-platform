@@ -1,1 +1,238 @@
-LyoqCiAqIElWWCBJQSBDaGF0IEV4ZWN1dGlvbiBNb2RlIOKAlCBMaXZlLXBvbGxpbmcgaG9vawogKgogKiBGSU5BTCBJVlggSUEgQ0hBVCBFWEVDVVRJT04gTU9ERSBtYW5kYXRlIChvd25lciAyMDI2LTA3LTE5KToKICogICAiU3RyZWFtIGxpdmUgZXhlY3V0aW9uIHN0YXR1cy4iCiAqCiAqIFdoZW4gdGhlIGJhY2tlbmQgcmV0dXJucyBIVFRQIDIwMiArIGBleGVjdXRpb25TdGF0dXNgIHBheWxvYWQgZm9yIGFuCiAqIGV4ZWN1dGlvbi1tb2RlIHByb21wdCAoZml4L2J1aWxkL2RlcGxveS9hdWRpdC9RQS9yZWZhY3Rvci9taWdyYXRpb24vCiAqIGNyZWF0ZSBtb2R1bGUvY3JlYXRlIGFwcC9zZW5pb3IgZGV2ZWxvcGVyKSwgdGhlIEV4cG8gY2hhdCByZW5kZXJzIGEKICogbGl2ZS1wb2xsaW5nIGV4ZWN1dGlvbiBjb25zb2xlIGJ1YmJsZS4gVGhpcyBob29rIHBvbGxzIHRoZSB3b3JrZXIgam9iCiAqIHN0YXR1c1VybCBvbiBhbiBpbnRlcnZhbCBhbmQgdXBkYXRlcyB0aGUgYnViYmxlIHdpdGggdGhlIHJlYWwgc3RhZ2UsCiAqIHByb2dyZXNzICUsIGZpbGVzIGNoYW5nZWQsIHRlc3RzLCBjb21taXRTaGEsIGRlcGxveUlkLCBhbmQgdmVyaWZpZWQKICogZXZpZGVuY2Ug4oCUIG5ldmVyIGZhYnJpY2F0ZWQuCiAqLwppbXBvcnQgeyB1c2VDYWxsYmFjaywgdXNlRWZmZWN0LCB1c2VSZWYsIHVzZVN0YXRlIH0gZnJvbSAncmVhY3QnOwoKLy8gSVZYIGNhbm9uaWNhbCBBUEkgYmFzZS4gUmVhZHMgRVhQT19QVUJMSUNfSVZYX0FQSV9CQVNFX1VSTCAob3duZXItQUkgcm91dGluZwovLyBlbnYpIHdpdGggYSBmYWxsYmFjayB0byB0aGUgcHJvZHVjdGlvbiBob3N0LCBtYXRjaGluZyB0aGUgcmVzdCBvZiB0aGUgYXBwCi8vIChzZWUgZXhwby9saWIvaXZ4LXN1cGFiYXNlLWNsaWVudC50cywgZXhwby9saWIvdmlkZW8tZmVlZC50cywgZXRjLikuCmNvbnN0IEJBU0VfVVJMID0gKHByb2Nlc3MuZW52LkVYUE9fUFVCTElDX0lWWF9BUElfQkFTRV9VUkwgfHwgJ2h0dHBzOi8vYXBpLml2eGhvbGRpbmcuY29tJykucmVwbGFjZSgvXC8rJC8sICcnKTsKCmV4cG9ydCB0eXBlIElWWENoYXRFeGVjdXRpb25TdGF0dXMgPSB7CiAgdGFza0lkOiBzdHJpbmc7CiAgc3RhdHVzOiBzdHJpbmc7CiAgc3RhZ2U6IHN0cmluZzsKICBsaXZlUHJvZ3Jlc3M6IG51bWJlcjsKICBmaWxlc0NoYW5nZWQ6IHN0cmluZ1tdOwogIHRlc3RzOiB7IHJ1bjogYm9vbGVhbjsgcGFzc2VkOiBib29sZWFuOyBjb21tYW5kOiBzdHJpbmcgfCBudWxsIH07CiAgY29tbWl0U2hhOiBzdHJpbmcgfCBudWxsOwogIGRlcGxveW1lbnRJZDogc3RyaW5nIHwgbnVsbDsKICBldmlkZW5jZTogewogICAgZGVwbG95ZWRUb1Byb2R1Y3Rpb246IGJvb2xlYW47CiAgICBsaXZlQ29tbWl0OiBzdHJpbmcgfCBudWxsOwogICAgY29tbWl0TWF0Y2g6IGJvb2xlYW47CiAgICBoZWFsdGhPazogYm9vbGVhbjsKICAgIHR5cGVjaGVjazogeyBydW46IGJvb2xlYW47IHBhc3NlZDogYm9vbGVhbiB9OwogICAgYnVpbGRSdW46IGJvb2xlYW47CiAgICBmaW5hbFN0YXR1czogc3RyaW5nOwogICAgZXJyb3I6IHN0cmluZyB8IG51bGw7CiAgICBhbnN3ZXJCbG9jazogc3RyaW5nOwogIH0gfCBudWxsOwogIGh0dHBTdGF0dXM6IDIwMCB8IDIwMjsKICBjYXRlZ29yeTogc3RyaW5nIHwgbnVsbDsKICBzdGF0dXNVcmw6IHN0cmluZzsKICBnZW5lcmF0ZWRBdDogc3RyaW5nOwp9OwoKY29uc3QgVEVSTUlOQUxfU1RBVFVTRVMgPSBuZXcgU2V0KFsnY29tcGxldGVkJywgJ2ZhaWxlZCcsICdibG9ja2VkJywgJ2NhbmNlbGxlZCddKTsKCmZ1bmN0aW9uIGlzUmVjb3JkKHZhbHVlOiB1bmtub3duKTogdmFsdWUgaXMgUmVjb3JkPHN0cmluZywgdW5rbm93bj4gewogIHJldHVybiB0eXBlb2YgdmFsdWUgPT09ICdvYmplY3QnICYmIHZhbHVlICE9PSBudWxsICYmICFBcnJheS5pc0FycmF5KHZhbHVlKTsKfQoKZnVuY3Rpb24gY29lcmNlU3RhdHVzKHBheWxvYWQ6IHVua25vd24pOiBJVlhDaGF0RXhlY3V0aW9uU3RhdHVzIHwgbnVsbCB7CiAgaWYgKCFpc1JlY29yZChwYXlsb2FkKSkgcmV0dXJuIG51bGw7CiAgY29uc3QgdGFza0lkID0gdHlwZW9mIHBheWxvYWQudGFza0lkID09PSAnc3RyaW5nJyA/IHBheWxvYWQudGFza0lkIDogbnVsbDsKICBjb25zdCBzdGF0dXNVcmwgPSB0eXBlb2YgcGF5bG9hZC5zdGF0dXNVcmwgPT09ICdzdHJpbmcnID8gcGF5bG9hZC5zdGF0dXNVcmwgOiBudWxsOwogIGlmICghdGFza0lkIHx8ICFzdGF0dXNVcmwpIHJldHVybiBudWxsOwogIGNvbnN0IHRlc3RzUmF3ID0gaXNSZWNvcmQocGF5bG9hZC50ZXN0cykgPyBwYXlsb2FkLnRlc3RzIDoge307CiAgY29uc3QgZXZpZGVuY2VSYXcgPSBpc1JlY29yZChwYXlsb2FkLmV2aWRlbmNlKSA/IHBheWxvYWQuZXZpZGVuY2UgOiBudWxsOwogIGNvbnN0IHR5cGVjaGVja0ZpZWxkID0gZXZpZGVuY2VSYXc/LnR5cGVjaGVjazsKICBjb25zdCB0eXBlY2hlY2tSYXcgPSBpc1JlY29yZCh0eXBlY2hlY2tGaWVsZCkgPyB0eXBlY2hlY2tGaWVsZCA6IHt9OwogIHJldHVybiB7CiAgICB0YXNrSWQsCiAgICBzdGF0dXM6IHR5cGVvZiBwYXlsb2FkLnN0YXR1cyA9PT0gJ3N0cmluZycgPyBwYXlsb2FkLnN0YXR1cyA6ICd1bmtub3duJywKICAgIHN0YWdlOiB0eXBlb2YgcGF5bG9hZC5zdGFnZSA9PT0gJ3N0cmluZycgPyBwYXlsb2FkLnN0YWdlIDogJ1VOS05PV04nLAogICAgbGl2ZVByb2dyZXNzOiB0eXBlb2YgcGF5bG9hZC5saXZlUHJvZ3Jlc3MgPT09ICdudW1iZXInID8gcGF5bG9hZC5saXZlUHJvZ3Jlc3MgOiAwLAogICAgZmlsZXNDaGFuZ2VkOiBBcnJheS5pc0FycmF5KHBheWxvYWQuZmlsZXNDaGFuZ2VkKQogICAgICA/IHBheWxvYWQuZmlsZXNDaGFuZ2VkLmZpbHRlcigoZik6IGYgaXMgc3RyaW5nID0+IHR5cGVvZiBmID09PSAnc3RyaW5nJykKICAgICAgOiBbXSwKICAgIHRlc3RzOiB7CiAgICAgIHJ1bjogdHlwZW9mIHRlc3RzUmF3LnJ1biA9PT0gJ2Jvb2xlYW4nID8gdGVzdHNSYXcucnVuIDogZmFsc2UsCiAgICAgIHBhc3NlZDogdHlwZW9mIHRlc3RzUmF3LnBhc3NlZCA9PT0gJ2Jvb2xlYW4nID8gdGVzdHNSYXcucGFzc2VkIDogZmFsc2UsCiAgICAgIGNvbW1hbmQ6IHR5cGVvZiB0ZXN0c1Jhdy5jb21tYW5kID09PSAnc3RyaW5nJyA/IHRlc3RzUmF3LmNvbW1hbmQgOiBudWxsLAogICAgfSwKICAgIGNvbW1pdFNoYTogdHlwZW9mIHBheWxvYWQuY29tbWl0U2hhID09PSAnc3RyaW5nJyA/IHBheWxvYWQuY29tbWl0U2hhIDogbnVsbCwKICAgIGRlcGxveW1lbnRJZDogdHlwZW9mIHBheWxvYWQuZGVwbG95bWVudElkID09PSAnc3RyaW5nJyA/IHBheWxvYWQuZGVwbG95bWVudElkIDogbnVsbCwKICAgIGV2aWRlbmNlOiBldmlkZW5jZVJhdwogICAgICA/IHsKICAgICAgICAgIGRlcGxveWVkVG9Qcm9kdWN0aW9uOiB0eXBlb2YgZXZpZGVuY2VSYXcuZGVwbG95ZWRUb1Byb2R1Y3Rpb24gPT09ICdib29sZWFuJyA/IGV2aWRlbmNlUmF3LmRlcGxveWVkVG9Qcm9kdWN0aW9uIDogZmFsc2UsCiAgICAgICAgICBsaXZlQ29tbWl0OiB0eXBlb2YgZXZpZGVuY2VSYXcubGl2ZUNvbW1pdCA9PT0gJ3N0cmluZycgPyBldmlkZW5jZVJhdy5saXZlQ29tbWl0IDogbnVsbCwKICAgICAgICAgIGNvbW1pdE1hdGNoOiB0eXBlb2YgZXZpZGVuY2VSYXcuY29tbWl0TWF0Y2ggPT09ICdib29sZWFuJyA/IGV2aWRlbmNlUmF3LmNvbW1pdE1hdGNoIDogZmFsc2UsCiAgICAgICAgICBoZWFsdGhPazogdHlwZW9mIGV2aWRlbmNlUmF3LmhlYWx0aE9rID09PSAnYm9vbGVhbicgPyBldmlkZW5jZVJhdy5oZWFsdGhPayA6IGZhbHNlLAogICAgICAgICAgdHlwZWNoZWNrOiB7CiAgICAgICAgICAgIHJ1bjogdHlwZW9mIHR5cGVjaGVja1Jhdy5ydW4gPT09ICdib29sZWFuJyA/IHR5cGVjaGVja1Jhdy5ydW4gOiBmYWxzZSwKICAgICAgICAgICAgcGFzc2VkOiB0eXBlb2YgdHlwZWNoZWNrUmF3LnBhc3NlZCA9PT0gJ2Jvb2xlYW4nID8gdHlwZWNoZWNrUmF3LnBhc3NlZCA6IGZhbHNlLAogICAgICAgICAgfSwKICAgICAgICAgIGJ1aWxkUnVuOiB0eXBlb2YgZXZpZGVuY2VSYXcuYnVpbGRSdW4gPT09ICdib29sZWFuJyA/IGV2aWRlbmNlUmF3LmJ1aWxkUnVuIDogZmFsc2UsCiAgICAgICAgICBmaW5hbFN0YXR1czogdHlwZW9mIGV2aWRlbmNlUmF3LmZpbmFsU3RhdHVzID09PSAnc3RyaW5nJyA/IGV2aWRlbmNlUmF3LmZpbmFsU3RhdHVzIDogJ1VOS05PV04nLAogICAgICAgICAgZXJyb3I6IHR5cGVvZiBldmlkZW5jZVJhdy5lcnJvciA9PT0gJ3N0cmluZycgPyBldmlkZW5jZVJhdy5lcnJvciA6IG51bGwsCiAgICAgICAgICBhbnN3ZXJCbG9jazogdHlwZW9mIGV2aWRlbmNlUmF3LmFuc3dlckJsb2NrID09PSAnc3RyaW5nJyA/IGV2aWRlbmNlUmF3LmFuc3dlckJsb2NrIDogJycsCiAgICAgICAgfQogICAgICA6IG51bGwsCiAgICBodHRwU3RhdHVzOiBwYXlsb2FkLmh0dHBTdGF0dXMgPT09IDIwMCA/IDIwMCA6IDIwMiwKICAgIGNhdGVnb3J5OiB0eXBlb2YgcGF5bG9hZC5jYXRlZ29yeSA9PT0gJ3N0cmluZycgPyBwYXlsb2FkLmNhdGVnb3J5IDogbnVsbCwKICAgIHN0YXR1c1VybCwKICAgIGdlbmVyYXRlZEF0OiB0eXBlb2YgcGF5bG9hZC5nZW5lcmF0ZWRBdCA9PT0gJ3N0cmluZycgPyBwYXlsb2FkLmdlbmVyYXRlZEF0IDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLAogIH07Cn0KCnR5cGUgUG9sbFN0YXRlID0gewogIHN0YXR1czogSVZYQ2hhdEV4ZWN1dGlvblN0YXR1cyB8IG51bGw7CiAgcG9sbGluZzogYm9vbGVhbjsKICBlcnJvcjogc3RyaW5nIHwgbnVsbDsKICBhdHRlbXB0czogbnVtYmVyOwp9OwoKY29uc3QgREVGQVVMVF9QT0xMX0lOVEVSVkFMX01TID0gMjUwMDsKY29uc3QgTUFYX1BPTExfQVRURU1QVFMgPSA4MDsgLy8gfjMuM21pbiBhdCAyLjVzIOKAlCBhbXBsZSBmb3Igc2VuaW9yLWRldiB0YXNrcwoKLyoqCiAqIFBvbGwgdGhlIHdvcmtlciBzdGF0dXNVcmwgZm9yIGxpdmUgZXhlY3V0aW9uIHVwZGF0ZXMgdW50aWwgdGhlIGpvYiByZWFjaGVzCiAqIGEgdGVybWluYWwgc3RhdGUgKGNvbXBsZXRlZC9mYWlsZWQvYmxvY2tlZC9jYW5jZWxsZWQpIG9yIHRoZSBhdHRlbXB0IGNhcAogKiBmaXJlcy4gUmV0dXJucyB0aGUgbGF0ZXN0IHN0YXR1cyBwbHVzIHRoZSB0ZXJtaW5hbCBhbnN3ZXJCbG9jayBzbyB0aGUgY2hhdAogKiBjYW4gc3dhcCB0aGUgbGl2ZS1wcm9ncmVzcyBidWJibGUgZm9yIHRoZSBmaW5hbCB2ZXJpZmllZC1ldmlkZW5jZSBibG9jay4KICovCmV4cG9ydCBmdW5jdGlvbiB1c2VFeGVjdXRpb25TdGF0dXNQb2xsKAogIGluaXRpYWxTdGF0dXM6IElWWENoYXRFeGVjdXRpb25TdGF0dXMgfCBudWxsLAogIGF1dGhUb2tlbjogc3RyaW5nIHwgbnVsbCwKICBvcHRpb25zOiB7IHBvbGxJbnRlcnZhbE1zPzogbnVtYmVyOyBtYXhBdHRlbXB0cz86IG51bWJlciB9ID0ge30sCik6IFBvbGxTdGF0ZSAmIHsKICByZWZyZXNoOiAoKSA9PiB2b2lkOwogIHN0b3A6ICgpID0+IHZvaWQ7Cn0gewogIGNvbnN0IHBvbGxJbnRlcnZhbE1zID0gb3B0aW9ucy5wb2xsSW50ZXJ2YWxNcyA/PyBERUZBVUxUX1BPTExfSU5URVJWQUxfTVM7CiAgY29uc3QgbWF4QXR0ZW1wdHMgPSBvcHRpb25zLm1heEF0dGVtcHRzID8/IE1BWF9QT0xMX0FUVEVNUFRTOwogIGNvbnN0IFtzdGF0ZSwgc2V0U3RhdGVdID0gdXNlU3RhdGU8UG9sbFN0YXRlPih7CiAgICBzdGF0dXM6IGluaXRpYWxTdGF0dXMsCiAgICBwb2xsaW5nOiBpbml0aWFsU3RhdHVzICE9PSBudWxsICYmICFURVJNSU5BTF9TVEFUVVNFUy5oYXMoaW5pdGlhbFN0YXR1cz8uc3RhdHVzID8/ICcnKSwKICAgIGVycm9yOiBudWxsLAogICAgYXR0ZW1wdHM6IDAsCiAgfSk7CiAgY29uc3Qgc3RvcHBlZFJlZiA9IHVzZVJlZihmYWxzZSk7CiAgY29uc3QgYXV0aFRva2VuUmVmID0gdXNlUmVmKGF1dGhUb2tlbik7CiAgYXV0aFRva2VuUmVmLmN1cnJlbnQgPSBhdXRoVG9rZW47CgogIGNvbnN0IGlzVGVybWluYWwgPSB1c2VDYWxsYmFjaygoczogSVZYQ2hhdEV4ZWN1dGlvblN0YXR1cyB8IG51bGwpOiBib29sZWFuID0+IHsKICAgIHJldHVybiBzICE9PSBudWxsICYmIFRFUk1JTkFMX1NUQVRVU0VTLmhhcyhzLnN0YXR1cyk7CiAgfSwgW10pOwoKICBjb25zdCBwb2xsT25jZSA9IHVzZUNhbGxiYWNrKGFzeW5jICgpOiBQcm9taXNlPHZvaWQ+ID0+IHsKICAgIGNvbnN0IGN1cnJlbnQgPSBzdGF0ZVJlZi5jdXJyZW50LnN0YXR1czsKICAgIGlmICghY3VycmVudCB8fCBzdG9wcGVkUmVmLmN1cnJlbnQgfHwgaXNUZXJtaW5hbChjdXJyZW50KSkgewogICAgICBzZXRTdGF0ZSgocHJldikgPT4gKHsgLi4ucHJldiwgcG9sbGluZzogZmFsc2UgfSkpOwogICAgICByZXR1cm47CiAgICB9CiAgICBjb25zdCB1cmwgPSBjdXJyZW50LnN0YXR1c1VybC5zdGFydHNXaXRoKCdodHRwJykKICAgICAgPyBjdXJyZW50LnN0YXR1c1VybAogICAgICA6IGAke0JBU0VfVVJMfSR7Y3VycmVudC5zdGF0dXNVcmx9YDsKICAgIHRyeSB7CiAgICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgZmV0Y2godXJsLCB7CiAgICAgICAgbWV0aG9kOiAnR0VUJywKICAgICAgICBoZWFkZXJzOiB7CiAgICAgICAgICAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nLAogICAgICAgICAgLi4uKGF1dGhUb2tlblJlZi5jdXJyZW50ID8geyBBdXRob3JpemF0aW9uOiBgQmVhcmVyICR7YXV0aFRva2VuUmVmLmN1cnJlbnR9YCB9IDoge30pLAogICAgICAgIH0sCiAgICAgIH0pOwogICAgICBpZiAoIXJlc3BvbnNlLm9rKSB7CiAgICAgICAgLy8gNDA0LzQwMSDihpIga2VlcCB0aGUgbGFzdCBzdGF0dXMgYnV0IHN0b3AgcG9sbGluZyB0byBhdm9pZCBhIGxvb3AuCiAgICAgICAgc2V0U3RhdGUoKHByZXYpID0+ICh7CiAgICAgICAgICAuLi5wcmV2LAogICAgICAgICAgcG9sbGluZzogZmFsc2UsCiAgICAgICAgICBlcnJvcjogYHN0YXR1cyBlbmRwb2ludCByZXR1cm5lZCAke3Jlc3BvbnNlLnN0YXR1c31gLAogICAgICAgICAgYXR0ZW1wdHM6IHByZXYuYXR0ZW1wdHMgKyAxLAogICAgICAgIH0pKTsKICAgICAgICBzdG9wcGVkUmVmLmN1cnJlbnQgPSB0cnVlOwogICAgICAgIHJldHVybjsKICAgICAgfQogICAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVzcG9uc2UuanNvbigpLmNhdGNoKCgpID0+IG51bGwpOwogICAgICBjb25zdCBqb2IgPSBpc1JlY29yZChib2R5KSAmJiBpc1JlY29yZChib2R5LmpvYikgPyBib2R5LmpvYiA6IGlzUmVjb3JkKGJvZHkpID8gYm9keSA6IG51bGw7CiAgICAgIGNvbnN0IG5leHQgPSBjb2VyY2VTdGF0dXMoam9iKTsKICAgICAgaWYgKCFuZXh0KSB7CiAgICAgICAgc2V0U3RhdGUoKHByZXYpID0+ICh7IC4uLnByZXYsIGF0dGVtcHRzOiBwcmV2LmF0dGVtcHRzICsgMSB9KSk7CiAgICAgICAgcmV0dXJuOwogICAgICB9CiAgICAgIHNldFN0YXRlKChwcmV2KSA9PiAoewogICAgICAgIHN0YXR1czogbmV4dCwKICAgICAgICBwb2xsaW5nOiAhVEVSTUlOQUxfU1RBVFVTRVMuaGFzKG5leHQuc3RhdHVzKSwKICAgICAgICBlcnJvcjogbnVsbCwKICAgICAgICBhdHRlbXB0czogcHJldi5hdHRlbXB0cyArIDEsCiAgICAgIH0pKTsKICAgICAgaWYgKFRFUk1JTkFMX1NUQVRVU0VTLmhhcyhuZXh0LnN0YXR1cykpIHsKICAgICAgICBzdG9wcGVkUmVmLmN1cnJlbnQgPSB0cnVlOwogICAgICB9CiAgICB9IGNhdGNoIChlcnJvcikgewogICAgICBzZXRTdGF0ZSgocHJldikgPT4gKHsKICAgICAgICAuLi5wcmV2LAogICAgICAgIGVycm9yOiBlcnJvciBpbnN0YW5jZW9mIEVycm9yID8gZXJyb3IubWVzc2FnZSA6ICdwb2xsIGZhaWxlZCcsCiAgICAgICAgYXR0ZW1wdHM6IHByZXYuYXR0ZW1wdHMgKyAxLAogICAgICB9KSk7CiAgICB9CiAgfSwgW2lzVGVybWluYWxdKTsKCiAgLy8gS2VlcCBhIHJlZiBvZiB0aGUgbGF0ZXN0IHN0YXRlIHNvIHRoZSBpbnRlcnZhbCBjYWxsYmFjayByZWFkcyBmcmVzaCBkYXRhLgogIGNvbnN0IHN0YXRlUmVmID0gdXNlUmVmKHN0YXRlKTsKICBzdGF0ZVJlZi5jdXJyZW50ID0gc3RhdGU7CgogIHVzZUVmZmVjdCgoKSA9PiB7CiAgICBpZiAoIWluaXRpYWxTdGF0dXMgfHwgaXNUZXJtaW5hbChpbml0aWFsU3RhdHVzKSkgewogICAgICByZXR1cm47CiAgICB9CiAgICBzdG9wcGVkUmVmLmN1cnJlbnQgPSBmYWxzZTsKICAgIGNvbnN0IGludGVydmFsSWQgPSBzZXRJbnRlcnZhbCgoKSA9PiB7CiAgICAgIHZvaWQgcG9sbE9uY2UoKTsKICAgIH0sIHBvbGxJbnRlcnZhbE1zKTsKICAgIC8vIEZpcmUgb25lIGltbWVkaWF0ZSBwb2xsIHNvIHRoZSBidWJibGUgYWR2YW5jZXMgcGFzdCAicXVldWVkIiBxdWlja2x5LgogICAgdm9pZCBwb2xsT25jZSgpOwogICAgcmV0dXJuICgpID0+IHsKICAgICAgY2xlYXJJbnRlcnZhbChpbnRlcnZhbElkKTsKICAgICAgc3RvcHBlZFJlZi5jdXJyZW50ID0gdHJ1ZTsKICAgIH07CiAgICAvLyBlc2xpbnQtZGlzYWJsZS1uZXh0LWxpbmUgcmVhY3QtaG9va3MvZXhoYXVzdGl2ZS1kZXBzCiAgfSwgW2luaXRpYWxTdGF0dXM/LnRhc2tJZCwgcG9sbEludGVydmFsTXNdKTsKCiAgLy8gSGFyZCBzdG9wIGFmdGVyIG1heEF0dGVtcHRzIHRvIHByZXZlbnQgdW5ib3VuZGVkIHBvbGxpbmcuCiAgdXNlRWZmZWN0KCgpID0+IHsKICAgIGlmIChzdGF0ZS5hdHRlbXB0cyA+PSBtYXhBdHRlbXB0cyAmJiBzdGF0ZS5wb2xsaW5nKSB7CiAgICAgIHNldFN0YXRlKChwcmV2KSA9PiAoeyAuLi5wcmV2LCBwb2xsaW5nOiBmYWxzZSwgZXJyb3I6IHByZXYuZXJyb3IgPz8gJ3BvbGwgdGltZW91dCcgfSkpOwogICAgICBzdG9wcGVkUmVmLmN1cnJlbnQgPSB0cnVlOwogICAgfQogIH0sIFtzdGF0ZS5hdHRlbXB0cywgc3RhdGUucG9sbGluZywgbWF4QXR0ZW1wdHNdKTsKCiAgY29uc3QgcmVmcmVzaCA9IHVzZUNhbGxiYWNrKCgpID0+IHsKICAgIHN0b3BwZWRSZWYuY3VycmVudCA9IGZhbHNlOwogICAgc2V0U3RhdGUoKHByZXYpID0+ICh7IC4uLnByZXYsIHBvbGxpbmc6IHRydWUsIGVycm9yOiBudWxsIH0pKTsKICAgIHZvaWQgcG9sbE9uY2UoKTsKICB9LCBbcG9sbE9uY2VdKTsKCiAgY29uc3Qgc3RvcCA9IHVzZUNhbGxiYWNrKCgpID0+IHsKICAgIHN0b3BwZWRSZWYuY3VycmVudCA9IHRydWU7CiAgICBzZXRTdGF0ZSgocHJldikgPT4gKHsgLi4ucHJldiwgcG9sbGluZzogZmFsc2UgfSkpOwogIH0sIFtdKTsKCiAgcmV0dXJuIHsgLi4uc3RhdGUsIHJlZnJlc2gsIHN0b3AgfTsKfQoKZXhwb3J0IHsgY29lcmNlU3RhdHVzIGFzIGNvZXJjZUV4ZWN1dGlvblN0YXR1c0Zyb21QYXlsb2FkIH07CmV4cG9ydCB7IFRFUk1JTkFMX1NUQVRVU0VTIGFzIEVYRUNVVElPTl9URVJNSU5BTF9TVEFUVVNFUyB9Owo=
+/**
+ * IVX IA Chat Execution Mode — Live-polling hook
+ *
+ * FINAL IVX IA CHAT EXECUTION MODE mandate (owner 2026-07-19):
+ *   "Stream live execution status."
+ *
+ * When the backend returns HTTP 202 + `executionStatus` payload for an
+ * execution-mode prompt (fix/build/deploy/audit/QA/refactor/migration/
+ * create module/create app/senior developer), the Expo chat renders a
+ * live-polling execution console bubble. This hook polls the worker job
+ * statusUrl on an interval and updates the bubble with the real stage,
+ * progress %, files changed, tests, commitSha, deployId, and verified
+ * evidence — never fabricated.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+// IVX canonical API base. Reads EXPO_PUBLIC_IVX_API_BASE_URL (owner-AI routing
+// env) with a fallback to the production host, matching the rest of the app
+// (see expo/lib/ivx-supabase-client.ts, expo/lib/video-feed.ts, etc.).
+const BASE_URL = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
+
+export type IVXChatExecutionStatus = {
+  taskId: string;
+  status: string;
+  stage: string;
+  liveProgress: number;
+  filesChanged: string[];
+  tests: { run: boolean; passed: boolean; command: string | null };
+  commitSha: string | null;
+  deploymentId: string | null;
+  evidence: {
+    deployedToProduction: boolean;
+    liveCommit: string | null;
+    commitMatch: boolean;
+    healthOk: boolean;
+    typecheck: { run: boolean; passed: boolean };
+    buildRun: boolean;
+    finalStatus: string;
+    error: string | null;
+    answerBlock: string;
+  } | null;
+  httpStatus: 200 | 202;
+  category: string | null;
+  statusUrl: string;
+  generatedAt: string;
+};
+
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'blocked', 'cancelled']);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function coerceStatus(payload: unknown): IVXChatExecutionStatus | null {
+  if (!isRecord(payload)) return null;
+  const taskId = typeof payload.taskId === 'string' ? payload.taskId : null;
+  const statusUrl = typeof payload.statusUrl === 'string' ? payload.statusUrl : null;
+  if (!taskId || !statusUrl) return null;
+  const testsRaw = isRecord(payload.tests) ? payload.tests : {};
+  const evidenceRaw = isRecord(payload.evidence) ? payload.evidence : null;
+  const typecheckField = evidenceRaw?.typecheck;
+  const typecheckRaw = isRecord(typecheckField) ? typecheckField : {};
+  return {
+    taskId,
+    status: typeof payload.status === 'string' ? payload.status : 'unknown',
+    stage: typeof payload.stage === 'string' ? payload.stage : 'UNKNOWN',
+    liveProgress: typeof payload.liveProgress === 'number' ? payload.liveProgress : 0,
+    filesChanged: Array.isArray(payload.filesChanged)
+      ? payload.filesChanged.filter((f): f is string => typeof f === 'string')
+      : [],
+    tests: {
+      run: typeof testsRaw.run === 'boolean' ? testsRaw.run : false,
+      passed: typeof testsRaw.passed === 'boolean' ? testsRaw.passed : false,
+      command: typeof testsRaw.command === 'string' ? testsRaw.command : null,
+    },
+    commitSha: typeof payload.commitSha === 'string' ? payload.commitSha : null,
+    deploymentId: typeof payload.deploymentId === 'string' ? payload.deploymentId : null,
+    evidence: evidenceRaw
+      ? {
+          deployedToProduction: typeof evidenceRaw.deployedToProduction === 'boolean' ? evidenceRaw.deployedToProduction : false,
+          liveCommit: typeof evidenceRaw.liveCommit === 'string' ? evidenceRaw.liveCommit : null,
+          commitMatch: typeof evidenceRaw.commitMatch === 'boolean' ? evidenceRaw.commitMatch : false,
+          healthOk: typeof evidenceRaw.healthOk === 'boolean' ? evidenceRaw.healthOk : false,
+          typecheck: {
+            run: typeof typecheckRaw.run === 'boolean' ? typecheckRaw.run : false,
+            passed: typeof typecheckRaw.passed === 'boolean' ? typecheckRaw.passed : false,
+          },
+          buildRun: typeof evidenceRaw.buildRun === 'boolean' ? evidenceRaw.buildRun : false,
+          finalStatus: typeof evidenceRaw.finalStatus === 'string' ? evidenceRaw.finalStatus : 'UNKNOWN',
+          error: typeof evidenceRaw.error === 'string' ? evidenceRaw.error : null,
+          answerBlock: typeof evidenceRaw.answerBlock === 'string' ? evidenceRaw.answerBlock : '',
+        }
+      : null,
+    httpStatus: payload.httpStatus === 200 ? 200 : 202,
+    category: typeof payload.category === 'string' ? payload.category : null,
+    statusUrl,
+    generatedAt: typeof payload.generatedAt === 'string' ? payload.generatedAt : new Date().toISOString(),
+  };
+}
+
+type PollState = {
+  status: IVXChatExecutionStatus | null;
+  polling: boolean;
+  error: string | null;
+  attempts: number;
+};
+
+const DEFAULT_POLL_INTERVAL_MS = 2500;
+const MAX_POLL_ATTEMPTS = 80; // ~3.3min at 2.5s — ample for senior-dev tasks
+
+/**
+ * Poll the worker statusUrl for live execution updates until the job reaches
+ * a terminal state (completed/failed/blocked/cancelled) or the attempt cap
+ * fires. Returns the latest status plus the terminal answerBlock so the chat
+ * can swap the live-progress bubble for the final verified-evidence block.
+ */
+export function useExecutionStatusPoll(
+  initialStatus: IVXChatExecutionStatus | null,
+  authToken: string | null,
+  options: { pollIntervalMs?: number; maxAttempts?: number } = {},
+): PollState & {
+  refresh: () => void;
+  stop: () => void;
+} {
+  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const maxAttempts = options.maxAttempts ?? MAX_POLL_ATTEMPTS;
+  const [state, setState] = useState<PollState>({
+    status: initialStatus,
+    polling: initialStatus !== null && !TERMINAL_STATUSES.has(initialStatus?.status ?? ''),
+    error: null,
+    attempts: 0,
+  });
+  const stoppedRef = useRef(false);
+  const authTokenRef = useRef(authToken);
+  authTokenRef.current = authToken;
+
+  const isTerminal = useCallback((s: IVXChatExecutionStatus | null): boolean => {
+    return s !== null && TERMINAL_STATUSES.has(s.status);
+  }, []);
+
+  const pollOnce = useCallback(async (): Promise<void> => {
+    const current = stateRef.current.status;
+    if (!current || stoppedRef.current || isTerminal(current)) {
+      setState((prev) => ({ ...prev, polling: false }));
+      return;
+    }
+    const url = current.statusUrl.startsWith('http')
+      ? current.statusUrl
+      : `${BASE_URL}${current.statusUrl}`;
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authTokenRef.current ? { Authorization: `Bearer ${authTokenRef.current}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        // 404/401 → keep the last status but stop polling to avoid a loop.
+        setState((prev) => ({
+          ...prev,
+          polling: false,
+          error: `status endpoint returned ${response.status}`,
+          attempts: prev.attempts + 1,
+        }));
+        stoppedRef.current = true;
+        return;
+      }
+      const body = await response.json().catch(() => null);
+      const job = isRecord(body) && isRecord(body.job) ? body.job : isRecord(body) ? body : null;
+      const next = coerceStatus(job);
+      if (!next) {
+        setState((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
+        return;
+      }
+      setState((prev) => ({
+        status: next,
+        polling: !TERMINAL_STATUSES.has(next.status),
+        error: null,
+        attempts: prev.attempts + 1,
+      }));
+      if (TERMINAL_STATUSES.has(next.status)) {
+        stoppedRef.current = true;
+      }
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'poll failed',
+        attempts: prev.attempts + 1,
+      }));
+    }
+  }, [isTerminal]);
+
+  // Keep a ref of the latest state so the interval callback reads fresh data.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  useEffect(() => {
+    if (!initialStatus || isTerminal(initialStatus)) {
+      return;
+    }
+    stoppedRef.current = false;
+    const intervalId = setInterval(() => {
+      void pollOnce();
+    }, pollIntervalMs);
+    // Fire one immediate poll so the bubble advances past "queued" quickly.
+    void pollOnce();
+    return () => {
+      clearInterval(intervalId);
+      stoppedRef.current = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStatus?.taskId, pollIntervalMs]);
+
+  // Hard stop after maxAttempts to prevent unbounded polling.
+  useEffect(() => {
+    if (state.attempts >= maxAttempts && state.polling) {
+      setState((prev) => ({ ...prev, polling: false, error: prev.error ?? 'poll timeout' }));
+      stoppedRef.current = true;
+    }
+  }, [state.attempts, state.polling, maxAttempts]);
+
+  const refresh = useCallback(() => {
+    stoppedRef.current = false;
+    setState((prev) => ({ ...prev, polling: true, error: null }));
+    void pollOnce();
+  }, [pollOnce]);
+
+  const stop = useCallback(() => {
+    stoppedRef.current = true;
+    setState((prev) => ({ ...prev, polling: false }));
+  }, []);
+
+  return { ...state, refresh, stop };
+}
+
+export { coerceStatus as coerceExecutionStatusFromPayload };
+export { TERMINAL_STATUSES as EXECUTION_TERMINAL_STATUSES };

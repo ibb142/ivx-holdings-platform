@@ -479,7 +479,7 @@ export function generateLandingDealHtml(card: PublishedDealCardModel): string {
           ${card.timelineSummary.stages.length > 0 ? `<details style="margin-top:10px;">
             <summary style="cursor:pointer;color:#909090;font-size:12px;font-weight:600;list-style:none;display:flex;align-items:center;gap:6px;">View All Stages</summary>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2A2A2A;">
-              ${card.timelineSummary.stages.map((s) => {
+              ${card.timelineSummary.stages.map((s: { name: string; status: string; startDate: string | null; estimatedCompletionDate: string | null; actualCompletionDate: string | null; percentComplete: number; note?: string | null }) => {
                 const sc = s.status === 'COMPLETE' ? '#00C48C' : s.status === 'ACTIVE' ? '#FFD700' : s.status === 'DELAYED' ? '#F59E0B' : '#555555';
                 const fmtD = (d: string | null) => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Not available';
                 return `<div style="display:flex;gap:12px;margin-bottom:16px;">
