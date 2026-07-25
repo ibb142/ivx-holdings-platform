@@ -37,6 +37,12 @@ const REPO = parseGithubRepoSlug(process.env.GITHUB_REPO) || parseGithubRepoSlug
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 const DELETE_REMOTE = process.env.SYNC_DELETE_REMOTE === 'true' || args.includes('--delete-remote');
+const INCLUDE_PATHS = new Set(
+  String(process.env.SYNC_INCLUDE_PATHS ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
 const msgIdx = args.indexOf('--message');
 const COMMIT_MESSAGE = msgIdx !== -1 && args[msgIdx + 1]
   ? args[msgIdx + 1]
@@ -239,8 +245,16 @@ async function main() {
 
   console.log('[2/6] Scanning local files...');
   console.log(`  Root: ${PROJECT_ROOT}`);
-  const localFiles = getAllFiles(PROJECT_ROOT);
-  console.log(`  Found ${localFiles.length} files locally`);
+  const discoveredFiles = getAllFiles(PROJECT_ROOT);
+  const localFiles = INCLUDE_PATHS.size > 0
+    ? discoveredFiles.filter((file) => INCLUDE_PATHS.has(file.path))
+    : discoveredFiles;
+  console.log(`  Found ${localFiles.length} files locally${INCLUDE_PATHS.size > 0 ? ' (release selection)' : ''}`);
+  if (INCLUDE_PATHS.size > 0 && localFiles.length !== INCLUDE_PATHS.size) {
+    const discoveredPaths = new Set(discoveredFiles.map((file) => file.path));
+    const missingPaths = [...INCLUDE_PATHS].filter((filePath) => !discoveredPaths.has(filePath));
+    throw new Error(`Selected release paths were not found locally: ${missingPaths.join(', ')}`);
+  }
 
   console.log('[3/6] Fetching remote tree...');
   const { treeSha: baseTreeSha, files: remoteFiles } = await getRemoteTree(headSha);
