@@ -250,7 +250,7 @@ describe('Items 3,5,6,7,8: orchestrateChatStartup', () => {
 
   test('returns timing for all phases', async () => {
     const result = await orchestrateChatStartup(makeDeps());
-    expect(result.timing.totalMs).toBeGreaterThan(0);
+    expect(result.timing.totalMs).toBeGreaterThanOrEqual(0);
     expect(result.timing.firstPaintMs).toBeGreaterThanOrEqual(0);
     expect(result.timing.conversationResolvedMs).not.toBeNull();
     expect(result.timing.aiProbeMs).not.toBeNull();

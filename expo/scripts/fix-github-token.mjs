@@ -7,7 +7,12 @@
  * Render's env-vars API. It is never logged, never written to disk, never
  * stored in source. The old expired token is overwritten in-place.
  */
-const RENDER_API_KEY = process.env.RENDER_API_KEY || 'rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs';
+const RENDER_API_KEY = process.env.RENDER_API_KEY || '';
+if (!RENDER_API_KEY) {
+  console.error('ERROR: RENDER_API_KEY env var is empty.');
+  console.error('Usage: RENDER_API_KEY=rnd_xxx... GITHUB_TOKEN=ghp_xxx... node fix-github-token.mjs');
+  process.exit(1);
+}
 const API_SERVICE_ID = 'srv-d7t9ivreo5us73ftose0';
 const WORKER_SERVICE_ID = 'srv-d9i15fg4n6ts73bn00j0';
 const RENDER_API = 'https://api.render.com/v1';
