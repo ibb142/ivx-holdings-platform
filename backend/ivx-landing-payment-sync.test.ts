@@ -12,6 +12,11 @@ describe('IVX Landing Payment Sync — real transactions only', () => {
     // Provide a test Supabase configuration so the service can build a client.
     // Real network calls are not made in these unit tests; the assertions focus
     // on payload validation, error handling, and result/audit structure.
+    // Clear all Supabase keys first so the service definitely uses the test anon key and fails to connect.
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_SERVICE_KEY;
+    delete process.env.SUPABASE_ANON_KEY;
     process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.test';
     // Ensure no payment-provider keys leak from other test files and make the provider look configured.
