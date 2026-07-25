@@ -212,3 +212,47 @@ export async function authorizeInternalDeploymentRequest(request: Request, store
 export function internalDeployAuthRuntimeStatus(): { workerIdConfigured: boolean; secretConfigured: boolean } {
   return { workerIdConfigured: Boolean(configuredWorkerId()), secretConfigured: Boolean(configuredSecret()) };
 }
+
+export type InternalWorkerSignatureResult =
+  | { ok: true; workerId: string }
+  | { ok: false; reason: string };
+
+/**
+ * Verifies (and replay-protects) a signed internal-worker request WITHOUT
+ * consuming an owner deployment approval. This is the lightweight sibling of
+ * `authorizeInternalDeploymentRequest`, intended for authenticated read-only
+ * calls the worker makes back to its own API (e.g. polling its own job status
+ * during LIVE_VERIFYING) rather than for deployment-mutating actions.
+ *
+ * Uses the same HMAC scheme/headers (`X-IVX-Worker-ID`, `X-IVX-Timestamp`,
+ * `X-IVX-Nonce`, `X-IVX-Deploy-Signature`) and nonce replay store as the
+ * deployment-authorization path, so no new secret is introduced.
+ */
+export async function verifyInternalWorkerSignature(request: Request, store: InternalDeployAuthStore = durableAuthStore): Promise<InternalWorkerSignatureResult> {
+  const secret = configuredSecret();
+  const expectedWorkerId = configuredWorkerId();
+  if (!secret || !expectedWorkerId) return { ok: false, reason: 'internal_worker_auth_not_configured' };
+
+  const workerId = trimmed(request.headers.get('X-IVX-Worker-ID'));
+  const timestamp = trimmed(request.headers.get('X-IVX-Timestamp'));
+  const nonce = trimmed(request.headers.get('X-IVX-Nonce'));
+  const receivedSignature = trimmed(request.headers.get('X-IVX-Deploy-Signature'));
+  if (!workerId || !timestamp || !nonce || !receivedSignature) return { ok: false, reason: 'missing_signature_headers' };
+  if (!secureEqual(workerId, expectedWorkerId)) return { ok: false, reason: 'worker_id_mismatch' };
+
+  const timestampMs = Number(timestamp) * 1000;
+  if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > MAX_CLOCK_SKEW_MS) return { ok: false, reason: 'timestamp_out_of_range' };
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(nonce)) return { ok: false, reason: 'invalid_nonce_format' };
+
+  const body = await request.clone().text();
+  const expectedSignature = createHmac('sha256', secret).update(signaturePayload({ workerId, timestamp, nonce, method: request.method, pathname: new URL(request.url).pathname, body }), 'utf8').digest('hex');
+  if (!/^[a-f0-9]{64}$/i.test(receivedSignature) || !secureEqual(receivedSignature.toLowerCase(), expectedSignature)) return { ok: false, reason: 'signature_mismatch' };
+
+  try {
+    await claimNonce(nonce, Date.now(), store);
+  } catch {
+    return { ok: false, reason: 'nonce_already_used' };
+  }
+
+  return { ok: true, workerId };
+}

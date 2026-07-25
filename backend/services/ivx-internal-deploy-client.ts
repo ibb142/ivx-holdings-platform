@@ -52,3 +52,42 @@ export async function consumeInternalDeploymentApproval(input: InternalDeploymen
   const message = typeof payload.error === 'string' ? payload.error : `Internal authorization request failed with HTTP ${response.status}.`;
   throw new Error(message.slice(0, 500));
 }
+
+export type SignedInternalGetRequestResult =
+  | { ok: true; request: Request; authSource: 'internal_worker_hmac'; workerId: string }
+  | { ok: false; reason: string; authSource: 'internal_worker_hmac' };
+
+/**
+ * Builds a signed, replay-protected GET request to the worker's own production
+ * API using the same HMAC scheme as deployment-authorization consumption, but
+ * WITHOUT any approval body (read-only calls carry no owner approval id).
+ * Returns a structured failure (instead of throwing) when the worker's own
+ * signing credentials are not configured, so callers can log a precise,
+ * secret-safe reason rather than crash.
+ */
+export function createSignedInternalGetRequest(pathname: string): SignedInternalGetRequestResult {
+  const authSource = 'internal_worker_hmac' as const;
+  const workerId = process.env.IVX_INTERNAL_WORKER_ID?.trim() ?? '';
+  const secret = process.env.IVX_INTERNAL_DEPLOY_SECRET?.trim() ?? '';
+  if (!workerId) return { ok: false, reason: 'IVX_INTERNAL_WORKER_ID is not configured for the internal worker.', authSource };
+  if (!secret) return { ok: false, reason: 'IVX_INTERNAL_DEPLOY_SECRET is not configured for the internal worker.', authSource };
+
+  const endpoint = `${internalApiBaseUrl()}${pathname}`;
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = randomBytes(24).toString('base64url');
+  const body = '';
+  const urlPathname = new URL(endpoint).pathname;
+  const payload = [workerId, timestamp, nonce, 'GET', urlPathname, body].join('\n');
+  const signature = createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+
+  const request = new Request(endpoint, {
+    method: 'GET',
+    headers: {
+      'X-IVX-Worker-ID': workerId,
+      'X-IVX-Timestamp': timestamp,
+      'X-IVX-Nonce': nonce,
+      'X-IVX-Deploy-Signature': signature,
+    },
+  });
+  return { ok: true, request, authSource, workerId };
+}
