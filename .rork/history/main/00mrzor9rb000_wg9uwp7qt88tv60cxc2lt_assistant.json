@@ -1940,7 +1940,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-autonomous-coder.ts\",\"offset\":820,\"limit\":90}",
       "createdAt": 1784942482573,
-      "completedAt": 1784942484249
+      "completedAt": 1784942484249,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2082,7 +2083,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"runIVXAutonomousCoder|IVXAutonomousCoderProof\",\"path\":\"backend\",\"include\":\"*.test.ts\"}",
       "createdAt": 1784942482575,
-      "completedAt": 1784942484258
+      "completedAt": 1784942484258,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2115,7 +2117,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-worker.ts\",\"edits\":[{\"oldString\":\"export function summarizeAutonomousCoderProof(\\n  jobId: string,\\n  proof: IVXAutonomousCoderProof,\\n): IVXWorkerJobResult {\\n  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'\\n    ? (proof.commitSha ? 'COMPLETE' : 'LOCAL_ONLY')\\n    : proof.finalStatus === 'BLOCKED'\\n      ? 'BLOCKED'\\n      : 'FAILED';\\n  return {\\n    jobId,\\n    goal: proof.goal.slice(0, 280),\\n    ok: proof.finalStatus === 'COMPLETED',\\n    endToEndProductionComplete: proof.productionVerified,\",\"newString\":\"/**\\n * Reject stale or incomplete mutation evidence before it can enter the durable\\n * ledger as a completed code-change or deploy job. A mutation must create a\\n * commit after its captured starting SHA; a deploy must additionally prove the\\n * new commit is live. This is intentionally stricter than a health-only check.\\n */\\nfunction autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): string | null {\\n  const isMutation = proof.executionMode === 'code_change' || proof.executionMode === 'deploy';\\n  if (!isMutation || proof.finalStatus !== 'COMPLETED') return null;\\n  if (proof.filesChanged.length === 0) return 'Code-change job produced no changed files; stale evidence is not accepted.';\\n  if (!proof.commitSha) return 'Code-change job produced no commit SHA; stale evidence is not accepted.';\\n  if (proof.startingSha && proof.commitSha === proof.startingSha) return 'Code-change job reused its starting commit SHA; stale evidence is not accepted.';\\n  if (proof.executionMode === 'deploy') {\\n    if (!proof.deployId) return 'Deploy job produced no deployment ID.';\\n    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';\\n  }\\n  return null;\\n}\\n\\nexport function summarizeAutonomousCoderProof(\\n  jobId: string,\\n  proof: IVXAutonomousCoderProof,\\n): IVXWorkerJobResult {\\n  const mutationProofError = autonomousCoderMutationProofError(proof);\\n  const completed = proof.finalStatus === 'COMPLETED' && mutationProofError === null;\\n  const finalStatus: IVXWorkerJobResult['finalStatus'] = completed\\n    ? (proof.commitSha ? 'COMPLETE' : 'LOCAL_ONLY')\\n    : proof.finalStatus === 'BLOCKED'\\n      ? 'BLOCKED'\\n      : 'FAILED';\\n  return {\\n    jobId,\\n    goal: proof.goal.slice(0, 280),\\n    ok: completed,\\n    endToEndProductionComplete: completed && proof.productionVerified,\",\"replaceAll\":false},{\"oldString\":\"    deployVerified: proof.productionVerified,\\n    deployRequested: proof.deployApproved && proof.finalStatus === 'COMPLETED' && Boolean(proof.deployId),\\n    liveCommit: proof.liveCommit,\\n    commitMatch: proof.productionVerified && proof.liveCommit === proof.commitSha,\\n    healthOk: proof.healthOk,\",\"newString\":\"    deployVerified: completed && proof.productionVerified,\\n    deployRequested: proof.deployApproved && completed && Boolean(proof.deployId),\\n    liveCommit: proof.liveCommit,\\n    commitMatch: completed && proof.productionVerified && proof.liveCommit === proof.commitSha,\\n    healthOk: completed && proof.healthOk,\",\"replaceAll\":false},{\"oldString\":\"    error: proof.error,\\n    durable: isDurableStoreConfigured(),\",\"newString\":\"    error: mutationProofError ?? proof.error,\\n    durable: isDurableStoreConfigured(),\",\"replaceAll\":false}]}",
       "createdAt": 1784942490496,
-      "completedAt": 1784942494491
+      "completedAt": 1784942494491,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2148,7 +2151,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-worker.ts\",\"edits\":[{\"oldString\":\"export function summarizeAutonomousCoderProof(\\n  jobId: string,\\n  proof: IVXAutonomousCoderProof,\\n): IVXWorkerJobResult {\\n  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'\\n    ? (proof.commitSha ? 'COMPLETE' : 'LOCAL_ONLY')\\n    : proof.finalStatus === 'BLOCKED'\\n      ? 'BLOCKED'\\n      : 'FAILED';\\n  return {\\n    jobId,\\n    goal: proof.goal.slice(0, 280),\\n    ok: proof.finalStatus === 'COMPLETED',\\n    endToEndProductionComplete: proof.productionVerified,\",\"newString\":\"/**\\n * Reject stale or incomplete mutation evidence before it can enter the durable\\n * ledger as a completed code-change or deploy job. A mutation must create a\\n * commit after its captured starting SHA; a deploy must additionally prove the\\n * new commit is live. This is intentionally stricter than a health-only check.\\n */\\nfunction autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): string | null {\\n  const isMutation = proof.executionMode === 'code_change' || proof.executionMode === 'deploy';\\n  if (!isMutation || proof.finalStatus !== 'COMPLETED') return null;\\n  if (proof.filesChanged.length === 0) return 'Code-change job produced no changed files; stale evidence is not accepted.';\\n  if (!proof.commitSha) return 'Code-change job produced no commit SHA; stale evidence is not accepted.';\\n  if (proof.startingSha && proof.commitSha === proof.startingSha) return 'Code-change job reused its starting commit SHA; stale evidence is not accepted.';\\n  if (proof.executionMode === 'deploy') {\\n    if (!proof.deployId) return 'Deploy job produced no deployment ID.';\\n    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';\\n  }\\n  return null;\\n}\\n\\nexport function summarizeAutonomousCoderProof(\\n  jobId: string,\\n  proof: IVXAutonomousCoderProof,\\n): IVXWorkerJobResult {\\n  const mutationProofError = autonomousCoderMutationProofError(proof);\\n  const completed = proof.finalStatus === 'COMPLETED' && mutationProofError === null;\\n  const finalStatus: IVXWorkerJobResult['finalStatus'] = completed\\n    ? (proof.commitSha ? 'COMPLETE' : 'LOCAL_ONLY')\\n    : proof.finalStatus === 'BLOCKED'\\n      ? 'BLOCKED'\\n      : 'FAILED';\\n  return {\\n    jobId,\\n    goal: proof.goal.slice(0, 280),\\n    ok: completed,\\n    endToEndProductionComplete: completed && proof.productionVerified,\",\"replaceAll\":false},{\"oldString\":\"    deployVerified: proof.productionVerified,\\n    deployRequested: proof.deployApproved && proof.finalStatus === 'COMPLETED' && Boolean(proof.deployId),\\n    liveCommit: proof.liveCommit,\\n    commitMatch: proof.productionVerified && proof.liveCommit === proof.commitSha,\\n    healthOk: proof.healthOk,\",\"newString\":\"    deployVerified: completed && proof.productionVerified,\\n    deployRequested: proof.deployApproved && completed && Boolean(proof.deployId),\\n    liveCommit: proof.liveCommit,\\n    commitMatch: completed && proof.productionVerified && proof.liveCommit === proof.commitSha,\\n    healthOk: completed && proof.healthOk,\",\"replaceAll\":false},{\"oldString\":\"    finalStatus,\\n    error: proof.error,\\n    durable: isDurableStoreConfigured(),\\n    generatedAt: proof.generatedAt,\\n    taskType: classifyTaskType(proof.goal),\\n  };\\n}\\n\\n/**\\n * Derive a secret-safe proof summary from a full senior-developer run proof\",\"newString\":\"    finalStatus,\\n    error: mutationProofError ?? proof.error,\\n    durable: isDurableStoreConfigured(),\\n    generatedAt: proof.generatedAt,\\n    taskType: classifyTaskType(proof.goal),\\n  };\\n}\\n\\n/**\\n * Derive a secret-safe proof summary from a full senior-developer run proof\",\"replaceAll\":false}]}",
       "createdAt": 1784942497194,
-      "completedAt": 1784942500246
+      "completedAt": 1784942500246,
+      "compactedAt": 1784945250174
     },
     {
       "type": "reasoning",
@@ -2183,7 +2187,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.test.ts\",\"edits\":[{\"oldString\":\"import { resolveWorkerExecutionMode } from './ivx-senior-developer-worker';\",\"newString\":\"import {\\n  resolveWorkerExecutionMode,\\n  summarizeAutonomousCoderProof,\\n} from './ivx-senior-developer-worker';\\nimport type { IVXAutonomousCoderProof } from '../services/ivx-autonomous-coder';\\n\\nfunction autonomousProof(overrides: Partial<IVXAutonomousCoderProof> = {}): IVXAutonomousCoderProof {\\n  return {\\n    marker: 'ivx-autonomous-coder-2026-07-19',\\n    taskId: 'task-proof',\\n    goal: 'Fix the public chat response and deploy it.',\\n    executionMode: 'deploy',\\n    approvalPolicy: 'owner_gated',\\n    ownerId: 'owner-proof',\\n    startingSha: 'before-sha',\\n    filesInspected: ['backend/api/public-chat.ts'],\\n    rootCause: 'HTTP 409 makes a completed blocker look like a transport failure.',\\n    technicalPlan: 'Return a renderable completed chat turn.',\\n    iterations: [],\\n    finalPatch: [],\\n    filesChanged: ['backend/api/public-chat.ts'],\\n    commandsRun: [{ command: 'bun test focused', ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }],\\n    testsPassed: true,\\n    typecheckPassed: true,\\n    buildRun: false,\\n    commitSha: 'after-sha',\\n    commitUrl: 'https://github.com/ibb142/rork-global-real-estate-invest/commit/after-sha',\\n    branch: 'main',\\n    deployApproved: true,\\n    deployRequested: true,\\n    deployId: 'dep-new',\\n    deployStatus: 'live',\\n    productionVerified: true,\\n    liveCommit: 'after-sha',\\n    healthOk: true,\\n    iterationCount: 1,\\n    durationMs: 1,\\n    finalStatus: 'COMPLETED',\\n    error: null,\\n    generatedAt: '2026-07-25T00:00:00.000Z',\\n    secretValuesReturned: false,\\n    patchAuthoredBy: 'ivx_llm',\\n    llmCallCount: 1,\\n    estimatedTokensUsed: 1,\\n    tokenBudgetExceeded: false,\\n    rollbackTriggered: false,\\n    rollbackCommitSha: null,\\n    rollbackError: null,\\n    ...overrides,\\n  };\\n}\",\"replaceAll\":false},{\"oldString\":\"  test('preserves an explicit safe read-only mode without mutation approvals', () => {\\n    expect(resolveWorkerExecutionMode('read_only', false, false)).toBe('read_only');\\n  });\\n});\",\"newString\":\"  test('preserves an explicit safe read-only mode without mutation approvals', () => {\\n    expect(resolveWorkerExecutionMode('read_only', false, false)).toBe('read_only');\\n  });\\n});\\n\\ndescribe('summarizeAutonomousCoderProof', () => {\\n  test('rejects reused starting commit evidence for a code-changing deploy', () => {\\n    const result = summarizeAutonomousCoderProof('job-stale', autonomousProof({ commitSha: 'before-sha', liveCommit: 'before-sha' }));\\n    expect(result.finalStatus).toBe('FAILED');\\n    expect(result.ok).toBe(false);\\n    expect(result.endToEndProductionComplete).toBe(false);\\n    expect(result.error).toContain('reused its starting commit SHA');\\n  });\\n\\n  test('rejects a completed code-changing deploy that reports no changed files', () => {\\n    const result = summarizeAutonomousCoderProof('job-no-files', autonomousProof({ filesChanged: [] }));\\n    expect(result.finalStatus).toBe('FAILED');\\n    expect(result.error).toContain('produced no changed files');\\n  });\\n\\n  test('accepts only fresh deploy proof with new live commit parity', () => {\\n    const result = summarizeAutonomousCoderProof('job-fresh', autonomousProof());\\n    expect(result.finalStatus).toBe('COMPLETE');\\n    expect(result.ok).toBe(true);\\n    expect(result.endToEndProductionComplete).toBe(true);\\n    expect(result.commitMatch).toBe(true);\\n  });\\n});\",\"replaceAll\":false}]}",
       "createdAt": 1784942505544,
-      "completedAt": 1784942508531
+      "completedAt": 1784942508531,
+      "compactedAt": 1784945250174
     },
     {
       "type": "reasoning",
@@ -2209,7 +2214,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun test backend/api/ivx-senior-developer-worker.test.ts backend/services/ivx-completion-validator.test.ts backend/services/ivx-public-chat-gate-response.test.ts backend/services/ivx-pre-execution-feasibility-gate.test.ts backend/services/ivx-internal-deploy-auth.test.ts && git diff --check\",\"cwd\":\".\"}",
       "createdAt": 1784942512536,
-      "completedAt": 1784942512544
+      "completedAt": 1784942512544,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2232,7 +2238,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.test.ts\",\"edits\":[{\"oldString\":\"import {\\n  resolveWorkerExecutionMode,\\n  summarizeAutonomousCoderProof,\\n} from './ivx-senior-developer-worker';\\nimport type { IVXAutonomousCoderProof } from '../services/ivx-autonomous-coder';\",\"newString\":\"import { resolveWorkerExecutionMode } from './ivx-senior-developer-worker';\\nimport { summarizeAutonomousCoderProof } from '../services/ivx-senior-developer-worker';\\nimport type { IVXAutonomousCoderProof } from '../services/ivx-autonomous-coder';\",\"replaceAll\":false}]}",
       "createdAt": 1784942514707,
-      "completedAt": 1784942515463
+      "completedAt": 1784942515463,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2251,7 +2258,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun test backend/api/ivx-senior-developer-worker.test.ts backend/services/ivx-completion-validator.test.ts backend/services/ivx-public-chat-gate-response.test.ts backend/services/ivx-pre-execution-feasibility-gate.test.ts backend/services/ivx-internal-deploy-auth.test.ts && git diff --check\",\"cwd\":\".\"}",
       "createdAt": 1784942517861,
-      "completedAt": 1784942518511
+      "completedAt": 1784942518511,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2271,7 +2279,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"appPath\":\"ios-ivx-holdings\"}",
       "createdAt": 1784942524742,
-      "completedAt": 1784942604490
+      "completedAt": 1784942604490,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2290,7 +2299,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"curl -fsS -H \\\"Authorization: Bearer $GITHUB_TOKEN\\\" -H 'Accept: application/vnd.github+json' 'https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/main' | bun -e 'const p=JSON.parse(await Bun.stdin.text()); console.log(JSON.stringify({sha:p.sha,message:p.commit?.message?.split(\\\"\\\\n\\\")[0]??null},null,2));' && curl -sS -o /tmp/public-chat-audit.json -w 'public_chat_http=%{http_code}\\\\n' -X POST 'https://api.ivxholding.com/api/public/chat' -H 'Content-Type: application/json' --data '{\\\"message\\\":\\\"deploy now\\\"}' && curl -fsS 'https://api.ivxholding.com/version'\",\"cwd\":\".\"}",
       "createdAt": 1784942524746,
-      "completedAt": 1784942605410
+      "completedAt": 1784942605410,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2309,7 +2319,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"git diff --check && git status --short && git diff -- backend/services/ivx-senior-developer-worker.ts backend/api/ivx-senior-developer-worker.test.ts\",\"cwd\":\".\"}",
       "createdAt": 1784942524749,
-      "completedAt": 1784942605452
+      "completedAt": 1784942605452,
+      "compactedAt": 1784945250174
     },
     {
       "type": "reasoning",
@@ -2339,7 +2350,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".rork/plans/force-sync-ivx-workspace-and-release-eve_1784928084433.plan.md\",\"edits\":[{\"oldString\":\"  - Remaining validation gaps: source publication, a new Render deployment for the corrective source SHA, live public-chat HTTP 200 answer probe, provisioned worker secret binding, live one-time approval consumption, Expo Go/physical-device validation, Android protected release signing and Play delivery, iOS TestFlight/App Store submission, physical Android/iOS QA, and a live retry/dead-letter recovery drill.\",\"newString\":\"  - Final stale-proof hardening (2026-07-25, local): `summarizeAutonomousCoderProof` now rejects a code-changing run that has no changed files, no commit, a commit equal to its captured starting SHA, or (for deploys) lacks a deployment ID and new-SHA live verification. New regressions cover stale SHA rejection, no-change rejection, and fresh deployment acceptance. Focused IVX validation now passes `99/99`; `git diff --check` passes. The iOS build check also passes.\\n  - Current publication/deployment result (2026-07-25): GitHub `main` remains `934e7e5eb7436d0a56b9b1974abf0a870110f848`, and the API `/version` endpoint reports the same SHA. The required public-chat probe remains HTTP `409`. No new GitHub commit or Render deployment exists for the corrective source, so it is not represented as deployed or live-verified.\\n  - Remaining validation gaps: publication of the reviewed backend source through the managed GitHub release path, a new Render deployment for that new source SHA, live public-chat HTTP 200 answer probe, provisioned worker secret binding and live one-time approval consumption, Expo Go/physical-device validation, Android protected release signing and Play delivery, iOS TestFlight/App Store submission, physical Android/iOS QA, and a live retry/dead-letter recovery drill.\",\"replaceAll\":false}]}",
       "createdAt": 1784942610024,
-      "completedAt": 1784942611818
+      "completedAt": 1784942611818,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2358,7 +2370,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".rork/plans/force-sync-ivx-workspace-and-release-eve_1784928084433.plan.md\",\"offset\":62,\"limit\":12}",
       "createdAt": 1784942614529,
-      "completedAt": 1784942614596
+      "completedAt": 1784942614596,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2381,7 +2394,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".rork/plans/force-sync-ivx-workspace-and-release-eve_1784928084433.plan.md\",\"edits\":[{\"oldString\":\"- Remaining validation gaps: source publication, a new Render deployment for the corrective source SHA, live public-chat HTTP 200 answer probe, provisioned worker secret binding, live one-time approval consumption, Expo Go/physical-device validation, Android protected release signing and Play delivery, iOS TestFlight/App Store submission, physical Android/iOS QA, and a live retry/dead-letter recovery drill.\",\"newString\":\"- Final stale-proof hardening (2026-07-25, local): `summarizeAutonomousCoderProof` now rejects a code-changing run that has no changed files, no commit, a commit equal to its captured starting SHA, or (for deploys) lacks a deployment ID and new-SHA live verification. New regressions cover stale SHA rejection, no-change rejection, and fresh deployment acceptance. Focused IVX validation now passes `99/99`; `git diff --check` passes. The iOS build check also passes.\\n- Current publication/deployment result (2026-07-25): GitHub `main` remains `934e7e5eb7436d0a56b9b1974abf0a870110f848`, and the API `/version` endpoint reports the same SHA. The required public-chat probe remains HTTP `409`. No new GitHub commit or Render deployment exists for the corrective source, so it is not represented as deployed or live-verified.\\n- Remaining validation gaps: publication of the reviewed backend source through the managed GitHub release path, a new Render deployment for that new source SHA, live public-chat HTTP 200 answer probe, provisioned worker secret binding and live one-time approval consumption, Expo Go/physical-device validation, Android protected release signing and Play delivery, iOS TestFlight/App Store submission, physical Android/iOS QA, and a live retry/dead-letter recovery drill.\",\"replaceAll\":false}]}",
       "createdAt": 1784942616661,
-      "completedAt": 1784942618536
+      "completedAt": 1784942618536,
+      "compactedAt": 1784945250174
     },
     {
       "type": "tool",
@@ -2439,7 +2453,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Inspect release source, repository synchronization, and Render worker configuration\",\"activeForm\":\"Inspecting release source, repository synchronization, and Render worker configuration\",\"status\":\"completed\"},{\"content\":\"Fix any remaining IVX IA release-proof and deployment configuration issues\",\"activeForm\":\"Fixing remaining IVX IA release-proof and deployment configuration issues\",\"status\":\"completed\"},{\"content\":\"Publish the reviewed backend source through the managed release path and verify the new Render deployment\",\"activeForm\":\"Publishing the reviewed backend source and verifying the new Render deployment\",\"status\":\"in_progress\"},{\"content\":\"Record final evidence and report any non-verifiable requirements\",\"activeForm\":\"Recording final evidence and reporting any non-verifiable requirements\",\"status\":\"pending\"}]}",
       "createdAt": 1784942622387,
-      "completedAt": 1784942622859
+      "completedAt": 1784942622859,
+      "compactedAt": 1784945250174
     },
     {
       "type": "text",
