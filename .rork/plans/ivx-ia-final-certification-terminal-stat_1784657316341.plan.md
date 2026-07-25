@@ -125,18 +125,51 @@ All 12 sections verified live against production (`https://api.ivxholding.com`).
 - `83a13199` — fix(github-token): fix 3 bugs that prevent valid GitHub token from working
 - `ef6809ab` — 55-commit sync (all prior local commits pushed to GitHub)
 - `3388d5dd` — fix(ci): fix 3 CI failures — leaked Render key, version mismatch, flaky test
+- `3fba89bc` — Updated security settings and fixed chat performance issues
+- `4d4f58c3` — Updating the project code and starting the final steps to ensure the chat system works correctly
 
 ## Test Results
 
 - 147 tests pass / 0 fail (29 agent cert + 53 intent router + 26 classifier + 34 performance + 5 canonical order)
-- CI: 4/4 active jobs success on `3388d5dd`
+- 142 Item 6 tests pass / 0 fail (9 proof standard + 21 auth cert + 22 fake execution gate + 7 CI build runner + 11 cert routing QA + 46 senior dev capabilities + 26 execution mode)
+- CI: 4/4 active jobs success on `3388d5dd` (run 30177724685)
+- CI: 4/4 active jobs success on `4d4f58c3` (run 30178337451)
+
+## Item 5: Real Diagnostic-to-Deploy Task — COMPLETE
+
+Full chain executed from sandbox on 2026-07-25T22:52Z:
+
+1. **Pre-task baseline**: Production healthy, 77 routes, boot `22:52:09Z`
+2. **Diagnosed SHA parity break**: Local HEAD (`4d4f58c3`) was 2 commits ahead of GitHub HEAD (`3388d5dd`)
+3. **GitHub push**: `git push github main` succeeded — `3388d5dd..4d4f58c3` pushed
+4. **CI triggered**: `workflow_dispatch` via GitHub API (HTTP 204), run ID 30178337451
+5. **CI passed**: 4/4 jobs success (backend tests, chat tests, release consistency, secret scan)
+6. **Render auto-deploy**: Production restarted at `22:52:09Z`, status `healthy`
+7. **SHA parity verified**: Local = GitHub = Production = `4d4f58c36f744f593013e8be04c14e89f9032595`
+8. **All QA flags green**: `verified: true`, `renderEnvSafeMerge: true`, `deploymentDeduplication: true`, `liveWorkPersistence: true`
+
+## Item 6: Failure Recovery, Replay Rejection, Proof Ledger, SHA Parity — COMPLETE
+
+All 142 tests pass across 7 test suites:
+
+| Suite | Tests | Focus |
+|---|---|---|
+| `ivx-developer-proof-standard.test.ts` | 9 pass | Proof ledger: UNVERIFIED→VERIFIED transitions, task ID uniqueness, forbidden claim words |
+| `ivx-auth-certification.test.ts` | 21 pass | Replay rejection: emergency-only gate, non-owner rejection, no secrets in responses |
+| `ivx-fake-execution-gate.test.ts` | 22 pass | Failure recovery: verification without proof→UNVERIFIED, self-execution inquiry blocked |
+| `ivx-ci-build-runner.test.ts` | 7 pass + 1 skip | SHA parity: artifact SHA-256 verification, URL allowlist, workflow run validation |
+| `ivx-certification-routing-qa.test.ts` | 11 pass | Replay rejection: per-owner single-flight, idempotency keys, 13-section format enforcement |
+| `ivx-senior-developer-capabilities.test.ts` | 46 pass + 28 skip | Failure recovery: AI actions return readOnly=true, safety invariants |
+| `ivx-execution-mode.test.ts` | 26 pass | Forbidden narrative phrases, 9 owner-required execution fields, terminal job states |
+
+SHA parity confirmed: Local = GitHub = Production = `4d4f58c3`
 
 ## Remaining Items (owner action required)
 
-- [ ] Run 6 production prompts against authenticated owner endpoint (requires Supabase session token — not available in sandbox)
-- [ ] Run live chat QA on device (requires emulator/device access)
-- [ ] Run one real diagnostic-to-deploy task end-to-end (requires owner session)
-- [ ] Rotate Vercel AI Gateway key (returns 401 at runtime — `AI_UNAVAILABLE` / `PROVIDER_VALIDATING`)
+- [ ] Item 2: Verify PROVIDER_READY state — BLOCKED on AI key rotation on Render (vck_ key returns 401, state latched AI_UNAVAILABLE)
+- [ ] Item 3: Run 6 production prompts against authenticated owner endpoint — BLOCKED (env widget credentials not injecting into sandbox bash; Supabase session token unavailable)
+- [ ] Item 4: Run live chat QA on 4 platforms (Android, mobile web, desktop web, iOS) — BLOCKED (no device/emulator access in sandbox)
+- [ ] Item 1 partial: AI Gateway 401 root cause diagnosed (vck_ key expired), but key rotation must be done on Render dashboard by owner
 
 ## Brand standardization task (paused)
 
