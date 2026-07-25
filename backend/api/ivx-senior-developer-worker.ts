@@ -140,6 +140,27 @@ export function OPTIONS(): Response {
   return ownerOnlyOptions();
 }
 
+/** Dedicated worker-only endpoint that atomically validates and consumes one approval. */
+export async function handleInternalDeploymentAuthorizationConsumeRequest(request: Request): Promise<Response> {
+  try {
+    const authorization = await authorizeInternalDeploymentRequest(request);
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SENIOR_DEV_WORKER_MARKER,
+      authorization: {
+        workerId: authorization.workerId,
+        approvalId: authorization.approvalId,
+        requestedCommitSha: authorization.requestedCommitSha,
+        action: authorization.action,
+      },
+      secretValuesReturned: false,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 /** GET worker status — capability snapshot. Owner-gated (read). */
 export async function handleSeniorDeveloperWorkerStatusRequest(request: Request): Promise<Response> {
   try {

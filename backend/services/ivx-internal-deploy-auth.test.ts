@@ -9,6 +9,7 @@ const testStore = {
   },
 };
 
+import { createInternalDeploymentAuthorizationRequest } from './ivx-internal-deploy-client';
 import {
   authorizeInternalDeploymentRequest,
   createOwnerDeploymentApproval,
@@ -74,6 +75,7 @@ beforeEach(() => {
   records.clear();
   process.env.IVX_INTERNAL_DEPLOY_SECRET = secret;
   process.env.IVX_INTERNAL_WORKER_ID = workerId;
+  process.env.IVX_INTERNAL_API_URL = 'https://api.ivxholding.com';
 });
 
 afterEach(() => {
@@ -133,6 +135,17 @@ describe('internal deploy authentication', () => {
     const secondApproval = await approvedRecord();
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: secondApproval.id, nonce: 'nonce-for-internal-test-replay' }), testStore))
       .rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 401 });
+  });
+
+  test('builds a valid signed request from the configured dedicated worker identity', async () => {
+    const approval = await approvedRecord();
+    const request = createInternalDeploymentAuthorizationRequest({
+      ownerApprovalId: approval.id,
+      requestedCommitSha: commitSha,
+      deploymentAction: 'PRODUCTION_DEPLOY',
+    });
+    expect(new URL(request.url).pathname).toBe('/api/ivx/senior-developer/internal-deployment-authorizations/consume');
+    await expect(authorizeInternalDeploymentRequest(request, testStore)).resolves.toMatchObject({ approvalId: approval.id, workerId });
   });
 
   test('rejects a signed request when its action does not match the owner approval', async () => {

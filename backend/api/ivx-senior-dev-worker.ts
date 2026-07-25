@@ -75,6 +75,7 @@ export async function handleSeniorDevWorkerSubmit(request: Request): Promise<Res
   const traceId = readString(body.traceId) ?? `senior-dev-${Date.now()}`;
   const idempotencyKey = readString(body.idempotencyKey) ?? `senior-dev-${traceId}`;
 
+  const requiresInternalAuthorization = new URL(request.url).pathname.includes('/autonomous-worker/');
   const task = await enqueueOwnerAITask({
     prompt,
     conversationId,
@@ -95,6 +96,9 @@ export async function handleSeniorDevWorkerSubmit(request: Request): Promise<Res
       riskLevel: body.riskLevel,
       rollbackPlan: body.rollbackPlan,
       requestsDeploy: body.requestsDeploy,
+      internalDeploymentApprovals: body.internalDeploymentApprovals,
+      requestedCommitSha: body.requestedCommitSha,
+      requiresInternalAuthorization,
     },
     checkpoint: 'QUEUED',
     checkpoint_history: appendCheckpoint(task.task.checkpoint_history, 'QUEUED for IVX-SENIOR-DEV-01'),

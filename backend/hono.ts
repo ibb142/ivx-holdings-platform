@@ -793,7 +793,7 @@ import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAu
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
 import { OPTIONS as branchPrProofOptions, handleIVXBranchPrProofRequest, handleIVXBranchPrProofStatusRequest } from './api/ivx-branch-pr-proof';
-import { OPTIONS as seniorDeveloperWorkerOptions, handleSeniorDeveloperWorkerEnqueueRequest, handleSeniorDeveloperWorkerJobRequest, handleSeniorDeveloperWorkerJobsRequest, handleSeniorDeveloperWorkerLastProofRequest, handleSeniorDeveloperWorkerLedgerRequest, handleSeniorDeveloperWorkerStatusRequest, handleSeniorDeveloperWorkerActiveJobRequest, handleSeniorDeveloperWorkerCancelJobRequest, handleSeniorDeveloperWorkerResumeJobRequest } from './api/ivx-senior-developer-worker';
+import { OPTIONS as seniorDeveloperWorkerOptions, handleInternalDeploymentAuthorizationConsumeRequest, handleSeniorDeveloperWorkerEnqueueRequest, handleSeniorDeveloperWorkerJobRequest, handleSeniorDeveloperWorkerJobsRequest, handleSeniorDeveloperWorkerLastProofRequest, handleSeniorDeveloperWorkerLedgerRequest, handleSeniorDeveloperWorkerStatusRequest, handleSeniorDeveloperWorkerActiveJobRequest, handleSeniorDeveloperWorkerCancelJobRequest, handleSeniorDeveloperWorkerResumeJobRequest } from './api/ivx-senior-developer-worker';
 import {
   OPTIONS as seniorDevBuildOptions,
   handleProofRequest as handleSeniorDevProofPost,
@@ -3158,6 +3158,10 @@ app.post('/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(c
 app.post('/api/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerEnqueueRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/deployment-approvals', async (context) => handleCreateDeploymentApproval(context.req.raw));
+app.post('/api/ivx/senior-developer/internal-deployment-authorizations/consume', async (context) => handleInternalDeploymentAuthorizationConsumeRequest(context.req.raw));
+app.post('/api/ivx/senior-developer/autonomous-worker/jobs', async (context) => handleSeniorDevWorkerSubmit(context.req.raw));
+app.get('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId', async (context) => handleSeniorDevWorkerStatus(context.req.raw, context.req.param('taskId')));
+app.post('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));
 app.get('/api/ivx/senior-developer/worker/jobs/:taskId', async (context) => handleSeniorDeveloperWorkerJobRequest(context.req.raw, context.req.param('taskId')));
 app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));
 app.options('/api/ivx/owner-ai/proxy-status', () => ownerAIOptions());

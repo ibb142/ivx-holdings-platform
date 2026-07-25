@@ -33,6 +33,7 @@ import {
 import { hasApproval, writeProofLedger, updateProofLedger, type IVXSeniorDevApprovalAction } from './ivx-senior-dev-proof';
 import { githubCommitFile, githubReadFile, githubGetHeadSha, githubListFiles } from './ivx-senior-dev-git';
 import { askAI, planEngineeringTask, generateFilePatch } from './ivx-senior-dev-ai';
+import { consumeInternalDeploymentApproval } from './ivx-internal-deploy-client';
 import {
   triggerRenderDeploy,
   getRenderDeployStatus,
@@ -399,8 +400,13 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
     await updateProofLedger(runId, { testResultsAfterHeal: retest as unknown as Record<string, unknown> });
   }
 
+  const workerData = (task.worker_data ?? {}) as Record<string, unknown>;
+
   // ─── Phase 5: COMMITTING ────────────────────────────────────────────
   await setPhase(task.id, 'COMMITTING', runId);
+  if (localEdits.length > 0) {
+    await consumeRequiredInternalApproval(task, workerData, 'GITHUB_WRITE', runId);
+  }
   let lastCommitSha: string | null = null;
   const commitMessage = `IVX-SENIOR-DEV-01: ${plan.summary}\n\nTask: ${task.id}\nWorker: ${IVX_SENIOR_DEV_WORKER_ID}`;
   for (const edit of localEdits) {
@@ -427,7 +433,6 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   await updateProofLedger(runId, { commitSha: lastCommitSha ?? undefined });
 
   // ─── Phase 6: WAITING_APPROVAL (if deploy required) ─────────────────
-  const workerData = (task.worker_data ?? {}) as Record<string, unknown>;
   const requestsDeploy = plan.requiresDeploy || workerData.requestsDeploy === true;
 
   if (requestsDeploy && changedFiles.length > 0) {
@@ -457,6 +462,7 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   // which claims the recovery lease and resumes at LIVE_VERIFYING.
   let deployId: string | null = null;
   if (requestsDeploy && changedFiles.length > 0) {
+    await consumeRequiredInternalApproval(task, workerData, 'RENDER_DEPLOY', runId);
     // 7a. Capture pre-deploy runtime SHA + expected SHA (GitHub HEAD = our commit)
     const preHealth = await getProductionHealth();
     const preDeployRuntimeSha = preHealth.commit ?? null;
@@ -634,6 +640,36 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
+
+type InternalApprovalAction = 'GITHUB_WRITE' | 'RENDER_DEPLOY' | 'PRODUCTION_DEPLOY';
+
+function approvalIdForAction(value: unknown, action: InternalApprovalAction): string {
+  if (!value || typeof value !== 'object') return '';
+  const candidate = (value as Record<string, unknown>)[action];
+  return typeof candidate === 'string' ? candidate.trim() : '';
+}
+
+async function consumeRequiredInternalApproval(
+  task: IVXOwnerAITaskRow,
+  workerData: Record<string, unknown>,
+  action: InternalApprovalAction,
+  runId: string,
+): Promise<void> {
+  if (workerData.requiresInternalAuthorization !== true) return;
+  const approvalId = approvalIdForAction(workerData.internalDeploymentApprovals, action);
+  const requestedCommitSha = typeof workerData.requestedCommitSha === 'string'
+    ? workerData.requestedCommitSha.trim().toLowerCase()
+    : '';
+  if (!approvalId || !/^[a-f0-9]{40}$/.test(requestedCommitSha)) {
+    throw new Error(`Missing exact single-use ${action} approval for autonomous task ${task.id}.`);
+  }
+  await consumeInternalDeploymentApproval({
+    ownerApprovalId: approvalId,
+    requestedCommitSha,
+    deploymentAction: action,
+  });
+  await logCheckpoint(task.id, runId, 'INTERNAL_APPROVAL_CONSUMED', { action, approvalId });
+}
 
 async function setPhase(taskId: string, phase: IVXSeniorDevWorkerPhase, runId: string): Promise<void> {
   state.currentPhase = phase;
