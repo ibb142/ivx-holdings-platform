@@ -63,6 +63,35 @@ export function resolveExactEchoCommand(prompt: string): string | null {
 }
 
 /**
+ * Diagnostic-intent guard — mirrors the client-side ivxOwnerIntentClassifier.
+ *
+ * A prompt that starts with or leads with a diagnostic question
+ * ("audit the loading problem...", "why is the chat...", "explain what is wrong")
+ * must NEVER be routed to the senior developer worker, even if it ends with
+ * "deploy it" / "fix it" / "and ship it". The owner's reported bug was exactly
+ * this: "Audit the loading problem on this chat, explain what is wrong, what
+ * must be fixed, and deploy it" matched the deploy/fix execution signals and
+ * was misrouted to the worker, which returned progress percentages instead of
+ * a real diagnosis. Diagnostic intent takes PRIORITY over execution intent.
+ */
+function isDiagnosticLeadingIntent(normalized: string): boolean {
+  // Leading diagnostic verbs: the prompt opens with an audit/diagnosis/explain request.
+  // We only match at the start of the prompt (first ~120 chars) so a later
+  // "...and audit the result" clause inside a long build task does not hijack it.
+  const head = normalized.slice(0, 160);
+  const leadsWithDiagnostic = /^(?:please\s+)?(?:audit|diagnose|diagnosis|diagnostic|explain|why\s+is|why\s+does|why\s+doesn't|what\s+is\s+wrong|what's\s+wrong|what\s+is\s+broken|what's\s+broken|investigate|trace|root\s+cause|figure\s+out\s+why|tell\s+me\s+why|tell\s+me\s+what\s+is\s+wrong|tell\s+me\s+what's\s+wrong)\b/i.test(head);
+  if (leadsWithDiagnostic) {
+    return true;
+  }
+  // Explicit diagnostic phrasing anywhere in the prompt that pairs an inspection
+  // verb with a "loading / broken / wrong / failing" symptom and an explanation ask.
+  const hasInspectionVerb = /\b(audit|diagnose|diagnosis|diagnostic|investigate|trace|root\s+cause|figure\s+out)\b/i.test(normalized);
+  const hasSymptom = /\b(loading|load\s+problem|blank|frozen|spinner|slow|stuck|broken|wrong|failing|crash|hangs?|won't\s+load|doesn't\s+load|not\s+loading)\b/i.test(normalized);
+  const asksForExplanation = /\b(explain|tell\s+me|what\s+is\s+wrong|what's\s+wrong|why\s+is|why\s+does|root\s+cause)\b/i.test(normalized);
+  return hasInspectionVerb && hasSymptom && asksForExplanation;
+}
+
+/**
  * Detects a long, structured owner EXECUTION command or task block (e.g.
  * "BLOCK 28 Visitor-to-Investor Conversion Engine / Create: ... / Track: ...").
  *
@@ -80,6 +109,14 @@ export function isOwnerExecutionOrTaskBlock(prompt: string): boolean {
     return false;
   }
   const normalized = normalizePrompt(prompt);
+
+  // DIAGNOSTIC PRIORITY: a prompt that leads with an audit/diagnose/explain request
+  // must never be treated as an execution/task block, even if it contains deploy/fix/commit
+  // signals later. The owner's "Audit the loading problem... and deploy it" was misrouted
+  // here, returning worker progress instead of a real diagnosis. This guard runs FIRST.
+  if (isDiagnosticLeadingIntent(normalized)) {
+    return false;
+  }
 
   // Explicit "BLOCK N" / "STEP N" / "PHASE N" task headers are always task blocks.
   if (/\b(block|step|phase)\s*\d+\b/.test(normalized)) {

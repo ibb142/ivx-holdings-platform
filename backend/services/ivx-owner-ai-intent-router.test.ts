@@ -258,6 +258,85 @@ describe('isOwnerExecutionOrTaskBlock — server crash prompts', () => {
   });
 });
 
+describe('isOwnerExecutionOrTaskBlock — diagnostic priority (chat loading bug regression)', () => {
+  // Regression: the owner's exact prompt "Audit the loading problem on this chat,
+  // explain what is wrong, what must be fixed, and deploy it" was misrouted to the
+  // senior developer worker because it contains "deploy it" + "fixed". The worker
+  // returned progress percentages instead of a real diagnosis. Diagnostic intent
+  // must take PRIORITY over execution intent.
+  test('the exact owner prompt is NOT an execution/task block (it is diagnostic)', () => {
+    const ownerPrompt =
+      'Audit the loading problem on this chat, explain what is wrong, what must be fixed, and deploy it';
+    expect(isOwnerExecutionOrTaskBlock(ownerPrompt)).toBe(false);
+  });
+
+  test('leading "audit" + symptom + "explain" is NOT an execution block', () => {
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Audit the loading problem on this chat, explain what is wrong, and deploy it',
+      ),
+    ).toBe(false);
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Diagnose why the chat is blank and tell me the root cause, then fix and deploy',
+      ),
+    ).toBe(false);
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Why is the chat screen blank on cold start? Investigate and deploy the fix',
+      ),
+    ).toBe(false);
+  });
+
+  test('leading "explain" + symptom is NOT an execution block', () => {
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Explain what is wrong with the chat loading and deploy the fix',
+      ),
+    ).toBe(false);
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Explain why the chat is broken, then commit and deploy the fix',
+      ),
+    ).toBe(false);
+  });
+
+  test('"why is" + symptom + "deploy" is NOT an execution block', () => {
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Why is the chat frozen on startup? Fix it and deploy to production',
+      ),
+    ).toBe(false);
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        "Why doesn't the chat load? Patch the bug, commit to GitHub, deploy to Render",
+      ),
+    ).toBe(false);
+  });
+
+  test('pure execution prompts (no diagnostic lead) STILL route to execution', () => {
+    // These do NOT lead with an audit/diagnose/explain verb and are real execution tasks.
+    // They carry 2+ production-execution signals (commit + deploy + verify) so the
+    // existing execution-signal counter routes them to the worker. The diagnostic
+    // guard only blocks prompts that LEAD with an inspection/explain verb.
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Patch the chat loading bug, commit to GitHub, deploy to Render, verify /health',
+      ),
+    ).toBe(true);
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Bump the version marker to 2026-07-25, commit, deploy, verify',
+      ),
+    ).toBe(true);
+    expect(
+      isOwnerExecutionOrTaskBlock(
+        'Fix the version marker, commit to GitHub, deploy to Render',
+      ),
+    ).toBe(true);
+  });
+});
+
 describe('asksToCreateAndShowProof — "create and show me" execution commands', () => {
   test('detects the screenshot prompt: create+show+chat module+senior developer status phrase', () => {
     const prompt = 'Can you create and show me on this chat developer text for chat module I want to see if you are senior developer';
