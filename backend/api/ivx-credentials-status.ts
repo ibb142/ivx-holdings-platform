@@ -131,10 +131,18 @@ async function testRender(): Promise<CredentialRow> {
   return { service: 'Render', variable: 'RENDER_API_KEY', environment: 'render', stored: true, injected: true, authenticated, permissionTest: authenticated ? 'service read OK' : 'service read failed', runtimeTest: detail, httpStatus: result.status, securityCheck: 'server-only', blocker: authenticated ? null : 'Render API auth failed', worker: 'W10', finalStatus: authenticated ? 'VERIFIED' : 'BLOCKED', testedAt };
 }
 
+function resolveSupabaseUrl(): string {
+  return envClean('EXPO_PUBLIC_SUPABASE_URL') || envClean('SUPABASE_URL');
+}
+
+function resolveSupabaseAnonKey(): string {
+  return envClean('EXPO_PUBLIC_SUPABASE_ANON_KEY') || envClean('SUPABASE_PUBLISHABLE_KEY') || envClean('SUPABASE_ANON_KEY');
+}
+
 async function testSupabaseAnon(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
-  const url = envClean('EXPO_PUBLIC_SUPABASE_URL');
-  const anon = envClean('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  const url = resolveSupabaseUrl();
+  const anon = resolveSupabaseAnonKey();
   const stored = url.length > 0 && anon.length > 0;
   if (!stored) {
     return { service: 'Supabase (anon)', variable: 'EXPO_PUBLIC_SUPABASE_URL + ANON_KEY', environment: 'render+mobile', stored: false, injected: false, authenticated: false, permissionTest: 'skipped', runtimeTest: 'variable absent', httpStatus: null, securityCheck: 'public by design', blocker: 'anon credentials not injected', worker: 'W5', finalStatus: 'BLOCKED', testedAt };
@@ -146,8 +154,8 @@ async function testSupabaseAnon(): Promise<CredentialRow> {
 
 async function testSupabaseServiceRole(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
-  const url = envClean('EXPO_PUBLIC_SUPABASE_URL');
-  const key = envClean('SUPABASE_SERVICE_ROLE_KEY');
+  const url = resolveSupabaseUrl();
+  const key = envClean('SUPABASE_SERVICE_ROLE_KEY') || envClean('SUPABASE_SERVICE_KEY');
   const stored = key.length > 0;
   if (!stored || url.length === 0) {
     return { service: 'Supabase (service-role)', variable: 'SUPABASE_SERVICE_ROLE_KEY', environment: 'render', stored, injected: false, authenticated: false, permissionTest: 'skipped', runtimeTest: 'variable absent in runtime env', httpStatus: null, securityCheck: 'server-only', blocker: 'service-role key not injected', worker: 'W5', finalStatus: 'BLOCKED', testedAt };

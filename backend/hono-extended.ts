@@ -55,6 +55,10 @@ import {
   handleIATaskPost,
   handleIALockPost,
 } from './api/ivx-ia-orchestrator';
+import {
+  ownerCredentialStatusOptions,
+  handleOwnerCredentialStatusGet,
+} from './api/ivx-owner-credential-status';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -83,6 +87,9 @@ app.options('/api/ivx/autonomous/ia/task', () => iaOrchestratorOptions());
 app.post('/api/ivx/autonomous/ia/task', async (context) => handleIATaskPost(context.req.raw));
 app.options('/api/ivx/autonomous/ia/lock', () => iaOrchestratorOptions());
 app.post('/api/ivx/autonomous/ia/lock', async (context) => handleIALockPost(context.req.raw));
+
+app.options('/api/ivx/owner/credential-status', () => ownerCredentialStatusOptions());
+app.get('/api/ivx/owner/credential-status', async (context) => handleOwnerCredentialStatusGet(context.req.raw));
 
 startAutonomousQAScheduler();
 
