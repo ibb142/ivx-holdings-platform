@@ -6,7 +6,7 @@ on:
       testTarget:
         description: Backend test files or directories to run
         required: false
-        default: backend/ivx-registration-orchestrator.test.ts backend/ivx-timezone.test.ts
+        default: default
       buildApk:
         description: Also build the Android release APK (set to "true")
         required: false
@@ -20,7 +20,8 @@ on:
       - "expo/ivxholding-landing/index.html"
       - "expo/scripts/verify-apk-release-consistency.mjs"
       - "expo/src/modules/chat/services/chatMessageUtils.ts"
-      - "expo/__tests__/chat-canonical-order.test.ts"
+      - "expo/src/modules/ivx-owner-ai/**"
+      - "expo/__tests__/**"
       - ".github/workflows/ivx-ci.yml"
 
 jobs:
@@ -37,14 +38,39 @@ jobs:
         run: bun install
       - name: Run env-independent backend tests
         run: |
-          TARGET="${{ github.event.inputs.testTarget || 'backend/ivx-registration-orchestrator.test.ts backend/ivx-timezone.test.ts' }}"
+          TARGET="${{ github.event.inputs.testTarget || 'default' }}"
           if [ "$TARGET" = "default" ] || [ "$TARGET" = "all" ]; then
             echo "Running full backend test suite (env-independent files)..."
-            bun test backend/ivx-registration-orchestrator.test.ts backend/ivx-timezone.test.ts backend/ivx-senior-developer-capabilities.test.ts backend/ivx-ci-build-runner.test.ts backend/ivx-growth-autonomous-ops.test.ts
+            bun test \
+              backend/ivx-registration-orchestrator.test.ts \
+              backend/ivx-timezone.test.ts \
+              backend/ivx-senior-developer-capabilities.test.ts \
+              backend/ivx-ci-build-runner.test.ts \
+              backend/ivx-growth-autonomous-ops.test.ts \
+              backend/services/ivx-agent-certification.test.ts \
+              backend/services/ivx-owner-ai-intent-router.test.ts
           else
             echo "Running targeted tests: $TARGET"
             bun test $TARGET
           fi
+
+  chat-tests:
+    name: Chat + intent + performance tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install expo dependencies
+        run: cd expo && bun install
+      - name: Run intent classifier tests
+        run: cd expo && bun test src/modules/ivx-owner-ai/services/ivxOwnerIntentClassifier.test.ts
+      - name: Run chat performance optimizer tests
+        run: cd expo && bun test src/modules/ivx-owner-ai/services/ivxChatPerformanceOptimizer.test.ts
+      - name: Test canonical chat ordering
+        run: cd expo && bun test __tests__/chat-canonical-order.test.ts
 
   release-consistency:
     name: Android release consistency
@@ -59,8 +85,37 @@ jobs:
         run: node expo/scripts/verify-apk-release-consistency.mjs
       - name: Install Expo dependencies
         run: cd expo && bun install
-      - name: Test canonical chat ordering
-        run: cd expo && bun test __tests__/chat-canonical-order.test.ts
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install
+      - name: Scan for leaked secrets
+        run: |
+          # Check for common secret patterns in source files (not .env.example)
+          EXIT_CODE=0
+          for pattern in 'ghp_[A-Za-z0-9]{36}' 'github_pat_[A-Za-z0-9_]{82}' 'sk-[A-Za-z0-9]{48}' 'rnd_[A-Za-z0-9]{24}' 'sbp_[a-z0-9]{40}'; do
+            FOUND=$(grep -r --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+              --exclude-dir=node_modules --exclude-dir=.git --exclude='*.test.ts' \
+              --exclude='.env.example' --exclude='.env.production.template' \
+              -E "$pattern" . 2>/dev/null || true)
+            if [ -n "$FOUND" ]; then
+              echo "SECRET LEAK DETECTED (pattern: $pattern):"
+              echo "$FOUND"
+              EXIT_CODE=1
+            fi
+          done
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "No secrets detected in source files."
+          fi
+          exit $EXIT_CODE
 
   android-apk:
     name: Android release APK

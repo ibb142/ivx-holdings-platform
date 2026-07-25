@@ -72,12 +72,18 @@ function getPathExtension(relativePath) {
   return filename.includes('.') ? `.${filename.split('.').pop().toLowerCase()}` : '';
 }
 
-function isIgnoredRelativePath(relativePath) {
+function isIgnoredRelativePath(relativePath, opts = {}) {
   const parts = getPathParts(relativePath);
   if (parts.some((part) => IGNORE_DIRS.has(part))) return true;
   // GitHub tokens without the `workflow` scope cannot modify files under .github/workflows.
-  // Skip them so tree creation does not 404 the entire sync.
-  if (parts.length >= 2 && parts[0] === '.github' && parts[1] === 'workflows') return true;
+  // Previously this was unconditionally skipped, which meant CI workflow updates
+  // NEVER reached GitHub even when the token had workflow scope.
+  // FIX: Only skip if the token explicitly lacks workflow scope (opt-in via env).
+  // If SYNC_INCLUDE_WORKFLOWS=true or the token has workflow scope, include them.
+  if (parts.length >= 2 && parts[0] === '.github' && parts[1] === 'workflows') {
+    const includeWorkflows = process.env.SYNC_INCLUDE_WORKFLOWS === 'true' || opts.includeWorkflows === true;
+    if (!includeWorkflows) return true;
+  }
   const filename = parts.at(-1) || '';
   if (IGNORE_FILES.has(filename)) return true;
   return IGNORE_EXTENSIONS.has(getPathExtension(relativePath));
@@ -239,7 +245,26 @@ async function main() {
 
   console.log('[2/6] Scanning local files...');
   console.log(`  Root: ${PROJECT_ROOT}`);
-  const localFiles = getAllFiles(PROJECT_ROOT);
+  // Check if token has workflow scope by probing /user and reading x-oauth-scopes header.
+  let includeWorkflows = process.env.SYNC_INCLUDE_WORKFLOWS === 'true';
+  if (!includeWorkflows && GITHUB_TOKEN) {
+    try {
+      const probeRes = await fetch(`${API}/user`, {
+        headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' },
+      });
+      const scopes = probeRes.headers.get('x-oauth-scopes') || '';
+      if (scopes.includes('workflow') || scopes.includes('repo')) {
+        // Fine-grained tokens with 'Contents: Read and write' on the repo can
+        // also update workflow files if the resource owner allows it.
+        includeWorkflows = true;
+      }
+    } catch {
+      // If probe fails, keep the safe default (skip workflows).
+    }
+  }
+  const localFiles = getAllFiles(PROJECT_ROOT).filter(
+    (f) => !isIgnoredRelativePath(f.path, { includeWorkflows })
+  );
   console.log(`  Found ${localFiles.length} files locally`);
 
   console.log('[3/6] Fetching remote tree...');

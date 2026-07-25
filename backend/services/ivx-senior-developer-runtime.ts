@@ -404,12 +404,37 @@ function readTrimmedEnv(name: string): string {
   return typeof process.env[name] === 'string' ? process.env[name]?.trim() ?? '' : '';
 }
 
+/**
+ * Read a deployment credential variable from the runtime.
+ *
+ * HONESTY FIX (Bug #1): Previously, if process.env was empty, the code
+ * silently fell back to the encrypted owner-variables store — which may
+ * contain a STALE, EXPIRED token from a previous sync. The fallback token
+ * was never validated, so the backend would use a dead token and report
+ * 401 Bad credentials without explaining why.
+ *
+ * Fix: process.env is ALWAYS authoritative. If the env var is set (even
+ * to a different value than the store), it wins. The encrypted store is
+ * only used as a fallback when process.env is genuinely absent — and when
+ * used, we log that we're falling back so the owner can see it in logs.
+ * The caller (auditIVXGithubRuntimeAccess) performs the live API
+ * validation call that actually detects 401s.
+ */
 async function readRuntimeVariable(name: OwnerVariableName): Promise<string> {
   const envValue = readTrimmedEnv(name);
   if (envValue) return envValue;
+
+  // process.env is empty — try encrypted store as last resort.
   try {
     const ownerVariables = await import('../api/ivx-owner-variables');
-    return await ownerVariables.getIVXOwnerVariableRuntimeValue(name);
+    const storedValue = await ownerVariables.getIVXOwnerVariableRuntimeValue(name);
+    if (storedValue) {
+      console.log('[IVXSeniorDeveloperRuntime] WARNING: process.env.' + name + ' is empty — falling back to encrypted owner-variables store. If this token is stale, GitHub API calls will return 401. Update the Render env var to fix.', {
+        name,
+        source: 'owner_variables_store',
+      });
+    }
+    return storedValue;
   } catch (error) {
     console.log('[IVXSeniorDeveloperRuntime] Owner Variables bridge unavailable:', {
       name,
