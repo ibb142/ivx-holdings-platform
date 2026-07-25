@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.upload
+package com.ivxholdings.app.upload
 
 import android.content.Context
 import android.net.Uri

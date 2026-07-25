@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.rork.ivxholdings"
+    namespace = "com.ivxholdings.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.rork.ivxholdings"
+        applicationId = "com.ivxholdings.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

@@ -1,10 +1,10 @@
-package com.rork.ivxholdings.media
+package com.ivxholdings.app.media
 
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import com.rork.ivxholdings.data.IVXReel
+import com.ivxholdings.app.data.IVXReel
 
 /**
  * The single process-local Reel player. It deliberately never creates one player

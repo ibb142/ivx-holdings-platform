@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.ui.screens
+package com.ivxholdings.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

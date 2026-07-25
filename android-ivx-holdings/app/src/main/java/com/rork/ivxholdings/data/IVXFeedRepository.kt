@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.data
+package com.ivxholdings.app.data
 
 import android.content.Context
 import org.json.JSONArray

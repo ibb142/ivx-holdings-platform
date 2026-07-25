@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.ui.theme
+package com.ivxholdings.app.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

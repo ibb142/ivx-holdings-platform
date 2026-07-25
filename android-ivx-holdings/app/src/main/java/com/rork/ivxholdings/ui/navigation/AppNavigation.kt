@@ -1,10 +1,10 @@
-package com.rork.ivxholdings.ui.navigation
+package com.ivxholdings.app.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.rork.ivxholdings.ui.screens.HomeScreen
+import com.ivxholdings.app.ui.screens.HomeScreen
 
 @Composable
 fun AppNavigation() {

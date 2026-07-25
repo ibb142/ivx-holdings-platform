@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.media
+package com.ivxholdings.app.media
 
 import androidx.media3.common.PlaybackException
 import kotlinx.coroutines.flow.MutableStateFlow

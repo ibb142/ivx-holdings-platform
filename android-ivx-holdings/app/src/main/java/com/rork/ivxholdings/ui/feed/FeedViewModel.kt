@@ -1,10 +1,10 @@
-package com.rork.ivxholdings.ui.feed
+package com.ivxholdings.app.ui.feed
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.rork.ivxholdings.data.FeedSnapshot
-import com.rork.ivxholdings.data.IVXFeedRepository
+import com.ivxholdings.app.data.FeedSnapshot
+import com.ivxholdings.app.data.IVXFeedRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

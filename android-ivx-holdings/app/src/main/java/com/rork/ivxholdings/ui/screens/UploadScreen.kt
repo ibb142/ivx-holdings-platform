@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.ui.screens
+package com.ivxholdings.app.ui.screens
 
 import android.content.Intent
 import android.provider.OpenableColumns
@@ -20,8 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.rork.ivxholdings.upload.IVXUploadQueue
-import com.rork.ivxholdings.upload.UploadDraft
+import com.ivxholdings.app.upload.IVXUploadQueue
+import com.ivxholdings.app.upload.UploadDraft
 
 /** File picker that persists URI access, validates locally, then schedules unique resumable work. */
 @Composable

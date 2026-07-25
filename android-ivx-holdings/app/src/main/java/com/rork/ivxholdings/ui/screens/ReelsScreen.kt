@@ -1,4 +1,4 @@
-package com.rork.ivxholdings.ui.screens
+package com.ivxholdings.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -30,10 +30,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
-import com.rork.ivxholdings.data.FeedSnapshot
-import com.rork.ivxholdings.data.IVXReel
-import com.rork.ivxholdings.media.ReelPlaybackCoordinator
-import com.rork.ivxholdings.ui.feed.FeedViewModel
+import com.ivxholdings.app.data.FeedSnapshot
+import com.ivxholdings.app.data.IVXReel
+import com.ivxholdings.app.media.ReelPlaybackCoordinator
+import com.ivxholdings.app.ui.feed.FeedViewModel
 
 /** Full-screen feed with exactly one Media3 player and poster-only neighboring pages. */
 @Composable
