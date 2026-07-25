@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 
 const SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const RENDER_KEY = process.env.RENDER_API_KEY || 'rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs';
+const RENDER_KEY = process.env.RENDER_API_KEY || '';
 const BACKEND_SVC = 'srv-d7t9ivreo5us73ftose0';
 const FRONTEND_SVC = 'srv-d7t9j00sfn5c738a18j0';
 const BACKEND_URL = 'https://api.ivxholding.com';
