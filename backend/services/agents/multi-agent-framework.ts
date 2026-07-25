@@ -680,6 +680,34 @@ export type ValidationCheck = {
 export function runFrameworkValidation(): { ok: boolean; checks: ValidationCheck[]; marker: string } {
   const checks: ValidationCheck[] = [];
 
+  // 0. HONESTY FIX: Zero agents → FAIL immediately
+  const agentCount = Object.keys(AGENTS).length;
+  checks.push({
+    name: 'registry.non_empty',
+    ok: agentCount > 0,
+    detail: `agents registered: ${agentCount}`,
+  });
+  if (agentCount === 0) {
+    return { ok: false, checks, marker: OPERATIONAL_MEMORY_MARKER };
+  }
+
+  // 0b. HONESTY FIX: Every agent must have a unique ID
+  const agentIds = Object.keys(AGENTS);
+  const uniqueIds = new Set(agentIds);
+  checks.push({
+    name: 'registry.unique_ids',
+    ok: uniqueIds.size === agentIds.length,
+    detail: `ids=${agentIds.length} unique=${uniqueIds.size}`,
+  });
+
+  // 0c. HONESTY FIX: Every agent must have at least one tool (non-placeholder)
+  const placeholderAgents = agentIds.filter((id) => AGENTS[id as AgentId].allowedTools.length === 0);
+  checks.push({
+    name: 'registry.no_placeholder_tools',
+    ok: placeholderAgents.length === 0,
+    detail: placeholderAgents.length > 0 ? `placeholder agents: ${placeholderAgents.join(', ')}` : 'all agents have tools',
+  });
+
   // 1. Routing
   const backendRoute = routeTaskToAgent('Patch the Hono backend api endpoint for owner-ai');
   checks.push({
@@ -764,6 +792,15 @@ export function runFrameworkValidation(): { ok: boolean; checks: ValidationCheck
   // Cleanup: complete validation tasks so they don't pollute active list
   completeTask(dispatched.task.id, { validation: true });
   completeTask(approved.task.id, { validation: true });
+
+  // 7. HONESTY FIX: Framework validation does NOT prove agents are real runtimes.
+  // It only validates routing, handoffs, memory, and risk gates.
+  // A PASS here means the framework LOGIC works, NOT that 12 independent agents exist.
+  checks.push({
+    name: 'honesty.framework_limit',
+    ok: true,
+    detail: 'Framework validation confirms routing/handoff/memory/risk logic only. It does NOT certify independent agent runtimes. Use validateAgentRegistry() for runtime certification.',
+  });
 
   const ok = checks.every((c) => c.ok);
   return { ok, checks, marker: OPERATIONAL_MEMORY_MARKER };

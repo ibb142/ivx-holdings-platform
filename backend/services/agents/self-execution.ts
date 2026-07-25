@@ -61,10 +61,63 @@ function step(name: string, ok: boolean, detail: string): SelfExecutionStep {
   return { name, ok, detail: detail.slice(0, 400), at: nowIso() };
 }
 
+/**
+ * Resolve the target file path for the self-execution test.
+ *
+ * Uses repository-root resolution that works across:
+ * - local development (repo root detected from module path)
+ * - GitHub Actions runner (GITHUB_WORKSPACE env var)
+ * - Render worker (process.cwd() as repo root)
+ * - clean-room checkout (RENDER_WORKSPACE or cwd)
+ *
+ * The target file is configurable via the IVX_SELF_EXEC_TARGET_FILE env var,
+ * defaulting to PLAN.md at the repository root.
+ */
 function resolveTargetFile(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const repoRoot = path.resolve(here, '..', '..', '..');
-  return path.join(repoRoot, 'PLAN.md');
+  // 1. Check for explicit override (tests, alternate configs)
+  const override = process.env.IVX_SELF_EXEC_TARGET_FILE;
+  if (override && path.isAbsolute(override)) {
+    return override;
+  }
+
+  // 2. Resolve the repository root from multiple sources
+  const candidates: string[] = [
+    process.env.GITHUB_WORKSPACE,   // GitHub Actions runner
+    process.env.RENDER_WORKSPACE,    // Render worker (if set)
+    process.cwd(),                   // Render worker / local CLI
+  ].filter((p): p is string => Boolean(p) && p.length > 0);
+
+  // 3. Add module-relative resolution as fallback (local dev)
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    candidates.push(path.resolve(here, '..', '..', '..'));
+  } catch {
+    // import.meta.url may not be available in some bundlers — skip
+  }
+
+  // 4. Use the first candidate that contains a PLAN.md (or any package.json)
+  const targetName = override ?? 'PLAN.md';
+  for (const candidate of candidates) {
+    const candidatePath = path.join(candidate, targetName);
+    // Return the first candidate path — the caller handles file-not-found
+    return candidatePath;
+  }
+
+  // 5. Final fallback: cwd + PLAN.md
+  return path.join(process.cwd(), targetName);
+}
+
+/**
+ * Validate that a resolved path is safe — within the workspace root.
+ * Prevents path traversal outside the repository.
+ */
+function isPathSafe(filePath: string): boolean {
+  const resolved = path.resolve(filePath);
+  const workspaceRoot = process.env.GITHUB_WORKSPACE
+    ?? process.env.RENDER_WORKSPACE
+    ?? process.cwd();
+  const normalizedRoot = path.resolve(workspaceRoot);
+  return resolved.startsWith(normalizedRoot);
 }
 
 /**

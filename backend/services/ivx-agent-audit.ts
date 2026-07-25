@@ -208,6 +208,11 @@ function assessAgent(agentId: ExecutiveAgentId): CapabilityAssessment[] {
   const fwDef = AGENTS[frameworkAgentId as keyof typeof AGENTS];
   const tools = fwDef?.allowedTools ?? [];
   const id = agentId as string;
+
+  // HONESTY RULE: Tool declarations are config, not evidence.
+  // A tool being listed does NOT mean it has been executed.
+  // Capabilities are scored based on what the agent CAN do per config,
+  // but the seniority classification now requires RUNTIME EVIDENCE.
   const canPatch = tools.includes('code_patch_proposal') || id === 'senior_developer';
   const canTest = tools.includes('run_tests') || tools.includes('lint') || tools.includes('test_fix_loop') || id === 'senior_developer' || id === 'qa';
   const canDeploy = tools.includes('deploy_gate_eval') || tools.includes('rollback_propose') || tools.includes('render_status') || tools.includes('aws_identity_check') || tools.includes('commit') || id === 'deployment';
@@ -215,6 +220,11 @@ function assessAgent(agentId: ExecutiveAgentId): CapabilityAssessment[] {
   const hasRuntime = id === 'senior_developer';
   const hasAuthTool = tools.includes('auth_audit');
   const hasGitTool = tools.includes('branch_create') || tools.includes('commit') || tools.includes('push');
+
+  // WARNING: These scores are based on DECLARED TOOL CAPABILITIES only.
+  // They do NOT prove the agent has ever executed a real job.
+  // The seniority level is now downgraded by default until runtime evidence
+  // is provided via the agent registry.
 
   return CAPABILITY_NAMES.map((cap, idx) => {
     const assessment: CapabilityAssessment = { capability: cap, score: 'FAIL', evidence: '' };
@@ -287,8 +297,14 @@ function assessAgent(agentId: ExecutiveAgentId): CapabilityAssessment[] {
         break;
 
       case 6: // Avoids fake data
-        assessment.score = 'PASS';
-        assessment.evidence = 'HONESTY RULES in ivx-enterprise-business-os.ts: "No mock services. Every agent run calls a real engine"';
+        // HONESTY FIX: This was auto-PASS for ALL agents. Now it requires evidence.
+        if (hasRuntime || canPatch) {
+          assessment.score = 'PARTIAL';
+          assessment.evidence = 'DECLARED: HONESTY RULES in ivx-enterprise-business-os.ts. NOT VERIFIED by runtime evidence.';
+        } else {
+          assessment.score = 'NOT_CONFIGURED';
+          assessment.evidence = 'Agent has no code execution capability — honesty rules are N/A until it can produce output';
+        }
         break;
 
       case 7: // Avoids duplicate implementations
@@ -325,13 +341,25 @@ function assessAgent(agentId: ExecutiveAgentId): CapabilityAssessment[] {
         break;
 
       case 10: // Handles errors correctly
-        assessment.score = 'PASS';
-        assessment.evidence = 'role-agents.ts: try/catch in runRoleAgent() records failed runs honestly. Executive agents record ok=false on failure';
+        // HONESTY FIX: This was auto-PASS for ALL agents. Now it requires evidence.
+        if (hasRuntime || canPatch) {
+          assessment.score = 'PARTIAL';
+          assessment.evidence = 'DECLARED: role-agents.ts has try/catch. NOT VERIFIED by runtime evidence.';
+        } else {
+          assessment.score = 'NOT_CONFIGURED';
+          assessment.evidence = 'Agent has no execution path — error handling is N/A';
+        }
         break;
 
       case 11: // Adds structured logs and trace IDs
-        assessment.score = 'PASS';
-        assessment.evidence = 'ivx-execution-trace-store.ts + ivx-agent-activity-store.ts: every run gets a UUID trace ID. Append-only JSONL ledger';
+        // HONESTY FIX: This was auto-PASS for ALL agents. Now it requires evidence.
+        if (hasRuntime || canPatch) {
+          assessment.score = 'PARTIAL';
+          assessment.evidence = 'DECLARED: ivx-execution-trace-store.ts exists. NOT VERIFIED that this agent has produced trace IDs.';
+        } else {
+          assessment.score = 'NOT_CONFIGURED';
+          assessment.evidence = 'Agent has no execution path — trace IDs are N/A';
+        }
         break;
 
       case 12: // Writes automated tests
@@ -414,8 +442,14 @@ function assessAgent(agentId: ExecutiveAgentId): CapabilityAssessment[] {
         break;
 
       case 19: // Provides proof instead of narrative
-        assessment.score = 'PASS';
-        assessment.evidence = 'ivx-developer-proof-ledger-store.ts: proof ledger records commitSha, deployId, verified status. HONESTY RULES enforced';
+        // HONESTY FIX: This was auto-PASS for ALL agents. Now it requires evidence.
+        if (hasRuntime || canPatch || canDeploy) {
+          assessment.score = 'PARTIAL';
+          assessment.evidence = 'DECLARED: ivx-developer-proof-ledger-store.ts exists. NOT VERIFIED that this agent has produced proof records.';
+        } else {
+          assessment.score = 'NOT_CONFIGURED';
+          assessment.evidence = 'Agent has no execution capability — proof generation is N/A';
+        }
         break;
 
       default:
@@ -433,10 +467,24 @@ function computeScorePercentage(assessments: CapabilityAssessment[]): number {
   return Math.round((total / assessments.length) * 100);
 }
 
-function classifySeniority(score: number): SeniorityLevel {
-  if (score >= 85) return 'SENIOR';
-  if (score >= 65) return 'MID';
-  if (score >= 40) return 'JUNIOR';
+/**
+ * HONESTY FIX: Seniority is no longer derived from static tool scores alone.
+ * An agent can only be SENIOR if it has RUNTIME EVIDENCE (completed jobs,
+ * heartbeats, proof ledger entries). Without runtime evidence, the maximum
+ * achievable level is MID (tool-declared capability only).
+ *
+ * The caller must pass runtime evidence from the agent registry to upgrade
+ * an agent from MID to SENIOR.
+ */
+function classifySeniority(
+  score: number,
+  hasRuntimeEvidence?: boolean,
+): SeniorityLevel {
+  // No runtime evidence → cap at MID regardless of tool score
+  const effectiveScore = hasRuntimeEvidence ? score : Math.min(score, 64);
+  if (effectiveScore >= 85 && hasRuntimeEvidence) return 'SENIOR';
+  if (effectiveScore >= 65) return 'MID';
+  if (effectiveScore >= 40) return 'JUNIOR';
   return 'NOT_A_DEVELOPER';
 }
 
@@ -476,7 +524,8 @@ export function runAgentAudit(): AgentAuditResult[] {
 
     const capabilities = assessAgent(agentId);
     const scorePercentage = computeScorePercentage(capabilities);
-    const seniority = classifySeniority(scorePercentage);
+    // HONESTY FIX: No runtime evidence by default → seniority capped at MID
+    const seniority = classifySeniority(scorePercentage, false);
 
     results.push({
       agentNumber,
@@ -613,18 +662,25 @@ export function buildAuditSummary(results: AgentAuditResult[]): AuditSummary {
   const withEvidence = results.filter((r) => r.capabilities[19]?.score === 'PASS');
 
   const criticalGaps: string[] = [];
-  if (senior.length < 3) criticalGaps.push(`Only ${senior.length} agent(s) at senior level — need at least 3 for independent operation`);
+  // HONESTY FIX: Report the actual state — no agent is SENIOR without runtime evidence
+  criticalGaps.push(`HONEST AUDIT: ${senior.length} agent(s) at SENIOR level (requires runtime evidence, not just tool declarations)`);
+  criticalGaps.push(`HONEST AUDIT: ${withEvidence.length} agent(s) with PASS on proof capability (most are now PARTIAL — declared but not verified)`);
   if (withExec.length < 4) criticalGaps.push(`Only ${withExec.length} agent(s) can execute code — most agents are analysis-only`);
   criticalGaps.push('No agent has autonomous Git branch creation — all commits require owner approval');
   criticalGaps.push('No agent has autonomous test-fix loop — can run tests but cannot auto-fix failures');
-  criticalGaps.push('Backend passwordless endpoint still returns 500 — IVX_OWNER_PASSWORD not configured on Render');
+  criticalGaps.push('Most agents are SHARED WORKERS with role wrappers over a single runtime — not independent agents');
+  criticalGaps.push('runFrameworkValidation() validates routing logic only — it does NOT certify 12 independent runtimes');
 
   const recommendedChanges: string[] = [];
+  recommendedChanges.push('Register all 12 agents in ivx-agent-registry.ts with real runtime state');
+  recommendedChanges.push('Provide runtime evidence (heartbeats, completed jobs) to upgrade agents from MID to SENIOR');
+  recommendedChanges.push('Classify each agent honestly: REAL_INDEPENDENT_AGENT vs SHARED_WORKER_WITH_ROLE vs UI_ONLY_LABEL');
+  recommendedChanges.push('Run one role-specific job per agent with evidence captured in the proof ledger');
+  recommendedChanges.push('Replace static dashboard cards with live data from the agent registry');
   recommendedChanges.push('Upgrade approval level for senior_developer from 3 to 4 to allow autonomous patch + deploy with approval');
   recommendedChanges.push('Add code_patch_proposal tool to qa_engineer so it can fix test failures autonomously');
   recommendedChanges.push('Add sql_proposal + supabase_inspect tools to deal agent for database migration capability');
   recommendedChanges.push('Add code_read tool to growth, investor, buyer, research, operations agents for codebase awareness');
-  recommendedChanges.push('Deploy backend fix commit to Render to resolve IVX_OWNER_PASSWORD issue');
   recommendedChanges.push('Create automated test-fix loop: run tests → parse failures → generate patch → re-run tests → report');
 
   return {
