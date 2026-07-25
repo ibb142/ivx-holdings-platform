@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readDurableJson, writeDurableJson } from './ivx-durable-store';
 
 const NONCE_STORE = 'logs/audit/internal-deploy-auth/nonces.json';
+const APPROVAL_STORE = 'logs/audit/owner-deployment-approvals/approvals.json';
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const MAX_NONCES = 500;
 
@@ -10,6 +11,11 @@ export type InternalDeployAuthorization = {
   approvalId: string;
   requestedCommitSha: string;
   action: 'GITHUB_WRITE' | 'RENDER_DEPLOY' | 'PRODUCTION_DEPLOY';
+};
+
+export type InternalDeployAuthStore = {
+  readJson<T>(file: string, fallback: T): Promise<T>;
+  writeJson(file: string, value: unknown): Promise<void>;
 };
 
 type UsedNonce = { nonce: string; expiresAt: number };
@@ -24,6 +30,11 @@ type StoredApproval = {
   usedAt: string | null;
   requestId: string;
   createdAt: string;
+};
+
+const durableAuthStore: InternalDeployAuthStore = {
+  readJson: readDurableJson,
+  writeJson: writeDurableJson,
 };
 
 export class InternalDeployAuthError extends Error {
@@ -74,12 +85,12 @@ function parseAuthorizationBody(bodyText: string): { approvalId: string; request
   return { approvalId, requestedCommitSha, action };
 }
 
-async function claimNonce(nonce: string, nowMs: number): Promise<void> {
-  const stored = await readDurableJson<UsedNonce[]>(NONCE_STORE, []);
+async function claimNonce(nonce: string, nowMs: number, store: InternalDeployAuthStore): Promise<void> {
+  const stored = await store.readJson<UsedNonce[]>(NONCE_STORE, []);
   const active = stored.filter((item) => item.expiresAt > nowMs).slice(-MAX_NONCES);
   if (active.some((item) => item.nonce === nonce)) throw new InternalDeployAuthError('Worker nonce has already been used.', 401);
   active.push({ nonce, expiresAt: nowMs + MAX_CLOCK_SKEW_MS });
-  await writeDurableJson(NONCE_STORE, active);
+  await store.writeJson(NONCE_STORE, active);
 }
 
 export type OwnerDeploymentApprovalInput = {
@@ -90,12 +101,12 @@ export type OwnerDeploymentApprovalInput = {
   expiresAt: string;
 };
 
-/** Creates a durable single-use owner approval. This is called only after human JWT authorization. */
-export async function createOwnerDeploymentApproval(input: OwnerDeploymentApprovalInput): Promise<StoredApproval> {
+/** Creates a durable single-use owner approval after human JWT authorization. */
+export async function createOwnerDeploymentApproval(input: OwnerDeploymentApprovalInput, store: InternalDeployAuthStore = durableAuthStore): Promise<StoredApproval> {
   const requestedCommitSha = input.requestedCommitSha.trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/i.test(requestedCommitSha)) throw new Error('requestedCommitSha must be a 40-character SHA.');
   if (Date.parse(input.expiresAt) <= Date.now()) throw new Error('expiresAt must be in the future.');
-  const approvals = await readDurableJson<StoredApproval[]>('logs/audit/owner-deployment-approvals/approvals.json', []);
+  const approvals = await store.readJson<StoredApproval[]>(APPROVAL_STORE, []);
   const approval: StoredApproval = {
     id: crypto.randomUUID(),
     ownerUserId: input.ownerUserId,
@@ -109,12 +120,12 @@ export async function createOwnerDeploymentApproval(input: OwnerDeploymentApprov
     createdAt: new Date().toISOString(),
   };
   approvals.push(approval);
-  await writeDurableJson('logs/audit/owner-deployment-approvals/approvals.json', approvals.slice(-MAX_NONCES));
+  await store.writeJson(APPROVAL_STORE, approvals.slice(-MAX_NONCES));
   return approval;
 }
 
-async function consumeApproval(input: InternalDeployAuthorization): Promise<void> {
-  const approvals = await readDurableJson<StoredApproval[]>('logs/audit/owner-deployment-approvals/approvals.json', []);
+async function consumeApproval(input: InternalDeployAuthorization, store: InternalDeployAuthStore): Promise<void> {
+  const approvals = await store.readJson<StoredApproval[]>(APPROVAL_STORE, []);
   const now = Date.now();
   const index = approvals.findIndex((approval) => approval.id === input.approvalId);
   const approval = index >= 0 ? approvals[index] : null;
@@ -125,11 +136,11 @@ async function consumeApproval(input: InternalDeployAuthorization): Promise<void
     throw new InternalDeployAuthError('The owner approval does not match the requested commit and action.', 403);
   }
   approvals[index] = { ...approval, usedAt: new Date(now).toISOString() };
-  await writeDurableJson('logs/audit/owner-deployment-approvals/approvals.json', approvals);
+  await store.writeJson(APPROVAL_STORE, approvals);
 }
 
 /** Validates and consumes a one-time signed worker deployment authorization. */
-export async function authorizeInternalDeploymentRequest(request: Request): Promise<InternalDeployAuthorization> {
+export async function authorizeInternalDeploymentRequest(request: Request, store: InternalDeployAuthStore = durableAuthStore): Promise<InternalDeployAuthorization> {
   const secret = configuredSecret();
   const expectedWorkerId = configuredWorkerId();
   if (!secret || !expectedWorkerId) throw new InternalDeployAuthError('Internal worker authentication is not configured.', 401);
@@ -149,9 +160,9 @@ export async function authorizeInternalDeploymentRequest(request: Request): Prom
   if (!/^[a-f0-9]{64}$/i.test(receivedSignature) || !secureEqual(receivedSignature.toLowerCase(), expectedSignature)) throw new InternalDeployAuthError('Worker request signature is invalid.', 401);
 
   const approval = parseAuthorizationBody(body);
-  await claimNonce(nonce, Date.now());
+  await claimNonce(nonce, Date.now(), store);
   const authorization: InternalDeployAuthorization = { workerId, ...approval };
-  await consumeApproval(authorization);
+  await consumeApproval(authorization, store);
   return authorization;
 }
 
