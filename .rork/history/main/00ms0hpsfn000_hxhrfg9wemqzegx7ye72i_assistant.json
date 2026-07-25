@@ -138,7 +138,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== does ivx-ci.yml pin a repository explicitly anywhere? ===\\\"\\ngrep -n \\\"repository:\\\\|rork-global-real-estate-invest\\\" .github/workflows/ivx-ci.yml\\necho \\\"=== what does the live file on GitHub main actually say (raw fetch) ===\\\"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://raw.githubusercontent.com/ibb142/ivx-holdings-platform/main/.github/workflows/ivx-ci.yml\\\" | grep -n \\\"repository:\\\\|checkout\\\"\\n\"}",
       "createdAt": 1784991050598,
-      "completedAt": 1784991050602
+      "completedAt": 1784991050602,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -161,7 +162,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== Check repo identity as GitHub API reports it now ===\\\"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint('full_name:', d.get('full_name'))\\nprint('id:', d.get('id'))\\nprint('default_branch:', d.get('default_branch'))\\n\\\"\\necho \\\"=== does the OLD name still resolve (redirect) ===\\\"\\ncurl -s -o /dev/null -w \\\"%{http_code}\\\\n\\\" -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/rork-global-real-estate-invest\\\"\\necho \\\"=== check last 10 runs for which repo name appears in their checkout logs by checking run 'repository' field via API (head_repository) ===\\\"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?per_page=10\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nfor r in d['workflow_runs']:\\n    print(r['id'], r['head_sha'][:10], r['repository']['full_name'], r['conclusion'])\\n\\\"\\n\"}",
       "createdAt": 1784991060712,
-      "completedAt": 1784991065276
+      "completedAt": 1784991065276,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -184,7 +186,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== trigger a fresh workflow_dispatch run to test rename-propagation theory ===\\\"\\ncurl -s -o /tmp/dispatch_resp.txt -w \\\"%{http_code}\\\\n\\\" -X POST \\\\\\n  -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\\\\n  -H \\\"Accept: application/vnd.github+json\\\" \\\\\\n  \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/workflows/ivx-ci.yml/dispatches\\\" \\\\\\n  -d '{\\\"ref\\\":\\\"main\\\",\\\"inputs\\\":{\\\"testTarget\\\":\\\"backend/ivx-registration-orchestrator.test.ts\\\",\\\"buildApk\\\":\\\"false\\\"}}'\\ncat /tmp/dispatch_resp.txt\\nsleep 8\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?per_page=3&event=workflow_dispatch\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nfor r in d['workflow_runs'][:3]:\\n    print(r['id'], r['status'], r['conclusion'], r['head_sha'][:10], r['created_at'])\\n\\\"\\n\"}",
       "createdAt": 1784991077493,
-      "completedAt": 1784991090088
+      "completedAt": 1784991090088,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -207,7 +210,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\nsleep 25\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs/30162456141\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nprint('status:', d.get('status'), 'conclusion:', d.get('conclusion'))\\n\\\"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs/30162456141/jobs\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nfor j in d.get('jobs',[]):\\n    print(j['name'], '->', j['status'], j.get('conclusion'))\\n\\\"\\n\"}",
       "createdAt": 1784991095748,
-      "completedAt": 1784991122813
+      "completedAt": 1784991122813,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -230,7 +234,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== does the file actually exist at that path on live main? ===\\\"\\ncurl -s -o /dev/null -w \\\"%{http_code}\\\\n\\\" -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/scripts/verify-apk-release-consistency.mjs?ref=main\\\"\\necho \\\"=== local file exists? ===\\\"\\nls -la expo/scripts/verify-apk-release-consistency.mjs\\necho \\\"=== is it possibly gitignored / untracked so it never reaches GitHub? ===\\\"\\ngrep -n \\\"verify-apk-release-consistency\\\\|scripts/\\\" expo/.gitignore .gitignore 2>/dev/null\\ngit -C . check-ignore -v expo/scripts/verify-apk-release-consistency.mjs 2>&1\\n\"}",
       "createdAt": 1784991126656,
-      "completedAt": 1784991129257
+      "completedAt": 1784991129257,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -253,7 +258,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== is this file tracked by git locally? ===\\\"\\ngit status --porcelain expo/scripts/verify-apk-release-consistency.mjs\\ngit log --oneline -- expo/scripts/verify-apk-release-consistency.mjs | head -5\\necho \\\"=== is it in .gitignore anywhere up the tree? ===\\\"\\ngit check-ignore -v expo/scripts/verify-apk-release-consistency.mjs; echo \\\"exit: $?\\\"\\necho \\\"=== list all files in expo/scripts on GitHub live main ===\\\"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/scripts?ref=main\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nif isinstance(d, dict) and d.get('message'):\\n    print('ERROR:', d['message'])\\nelse:\\n    names=[f['name'] for f in d]\\n    print(len(names), 'files')\\n    print('verify-apk-release-consistency.mjs' in names)\\n\\\"\\n\"}",
       "createdAt": 1784991136010,
-      "completedAt": 1784991139288
+      "completedAt": 1784991139288,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -276,7 +282,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== compare full expo/scripts local vs GitHub main ===\\\"\\nls expo/scripts/*.mjs expo/scripts/*.ts 2>/dev/null | xargs -n1 basename | sort > /tmp/local_scripts.txt\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/scripts?ref=main\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nnames=sorted(f['name'] for f in d)\\nfor n in names: print(n)\\n\\\" > /tmp/github_scripts.txt\\necho \\\"--- LOCAL ONLY (missing from GitHub) ---\\\"\\ncomm -23 /tmp/local_scripts.txt /tmp/github_scripts.txt\\necho \\\"--- GITHUB ONLY ---\\\"\\ncomm -13 /tmp/local_scripts.txt /tmp/github_scripts.txt\\necho \\\"=== also check __tests__/chat-canonical-order.test.ts referenced by same job ===\\\"\\ncurl -s -o /dev/null -w \\\"%{http_code}\\\\n\\\" -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/__tests__/chat-canonical-order.test.ts?ref=main\\\"\\n\"}",
       "createdAt": 1784991148269,
-      "completedAt": 1784991152012
+      "completedAt": 1784991152012,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -299,7 +306,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\necho \\\"=== local test file exists? ===\\\"\\nls -la expo/__tests__/chat-canonical-order.test.ts 2>&1\\necho \\\"=== full diff of expo/__tests__ local vs github ===\\\"\\nls expo/__tests__/*.ts 2>/dev/null | xargs -n1 basename | sort > /tmp/local_tests.txt\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/__tests__?ref=main\\\" | python3 -c \\\"\\nimport json,sys\\nd=json.load(sys.stdin)\\nif isinstance(d,dict): print('ERR', d.get('message'))\\nelse:\\n    for f in sorted(x['name'] for x in d): print(f)\\n\\\" > /tmp/github_tests.txt\\necho \\\"--- LOCAL ONLY (missing on GitHub) ---\\\"\\ncomm -23 /tmp/local_tests.txt /tmp/github_tests.txt\\n\"}",
       "createdAt": 1784991157170,
-      "completedAt": 1784991160241
+      "completedAt": 1784991160241,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -321,7 +329,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/scripts/verify-apk-release-consistency.mjs\"}",
       "createdAt": 1784991168440,
-      "completedAt": 1784991168716
+      "completedAt": 1784991168716,
+      "compactedAt": 1784994932074
     },
     {
       "type": "tool",
@@ -338,7 +347,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/__tests__/chat-canonical-order.test.ts\"}",
       "createdAt": 1784991168713,
-      "completedAt": 1784991169091
+      "completedAt": 1784991169091,
+      "compactedAt": 1784994932074
     },
     {
       "type": "tool",
@@ -355,7 +365,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/__tests__/investment-card-timeline.test.ts\"}",
       "createdAt": 1784991169089,
-      "completedAt": 1784991169294
+      "completedAt": 1784991169294,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -378,7 +389,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncd /home/user/rork-app\\ngit status --porcelain -- expo/scripts/verify-apk-release-consistency.mjs expo/scripts/upload-apk.mjs expo/__tests__/chat-canonical-order.test.ts expo/__tests__/investment-card-timeline.test.ts\\necho \\\"---\\\"\\ngit log --oneline -3\\necho \\\"--- remote ---\\\"\\ngit remote -v\\n\"}",
       "createdAt": 1784991175300,
-      "completedAt": 1784991176652
+      "completedAt": 1784991176652,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -401,7 +413,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncd /home/user/rork-app\\ngit add expo/scripts/verify-apk-release-consistency.mjs expo/scripts/upload-apk.mjs expo/__tests__/chat-canonical-order.test.ts expo/__tests__/investment-card-timeline.test.ts\\ngit status --porcelain\\n\"}",
       "createdAt": 1784991181629,
-      "completedAt": 1784991183151
+      "completedAt": 1784991183151,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -424,7 +437,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncd /home/user/rork-app\\ngit diff --cached --stat\\ngit commit -m \\\"fix: publish missing APK release-consistency script and chat/timeline tests required by CI\\\"\\ngit push origin HEAD:main\\n\"}",
       "createdAt": 1784991189386,
-      "completedAt": 1784991190937
+      "completedAt": 1784991190937,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -447,7 +461,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncd /home/user/rork-app\\necho \\\"=== is expo/scripts/verify-apk-release-consistency.mjs actually tracked in current HEAD? ===\\\"\\ngit ls-files expo/scripts/verify-apk-release-consistency.mjs expo/scripts/upload-apk.mjs expo/__tests__/chat-canonical-order.test.ts expo/__tests__/investment-card-timeline.test.ts\\necho \\\"=== local HEAD sha ===\\\"\\ngit rev-parse HEAD\\necho \\\"=== does local HEAD match GitHub main HEAD? ===\\\"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" | python3 -c \\\"import json,sys;print(json.load(sys.stdin)['sha'])\\\"\\n\"}",
       "createdAt": 1784991199316,
-      "completedAt": 1784991202335
+      "completedAt": 1784991202335,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -470,7 +485,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncd /home/user/rork-app\\ngit fetch origin main 2>&1\\necho \\\"--- origin/main after fetch ---\\\"\\ngit rev-parse origin/main\\necho \\\"--- local HEAD ---\\\"\\ngit rev-parse HEAD\\necho \\\"--- is local HEAD ancestor of origin/main or vice versa? ---\\\"\\ngit merge-base --is-ancestor HEAD origin/main && echo \\\"HEAD is ancestor of origin/main\\\" || echo \\\"HEAD NOT ancestor of origin/main\\\"\\ngit log --oneline origin/main -5\\n\"}",
       "createdAt": 1784991214233,
-      "completedAt": 1784991216346
+      "completedAt": 1784991216346,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -493,7 +509,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" | python3 -c \\\"import json,sys;print(json.load(sys.stdin)['sha'])\\\"\\ncurl -s -o /dev/null -w \\\"%{http_code}\\\\n\\\" -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/scripts/verify-apk-release-consistency.mjs?ref=main\\\"\\n\"}",
       "createdAt": 1784991229130,
-      "completedAt": 1784991230793
+      "completedAt": 1784991230793,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -516,7 +533,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" | python3 -c \\\"import json,sys;print('GitHub HEAD:', json.load(sys.stdin)['sha'])\\\"\\ncurl -s -o /dev/null -w \\\"verify-apk script on GitHub: %{http_code}\\\\n\\\" -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/scripts/verify-apk-release-consistency.mjs?ref=main\\\"\\n\"}",
       "createdAt": 1784991245040,
-      "completedAt": 1784991246970
+      "completedAt": 1784991246970,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
@@ -539,7 +557,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"\\ncurl -s -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" | python3 -c \\\"import json,sys;print('GitHub HEAD:', json.load(sys.stdin)['sha'])\\\"\\ncurl -s -o /dev/null -w \\\"verify-apk script on GitHub: %{http_code}\\\\n\\\" -H \\\"Authorization: token $GITHUB_TOKEN\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/contents/expo/scripts/verify-apk-release-consistency.mjs?ref=main\\\"\\n\"}",
       "createdAt": 1784991257294,
-      "completedAt": 1784991258772
+      "completedAt": 1784991258772,
+      "compactedAt": 1784994932074
     },
     {
       "type": "text",
