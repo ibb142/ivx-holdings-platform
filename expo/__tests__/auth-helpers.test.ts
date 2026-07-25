@@ -137,7 +137,7 @@ describe('validatePassword', () => {
   });
 
   test('accepts exactly 12 chars with requirements', () => {
-    const result = validatePassword('Abcdefghij1');
+    const result = validatePassword('Abcdefghijk1');
     expect(result.valid).toBe(true);
   });
 });
