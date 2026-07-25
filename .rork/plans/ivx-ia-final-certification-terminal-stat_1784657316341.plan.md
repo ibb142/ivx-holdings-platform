@@ -1,15 +1,18 @@
 ---
 name: "IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict"
-overview: "Certification completed. The project is now executing IVX Global Brand Standardization as the next owner-approved task."
+overview: "Owner redirected to a full deep QA of all 12 IVX Senior Developer agents. Brand standardization is paused pending audit results."
 createdAt: 2026-07-21T18:08:36.341Z
+updatedAt: 2026-07-25T20:45:00.000Z
 ---
 # IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict
 
-> **STATUS: COMPLETE** — all certification sections passed with live evidence (1730 backend tests pass, 0 fail; autonomous coder COMPLETED with real commit; production commit match verified; deploy-gate certification pipeline live). The certification requested "no new features, no refactor"; that scope is closed.
+> **STATUS: PAUSED / RE-AUDIT IN PROGRESS** — The owner has issued a new directive: perform a real deep QA of all 12 IVX Senior Developer agents, independent of the prior certification. This supersedes the brand-standardization task until the audit is complete and findings are fixed.
 >
-> **NEXT OWNER-APPROVED TASK:** IVX Global Brand Standardization — replace every old logo / crown / generic mark with the owner-attached official IVX logo, centralize brand tokens, and deploy end-to-end.
+> **PREVIOUS OWNER-APPROVED TASK (paused):** IVX Global Brand Standardization — replace every old logo / crown / generic mark with the owner-attached official IVX logo, centralize brand tokens, and deploy end-to-end.
+>
+> **CURRENT OWNER-APPROVED TASK:** Final Deep QA — verify all 12 IVX Senior Developer agents, identify real vs. simulated, run independent end-to-end tests, and produce a new honest certification table.
 
-## Final certification verdict (record)
+## Final certification verdict (record — under re-audit)
 
 - AUTONOMOUS CODER: PASS
 - IVX IA CHAT: PASS
