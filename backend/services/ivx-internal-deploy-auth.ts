@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readDurableJson, writeDurableJson } from './ivx-durable-store';
+import { consumeWorkerAccessToken, isAllowedWorkerAccessAction, WorkerAccessTokenError, type WorkerAccessAction } from './ivx-worker-access-token';
 
 const NONCE_STORE = 'logs/audit/internal-deploy-auth/nonces.json';
 const APPROVAL_STORE = 'logs/audit/owner-deployment-approvals/approvals.json';
@@ -11,6 +12,8 @@ export type InternalDeployAuthorization = {
   approvalId: string;
   requestedCommitSha: string;
   action: 'GITHUB_WRITE' | 'RENDER_DEPLOY' | 'PRODUCTION_DEPLOY';
+  /** Present when this authorization was granted via a short-lived worker access token instead of the legacy owner-approval-ID store. */
+  workerAccessTokenId?: string;
 };
 
 export type InternalDeployAuthStore = {
@@ -68,7 +71,14 @@ function signaturePayload(input: { workerId: string; timestamp: string; nonce: s
   return [input.workerId, input.timestamp, input.nonce, input.method.toUpperCase(), input.pathname, input.body].join('\n');
 }
 
-function parseAuthorizationBody(bodyText: string): { approvalId: string; requestedCommitSha: string; action: InternalDeployAuthorization['action'] } {
+type ParsedAuthorizationBody = {
+  approvalId: string;
+  requestedCommitSha: string;
+  action: InternalDeployAuthorization['action'];
+  workerAccessToken: string;
+};
+
+function parseAuthorizationBody(bodyText: string): ParsedAuthorizationBody {
   let raw: unknown;
   try {
     raw = JSON.parse(bodyText) as unknown;
@@ -79,10 +89,14 @@ function parseAuthorizationBody(bodyText: string): { approvalId: string; request
   const approvalId = typeof body.ownerApprovalId === 'string' ? body.ownerApprovalId.trim() : '';
   const requestedCommitSha = typeof body.requestedCommitSha === 'string' ? body.requestedCommitSha.trim().toLowerCase() : '';
   const action = typeof body.deploymentAction === 'string' ? body.deploymentAction.trim() : '';
-  if (!approvalId || !/^[a-zA-Z0-9_-]{8,128}$/.test(approvalId)) throw new InternalDeployAuthError('A valid ownerApprovalId is required.', 403);
+  const workerAccessToken = typeof body.workerAccessToken === 'string' ? body.workerAccessToken.trim() : '';
   if (!/^[a-f0-9]{40}$/i.test(requestedCommitSha)) throw new InternalDeployAuthError('A 40-character requestedCommitSha is required.', 403);
   if (action !== 'GITHUB_WRITE' && action !== 'RENDER_DEPLOY' && action !== 'PRODUCTION_DEPLOY') throw new InternalDeployAuthError('The requested deployment action is not allowed.', 403);
-  return { approvalId, requestedCommitSha, action };
+  // Either a short-lived worker access token OR a legacy owner-approval-ID must be present.
+  if (!workerAccessToken && (!approvalId || !/^[a-zA-Z0-9_-]{8,128}$/.test(approvalId))) {
+    throw new InternalDeployAuthError('A valid ownerApprovalId or workerAccessToken is required.', 403);
+  }
+  return { approvalId, requestedCommitSha, action, workerAccessToken };
 }
 
 async function claimNonce(nonce: string, nowMs: number, store: InternalDeployAuthStore): Promise<void> {
@@ -159,9 +173,37 @@ export async function authorizeInternalDeploymentRequest(request: Request, store
   const expectedSignature = createHmac('sha256', secret).update(signaturePayload({ workerId, timestamp, nonce, method: request.method, pathname: new URL(request.url).pathname, body }), 'utf8').digest('hex');
   if (!/^[a-f0-9]{64}$/i.test(receivedSignature) || !secureEqual(receivedSignature.toLowerCase(), expectedSignature)) throw new InternalDeployAuthError('Worker request signature is invalid.', 401);
 
-  const approval = parseAuthorizationBody(body);
+  const parsed = parseAuthorizationBody(body);
   await claimNonce(nonce, Date.now(), store);
-  const authorization: InternalDeployAuthorization = { workerId, ...approval };
+
+  // Short-lived worker access token path (preferred — no permanent owner
+  // session ever stored in Render). Falls back to the legacy owner-approval-ID
+  // store only when no token is presented.
+  if (parsed.workerAccessToken) {
+    let consumed: Awaited<ReturnType<typeof consumeWorkerAccessToken>>;
+    try {
+      consumed = await consumeWorkerAccessToken({
+        rawToken: parsed.workerAccessToken,
+        action: parsed.action as WorkerAccessAction,
+        commitSha: parsed.requestedCommitSha,
+        workerId,
+      });
+    } catch (error) {
+      if (error instanceof WorkerAccessTokenError) {
+        throw new InternalDeployAuthError(error.message, error.status === 401 ? 401 : 403);
+      }
+      throw error;
+    }
+    return {
+      workerId,
+      approvalId: consumed.id,
+      requestedCommitSha: consumed.commitSha,
+      action: parsed.action,
+      workerAccessTokenId: consumed.id,
+    };
+  }
+
+  const authorization: InternalDeployAuthorization = { workerId, approvalId: parsed.approvalId, requestedCommitSha: parsed.requestedCommitSha, action: parsed.action };
   await consumeApproval(authorization, store);
   return authorization;
 }
