@@ -750,11 +750,32 @@ function qaPhaseToStage(phase: IVXQAOnlyPhase): { stage: IVXWorkerJobStage; deta
  * real autonomous-coder outcome (patch applied, commit created, deploy
  * triggered, production verified).
  */
+/**
+ * Reject stale or incomplete mutation evidence before it can enter the durable
+ * ledger as a completed code-change or deploy job. A mutation must create a
+ * commit after its captured starting SHA; a deploy must additionally prove the
+ * new commit is live. This is intentionally stricter than a health-only check.
+ */
+function autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): string | null {
+  const isMutation = proof.executionMode === 'code_change' || proof.executionMode === 'deploy';
+  if (!isMutation || proof.finalStatus !== 'COMPLETED') return null;
+  if (proof.filesChanged.length === 0) return 'Code-change job produced no changed files; stale evidence is not accepted.';
+  if (!proof.commitSha) return 'Code-change job produced no commit SHA; stale evidence is not accepted.';
+  if (proof.startingSha && proof.commitSha === proof.startingSha) return 'Code-change job reused its starting commit SHA; stale evidence is not accepted.';
+  if (proof.executionMode === 'deploy') {
+    if (!proof.deployId) return 'Deploy job produced no deployment ID.';
+    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';
+  }
+  return null;
+}
+
 export function summarizeAutonomousCoderProof(
   jobId: string,
   proof: IVXAutonomousCoderProof,
 ): IVXWorkerJobResult {
-  const finalStatus: IVXWorkerJobResult['finalStatus'] = proof.finalStatus === 'COMPLETED'
+  const mutationProofError = autonomousCoderMutationProofError(proof);
+  const completed = proof.finalStatus === 'COMPLETED' && mutationProofError === null;
+  const finalStatus: IVXWorkerJobResult['finalStatus'] = completed
     ? (proof.commitSha ? 'COMPLETE' : 'LOCAL_ONLY')
     : proof.finalStatus === 'BLOCKED'
       ? 'BLOCKED'
@@ -762,8 +783,8 @@ export function summarizeAutonomousCoderProof(
   return {
     jobId,
     goal: proof.goal.slice(0, 280),
-    ok: proof.finalStatus === 'COMPLETED',
-    endToEndProductionComplete: proof.productionVerified,
+    ok: completed,
+    endToEndProductionComplete: completed && proof.productionVerified,
     changedFiles: proof.filesChanged.slice(0, 25),
     testsRun: proof.commandsRun.some((cmd) => /test/i.test(cmd.command)),
     testsPassed: proof.testsPassed,
@@ -777,17 +798,17 @@ export function summarizeAutonomousCoderProof(
     branch: proof.branch,
     deployId: proof.deployId,
     deployStatus: proof.deployStatus,
-    deployVerified: proof.productionVerified,
-    deployRequested: proof.deployApproved && proof.finalStatus === 'COMPLETED' && Boolean(proof.deployId),
+    deployVerified: completed && proof.productionVerified,
+    deployRequested: proof.deployApproved && completed && Boolean(proof.deployId),
     liveCommit: proof.liveCommit,
-    commitMatch: proof.productionVerified && proof.liveCommit === proof.commitSha,
-    healthOk: proof.healthOk,
+    commitMatch: completed && proof.productionVerified && proof.liveCommit === proof.commitSha,
+    healthOk: completed && proof.healthOk,
     healthStatus: null,
     versionEndpoint: null,
     generatedFeatureSlug: null,
     auditFiles: { json: '', jsonl: '' },
     finalStatus,
-    error: proof.error,
+    error: mutationProofError ?? proof.error,
     durable: isDurableStoreConfigured(),
     generatedAt: proof.generatedAt,
     taskType: classifyTaskType(proof.goal),
