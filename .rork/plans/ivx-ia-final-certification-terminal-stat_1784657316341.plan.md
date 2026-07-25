@@ -1,30 +1,40 @@
----
 name: "IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict"
 overview: "Owner redirected to a full deep QA of all 12 IVX Senior Developer agents. Brand standardization is paused pending audit results."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-25T22:35:00.000Z
+updatedAt: 2026-07-25T23:15:36.000Z
 ---
 # IVX IA final certification — terminal-state fix + 12-section honest PASS/FAIL verdict
 
-> **STATUS: RE-AUDIT COMPLETE — 12-SECTION PRODUCTION VERIFICATION PASS**
+> **STATUS: FINAL CERTIFICATION 4/6 ITEMS COMPLETE — 2 ITEMS PENDING OWNER TESTING**
 >
 > **CURRENT OWNER-APPROVED TASK:** Final Deep QA — verify all 12 IVX Senior Developer agents, identify real vs. simulated, run independent end-to-end tests, and produce a new honest certification table.
 >
-> **COMPLETED:** 3 token/CI/sync bugs fixed, 55 local commits synced to GitHub, CI expanded and green, production deployed with all QA flags green, SHA alignment verified across local/GitHub/production.
+> **COMPLETED:** 6 bugs fixed, 55 local commits synced to GitHub, CI expanded and green, production deployed with all QA flags green, SHA alignment verified, AI provider rotated and verified READY, diagnostic-to-deploy chain proven, failure/recovery/replay/ledger tests all pass.
 
-## 12-Section Production Verification — FINAL RESULTS (2026-07-25T22:32Z)
+## 6 Final Verification Items — Current Status (2026-07-25T23:15Z)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Item 1: AI Gateway HTTP 401 diagnosis | ✅ COMPLETE | Revoked `vck_` keys replaced with active Vercel v0 key; public chat now returns `source: chatgpt` |
+| Item 2: Verify PROVIDER_READY state | ✅ COMPLETE | `providerState: PROVIDER_READY`, `lastHttpStatus: 200`, `lastValidationTime: 2026-07-25T23:15:35.577Z` |
+| Item 3: Run 6 authenticated production prompts | ⏳ OWNER TESTING | Requires owner to send 6 prompts from live IVX IA chat and share responses |
+| Item 4: Live chat QA on 4 platforms | ⏳ OWNER TESTING | Requires manual testing on Android, mobile web, desktop web, iOS |
+| Item 5: Real diagnostic-to-deploy task | ✅ COMPLETE | SHA parity break diagnosed, pushed, CI run 30178337451 success, Render deployed `4d4f58c3`, all QA flags green |
+| Item 6: Failure recovery, replay rejection, proof ledger, SHA parity | ✅ COMPLETE | 142 tests pass across 7 test suites; SHA parity Local=GitHub=Production=`4d4f58c3` |
+
+## 12-Section Production Verification — FINAL RESULTS (2026-07-25T23:15Z)
 
 All 12 sections verified live against production (`https://api.ivxholding.com`).
 
 ### Section 1: SHA Alignment — PASS
-- Local HEAD: `3388d5dd`
-- GitHub HEAD: `3388d5dd`
-- Production SHA: `3388d5dd`
+- Local HEAD: `4d4f58c3`
+- GitHub HEAD: `4d4f58c3`
+- Production SHA: `4d4f58c3`
 - All 3 match — the git sync gap is resolved.
 
 ### Section 2: CI Status — PASS
-- Run ID: 30177724685
-- SHA: `3388d5dd`
+- Run ID: 30178337451
+- SHA: `4d4f58c3`
 - Conclusion: `completed/success`
 - Jobs:
   - Backend tests (bun) → success (includes agent certification + intent router tests)
@@ -35,7 +45,7 @@ All 12 sections verified live against production (`https://api.ivxholding.com`).
 
 ### Section 3: Production Health — PASS
 - Status: `healthy`
-- Boot time: `2026-07-25T22:32:43.462Z`
+- Boot time: `2026-07-25T23:14:14.767Z`
 - Routes: 77 registered
 - Rork dependency: `false`
 
@@ -50,39 +60,40 @@ All 12 sections verified live against production (`https://api.ivxholding.com`).
 - `canDeploy`: `true`
 - `RENDER_API_KEY` present: `true`
 - `RENDER_SERVICE_ID` present: `true`
-- Auto-deploy confirmed: production SHA advanced from `1b0fe07a` → `ef6809ab` → `3388d5dd`.
+- Auto-deploy confirmed: production SHA advanced from `1b0fe07a` → `ef6809ab` → `3388d5dd` → `4d4f58c3`.
 
 ### Section 6: AI Provider — PASS
 - `providerReady`: `true`
 - Provider: `vercel_ai_gateway`
 - Model: `openai/gpt-4o`
-- `keyPrefix`: `vck_***`
+- `providerState`: `PROVIDER_READY`
+- `lastHttpStatus`: `200`
 - `rorkDependency`: `false`
 
 ### Section 7: Final Verification — PASS
-- `verified`: `true` (was `false`)
+- `verified`: `true`
 - `executionPath`: `github_git_data_api` (Git Data API — blobs → trees → commits → ref PATCH)
 - `renderEnvSafeMerge`: `true`
 - `deploymentDeduplication`: `true`
 - `liveWorkPersistence`: `true`
 
 ### Section 8: Final QA — PASS
-- `githubReady`: `true` (was `false`)
+- `githubReady`: `true`
 - `renderReady`: `true`
 - `aiProviderReady`: `true`
-- `toolRegistryReady`: `true` (was `false`)
-- `variablesValidated`: `true` (was `false`)
+- `toolRegistryReady`: `true`
+- `variablesValidated`: `true`
 - `verifiedAtRuntime`: `true`
 - `ownerAuthorized`: `true`
 - `intentRouterReady`: `true`
 - `liveWorkReady`: `true`
-- `deployedSha`: `3388d5dd`
+- `deployedSha`: `4d4f58c3`
 
 ### Section 9: Senior Developer Runtime — PASS
 - `enabled`: `true`
-- `variablesValidated`: `true` (was `false`)
-- `toolRegistryReady`: `true` (was `false`)
-- `commitSha`: `3388d5dd`
+- `variablesValidated`: `true`
+- `toolRegistryReady`: `true`
+- `commitSha`: `4d4f58c3`
 - `rorkDependency`: `false`
 
 ### Section 10: Public Endpoints — PASS
@@ -94,11 +105,12 @@ All 12 sections verified live against production (`https://api.ivxholding.com`).
 
 ### Section 11: Production Chat Test — PASS
 - Public chat endpoint returned `ok: true`
-- Model: `ivx-ia-conversation-brain`
-- Reply received (public endpoint uses fallback model, not owner AI intent router — owner-authenticated testing requires Supabase session token)
+- Source: `chatgpt` (primary AI provider, no longer fallback)
+- Model: `openai/gpt-4o`
+- Reply received
 
 ### Section 12: CI Job Details — PASS
-- All 4 active jobs passed (backend tests, chat tests, release consistency, secret scan)
+- All 4 active jobs passed on `4d4f58c3` (backend tests, chat tests, release consistency, secret scan)
 - APK build skipped (not requested in this run)
 
 ## Honest Agent Classification (unchanged from re-audit)
@@ -119,6 +131,7 @@ All 12 sections verified live against production (`https://api.ivxholding.com`).
 | #4 Leaked Render API key | `expo/scripts/fix-github-token.mjs` | Removed hardcoded `rnd_1H0X...` fallback; requires env var |
 | #5 Android version mismatch | `expo/android/app/build.gradle` + landing page | `1.4.37` → `1.4.38` (build.gradle + 4 landing page URLs) |
 | #6 Flaky timing test | `ivxChatPerformanceOptimizer.test.ts` | `toBeGreaterThan(0)` → `toBeGreaterThanOrEqual(0)` for `totalMs` |
+| #7 Revoked AI Gateway key | Render env var `OPENAI_API_KEY` | Replaced revoked `vck_` key with active Vercel AI Gateway v0 key |
 
 ## Commits Pushed
 
@@ -164,12 +177,25 @@ All 142 tests pass across 7 test suites:
 
 SHA parity confirmed: Local = GitHub = Production = `4d4f58c3`
 
+## Item 1: AI Gateway HTTP 401 Diagnosis — COMPLETE
+
+- **Diagnosis**: Production was using a revoked `vck_` Vercel AI Gateway key. All old keys showed `Revoked` in the Vercel dashboard; only the active v0 key remained.
+- **Fix**: Owner saved the active `vck_2rmv...AJ6Ac` key to Render as `OPENAI_API_KEY` and triggered a manual deploy.
+- **Verification**: After deploy, `providerState` changed from `AI_UNAVAILABLE` to `PROVIDER_VALIDATING`, then to `PROVIDER_READY` after a live chat request. `lastHttpStatus` changed from `401` to `200`. Public chat now returns `source: chatgpt` instead of `source: fallback`.
+
+## Item 2: Verify PROVIDER_READY State — COMPLETE
+
+- `providerState`: `PROVIDER_READY`
+- `lastHttpStatus`: `200`
+- `lastValidationTime`: `2026-07-25T23:15:35.577Z`
+- `providerReady`: `true`
+- `provider`: `vercel_ai_gateway`
+- `model`: `openai/gpt-4o`
+
 ## Remaining Items (owner action required)
 
-- [ ] Item 2: Verify PROVIDER_READY state — BLOCKED on AI key rotation on Render (vck_ key returns 401, state latched AI_UNAVAILABLE)
-- [ ] Item 3: Run 6 production prompts against authenticated owner endpoint — BLOCKED (env widget credentials not injecting into sandbox bash; Supabase session token unavailable)
-- [ ] Item 4: Run live chat QA on 4 platforms (Android, mobile web, desktop web, iOS) — BLOCKED (no device/emulator access in sandbox)
-- [ ] Item 1 partial: AI Gateway 401 root cause diagnosed (vck_ key expired), but key rotation must be done on Render dashboard by owner
+- [ ] Item 3: Run 6 authenticated production prompts — Send 6 real prompts from the IVX IA owner chat and share the responses.
+- [ ] Item 4: Live chat QA on 4 platforms — Test chat on Android app, mobile web, desktop web, and iOS; confirm each can send and receive a message.
 
 ## Brand standardization task (paused)
 
@@ -184,6 +210,6 @@ SHA parity confirmed: Local = GitHub = Production = `4d4f58c3`
 - [x] Phase 9 — Brand Governance (DONE)
 - [ ] Phase 10 — App Factory Brand Inheritance (PENDING)
 - [x] Phase 11 — QA Every Screen (AUDIT DONE)
-- [ ] Phase 12 — Build and Deploy (IN PROGRESS)
-- [ ] Phase 13 — Live Verification (PENDING)
+- [x] Phase 12 — Build and Deploy (DONE)
+- [ ] Phase 13 — Live Verification (IN PROGRESS — 4/6 items done)
 - [ ] Phase 14 — Final Evidence Report (PENDING)
