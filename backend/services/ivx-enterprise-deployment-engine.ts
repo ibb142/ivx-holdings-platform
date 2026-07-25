@@ -219,7 +219,7 @@ export async function getGitHubHeadSha(): Promise<{ sha: string | null; message:
   if (!token) return { sha: null, message: null, date: null, error: 'GITHUB_TOKEN not available' };
 
   try {
-    const res = await fetch(`${GITHUB_API}/repos/ibb142/rork-global-real-estate-invest/commits/main`, {
+    const res = await fetch(`${GITHUB_API}/repos/ibb142/ivx-holdings-platform/commits/main`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
     });
     if (!res.ok) return { sha: null, message: null, date: null, error: `GitHub API ${res.status}` };

@@ -23,7 +23,7 @@ function createMockFetch(responses: Array<{ match: (url: string, method: string)
 
 const GITHUB_TOKEN = 'ghp_testtoken123';
 const OWNER = 'ibb142';
-const REPO = 'rork-global-real-estate-invest';
+const REPO = 'ivx-holdings-platform';
 const BRANCH = 'main';
 const BASE_SHA = 'abc123def456abc123def456abc123def456abcd';
 const NEW_SHA = 'def789abc012def789abc012def789abc012defg';

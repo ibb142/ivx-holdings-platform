@@ -234,29 +234,36 @@ async function readInspectedFile(projectRoot: string, relPath: string): Promise<
   };
 }
 
+/**
+ * Run a read-only validation command under the IVX process watchdog so a
+ * nested subprocess tree can never hang the inspection. The whole process
+ * group is terminated on timeout or cancellation.
+ */
 async function runReadOnlyTestCommand(projectRoot: string, kind: 'run_tests' | 'typecheck'): Promise<IVXReadOnlyInspectionCommand> {
   const command = kind === 'run_tests'
     ? 'bun test backend/services/ivx-ia-reliability-gate.test.ts'
     : 'bun x tsc --noEmit';
   const startedAt = Date.now();
   try {
-    // Use Bun's subprocess API via a dynamic import so this stays portable.
-    const { spawn } = await import('node:child_process') as typeof import('node:child_process');
-    const child = spawn(command.split(' ')[0], command.split(' ').slice(1), {
+    const { runWithWatchdog } = await import('./ivx-process-watchdog.js') as typeof import('./ivx-process-watchdog.js');
+    const result = await runWithWatchdog(command, {
+      timeoutMs: 45_000,
       cwd: projectRoot,
-      env: { ...process.env, CI: 'true', FORCE_COLOR: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 45_000,
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString(); if (stdout.length > 4096) stdout = stdout.slice(-4096); });
-    child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); if (stderr.length > 4096) stderr = stderr.slice(-4096); });
-    const exitCode = await new Promise<number>((resolve) => {
-      child.on('close', (code) => resolve(typeof code === 'number' ? code : 0));
-      child.on('error', () => resolve(1));
-    });
-    const preview = truncate((stdout + (stderr ? `\n[stderr]\n${stderr}` : '')).trim(), COMMAND_OUTPUT_PREVIEW_CHARS);
+    const durationMs = Date.now() - startedAt;
+    const preview = truncate((result.stdoutTail + (result.stderrTail ? `\n[stderr]\n${result.stderrTail}` : '')).trim(), COMMAND_OUTPUT_PREVIEW_CHARS);
+    if (result.status === 'timed_out' || result.status === 'cancelled' || result.status === 'spawn_error') {
+      return {
+        command,
+        kind,
+        ok: false,
+        exitCode: null,
+        outputPreview: preview,
+        error: result.status === 'spawn_error' ? result.error : result.status,
+        durationMs,
+      };
+    }
+    const exitCode = result.exitCode ?? 0;
     return {
       command,
       kind,
@@ -264,7 +271,7 @@ async function runReadOnlyTestCommand(projectRoot: string, kind: 'run_tests' | '
       exitCode,
       outputPreview: preview,
       error: exitCode === 0 ? null : `exit ${exitCode}`,
-      durationMs: Date.now() - startedAt,
+      durationMs,
     };
   } catch (error) {
     return {

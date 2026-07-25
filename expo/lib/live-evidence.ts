@@ -286,7 +286,7 @@ async function checkGitHubEvidence(
       });
       return {
         status: 'fail',
-        repo: 'ibb142/rork-global-real-estate-invest',
+        repo: 'ibb142/ivx-holdings-platform',
         branch: '',
         latestCommitSha: '',
         commitShort: '',
@@ -297,7 +297,7 @@ async function checkGitHubEvidence(
 
     const result: GitHubEvidenceResult = {
       status: 'ok',
-      repo: 'ibb142/rork-global-real-estate-invest',
+      repo: 'ibb142/ivx-holdings-platform',
       branch: 'main',
       latestCommitSha: (data.commit as string) || '',
       commitShort: ((data.commitShort as string) || (data.commit as string) || '').slice(0, 8),
@@ -326,7 +326,7 @@ async function checkGitHubEvidence(
     });
     return {
       status: 'fail',
-      repo: 'ibb142/rork-global-real-estate-invest',
+      repo: 'ibb142/ivx-holdings-platform',
       branch: '',
       latestCommitSha: '',
       commitShort: '',
@@ -1057,7 +1057,7 @@ export async function runSingleEvidenceCheck(
 /** Builds a structured proof report object. */
 export function buildProofReport(report: LiveEvidenceReport): Record<string, unknown> {
   return {
-    REPO: report.github.repo || 'ibb142/rork-global-real-estate-invest',
+    REPO: report.github.repo || 'ibb142/ivx-holdings-platform',
     BRANCH: report.github.branch || 'main',
     LATEST_GITHUB_COMMIT: report.github.latestCommitSha || report.health.liveCommitSha,
     RENDER_SERVICE: report.render.service,

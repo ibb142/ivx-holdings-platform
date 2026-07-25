@@ -556,21 +556,8 @@ function mapMessageRow(
   };
 }
 
-// CANONICAL ORDER: server created_at ASC, then id ASC as a stable tiebreak.
-// Using only the timestamp allowed visible reordering when two messages share
-// the same millisecond (bulk inserts, fast owner+assistant turns) because the
-// array's pre-sort order (network arrival order) was used as the de-facto
-// tiebreak, which is not guaranteed stable across reconnects/pagination/
-// re-fetches. Comparing the id string as the secondary key makes this sort
-// deterministic and matches the canonical order enforced in chat.tsx's
-// in-memory `allMessages` merge, so paginated/initial loads never briefly
-// disagree with the post-merge render order.
 function sortMessages(left: ChatMessage, right: ChatMessage): number {
-  const timeDiff = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-  if (timeDiff !== 0) {
-    return timeDiff;
-  }
-  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+  return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
 }
 
 function isSchemaMissingError(error: ErrorLike | null | undefined): boolean {

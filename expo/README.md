@@ -4,7 +4,7 @@ This is the IVX Holdings native cross-platform mobile app. It is owned, built,
 deployed, and operated by IVX Holdings (owner: iperez4242@gmail.com).
 
 The canonical production repository is
-[github.com/ibb142/rork-global-real-estate-invest](https://github.com/ibb142/rork-global-real-estate-invest).
+[github.com/ibb142/ivx-holdings-platform](https://github.com/ibb142/ivx-holdings-platform).
 
 ## Repo history note
 

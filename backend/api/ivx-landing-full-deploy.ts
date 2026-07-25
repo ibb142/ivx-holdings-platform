@@ -142,7 +142,7 @@ function tryReadBrandAsset(filename: string): Buffer | null {
 }
 
 async function fetchBrandAssetFromGitHub(filename: string): Promise<Buffer | null> {
-  const repoUrl = readEnv('GITHUB_REPO_URL') || 'https://github.com/ibb142/rork-global-real-estate-invest';
+  const repoUrl = readEnv('GITHUB_REPO_URL') || 'https://github.com/ibb142/ivx-holdings-platform';
   const token = readEnv('GITHUB_TOKEN') || '';
   const repoPath = repoUrl.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
   const apiUrl = `https://api.github.com/repos/${repoPath}/contents/expo/assets/images/${encodeURIComponent(filename)}?ref=main`;

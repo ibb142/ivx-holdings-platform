@@ -43,7 +43,7 @@ async function phase0() {
     fetch(`${BACKEND_URL}/health`),
     fetch(`${BACKEND_URL}/version`),
     fetch(`https://api.render.com/v1/services/${RENDER_SERVICE_ID}`, { headers: { Authorization: `Bearer ${RENDER_KEY}`, Accept: 'application/json' } }),
-    fetch('https://api.github.com/repos/ibb142/rork-global-real-estate-invest', { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' } }),
+    fetch('https://api.github.com/repos/ibb142/ivx-holdings-platform', { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' } }),
   ]);
   p.health = { status: health.status, body: health.body?.slice(0, 300) };
   const vj = j(version.body || '');
@@ -57,7 +57,7 @@ async function phase0() {
   const ghj = j(ghRepo.body || '');
   p.github = { status: ghRepo.status, repo: ghj?.full_name, private: ghj?.private, defaultBranch: ghj?.default_branch, pushedAt: ghj?.pushed_at };
   // latest commit
-  const ghCommits = await fetch('https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits?per_page=1', { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' } });
+  const ghCommits = await fetch('https://api.github.com/repos/ibb142/ivx-holdings-platform/commits?per_page=1', { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' } });
   const ghc = j(ghCommits.body || '');
   p.latestCommit = ghc?.[0] ? { sha: ghc[0].sha, message: ghc[0].commit?.message?.slice(0,120), date: ghc[0].commit?.author?.date } : null;
   p.commitMatch = (p.latestDeploy?.commit && p.latestCommit?.sha && p.latestDeploy.commit === p.latestCommit.sha.slice(0,8)) || false;

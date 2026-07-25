@@ -76,7 +76,7 @@ describe('IVX Autonomous Coder — engine loop', () => {
 
     const commitFn = async (_filePaths: string[], _branch: string) => ({
       commitSha: 'fake-commit-sha-abc123',
-      commitUrl: 'https://github.com/ibb142/rork-global-real-estate-invest/commit/fake-commit-sha-abc123',
+      commitUrl: 'https://github.com/ibb142/ivx-holdings-platform/commit/fake-commit-sha-abc123',
       branch: 'main',
     });
 
@@ -572,7 +572,7 @@ describe('IVX Autonomous Coder — deterministic pilot fallback (Phase 3)', () =
     });
     const commitFn = async (_filePaths: string[], _branch: string) => ({
       commitSha: 'pilot-fallback-commit-sha-001',
-      commitUrl: 'https://github.com/ibb142/rork-global-real-estate-invest/commit/pilot-fallback-commit-sha-001',
+      commitUrl: 'https://github.com/ibb142/ivx-holdings-platform/commit/pilot-fallback-commit-sha-001',
       branch: 'main',
     });
     const input: IVXAutonomousCoderInput = {

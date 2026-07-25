@@ -399,7 +399,7 @@ export default function DataRecoveryScreen() {
         {/* DR Runbook Link */}
         <TouchableOpacity
           style={styles.runbookButton}
-          onPress={() => Linking.openURL('https://github.com/ibb142/rork-global-real-estate-invest/blob/main/docs/DISASTER-RECOVERY-RUNBOOK.md')}
+          onPress={() => Linking.openURL('https://github.com/ibb142/ivx-holdings-platform/blob/main/docs/DISASTER-RECOVERY-RUNBOOK.md')}
         >
           <FileText size={20} color={GOLD} />
           <Text style={styles.runbookText}>Open Disaster Recovery Runbook</Text>

@@ -139,7 +139,7 @@ export async function compareCommits(): Promise<{
   match: boolean;
 }> {
   const GITHUB_API = 'https://api.github.com';
-  const repo = 'ibb142/rork-global-real-estate-invest';
+  const repo = 'ibb142/ivx-holdings-platform';
   const token = (process.env.GITHUB_TOKEN ?? '').trim();
 
   const commits: CommitComparison[] = [];

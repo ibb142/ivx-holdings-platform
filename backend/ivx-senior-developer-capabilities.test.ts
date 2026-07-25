@@ -22,7 +22,7 @@ import {
   runRenderGetLogs,
 } from './api/ivx-developer-deploy-control';
 
-const TEST_REPO_URL = 'https://github.com/ibb142/rork-global-real-estate-invest';
+const TEST_REPO_URL = 'https://github.com/ibb142/ivx-holdings-platform';
 const hasGithubToken = Boolean((process.env.GITHUB_TOKEN ?? '').trim());
 
 // ─── github_read_file ──────────────────────────────────────────────────────

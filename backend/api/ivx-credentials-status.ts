@@ -70,7 +70,7 @@ async function safeFetch(url: string, init?: RequestInit): Promise<{ status: num
 function repoSlugFromUrl(): string {
   const raw = envClean('GITHUB_REPO_URL');
   const match = raw.match(/github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?(?:[\s/]|$)/);
-  return match ? match[1] : 'ibb142/rork-global-real-estate-invest';
+  return match ? match[1] : 'ibb142/ivx-holdings-platform';
 }
 
 async function testGitHub(): Promise<CredentialRow> {

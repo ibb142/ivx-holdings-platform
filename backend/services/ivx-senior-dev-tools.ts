@@ -16,8 +16,8 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { runWithWatchdog } from './ivx-process-watchdog.js';
 import { pathToFileURL } from 'node:url';
 import { listIncidents, getIncident, type IVXIncident } from './ivx-incident-store';
 import { diagnoseIncident } from './ivx-repair-brain';
@@ -361,25 +361,28 @@ export async function toolPatchGenerate(input: { incidentId?: string }) {
   };
 }
 
+/**
+ * Run a subprocess under the IVX process watchdog. The watchdog launches the
+ * command in its own process group and terminates the full tree on timeout,
+ * so a nested subprocess can never pin the worker. We keep the same return
+ * shape (code/out/err/timedOut) so callers are unchanged.
+ */
 function runProcess(cmd: string, args: string[], timeoutMs: number): Promise<{ code: number | null; out: string; err: string; timedOut: boolean }> {
   // Resolve an ABSOLUTE executable path so child_process never throws ENOENT
   // when the bare command name (bun/bunx) is not on the spawned PATH.
   const resolution = resolveRuntimeCommand(cmd as RuntimeName);
   const resolvedCmd = resolution.resolvedPath ?? cmd;
-  return new Promise((resolve) => {
-    const child = spawn(resolvedCmd, args, { cwd: REPO_ROOT, env: process.env });
-    let out = '';
-    let err = '';
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try { child.kill('SIGTERM'); } catch { /* ignore */ }
-    }, timeoutMs);
-    child.stdout.on('data', (b: Buffer) => { out += b.toString('utf8'); if (out.length > 64 * 1024) out = out.slice(-64 * 1024); });
-    child.stderr.on('data', (b: Buffer) => { err += b.toString('utf8'); if (err.length > 64 * 1024) err = err.slice(-64 * 1024); });
-    child.on('close', (code) => { clearTimeout(timer); resolve({ code, out, err, timedOut }); });
-    child.on('error', (e) => { clearTimeout(timer); resolve({ code: null, out, err: err + '\n' + (e instanceof Error ? e.message : ''), timedOut }); });
-  });
+  const fullCommand = `${resolvedCmd} ${args.join(' ')}`;
+  return runWithWatchdog(fullCommand, { timeoutMs, cwd: REPO_ROOT })
+    .then((result) => {
+      if (result.status === 'timed_out' || result.status === 'cancelled') {
+        return { code: null, out: result.stdoutTail, err: result.stderrTail, timedOut: true };
+      }
+      if (result.status === 'spawn_error') {
+        return { code: null, out: result.stdoutTail, err: result.stderrTail + '\n' + result.error, timedOut: false };
+      }
+      return { code: result.exitCode, out: result.stdoutTail, err: result.stderrTail, timedOut: false };
+    });
 }
 
 /** Established, proven-safe smoke target (mirrors `runValidations` in the senior-developer runtime). */

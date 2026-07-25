@@ -160,7 +160,7 @@ async function main() {
     : { status: deploysRes.status, error: deploysRes.error };
 
   // 8. GitHub repo
-  const ghRes = await fetchJson('https://api.github.com/repos/ibb142/rork-global-real-estate-invest', {
+  const ghRes = await fetchJson('https://api.github.com/repos/ibb142/ivx-holdings-platform', {
     headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' },
   });
   evidence.steps.githubRepo = {
@@ -172,7 +172,7 @@ async function main() {
   };
 
   // 9. GitHub latest commit on main
-  const ghCommit = await fetchJson('https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/main', {
+  const ghCommit = await fetchJson('https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main', {
     headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' },
   });
   evidence.steps.githubLatestCommit = {

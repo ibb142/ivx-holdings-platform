@@ -699,7 +699,7 @@ async function auditProductionHealth(apiBase: string): Promise<AuditModuleResult
   // GitHub HEAD
   let githubHead: string | null = null;
   try {
-    const { status, body } = await fetchJson('https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits/HEAD');
+    const { status, body } = await fetchJson('https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/HEAD');
     githubHead = (body?.sha as string)?.slice(0, 14) ?? null;
     checks.push({
       name: 'github_head_resolved',

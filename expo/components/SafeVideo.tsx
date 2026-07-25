@@ -190,7 +190,7 @@ export default function SafeVideo({
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           ) : (
-            <Text style={styles.unavailableText}>Video unavailable</Text>
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
           )}
         </View>
       )}
@@ -224,10 +224,5 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 14,
     fontWeight: '700' as const,
-  },
-  unavailableText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
-    fontWeight: '600' as const,
   },
 });

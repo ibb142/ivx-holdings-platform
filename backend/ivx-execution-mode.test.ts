@@ -200,7 +200,7 @@ describe('FINAL IVX IA CHAT EXECUTION MODE', () => {
           buildRun: true,
           commitCreated: true,
           commitSha: 'abc123def456',
-          commitUrl: 'https://github.com/ibb142/rork-global-real-estate-invest/commit/abc123def456',
+          commitUrl: 'https://github.com/ibb142/ivx-holdings-platform/commit/abc123def456',
           pushed: true,
           branch: 'main',
           deployId: 'dep-d7t9ivreo5us73ftose0',

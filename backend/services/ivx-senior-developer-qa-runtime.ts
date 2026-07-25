@@ -306,41 +306,64 @@ async function inspectSourceFiles(
 }
 
 /**
- * Run a shell command and capture stdout/stderr/exitCode.
+ * Run a shell command under the IVX process watchdog and capture
+ * stdout/stderr/exitCode. The watchdog launches the command in its own
+ * process group and terminates the full tree on timeout or cancellation,
+ * so a nested lint subprocess can never pin the worker at VERIFYING.
  */
 async function runCommand(
   projectRoot: string,
   command: string,
   kind: IVXQACommand['kind'],
+  abortSignal?: AbortSignal,
 ): Promise<IVXQACommand> {
   const startedAt = Date.now();
   try {
-    const { spawn } = await import('node:child_process') as typeof import('node:child_process');
-    const parts = command.split(' ');
-    const child = spawn(parts[0], parts.slice(1), {
+    const { runWithWatchdog } = await import('./ivx-process-watchdog.js') as typeof import('./ivx-process-watchdog.js');
+    const result = await runWithWatchdog(command, {
+      timeoutMs: COMMAND_TIMEOUT_MS,
       cwd: projectRoot,
-      env: { ...process.env, CI: 'true', FORCE_COLOR: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: COMMAND_TIMEOUT_MS,
+      abortSignal,
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-      if (stdout.length > 8192) stdout = stdout.slice(-8192);
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-      if (stderr.length > 4096) stderr = stderr.slice(-4096);
-    });
-    const exitCode = await new Promise<number>((resolve) => {
-      child.on('close', (code) => resolve(typeof code === 'number' ? code : 0));
-      child.on('error', () => resolve(1));
-    });
+    const durationMs = Date.now() - startedAt;
     const preview = truncate(
-      (stdout + (stderr ? `\n[stderr]\n${stderr}` : '')).trim(),
+      (result.stdoutTail + (result.stderrTail ? `\n[stderr]\n${result.stderrTail}` : '')).trim(),
       COMMAND_OUTPUT_PREVIEW_CHARS,
     );
+    if (result.status === 'timed_out') {
+      return {
+        command,
+        kind,
+        ok: false,
+        exitCode: null,
+        outputPreview: preview,
+        error: `timed_out after ${result.timeoutMs}ms (${result.signal})`,
+        durationMs,
+      };
+    }
+    if (result.status === 'cancelled') {
+      return {
+        command,
+        kind,
+        ok: false,
+        exitCode: null,
+        outputPreview: preview,
+        error: `cancelled (${result.signal})`,
+        durationMs,
+      };
+    }
+    if (result.status === 'spawn_error') {
+      return {
+        command,
+        kind,
+        ok: false,
+        exitCode: null,
+        outputPreview: preview,
+        error: result.error,
+        durationMs,
+      };
+    }
+    const exitCode = result.exitCode ?? 0;
     return {
       command,
       kind,
@@ -348,7 +371,7 @@ async function runCommand(
       exitCode,
       outputPreview: preview,
       error: exitCode === 0 ? null : `exit ${exitCode}`,
-      durationMs: Date.now() - startedAt,
+      durationMs,
     };
   } catch (error) {
     return {

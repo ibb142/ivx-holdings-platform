@@ -1113,7 +1113,6 @@ import {
   handleSeniorDevWorkerSubmit,
 } from './api/ivx-senior-dev-worker';
 import { handleCreateDeploymentApproval } from './api/ivx-deployment-approvals';
-import { handleGenerateWorkerAccessRequest, OPTIONS as workerAccessOptions } from './api/ivx-worker-access';
 import {
   handleVideoJobCreate,
   handleVideoJobGet,
@@ -1890,7 +1889,7 @@ function buildRenderHeaders(apiKey: string): HeadersInit {
   };
 }
 
-const TARGET_GITHUB_REPO = 'ibb142/rork-global-real-estate-invest';
+const TARGET_GITHUB_REPO = 'ibb142/ivx-holdings-platform';
 const TARGET_GITHUB_REPO_URL = `https://github.com/${TARGET_GITHUB_REPO}`;
 const TARGET_BRANCH = 'main';
 
@@ -3159,8 +3158,6 @@ app.post('/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(c
 app.post('/api/ivx/owner-ai/tools', async (context) => handleIVXOwnerAIToolRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerEnqueueRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/deployment-approvals', async (context) => handleCreateDeploymentApproval(context.req.raw));
-app.options('/api/ivx/senior-developer/generate-worker-access', () => workerAccessOptions());
-app.post('/api/ivx/senior-developer/generate-worker-access', async (context) => handleGenerateWorkerAccessRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/internal-deployment-authorizations/consume', async (context) => handleInternalDeploymentAuthorizationConsumeRequest(context.req.raw));
 app.post('/api/ivx/senior-developer/autonomous-worker/jobs', async (context) => handleSeniorDevWorkerSubmit(context.req.raw));
 app.get('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId', async (context) => handleSeniorDevWorkerStatus(context.req.raw, context.req.param('taskId')));
@@ -6093,7 +6090,7 @@ app.post('/api/ivx/autonomous/monitor/run', async (c) => {
   const { runChecksForCadence } = await import('./services/ivx-production-monitor');
   const body = await c.req.json().catch(() => ({}));
   const cadence = body.cadence || '5min';
-  const baseUrl = 'https://api.ivxholding.com';
+  const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://api.ivxholding.com';
   const results = await runChecksForCadence(cadence, {
     baseUrl,
     landingUrl: 'https://ivxholding.com',

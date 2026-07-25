@@ -25,6 +25,7 @@ import {
   ArrowDownRight,
   Search,
   X,
+  Crown,
   UserPlus,
   Percent,
   Handshake,
@@ -74,7 +75,6 @@ import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
-import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { getAdminMemberRegistrySnapshot, type AdminMemberRegistrySnapshot } from '@/lib/member-registry';
 import { getDeployAccessDiagnostic } from '@/lib/landing-deploy';
 import { getAutoDeployStatus } from '@/lib/auto-deploy';
@@ -105,7 +105,7 @@ const adminTeamMembers = [
 
 const ADMIN_MODULES = [
   { id: 'system-map', name: 'System Blueprint', icon: Network, route: '/admin/system-map', category: 'Core', keywords: 'blueprint system map architecture live health network diagram' },
-  { id: 'owner-controls', name: 'Owner Controls', icon: IVXBrandIcon, route: '/admin/owner-controls', category: 'Core', keywords: 'owner admin controls master settings' },
+  { id: 'owner-controls', name: 'Owner Controls', icon: Crown, route: '/admin/owner-controls', category: 'Core', keywords: 'owner admin controls master settings' },
   { id: 'access-control', name: 'Access Control', icon: Shield, route: '/admin/access-control', category: 'Core', keywords: 'access control roles permissions users screens rbac security manage assign revoke' },
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, route: '/admin/dashboard', category: 'Core', keywords: 'dashboard overview summary' },
   { id: 'business-overview', name: 'Business Overview', icon: BarChart3, route: '/admin/business-overview', category: 'Core', keywords: 'business overview members investors deals capital raised kyc system health' },
@@ -659,7 +659,7 @@ export default function AdminDashboard() {
           <View style={styles.auditGrid}>
             <View style={styles.auditSectionCard}>
               <View style={styles.auditSectionHeaderRow}>
-                <IVXBrandIcon size={16} />
+                <Crown size={16} color={Colors.primary} />
                 <Text style={styles.auditSectionTitle}>Owner recognition</Text>
               </View>
               {ownerAuditRows.map((item) => (
@@ -706,7 +706,7 @@ export default function AdminDashboard() {
               <Text style={styles.auditQuickBtnText}>Owner Access</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.auditQuickBtn} onPress={() => router.push('/admin/owner-controls' as any)} testID="admin-live-audit-owner-btn">
-              <IVXBrandIcon size={16} />
+              <Crown size={16} color={Colors.text} />
               <Text style={styles.auditQuickBtnText}>Owner Controls</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.auditQuickBtn} onPress={() => router.push('/admin/members' as any)} testID="admin-live-audit-members-btn">

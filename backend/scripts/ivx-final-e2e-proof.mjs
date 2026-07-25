@@ -57,7 +57,7 @@ async function postJson(path, payload, headers = {}) {
 async function main() {
   const result = { timestamp: new Date().toISOString() };
 
-  result.github = await fetch('https://api.github.com/repos/ibb142/rork-global-real-estate-invest/commits?per_page=1', { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' } });
+  result.github = await fetch('https://api.github.com/repos/ibb142/ivx-holdings-platform/commits?per_page=1', { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'IVX-Audit' } });
   const ghCommits = j(result.github.body || '[]');
   result.latestCommit = ghCommits?.[0] ? { sha: ghCommits[0].sha, message: ghCommits[0].commit?.message?.slice(0, 120), date: ghCommits[0].commit?.author?.date } : null;
 

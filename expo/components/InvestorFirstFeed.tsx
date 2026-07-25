@@ -30,10 +30,6 @@ import type { JVAgreement } from '@/types/jv';
 import { toggleProjectLike, trackProjectShare } from '@/lib/project-engagement';
 import { toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
 import { resolveDealPhotos } from '@/lib/parse-deal';
-import { buildOwnershipSnapshot } from '@/lib/ownership-math';
-import { resolveDealTrustMarket } from '@/lib/parse-deal';
-import { resolveCanonicalDealIdentity } from '@/lib/deal-identity';
-import { buildTimelineSummary, type TimelineSummary } from '@/lib/timeline-stages';
 
 /** Per-card error boundary so one bad card never crashes the home feed */
 class CardBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -52,7 +48,7 @@ class CardBoundary extends Component<{ children: ReactNode }, { hasError: boolea
   }
 }
 
-/** Map a HomeFeedDeal + local JV deal to InvestmentCardData with full investment details */
+/** Map a HomeFeedDeal + local JV deal to InvestmentCardData */
 function homeFeedDealToInvestmentCard(
   deal: HomeFeedDeal,
   local: JVAgreement | undefined,
@@ -74,36 +70,13 @@ function homeFeedDealToInvestmentCard(
     photos = [deal.photo_url];
   }
 
-  // Resolve investment details from local JV deal or home feed deal
-  const rawDeal: Record<string, unknown> = local
-    ? (local as unknown as Record<string, unknown>)
-    : { id: deal.id, name: deal.name, expected_roi: deal.expected_roi, total_investment: deal.investment_amount, deal_type: deal.deal_type, status: deal.status, city: deal.city, created_at: deal.created_at };
-
-  const identity = resolveCanonicalDealIdentity(rawDeal);
-  const trustMarket = resolveDealTrustMarket(rawDeal);
-  const ownershipSnapshot = buildOwnershipSnapshot(trustMarket.minInvestment, trustMarket.salePrice);
-
-  // Build timeline summary from trust market data
-  const timelineSummary: TimelineSummary | null = buildTimelineSummary(
-    trustMarket.timelineMin,
-    trustMarket.timelineMax,
-    trustMarket.timelineUnit,
-    (rawDeal.timeline_stages as any) ?? null,
-    (rawDeal.created_at as string) ?? deal.created_at ?? null,
-  );
-
-  const salePrice = trustMarket.explicitSalePrice ?? trustMarket.salePrice ?? null;
-  const totalInvestment = local?.totalInvestment ?? deal.investment_amount ?? null;
-  const minInvestment = deal.min_investment ?? trustMarket.minInvestment ?? local?.poolTiers?.[0]?.minInvestment ?? null;
-  const fractionalStart = minInvestment ?? trustMarket.fractionalSharePrice ?? null;
-
   return {
     dealId: deal.id,
-    title: deal.name ?? identity.title ?? 'IVX Investment',
+    title: deal.name ?? 'IVX Investment',
     location: deal.city ?? null,
     photos,
     roi: deal.expected_roi ? parseFloat(deal.expected_roi) : (local?.expectedROI ?? null),
-    minimumInvestment: minInvestment,
+    minimumInvestment: deal.min_investment ?? (local?.poolTiers?.[0]?.minInvestment ?? null),
     status: deal.status ?? 'published',
     category: deal.deal_type ?? (local?.type ?? null),
     dealUrl: deal.url ?? null,
@@ -113,18 +86,6 @@ function homeFeedDealToInvestmentCard(
     shareCount: 0,
     isLiked: false,
     isSaved: false,
-    // Restored old-card investment details
-    salePrice: salePrice && salePrice > 0 ? salePrice : null,
-    totalInvestment: totalInvestment && totalInvestment > 0 ? totalInvestment : null,
-    timelineMin: trustMarket.timelineMin ?? null,
-    timelineMax: trustMarket.timelineMax ?? null,
-    timelineUnit: trustMarket.timelineUnit ?? null,
-    minimumOwnershipPercent: ownershipSnapshot.ownershipPercent > 0 ? ownershipSnapshot.ownershipPercent : null,
-    fractionalStartAmount: fractionalStart && fractionalStart > 0 ? fractionalStart : null,
-    developerName: identity.developerName ?? null,
-    developerLogo: null,
-    investmentDetails: (rawDeal.description as string) ?? (rawDeal.description_short as string) ?? null,
-    timelineSummary,
   };
 }
 
@@ -136,13 +97,10 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
   openQuickBuy: (deal: JVAgreement) => void;
 }) {
   const router = useRouter();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth } = useWindowDimensions();
   const [muted, setMuted] = React.useState<boolean>(true);
   const padH = isXs ? 16 : 20;
-  // Instagram Reels sizing: vertical 9:16 card (width * 16/9), capped so it
-  // always fits within the viewport like the Instagram feed player.
-  const reelWidth = screenWidth - padH * 2;
-  const feedHeight = Math.min(Math.round(reelWidth * (16 / 9)), Math.round(screenHeight * 0.82));
+  const feedHeight = Math.min(screenWidth - padH * 2, 520);
 
   const homeFeedQuery = useQuery({
     queryKey: ['ivx-home-feed'],

@@ -382,7 +382,7 @@ function resolveCredential(
 }
 
 /** The only repository production is authorized to deploy from (owner spec). */
-export const IVX_AUTHORIZED_GITHUB_REPO = 'ibb142/rork-global-real-estate-invest';
+export const IVX_AUTHORIZED_GITHUB_REPO = 'ibb142/ivx-holdings-platform';
 
 /** Variable name a repo identity was resolved from — evidence, never a secret. */
 export type RepoIdentitySourceVar =
@@ -416,7 +416,7 @@ function parseRepoUrl(url: string): string {
  * IVX_GITHUB_REPO, GITHUB_REPOSITORY, GITHUB_OWNER, and
  * GITHUB_REPO_URL / IVX_GITHUB_REPO_URL (the variable production actually sets).
  * Also reports whether the resolved slug matches the authorized production
- * repository (IVX_AUTHORIZED_GITHUB_REPO env override, default ibb142/rork-global-real-estate-invest).
+ * repository (IVX_AUTHORIZED_GITHUB_REPO env override, default ibb142/ivx-holdings-platform).
  */
 export function resolveGithubRepoIdentity(env: Record<string, string | undefined>): ResolvedRepoIdentity {
   const authorizedRepo = (env.IVX_AUTHORIZED_GITHUB_REPO ?? '').trim() || IVX_AUTHORIZED_GITHUB_REPO;
@@ -819,9 +819,9 @@ export function ownerActionFor(blockerCode: BlockerCode): string {
     case 'GITHUB_TOKEN_REVOKED':
       return 'Generate a new GitHub personal access token with repo / contents:write permission and save it in the secure owner variable store as GITHUB_TOKEN.';
     case 'GITHUB_REPO_INVALID':
-      return 'Set GITHUB_REPO to the exact "owner/repo" string (e.g. ibb142/rork-global-real-estate-invest) in the runtime environment.';
+      return 'Set GITHUB_REPO to the exact "owner/repo" string (e.g. ibb142/ivx-holdings-platform) in the runtime environment.';
     case 'GITHUB_REPO_UNAUTHORIZED':
-      return 'The resolved repository is not the authorized IVX production repository. Point GITHUB_REPO / GITHUB_REPO_URL at ibb142/rork-global-real-estate-invest (or update IVX_AUTHORIZED_GITHUB_REPO if the authorized repository legitimately changed).';
+      return 'The resolved repository is not the authorized IVX production repository. Point GITHUB_REPO / GITHUB_REPO_URL at ibb142/ivx-holdings-platform (or update IVX_AUTHORIZED_GITHUB_REPO if the authorized repository legitimately changed).';
     case 'RENDER_KEY_MISSING':
       return 'Set IVX_RENDER_API_KEY (or fallback RENDER_API_KEY) in the Render environment variables or secure owner variable store.';
     case 'RENDER_SERVICE_ID_INVALID':

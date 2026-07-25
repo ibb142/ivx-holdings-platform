@@ -198,7 +198,7 @@ export async function createOwnerActionRequest(input: CreateOwnerActionInput): P
     deadline: input.deadline ?? null,
     urgency: input.urgency ?? 'high',
     resumeDeepLink: `https://ivxholding.com/admin?traceId=${traceId}`,
-    repository: input.repository ?? 'ibb142/rork-global-real-estate-invest',
+    repository: input.repository ?? 'ibb142/ivx-holdings-platform',
     branch: input.branch ?? 'main',
     commitSha: input.commitSha ?? null,
     deploymentId: input.deploymentId ?? null,
@@ -464,7 +464,7 @@ export async function handleVerifyOwnerAction(req: Request, traceId: string): Pr
     if (verifyType === 'github_sync') {
       // Check if GitHub HEAD matches the expected commit
       const expectedSha = typeof body.expectedSha === 'string' ? body.expectedSha.trim() : null;
-      const repo = typeof body.repo === 'string' ? body.repo.trim() : 'ibb142/rork-global-real-estate-invest';
+      const repo = typeof body.repo === 'string' ? body.repo.trim() : 'ibb142/ivx-holdings-platform';
 
       const result = await verifyOwnerAction(traceId, async () => {
         try {

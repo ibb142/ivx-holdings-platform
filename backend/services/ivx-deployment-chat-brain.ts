@@ -49,7 +49,7 @@ interface QAResult {
 
 const PRODUCTION_API = 'https://api.ivxholding.com';
 const DEFAULT_SERVICE_ID = 'srv-d7t9ivreo5us73ftose0';
-const DEFAULT_REPO = 'ibb142/rork-global-real-estate-invest';
+const DEFAULT_REPO = 'ibb142/ivx-holdings-platform';
 
 function nowIso(): string {
   return new Date().toISOString();

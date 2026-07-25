@@ -20,11 +20,11 @@ export const IVX_LOGO_MASTER = require('@/assets/images/ivx-logo.png');
 /** Transparent-background variant (gold symbol + wordmark only). */
 export const IVX_LOGO_TRANSPARENT = require('@/assets/images/ivx-logo-transparent.png');
 
-/** Horizontal layout (symbol left, wordmark right) — owner-approved official variant. Bundled locally (IVX independence: no external Rork CDN host). */
-export const IVX_LOGO_HORIZONTAL = require('@/assets/images/ivx-logo-horizontal.png');
+/** Horizontal layout (symbol left, wordmark right) — owner-approved official variant. */
+export const IVX_LOGO_HORIZONTAL = { uri: 'https://r2-pub.rork.com/projects/j2l8t44588ix9ns7b57mu/assets/02dc3859-abdd-4577-8360-2531e06ee2b0.png' };
 
-/** Stacked / vertical layout (symbol above wordmark) — owner-approved official variant. Bundled locally (IVX independence: no external Rork CDN host). */
-export const IVX_LOGO_STACKED = require('@/assets/images/ivx-logo-stacked.png');
+/** Stacked / vertical layout (symbol above wordmark) — owner-approved official variant. */
+export const IVX_LOGO_STACKED = { uri: 'https://r2-pub.rork.com/projects/j2l8t44588ix9ns7b57mu/assets/13a98cc9-5275-4104-8380-38ee2d5b1fca.png' };
 
 /** Gold symbol-only version (compact avatars, tab icons, small headers). */
 export const IVX_SYMBOL = require('@/assets/images/ivx-symbol.png');

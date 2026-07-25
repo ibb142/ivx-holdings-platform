@@ -15,8 +15,8 @@
  * the pipeline works even before the table exists.
  */
 import { promises as fs } from 'node:fs';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { runWithWatchdog } from './ivx-process-watchdog.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -115,23 +115,20 @@ function riskFor(capabilities: ExecutorCapability[]): RiskLevel {
 // Shell helper
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Run a shell command under the IVX process watchdog so a nested subprocess
+ * tree can never hang the executor. The whole process group is terminated on
+ * timeout. Returns the same shape callers expect.
+ */
 function runShell(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, {
-      cwd: opts.cwd ?? REPO_ROOT,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const fullCommand = `${cmd} ${args.join(' ')}`;
+  return runWithWatchdog(fullCommand, { timeoutMs: opts.timeoutMs ?? 60_000, cwd: opts.cwd ?? REPO_ROOT })
+    .then((result) => {
+      if (result.status === 'timed_out' || result.status === 'cancelled' || result.status === 'spawn_error') {
+        return { ok: false, stdout: result.stdoutTail, stderr: result.stderrTail, code: null };
+      }
+      return { ok: result.exitCode === 0, stdout: result.stdoutTail, stderr: result.stderrTail, code: result.exitCode };
     });
-    let stdout = '';
-    let stderr = '';
-    const timeout = setTimeout(() => {
-      try { child.kill('SIGKILL'); } catch { /* ignore */ }
-    }, opts.timeoutMs ?? 60_000);
-    child.stdout.on('data', (d) => { stdout += d.toString(); if (stdout.length > 200_000) stdout = stdout.slice(0, 200_000); });
-    child.stderr.on('data', (d) => { stderr += d.toString(); if (stderr.length > 100_000) stderr = stderr.slice(0, 100_000); });
-    child.on('error', (err) => { clearTimeout(timeout); resolve({ ok: false, stdout, stderr: stderr + err.message, code: null }); });
-    child.on('close', (code) => { clearTimeout(timeout); resolve({ ok: code === 0, stdout, stderr, code }); });
-  });
 }
 
 function safeResolve(rel: string): string | null {

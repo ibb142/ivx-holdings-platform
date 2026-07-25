@@ -410,7 +410,7 @@ async function loadLedger(): Promise<LedgerDoc> {
 // watches main) never fires from a ledger write. No secrets are stored.
 
 const LEDGER_GITHUB_BRANCH = 'ivx-proof-ledger';
-const DEFAULT_LEDGER_REPO = 'ibb142/rork-global-real-estate-invest';
+const DEFAULT_LEDGER_REPO = 'ibb142/ivx-holdings-platform';
 
 function ledgerGithubToken(): string {
   return typeof process.env.GITHUB_TOKEN === 'string' ? process.env.GITHUB_TOKEN.trim() : '';
@@ -1827,7 +1827,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       if (factoryCommitSha) {
         result.commitCreated = true;
         result.commitSha = factoryCommitSha;
-        result.commitUrl = `https://github.com/ibb142/rork-global-real-estate-invest/commit/${factoryCommitSha}`;
+        result.commitUrl = `https://github.com/ibb142/ivx-holdings-platform/commit/${factoryCommitSha}`;
         result.pushed = true;
       }
       result.factoryCommitDiagnostics = factoryCommitDiagnostics;

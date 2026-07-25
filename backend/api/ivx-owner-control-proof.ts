@@ -28,7 +28,7 @@ type ConnectivityProbe = {
 
 async function probeGitHub(): Promise<ConnectivityProbe> {
   const token = (process.env.GITHUB_TOKEN ?? '').trim();
-  const repo = (process.env.GITHUB_REPO ?? '').trim() || 'ibb142/rork-global-real-estate-invest';
+  const repo = (process.env.GITHUB_REPO ?? '').trim() || 'ibb142/ivx-holdings-platform';
   if (!token) {
     return { connected: false, detail: 'GITHUB_TOKEN not configured in backend runtime', httpStatus: null };
   }

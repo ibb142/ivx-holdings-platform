@@ -5,7 +5,6 @@ import {
   resolveIVXAuthenticatedRequest,
   type IVXAuthenticatedRequestContext,
 } from '../../expo/shared/ivx';
-import { verifyInternalWorkerSignature } from '../services/ivx-internal-deploy-auth';
 
 export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;
 
@@ -138,18 +137,6 @@ export function ownerOnlyOptions(): Response {
 export async function assertIVXOwnerOnly(request: Request): Promise<IVXOwnerRequestContext> {
   if (checkIVXAISystemKey(request)) {
     return makeSystemOwnerRequestContext();
-  }
-  // Signed internal-worker requests (HMAC over X-IVX-Worker-ID/Timestamp/Nonce,
-  // using the same IVX_INTERNAL_WORKER_ID/IVX_INTERNAL_DEPLOY_SECRET already
-  // provisioned on the dedicated worker service) are accepted as a read-only
-  // owner-equivalent identity. This lets the worker authenticate its own calls
-  // back to owner-gated status endpoints (e.g. runLiveFeatureTest) without a
-  // borrowed/expired Supabase session.
-  if (request.headers.get('X-IVX-Worker-ID') && request.headers.get('X-IVX-Deploy-Signature')) {
-    const verified = await verifyInternalWorkerSignature(request);
-    if (verified.ok) {
-      return makeSystemOwnerRequestContext();
-    }
   }
   return await resolveIVXAuthenticatedRequest(request, '[IVXOwnerOnly]');
 }

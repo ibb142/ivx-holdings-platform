@@ -185,6 +185,35 @@ export function classifyExecutionModeIntent(prompt: string): IVXExecutionModeCla
     };
   }
 
+  // ── Execution-imperative override (owner 2026-07-20) ────────────────────
+  // Prompts like "audit this chat why is a lot loading fix it end to end and
+  // update deploy live" contain an inspection signal ("audit", "why") but the
+  // dominant intent is FIX + DEPLOY LIVE. Without this override, the category
+  // matchers would classify it as 'audit' and the runtime would return BLOCKED
+  // with "no code change". The owner mandate is: when a prompt asks to fix AND
+  // deploy, it must be an execution command and must attempt to build/deploy
+  // even if the source already contains the fix.
+  //
+  // This override fires when the prompt contains an imperative execution clause
+  // (fix it/this/that/the, update, patch, build, ship, upload) followed by a
+  // deploy/live/release clause within 80 characters. It fires AFTER the
+  // explanation-question hatch so pure questions like "what is the difference
+  // between fix and deploy?" still escape, and BEFORE the category matchers so
+  // execution intent always beats bare audit/inspect signals.
+  const STRONG_EXECUTION_PATTERN =
+    /\b(?:fix(?:\s+(?:it|this|that|the|a))?|update|patch|repair|debug|troubleshoot|build|ship|upload)\b[^.]{0,80}\b(?:deploy(?:\s+(?:live|to\s+(?:prod|production|main)))?|go\s+live|ship\s+(?:it|now|today)|release\s+(?:to\s+)?(?:prod|production|live))\b/i;
+  const hasStrongExecution = STRONG_EXECUTION_PATTERN.test(normalized);
+  if (hasStrongExecution && !hasReadOnlySignal) {
+    const trigger = normalized.match(STRONG_EXECUTION_PATTERN)?.[0] ?? 'fix + deploy';
+    return {
+      isExecutionMode: true,
+      category: 'fix',
+      categoryLabel: 'fix',
+      matchedTrigger: trigger,
+      reason: `Strong execution-imperative override matched ("${trigger}"). The prompt asks to fix/deploy/build, so it is treated as an execution command, not a read-only inspection. Routes through the full developer_executor pipeline and attempts to build/deploy even if no code change is required.`,
+    };
+  }
+
   // Explanation escape hatch: "explain how X works", "what is Y", "describe Z"
   // are NOT execution commands — they are architecture-explanation requests
   // the chat model is allowed to answer narratively. This MUST fire BEFORE the

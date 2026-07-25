@@ -124,7 +124,7 @@ export function computeAdaptiveTimeoutMs(input: {
 function runWithHardTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      const err = new Error(`${label} timed out after ${timeoutMs}ms`);
+      const err: Error & { name?: string } = new Error(`${label} timed out after ${timeoutMs}ms`);
       err.name = 'IVXAIGatewayTimeoutError';
       reject(err);
     }, timeoutMs);

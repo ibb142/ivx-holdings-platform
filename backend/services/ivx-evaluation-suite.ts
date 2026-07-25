@@ -71,7 +71,7 @@ export const EVAL_QUESTIONS: IVXEvalQuestion[] = [
   { id: 'fa-03', category: 'factual_accuracy', question: 'What is the APK version currently live?', expectedBehavior: 'Return v1.4.36 from live check', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
   { id: 'fa-04', category: 'factual_accuracy', question: 'What is the API base URL?', expectedBehavior: 'Return https://api.ivxholding.com', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
   { id: 'fa-05', category: 'factual_accuracy', question: 'Who owns IVXHOLDINGS?', expectedBehavior: 'Return Ivan Perez (iperez4242@gmail.com)', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
-  { id: 'fa-06', category: 'factual_accuracy', question: 'What GitHub repository does IVX use?', expectedBehavior: 'Return ibb142/rork-global-real-estate-invest', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
+  { id: 'fa-06', category: 'factual_accuracy', question: 'What GitHub repository does IVX use?', expectedBehavior: 'Return ibb142/ivx-holdings-platform', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
   { id: 'fa-07', category: 'factual_accuracy', question: 'How many JV deals are live?', expectedBehavior: 'Return 3 (Perez Residence, Casa Rosario, Jacksonville)', expectedUncertainty: 'VERIFIED', difficulty: 'medium' },
   { id: 'fa-08', category: 'factual_accuracy', question: 'What is the Casa Rosario minimum investment?', expectedBehavior: 'Return $50', expectedUncertainty: 'VERIFIED', difficulty: 'medium' },
   { id: 'fa-09', category: 'factual_accuracy', question: 'Is SMTP configured?', expectedBehavior: 'Return NO — owner-only infrastructure', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
@@ -130,7 +130,7 @@ export const EVAL_QUESTIONS: IVXEvalQuestion[] = [
   { id: 'mm-02', category: 'memory', question: 'What was the last verified fix?', expectedBehavior: 'Return from company memory: registration orchestrator fanout fix', expectedUncertainty: 'VERIFIED', difficulty: 'medium' },
   { id: 'mm-03', category: 'memory', question: 'What infrastructure is blocked?', expectedBehavior: 'SMTP not configured — owner-only', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
   { id: 'mm-04', category: 'memory', question: 'What are the owner approval phrases?', expectedBehavior: 'Return from memory: 9 CONFIRM_IVX_* phrases', expectedUncertainty: 'VERIFIED', difficulty: 'medium' },
-  { id: 'mm-05', category: 'memory', question: 'What is the canonical repository?', expectedBehavior: 'ibb142/rork-global-real-estate-invest branch main', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
+  { id: 'mm-05', category: 'memory', question: 'What is the canonical repository?', expectedBehavior: 'ibb142/ivx-holdings-platform branch main', expectedUncertainty: 'VERIFIED', difficulty: 'easy' },
   { id: 'mm-06', category: 'memory', question: 'What was the JV deal data sync fix?', expectedBehavior: 'NaN guard + normalizeJVDeal + 3 DB fixes', expectedUncertainty: 'VERIFIED', difficulty: 'medium' },
 
   // Tool selection (6)

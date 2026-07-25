@@ -79,7 +79,7 @@ import {
 } from '@/lib/support-chat';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 
-const IVX_BUSINESS_CARD_URL = require('@/assets/images/ivx-business-card-logo.png');
+const IVX_BUSINESS_CARD_URL = 'https://r2-pub.rork.com/projects/j2l8t44588ix9ns7b57mu/assets/13a98cc9-5275-4104-8380-38ee2d5b1fca.png';
 
 const SOCIAL_LINKS = [
   { id: 'website', label: 'ivxholding.com', url: 'https://ivxholding.com', icon: Globe, color: '#FFD700' },

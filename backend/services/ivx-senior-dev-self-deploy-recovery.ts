@@ -39,7 +39,6 @@ import {
   getProductionHealth,
   getGitHubHeadSha,
 } from './ivx-enterprise-deployment-engine';
-import { createSignedInternalGetRequest } from './ivx-internal-deploy-client';
 
 export const IVX_SENIOR_DEV_WORKER_ID = 'IVX-SENIOR-DEV-01';
 export const RECOVERY_LEASE_DURATION_MS = 5 * 60 * 1000;
@@ -398,56 +397,17 @@ export interface LiveFeatureTestResult {
 }
 
 export async function runLiveFeatureTest(taskId: string): Promise<LiveFeatureTestResult> {
-  const pathname = `/api/ivx/senior-developer/worker/jobs/${encodeURIComponent(taskId)}`;
+  const url = `https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/${encodeURIComponent(taskId)}`;
   const responseTimestamp = new Date().toISOString();
-  const traceId = `live-feature-test-${taskId}-${Date.now()}`;
-
-  // This call hits an owner-gated status route. It MUST carry the worker's own
-  // signed authentication (X-IVX-Worker-ID/Timestamp/Nonce/Deploy-Signature,
-  // built from IVX_INTERNAL_WORKER_ID/IVX_INTERNAL_DEPLOY_SECRET which are
-  // provisioned on the dedicated worker service) — an unauthenticated request
-  // to this route will always be rejected with HTTP 401.
-  const signed = createSignedInternalGetRequest(pathname);
-  const authSource = signed.authSource;
-  const headerAttached = signed.ok;
-
-  if (!signed.ok) {
-    console.error('[IVX-LiveFeatureTest] signed request could not be built — internal worker credentials missing', {
-      endpoint: pathname,
-      traceId,
-      taskId,
-      authSource,
-      headerAttached,
-      reason: signed.reason,
-    });
-    return { passed: false, httpStatus: null, reason: `auth_setup_failed: ${signed.reason}`, traceId, responseTimestamp, contradictoryState: false };
-  }
-
   try {
-    const res = await fetch(signed.request, { signal: AbortSignal.timeout(LIVE_FEATURE_TEST_TIMEOUT_MS) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(LIVE_FEATURE_TEST_TIMEOUT_MS) });
     const httpStatus = res.status;
-    console.log('[IVX-LiveFeatureTest] authenticated status probe result', {
-      endpoint: pathname,
-      httpStatus,
-      traceId,
-      taskId,
-      authSource,
-      headerAttached,
-    });
     if (res.status === 503) {
-      return { passed: false, httpStatus, reason: '503 service unavailable', traceId, responseTimestamp, contradictoryState: false };
+      return { passed: false, httpStatus, reason: '503 service unavailable', traceId: null, responseTimestamp, contradictoryState: false };
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error('[IVX-LiveFeatureTest] non-2xx from owner-gated status route', {
-        endpoint: pathname,
-        httpStatus,
-        traceId,
-        taskId,
-        authSource,
-        headerAttached,
-      });
-      return { passed: false, httpStatus, reason: `http_${res.status}: ${body.slice(0, 120)}`, traceId, responseTimestamp, contradictoryState: false };
+      return { passed: false, httpStatus, reason: `http_${res.status}: ${body.slice(0, 120)}`, traceId: null, responseTimestamp, contradictoryState: false };
     }
     const data = await res.json().catch(() => ({})) as { task?: { status?: string; commitSha?: string | null; renderDeployId?: string | null; runtimeSha?: string | null; proofLedgerId?: string | null } };
     const t = data.task ?? {};
@@ -456,13 +416,12 @@ export async function runLiveFeatureTest(taskId: string): Promise<LiveFeatureTes
     const has4 = Boolean(t.commitSha) && Boolean(t.renderDeployId) && Boolean(t.runtimeSha) && Boolean(t.proofLedgerId);
     const contradictoryState = (t.status === 'VERIFIED' && !has4) || (t.status === 'FAILED' && has4);
     if (contradictoryState) {
-      return { passed: false, httpStatus, reason: `contradictory_state: status=${t.status} has4Evidence=${has4}`, traceId, responseTimestamp, contradictoryState: true };
+      return { passed: false, httpStatus, reason: `contradictory_state: status=${t.status} has4Evidence=${has4}`, traceId: null, responseTimestamp, contradictoryState: true };
     }
-    return { passed: true, httpStatus, reason: 'ok', traceId, responseTimestamp, contradictoryState: false };
+    return { passed: true, httpStatus, reason: 'ok', traceId: null, responseTimestamp, contradictoryState: false };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[IVX-LiveFeatureTest] fetch_error', { endpoint: pathname, traceId, taskId, authSource, headerAttached, msg });
-    return { passed: false, httpStatus: null, reason: `fetch_error: ${msg}`, traceId, responseTimestamp, contradictoryState: false };
+    return { passed: false, httpStatus: null, reason: `fetch_error: ${msg}`, traceId: null, responseTimestamp, contradictoryState: false };
   }
 }
 

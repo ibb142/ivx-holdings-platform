@@ -38,7 +38,7 @@ function probeThatAccepts(httpStatus = 200, detail = 'authenticated'): (value: s
 
 const FULL_ENV = {
   IVX_GITHUB_TOKEN: 'ghp_abcdef1234567890abcdef1234567890abcd',
-  GITHUB_REPO: 'ibb142/rork-global-real-estate-invest',
+  GITHUB_REPO: 'ibb142/ivx-holdings-platform',
   IVX_RENDER_API_KEY: 'rnd_abcdef1234567890abcdef',
   IVX_RENDER_SERVICE_ID: 'srv-d7t9ivreo5us73ftose0',
   IVX_SUPABASE_URL: 'https://example.supabase.co',
@@ -521,7 +521,7 @@ describe('IVX Pre-Execution Feasibility Gate', () => {
   });
 
   describe('GitHub repository identity resolution (canonical variables)', () => {
-    const AUTHORIZED = 'ibb142/rork-global-real-estate-invest';
+    const AUTHORIZED = 'ibb142/ivx-holdings-platform';
 
     it('resolves from GITHUB_REPO ("owner/repo")', () => {
       const id = resolveGithubRepoIdentity({ GITHUB_REPO: AUTHORIZED });
@@ -538,7 +538,7 @@ describe('IVX Pre-Execution Feasibility Gate', () => {
     });
 
     it('combines GITHUB_OWNER with a bare GITHUB_REPO name', () => {
-      const id = resolveGithubRepoIdentity({ GITHUB_OWNER: 'ibb142', GITHUB_REPO: 'rork-global-real-estate-invest' });
+      const id = resolveGithubRepoIdentity({ GITHUB_OWNER: 'ibb142', GITHUB_REPO: 'ivx-holdings-platform' });
       expect(id.slug).toBe(AUTHORIZED);
       expect(id.sourceVar).toBe('GITHUB_OWNER+GITHUB_REPO');
       expect(id.authorized).toBe(true);

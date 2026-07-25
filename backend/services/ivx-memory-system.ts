@@ -76,7 +76,7 @@ const COMPANY_MEMORY_SEED: Array<Omit<IVXMemoryRecord, 'id' | 'createdAt' | 'upd
   {
     category: 'company',
     source: 'github',
-    content: 'Canonical repository: ibb142/rork-global-real-estate-invest, branch main.',
+    content: 'Canonical repository: ibb142/ivx-holdings-platform, branch main.',
     confidence: 1.0,
     verified: true,
     expiresAt: null,
