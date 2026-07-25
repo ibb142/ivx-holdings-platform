@@ -94,12 +94,18 @@ export type IVXCompletionValidatorResult = {
 
 export function classifyTaskType(prompt: string): IVXTaskType {
   const lower = prompt.toLowerCase();
-  if (lower.includes('redeploy') || (lower.includes('deploy') && !lower.includes('fix') && !lower.includes('add'))) return 'DEPLOYMENT';
+  const requestsImplementation = /\b(fix|repair|resolve|patch|change|update|add|create|build|implement)\b/.test(lower);
+  const requestsFix = /\b(fix|repair|resolve|patch)\b/.test(lower);
+  if (lower.includes('redeploy') || (lower.includes('deploy') && !requestsImplementation)) return 'DEPLOYMENT';
   if (lower.includes('audit') || lower.includes('inspect') || lower.includes('report only') || lower.includes('explain')) return 'INVESTIGATION';
+  if (requestsImplementation) {
+    if (lower.includes('chat') || lower.includes('scroll') || lower.includes('keyboard') || lower.includes('loading') || lower.includes('ui')) return 'UI_FIX';
+    if (requestsFix) return 'CODE_FIX';
+    if (lower.includes('add') || lower.includes('create') || lower.includes('build') || lower.includes('implement')) return 'FEATURE';
+    return 'CODE_FIX';
+  }
   if (lower.includes('qa') || lower.includes('verify') || lower.includes('test the')) return 'QA_ONLY';
   if (lower.includes('chat') || lower.includes('scroll') || lower.includes('keyboard') || lower.includes('loading') || lower.includes('ui')) return 'UI_FIX';
-  if (lower.includes('fix') || lower.includes('broken') || lower.includes('bug') || lower.includes('repair')) return 'CODE_FIX';
-  if (lower.includes('add') || lower.includes('create') || lower.includes('build') || lower.includes('implement')) return 'FEATURE';
   return 'CODE_FIX';
 }
 

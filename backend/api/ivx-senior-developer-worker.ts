@@ -30,6 +30,7 @@ import { authorizeInternalDeploymentRequest, InternalDeployAuthError } from '../
 
 type WorkerEnqueueRequest = {
   goal?: unknown;
+  executionMode?: unknown;
   templateMode?: unknown;
   proposedPlan?: unknown;
   filesAffected?: unknown;
@@ -78,6 +79,27 @@ function normalizeRiskLevel(value: unknown): 'low' | 'medium' | 'high' {
 
 function normalizeValidationMode(value: unknown): 'focused' | 'typecheck' {
   return readTrimmed(value).toLowerCase() === 'typecheck' ? 'typecheck' : 'focused';
+}
+
+const EXECUTION_MODES = ['read_only', 'qa_only', 'code_change', 'deploy'] as const;
+type WorkerExecutionMode = (typeof EXECUTION_MODES)[number];
+
+/**
+ * Production mutations must not fall through to the legacy executor: it can
+ * classify an implementation request as QA-only and reuse old deploy evidence.
+ */
+export function resolveWorkerExecutionMode(
+  value: unknown,
+  approvePatch: boolean,
+  approveGitDeploy: boolean,
+): WorkerExecutionMode {
+  if (approveGitDeploy) return 'deploy';
+  if (approvePatch) return 'code_change';
+  const requested = readTrimmed(value).toLowerCase();
+  if ((EXECUTION_MODES as readonly string[]).includes(requested)) {
+    return requested as WorkerExecutionMode;
+  }
+  return 'read_only';
 }
 
 function statusForError(error: unknown): number {
@@ -157,6 +179,8 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     const riskLevel = normalizeRiskLevel(body.riskLevel);
     const rollbackOption = readTrimmed(body.rollbackOption);
     const approveGitDeploy = readBoolean(body.approveGitDeploy);
+    const approvePatch = readBoolean(body.approvePatch);
+    const executionMode = resolveWorkerExecutionMode(body.executionMode, approvePatch, approveGitDeploy);
 
     if (!goal) {
       return ownerOnlyJson({
@@ -208,8 +232,9 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     const input: IVXWorkerJobInput = {
       goal: `[TEMPLATE_MODE:${templateMode}] ${goal}`,
       ownerApproved: true,
-      approvePatch: readBoolean(body.approvePatch),
+      approvePatch,
       approveGitDeploy,
+      executionMode,
       validationMode: normalizeValidationMode(body.validationMode),
       systemMode: isSystemMode,
       ownerApprovedAction,
@@ -228,6 +253,7 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
       attached,
       activeJobId: activeJobId ?? (attached ? job.jobId : null),
       templateMode,
+      executionMode,
       poll: `GET /api/ivx/senior-developer/worker/jobs/${job.jobId}`,
       message: attached
         ? `A job is already running for this owner. Your request was attached to the active job (${job.jobId}). Poll its status instead of creating a duplicate.`

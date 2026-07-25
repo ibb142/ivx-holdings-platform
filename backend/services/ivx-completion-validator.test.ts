@@ -53,6 +53,9 @@ describe('classifyTaskType', () => {
   test('QA_ONLY for test/verify prompt', () => {
     expect(classifyTaskType('run QA tests and verify the chat module')).toBe('QA_ONLY');
   });
+  test('does not classify a code-fix release as QA-only merely because it requires verification', () => {
+    expect(classifyTaskType('Fix the public chat response, deploy it, and verify the live endpoint')).toBe('UI_FIX');
+  });
 });
 
 describe('validateCompletion — owner mandate 2026-07-20', () => {
