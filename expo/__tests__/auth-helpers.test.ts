@@ -113,7 +113,7 @@ describe('validateEmail', () => {
 
 describe('validatePassword', () => {
   test('accepts strong password', () => {
-    const result = validatePassword('MyP4ssword');
+    const result = validatePassword('MyP4ssword123');
     expect(result.valid).toBe(true);
     expect(result.reason).toBeUndefined();
   });
@@ -121,23 +121,23 @@ describe('validatePassword', () => {
   test('rejects short password', () => {
     const result = validatePassword('Aa1');
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('8 characters');
+    expect(result.reason).toContain('12 characters');
   });
 
   test('rejects no uppercase', () => {
-    const result = validatePassword('mypassword1');
+    const result = validatePassword('mypassword123');
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('uppercase');
   });
 
   test('rejects no number', () => {
-    const result = validatePassword('MyPassword');
+    const result = validatePassword('MyLongPassword');
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('number');
   });
 
-  test('accepts exactly 8 chars with requirements', () => {
-    const result = validatePassword('Abcdefg1');
+  test('accepts exactly 12 chars with requirements', () => {
+    const result = validatePassword('Abcdefghij1');
     expect(result.valid).toBe(true);
   });
 });
