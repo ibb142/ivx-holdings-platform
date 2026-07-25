@@ -1,6 +1,9 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { withRorkMetro } = require("@rork-ai/toolkit-sdk/metro");
 
 const config = getDefaultConfig(__dirname);
 
-module.exports = withRorkMetro(config);
+// IVX-owned plain Expo Metro config.
+// Rork toolkit wrapper removed — IVX is fully independent.
+config.watcher.watchman = false;
+
+module.exports = config;

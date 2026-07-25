@@ -28,7 +28,7 @@ import * as Haptics from 'expo-haptics';
 import IVXBrandLogo from '@/components/IVXBrandLogo';
 import QRCodeView from '@/components/QRCodeView';
 
-const IVX_BUSINESS_CARD_URL = 'https://r2-pub.rork.com/projects/j2l8t44588ix9ns7b57mu/assets/13a98cc9-5275-4104-8380-38ee2d5b1fca.png';
+const IVX_BUSINESS_CARD_URL = require('@/assets/images/ivx-logo-stacked.png');
 
 const GOLD = '#FFD700';
 const GOLD_DIM = '#C9A800';
