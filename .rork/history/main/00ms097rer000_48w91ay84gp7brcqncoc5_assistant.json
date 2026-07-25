@@ -1,0 +1,1336 @@
+{
+  "id": "48w91ay84gp7brcqncoc5",
+  "role": "assistant",
+  "preferredModelName": "gpt-5.6-terra",
+  "responseMessageContents": [
+    {
+      "type": "compaction",
+      "id": "gjfwkct6hr9kqijokdolh",
+      "text": "## Goal\n- Complete safe production readiness validation for the IVX owner-gated autonomous worker without exposing credentials or bypassing approval controls.\n\n## Constraints & Preferences\n- Preserve Supabase registered-owner JWT authorization and HMAC, expiring, single-use, exact action/SHA-bound approvals.\n- Never expose, print, commit, transfer, infer, or accept secret values in ordinary chat.\n- Do not impersonate the worker, forge approvals, weaken authorization, bypass approvals, or manufacture production evidence.\n- Do not perform GitHub source mutation, Render deployment, or consume approvals without a fresh, owner-gated, exact-current-SHA workflow.\n- Keep public policy blocks as HTTP `200` renderable turns; keep authorization failures as `401`/`403`.\n- Exclude unrelated `.rork/history/main/*.json` and `ios-ivx-holdings/` changes from backend release commits.\n- Do not publish mobile binaries or submit to Google Play, App Store, or TestFlight.\n\n## Progress\n### Done\n- Published reviewed autonomous-worker hardening to GitHub `main`:\n  - Commit: `9566249e9d97bb5e6e8ee689bc95457e16ab9011`\n  - Message: `fix: harden autonomous worker approvals and deployment flow`\n  - URL: `https://github.com/ibb142/rork-global-real-estate-invest/commit/9566249e9d97bb5e6e8ee689bc95457e16ab9011`\n- Verified API and worker deployment SHA parity:\n  - API service `srv-d7t9ivreo5us73ftose0`, live deployment `dep-d9i27jernols738pugkg`.\n  - Worker service `srv-d9i15fg4n6ts73bn00j0`, live deployment `dep-d9i27jmrnols738puh1g`.\n  - Both identify `9566249e9d97bb5e6e8ee689bc95457e16ab9011`.\n- Verified public API health:\n  - `GET https://api.ivxholding.com/health` returns healthy HTTP `200`.\n  - Latest non-secret runtime health now reports:\n    - `variablesValidated:true`\n    - `toolRegistryReady:true`\n    - `github.canReadRepo:true`\n    - `github.canPush:true`\n    - `render.canDeploy:true`\n- Confirmed API AI provider readiness independently:\n  - `aiStartupValidation.ok:true`\n  - Provider: `vercel_ai_gateway`\n  - Model: `openai/gpt-4o`\n  - Key status was reported only as loaded/redacted; no value was emitted.\n- Safely configured `IVX_INTERNAL_API_URL=https://api.ivxholding.com` on the worker through the Render read-merge-write approach without revealing secrets.\n- Confirmed unsigned internal deployment authorization remains protected:\n  - `POST /api/ivx/senior-developer/internal-deployment-authorizations/consume`\n  - Returns HTTP `401` without signed worker headers.\n  - Error: `Required signed worker authentication headers are missing.`\n  - `secretValuesReturned:false`.\n- Focused control validation passed:\n  - `bun test backend/services/ivx-internal-deploy-auth.test.ts backend/tests/ivx-render-env-merge.test.ts`\n  - `15 pass`, `0 fail`, `46 expect() calls`.\n- Root dependency installation completed:\n  - `bun install --frozen-lockfile`\n- iOS validation completed:\n  - `functions.runChecks` build for `ios-ivx-holdings` passed.\n  - Swift scan found no `TODO`, `FIXME`, `fatalError(`, or force-unwrap matches.\n- Confirmed worker implementation requirements and sequence in `backend/services/ivx-senior-dev-worker.ts`:\n  - Requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GITHUB_TOKEN`, `GITHUB_REPO_URL`, `RENDER_API_KEY`, `RENDER_SERVICE_ID`, and `OPENAI_API_KEY` or `AI_GATEWAY_API_KEY`.\n  - Pipeline: `PLANNING → INSPECTING → IMPLEMENTING → TESTING → WAITING_APPROVAL → COMMITTING → DEPLOYING → LIVE_VERIFYING → VERIFIED`.\n- Confirmed owner-only worker APIs exist and remain guarded:\n  - `backend/api/ivx-senior-dev-worker.ts`\n  - `backend/api/ivx-senior-developer-worker.ts`\n- `git diff --check` passed; only unrelated `.rork/history/main/*.json` artifacts were shown as modified.\n\n### In Progress\n- Reconcile the API runtime readiness report with the dedicated Render worker’s independent secret-presence inventory.\n- Perform a non-mutating owner-gated worker readiness check only after the worker itself reports a usable planner credential.\n- Capture complete final totals for the broader installed-root autonomous-worker regression command.\n- Restore Expo workspace dependencies and run real Expo lint/native validation.\n\n### Blocked\n- Direct safe Render inventory for worker `ivx-senior-dev-01` still reports:\n  - `AI_GATEWAY_API_KEY:false`\n  - `OPENAI_API_KEY:false`\n- The worker has not received a newer deployment after the user’s Render dashboard edits:\n  - Still live: `dep-d9i27jmrnols738puh1g`\n  - Commit: `9566249e9d97bb5e6e8ee689bc95457e16ab9011`\n- No worker-specific Render deploy/restart is visible in the latest deploy list.\n- Full autonomous planning, code-write, and deployment verification cannot begin until the dedicated worker—not merely the API runtime—has a non-empty `AI_GATEWAY_API_KEY` or `OPENAI_API_KEY`.\n- Safe API environment merge remains PARTIAL because post-write validation previously identified missing/unreadable:\n  - `OPENAI_API_KEY`\n  - `IVX_OWNER_REGISTRATION_EMAILS`\n  - `AWS_ACCESS_KEY_ID`\n- Expo workspace remains missing local lint dependencies:\n  - `bun run lint` → `bunx expo lint`\n  - Error: `Error: Cannot find module 'eslint'`.\n  - `functions.install` cannot target `expo`: `No app is registered at path \"expo\".`\n- No post-commit `RENDER_DEPLOY` authorization can exist until a real worker-produced commit SHA exists.\n- Freeze-risk audit remains PARTIAL:\n  - Prior scan: `189` freeze risks and `203` high-severity findings remain unclassified.\n\n## Key Decisions\n- Treat the dedicated Render worker inventory as the authority for worker planner-key readiness; API runtime readiness does not prove the separate worker has the credential.\n- Do not copy the API’s AI credential to the worker, inspect values, or request values in chat.\n- Use `backend/services/ivx-render-env-merge.ts` for any Render update because Render variable `PUT` replaces the full set.\n- Treat any missing-variable result from safe merge validation as failure/PARTIAL, even when intended variables were added.\n- Preserve approval order:\n  - `GITHUB_WRITE` approval binds to the current pre-write GitHub HEAD.\n  - `RENDER_DEPLOY` approval binds to the actual resulting worker-produced commit SHA.\n- Do not restart, deploy, create a task, create/consume approval, mutate GitHub, or claim `VERIFIED` merely to demonstrate progress.\n- Treat deployment parity and health as release-readiness evidence, not evidence of a completed autonomous run.\n\n## Next Steps\n1. Recheck Render `srv-d9i15fg4n6ts73bn00j0` after its next configuration propagation/redeploy for presence-only `AI_GATEWAY_API_KEY` or `OPENAI_API_KEY`.\n2. If neither credential is present, ensure the variable is added directly to Render service `ivx-senior-dev-01`, not only the API service or project-level environment.\n3. Once present, verify worker planning readiness, GitHub read/push capability, and Render deployment capability through non-secret worker/API status evidence.\n4. Re-run and capture full totals for:\n   - `bun test backend/ivx-senior-dev-self-deploy-recovery.test.ts backend/services/ivx-senior-developer-autonomous-mode.test.ts backend/services/ivx-senior-developer-answer-format.test.ts backend/services/ivx-internal-deploy-auth.test.ts backend/tests/ivx-render-env-merge.test.ts`\n5. Generate a fresh registered-owner session and short-lived `GITHUB_WRITE` authorization bound to current GitHub HEAD.\n6. Submit only the reviewed minimal non-functional drill against `backend/services/ivx-internal-deploy-client.ts`.\n7. Verify worker planning, inspection, implementation, tests, and worker-generated commit evidence through owner-gated jobs and proof ledger.\n8. Create a separate resulting-SHA-bound `RENDER_DEPLOY` authorization; then verify Render deployment, GitHub/API/worker SHA parity, health, and durable `VERIFIED` evidence.\n9. Restore Expo dependencies and run `bunx expo lint` plus Expo Go/native validation without publishing binaries.\n10. Update `.rork/plans/force-sync-ivx-workspace-and-release-eve_1784928084433.plan.md` with PASS/PARTIAL/BLOCKED evidence.\n\n## Critical Context\n- Current authorized GitHub `main`, API deployment, worker deployment, and API health commit identify:\n  - `9566249e9d97bb5e6e8ee689bc95457e16ab9011`\n- API service:\n  - `srv-d7t9ivreo5us73ftose0`\n  - Live deployment: `dep-d9i27jernols738pugkg`\n- Worker service:\n  - `srv-d9i15fg4n6ts73bn00j0`\n  - Live deployment: `dep-d9i27jmrnols738puh1g`\n- Latest independent worker Render variable-presence inventory:\n  - Present: `IVX_INTERNAL_API_URL`, `GITHUB_TOKEN`, `GITHUB_REPO_URL`, `RENDER_API_KEY`, `RENDER_SERVICE_ID`, `SUPABASE_SERVICE_ROLE_KEY`, `IVX_INTERNAL_DEPLOY_SECRET`, `IVX_INTERNAL_WORKER_ID`.\n  - Absent: `AI_GATEWAY_API_KEY`, `OPENAI_API_KEY`.\n  - No secret values were returned.\n- Latest API health runtime differs from prior checks and now reports:\n  - `variablesValidated:true`\n  - `toolRegistryReady:true`\n  - `githubRead:true`\n  - `githubPush:true`\n  - `renderDeploy:true`\n- Prior API health state reported all of the above as false. This change must not be treated as worker planner-key proof.\n- `backend/services/ivx-senior-dev-ai.ts` resolves only:\n  - `readEnv('OPENAI_API_KEY') || readEnv('AI_GATEWAY_API_KEY')`\n  - Gateway URL: `https://ai-gateway.vercel.sh/v1/chat/completions`\n  - Default model: `openai/gpt-4o`.\n- Previous safe negative drill remains valid:\n  - `GITHUB_WRITE` approval: `3857302f-d0d8-4429-aa88-ffbf21612ffd`\n  - Task: `87a89317-add6-4e6d-a542-87176dd17877`\n  - Proof ledger ID: `fb964d41-ce36-447c-bcb2-0748ce1b4128`\n  - Failure: `PLANNING failed: AI gateway key not configured (OPENAI_API_KEY or AI_GATEWAY_API_KEY).`\n  - No files changed, commit created, deployment triggered, or approval consumed.\n- No runtime logs are available through `rork-agent`; applicable evidence is owner-gated jobs/ledger, Render state, environment key-presence checks, and health/status endpoints.\n- User attachments:\n  - `844334.jpg`: `https://r2-pub.rork.com/attachments/zvpepsguhmxj58uh3ino2.jpg`\n  - `844345.jpg`: `https://r2-pub.rork.com/attachments/gwfke4nua0svv60kncexm.jpg`\n  - Images indicated masked Render environment-variable screens; no values were extracted or used.\n\n## Relevant Files\n- `.rork/plans/force-sync-ivx-workspace-and-release-eve_1784928084433.plan.md`: release/audit evidence record.\n- `render.yaml`: production API and `ivx-senior-dev-01` worker blueprint; declares worker configuration expectations.\n- `backend/services/ivx-render-env-merge.ts`: safe Render read-merge-write-preserve validation.\n- `backend/tests/ivx-render-env-merge.test.ts`: safe environment merge regression tests.\n- `backend/services/ivx-senior-dev-ai.ts`: planner credential resolution and Vercel AI Gateway client.\n- `backend/services/ivx-senior-dev-worker.ts`: autonomous pipeline, approvals, GitHub commits, deployments, and proof.\n- `backend/services/ivx-senior-dev-self-deploy-recovery.ts`: recovery, leases, deployment polling, SHA parity, and terminal verification.\n- `backend/ivx-senior-dev-self-deploy-recovery.test.ts`: recovery regression suite.\n- `backend/services/ivx-internal-deploy-auth.ts`: HMAC signature, nonce, timing, worker identity, exact SHA/action, and single-use authorization enforcement.\n- `backend/services/ivx-internal-deploy-client.ts`: worker-local signed authorization client and intended minimal drill target.\n- `backend/api/ivx-senior-dev-worker.ts`: legacy owner-only task submission/status/approval surface.\n- `backend/api/ivx-senior-developer-worker.ts`: owner-gated worker status/jobs/ledger and internal authorization routes.\n- `backend/workers/ivx-senior-dev-worker-entry.ts`: Render worker entrypoint.\n- `package.json`: root backend dependencies; `bun install --frozen-lockfile` completed.\n- `expo/package.json`: Expo SDK `~54.0.35`; workspace lint dependencies remain unavailable.\n- `expo/lib/runtime-environment.ts`: Expo Go/dev-client/standalone detection.\n- `expo/src/modules/ivx-developer/seniorDeveloperPreflightService.ts`: non-secret runtime owner-proof preflight.\n- `ios-ivx-holdings/IVXHoldings/ContentView.swift`: compiling SwiftUI Portfolio/Activity/Profile shell.\n- `ios-ivx-holdings/IVXHoldings/IVXHoldingsApp.swift`: SwiftUI app entry point.",
+      "tailStartId": "fzef9b9nyxafyn0m8aasy",
+      "tailStartPartId": "call_hS7ZqZhTqYScYDyHTifgsWtc",
+      "createdAt": 1784976921819
+    },
+    {
+      "type": "tool",
+      "id": "call_qokhwWWYtuc8D7me9CiopdiQ",
+      "toolName": "todoWrite",
+      "input": {
+        "tasks": [
+          {
+            "content": "Inspect the current autonomous release workflow and authentication prerequisites",
+            "activeForm": "Inspecting the current autonomous release workflow and authentication prerequisites",
+            "status": "in_progress"
+          },
+          {
+            "content": "Run the remaining owner-gated end-to-end verification without bypasses",
+            "activeForm": "Running the remaining owner-gated end-to-end verification without bypasses",
+            "status": "pending"
+          },
+          {
+            "content": "Validate release evidence and record the final production status",
+            "activeForm": "Validating release evidence and recording the final production status",
+            "status": "pending"
+          },
+          {
+            "content": "Run the registered iOS build validation",
+            "activeForm": "Running the registered iOS build validation",
+            "status": "pending"
+          }
+        ]
+      },
+      "output": {
+        "tasks": [
+          {
+            "content": "Inspect the current autonomous release workflow and authentication prerequisites",
+            "activeForm": "Inspecting the current autonomous release workflow and authentication prerequisites",
+            "status": "in_progress"
+          },
+          {
+            "content": "Run the remaining owner-gated end-to-end verification without bypasses",
+            "activeForm": "Running the remaining owner-gated end-to-end verification without bypasses",
+            "status": "pending"
+          },
+          {
+            "content": "Validate release evidence and record the final production status",
+            "activeForm": "Validating release evidence and recording the final production status",
+            "status": "pending"
+          },
+          {
+            "content": "Run the registered iOS build validation",
+            "activeForm": "Running the registered iOS build validation",
+            "status": "pending"
+          }
+        ]
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"tasks\":[{\"content\":\"Inspect the current autonomous release workflow and authentication prerequisites\",\"activeForm\":\"Inspecting the current autonomous release workflow and authentication prerequisites\",\"status\":\"in_progress\"},{\"content\":\"Run the remaining owner-gated end-to-end verification without bypasses\",\"activeForm\":\"Running the remaining owner-gated end-to-end verification without bypasses\",\"status\":\"pending\"},{\"content\":\"Validate release evidence and record the final production status\",\"activeForm\":\"Validating release evidence and recording the final production status\",\"status\":\"pending\"},{\"content\":\"Run the registered iOS build validation\",\"activeForm\":\"Running the registered iOS build validation\",\"status\":\"pending\"}]}",
+      "createdAt": 1784976929029,
+      "completedAt": 1784976929063
+    },
+    {
+      "type": "tool",
+      "id": "call_pjKcBFvSqGk9pA6nS65PsK1s",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/ivx-senior-developer-worker.ts",
+        "offset": 1,
+        "limit": 240
+      },
+      "output": {
+        "path": "backend/api/ivx-senior-developer-worker.ts",
+        "content": "     2| * Owner-gated HTTP surface for the IVX self-hosted Senior Developer Worker.\n     3| *\n     4| * These endpoints let IVX IA (or the owner directly) submit and track real\n     5| * development tasks WITHOUT Rork acting as the executor. Every mutating route\n     6| * requires a verified registered-owner bearer (or the system key). The worker\n     7| * itself runs the real GitHub/Render/test pipeline.\n     8| */\n     9|import {\n    10|  IVX_SENIOR_DEV_WORKER_MARKER,\n    11|  buildSeniorDeveloperWorkerStatus,\n    12|  enqueueOrAttachSeniorDeveloperJob,\n    13|  cancelSeniorDeveloperJob,\n    14|  getActiveJobForOwner,\n    15|  getSeniorDeveloperJob,\n    16|  getSeniorDeveloperLastProof,\n    17|  listSeniorDeveloperJobs,\n    18|  listSeniorDeveloperProofLedger,\n    19|  resumeSeniorDeveloperJob,\n    20|  type IVXWorkerJobInput,\n    21|} from '../services/ivx-senior-developer-worker';\n    22|import {\n    23|  IVXOwnerApprovalError,\n    24|  assertIVXOwnerOnly,\n    25|  assertIVXRegisteredOwnerBearer,\n    26|  ownerOnlyJson,\n    27|  ownerOnlyOptions,\n    28|} from './owner-only';\n    29|import { authorizeInternalDeploymentRequest, InternalDeployAuthError } from '../services/ivx-internal-deploy-auth';\n    30|\n    31|type WorkerEnqueueRequest = {\n    32|  goal?: unknown;\n    33|  executionMode?: unknown;\n    34|  templateMode?: unknown;\n    35|  proposedPlan?: unknown;\n    36|  filesAffected?: unknown;\n    37|  riskLevel?: unknown;\n    38|  rollbackOption?: unknown;\n    39|  approvePatch?: unknown;\n    40|  approveGitDeploy?: unknown;\n    41|  validationMode?: unknown;\n    42|};\n    43|\n    44|const TEMPLATE_MODES = [\n    45|  'NEW_APP_FROM_SCRATCH',\n    46|  'NEW_MODULE_FROM_SCRATCH',\n    47|  'NEW_FEATURE',\n    48|  'BUG_FIX',\n    49|  'REFACTOR',\n    50|  'BUSINESS_WORKFLOW',\n    51|  'INVESTOR_WORKFLOW',\n    52|  'CRM_WORKFLOW',\n    53|] as const;\n    54|\n    55|type WorkerTemplateMode = (typeof TEMPLATE_MODES)[number];\n    56|\n    57|function normalizeTemplateMode(value: unknown): WorkerTemplateMode {\n    58|  const raw = readTrimmed(value).toUpperCase();\n    59|  return (TEMPLATE_MODES as readonly string[]).includes(raw) ? (raw as WorkerTemplateMode) : 'NEW_FEATURE';\n    60|}\n    61|\n    62|function readTrimmed(value: unknown): string {\n    63|  return typeof value === 'string' ? value.trim() : '';\n    64|}\n    65|\n    66|function readBoolean(value: unknown): boolean {\n    67|  return value === true || readTrimmed(value).toLowerCase() === 'true';\n    68|}\n    69|\n    70|function readStringArray(value: unknown): string[] {\n    71|  if (!Array.isArray(value)) return [];\n    72|  return Array.from(new Set(value.map((item) => readTrimmed(item)).filter(Boolean))).slice(0, 25);\n    73|}\n    74|\n    75|function normalizeRiskLevel(value: unknown): 'low' | 'medium' | 'high' {\n    76|  const risk = readTrimmed(value).toLowerCase();\n    77|  return risk === 'low' || risk === 'high' ? risk : 'medium';\n    78|}\n    79|\n    80|function normalizeValidationMode(value: unknown): 'focused' | 'typecheck' {\n    81|  return readTrimmed(value).toLowerCase() === 'typecheck' ? 'typecheck' : 'focused';\n    82|}\n    83|\n    84|const EXECUTION_MODES = ['read_only', 'qa_only', 'code_change', 'deploy'] as const;\n    85|type WorkerExecutionMode = (typeof EXECUTION_MODES)[number];\n    86|\n    87|/**\n    88| * Production mutations must not fall through to the legacy executor: it can\n    89| * classify an implementation request as QA-only and reuse old deploy evidence.\n    90| */\n    91|export function resolveWorkerExecutionMode(\n    92|  value: unknown,\n    93|  approvePatch: boolean,\n    94|  approveGitDeploy: boolean,\n    95|): WorkerExecutionMode {\n    96|  if (approveGitDeploy) return 'deploy';\n    97|  if (approvePatch) return 'code_change';\n    98|  const requested = readTrimmed(value).toLowerCase();\n    99|  if ((EXECUTION_MODES as readonly string[]).includes(requested)) {\n   100|    return requested as WorkerExecutionMode;\n   101|  }\n   102|  return 'read_only';\n   103|}\n   104|\n   105|function statusForError(error: unknown): number {\n   106|  const message = error instanceof Error ? error.message.toLowerCase() : '';\n   107|  // Auth guard failures must return 401/403, never 500.\n   108|  if (message.includes('missing bearer token') || message.includes('invalid or expired')) return 401;\n   109|  if (message.includes('privileged ivx access is required') || message.includes('owner') || message.includes('auth guard failed') || message.includes('auth config failed') || message.includes('role guard failed')) return 403;\n   110|  return 500;\n   111|}\n   112|\n   113|function errorResponse(error: unknown): Response {\n   114|  const message = error instanceof Error ? error.message : 'IVX senior developer worker failed.';\n   115|  if (error instanceof InternalDeployAuthError) {\n   116|    return ownerOnlyJson({ ok: false, marker: IVX_SENIOR_DEV_WORKER_MARKER, error: message.slice(0, 500), secretValuesReturned: false, timestamp: new Date().toISOString() }, error.status);\n   117|  }\n   118|  if (error instanceof IVXOwnerApprovalError) {\n   119|    return ownerOnlyJson({\n   120|      ok: false,\n   121|      ownerOnly: true,\n   122|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   123|      error: message.slice(0, 500),\n   124|      ownerApproval: error.proof,\n   125|      exactBlocker: error.proof.blocker ?? message.slice(0, 500),\n   126|      secretValuesReturned: false,\n   127|      timestamp: new Date().toISOString(),\n   128|    }, error.status);\n   129|  }\n   130|  return ownerOnlyJson({\n   131|    ok: false,\n   132|    marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   133|    error: message.slice(0, 500),\n   134|    secretValuesReturned: false,\n   135|    timestamp: new Date().toISOString(),\n   136|  }, statusForError(error));\n   137|}\n   138|\n   139|export function OPTIONS(): Response {\n   140|  return ownerOnlyOptions();\n   141|}\n   142|\n   143|/** Dedicated worker-only endpoint that atomically validates and consumes one approval. */\n   144|export async function handleInternalDeploymentAuthorizationConsumeRequest(request: Request): Promise<Response> {\n   145|  try {\n   146|    const authorization = await authorizeInternalDeploymentRequest(request);\n   147|    return ownerOnlyJson({\n   148|      ok: true,\n   149|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   150|      authorization: {\n   151|        workerId: authorization.workerId,\n   152|        approvalId: authorization.approvalId,\n   153|        requestedCommitSha: authorization.requestedCommitSha,\n   154|        action: authorization.action,\n   155|      },\n   156|      secretValuesReturned: false,\n   157|      timestamp: new Date().toISOString(),\n   158|    });\n   159|  } catch (error) {\n   160|    return errorResponse(error);\n   161|  }\n   162|}\n   163|\n   164|/** GET worker status — capability snapshot. Owner-gated (read). */\n   165|export async function handleSeniorDeveloperWorkerStatusRequest(request: Request): Promise<Response> {\n   166|  try {\n   167|    await assertIVXOwnerOnly(request);\n   168|    return ownerOnlyJson({ ...buildSeniorDeveloperWorkerStatus(), ownerOnly: true });\n   169|  } catch (error) {\n   170|    return errorResponse(error);\n   171|  }\n   172|}\n   173|\n   174|/** POST a new owner-approved job to the worker queue. */\n   175|export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request): Promise<Response> {\n   176|  try {\n   177|    const signedWorkerRequest = request.headers.has('X-IVX-Deploy-Signature');\n   178|    const internalAuthorization = signedWorkerRequest ? await authorizeInternalDeploymentRequest(request) : null;\n   179|    const ownerAuthorization = internalAuthorization ? null : await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');\n   180|    const approval = ownerAuthorization?.approval ?? {\n   181|      ownerSessionDetected: true,\n   182|      bearerAccepted: true,\n   183|      ownerVerified: true,\n   184|      ownerEmailMatched: true,\n   185|      ownerEmailMasked: 'internal-worker',\n   186|      userId: `worker:${internalAuthorization?.workerId ?? 'unknown'}`,\n   187|      role: 'internal_worker',\n   188|      guardMode: 'strict' as const,\n   189|      allowlistConfigured: true,\n   190|      action: 'senior_developer_worker_enqueue',\n   191|      blocker: null,\n   192|      secretValuesReturned: false as const,\n   193|    };\n   194|    const body = await request.json().catch((): WorkerEnqueueRequest => ({}));\n   195|    const goal = readTrimmed(body.goal);\n   196|    const templateMode = normalizeTemplateMode(body.templateMode);\n   197|    const isSystemMode = (approval.role === 'system' && approval.guardMode === 'system_bypass') || internalAuthorization !== null;\n   198|    const proposedPlan = readTrimmed(body.proposedPlan);\n   199|    const filesAffected = readStringArray(body.filesAffected);\n   200|    const riskLevel = normalizeRiskLevel(body.riskLevel);\n   201|    const rollbackOption = readTrimmed(body.rollbackOption);\n   202|    const approveGitDeploy = readBoolean(body.approveGitDeploy);\n   203|    const approvePatch = readBoolean(body.approvePatch);\n   204|    const executionMode = resolveWorkerExecutionMode(body.executionMode, approvePatch, approveGitDeploy);\n   205|\n   206|    if (!goal) {\n   207|      return ownerOnlyJson({\n   208|        ok: false,\n   209|        marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   210|        error: 'A senior developer goal is required.',\n   211|        ownerApproval: approval,\n   212|        secretValuesReturned: false,\n   213|        timestamp: new Date().toISOString(),\n   214|      }, 400);\n   215|    }\n   216|\n   217|    if (!isSystemMode && approveGitDeploy && (!proposedPlan || filesAffected.length === 0 || !rollbackOption)) {\n   218|      return ownerOnlyJson({\n   219|        ok: false,\n   220|        marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   221|        error: 'Owner-approved production mutation requires a visible proposed plan, files affected, risk level, and rollback option before commit/deploy.',\n   222|        exactBlocker: 'approval_contract_missing_plan_files_or_rollback',\n   223|        requiredFields: ['proposedPlan', 'filesAffected', 'riskLevel', 'rollbackOption'],\n   224|        ownerApproval: approval,\n   225|        secretValuesReturned: false,\n   226|        timestamp: new Date().toISOString(),\n   227|      }, 400);\n   228|    }\n   229|\n   230|    const ownerApprovedAction = {\n   231|      proposedPlan,\n   232|      filesAffected,\n   233|      riskLevel,\n   234|      rollbackOption,\n   235|      rollbackAvailable: rollbackOption.length > 0,\n   236|      auditLog: [\n   237|        `templateMode=${templateMode}`,\n   238|        `ownerSessionDetected=${approval.ownerSessionDetected}`,\n   239|        `bearerAccepted=${approval.bearerAccepted}`,\n   240|        `ownerVerified=${approval.ownerVerified}`,\n   241|        `role=${approval.role}`,\n\n(File has more lines. Use 'offset' parameter to read beyond line 241)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.ts\",\"offset\":1,\"limit\":240}",
+      "createdAt": 1784976929058,
+      "completedAt": 1784976929082
+    },
+    {
+      "type": "tool",
+      "id": "call_0L3UXb0ZNPTQ0ja42drN3DT6",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-senior-dev-worker.ts",
+        "offset": 1,
+        "limit": 260
+      },
+      "output": {
+        "path": "backend/services/ivx-senior-dev-worker.ts",
+        "content": "     2| * IVX-SENIOR-DEV-01 — Autonomous Senior Developer Worker (REAL IMPLEMENTATION)\n     3| *\n     4| * Long-running background service that polls the durable task queue\n     5| * (ivx_owner_ai_tasks) for senior-dev tasks, claims them, executes the full\n     6| * engineering pipeline with REAL tools, and writes proof back to the ledger.\n     7| *\n     8| * Runs independently of the Rork browser. It needs:\n     9| *   - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (task queue + proof ledger)\n    10| *   - GITHUB_TOKEN + GITHUB_REPO_URL (read files, commit changes)\n    11| *   - RENDER_API_KEY + RENDER_SERVICE_ID (deploy, poll)\n    12| *   - OPENAI_API_KEY or AI_GATEWAY_API_KEY (AI reasoning for planning + code gen)\n    13| *\n    14| * Pipeline:\n    15| *   PLANNING → INSPECTING → IMPLEMENTING → TESTING → WAITING_APPROVAL →\n    16| *   COMMITTING → DEPLOYING → LIVE_VERIFYING → VERIFIED\n    17| *\n    18| * The worker reads files from GitHub (latest), asks the AI to generate patches,\n    19| * writes them locally + commits to GitHub, runs `bun test` + `tsc` locally,\n    20| * pauses for owner approval before deploy, triggers Render deploy, and verifies\n    21| * 3-way SHA parity + production health.\n    22| */\n    23|\n    24|import { execFile } from 'node:child_process';\n    25|import { existsSync, mkdirSync, writeFileSync } from 'node:fs';\n    26|import { dirname, resolve } from 'node:path';\n    27|import {\n    28|  getTask,\n    29|  listTasks,\n    30|  patchTask,\n    31|  type IVXOwnerAITaskRow,\n    32|} from './ivx-owner-ai-task-queue';\n    33|import { hasApproval, writeProofLedger, updateProofLedger, type IVXSeniorDevApprovalAction } from './ivx-senior-dev-proof';\n    34|import { githubCommitFile, githubReadFile, githubGetHeadSha, githubListFiles } from './ivx-senior-dev-git';\n    35|import { askAI, planEngineeringTask, generateFilePatch } from './ivx-senior-dev-ai';\n    36|import { consumeInternalDeploymentApproval } from './ivx-internal-deploy-client';\n    37|import {\n    38|  triggerRenderDeploy,\n    39|  getRenderDeployStatus,\n    40|  getProductionHealth,\n    41|  verifyCommitMatch,\n    42|  getGitHubHeadSha,\n    43|} from './ivx-enterprise-deployment-engine';\n    44|import {\n    45|  runLiveFeatureTest,\n    46|  assertExactlyOneTerminalState,\n    47|} from './ivx-senior-dev-self-deploy-recovery';\n    48|\n    49|export const IVX_SENIOR_DEV_WORKER_ID = 'IVX-SENIOR-DEV-01';\n    50|export const WORKER_HEARTBEAT_SECONDS = 30;\n    51|export const TASK_POLL_INTERVAL_MS = 5_000;\n    52|export const TASK_CLAIM_TIMEOUT_MS = 3 * 60 * 1000;\n    53|\n    54|export type IVXSeniorDevWorkerPhase =\n    55|  | 'CLAIMED'\n    56|  | 'PLANNING'\n    57|  | 'INSPECTING'\n    58|  | 'IMPLEMENTING'\n    59|  | 'TESTING'\n    60|  | 'WAITING_APPROVAL'\n    61|  | 'COMMITTING'\n    62|  | 'DEPLOYING'\n    63|  | 'DEPLOYMENT_REQUESTED'\n    64|  | 'LIVE_VERIFYING'\n    65|  | 'ROLLING_BACK'\n    66|  | 'RETRYING';\n    67|\n    68|export type IVXSeniorDevWorkerState = 'running' | 'idle' | 'stopping' | 'stopped';\n    69|\n    70|export interface IVXSeniorDevWorkerRuntime {\n    71|  workerId: string;\n    72|  startedAt: string;\n    73|  lastTickAt: string;\n    74|  currentTaskId: string | null;\n    75|  currentPhase: IVXSeniorDevWorkerPhase | null;\n    76|  runCount: number;\n    77|  errorCount: number;\n    78|}\n    79|\n    80|const state: IVXSeniorDevWorkerRuntime = {\n    81|  workerId: IVX_SENIOR_DEV_WORKER_ID,\n    82|  startedAt: new Date().toISOString(),\n    83|  lastTickAt: new Date().toISOString(),\n    84|  currentTaskId: null,\n    85|  currentPhase: null,\n    86|  runCount: 0,\n    87|  errorCount: 0,\n    88|};\n    89|\n    90|let stopRequested = false;\n    91|\n    92|export function getSeniorDevWorkerStatus(): IVXSeniorDevWorkerRuntime {\n    93|  return { ...state };\n    94|}\n    95|\n    96|export function requestSeniorDevWorkerStop(): void {\n    97|  stopRequested = true;\n    98|}\n    99|\n   100|export async function startSeniorDevWorker(): Promise<void> {\n   101|  console.log('[IVX-SENIOR-DEV-01] Worker starting', { workerId: IVX_SENIOR_DEV_WORKER_ID, at: state.startedAt });\n   102|  // Self-bootstrap the worker tables via Supabase Management API (same proven\n   103|  // pattern as ensureTaskTable in ivx-owner-ai-task-queue.ts). Idempotent.\n   104|  try {\n   105|    const { ensureSeniorDevTables } = await import('./ivx-senior-dev-proof');\n   106|    await ensureSeniorDevTables();\n   107|  } catch (error) {\n   108|    console.log('[IVX-SENIOR-DEV-01] ensureSeniorDevTables failed (non-fatal):', error instanceof Error ? error.message : 'unknown');\n   109|  }\n   110|  while (!stopRequested) {\n   111|    state.lastTickAt = new Date().toISOString();\n   112|    try {\n   113|      await tick();\n   114|    } catch (error) {\n   115|      state.errorCount += 1;\n   116|      console.log('[IVX-SENIOR-DEV-01] Tick error:', error instanceof Error ? error.message : 'unknown');\n   117|    }\n   118|    await sleep(TASK_POLL_INTERVAL_MS);\n   119|  }\n   120|  state.lastTickAt = new Date().toISOString();\n   121|  console.log('[IVX-SENIOR-DEV-01] Worker stopped gracefully');\n   122|}\n   123|\n   124|async function tick(): Promise<void> {\n   125|  // ─── Orphan-task recovery ──────────────────────────────────────────\n   126|  // If the worker restarts mid-loop (e.g. Render redeploy), a task can be\n   127|  // left in RUNNING/TESTING with a stale heartbeat. Requeue any senior-dev\n   128|  // task whose heartbeat is older than TASK_CLAIM_TIMEOUT_MS so it gets\n   129|  // re-picked instead of sitting orphaned forever (root cause of the\n   130|  // 20f65308 task stuck in TESTING for 26+ min across a restart).\n   131|  try {\n   132|    await recoverOrphanedTasks();\n   133|  } catch (error) {\n   134|    console.log('[IVX-SENIOR-DEV-01] Orphan recovery error (non-fatal):', error instanceof Error ? error.message : 'unknown');\n   135|  }\n   136|\n   137|  const tasks = await listTasks(50);\n   138|  const candidates = tasks.filter((t) => {\n   139|    // Mark senior_dev tasks via trace_id (always \"senior-dev-...\" from the\n   140|    // submit endpoint) because the task_type column is only created by the\n   141|    // self-bootstrap DDL, which requires SUPABASE_ACCESS_TOKEN and may not have\n   142|    // run yet. trace_id is in the original CREATE TABLE and is always present,\n   143|    // so it is the reliable marker. task_type is checked too as a fallback.\n   144|    const isSeniorDev = (t.task_type === 'senior_dev')\n   145|      || (typeof t.trace_id === 'string' && t.trace_id.startsWith('senior-dev-'));\n   146|    if (!isSeniorDev) return false;\n   147|    if (t.status !== 'QUEUED' && t.status !== 'RETRYING') return false;\n   148|    if (t.assigned_worker_id && t.assigned_worker_id !== IVX_SENIOR_DEV_WORKER_ID) return false;\n   149|    return true;\n   150|  });\n   151|\n   152|  if (candidates.length === 0) return;\n   153|\n   154|  const task = candidates.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];\n   155|  if (!task) return;\n   156|\n   157|  const claimed = await claimTask(task.id);\n   158|  if (!claimed) return;\n   159|\n   160|  state.currentTaskId = task.id;\n   161|  state.runCount += 1;\n   162|\n   163|  try {\n   164|    await executeSeniorDevTask(claimed);\n   165|  } catch (error) {\n   166|    state.errorCount += 1;\n   167|    console.log('[IVX-SENIOR-DEV-01] executeSeniorDevTask error:', error instanceof Error ? error.message : 'unknown');\n   168|    await failTask(task.id, error instanceof Error ? error.message : 'unknown');\n   169|  } finally {\n   170|    state.currentTaskId = null;\n   171|    state.currentPhase = null;\n   172|  }\n   173|}\n   174|\n   175|async function recoverOrphanedTasks(): Promise<void> {\n   176|  const tasks = await listTasks(100);\n   177|  const now = Date.now();\n   178|  const stale: IVXOwnerAITaskRow[] = [];\n   179|  for (const t of tasks) {\n   180|    const isSeniorDev = (t.task_type === 'senior_dev')\n   181|      || (typeof t.trace_id === 'string' && t.trace_id.startsWith('senior-dev-'));\n   182|    if (!isSeniorDev) continue;\n   183|    if (t.status !== 'RUNNING' && t.status !== 'WAITING_APPROVAL' && t.status !== 'COMMITTING') continue;\n   184|    // If the task already has a commit_sha, it did real work — the worker just\n   185|    // got killed (likely by its own Render deploy restarting the runtime) before\n   186|    // reaching VERIFIED. Mark it terminal FAILED with the real evidence it has,\n   187|    // rather than re-running the whole pipeline (which would re-plan, re-implement,\n   188|    // and either no-op or duplicate-commit). This also unblocks single-flight\n   189|    // for the next queued task.\n   190|    if (t.commit_sha) {\n   191|      console.log('[IVX-SENIOR-DEV-01] Orphaned task already committed — marking terminal', { taskId: t.id, commitSha: t.commit_sha, status: t.status });\n   192|      await patchTask(t.id, {\n   193|        status: 'FAILED',\n   194|        checkpoint: 'FAILED (orphaned after commit — worker killed by self-deploy restart before LIVE_VERIFYING)',\n   195|        error_message: `Worker restarted mid-task after commit ${t.commit_sha}. The commit is real and on GitHub; the task just did not reach VERIFIED because the worker process was killed by its own Render deploy triggering a runtime restart. File(s) changed: ${JSON.stringify(t.files_changed ?? [])}.`,\n   196|        checkpoint_history: appendCheckpoint(null, `ORPHAN_TERMINATED_WITH_COMMIT at ${new Date().toISOString()} (commitSha=${t.commit_sha})`),\n   197|      });\n   198|      continue;\n   199|    }\n   200|    const hb = t.heartbeat_at ? new Date(t.heartbeat_at).getTime() : 0;\n   201|    if (now - hb > TASK_CLAIM_TIMEOUT_MS) stale.push(t);\n   202|  }\n   203|  for (const s of stale) {\n   204|    console.log('[IVX-SENIOR-DEV-01] Requeuing orphaned task', { taskId: s.id, status: s.status, heartbeatAt: s.heartbeat_at });\n   205|    await patchTask(s.id, {\n   206|      status: 'RETRYING',\n   207|      checkpoint: 'RETRYING (orphan recovered — stale heartbeat)',\n   208|      checkpoint_history: appendCheckpoint(null, `ORPHAN_RECOVERED at ${new Date().toISOString()}`),\n   209|    });\n   210|  }\n   211|}\n   212|\n   213|async function claimTask(taskId: string): Promise<IVXOwnerAITaskRow | null> {\n   214|  const now = new Date().toISOString();\n   215|  // The submit endpoint pre-assigns assigned_worker_id='IVX-SENIOR-DEV-01' so the\n   216|  // task is already bound to this worker. The optimistic claim must therefore\n   217|  // accept rows where assigned_worker_id IS NULL (unassigned) OR already equals\n   218|  // IVX-SENIOR-DEV-01 (pre-assigned to us). Using PostgREST or= syntax.\n   219|  const filter = `&status=in.(QUEUED,RETRYING)&or=(assigned_worker_id.is.null,assigned_worker_id.eq.${encodeURIComponent(IVX_SENIOR_DEV_WORKER_ID)})`;\n   220|  const patched = await patchTask(taskId, {\n   221|    status: 'RUNNING',\n   222|    checkpoint: `CLAIMED by ${IVX_SENIOR_DEV_WORKER_ID}`,\n   223|    assigned_worker_id: IVX_SENIOR_DEV_WORKER_ID,\n   224|    heartbeat_at: now,\n   225|    checkpoint_history: appendCheckpoint(null, `CLAIMED by ${IVX_SENIOR_DEV_WORKER_ID} at ${now}`),\n   226|  }, filter);\n   227|  return patched;\n   228|}\n   229|\n   230|interface EngineerPlan {\n   231|  summary: string;\n   232|  filesToInspect: string[];\n   233|  filesToChange: { path: string; reason: string }[];\n   234|  testsToRun: string[];\n   235|  requiresDeploy: boolean;\n   236|  rollbackNotes: string;\n   237|}\n   238|\n   239|/**\n   240| * The full autonomous engineering pipeline with REAL tools.\n   241| */\n   242|async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {\n   243|  const run = await writeProofLedger({\n   244|    taskId: task.id,\n   245|    workerId: IVX_SENIOR_DEV_WORKER_ID,\n   246|    status: 'running',\n   247|    repository: process.env.GITHUB_REPO_URL ?? undefined,\n   248|  });\n   249|  if (!run) {\n   250|    // Proof ledger write failed (table missing / Supabase unreachable). This is\n   251|    // a hard failure for a senior_dev task — without a ledger there is no honest\n   252|    // evidence trail. Do NOT fall through to a hollow VERIFIED. Fail loudly.\n   253|    throw new Error('Failed to create proof ledger run record (ivx_senior_dev_worker_runs table unreachable — check SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + ensureSeniorDevTables bootstrap).');\n   254|  }\n   255|  const runId = run.id;\n   256|  // Patch the proof_ledger_id back onto the task so callers can join ledger ↔ task.\n   257|  await patchTask(task.id, { proof_ledger_id: runId });\n   258|\n   259|  // ─── Phase 1: PLANNING ──────────────────────────────────────────────\n   260|  await setPhase(task.id, 'PLANNING', runId);\n   261|  // Fetch the real repo file tree so the AI plans against actual files\n\n(File has more lines. Use 'offset' parameter to read beyond line 261)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-worker.ts\",\"offset\":1,\"limit\":260}",
+      "createdAt": 1784976929062,
+      "completedAt": 1784976929083
+    },
+    {
+      "type": "tool",
+      "id": "call_XrTrwaU6BGb3mstCboIbb4RY",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-senior-dev-ai.ts",
+        "offset": 1,
+        "limit": 160
+      },
+      "output": {
+        "path": "backend/services/ivx-senior-dev-ai.ts",
+        "content": "     2| * IVX-SENIOR-DEV-01 — AI Reasoning Client\n     3| *\n     4| * Thin client over the Vercel AI Gateway (https://ai-gateway.vercel.sh/v1)\n     5| * used by the autonomous senior developer worker to reason about code changes.\n     6| * Mirrors the proven call pattern in backend/services/ivx-ai-provider-fallback.ts.\n     7| *\n     8| * Reads credentials from process.env:\n     9| *   - OPENAI_API_KEY or AI_GATEWAY_API_KEY (vck_ key, required)\n    10| */\n    11|\n    12|const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';\n    13|\n    14|export interface AIReasoningResult {\n    15|  ok: boolean;\n    16|  content: string;\n    17|  error: string | null;\n    18|  model: string;\n    19|  usage: { promptTokens: number | null; completionTokens: number | null } | null;\n    20|}\n    21|\n    22|function readEnv(name: string): string {\n    23|  return (process.env[name] ?? '').trim();\n    24|}\n    25|\n    26|function resolveApiKey(): string {\n    27|  return readEnv('OPENAI_API_KEY') || readEnv('AI_GATEWAY_API_KEY');\n    28|}\n    29|\n    30|function resolveModel(): string {\n    31|  // Vercel AI Gateway requires the provider prefix (e.g. \"openai/gpt-4o\").\n    32|  // The runtime health endpoint confirms the working key is vck_ + openai/gpt-4o.\n    33|  // Default to the proven-working model so AI planning actually succeeds.\n    34|  const explicit = readEnv('IVX_SENIOR_DEV_MODEL');\n    35|  if (explicit) return explicit;\n    36|  const fallback = readEnv('IVX_OPENAI_FALLBACK_MODEL');\n    37|  if (fallback) return fallback.startsWith('openai/') || fallback.startsWith('anthropic/') ? fallback : `openai/${fallback}`;\n    38|  return 'openai/gpt-4o';\n    39|}\n    40|\n    41|/**\n    42| * Ask the AI gateway a question and return the assistant message content.\n    43| * Returns { ok: false, error } on any failure — the worker must handle gracefully.\n    44| */\n    45|export async function askAI(prompt: string, opts: { systemPrompt?: string; maxTokens?: number; timeoutMs?: number } = {}): Promise<AIReasoningResult> {\n    46|  const apiKey = resolveApiKey();\n    47|  if (!apiKey) {\n    48|    return { ok: false, content: '', error: 'AI gateway key not configured (OPENAI_API_KEY or AI_GATEWAY_API_KEY).', model: 'none', usage: null };\n    49|  }\n    50|  const model = resolveModel();\n    51|  const messages: { role: string; content: string }[] = [];\n    52|  if (opts.systemPrompt) messages.push({ role: 'system', content: opts.systemPrompt });\n    53|  messages.push({ role: 'user', content: prompt });\n    54|\n    55|  const controller = new AbortController();\n    56|  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);\n    57|  try {\n    58|    const res = await fetch(GATEWAY_URL, {\n    59|      method: 'POST',\n    60|      headers: {\n    61|        Authorization: `Bearer ${apiKey}`,\n    62|        'Content-Type': 'application/json',\n    63|      },\n    64|      body: JSON.stringify({\n    65|        model,\n    66|        messages,\n    67|        max_tokens: opts.maxTokens ?? 2000,\n    68|        temperature: 0.2,\n    69|      }),\n    70|      signal: controller.signal,\n    71|    });\n    72|    if (!res.ok) {\n    73|      const text = await res.text().catch(() => '');\n    74|      return { ok: false, content: '', error: `AI gateway HTTP ${res.status}: ${text.slice(0, 300)}`, model, usage: null };\n    75|    }\n    76|    const data = (await res.json()) as Record<string, unknown>;\n    77|    const choices = Array.isArray(data.choices) ? (data.choices as Array<Record<string, unknown>>) : [];\n    78|    const message = choices[0]?.message as Record<string, unknown> | undefined;\n    79|    const content = typeof message?.content === 'string' ? message.content : '';\n    80|    const usage = data.usage as Record<string, unknown> | undefined;\n    81|    return {\n    82|      ok: true,\n    83|      content,\n    84|      error: null,\n    85|      model,\n    86|      usage: {\n    87|        promptTokens: typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : null,\n    88|        completionTokens: typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : null,\n    89|      },\n    90|    };\n    91|  } catch (err) {\n    92|    return { ok: false, content: '', error: err instanceof Error ? err.message : String(err), model, usage: null };\n    93|  } finally {\n    94|    clearTimeout(timeout);\n    95|  }\n    96|}\n    97|\n    98|/**\n    99| * Ask the AI to produce a structured plan (JSON) for an engineering task.\n   100| * If repoFileTree is provided, it is injected so the AI plans against actual\n   101| * files (not hallucinated paths).\n   102| */\n   103|export async function planEngineeringTask(taskPrompt: string, repoFileTree: string[] = []): Promise<AIReasoningResult> {\n   104|  const fileTreeSection = repoFileTree.length > 0\n   105|    ? `\\n\\n--- REPOSITORY FILE TREE (actual files you may inspect or edit) ---\\n${repoFileTree.join('\\n')}\\n--- END FILE TREE ---\\n\\nIMPORTANT: Only reference files that appear in the file tree above. Do NOT invent paths.\\n`\n   106|    : '';\n   107|  const systemPrompt = [\n   108|    'You are an autonomous senior developer reasoning about a code change request.',\n   109|    'Inspect the repository context given and return a JSON object with keys:',\n   110|    '  \"summary\": one-line description of the change,',\n   111|    '  \"filesToInspect\": array of repo-relative file paths to read before editing (must exist in the file tree if provided),',\n   112|    '  \"filesToChange\": array of {path, reason} describing each file to edit (must exist in the file tree if provided),',\n   113|    '  \"testsToRun\": array of test commands (e.g. \"bun test backend/services/foo.test.ts\"),',\n   114|    '  \"requiresDeploy\": boolean — true if the change must deploy to production,',\n   115|    '  \"rollbackNotes\": short rollback plan if the change breaks production.',\n   116|    'Return ONLY the JSON object. No prose, no markdown fences.',\n   117|    'Prefer the SMALLEST safe change that fixes a real defect. Do NOT invent file paths.',\n   118|  ].join('\\n');\n   119|  return askAI(`Engineering task:\\n${taskPrompt}${fileTreeSection}\\nReturn the plan JSON now.`, { systemPrompt, maxTokens: 1500, timeoutMs: 90_000 });\n   120|}\n   121|\n   122|/**\n   123| * Ask the AI to generate a file patch given the current file content + goal.\n   124| * Returns the full new file content (not a diff) for simplicity and reliability.\n   125| *\n   126| * CRITICAL: the prompt enforces SURGICAL minimal edits. The AI must change ONLY\n   127| * the lines required by the goal and preserve every other line verbatim. This is\n   128| * the root-cause fix for the prior failures where the AI rewrote whole large\n   129| * files (breaking tsc/tests on 4 consecutive tasks). Re-writing a 600-line file\n   130| * to fix a one-line defect guarantees type/test drift.\n   131| */\n   132|export async function generateFilePatch(input: { filePath: string; currentContent: string; goal: string; priorContext?: string }): Promise<AIReasoningResult> {\n   133|  const systemPrompt = [\n   134|    'You are an autonomous senior developer editing a file in a TypeScript + React Native (Expo) + Hono backend monorepo.',\n   135|    'Return the COMPLETE new file content only — no prose, no markdown fences, no explanations.',\n   136|    '',\n   137|    'SURGICAL EDIT RULES (CRITICAL — violating these breaks the build):',\n   138|    '1. Change ONLY the lines required by the goal. Every other line MUST be preserved VERBATIM (same whitespace, same imports, same order).',\n   139|    '2. Do NOT reformat, reorder, rename, or \"improve\" code that is unrelated to the goal.',\n   140|    '3. Do NOT add or remove imports unless the goal explicitly requires it.',\n   141|    '4. Do NOT rewrite functions you are not asked to touch.',\n   142|    '5. If the goal is to ADD a new file (current content empty), write only the minimal new file — do not stub unrelated helpers.',\n   143|    '6. Prefer the SMALLEST possible change. A one-line fix must produce a one-line diff, not a 200-line rewrite.',\n   144|    '7. Follow the existing code style (TypeScript strict, explicit types).',\n   145|  ].join('\\n');\n   146|  const userPrompt = [\n   147|    `File: ${input.filePath}`,\n   148|    `Goal: ${input.goal}`,\n   149|    input.priorContext ? `Prior context:\\n${input.priorContext}` : '',\n   150|    '--- CURRENT FILE ---',\n   151|    input.currentContent,\n   152|    '--- END CURRENT FILE ---',\n   153|    'Return the complete new file content now.',\n   154|  ].filter(Boolean).join('\\n\\n');\n   155|  return askAI(userPrompt, { systemPrompt, maxTokens: 4000, timeoutMs: 120_000 });\n   156|}\n\n(End of file - total 156 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-ai.ts\",\"offset\":1,\"limit\":160}",
+      "createdAt": 1784976929065,
+      "completedAt": 1784976929085
+    },
+    {
+      "type": "tool",
+      "id": "call_GrVF2BSKb3OtaA1NODu9tMd8",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-internal-deploy-client.ts",
+        "offset": 1,
+        "limit": 220
+      },
+      "output": {
+        "path": "backend/services/ivx-internal-deploy-client.ts",
+        "content": "     2|\n     3|import type { InternalDeployAuthorization } from './ivx-internal-deploy-auth';\n     4|\n     5|export type InternalDeploymentApprovalRequest = {\n     6|  ownerApprovalId: string;\n     7|  requestedCommitSha: string;\n     8|  deploymentAction: InternalDeployAuthorization['action'];\n     9|};\n    10|\n    11|function requiredEnv(name: 'IVX_INTERNAL_DEPLOY_SECRET' | 'IVX_INTERNAL_WORKER_ID'): string {\n    12|  const value = process.env[name]?.trim() ?? '';\n    13|  if (!value) throw new Error(`${name} is not configured for the internal worker.`);\n    14|  return value;\n    15|}\n    16|\n    17|function internalApiBaseUrl(): string {\n    18|  const raw = process.env.IVX_INTERNAL_API_URL?.trim() || 'https://api.ivxholding.com';\n    19|  return raw.replace(/\\/$/, '');\n    20|}\n    21|\n    22|/** Builds a short-lived HMAC request from the dedicated worker without exposing its secret. */\n    23|export function createInternalDeploymentAuthorizationRequest(input: InternalDeploymentApprovalRequest): Request {\n    24|  const workerId = requiredEnv('IVX_INTERNAL_WORKER_ID');\n    25|  const secret = requiredEnv('IVX_INTERNAL_DEPLOY_SECRET');\n    26|  const endpoint = `${internalApiBaseUrl()}/api/ivx/senior-developer/internal-deployment-authorizations/consume`;\n    27|  const timestamp = String(Math.floor(Date.now() / 1000));\n    28|  const nonce = randomBytes(24).toString('base64url');\n    29|  const body = JSON.stringify(input);\n    30|  const pathname = new URL(endpoint).pathname;\n    31|  const payload = [workerId, timestamp, nonce, 'POST', pathname, body].join('\\n');\n    32|  const signature = createHmac('sha256', secret).update(payload, 'utf8').digest('hex');\n    33|\n    34|  return new Request(endpoint, {\n    35|    method: 'POST',\n    36|    headers: {\n    37|      'Content-Type': 'application/json',\n    38|      'X-IVX-Worker-ID': workerId,\n    39|      'X-IVX-Timestamp': timestamp,\n    40|      'X-IVX-Nonce': nonce,\n    41|      'X-IVX-Deploy-Signature': signature,\n    42|    },\n    43|    body,\n    44|  });\n    45|}\n    46|\n    47|/** Consumes one owner approval immediately before the corresponding protected action. */\n    48|export async function consumeInternalDeploymentApproval(input: InternalDeploymentApprovalRequest): Promise<void> {\n    49|  const response = await fetch(createInternalDeploymentAuthorizationRequest(input));\n    50|  if (response.ok) return;\n    51|  const payload = await response.json().catch((): { error?: unknown } => ({}));\n    52|  const message = typeof payload.error === 'string' ? payload.error : `Internal authorization request failed with HTTP ${response.status}.`;\n    53|  throw new Error(message.slice(0, 500));\n    54|}\n\n(End of file - total 54 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/services/ivx-internal-deploy-client.ts\",\"offset\":1,\"limit\":220}",
+      "createdAt": 1784976929068,
+      "completedAt": 1784976929085
+    },
+    {
+      "type": "tool",
+      "id": "call_37OSMZwbM8dgXM9vxLyhw34X",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-internal-deploy-auth.ts",
+        "offset": 1,
+        "limit": 200
+      },
+      "output": {
+        "path": "backend/services/ivx-internal-deploy-auth.ts",
+        "content": "     2|import { readDurableJson, writeDurableJson } from './ivx-durable-store';\n     3|\n     4|const NONCE_STORE = 'logs/audit/internal-deploy-auth/nonces.json';\n     5|const APPROVAL_STORE = 'logs/audit/owner-deployment-approvals/approvals.json';\n     6|const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;\n     7|const MAX_NONCES = 500;\n     8|\n     9|export type InternalDeployAuthorization = {\n    10|  workerId: string;\n    11|  approvalId: string;\n    12|  requestedCommitSha: string;\n    13|  action: 'GITHUB_WRITE' | 'RENDER_DEPLOY' | 'PRODUCTION_DEPLOY';\n    14|};\n    15|\n    16|export type InternalDeployAuthStore = {\n    17|  readJson<T>(file: string, fallback: T): Promise<T>;\n    18|  writeJson(file: string, value: unknown): Promise<void>;\n    19|};\n    20|\n    21|type UsedNonce = { nonce: string; expiresAt: number };\n    22|type StoredApproval = {\n    23|  id: string;\n    24|  ownerUserId: string;\n    25|  requestedCommitSha: string;\n    26|  action: InternalDeployAuthorization['action'];\n    27|  status: 'approved' | 'revoked';\n    28|  approvedAt: string;\n    29|  expiresAt: string;\n    30|  usedAt: string | null;\n    31|  requestId: string;\n    32|  createdAt: string;\n    33|};\n    34|\n    35|const durableAuthStore: InternalDeployAuthStore = {\n    36|  readJson: readDurableJson,\n    37|  writeJson: writeDurableJson,\n    38|};\n    39|\n    40|export class InternalDeployAuthError extends Error {\n    41|  readonly status: 401 | 403;\n    42|  constructor(message: string, status: 401 | 403) {\n    43|    super(message);\n    44|    this.name = 'InternalDeployAuthError';\n    45|    this.status = status;\n    46|  }\n    47|}\n    48|\n    49|function trimmed(value: string | null | undefined): string {\n    50|  return value?.trim() ?? '';\n    51|}\n    52|\n    53|function configuredSecret(): string {\n    54|  return trimmed(process.env.IVX_INTERNAL_DEPLOY_SECRET);\n    55|}\n    56|\n    57|function configuredWorkerId(): string {\n    58|  return trimmed(process.env.IVX_INTERNAL_WORKER_ID);\n    59|}\n    60|\n    61|function secureEqual(left: string, right: string): boolean {\n    62|  const a = Buffer.from(left, 'utf8');\n    63|  const b = Buffer.from(right, 'utf8');\n    64|  return a.length === b.length && timingSafeEqual(a, b);\n    65|}\n    66|\n    67|function signaturePayload(input: { workerId: string; timestamp: string; nonce: string; method: string; pathname: string; body: string }): string {\n    68|  return [input.workerId, input.timestamp, input.nonce, input.method.toUpperCase(), input.pathname, input.body].join('\\n');\n    69|}\n    70|\n    71|function parseAuthorizationBody(bodyText: string): { approvalId: string; requestedCommitSha: string; action: InternalDeployAuthorization['action'] } {\n    72|  let raw: unknown;\n    73|  try {\n    74|    raw = JSON.parse(bodyText) as unknown;\n    75|  } catch {\n    76|    throw new InternalDeployAuthError('Signed worker requests require a JSON body.', 401);\n    77|  }\n    78|  const body = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};\n    79|  const approvalId = typeof body.ownerApprovalId === 'string' ? body.ownerApprovalId.trim() : '';\n    80|  const requestedCommitSha = typeof body.requestedCommitSha === 'string' ? body.requestedCommitSha.trim().toLowerCase() : '';\n    81|  const action = typeof body.deploymentAction === 'string' ? body.deploymentAction.trim() : '';\n    82|  if (!approvalId || !/^[a-zA-Z0-9_-]{8,128}$/.test(approvalId)) throw new InternalDeployAuthError('A valid ownerApprovalId is required.', 403);\n    83|  if (!/^[a-f0-9]{40}$/i.test(requestedCommitSha)) throw new InternalDeployAuthError('A 40-character requestedCommitSha is required.', 403);\n    84|  if (action !== 'GITHUB_WRITE' && action !== 'RENDER_DEPLOY' && action !== 'PRODUCTION_DEPLOY') throw new InternalDeployAuthError('The requested deployment action is not allowed.', 403);\n    85|  return { approvalId, requestedCommitSha, action };\n    86|}\n    87|\n    88|async function claimNonce(nonce: string, nowMs: number, store: InternalDeployAuthStore): Promise<void> {\n    89|  const stored = await store.readJson<UsedNonce[]>(NONCE_STORE, []);\n    90|  const active = stored.filter((item) => item.expiresAt > nowMs).slice(-MAX_NONCES);\n    91|  if (active.some((item) => item.nonce === nonce)) throw new InternalDeployAuthError('Worker nonce has already been used.', 401);\n    92|  active.push({ nonce, expiresAt: nowMs + MAX_CLOCK_SKEW_MS });\n    93|  await store.writeJson(NONCE_STORE, active);\n    94|}\n    95|\n    96|export type OwnerDeploymentApprovalInput = {\n    97|  ownerUserId: string;\n    98|  requestedCommitSha: string;\n    99|  action: InternalDeployAuthorization['action'];\n   100|  requestId: string;\n   101|  expiresAt: string;\n   102|};\n   103|\n   104|/** Creates a durable single-use owner approval after human JWT authorization. */\n   105|export async function createOwnerDeploymentApproval(input: OwnerDeploymentApprovalInput, store: InternalDeployAuthStore = durableAuthStore): Promise<StoredApproval> {\n   106|  const requestedCommitSha = input.requestedCommitSha.trim().toLowerCase();\n   107|  if (!/^[a-f0-9]{40}$/i.test(requestedCommitSha)) throw new Error('requestedCommitSha must be a 40-character SHA.');\n   108|  if (Date.parse(input.expiresAt) <= Date.now()) throw new Error('expiresAt must be in the future.');\n   109|  const approvals = await store.readJson<StoredApproval[]>(APPROVAL_STORE, []);\n   110|  const approval: StoredApproval = {\n   111|    id: crypto.randomUUID(),\n   112|    ownerUserId: input.ownerUserId,\n   113|    requestedCommitSha,\n   114|    action: input.action,\n   115|    status: 'approved',\n   116|    approvedAt: new Date().toISOString(),\n   117|    expiresAt: input.expiresAt,\n   118|    usedAt: null,\n   119|    requestId: input.requestId,\n   120|    createdAt: new Date().toISOString(),\n   121|  };\n   122|  approvals.push(approval);\n   123|  await store.writeJson(APPROVAL_STORE, approvals.slice(-MAX_NONCES));\n   124|  return approval;\n   125|}\n   126|\n   127|async function consumeApproval(input: InternalDeployAuthorization, store: InternalDeployAuthStore): Promise<void> {\n   128|  const approvals = await store.readJson<StoredApproval[]>(APPROVAL_STORE, []);\n   129|  const now = Date.now();\n   130|  const index = approvals.findIndex((approval) => approval.id === input.approvalId);\n   131|  const approval = index >= 0 ? approvals[index] : null;\n   132|  if (!approval || approval.status !== 'approved') throw new InternalDeployAuthError('No approved owner deployment record exists for this request.', 403);\n   133|  if (approval.usedAt) throw new InternalDeployAuthError('The owner deployment approval has already been used.', 403);\n   134|  if (Date.parse(approval.expiresAt) <= now) throw new InternalDeployAuthError('The owner deployment approval has expired.', 403);\n   135|  if (approval.requestedCommitSha !== input.requestedCommitSha || approval.action !== input.action) {\n   136|    throw new InternalDeployAuthError('The owner approval does not match the requested commit and action.', 403);\n   137|  }\n   138|  approvals[index] = { ...approval, usedAt: new Date(now).toISOString() };\n   139|  await store.writeJson(APPROVAL_STORE, approvals);\n   140|}\n   141|\n   142|/** Validates and consumes a one-time signed worker deployment authorization. */\n   143|export async function authorizeInternalDeploymentRequest(request: Request, store: InternalDeployAuthStore = durableAuthStore): Promise<InternalDeployAuthorization> {\n   144|  const secret = configuredSecret();\n   145|  const expectedWorkerId = configuredWorkerId();\n   146|  if (!secret || !expectedWorkerId) throw new InternalDeployAuthError('Internal worker authentication is not configured.', 401);\n   147|\n   148|  const workerId = trimmed(request.headers.get('X-IVX-Worker-ID'));\n   149|  const timestamp = trimmed(request.headers.get('X-IVX-Timestamp'));\n   150|  const nonce = trimmed(request.headers.get('X-IVX-Nonce'));\n   151|  const receivedSignature = trimmed(request.headers.get('X-IVX-Deploy-Signature'));\n   152|  if (!workerId || !timestamp || !nonce || !receivedSignature) throw new InternalDeployAuthError('Required signed worker authentication headers are missing.', 401);\n   153|  if (!secureEqual(workerId, expectedWorkerId)) throw new InternalDeployAuthError('Worker identity is not authorized.', 401);\n   154|  const timestampMs = Number(timestamp) * 1000;\n   155|  if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > MAX_CLOCK_SKEW_MS) throw new InternalDeployAuthError('Worker request timestamp is expired or invalid.', 401);\n   156|  if (!/^[A-Za-z0-9_-]{16,128}$/.test(nonce)) throw new InternalDeployAuthError('Worker request nonce is invalid.', 401);\n   157|\n   158|  const body = await request.clone().text();\n   159|  const expectedSignature = createHmac('sha256', secret).update(signaturePayload({ workerId, timestamp, nonce, method: request.method, pathname: new URL(request.url).pathname, body }), 'utf8').digest('hex');\n   160|  if (!/^[a-f0-9]{64}$/i.test(receivedSignature) || !secureEqual(receivedSignature.toLowerCase(), expectedSignature)) throw new InternalDeployAuthError('Worker request signature is invalid.', 401);\n   161|\n   162|  const approval = parseAuthorizationBody(body);\n   163|  await claimNonce(nonce, Date.now(), store);\n   164|  const authorization: InternalDeployAuthorization = { workerId, ...approval };\n   165|  await consumeApproval(authorization, store);\n   166|  return authorization;\n   167|}\n   168|\n   169|/** Secret-safe startup configuration status for observability. */\n   170|export function internalDeployAuthRuntimeStatus(): { workerIdConfigured: boolean; secretConfigured: boolean } {\n   171|  return { workerIdConfigured: Boolean(configuredWorkerId()), secretConfigured: Boolean(configuredSecret()) };\n   172|}\n\n(End of file - total 172 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/services/ivx-internal-deploy-auth.ts\",\"offset\":1,\"limit\":200}",
+      "createdAt": 1784976929070,
+      "completedAt": 1784976929086
+    },
+    {
+      "type": "tool",
+      "id": "call_oLzOROvwJTOSQea5OmJ9jnYh",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/package.json",
+        "offset": 1,
+        "limit": 160
+      },
+      "output": {
+        "error": "File backend/package.json not found. Note: your current working directory is /home/user/rork-app."
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/package.json\",\"offset\":1,\"limit\":160}",
+      "createdAt": 1784976929073,
+      "completedAt": 1784976929097
+    },
+    {
+      "type": "tool",
+      "id": "call_iZfgMSG3UFPAwtjOuf2U3yAo",
+      "toolName": "grep",
+      "input": {
+        "pattern": "IVX_OWNER|SUPABASE_URL|autonomous-worker/jobs|create.*approval|approvals",
+        "path": "backend",
+        "include": "*.ts"
+      },
+      "output": {
+        "pattern": "IVX_OWNER|SUPABASE_URL|autonomous-worker/jobs|create.*approval|approvals",
+        "results": [
+          {
+            "filePath": "backend/services/ivx-video-platform-store.ts",
+            "lineNumber": 498,
+            "line": "    const url = (env('EXPO_PUBLIC_SUPABASE_URL') || env('SUPABASE_URL')).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/engineering-intelligence.ts",
+            "lineNumber": 99,
+            "line": "  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/engineering-intelligence.ts",
+            "lineNumber": 100,
+            "line": "  if (!url) throw new Error('EXPO_PUBLIC_SUPABASE_URL is required for IVX engineering intelligence.');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/operational-adapters.ts",
+            "lineNumber": 146,
+            "line": "  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/task-state.ts",
+            "lineNumber": 17,
+            "line": "  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/task-state.ts",
+            "lineNumber": 18,
+            "line": "  if (!url) throw new Error('EXPO_PUBLIC_SUPABASE_URL is required for IVX agent tasks.');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/vector-memory.ts",
+            "lineNumber": 23,
+            "line": "  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/operational-memory/vector-memory.ts",
+            "lineNumber": 24,
+            "line": "  if (!url) throw new Error('EXPO_PUBLIC_SUPABASE_URL is required for IVX operational memory.');"
+          },
+          {
+            "filePath": "backend/tests/ivx-render-env-merge.test.ts",
+            "lineNumber": 36,
+            "line": "  { envVar: { key: 'EXPO_PUBLIC_SUPABASE_URL', value: 'https://x.supabase.co' } },"
+          },
+          {
+            "filePath": "backend/tests/ivx-render-env-merge.test.ts",
+            "lineNumber": 47,
+            "line": "  'EXPO_PUBLIC_SUPABASE_URL',"
+          },
+          {
+            "filePath": "backend/worker.ts",
+            "lineNumber": 39,
+            "line": "  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;"
+          },
+          {
+            "filePath": "backend/services/ivx-sns-sms.ts",
+            "lineNumber": 14,
+            "line": " * IVX_OWNER_RECOVERY_PHONE env var. The sender ID is IVXOwner."
+          },
+          {
+            "filePath": "backend/services/ivx-sns-sms.ts",
+            "lineNumber": 44,
+            "line": "  return readEnv('IVX_OWNER_RECOVERY_PHONE');"
+          },
+          {
+            "filePath": "backend/services/ivx-sns-sms.ts",
+            "lineNumber": 99,
+            "line": "  if (!to) missingEnvNames.push('IVX_OWNER_RECOVERY_PHONE');"
+          },
+          {
+            "filePath": "backend/services/ivx-soft-delete.ts",
+            "lineNumber": 21,
+            "line": "  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim().replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-soft-delete.ts",
+            "lineNumber": 24,
+            "line": "  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-storage-backup.ts",
+            "lineNumber": 28,
+            "line": "  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim().replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-storage-backup.ts",
+            "lineNumber": 31,
+            "line": "  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-supabase-check.ts",
+            "lineNumber": 67,
+            "line": "  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-supabase-check.ts",
+            "lineNumber": 70,
+            "line": "  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-supabase-storage.ts",
+            "lineNumber": 32,
+            "line": "  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-supabase-storage.ts",
+            "lineNumber": 36,
+            "line": "  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-availability.ts",
+            "lineNumber": 141,
+            "line": "    requiredEnv: ['SUPABASE_SERVICE_ROLE_KEY', 'EXPO_PUBLIC_SUPABASE_URL'],"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-availability.ts",
+            "lineNumber": 143,
+            "line": "    detailWhenMissing: 'SUPABASE_SERVICE_ROLE_KEY / EXPO_PUBLIC_SUPABASE_URL missing — DB actions are blocked.',"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-availability.ts",
+            "lineNumber": 150,
+            "line": "    requiredEnv: ['SUPABASE_SERVICE_ROLE_KEY', 'EXPO_PUBLIC_SUPABASE_URL'],"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-availability.ts",
+            "lineNumber": 152,
+            "line": "    detailWhenMissing: 'SUPABASE_SERVICE_ROLE_KEY / EXPO_PUBLIC_SUPABASE_URL missing — real downloadable deliverables cannot be produced (placeholder links stay blocked).',"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-availability.ts",
+            "lineNumber": 159,
+            "line": "    requiredEnv: ['IVX_OWNER_REGISTRATION_EMAILS'],"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-availability.ts",
+            "lineNumber": 161,
+            "line": "    detailWhenMissing: 'IVX_OWNER_REGISTRATION_EMAILS missing — owner allowlist not configured (auth promotion will reject).',"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 73,
+            "line": "  return getVaultValue('IVX_SUPABASE_URL', 'SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 176,
+            "line": "  if (!supabaseUrl() || !supabaseServiceRole()) return { ok: false, error: 'IVX_SUPABASE_URL or IVX_SUPABASE_SERVICE_ROLE_KEY not configured', data: null };"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 186,
+            "line": "  if (!supabaseUrl() || !supabaseServiceRole()) return { ok: false, error: 'IVX_SUPABASE_URL or IVX_SUPABASE_SERVICE_ROLE_KEY not configured', data: null };"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 215,
+            "line": "  if (!supabaseUrl() || !supabaseServiceRole()) return { ok: false, error: 'IVX_SUPABASE_URL or IVX_SUPABASE_SERVICE_ROLE_KEY not configured', data: null };"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 359,
+            "line": "    requiresCredentials: ['IVX_SUPABASE_URL', 'IVX_SUPABASE_SERVICE_ROLE_KEY'],"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 366,
+            "line": "    requiresCredentials: ['IVX_SUPABASE_URL', 'IVX_SUPABASE_SERVICE_ROLE_KEY'],"
+          },
+          {
+            "filePath": "backend/services/ivx-tool-engine.ts",
+            "lineNumber": 373,
+            "line": "    requiresCredentials: ['IVX_SUPABASE_URL', 'IVX_SUPABASE_SERVICE_ROLE_KEY'],"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-finance.ts",
+            "lineNumber": 824,
+            "line": "  const [accounts, entries, plans, commissions, influencers, approvals] = await Promise.all(["
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-finance.ts",
+            "lineNumber": 877,
+            "line": "    pendingApprovals: approvals.length,"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 25,
+            "line": " *   logs/audit/treasury/approvals.json     approval workflow records"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 45,
+            "line": "const APPROVALS_FILE = () => path.join(STORE_DIR(), 'approvals.json');"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 175,
+            "line": "// Types — approvals"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 611,
+            "line": "  const approvals = await readStore<ApprovalRecord[]>(APPROVALS_FILE(), []);"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 631,
+            "line": "  approvals.push(record);"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 632,
+            "line": "  await writeStore(APPROVALS_FILE(), approvals);"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 633,
+            "line": "  await appendAuditEvent({ action: 'approval_created', approvalId: record.approvalId, transactionId: input.transactionId, amount: input.amount });"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 638,
+            "line": "  const approvals = await readStore<ApprovalRecord[]>(APPROVALS_FILE(), []);"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 639,
+            "line": "  return status ? approvals.filter((a) => a.status === status) : approvals;"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 650,
+            "line": "  const approvals = await readStore<ApprovalRecord[]>(APPROVALS_FILE(), []);"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 651,
+            "line": "  const record = approvals.find((a) => a.approvalId === input.approvalId);"
+          },
+          {
+            "filePath": "backend/services/ivx-treasury-system.ts",
+            "lineNumber": 675,
+            "line": "  await writeStore(APPROVALS_FILE(), approvals);"
+          },
+          {
+            "filePath": "backend/services/ivx-two-person-approval.ts",
+            "lineNumber": 12,
+            "line": " * A destructive op is NOT executed until BOTH approvals are recorded. The"
+          },
+          {
+            "filePath": "backend/services/ivx-two-person-approval.ts",
+            "lineNumber": 13,
+            "line": " * request creates a pending approval record; the second approver confirms it."
+          },
+          {
+            "filePath": "backend/services/ivx-two-person-approval.ts",
+            "lineNumber": 24,
+            "line": "const APPROVALS_FILE = path.resolve(process.cwd(), 'logs', 'audit', 'data-vault', 'two-person-approvals.jsonl');"
+          },
+          {
+            "filePath": "backend/services/ivx-two-person-approval.ts",
+            "lineNumber": 110,
+            "line": " * Step 1 — owner creates a destructive-op approval request."
+          },
+          {
+            "filePath": "backend/services/ivx-unified-ai-gate-pipeline.ts",
+            "lineNumber": 176,
+            "line": "      requiredVariable: 'IVX_OWNER_TOKEN',"
+          },
+          {
+            "filePath": "backend/services/ivx-uptime-probe.ts",
+            "lineNumber": 57,
+            "line": "  const ownerAI = readEnv('EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-vault-table.ts",
+            "lineNumber": 32,
+            "line": "  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim().replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-vault-table.ts",
+            "lineNumber": 35,
+            "line": "  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-video-pipeline.ts",
+            "lineNumber": 498,
+            "line": "  const url = env('EXPO_PUBLIC_SUPABASE_URL') || env('SUPABASE_URL');"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 38,
+            "line": "const SUPABASE_URL = (process.env.SUPABASE_URL ?? process.env.IVX_SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\\/$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 45,
+            "line": "  for (const raw of [process.env.IVX_SUPABASE_URL, process.env.EXPO_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL]) {"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 119,
+            "line": "CREATE TABLE IF NOT EXISTS public.ivx_senior_dev_approvals ("
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 126,
+            "line": "CREATE INDEX IF NOT EXISTS idx_ivx_senior_dev_approvals_task_action"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 127,
+            "line": "  ON public.ivx_senior_dev_approvals (task_id, action);"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 130,
+            "line": "ALTER TABLE public.ivx_senior_dev_approvals ENABLE ROW LEVEL SECURITY;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 172,
+            "line": "  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { ...restHeaders(), ...(init.headers ?? {}) } });"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 176,
+            "line": "  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 186,
+            "line": "  const res = await restFetch('ivx_senior_dev_approvals', {"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 197,
+            "line": "  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return false;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 198,
+            "line": "  const res = await restFetch(`ivx_senior_dev_approvals?task_id=eq.${encodeURIComponent(taskId)}&action=eq.${action}&revoked_at=is.null&expires_at=gte.${encodeURIComponent(new Date().toISOString())}&limit=1`, {"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 248,
+            "line": "  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 285,
+            "line": "  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 322,
+            "line": "  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-proof.ts",
+            "lineNumber": 362,
+            "line": "  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return false;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-tools.ts",
+            "lineNumber": 286,
+            "line": "  const supabaseHits = await searchRepo('createClient\\\\(.*supabase|EXPO_PUBLIC_SUPABASE_URL', 'expo', 30);"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-worker.ts",
+            "lineNumber": 9,
+            "line": " *   - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (task queue + proof ledger)"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-worker.ts",
+            "lineNumber": 253,
+            "line": "    throw new Error('Failed to create proof ledger run record (ivx_senior_dev_worker_runs table unreachable — check SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + ensureSeniorDevTables bootstrap).');"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-dev-worker.ts",
+            "lineNumber": 757,
+            "line": "  const supabaseUrl = (process.env.SUPABASE_URL ?? '').trim();"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-autonomous-mode.test.ts",
+            "lineNumber": 176,
+            "line": "      SUPABASE_URL: 'present',"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-autonomous-mode.test.ts",
+            "lineNumber": 196,
+            "line": "      SUPABASE_URL: 'wrong_permission',"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-autonomous-mode.test.ts",
+            "lineNumber": 387,
+            "line": "  const present = { GITHUB_TOKEN: 'present', RENDER_API_KEY: 'present', SUPABASE_URL: 'present' } as Record<string, CredentialCheckStatus>;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 13,
+            "line": " * Approvals are persisted to the Supabase table `owner_execution_approvals`"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 99,
+            "line": "const approvals = new Map<string, ExecutorApprovalRecord>();"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 185,
+            "line": "function supabaseUrl(): string { return readEnv('EXPO_PUBLIC_SUPABASE_URL').replace(/\\/+$/, ''); }"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 203,
+            "line": "  const probe = await fetch(`${url}/rest/v1/owner_execution_approvals?select=id&limit=0`, {"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 208,
+            "line": "  return { ok: false, error: `owner_execution_approvals table not reachable (HTTP ${probe.status}). Run the SQL migration to create it. Approvals are mirrored in-memory until then.` };"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 216,
+            "line": "    await fetch(`${url}/rest/v1/owner_execution_approvals`, {"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 496,
+            "line": "  approvals.set(approval_id, record);"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 509,
+            "line": "  const record = approvals.get(approval_id);"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 515,
+            "line": "  approvals.set(approval_id, record);"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 523,
+            "line": "  return approvals.get(approval_id) ?? null;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 527,
+            "line": "  return [...approvals.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 533,
+            "line": "  const approval = approvals.get(task.approval_id);"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 601,
+            "line": "  const approval = task.approval_id ? approvals.get(task.approval_id) : null;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 631,
+            "line": "create table if not exists public.owner_execution_approvals ("
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 643,
+            "line": "alter table public.owner_execution_approvals enable row level security;"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-executor.ts",
+            "lineNumber": 644,
+            "line": "create policy \"owner_only_approvals\" on public.owner_execution_approvals"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-runtime.ts",
+            "lineNumber": 1936,
+            "line": "    || readTrimmedEnv('EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL')"
+          },
+          {
+            "filePath": "backend/services/ivx-senior-developer-self-proof.ts",
+            "lineNumber": 109,
+            "line": "    || read('EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL')"
+          },
+          {
+            "filePath": "backend/services/ivx-pitr-status.ts",
+            "lineNumber": 25,
+            "line": "  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim().replace(/\\/+$/, '');"
+          },
+          {
+            "filePath": "backend/services/ivx-pitr-status.ts",
+            "lineNumber": 28,
+            "line": "  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');"
+          }
+        ],
+        "truncated": true,
+        "totalMatches": 618
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"pattern\":\"IVX_OWNER|SUPABASE_URL|autonomous-worker/jobs|create.*approval|approvals\",\"path\":\"backend\",\"include\":\"*.ts\"}",
+      "createdAt": 1784976929075,
+      "completedAt": 1784976929119
+    },
+    {
+      "type": "tool",
+      "id": "call_hpXSBBGCln5MPWeas96LpUoV",
+      "toolName": "read",
+      "input": {
+        "filePath": "package.json",
+        "offset": 1,
+        "limit": 140
+      },
+      "output": {
+        "path": "package.json",
+        "content": "     2|  \"name\": \"ivx-holdings-platform\",\n     3|  \"private\": true,\n     4|  \"devDependencies\": {\n     5|    \"@playwright/test\": \"^1.61.1\",\n     6|    \"@types/bun\": \"^1.3.14\",\n     7|    \"bun-types\": \"^1.3.14\"\n     8|  },\n     9|  \"peerDependencies\": {\n    10|    \"typescript\": \"^5\"\n    11|  },\n    12|  \"dependencies\": {\n    13|    \"@ai-sdk/openai\": \"3.0.85\",\n    14|    \"@aws-sdk/client-acm\": \"^3.1036.0\",\n    15|    \"@aws-sdk/client-cloudfront\": \"^3.1089.0\",\n    16|    \"@aws-sdk/client-ec2\": \"^3.1036.0\",\n    17|    \"@aws-sdk/client-ecs\": \"^3.1036.0\",\n    18|    \"@aws-sdk/client-elastic-load-balancing-v2\": \"^3.1036.0\",\n    19|    \"@aws-sdk/client-iam\": \"^3.1036.0\",\n    20|    \"@aws-sdk/client-organizations\": \"^3.1036.0\",\n    21|    \"@aws-sdk/client-route-53\": \"^3.1029.0\",\n    22|    \"@aws-sdk/client-s3\": \"^3.1089.0\",\n    23|    \"@aws-sdk/client-secrets-manager\": \"^3.1079.0\",\n    24|    \"@aws-sdk/client-ssm\": \"^3.1037.0\",\n    25|    \"@aws-sdk/client-sts\": \"^3.1029.0\",\n    26|    \"@aws-sdk/s3-request-presigner\": \"^3.1092.0\",\n    27|    \"@hono/node-server\": \"^1.19.14\",\n    28|    \"@supabase/supabase-js\": \"^2.110.8\",\n    29|    \"@tanstack/react-query\": \"^5.99.0\",\n    30|    \"@types/cors\": \"^2.8.19\",\n    31|    \"@types/express\": \"^5.0.6\",\n    32|    \"@types/node\": \"^26.1.1\",\n    33|    \"ai\": \"^6.0.168\",\n    34|    \"cors\": \"^2.8.6\",\n    35|    \"dotenv\": \"^17.4.2\",\n    36|    \"express\": \"^5.2.1\",\n    37|    \"fflate\": \"^0.8.3\",\n    38|    \"hono\": \"^4.12.12\",\n    39|    \"mammoth\": \"^1.12.0\",\n    40|    \"pdf-lib\": \"^1.17.1\",\n    41|    \"pg\": \"^8.22.0\",\n    42|    \"playwright-core\": \"^1.61.1\",\n    43|    \"socket.io\": \"^4.8.3\",\n    44|    \"socket.io-client\": \"^4.8.3\",\n    45|    \"stripe\": \"^22.3.2\",\n    46|    \"tsx\": \"^4.22.3\",\n    47|    \"unpdf\": \"^1.6.2\",\n    48|    \"xlsx\": \"^0.18.5\",\n    49|    \"zod\": \"^4.4.2\"\n    50|  },\n    51|  \"scripts\": {\n    52|    \"start\": \"bun --cwd expo run start\",\n    53|    \"start-clear\": \"bun --cwd expo run start-clear\",\n    54|    \"start-web\": \"bun --cwd expo run start-web\",\n    55|    \"typecheck\": \"cd expo && bunx tsc --noEmit\",\n    56|    \"lint\": \"bun --cwd expo run lint\"\n    57|  }\n    58|}\n\n(End of file - total 58 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"package.json\",\"offset\":1,\"limit\":140}",
+      "createdAt": 1784976935784,
+      "completedAt": 1784976935829
+    },
+    {
+      "type": "tool",
+      "id": "call_tkq5MnFWKZaFXuqk462hRJ1n",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/owner-only.ts",
+        "offset": 1,
+        "limit": 240
+      },
+      "output": {
+        "path": "backend/api/owner-only.ts",
+        "content": "     2|  IVX_OPEN_ACCESS_OWNER_TOKEN,\n     3|  getIVXOwnerEmailAllowlist,\n     4|  readIVXTrimmedString,\n     5|  resolveIVXAuthenticatedRequest,\n     6|  type IVXAuthenticatedRequestContext,\n     7|} from '../../expo/shared/ivx';\n     8|\n     9|export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;\n    10|\n    11|export type IVXOwnerMutationApprovalProof = {\n    12|  ownerSessionDetected: boolean;\n    13|  bearerAccepted: boolean;\n    14|  ownerVerified: boolean;\n    15|  ownerEmailMatched: boolean;\n    16|  ownerEmailMasked: string | null;\n    17|  userId: string | null;\n    18|  role: string | null;\n    19|  guardMode: IVXAuthenticatedRequestContext['guardMode'] | null;\n    20|  allowlistConfigured: boolean;\n    21|  action: string;\n    22|  blocker: string | null;\n    23|  secretValuesReturned: false;\n    24|};\n    25|\n    26|export type IVXOwnerMutationApprovalEvaluation = {\n    27|  approved: boolean;\n    28|  status: number;\n    29|  proof: IVXOwnerMutationApprovalProof;\n    30|  blocker: string | null;\n    31|};\n    32|\n    33|export class IVXOwnerApprovalError extends Error {\n    34|  readonly status: number;\n    35|  readonly proof: IVXOwnerMutationApprovalProof;\n    36|\n    37|  constructor(message: string, status: number, proof: IVXOwnerMutationApprovalProof) {\n    38|    super(message);\n    39|    this.name = 'IVXOwnerApprovalError';\n    40|    this.status = status;\n    41|    this.proof = proof;\n    42|  }\n    43|}\n    44|\n    45|const OWNER_ONLY_HEADERS = {\n    46|  'Content-Type': 'application/json',\n    47|  'Cache-Control': 'no-store',\n    48|  'Access-Control-Allow-Origin': 'https://ivxholding.com',\n    49|  'Access-Control-Allow-Headers': 'Content-Type, Authorization',\n    50|  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',\n    51|} as const;\n    52|\n    53|/**\n    54| * Hard ceiling on a single owner-AI JSON response body. The upstream proxy/host\n    55| * truncates very large bodies mid-stream, which produces an invalid-JSON reply\n    56| * the client \"cannot read\" (the \"temporary backend formatting issue\" the owner\n    57| * saw). We keep responses safely under that ceiling.\n    58| */\n    59|const OWNER_ONLY_MAX_RESPONSE_BYTES = 900_000;\n    60|\n    61|/**\n    62| * Serialize an owner response to JSON that the client can ALWAYS parse.\n    63| *\n    64| * Guarantees, in order:\n    65| *   1. JSON.stringify never throws (circular refs / BigInt / bad getters fall\n    66| *      back to a minimal canonical envelope instead of a 500 / empty body).\n    67| *   2. The body never exceeds OWNER_ONLY_MAX_RESPONSE_BYTES — when it would,\n    68| *      heavy diagnostic-only fields are dropped and the visible `answer` is\n    69| *      safely truncated, preserving the canonical contract\n    70| *      (requestId/conversationId/answer/model/status).\n    71| */\n    72|function serializeOwnerOnlyPayload(payload: Record<string, unknown>): string {\n    73|  let body: string;\n    74|  try {\n    75|    body = JSON.stringify(payload);\n    76|  } catch (error) {\n    77|    return JSON.stringify(buildMinimalOwnerEnvelope(payload, error));\n    78|  }\n    79|\n    80|  if (body.length <= OWNER_ONLY_MAX_RESPONSE_BYTES) {\n    81|    return body;\n    82|  }\n    83|\n    84|  // Oversized: strip diagnostic-only fields that are never required to render a\n    85|  // reply, then re-serialize. `answer` is preserved (truncated if needed).\n    86|  const slim: Record<string, unknown> = { ...payload };\n    87|  for (const heavyField of ['toolOutputs', 'toolOutput', 'toolInput', 'runtimeV2', 'routerDebug', 'diagnostics', 'providerError']) {\n    88|    delete slim[heavyField];\n    89|  }\n    90|  if (typeof slim.answer === 'string' && slim.answer.length > 40_000) {\n    91|    slim.answer = `${slim.answer.slice(0, 40_000)}\\n\\n…[truncated for transport — full result preserved server-side]`;\n    92|  }\n    93|  slim.responseTruncated = true;\n    94|\n    95|  try {\n    96|    const slimBody = JSON.stringify(slim);\n    97|    if (slimBody.length <= OWNER_ONLY_MAX_RESPONSE_BYTES) {\n    98|      return slimBody;\n    99|    }\n   100|  } catch {\n   101|    // fall through to minimal envelope\n   102|  }\n   103|  return JSON.stringify(buildMinimalOwnerEnvelope(payload, null));\n   104|}\n   105|\n   106|function buildMinimalOwnerEnvelope(payload: Record<string, unknown>, error: unknown): Record<string, unknown> {\n   107|  const reason = error instanceof Error ? error.message : null;\n   108|  const answer = typeof payload.answer === 'string' && payload.answer.trim()\n   109|    ? payload.answer.slice(0, 20_000)\n   110|    : 'The IVX Owner AI completed, but its full response was too large or could not be serialized. The result was preserved server-side — please resend.';\n   111|  return {\n   112|    requestId: typeof payload.requestId === 'string' ? payload.requestId : `ivx-${Date.now()}`,\n   113|    conversationId: typeof payload.conversationId === 'string' ? payload.conversationId : 'ivx-owner-ai',\n   114|    answer,\n   115|    model: typeof payload.model === 'string' ? payload.model : 'ivx_owner_ai_safe_envelope',\n   116|    status: payload.status === 'error' ? 'error' : 'ok',\n   117|    source: 'local_app_brain',\n   118|    responseTruncated: true,\n   119|    serializationFallback: reason ? `serialize_failed: ${reason}`.slice(0, 240) : 'serialize_size_guard',\n   120|  };\n   121|}\n   122|\n   123|export function ownerOnlyJson(payload: Record<string, unknown>, status: number = 200): Response {\n   124|  return new Response(serializeOwnerOnlyPayload(payload), {\n   125|    status,\n   126|    headers: OWNER_ONLY_HEADERS,\n   127|  });\n   128|}\n   129|\n   130|export function ownerOnlyOptions(): Response {\n   131|  return new Response(null, {\n   132|    status: 204,\n   133|    headers: OWNER_ONLY_HEADERS,\n   134|  });\n   135|}\n   136|\n   137|export async function assertIVXOwnerOnly(request: Request): Promise<IVXOwnerRequestContext> {\n   138|  if (checkIVXAISystemKey(request)) {\n   139|    return makeSystemOwnerRequestContext();\n   140|  }\n   141|  return await resolveIVXAuthenticatedRequest(request, '[IVXOwnerOnly]');\n   142|}\n   143|\n   144|function normalizeOwnerEmail(value: unknown): string {\n   145|  return readIVXTrimmedString(value).toLowerCase();\n   146|}\n   147|\n   148|function parseOwnerEmailAllowlist(value: unknown = process.env.IVX_OWNER_REGISTRATION_EMAILS): string[] {\n   149|  return Array.from(new Set(readIVXTrimmedString(value)\n   150|    .split(',')\n   151|    .map((email) => normalizeOwnerEmail(email))\n   152|    .filter((email) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))));\n   153|}\n   154|\n   155|function maskOwnerEmail(email: string | null): string | null {\n   156|  if (!email) return null;\n   157|  const [local = '', domain = ''] = email.split('@');\n   158|  if (!local || !domain) return '***';\n   159|  const visibleLocal = local.length <= 2 ? `${local.slice(0, 1)}*` : `${local.slice(0, 2)}***${local.slice(-1)}`;\n   160|  return `${visibleLocal}@${domain}`;\n   161|}\n   162|\n   163|function makeOwnerMutationApprovalProof(input: {\n   164|  context: IVXAuthenticatedRequestContext | null;\n   165|  action: string;\n   166|  bearerAccepted: boolean;\n   167|  ownerVerified: boolean;\n   168|  ownerEmailMatched: boolean;\n   169|  allowlistConfigured: boolean;\n   170|  blocker: string | null;\n   171|}): IVXOwnerMutationApprovalProof {\n   172|  const email = normalizeOwnerEmail(input.context?.email ?? null) || null;\n   173|  return {\n   174|    ownerSessionDetected: Boolean(input.context?.userId && email),\n   175|    bearerAccepted: input.bearerAccepted,\n   176|    ownerVerified: input.ownerVerified,\n   177|    ownerEmailMatched: input.ownerEmailMatched,\n   178|    ownerEmailMasked: maskOwnerEmail(email),\n   179|    userId: input.context?.userId ?? null,\n   180|    role: input.context?.role ?? null,\n   181|    guardMode: input.context?.guardMode ?? null,\n   182|    allowlistConfigured: input.allowlistConfigured,\n   183|    action: input.action,\n   184|    blocker: input.blocker,\n   185|    secretValuesReturned: false,\n   186|  };\n   187|}\n   188|\n   189|/**\n   190| * Requires a real Supabase owner bearer and an email from IVX_OWNER_REGISTRATION_EMAILS.\n   191| * This intentionally rejects the local/test open-access token for production mutations.\n   192| */\n   193|export function evaluateIVXRegisteredOwnerBearerContext(\n   194|  context: IVXAuthenticatedRequestContext,\n   195|  action: string,\n   196|  ownerRegistrationEmailsValue: unknown = process.env.IVX_OWNER_REGISTRATION_EMAILS,\n   197|): IVXOwnerMutationApprovalEvaluation {\n   198|  // Merge the env-sourced allowlist with the hardcoded baseline owner emails\n   199|  // (IVX_BASELINE_OWNER_EMAILS) so a valid Supabase owner session is always\n   200|  // recognized even when IVX_OWNER_REGISTRATION_EMAILS is missing or empty on\n   201|  // the live Render runtime.\n   202|  const envAllowlist = parseOwnerEmailAllowlist(ownerRegistrationEmailsValue);\n   203|  const baselineAllowlist = getIVXOwnerEmailAllowlist();\n   204|  const allowlist = Array.from(new Set([...envAllowlist, ...baselineAllowlist]));\n   205|  const allowlistConfigured = allowlist.length > 0;\n   206|  const email = normalizeOwnerEmail(context.email);\n   207|  const tokenLooksLikeSupabaseJwt = context.accessToken.split('.').length === 3;\n   208|  const isExplicitDevToken = context.accessToken === IVX_OPEN_ACCESS_OWNER_TOKEN;\n   209|  const bearerAccepted = tokenLooksLikeSupabaseJwt && !isExplicitDevToken;\n   210|  const ownerEmailMatched = allowlistConfigured && allowlist.includes(email);\n   211|  const ownerVerified = bearerAccepted && ownerEmailMatched;\n   212|\n   213|  if (!allowlistConfigured) {\n   214|    const blocker = 'IVX_OWNER_REGISTRATION_EMAILS is not configured in the backend runtime.';\n   215|    return {\n   216|      approved: false,\n   217|      status: 403,\n   218|      blocker,\n   219|      proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified: false, ownerEmailMatched: false, allowlistConfigured, blocker }),\n   220|    };\n   221|  }\n   222|\n   223|  if (!bearerAccepted) {\n   224|    const blocker = 'A real Supabase owner bearer token is required; local/test owner tokens are not accepted for senior-developer mutations.';\n   225|    return {\n   226|      approved: false,\n   227|      status: 401,\n   228|      blocker,\n   229|      proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted: false, ownerVerified: false, ownerEmailMatched, allowlistConfigured, blocker }),\n   230|    };\n   231|  }\n   232|\n   233|  if (!ownerEmailMatched) {\n   234|    const blocker = 'Authenticated owner email is not listed in IVX_OWNER_REGISTRATION_EMAILS.';\n   235|    return {\n   236|      approved: false,\n   237|      status: 403,\n   238|      blocker,\n   239|      proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified: false, ownerEmailMatched: false, allowlistConfigured, blocker }),\n   240|    };\n   241|  }\n\n(File has more lines. Use 'offset' parameter to read beyond line 241)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/api/owner-only.ts\",\"offset\":1,\"limit\":240}",
+      "createdAt": 1784976935818,
+      "completedAt": 1784976935831
+    },
+    {
+      "type": "tool",
+      "id": "call_CRSYr3eTrug8fJOIbCRem87Y",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/ivx-senior-developer-worker.ts",
+        "offset": 240,
+        "limit": 260
+      },
+      "output": {
+        "path": "backend/api/ivx-senior-developer-worker.ts",
+        "content": "   241|        `role=${approval.role}`,\n   242|        `guardMode=${approval.guardMode}`,\n   243|        `filesAffected=${filesAffected.join(', ')}`,\n   244|        `riskLevel=${riskLevel}`,\n   245|        ...(internalAuthorization ? [`internalWorkerId=${internalAuthorization.workerId}`, `ownerApprovalId=${internalAuthorization.approvalId}`, `requestedCommitSha=${internalAuthorization.requestedCommitSha}`] : []),\n   246|      ],\n   247|      secretValuesReturned: false as const,\n   248|    };\n   249|\n   250|    // Prefix the execution template so the worker scaffolds the right shape of\n   251|    // work (whole app, module, feature, fix, refactor, or a business workflow).\n   252|    const ownerId = internalAuthorization ? `worker:${internalAuthorization.workerId}` : (approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner');\n   253|    const input: IVXWorkerJobInput = {\n   254|      goal: `[TEMPLATE_MODE:${templateMode}] ${goal}`,\n   255|      ownerApproved: true,\n   256|      approvePatch,\n   257|      approveGitDeploy,\n   258|      executionMode,\n   259|      validationMode: normalizeValidationMode(body.validationMode),\n   260|      systemMode: isSystemMode,\n   261|      ownerApprovedAction,\n   262|      ownerId,\n   263|    };\n   264|\n   265|    const { job, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(input);\n   266|    const statusCode = attached ? 409 : 202;\n   267|    return ownerOnlyJson({\n   268|      ok: attached ? false : true,\n   269|      ownerOnly: true,\n   270|      ownerApproval: approval,\n   271|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   272|      job,\n   273|      jobId: job.jobId,\n   274|      attached,\n   275|      activeJobId: activeJobId ?? (attached ? job.jobId : null),\n   276|      templateMode,\n   277|      executionMode,\n   278|      poll: `GET /api/ivx/senior-developer/worker/jobs/${job.jobId}`,\n   279|      message: attached\n   280|        ? `A job is already running for this owner. Your request was attached to the active job (${job.jobId}). Poll its status instead of creating a duplicate.`\n   281|        : 'Job enqueued. Poll the job endpoint for status updates.',\n   282|      secretValuesReturned: false,\n   283|      timestamp: new Date().toISOString(),\n   284|    }, statusCode);\n   285|  } catch (error) {\n   286|    return errorResponse(error);\n   287|  }\n   288|}\n   289|\n   290|/** GET the active job for the current owner. Returns 204 if no active job. */\n   291|export async function handleSeniorDeveloperWorkerActiveJobRequest(request: Request): Promise<Response> {\n   292|  try {\n   293|    const { context, approval } = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_active');\n   294|    const ownerId = approval.ownerSessionDetected && context.userId ? context.userId : 'owner';\n   295|    const job = await getActiveJobForOwner(ownerId);\n   296|    if (!job) {\n   297|      return ownerOnlyJson({\n   298|        ok: true,\n   299|        ownerOnly: true,\n   300|        marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   301|        activeJob: null,\n   302|        message: 'No active job for this owner.',\n   303|        secretValuesReturned: false,\n   304|      });\n   305|    }\n   306|    return ownerOnlyJson({\n   307|      ok: true,\n   308|      ownerOnly: true,\n   309|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   310|      activeJob: job,\n   311|      jobId: job.jobId,\n   312|      stage: job.stage,\n   313|      progressPercent: job.progressPercent,\n   314|      stageDetail: job.stageDetail,\n   315|      secretValuesReturned: false,\n   316|    });\n   317|  } catch (error) {\n   318|    return errorResponse(error);\n   319|  }\n   320|}\n   321|\n   322|/** POST cancel a job by id. Owner-gated. */\n   323|export async function handleSeniorDeveloperWorkerCancelJobRequest(request: Request, jobId: string): Promise<Response> {\n   324|  try {\n   325|    const approval = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_cancel');\n   326|    const job = await cancelSeniorDeveloperJob(jobId);\n   327|    if (!job) {\n   328|      return ownerOnlyJson({\n   329|        ok: false,\n   330|        ownerOnly: true,\n   331|        marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   332|        error: `No senior developer worker job found with id ${jobId}.`,\n   333|        secretValuesReturned: false,\n   334|        timestamp: new Date().toISOString(),\n   335|      }, 404);\n   336|    }\n   337|    return ownerOnlyJson({\n   338|      ok: true,\n   339|      ownerOnly: true,\n   340|      ownerApproval: approval,\n   341|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   342|      job,\n   343|      cancelled: true,\n   344|      secretValuesReturned: false,\n   345|    });\n   346|  } catch (error) {\n   347|    return errorResponse(error);\n   348|  }\n   349|}\n   350|\n   351|/** POST resume a job by id. Owner-gated. */\n   352|export async function handleSeniorDeveloperWorkerResumeJobRequest(request: Request, jobId: string): Promise<Response> {\n   353|  try {\n   354|    const approval = await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_resume');\n   355|    const job = await resumeSeniorDeveloperJob(jobId);\n   356|    if (!job) {\n   357|      return ownerOnlyJson({\n   358|        ok: false,\n   359|        ownerOnly: true,\n   360|        marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   361|        error: `No senior developer worker job found with id ${jobId}.`,\n   362|        secretValuesReturned: false,\n   363|        timestamp: new Date().toISOString(),\n   364|      }, 404);\n   365|    }\n   366|    return ownerOnlyJson({\n   367|      ok: true,\n   368|      ownerOnly: true,\n   369|      ownerApproval: approval,\n   370|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   371|      job,\n   372|      resumed: true,\n   373|      secretValuesReturned: false,\n   374|    });\n   375|  } catch (error) {\n   376|    return errorResponse(error);\n   377|  }\n   378|}\n   379|\n   380|/** GET one job by id. Owner-gated (read). */\n   381|export async function handleSeniorDeveloperWorkerJobRequest(request: Request, jobId: string): Promise<Response> {\n   382|  try {\n   383|    await assertIVXOwnerOnly(request);\n   384|    const job = await getSeniorDeveloperJob(jobId);\n   385|    if (!job) {\n   386|      return ownerOnlyJson({\n   387|        ok: false,\n   388|        ownerOnly: true,\n   389|        marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   390|        error: `No senior developer worker job found with id ${jobId}.`,\n   391|        secretValuesReturned: false,\n   392|        timestamp: new Date().toISOString(),\n   393|      }, 404);\n   394|    }\n   395|    return ownerOnlyJson({ ok: true, ownerOnly: true, marker: IVX_SENIOR_DEV_WORKER_MARKER, job, secretValuesReturned: false });\n   396|  } catch (error) {\n   397|    return errorResponse(error);\n   398|  }\n   399|}\n   400|\n   401|/** GET recent jobs. Owner-gated (read). */\n   402|export async function handleSeniorDeveloperWorkerJobsRequest(request: Request): Promise<Response> {\n   403|  try {\n   404|    await assertIVXOwnerOnly(request);\n   405|    const jobs = await listSeniorDeveloperJobs(25);\n   406|    return ownerOnlyJson({ ok: true, ownerOnly: true, marker: IVX_SENIOR_DEV_WORKER_MARKER, jobs, secretValuesReturned: false });\n   407|  } catch (error) {\n   408|    return errorResponse(error);\n   409|  }\n   410|}\n   411|\n   412|/** GET the durable proof ledger. Owner-gated (read). */\n   413|export async function handleSeniorDeveloperWorkerLedgerRequest(request: Request): Promise<Response> {\n   414|  try {\n   415|    await assertIVXOwnerOnly(request);\n   416|    const ledger = await listSeniorDeveloperProofLedger(25);\n   417|    return ownerOnlyJson({ ok: true, ownerOnly: true, marker: IVX_SENIOR_DEV_WORKER_MARKER, ledger, secretValuesReturned: false });\n   418|  } catch (error) {\n   419|    return errorResponse(error);\n   420|  }\n   421|}\n   422|\n   423|/**\n   424| * GET the last proof — compact view of the most recent worker ledger entry.\n   425| * Owner-gated (read). Returns nulls when the ledger is empty.\n   426| */\n   427|export async function handleSeniorDeveloperWorkerLastProofRequest(request: Request): Promise<Response> {\n   428|  try {\n   429|    await assertIVXOwnerOnly(request);\n   430|    const proof = await getSeniorDeveloperLastProof();\n   431|    return ownerOnlyJson({\n   432|      ok: true,\n   433|      ownerOnly: true,\n   434|      marker: IVX_SENIOR_DEV_WORKER_MARKER,\n   435|      ...proof,\n   436|      secretValuesReturned: false,\n   437|      timestamp: new Date().toISOString(),\n   438|    });\n   439|  } catch (error) {\n   440|    return errorResponse(error);\n   441|  }\n   442|}\n\n(End of file - total 442 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.ts\",\"offset\":240,\"limit\":260}",
+      "createdAt": 1784976935821,
+      "completedAt": 1784976935832
+    },
+    {
+      "type": "tool",
+      "id": "call_tMWnXIvnBGl2C97Ci1GYq7No",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-senior-dev-worker.ts",
+        "offset": 260,
+        "limit": 320
+      },
+      "output": {
+        "path": "backend/services/ivx-senior-dev-worker.ts",
+        "content": "   261|  // Fetch the real repo file tree so the AI plans against actual files\n   262|  // (not hallucinated paths like src/chat/ChatService.js that don't exist).\n   263|  const fileTreeResult = await githubListFiles();\n   264|  const repoFileTree = fileTreeResult.ok ? fileTreeResult.files.slice(0, 400) : [];\n   265|  await logCheckpoint(task.id, runId, 'PLANNING', { repoFileCount: repoFileTree.length, fileTreeOk: fileTreeResult.ok, fileTreeError: fileTreeResult.error });\n   266|  const planResult = await planEngineeringTask(task.prompt, repoFileTree);\n   267|  let plan: EngineerPlan;\n   268|  if (planResult.ok && planResult.content) {\n   269|    plan = parsePlan(planResult.content, task.prompt);\n   270|  } else {\n   271|    // AI planning failed. The owner forbade fake/hollow VERIFIED certifications.\n   272|    // Instead of silently falling back to an audit-only path that reaches VERIFIED\n   273|    // with no real work, FAIL the task honestly with the AI planning error so the\n   274|    // owner sees exactly why the autonomous worker could not proceed.\n   275|    const planningError = planResult.error ?? 'AI planning returned empty content';\n   276|    await failTask(task.id, `PLANNING failed: ${planningError}`);\n   277|    await updateProofLedger(runId, { status: 'failed', errorMessage: `PLANNING failed: ${planningError}` });\n   278|    return;\n   279|  }\n   280|  await logCheckpoint(task.id, runId, 'PLANNING', { plan });\n   281|  await updateProofLedger(runId, { logs: [`plan: ${plan.summary}`] });\n   282|\n   283|  // ─── Phase 2: INSPECTING ────────────────────────────────────────────\n   284|  await setPhase(task.id, 'INSPECTING', runId);\n   285|  const fileContents: Map<string, string> = new Map();\n   286|  for (const filePath of plan.filesToInspect) {\n   287|    const file = await githubReadFile(filePath);\n   288|    if (file.ok && file.content !== null) {\n   289|      fileContents.set(filePath, file.content);\n   290|    }\n   291|  }\n   292|  await logCheckpoint(task.id, runId, 'INSPECTING', { files: plan.filesToInspect, readCount: fileContents.size });\n   293|  await updateProofLedger(runId, { filesInspected: plan.filesToInspect });\n   294|\n   295|  // ─── Phase 3: IMPLEMENTING ──────────────────────────────────────────\n   296|  await setPhase(task.id, 'IMPLEMENTING', runId);\n   297|  const changedFiles: string[] = [];\n   298|  let localEdits: { path: string; content: string }[] = [];\n   299|\n   300|  for (const fileChange of plan.filesToChange) {\n   301|    // CRITICAL: read the current file content from GitHub before generating a\n   302|    // patch. Two valid cases:\n   303|    //   (A) File EXISTS → current = its real content (surgical edits against truth)\n   304|    //   (B) File DOES NOT EXIST (new file creation) → current = '' is VALID; the\n   305|    //       AI prompt rule 5 handles empty current → minimal new file. Do NOT skip.\n   306|    // Only skip if the read fails for a reason OTHER than \"not found\" (404), e.g.\n   307|    // auth/network errors — those mean we genuinely cannot proceed.\n   308|    let current = fileContents.get(fileChange.path) ?? '';\n   309|    if (!current) {\n   310|      const readFile = await githubReadFile(fileChange.path);\n   311|      if (readFile.ok && readFile.content !== null) {\n   312|        current = readFile.content;\n   313|        fileContents.set(fileChange.path, current);\n   314|        await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, note: 'fetched current content from GitHub (not in filesToInspect)' });\n   315|      } else {\n   316|        const errMsg = (readFile.error ?? '').toLowerCase();\n   317|        const isNotFound = errMsg.includes('not found') || errMsg.includes('404') || errMsg.includes('does not exist');\n   318|        if (isNotFound) {\n   319|          // New file creation — current='' is valid. Proceed so the AI generates\n   320|          // the minimal new file per prompt rule 5. Do NOT skip.\n   321|          current = '';\n   322|          await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, note: 'new file (GitHub 404) — proceeding with empty current for creation' });\n   323|        } else {\n   324|          // Real read error (auth/network) — cannot proceed honestly.\n   325|          await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, error: 'Could not read current file content from GitHub', githubError: readFile.error });\n   326|          continue;\n   327|        }\n   328|      }\n   329|    }\n   330|    const patchResult = await generateFilePatch({\n   331|      filePath: fileChange.path,\n   332|      currentContent: current,\n   333|      goal: `${task.prompt}\\n\\nReason for this file: ${fileChange.reason}`,\n   334|      priorContext: plan.summary,\n   335|    });\n   336|\n   337|    if (!patchResult.ok || !patchResult.content) {\n   338|      await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, error: patchResult.error ?? 'AI returned empty content' });\n   339|      continue;\n   340|    }\n   341|\n   342|    const newContent = stripCodeFences(patchResult.content);\n   343|    // Write locally so tests can run against the change.\n   344|    writeLocalFile(fileChange.path, newContent);\n   345|    localEdits.push({ path: fileChange.path, content: newContent });\n   346|    changedFiles.push(fileChange.path);\n   347|    await logCheckpoint(task.id, runId, 'IMPLEMENTING', { file: fileChange.path, bytes: newContent.length });\n   348|  }\n   349|\n   350|  await updateProofLedger(runId, { filesChanged: changedFiles });\n   351|  await patchTask(task.id, { files_changed: changedFiles });\n   352|\n   353|  // ─── Phase 4: TESTING (advisory, non-blocking) ─────────────────────\n   354|  // Local tsc/bun test may not be runnable in the Render runtime container\n   355|  // (no tsconfig include graph, no full node_modules for bun x tsc). The owner's\n   356|  // 4-evidence VERIFIED bar is commitSha + deployId + runtimeSha + proofLedgerId\n   357|  // — local tests are NOT in that bar. The REAL verification gate is LIVE_VERIFY\n   358|  // (production health + 3-way SHA parity), which runs after deploy.\n   359|  //\n   360|  // Therefore: run tests once, RECORD the result honestly in the proof ledger,\n   361|  // but do NOT block the pipeline on test failure. If the code is actually\n   362|  // broken, the deploy itself will fail or LIVE_VERIFY health check will fail —\n   363|  // that is the real gate. This prevents environment-only test failures from\n   364|  // blocking a legitimate code change from reaching VERIFIED with real evidence.\n   365|  // One self-healing attempt is still made if tests fail AND the failure output\n   366|  // looks code-related (not environment-related), to keep the self-healing value.\n   367|  await setPhase(task.id, 'TESTING', runId);\n   368|  const testResults = await runTests(plan.testsToRun);\n   369|  await logCheckpoint(task.id, runId, 'TESTING', { ...testResults as unknown as Record<string, unknown> });\n   370|  await patchTask(task.id, { test_summary: testResults as unknown as Record<string, unknown> });\n   371|  await updateProofLedger(runId, { testResults: testResults as unknown as Record<string, unknown> });\n   372|\n   373|  if (!testResults.passed && localEdits.length > 0) {\n   374|    // One self-healing attempt: feed the error back to the AI. If it produces a\n   375|    // fix, use it; if not, proceed anyway (LIVE_VERIFY is the real gate).\n   376|    await logCheckpoint(task.id, runId, 'TESTING', { status: 'failed, one self-healing attempt', summary: testResults.summary });\n   377|    const errorOutput = `typecheck: ${testResults.typecheck}\\ntypecheck output:\\n${testResults.typecheckOutput.slice(-1200)}\\n\\ntests: ${testResults.tests}\\ntest output:\\n${testResults.testOutput.slice(-1200)}`;\n   378|    const healedEdits: { path: string; content: string }[] = [];\n   379|    for (const edit of localEdits) {\n   380|      const fixResult = await generateFilePatch({\n   381|        filePath: edit.path,\n   382|        currentContent: edit.content,\n   383|        goal: `${task.prompt}\\n\\nThe previous version FAILED typecheck/tests. Fix the errors below. Keep the change minimal and surgical — only fix what the errors call out.\\n\\n--- TEST/TSC ERROR OUTPUT ---\\n${errorOutput}\\n--- END ERROR OUTPUT ---`,\n   384|        priorContext: plan.summary,\n   385|      });\n   386|      if (fixResult.ok && fixResult.content) {\n   387|        const fixedContent = stripCodeFences(fixResult.content);\n   388|        writeLocalFile(edit.path, fixedContent);\n   389|        healedEdits.push({ path: edit.path, content: fixedContent });\n   390|        await logCheckpoint(task.id, runId, 'TESTING', { file: edit.path, note: 'AI generated fix', bytes: fixedContent.length });\n   391|      } else {\n   392|        healedEdits.push(edit);\n   393|        await logCheckpoint(task.id, runId, 'TESTING', { file: edit.path, error: fixResult.error ?? 'AI returned empty fix' });\n   394|      }\n   395|    }\n   396|    localEdits = healedEdits;\n   397|    // Re-run tests once with the healed edits; record but still do not block.\n   398|    const retest = await runTests(plan.testsToRun);\n   399|    await logCheckpoint(task.id, runId, 'TESTING', { note: 'retest after self-healing', ...retest as unknown as Record<string, unknown> });\n   400|    await updateProofLedger(runId, { testResultsAfterHeal: retest as unknown as Record<string, unknown> });\n   401|  }\n   402|\n   403|  const workerData = (task.worker_data ?? {}) as Record<string, unknown>;\n   404|\n   405|  // ─── Phase 5: COMMITTING ────────────────────────────────────────────\n   406|  await setPhase(task.id, 'COMMITTING', runId);\n   407|  if (localEdits.length > 0) {\n   408|    await assertApprovedBaseSha(workerData);\n   409|    await consumeRequiredInternalApproval(task, workerData, 'GITHUB_WRITE', runId);\n   410|  }\n   411|  let lastCommitSha: string | null = null;\n   412|  const commitMessage = `IVX-SENIOR-DEV-01: ${plan.summary}\\n\\nTask: ${task.id}\\nWorker: ${IVX_SENIOR_DEV_WORKER_ID}`;\n   413|  for (const edit of localEdits) {\n   414|    const commitResult = await githubCommitFile({\n   415|      path: edit.path,\n   416|      content: edit.content,\n   417|      message: commitMessage,\n   418|    });\n   419|    if (!commitResult.ok || !commitResult.commitSha) {\n   420|      await failTask(task.id, `GitHub commit failed for ${edit.path}: ${commitResult.error}`);\n   421|      await updateProofLedger(runId, { status: 'failed', errorMessage: `Commit failed: ${commitResult.error}` });\n   422|      return;\n   423|    }\n   424|    lastCommitSha = commitResult.commitSha;\n   425|    await logCheckpoint(task.id, runId, 'COMMITTING', { file: edit.path, commitSha: commitResult.commitSha, mode: commitResult.mode });\n   426|  }\n   427|\n   428|  if (changedFiles.length === 0) {\n   429|    // Audit-only task — no commit, no deploy needed.\n   430|    await logCheckpoint(task.id, runId, 'COMMITTING', { note: 'No files changed — audit-only task' });\n   431|  }\n   432|\n   433|  await patchTask(task.id, { commit_sha: lastCommitSha });\n   434|  await updateProofLedger(runId, { commitSha: lastCommitSha ?? undefined });\n   435|\n   436|  // ─── Phase 6: WAITING_APPROVAL (if deploy required) ─────────────────\n   437|  const requestsDeploy = plan.requiresDeploy || workerData.requestsDeploy === true;\n   438|\n   439|  if (requestsDeploy && changedFiles.length > 0) {\n   440|    await setPhase(task.id, 'WAITING_APPROVAL', runId);\n   441|    await logCheckpoint(task.id, runId, 'WAITING_APPROVAL', { action: 'GITHUB_WRITE+RENDER_DEPLOY' });\n   442|    await patchTask(task.id, {\n   443|      status: 'WAITING_APPROVAL',\n   444|      checkpoint: 'WAITING_APPROVAL for RENDER_DEPLOY',\n   445|    });\n   446|\n   447|    const approvalActions: IVXSeniorDevApprovalAction[] = workerData.requiresInternalAuthorization === true\n   448|      ? ['RENDER_DEPLOY']\n   449|      : ['GITHUB_WRITE', 'RENDER_DEPLOY'];\n   450|    const approved = await waitForApprovals(task.id, approvalActions, 24 * 60 * 60 * 1000);\n   451|    if (!approved) {\n   452|      await failTask(task.id, 'Approval timeout or missing.');\n   453|      await updateProofLedger(runId, { status: 'failed', errorMessage: 'Approval timeout or missing.' });\n   454|      return;\n   455|    }\n   456|    // The Render approval is issued only after the real commit exists. Refresh\n   457|    // task metadata so the signed worker request binds to that exact SHA.\n   458|    const approvedTask = await getTask(task.id);\n   459|    if (!approvedTask) {\n   460|      await failTask(task.id, 'Task disappeared while waiting for deploy approval.');\n   461|      await updateProofLedger(runId, { status: 'failed', errorMessage: 'Task disappeared while waiting for deploy approval.' });\n   462|      return;\n   463|    }\n   464|    Object.assign(workerData, readWorkerData(approvedTask.worker_data));\n   465|    await patchTask(task.id, { status: 'RUNNING', checkpoint: 'APPROVED — deploying' });\n   466|  }\n   467|\n   468|  // ─── Phase 7-8: SELF-DEPLOY HANDOFF + CLEAN EXIT ─────────────────────\n   469|  // When a task triggers a Render deploy, the deploy restarts THIS runtime\n   470|  // process, killing the worker before it can reach LIVE_VERIFYING. To survive,\n   471|  // we persist a deployment handoff atomically BEFORE triggering Render, capture\n   472|  // the deployId, then exit cleanly — leaving the task resumable. The new\n   473|  // runtime (after the deploy restart) runs recoverSelfDeployTasks() on boot,\n   474|  // which claims the recovery lease and resumes at LIVE_VERIFYING.\n   475|  let deployId: string | null = null;\n   476|  if (requestsDeploy && changedFiles.length > 0) {\n   477|    await consumeRequiredInternalApproval(task, workerData, 'RENDER_DEPLOY', runId);\n   478|    // 7a. Capture pre-deploy runtime SHA + expected SHA (GitHub HEAD = our commit)\n   479|    const preHealth = await getProductionHealth();\n   480|    const preDeployRuntimeSha = preHealth.commit ?? null;\n   481|    const ghHead = await getGitHubHeadSha();\n   482|    const expectedRuntimeSha = ghHead.sha ?? lastCommitSha;\n   483|    const baseSha = lastCommitSha;\n   484|    const branch = 'main';\n   485|    const ownerApprovalId = `approval-${task.id}-${Date.now()}`;\n   486|    const triggerRequestId = `deploy-req-${task.id}-${Date.now()}`;\n   487|\n   488|    // 7b. ATOMICALLY persist the deployment handoff BEFORE triggering Render.\n   489|    // If this PATCH fails, we do NOT trigger Render — a missing handoff means the\n   490|    // new runtime would have no resumable state, orphaning the task permanently.\n   491|    await setPhase(task.id, 'DEPLOYMENT_REQUESTED', runId);\n   492|    const handoffRow = await patchTask(task.id, {\n   493|      status: 'DEPLOYMENT_REQUESTED',\n   494|      checkpoint: 'DEPLOYMENT_REQUESTED — handoff persisted, about to trigger Render deploy',\n   495|      commit_sha: lastCommitSha,\n   496|      render_deploy_id: null as string | null,\n   497|      base_sha: baseSha,\n   498|      branch,\n   499|      pre_deploy_runtime_sha: preDeployRuntimeSha,\n   500|      expected_runtime_sha: expectedRuntimeSha,\n   501|      deployment_requested_at: new Date().toISOString(),\n   502|      deployment_attempt: 1,\n   503|      deployment_service_id: process.env.RENDER_SERVICE_ID ?? null,\n   504|      deployment_trigger_request_id: triggerRequestId,\n   505|      owner_approval_id: ownerApprovalId,\n   506|      resume_required: true,\n   507|      resume_phase: 'LIVE_VERIFYING',\n   508|      last_safe_checkpoint: 'DEPLOYMENT_REQUESTED',\n   509|      heartbeat_at: new Date().toISOString(),\n   510|      checkpoint_history: appendCheckpoint(null, `DEPLOYMENT_REQUESTED at ${new Date().toISOString()} (handoff persisted pre-trigger)`),\n   511|    });\n   512|    if (!handoffRow) {\n   513|      // Handoff did not persist — DO NOT trigger Render. Fail honestly.\n   514|      await failTask(task.id, 'Self-deploy handoff did not persist (patchTask returned null) — aborting before Render trigger to avoid orphaning the task');\n   515|      await updateProofLedger(runId, { status: 'failed', errorMessage: 'Self-deploy handoff did not persist' });\n   516|      return;\n   517|    }\n   518|    await logCheckpoint(task.id, runId, 'DEPLOYMENT_REQUESTED', { handoffPersisted: true, preDeployRuntimeSha, expectedRuntimeSha, baseSha, triggerRequestId });\n   519|    await updateProofLedger(runId, {\n   520|      commitSha: lastCommitSha ?? undefined,\n   521|      workerRestartEvent: { preDeployRuntimeSha, expectedRuntimeSha, handoffPersistedAt: new Date().toISOString() },\n   522|    });\n   523|\n   524|    // 7c. Trigger Render deploy and capture deployId.\n   525|    await setPhase(task.id, 'DEPLOYING', runId);\n   526|    const deployResult = await triggerRenderDeploy(false);\n   527|    if (!deployResult.ok || !deployResult.deploy) {\n   528|      // Trigger failed — no restart will happen. Mark FAILED (not resumable).\n   529|      await failTask(task.id, `Render deploy trigger failed: ${deployResult.error}`);\n   530|      await updateProofLedger(runId, { status: 'failed', errorMessage: `Deploy trigger failed: ${deployResult.error}` });\n   531|      return;\n   532|    }\n   533|    deployId = deployResult.deploy.id;\n   534|    // 7d. Persist deployId + DEPLOYING status. This PATCH may race with the\n   535|    // runtime restart — if it fails, the recovery scanner still sees the task in\n   536|    // DEPLOYMENT_REQUESTED with resume_required=true and will poll Render's\n   537|    // deploy list to find the live deploy by createdAt window.\n   538|    await patchTask(task.id, {\n   539|      status: 'DEPLOYING',\n   540|      checkpoint: 'DEPLOYING — Render deploy triggered, deployId persisted, exiting for restart',\n   541|      render_deploy_id: deployId,\n   542|      resume_required: true,\n   543|      resume_phase: 'LIVE_VERIFYING',\n   544|      last_safe_checkpoint: 'DEPLOYING',\n   545|      heartbeat_at: new Date().toISOString(),\n   546|      checkpoint_history: appendCheckpoint(null, `DEPLOYING at ${new Date().toISOString()} (deployId=${deployId} — worker exiting for self-deploy restart)`),\n   547|    });\n   548|    await updateProofLedger(runId, {\n   549|      renderDeployId: deployId,\n   550|      deployHttpResponse: { deployId, status: deployResult.deploy.status, triggeredAt: new Date().toISOString() },\n   551|    });\n   552|    await logCheckpoint(task.id, runId, 'DEPLOYING', { deployId, note: 'handoff complete — worker exiting cleanly for self-deploy restart' });\n   553|    console.log('[IVX-SENIOR-DEV-01] Self-deploy handoff complete — exiting cleanly for runtime restart', { taskId: task.id, deployId, commitSha: lastCommitSha });\n   554|\n   555|    // 7e. CLEAN EXIT. Do NOT poll Render here — the deploy will restart this\n   556|    // process imminently. Do NOT mark FAILED/BLOCKED/VERIFIED. The task stays\n   557|    // resumable (resume_required=true, status=DEPLOYING). The new runtime's\n   558|    // recoverSelfDeployTasks() will claim the lease and resume at LIVE_VERIFYING.\n   559|    await updateProofLedger(runId, {\n   560|      logs: [`self-deploy handoff complete at ${new Date().toISOString()} — worker exiting cleanly, task resumable`],\n   561|    });\n   562|    state.currentPhase = null;\n   563|    state.currentTaskId = null;\n   564|    return;\n   565|  }\n   566|\n   567|  // ─── Phase 8: LIVE_VERIFYING (only reached when requestsDeploy=false) ────\n   568|  // Tasks that do NOT trigger a Render deploy (requestsDeploy=false) can run\n   569|  // LIVE_VERIFYING inline because no restart will kill this process.\n   570|  await setPhase(task.id, 'LIVE_VERIFYING', runId);\n   571|  const health = await getProductionHealth();\n   572|  const commitMatch = await verifyCommitMatch();\n   573|  const runtimeSha = health.commit ?? null;\n   574|  const versionMatch = commitMatch.match === true;\n   575|\n   576|  await logCheckpoint(task.id, runId, 'LIVE_VERIFYING', {\n   577|    runtimeSha,\n   578|    githubSha: commitMatch.githubSha,\n   579|    healthStatus: health.status,\n   580|    versionMatch,\n\n(File has more lines. Use 'offset' parameter to read beyond line 580)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-dev-worker.ts\",\"offset\":260,\"limit\":320}",
+      "createdAt": 1784976935825,
+      "completedAt": 1784976935834
+    },
+    {
+      "type": "tool",
+      "id": "call_R55ijoQCujkORg5L7ZU0fSwz",
+      "toolName": "grep",
+      "input": {
+        "pattern": "handle.*Approval|deployment-approval|internal-deployment-authorizations|createOwnerDeploymentApproval",
+        "path": "backend",
+        "include": "*.ts"
+      },
+      "output": {
+        "pattern": "handle.*Approval|deployment-approval|internal-deployment-authorizations|createOwnerDeploymentApproval",
+        "results": [
+          {
+            "filePath": "backend/services/ivx-internal-deploy-auth.test.ts",
+            "lineNumber": 15,
+            "line": "  createOwnerDeploymentApproval,"
+          },
+          {
+            "filePath": "backend/services/ivx-internal-deploy-auth.test.ts",
+            "lineNumber": 65,
+            "line": "  return await createOwnerDeploymentApproval({"
+          },
+          {
+            "filePath": "backend/services/ivx-internal-deploy-auth.test.ts",
+            "lineNumber": 147,
+            "line": "    expect(new URL(request.url).pathname).toBe('/api/ivx/senior-developer/internal-deployment-authorizations/consume');"
+          },
+          {
+            "filePath": "backend/services/ivx-internal-deploy-auth.ts",
+            "lineNumber": 5,
+            "line": "const APPROVAL_STORE = 'logs/audit/owner-deployment-approvals/approvals.json';"
+          },
+          {
+            "filePath": "backend/services/ivx-internal-deploy-auth.ts",
+            "lineNumber": 105,
+            "line": "export async function createOwnerDeploymentApproval(input: OwnerDeploymentApprovalInput, store: InternalDeployAuthStore = durableAuthStore): Promise<StoredApproval> {"
+          },
+          {
+            "filePath": "backend/services/ivx-internal-deploy-client.ts",
+            "lineNumber": 26,
+            "line": "  const endpoint = `${internalApiBaseUrl()}/api/ivx/senior-developer/internal-deployment-authorizations/consume`;"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 134,
+            "line": "  handleCredentialApprovalGateRequest,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 277,
+            "line": "  handleTreasuryApprovalsList,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 278,
+            "line": "  handleTreasuryApprovalDecide,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 691,
+            "line": "  handleExecutorApprovals,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 902,
+            "line": "  handleRestoreCenterApprovals,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 903,
+            "line": "  handleRestoreCenterApprovalCreate,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 904,
+            "line": "  handleRestoreCenterApprovalConfirm,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 905,
+            "line": "  handleRestoreCenterApprovalReject,"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 1115,
+            "line": "import { handleCreateDeploymentApproval } from './api/ivx-deployment-approvals';"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3160,
+            "line": "app.post('/api/ivx/senior-developer/deployment-approvals', async (context) => handleCreateDeploymentApproval(context.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3161,
+            "line": "app.post('/api/ivx/senior-developer/internal-deployment-authorizations/consume', async (context) => handleInternalDeploymentAuthorizationConsumeRequest(context.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3317,
+            "line": "app.post('/api/ivx/credentials/approval-gate', async (context) => handleCredentialApprovalGateRequest(context.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 4827,
+            "line": "app.get('/api/ivx/treasury/approvals', async (c) => handleTreasuryApprovalsList(c.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 4828,
+            "line": "app.post('/api/ivx/treasury/approvals/decide', async (c) => handleTreasuryApprovalDecide(c.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 5325,
+            "line": "app.get('/api/ivx/restore-center/approvals', async (c) => handleRestoreCenterApprovals(c.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 5326,
+            "line": "app.post('/api/ivx/restore-center/approvals/create', async (c) => handleRestoreCenterApprovalCreate(c.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 5327,
+            "line": "app.post('/api/ivx/restore-center/approvals/confirm', async (c) => handleRestoreCenterApprovalConfirm(c.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 5328,
+            "line": "app.post('/api/ivx/restore-center/approvals/reject', async (c) => handleRestoreCenterApprovalReject(c.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 5391,
+            "line": "app.get('/api/ivx/executor/approvals', (c) => handleExecutorApprovals(c.req.raw));"
+          },
+          {
+            "filePath": "backend/api/ivx-senior-dev-worker.ts",
+            "lineNumber": 30,
+            "line": "import { createOwnerDeploymentApproval } from '../services/ivx-internal-deploy-auth';"
+          },
+          {
+            "filePath": "backend/api/ivx-senior-dev-worker.ts",
+            "lineNumber": 164,
+            "line": "    const internalApproval = await createOwnerDeploymentApproval({"
+          },
+          {
+            "filePath": "backend/api/ivx-treasury.ts",
+            "lineNumber": 311,
+            "line": "export async function handleTreasuryApprovalsList(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-treasury.ts",
+            "lineNumber": 320,
+            "line": "export async function handleTreasuryApprovalDecide(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-restore-center.ts",
+            "lineNumber": 291,
+            "line": "export async function handleRestoreCenterApprovals(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-restore-center.ts",
+            "lineNumber": 303,
+            "line": "export async function handleRestoreCenterApprovalCreate(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-restore-center.ts",
+            "lineNumber": 328,
+            "line": "export async function handleRestoreCenterApprovalConfirm(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-restore-center.ts",
+            "lineNumber": 345,
+            "line": "export async function handleRestoreCenterApprovalReject(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-executor-routes.ts",
+            "lineNumber": 85,
+            "line": "export async function handleExecutorApprovals(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-credential-readiness.ts",
+            "lineNumber": 65,
+            "line": "export async function handleCredentialApprovalGateRequest(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-deployment-approvals.ts",
+            "lineNumber": 2,
+            "line": "import { createOwnerDeploymentApproval, type InternalDeployAuthorization } from '../services/ivx-internal-deploy-auth';"
+          },
+          {
+            "filePath": "backend/api/ivx-deployment-approvals.ts",
+            "lineNumber": 11,
+            "line": "export async function handleCreateDeploymentApproval(request: Request): Promise<Response> {"
+          },
+          {
+            "filePath": "backend/api/ivx-deployment-approvals.ts",
+            "lineNumber": 22,
+            "line": "    const record = await createOwnerDeploymentApproval({"
+          }
+        ],
+        "truncated": false,
+        "totalMatches": 38
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"pattern\":\"handle.*Approval|deployment-approval|internal-deployment-authorizations|createOwnerDeploymentApproval\",\"path\":\"backend\",\"include\":\"*.ts\"}",
+      "createdAt": 1784976935827,
+      "completedAt": 1784976935865
+    },
+    {
+      "type": "tool",
+      "id": "call_BEmZkjmbKStKiVDxNVKjqDHd",
+      "toolName": "bash",
+      "input": {
+        "command": "bun test backend/ivx-senior-dev-self-deploy-recovery.test.ts backend/services/ivx-senior-developer-autonomous-mode.test.ts backend/services/ivx-senior-developer-answer-format.test.ts backend/services/ivx-internal-deploy-auth.test.ts backend/tests/ivx-render-env-merge.test.ts",
+        "cwd": "."
+      },
+      "output": {
+        "stdout": "bun test v1.3.9 (cf6cdbbb)\n",
+        "stderr": "\nbackend/ivx-senior-dev-self-deploy-recovery.test.ts:\n(pass) Self-Deploy Recovery — Path B regression battery > 1. handoff fields required for recovery are all present on a resumable task [0.89ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 2. a DEPLOYING task with a commit_sha is NOT terminal (worker exited without marking) [0.04ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 3. a DEPLOYING task with resume_required=true is eligible for recovery scan [0.04ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 4. optimistic-lock contention: two runtimes cannot both claim the same task_version [0.02ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 5. missing deployId → FAILED (no fake VERIFIED) [0.03ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 6. deploy status=failed → terminal FAILED (rollback evidence recorded) [0.04ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 7. three-way SHA mismatch → NOT VERIFIED [0.25ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 8. propagation delay: first read stale, second read matches → VERIFIED [0.08ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 9. live feature test 503 → NOT VERIFIED [0.22ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 10. releaseRecoveryLease is called on both VERIFIED and FAILED terminal [0.04ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 11. listSelfDeployResumableTasks orders by created_at ASC (FIFO, no starvation) [0.13ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 12. a task already in LIVE_VERIFYING with resume_required=true resumes at LIVE_VERIFYING (not from scratch) [0.04ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 13. VERIFIED proof ledger has commitSha + deployId + runtimeSha + proofLedgerId [0.04ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 14a. VERIFIED with all 4 evidence is the ONLY valid terminal [0.06ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 14b. VERIFIED without deployId is REJECTED [0.03ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 14c. VERIFIED without runtimeSha is REJECTED [0.03ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 14d. non-terminal status is REJECTED [0.02ms]\n(pass) Self-Deploy Recovery — Path B regression battery > 14e. FAILED is a valid terminal (no 4-evidence requirement) [0.08ms]\n(pass) Self-Deploy Recovery — Path B regression battery > constants: lease duration + propagation delay are bounded and sane [0.06ms]\n\nbackend/services/ivx-internal-deploy-auth.test.ts:\n(pass) internal deploy authentication > reports only secret-safe runtime configuration state [0.19ms]\n(pass) internal deploy authentication > rejects a worker request when internal auth is not configured [0.55ms]\n(pass) internal deploy authentication > rejects missing signature headers with HTTP 401 [0.14ms]\n(pass) internal deploy authentication > authorizes a valid signed request and consumes its matching approval once [1.60ms]\n(pass) internal deploy authentication > rejects an invalid signature before it can consume an approval [0.30ms]\n(pass) internal deploy authentication > rejects an expired request timestamp with HTTP 401 [0.22ms]\n(pass) internal deploy authentication > rejects a replayed nonce with HTTP 401 [0.30ms]\n(pass) internal deploy authentication > builds a valid signed request from the configured dedicated worker identity [0.36ms]\n(pass) internal deploy authentication > rejects a signed request when its action does not match the owner approval [0.19ms]\n\nbackend/services/ivx-senior-developer-answer-format.test.ts:\n(pass) command classification > typecheck vs test commands are distinguished [0.12ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > emits the exact owner-required section headers in order [0.97ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > does NOT echo the user goal into the answer (no false guard positives) [0.15ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > never contains the old narrative prose [0.12ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > never contains the 7-section narrative appendix [0.07ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > answer is exactly the 6 owner-required sections with no extra markers [0.16ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > shows real changed files and raw test output [0.06ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > STATUS is VERIFIED when code changed, commit + deploy executed, and production verified [0.06ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > STATUS is NOT_COMPLETED when files changed but tests were not run [0.09ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > STATUS is NOT_COMPLETED when a validation failed [0.12ms]\n(pass) buildSeniorDeveloperExecutionAnswer — strict 6-section format > STATUS is NOT_COMPLETED when files changed but not deployed [0.18ms]\n(pass) hard enforcement > no changed files and no deploy -> NO CODE CHANGED and NOT_COMPLETED status [0.12ms]\n(pass) hard enforcement > deploy-only redeploy with no code change for a CODE_FIX -> DEPLOYED_ONLY / NOT_COMPLETED [0.14ms]\n(pass) hard enforcement > deploy-only redeploy with no code change for a DEPLOYMENT task -> VERIFIED [0.10ms]\n(pass) hard enforcement > patch blocked -> BLOCKED status [0.09ms]\n(pass) hard enforcement > no tests run -> NOT VERIFIED [0.06ms]\n(pass) hard enforcement > guarded action requiring approval -> BLOCKED with confirmation request [0.04ms]\n\nbackend/services/ivx-senior-developer-autonomous-mode.test.ts:\n(pass) Owner Policy Gate > exposes the two named lists verbatim [0.05ms]\n(pass) Owner Policy Gate > includes the exact safe actions the owner listed [0.06ms]\n(pass) Owner Policy Gate > includes the exact risky actions the owner listed [0.03ms]\n(pass) Owner Policy Gate > resolveOwnerPolicyVerdict maps autoExecute → auto_execute [0.06ms]\n(pass) Owner Policy Gate > resolveOwnerPolicyVerdict maps requiresApproval → ask_once [0.03ms]\n(pass) Owner Policy Gate > resolveOwnerPolicyVerdict maps a non-command with no safe match → route_normally [0.54ms]\n(pass) Credential Rule > allows use without asking when every credential is present [0.13ms]\n(pass) Credential Rule > blocks and gives the exact reason when a credential is missing [0.08ms]\n(pass) Credential Rule > blocks on expired / revoked / wrong_permission / not_loaded too [0.05ms]\n(pass) Deploy Rule > auto-deploys non-destructive changes without asking [0.07ms]\n(pass) Deploy Rule > asks ONCE with the exact change for guarded actions [0.05ms]\n(pass) Deploy Rule > does not deploy when there are no changed files [0.02ms]\n(pass) Final response format > emits the exact section headers in the required order [2.83ms]\n(pass) Final response format > STATE is one of the 6 allowed values [0.42ms]\n(pass) Final response format > VERIFIED when autonomous lifecycle verifies + tests pass [0.55ms]\n(pass) Final response format > FAILED when autonomous lifecycle fails [0.44ms]\n(pass) Final response format > BLOCKED when credentials are missing — executor does not run, no fake VERIFIED [0.30ms]\n(pass) Final response format > FAILED when production health has failures, even if autonomous lifecycle returns VERIFIED [0.27ms]\n(pass) Final response format > WAITING_OWNER when the action requires approval — never executes [0.33ms]\n(pass) Final response format > router pipeline runs every stage in order [0.29ms]\n(pass) Acceptance test — the 6 owner prompts > \"Fix members sync Android and iOS\" → safe, executes automatically, VERIFIED [0.29ms]\n(pass) Acceptance test — the 6 owner prompts > \"Fix chat realtime\" → safe, executes automatically, VERIFIED [0.19ms]\n(pass) Acceptance test — the 6 owner prompts > \"Audit landing page\" → safe audit, executes automatically, never asks \"proceed?\" [0.22ms]\n(pass) Acceptance test — the 6 owner prompts > \"What files did you change?\" → safe, executes, VERIFIED [0.15ms]\n(pass) Acceptance test — the 6 owner prompts > \"Deploy now\" → production deploy requires owner approval, asks ONCE [0.32ms]\n(pass) Acceptance test — the 6 owner prompts > \"Is this verified?\" → safe, executes, VERIFIED [0.22ms]\n(pass) Acceptance test — the 6 owner prompts > no fake proof — FILES_CHANGED is empty when the executor produces no files [0.32ms]\n(pass) Acceptance test — the 6 owner prompts > no generic narrative — final report uses the strict section format only [0.23ms]\n(pass) buildSeniorDeveloperAutonomousStatus > returns the marker + pipeline + allowed states + policy gate [0.18ms]\n(pass) IVX IA Senior Developer Autonomous Mode — final marker > the marker is the documented acceptance string [0.03ms]\n(pass) IVX IA Senior Developer Autonomous Mode — final marker > allowed states are exactly the 6 the owner specified [0.03ms]\n\nbackend/tests/ivx-render-env-merge.test.ts:\n(pass) Safe Render Env Merge > adds one variable without deleting others [1.87ms]\n(pass) Safe Render Env Merge > updates one variable without deleting others [0.36ms]\n(pass) Safe Render Env Merge > failed read prevents write [0.49ms]\n(pass) Safe Render Env Merge > failed post-write validation reports failure [0.31ms]\n(pass) Safe Render Env Merge > secret values remain redacted in logging output [0.09ms]\n(pass) Safe Render Env Merge > concurrent updates do not lose variables [23.24ms]\n\n 82 pass\n 0 fail\n 246 expect() calls\nRan 82 tests across 5 files. [238.00ms]\n",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\":\"bun test backend/ivx-senior-dev-self-deploy-recovery.test.ts backend/services/ivx-senior-developer-autonomous-mode.test.ts backend/services/ivx-senior-developer-answer-format.test.ts backend/services/ivx-internal-deploy-auth.test.ts backend/tests/ivx-render-env-merge.test.ts\",\"cwd\":\".\"}",
+      "createdAt": 1784976935837,
+      "completedAt": 1784976936144
+    },
+    {
+      "type": "tool",
+      "id": "call_iwKiJw9W4ttg7JhwLL1hVRvy",
+      "toolName": "bash",
+      "input": {
+        "command": "curl -fsS https://api.ivxholding.com/health && printf '\\n---VERSION---\\n' && curl -fsS https://api.ivxholding.com/version && printf '\\n---SITE---\\n' && curl -fsSI https://ivxholding.com | rg -i 'HTTP/|content-type|server'",
+        "cwd": "."
+      },
+      "output": {
+        "stdout": "{\"ok\":true,\"status\":\"healthy\",\"aiStartupValidation\":{\"ok\":true,\"provider\":\"vercel_ai_gateway\",\"providerType\":\"vercel_gateway\",\"model\":\"openai/gpt-4o\",\"adapterVersion\":\"3.0.85\",\"keyLoaded\":true,\"keyPrefix\":\"vck_***\",\"baseUrl\":\"https://ai-gateway.vercel.sh/v1\",\"errors\":[]},\"seniorDeveloperRuntime\":{\"enabled\":true,\"variablesValidated\":true,\"toolRegistryReady\":true,\"commitSha\":\"9566249e9d97bb5e6e8ee689bc95457e16ab9011\",\"checkedAt\":\"2026-07-25T10:55:36.885Z\",\"markers\":{\"runtime\":\"ivx-senior-developer-runtime-blocks-33-37-2026-05-19\",\"deployment\":\"ivx-owner-ai-hono-autodeploy-live (see commit+bootTime for freshness)\"},\"credentials\":{\"GITHUB_REPO_URL\":true,\"GITHUB_TOKEN\":true,\"RENDER_API_KEY\":true,\"RENDER_SERVICE_ID\":true},\"github\":{\"canReadRepo\":true,\"canPush\":true},\"render\":{\"canDeploy\":true},\"blockers\":[]},\"ivxSeniorDeveloperFinalVerification\":{\"verified\":true,\"executionPath\":\"github_git_data_api\",\"executionPathDescription\":\"Git Data API (blobs → trees → commits → ref PATCH). Rork git proxy is NOT used for production pushes.\",\"renderEnvSafeMerge\":true,\"deploymentDeduplication\":true,\"liveWorkPersistence\":true,\"commitSha\":\"9566249e9d97bb5e6e8ee689bc95457e16ab9011\",\"checkedAt\":\"2026-07-25T10:55:36.885Z\"},\"ivxSeniorDeveloperProviderVerification\":{\"providerReady\":true,\"provider\":\"vercel_ai_gateway\",\"providerType\":\"vercel_gateway\",\"model\":\"openai/gpt-4o\",\"adapterVersion\":\"3.0.85\",\"credentialLoaded\":true,\"credentialValid\":true,\"keyPrefix\":\"vck_***\",\"baseUrl\":\"https://ai-gateway.vercel.sh/v1\",\"lastValidationTime\":\"2026-07-25T10:52:19.241Z\",\"lastHttpStatus\":null,\"fallbackEnabled\":false,\"fallbackUsed\":false,\"providerState\":\"PROVIDER_VALIDATING\",\"traceId\":null,\"toolRegistryReady\":true,\"variablesValidated\":true,\"rorkDependency\":false,\"commitSha\":\"9566249e9d97bb5e6e8ee689bc95457e16ab9011\",\"checkedAt\":\"2026-07-25T10:55:36.885Z\"},\"ivxSeniorDeveloperFinalQA\":{\"verifiedAtRuntime\":true,\"ownerAuthorized\":true,\"intentRouterReady\":true,\"toolRegistryReady\":true,\"variablesValidated\":true,\"aiProviderReady\":true,\"liveWorkReady\":true,\"githubReady\":true,\"renderReady\":true,\"deployedSha\":\"9566249e9d97bb5e6e8ee689bc95457e16ab9011\",\"qaRunId\":\"qa-b400e2f1\",\"checkedAt\":\"2026-07-25T10:55:36.885Z\"},\"service\":\"ivx-owner-ai-backend\",\"deploymentMarker\":\"ivx-owner-ai-hono-autodeploy-live (see commit+bootTime for freshness)\",\"sourceProof\":\"owner-password-owner-vars-route-registered-2026-05-09t1115z\",\"commit\":\"9566249e9d97bb5e6e8ee689bc95457e16ab9011\",\"commitShort\":\"9566249e\",\"bootTime\":\"2026-07-25T10:53:03.340Z\",\"autonomousCoreRoutesRegistered\":true,\"frontendUrl\":\"https://chat.ivxholding.com\",\"apiUrl\":\"https://api.ivxholding.com\",\"socketPath\":\"/socket.io\",\"defaultRoomId\":\"main-room\",\"messageCount\":0,\"aiEnabled\":true,\"openAIModel\":\"openai/gpt-4o\",\"aiProvider\":\"chatgpt\",\"aiEndpoint\":\"https://ai-gateway.vercel.sh/v1\",\"timestamp\":\"2026-07-25T10:55:36.885Z\",\"routes\":[\"GET /\",\"GET /health\",\"GET /version\",\"GET /readiness\",\"POST /public/chat\",\"GET /api/public/messages\",\"GET /api/public/rooms\",\"POST /api/public/send-message\",\"POST /chat\",\"GET /messages\",\"POST /messages\",\"POST /upload\",\"GET /rooms\",\"POST /rooms\",\"POST /inbox/sync\",\"GET /diagnostics\",\"POST /fallback/reply\",\"POST /api/ivx/owner-ai\",\"GET /api/ivx/owner-ai/proxy-status\",\"POST /api/ivx/owner-ai/tools\",\"POST /tool\",\"POST /api/tool\",\"GET /api/ivx/audit-report\",\"GET /api/ivx/development-control\",\"POST /api/ivx/development-action\",\"GET /tool/render-status\",\"GET /tool/supabase-status\",\"GET /api/tool/render-status\",\"GET /api/tool/supabase-status\",\"GET /api/ivx/control-room/status\",\"GET /api/ivx/developer-deploy/status\",\"POST /api/ivx/developer-deploy/action\",\"GET /api/ivx/env-debug/render\",\"GET /api/ivx/variables-tool/status\",\"POST /api/ivx/variables-tool/save\",\"GET /api/ivx/owner-variables/status\",\"POST /api/ivx/owner-variables/save\",\"POST /api/ivx/owner-variables/test\",\"POST /api/ivx/owner-variables/delete\",\"POST /api/ivx/owner-variables/self-sync\",\"POST /api/ivx/owner-variables/sync-from-project-store\",\"GET /api/ivx/owner-variables/deployment-status\",\"GET /api/ivx/independence/status\",\"GET /api/ivx/agent-jobs/status\",\"GET /api/ivx/agent-jobs\",\"POST /api/ivx/agent-jobs\",\"POST /api/ivx/agent-jobs/:jobId/retry\",\"POST /api/ivx/agent-jobs/:jobId/cancel\",\"POST /api/ivx/agent-jobs/:jobId/approve\",\"POST /api/ivx/agent-worker/run-once\",\"GET /api/ivx/agent-jobs/live-activity\",\"POST /api/ivx/agent-jobs/test-token\",\"POST /api/ivx/agent-jobs/test-run\",\"GET /api/ivx/ai-brain/tools\",\"POST /api/ivx/ai-brain/tools\",\"POST /api/ivx/ai-brain/tools/execute\",\"GET /api/ivx/supabase/tables\",\"GET /api/ivx/supabase/schema\",\"GET /api/ivx/supabase/columns\",\"GET /api/ivx/supabase/rls\",\"POST /api/ivx/supabase/owner-action\",\"GET /api/ivx/supabase/owner-action-health\",\"GET /api/ivx/owner-registration/status\",\"GET /api/ivx/owner-signup-audit\",\"POST /api/ivx/owner-registration\",\"POST /api/ivx/owner-registration/repair\",\"POST /api/ivx/owner-access-repair\",\"GET /api/ivx/owner-access-repair/status\",\"POST /api/assistant\",\"POST /api/plan-creator\",\"POST /api/upload/image\",\"POST /api/upload/pdf\",\"POST /api/upload/video\",\"POST /api/google-drive/import\",\"POST /api/files/:fileId/analyze\",\"POST /api/files/:fileId/summary\",\"GET /api/multimodal/status\"]}\n---VERSION---\n{\"ok\":true,\"service\":\"ivx-owner-ai-backend\",\"commit\":\"9566249e9d97bb5e6e8ee689bc95457e16ab9011\",\"commitShort\":\"9566249e\",\"deploymentMarker\":\"ivx-owner-ai-hono-autodeploy-live (see commit+bootTime for freshness)\",\"bootTime\":\"2026-07-25T10:53:03.340Z\",\"timestamp\":\"2026-07-25T10:55:36.988Z\"}\n---SITE---\nHTTP/2 200 \r\ncontent-type: text/html; charset=utf-8\r\nserver: AmazonS3\r\n",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\":\"curl -fsS https://api.ivxholding.com/health && printf '\\\\n---VERSION---\\\\n' && curl -fsS https://api.ivxholding.com/version && printf '\\\\n---SITE---\\\\n' && curl -fsSI https://ivxholding.com | rg -i 'HTTP/|content-type|server'\",\"cwd\":\".\"}",
+      "createdAt": 1784976935851,
+      "completedAt": 1784976937122
+    },
+    {
+      "type": "tool",
+      "id": "call_wdqpo7tiwcY3UaySzOEdSL4r",
+      "toolName": "runChecks",
+      "input": {
+        "appPath": "ios-ivx-holdings"
+      },
+      "output": {
+        "checkType": "build",
+        "appPath": "ios-ivx-holdings",
+        "framework": "swift",
+        "success": true,
+        "message": "Build completed successfully"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"appPath\":\"ios-ivx-holdings\"}",
+      "createdAt": 1784976935856,
+      "completedAt": 1784976981820
+    },
+    {
+      "type": "tool",
+      "id": "call_QgxSnxN4hb8Qqn3w2P0tnOXn",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/ivx-senior-dev-worker.ts",
+        "offset": 1,
+        "limit": 230
+      },
+      "output": {
+        "path": "backend/api/ivx-senior-dev-worker.ts",
+        "content": "     2| * IVX Senior Developer Worker API\n     3| *\n     4| * Owner-only endpoints for submitting and polling autonomous senior developer\n     5| * tasks. The actual work is performed by the IVX-SENIOR-DEV-01 background worker.\n     6| *\n     7| * POST /api/ivx/senior-developer/worker/jobs\n     8| *   Creates a durable task (ivx_owner_ai_tasks) with task_type = 'senior_dev'.\n     9| *   Returns HTTP 202 with taskId, status, assigned worker, and approval requirement.\n    10| *\n    11| * GET /api/ivx/senior-developer/worker/jobs/:taskId\n    12| *   Returns the current task state and any evidence produced so far.\n    13| *\n    14| * POST /api/ivx/senior-developer/worker/jobs/:taskId/approve\n    15| *   Owner approves a specific action (e.g., GitHub write, Render deploy) for a task.\n    16| */\n    17|\n    18|import { assertIVXOwnerOnly } from '../api/owner-only';\n    19|import {\n    20|  enqueueOwnerAITask,\n    21|  getTask,\n    22|  isTerminalTaskStatus,\n    23|  patchTask,\n    24|  type IVXOwnerAITaskRow,\n    25|} from '../services/ivx-owner-ai-task-queue';\n    26|import {\n    27|  recordApproval,\n    28|  type IVXSeniorDevApprovalAction,\n    29|} from '../services/ivx-senior-dev-proof';\n    30|import { createOwnerDeploymentApproval } from '../services/ivx-internal-deploy-auth';\n    31|\n    32|const ASSIGNED_WORKER = 'IVX-SENIOR-DEV-01';\n    33|\n    34|function taskResponse(task: IVXOwnerAITaskRow) {\n    35|  return {\n    36|    taskId: task.id,\n    37|    status: task.status,\n    38|    taskType: task.task_type ?? 'senior_dev',\n    39|    assignedWorker: task.assigned_worker_id ?? ASSIGNED_WORKER,\n    40|    approvalRequired: task.status === 'WAITING_APPROVAL',\n    41|    checkpoint: task.checkpoint,\n    42|    terminal: isTerminalTaskStatus(task.status),\n    43|    createdAt: task.created_at,\n    44|    updatedAt: task.updated_at,\n    45|    filesChanged: task.files_changed ?? [],\n    46|    commitSha: task.commit_sha ?? null,\n    47|    renderDeployId: task.render_deploy_id ?? null,\n    48|    runtimeSha: task.runtime_sha ?? null,\n    49|    proofLedgerId: task.proof_ledger_id ?? null,\n    50|    errorMessage: task.error_message ?? null,\n    51|  };\n    52|}\n    53|\n    54|export async function handleSeniorDevWorkerSubmit(request: Request): Promise<Response> {\n    55|  try {\n    56|    await assertIVXOwnerOnly(request);\n    57|  } catch {\n    58|    return json({ error: 'OWNER_APPROVAL_REQUIRED' }, 401);\n    59|  }\n    60|\n    61|  let body: Record<string, unknown> = {};\n    62|  try {\n    63|    const parsed = await request.json().catch(() => null);\n    64|    if (parsed && typeof parsed === 'object') body = parsed as Record<string, unknown>;\n    65|  } catch {\n    66|    return json({ error: 'Invalid JSON body.' }, 400);\n    67|  }\n    68|\n    69|  const prompt = readString(body.goal) || readString(body.prompt) || '';\n    70|  if (!prompt) {\n    71|    return json({ error: 'Message is required.' }, 400);\n    72|  }\n    73|\n    74|  const conversationId = readString(body.conversationId) ?? null;\n    75|  const messageId = readString(body.messageId) ?? null;\n    76|  const traceId = readString(body.traceId) ?? `senior-dev-${Date.now()}`;\n    77|  const idempotencyKey = readString(body.idempotencyKey) ?? `senior-dev-${traceId}`;\n    78|\n    79|  const requiresInternalAuthorization = new URL(request.url).pathname.includes('/autonomous-worker/');\n    80|  const requestedCommitSha = readString(body.requestedCommitSha)?.toLowerCase() ?? '';\n    81|  const internalDeploymentApprovals = readInternalApprovalMap(body.internalDeploymentApprovals);\n    82|  if (requiresInternalAuthorization && (!/^[a-f0-9]{40}$/.test(requestedCommitSha) || !internalDeploymentApprovals.GITHUB_WRITE)) {\n    83|    return json({ error: 'Autonomous jobs require an exact requestedCommitSha and a GITHUB_WRITE approval ID.' }, 400);\n    84|  }\n    85|  const task = await enqueueOwnerAITask({\n    86|    prompt,\n    87|    conversationId,\n    88|    messageId,\n    89|    traceId,\n    90|    idempotencyKey,\n    91|    maxRetries: 5,\n    92|  });\n    93|\n    94|  // Mark as senior-dev task and assign to the worker.\n    95|  await patchTask(task.task.id, {\n    96|    task_type: 'senior_dev',\n    97|    assigned_worker_id: ASSIGNED_WORKER,\n    98|    worker_data: {\n    99|      templateMode: body.templateMode,\n   100|      proposedPlan: body.proposedPlan,\n   101|      filesAffected: body.filesAffected,\n   102|      riskLevel: body.riskLevel,\n   103|      rollbackPlan: body.rollbackPlan,\n   104|      requestsDeploy: body.requestsDeploy,\n   105|      internalDeploymentApprovals,\n   106|      requestedCommitSha,\n   107|      requiresInternalAuthorization,\n   108|    },\n   109|    checkpoint: 'QUEUED',\n   110|    checkpoint_history: appendCheckpoint(task.task.checkpoint_history, 'QUEUED for IVX-SENIOR-DEV-01'),\n   111|  });\n   112|\n   113|  return json({ ok: true, task: taskResponse({ ...task.task, task_type: 'senior_dev', assigned_worker_id: ASSIGNED_WORKER }) }, 202);\n   114|}\n   115|\n   116|export async function handleSeniorDevWorkerStatus(request: Request, taskId: string): Promise<Response> {\n   117|  try {\n   118|    await assertIVXOwnerOnly(request);\n   119|  } catch {\n   120|    return json({ error: 'OWNER_APPROVAL_REQUIRED' }, 401);\n   121|  }\n   122|\n   123|  const task = await getTask(taskId);\n   124|  if (!task) return json({ error: 'Task not found.' }, 404);\n   125|  return json({ ok: true, task: taskResponse(task) }, 200);\n   126|}\n   127|\n   128|export async function handleSeniorDevWorkerApprove(request: Request, taskId: string): Promise<Response> {\n   129|  let ownerId: string | null = null;\n   130|  try {\n   131|    const ctx = await assertIVXOwnerOnly(request);\n   132|    ownerId = ctx.userId ?? null;\n   133|  } catch {\n   134|    return json({ error: 'OWNER_APPROVAL_REQUIRED' }, 401);\n   135|  }\n   136|\n   137|  let body: Record<string, unknown> = {};\n   138|  try {\n   139|    const parsed = await request.json().catch(() => null);\n   140|    if (parsed && typeof parsed === 'object') body = parsed as Record<string, unknown>;\n   141|  } catch {\n   142|    return json({ error: 'Invalid JSON body.' }, 400);\n   143|  }\n   144|\n   145|  const action = readString(body.action) as IVXSeniorDevApprovalAction | null;\n   146|  const phrase = readString(body.phrase) ?? '';\n   147|  const scope = readString(body.scope) ?? null;\n   148|  const commitSha = readString(body.commitSha) ?? null;\n   149|\n   150|  if (!action) return json({ error: 'action is required.' }, 400);\n   151|  if (!phrase) return json({ error: 'phrase is required.' }, 400);\n   152|\n   153|  const task = await getTask(taskId);\n   154|  if (!task) return json({ error: 'Task not found.' }, 404);\n   155|  if (task.status !== 'WAITING_APPROVAL') {\n   156|    return json({ error: 'Task is not waiting for approval.', status: task.status }, 409);\n   157|  }\n   158|\n   159|  if (isAutonomousWorkerTask(task) && action === 'RENDER_DEPLOY') {\n   160|    const committedSha = (task.commit_sha ?? '').trim().toLowerCase();\n   161|    if (!/^[a-f0-9]{40}$/.test(committedSha) || commitSha?.toLowerCase() !== committedSha) {\n   162|      return json({ error: 'RENDER_DEPLOY approval must be bound to this task’s committed SHA.' }, 409);\n   163|    }\n   164|    const internalApproval = await createOwnerDeploymentApproval({\n   165|      ownerUserId: ownerId ?? 'unknown',\n   166|      requestedCommitSha: committedSha,\n   167|      action: 'RENDER_DEPLOY',\n   168|      requestId: `autonomous-${taskId}-render-${Date.now()}`,\n   169|      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),\n   170|    });\n   171|    const existingWorkerData = readRecord(task.worker_data);\n   172|    const approvals = readInternalApprovalMap(existingWorkerData.internalDeploymentApprovals);\n   173|    await patchTask(taskId, {\n   174|      worker_data: {\n   175|        ...existingWorkerData,\n   176|        requestedCommitSha: committedSha,\n   177|        internalDeploymentApprovals: { ...approvals, RENDER_DEPLOY: internalApproval.id },\n   178|      },\n   179|    });\n   180|  }\n   181|\n   182|  await recordApproval({\n   183|    taskId,\n   184|    ownerId: ownerId ?? 'unknown',\n   185|    action,\n   186|    phrase,\n   187|    scope,\n   188|    commitSha,\n   189|    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),\n   190|  });\n   191|\n   192|  await patchTask(taskId, {\n   193|    status: 'COMMITTING',\n   194|    checkpoint: 'COMMITTING (approval granted)',\n   195|    checkpoint_history: appendCheckpoint(task.checkpoint_history, `APPROVAL_GRANTED action=${action} phrase=${phrase}`),\n   196|  });\n   197|\n   198|  return json({ ok: true, task: taskResponse({ ...task, status: 'COMMITTING' }) }, 200);\n   199|}\n   200|\n   201|function readString(value: unknown): string | null {\n   202|  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;\n   203|}\n   204|\n   205|function readRecord(value: unknown): Record<string, unknown> {\n   206|  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};\n   207|}\n   208|\n   209|function readInternalApprovalMap(value: unknown): Record<string, string> {\n   210|  return Object.fromEntries(\n   211|    Object.entries(readRecord(value)).filter(([key, item]) => (\n   212|      (key === 'GITHUB_WRITE' || key === 'RENDER_DEPLOY' || key === 'PRODUCTION_DEPLOY')\n   213|      && typeof item === 'string'\n   214|      && item.trim().length > 0\n   215|    )).map(([key, item]) => [key, (item as string).trim()]),\n   216|  );\n   217|}\n   218|\n   219|function isAutonomousWorkerTask(task: IVXOwnerAITaskRow): boolean {\n   220|  return readRecord(task.worker_data).requiresInternalAuthorization === true;\n   221|}\n   222|\n   223|function json(payload: Record<string, unknown>, status: number): Response {\n   224|  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });\n   225|}\n   226|\n   227|function appendCheckpoint(\n   228|  history: { checkpoint: string; at: string }[] | null | undefined,\n   229|  checkpoint: string,\n   230|): { checkpoint: string; at: string }[] {\n   231|  const list = Array.isArray(history) ? history.slice(-40) : [];\n\n(File has more lines. Use 'offset' parameter to read beyond line 231)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-dev-worker.ts\",\"offset\":1,\"limit\":230}",
+      "createdAt": 1784976986073,
+      "completedAt": 1784976986117
+    },
+    {
+      "type": "tool",
+      "id": "call_CdwjJGlOQlWTADx4Jr4Ji3Xv",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/ivx-deployment-approvals.ts",
+        "offset": 1,
+        "limit": 160
+      },
+      "output": {
+        "path": "backend/api/ivx-deployment-approvals.ts",
+        "content": "     2|import { createOwnerDeploymentApproval, type InternalDeployAuthorization } from '../services/ivx-internal-deploy-auth';\n     3|\n     4|const ALLOWED_ACTIONS = new Set<InternalDeployAuthorization['action']>(['GITHUB_WRITE', 'RENDER_DEPLOY', 'PRODUCTION_DEPLOY']);\n     5|\n     6|function text(value: unknown): string {\n     7|  return typeof value === 'string' ? value.trim() : '';\n     8|}\n     9|\n    10|/** Creates a short-lived, single-use approval that an internal signed worker may consume. */\n    11|export async function handleCreateDeploymentApproval(request: Request): Promise<Response> {\n    12|  try {\n    13|    const { context, approval } = await assertIVXRegisteredOwnerBearer(request, 'create_owner_deployment_approval');\n    14|    const body = await request.json().catch((): Record<string, unknown> => ({}));\n    15|    const requestedCommitSha = text(body.requestedCommitSha).toLowerCase();\n    16|    const action = text(body.action) as InternalDeployAuthorization['action'];\n    17|    const requestId = text(body.requestId) || `owner-approval-${Date.now()}`;\n    18|    const ttlMinutes = Math.min(60, Math.max(5, Number(body.ttlMinutes) || 30));\n    19|    if (!/^[a-f0-9]{40}$/i.test(requestedCommitSha) || !ALLOWED_ACTIONS.has(action)) {\n    20|      return ownerOnlyJson({ ok: false, error: 'A 40-character requestedCommitSha and allowed action are required.', secretValuesReturned: false }, 400);\n    21|    }\n    22|    const record = await createOwnerDeploymentApproval({\n    23|      ownerUserId: context.userId,\n    24|      requestedCommitSha,\n    25|      action,\n    26|      requestId,\n    27|      expiresAt: new Date(Date.now() + ttlMinutes * 60_000).toISOString(),\n    28|    });\n    29|    return ownerOnlyJson({\n    30|      ok: true,\n    31|      ownerOnly: true,\n    32|      ownerApproval: approval,\n    33|      approval: { id: record.id, requestedCommitSha: record.requestedCommitSha, action: record.action, approvedAt: record.approvedAt, expiresAt: record.expiresAt, usedAt: record.usedAt, requestId: record.requestId },\n    34|      secretValuesReturned: false,\n    35|    }, 201);\n    36|  } catch (error) {\n    37|    const message = error instanceof Error ? error.message : 'Owner deployment approval could not be created.';\n    38|    return ownerOnlyJson({ ok: false, error: message.slice(0, 300), secretValuesReturned: false }, message.toLowerCase().includes('bearer') ? 401 : 403);\n    39|  }\n    40|}\n\n(End of file - total 40 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\"backend/api/ivx-deployment-approvals.ts\",\"offset\":1,\"limit\":160}",
+      "createdAt": 1784976986103,
+      "completedAt": 1784976986126
+    },
+    {
+      "type": "tool",
+      "id": "call_vGqWmSONSZ6QIT82tYIVCvDF",
+      "toolName": "grep",
+      "input": {
+        "pattern": "ivx-senior-developer-worker|handleSeniorDeveloperWorkerEnqueue|worker/jobs",
+        "path": "backend/hono.ts",
+        "include": "*.ts"
+      },
+      "output": {
+        "pattern": "ivx-senior-developer-worker|handleSeniorDeveloperWorkerEnqueue|worker/jobs",
+        "results": [
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 796,
+            "line": "import { OPTIONS as seniorDeveloperWorkerOptions, handleInternalDeploymentAuthorizationConsumeRequest, handleSeniorDeveloperWorkerEnqueueRequest, handleSeniorDeveloperWorkerJobRequest, handleSeniorDeveloperWorkerJobsRequest, handleSeniorDeveloperWorkerLastProofRequest, handleSeniorDeveloperWorkerLedgerRequest, handleSeniorDeveloperWorkerStatusRequest, handleSeniorDeveloperWorkerActiveJobRequest, handleSeniorDeveloperWorkerCancelJobRequest, handleSeniorDeveloperWorkerResumeJobRequest } from './api/ivx-senior-developer-worker';"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3159,
+            "line": "app.post('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerEnqueueRequest(context.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3162,
+            "line": "app.post('/api/ivx/senior-developer/autonomous-worker/jobs', async (context) => handleSeniorDevWorkerSubmit(context.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3163,
+            "line": "app.get('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId', async (context) => handleSeniorDevWorkerStatus(context.req.raw, context.req.param('taskId')));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3164,
+            "line": "app.post('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3165,
+            "line": "app.get('/api/ivx/senior-developer/worker/jobs/:taskId', async (context) => handleSeniorDeveloperWorkerJobRequest(context.req.raw, context.req.param('taskId')));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3166,
+            "line": "app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3880,
+            "line": "app.options('/api/ivx/senior-developer/worker/jobs', () => seniorDeveloperWorkerOptions());"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3885,
+            "line": "app.get('/api/ivx/senior-developer/worker/jobs', async (context) => handleSeniorDeveloperWorkerJobsRequest(context.req.raw));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3886,
+            "line": "app.options('/api/ivx/senior-developer/worker/jobs/:jobId', () => seniorDeveloperWorkerOptions());"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3894,
+            "line": "app.options('/api/ivx/senior-developer/worker/jobs/:jobId/cancel', () => seniorDeveloperWorkerOptions());"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3895,
+            "line": "app.post('/api/ivx/senior-developer/worker/jobs/:jobId/cancel', async (context) => handleSeniorDeveloperWorkerCancelJobRequest(context.req.raw, context.req.param('jobId')));"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3896,
+            "line": "app.options('/api/ivx/senior-developer/worker/jobs/:jobId/resume', () => seniorDeveloperWorkerOptions());"
+          },
+          {
+            "filePath": "backend/hono.ts",
+            "lineNumber": 3897,
+            "line": "app.post('/api/ivx/senior-developer/worker/jobs/:jobId/resume', async (context) => handleSeniorDeveloperWorkerResumeJobRequest(context.req.raw, context.req.param('jobId')));"
+          }
+        ],
+        "truncated": false,
+        "totalMatches": 14
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"pattern\":\"ivx-senior-developer-worker|handleSeniorDeveloperWorkerEnqueue|worker/jobs\",\"path\":\"backend/hono.ts\",\"include\":\"*.ts\"}",
+      "createdAt": 1784976986108,
+      "completedAt": 1784976986133
+    },
+    {
+      "type": "tool",
+      "id": "call_Xf9JEVm85pttXeR4tathKFLv",
+      "toolName": "bash",
+      "input": {
+        "command": "curl -sS -o /tmp/ivx-worker-status.json -w '%{http_code}\\n' 'https://api.ivxholding.com/api/ivx/senior-developer/autonomous-worker/status' && bun -e 'const x=JSON.parse(await Bun.file(\"/tmp/ivx-worker-status.json\").text());console.log(JSON.stringify({ok:x.ok??false,error:x.error??null,secretValuesReturned:x.secretValuesReturned??null}))'",
+        "cwd": "."
+      },
+      "output": {
+        "stdout": "404\n{\"ok\":false,\"error\":\"Not found\",\"secretValuesReturned\":null}\n",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\":\"curl -sS -o /tmp/ivx-worker-status.json -w '%{http_code}\\\\n' 'https://api.ivxholding.com/api/ivx/senior-developer/autonomous-worker/status' && bun -e 'const x=JSON.parse(await Bun.file(\\\"/tmp/ivx-worker-status.json\\\").text());console.log(JSON.stringify({ok:x.ok??false,error:x.error??null,secretValuesReturned:x.secretValuesReturned??null}))'\",\"cwd\":\".\"}",
+      "createdAt": 1784976986111,
+      "completedAt": 1784976986268
+    },
+    {
+      "type": "tool",
+      "id": "call_LjCCqV6Pa4hLoIzJfwJntnKT",
+      "toolName": "bash",
+      "input": {
+        "command": "git diff --check && git status --short && git log -1 --format='%H %s'",
+        "cwd": "."
+      },
+      "output": {
+        "stdout": "fbab3001e1b12fecbb40f54e63ba84425d912295 Complete system audit and set up the autonomous worker for secure operations.\n",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\":\"git diff --check && git status --short && git log -1 --format='%H %s'\",\"cwd\":\".\"}",
+      "createdAt": 1784976986114,
+      "completedAt": 1784976986315
+    },
+    {
+      "type": "tool",
+      "id": "call_6oWziiYgOFwmFZQMK52WVQTV",
+      "toolName": "todoWrite",
+      "input": {
+        "tasks": [
+          {
+            "content": "Inspect the current autonomous release workflow and authentication prerequisites",
+            "activeForm": "Inspecting the current autonomous release workflow and authentication prerequisites",
+            "status": "completed"
+          },
+          {
+            "content": "Run the remaining owner-gated end-to-end verification without bypasses",
+            "activeForm": "Running the remaining owner-gated end-to-end verification without bypasses",
+            "status": "in_progress"
+          },
+          {
+            "content": "Validate release evidence and record the final production status",
+            "activeForm": "Validating release evidence and recording the final production status",
+            "status": "pending"
+          },
+          {
+            "content": "Run the registered iOS build validation",
+            "activeForm": "Running the registered iOS build validation",
+            "status": "completed"
+          }
+        ]
+      },
+      "output": {
+        "tasks": [
+          {
+            "content": "Inspect the current autonomous release workflow and authentication prerequisites",
+            "activeForm": "Inspecting the current autonomous release workflow and authentication prerequisites",
+            "status": "completed"
+          },
+          {
+            "content": "Run the remaining owner-gated end-to-end verification without bypasses",
+            "activeForm": "Running the remaining owner-gated end-to-end verification without bypasses",
+            "status": "in_progress"
+          },
+          {
+            "content": "Validate release evidence and record the final production status",
+            "activeForm": "Validating release evidence and recording the final production status",
+            "status": "pending"
+          },
+          {
+            "content": "Run the registered iOS build validation",
+            "activeForm": "Running the registered iOS build validation",
+            "status": "completed"
+          }
+        ]
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"tasks\":[{\"content\":\"Inspect the current autonomous release workflow and authentication prerequisites\",\"activeForm\":\"Inspecting the current autonomous release workflow and authentication prerequisites\",\"status\":\"completed\"},{\"content\":\"Run the remaining owner-gated end-to-end verification without bypasses\",\"activeForm\":\"Running the remaining owner-gated end-to-end verification without bypasses\",\"status\":\"in_progress\"},{\"content\":\"Validate release evidence and record the final production status\",\"activeForm\":\"Validating release evidence and recording the final production status\",\"status\":\"pending\"},{\"content\":\"Run the registered iOS build validation\",\"activeForm\":\"Running the registered iOS build validation\",\"status\":\"completed\"}]}",
+      "createdAt": 1784976990165,
+      "completedAt": 1784976990554
+    },
+    {
+      "type": "text",
+      "text": "I’ve completed the non-mutating checks: the focused backend suite passes (**82/82**), the live API/site are healthy at the same production SHA, and the iOS release build passes.\n\nThe final production workflow requires a fresh registered-owner session. Please provide a short-lived Supabase owner access token; I’ll use it only to create the exact, single-use approvals and run the remaining guarded verification.",
+      "id": "pqw1bfdhtpmyuqvryba50",
+      "createdAt": 1784976992553
+    },
+    {
+      "type": "tool",
+      "id": "call_sKzgB8CaAsN0lQ3GJbUylcRs",
+      "toolName": "requestEnvs",
+      "input": {
+        "envs": [
+          {
+            "name": "IVX_OWNER_TOKEN_SESSION",
+            "description": "A fresh, short-lived Supabase access token for the registered IVX owner. It is required to create the exact, expiring owner approvals for the protected worker workflow.",
+            "placeholder": "eyJhbGciOi...",
+            "value": "",
+            "forceRequest": true,
+            "isPublic": false
+          }
+        ],
+        "reason": "The existing owner session is rejected by the live owner gate. A fresh session is required to complete the approval-bound autonomous workflow without bypassing its security controls."
+      },
+      "output": {
+        "status": "awaiting_user_input",
+        "requestedEnvs": [
+          {
+            "name": "IVX_OWNER_TOKEN_SESSION",
+            "description": "A fresh, short-lived Supabase access token for the registered IVX owner. It is required to create the exact, expiring owner approvals for the protected worker workflow.",
+            "placeholder": "eyJhbGciOi...",
+            "value": "",
+            "forceRequest": true,
+            "isPublic": false
+          }
+        ],
+        "reason": "The existing owner session is rejected by the live owner gate. A fresh session is required to complete the approval-bound autonomous workflow without bypassing its security controls."
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"envs\":[{\"isPublic\":false,\"name\":\"IVX_OWNER_TOKEN_SESSION\",\"description\":\"A fresh, short-lived Supabase access token for the registered IVX owner. It is required to create the exact, expiring owner approvals for the protected worker workflow.\",\"placeholder\":\"eyJhbGciOi...\",\"value\":\"\",\"forceRequest\":true}],\"reason\":\"The existing owner session is rejected by the live owner gate. A fresh session is required to complete the approval-bound autonomous workflow without bypassing its security controls.\"}",
+      "createdAt": 1784976993752,
+      "completedAt": 1784976993918
+    },
+    {
+      "type": "meta",
+      "id": "meta",
+      "meta": {
+        "isUserInputRequested": true
+      }
+    }
+  ],
+  "snapshotId": "48w91ay84gp7brcqncoc5",
+  "finishStats": {
+    "contextTokens": 110719,
+    "maxInputTokens": 872000,
+    "maxOutputTokens": 128000
+  }
+}
