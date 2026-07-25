@@ -52,6 +52,7 @@ function sanitizeBackendUrl(url) {
   const u = String(url || '').trim().replace(/\/$/, '');
   if (!u) return PRODUCTION_BACKEND_URL;
   if (isLocalDevCredential(u)) return PRODUCTION_BACKEND_URL;
+  if (u === 'https://ivxholding.com' || u === 'https://www.ivxholding.com') return PRODUCTION_BACKEND_URL;
   if (u.includes('ivxholding.com')) return u;
   // Prefer production API over legacy Render URLs
   if (u.includes('onrender.com')) return PRODUCTION_BACKEND_URL;

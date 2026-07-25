@@ -33,7 +33,7 @@
   <link rel="canonical" href="https://ivxholding.com" />
   <meta name="theme-color" content="#FFD700" />
   <meta name="author" content="IVX Holdings" />
-  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' https:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https:; connect-src 'self' https:; frame-src 'none'; object-src 'none';" />
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' https:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https:; connect-src 'self' https: wss://*.supabase.co; frame-src 'none'; object-src 'none';" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
@@ -5909,13 +5909,23 @@
     var url = IVX_API + '/api/trpc/' + procedure;
     var headers = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+    var isReadOnlyStats = procedure === 'waitlist.getStats';
     var _trpcCtrl = new AbortController();
     var _trpcTo = setTimeout(function() { _trpcCtrl.abort(); }, 10000);
-    return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify({ json: input }), signal: _trpcCtrl.signal })
-      .then(function(res) { clearTimeout(_trpcTo); return res.json(); })
+    return fetch(url, {
+      method: isReadOnlyStats ? 'GET' : 'POST',
+      headers: headers,
+      body: isReadOnlyStats ? undefined : JSON.stringify({ json: input }),
+      signal: _trpcCtrl.signal
+    })
+      .then(function(res) {
+        clearTimeout(_trpcTo);
+        if (!res.ok) throw new Error('Request failed with HTTP ' + res.status);
+        return res.json();
+      })
       .then(function(data) {
         if (data.error) throw new Error((data.error.json && data.error.json.message) || data.error.message || 'Request failed');
-        return data.result && data.result.data && data.result.data.json;
+        return isReadOnlyStats ? data : (data.result && data.result.data && data.result.data.json);
       })
       .catch(function(err) { clearTimeout(_trpcTo); throw err; });
   }
@@ -8591,7 +8601,7 @@
 
     // Fire a wake-up ping immediately to start backend cold boot ASAP
     if (_HARDCODED_BACKEND_URL) {
-      fetch(_HARDCODED_BACKEND_URL + '/api/', { mode: 'no-cors' }).catch(function(){});
+      fetch(_HARDCODED_BACKEND_URL + '/health', { mode: 'no-cors' }).catch(function(){});
     }
 
     console.log('[IVX Deals] Starting deal fetch. Supabase ready:', _supabaseReady, '| JWT key:', isValidJwtKey(SUPABASE_ANON_KEY));
