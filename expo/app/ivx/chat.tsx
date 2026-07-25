@@ -163,6 +163,16 @@ import {
   type SeniorDeveloperJobDraft,
 } from '@/src/modules/ivx-developer/seniorDeveloperBuildIntent';
 import {
+  classifyOwnerIntent,
+} from '@/src/modules/ivx-owner-ai/services/ivxOwnerIntentClassifier';
+import {
+  runChatDiagnostic,
+  formatDiagnosticResultCard,
+  formatDiagnosticProgressCard,
+  type DiagnosticStage,
+  type DiagnosticFinding,
+} from '@/src/modules/ivx-owner-ai/services/ivxChatDiagnosticEngine';
+import {
   getSeniorDeveloperWorkerLastProof,
   isWorkerJobComplete,
   pollSeniorDeveloperWorkerJob,
@@ -3125,14 +3135,138 @@ export default function IVXOwnerChatRoute() {
           devTestModeActive: devTestMode.testModeActive,
         });
 
-      // BUILD-INTENT ROUTING (runs BEFORE any chat-mode branch) — build app,
-      // build module, create feature, fix bug, and deploy requests must NOT
-      // produce chat narrative and must NOT trigger database/schema inspection.
-      // They route directly to the self-hosted Senior Developer Worker as an
-      // owner-approved job. A pending draft is executed on /confirm. Database
-      // inspection only happens when the owner explicitly asks for it.
+      // ====================================================================
+      // INTENT CLASSIFICATION (owner directive 2026-07-25) — runs BEFORE the
+      // build-intent check. A diagnostic request ("audit the loading problem",
+      // "why is X failing") must NEVER be misrouted to the worker just because
+      // it contains the word "deploy" or "fix". The classifier separates:
+      //   diagnostic / code_change / deployment / status / explanation
+      // Only code_change and deployment route to the worker.
+      // ====================================================================
+      const ownerIntent = classifyOwnerIntent(effectiveText);
       const isConfirmReply = isExplicitSensitiveActionConfirmation(text);
       const wdSenior = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
+
+      // DIAGNOSTIC ROUTING — run the chat diagnostic engine and return a real
+      // diagnosis card, NOT a progress percentage. This is the fix for the
+      // owner-reported failure where "Audit the loading problem on this chat
+      // ... and deploy it" was misrouted to the worker and returned
+      // "RUNNING 10% / COMMITTING 65%" instead of a diagnosis.
+      if (ownerIntent.isDiagnostic && !isConfirmReply) {
+        console.log('[IVXOwnerChatRoute] Diagnostic intent detected — running chat diagnostic engine', {
+          intent: ownerIntent.intent,
+          subject: ownerIntent.diagnosticSubject,
+          reason: ownerIntent.reason,
+        });
+        // Persist the owner's message first
+        await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
+        setLastSendAt(new Date().toISOString());
+        wdSenior?.pass('AI_TRIGGER_DECISION', `branch=diagnostic subject=${ownerIntent.diagnosticSubject ?? 'general'}`);
+
+        // Show an immediate diagnostic-started card so the owner knows a real
+        // diagnosis is running, not a worker progress bar.
+        await persistSupportMessage([
+          'DIAGNOSTIC STARTED',
+          '',
+          `I am auditing the ${ownerIntent.diagnosticSubject ?? 'chat'} loading path.`,
+          '',
+          'I will inspect:',
+          '  - App open → auth session restore → owner verification',
+          '  - Conversation lookup → message history load → realtime subscription',
+          '  - AI capability load → worker status → UI render → composer ready',
+          '',
+          'I will return:',
+          '  - Exact files and functions in the loading path',
+          '  - Confirmed root cause with evidence',
+          '  - Proposed fix with specific code changes',
+          '  - Production API health check result',
+          '',
+          'This is a real diagnostic, not a progress percentage.',
+        ].join('\n'), 'assistant');
+
+        // Run the diagnostic with live progress cards
+        try {
+          const result = await runChatDiagnostic(
+            ownerIntent.diagnosticSubject ?? 'chat loading',
+            (stage: DiagnosticStage, finding: DiagnosticFinding) => {
+              // Show each stage as a progress card with REAL evidence
+              void persistSupportMessage(formatDiagnosticProgressCard(stage, finding), 'system');
+            },
+          );
+
+          // Quality gate: verify the diagnosis has real evidence before showing
+          const hasRootCause = !!result.rootCause;
+          const hasAffectedFiles = result.affectedFiles.length > 0;
+          const hasProposedFix = !!result.proposedFix;
+          const evidenceCount = result.findings.length;
+
+          if (!hasRootCause || !hasAffectedFiles || !hasProposedFix) {
+            await persistSupportMessage([
+              'DIAGNOSTIC QUALITY GATE: FAIL',
+              '',
+              `Root cause: ${hasRootCause ? 'confirmed' : 'MISSING'}`,
+              `Affected files: ${hasAffectedFiles ? result.affectedFiles.length + ' found' : 'NONE'}`,
+              `Proposed fix: ${hasProposedFix ? 'provided' : 'MISSING'}`,
+              `Evidence count: ${evidenceCount}`,
+              '',
+              'The diagnostic did not meet the senior-developer quality bar. Not marking complete.',
+            ].join('\n'), 'system');
+            wdSenior?.fail('AI_MUTATION_STARTED', 'diagnostic quality gate failed');
+            return;
+          }
+
+          // Show the final diagnosis card
+          await persistSupportMessage(formatDiagnosticResultCard(result), 'assistant');
+          wdSenior?.complete('SUCCESS');
+        } catch (diagError) {
+          await persistSupportMessage([
+            'DIAGNOSTIC FAILED',
+            '',
+            `The diagnostic engine encountered an error: ${diagError instanceof Error ? diagError.message : 'unknown'}`,
+            'This is a real failure, not a timeout. Please retry or inspect manually.',
+          ].join('\n'), 'system');
+          wdSenior?.fail('AI_MUTATION_STARTED', `diagnostic engine error: ${diagError instanceof Error ? diagError.message : 'unknown'}`);
+        }
+        return;
+      }
+
+      // STATUS REQUEST — return task/progress status, not a diagnosis
+      if (ownerIntent.intent === 'status' && !isConfirmReply) {
+        console.log('[IVXOwnerChatRoute] Status intent detected — returning current task status');
+        await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
+        setLastSendAt(new Date().toISOString());
+        wdSenior?.pass('AI_TRIGGER_DECISION', 'branch=status');
+        await persistSupportMessage([
+          'TASK STATUS',
+          '',
+          'Current chat session status:',
+          `  - Messages loaded: ${messages.length}`,
+          `  - Conversation ID: ${canonicalConversationId}`,
+          `  - AI backend reachable: ${aiReachableRef.current ? 'yes' : 'no'}`,
+          `  - Room status: ${ivxRoomStatus?.storageMode ?? 'probing'}`,
+          `  - Pending owner messages: ${pendingOwnerMessages.length}`,
+          `  - Transient assistant messages: ${transientAssistantMessages.length}`,
+          '',
+          'No active worker job in this session. Send a build/fix/deploy request to start one.',
+        ].join('\n'), 'system');
+        wdSenior?.complete('SUCCESS');
+        return;
+      }
+
+      // EXPLANATION REQUEST — route to the AI for a conversational answer
+      // (do NOT route to the worker — explanations are not code changes)
+      if (ownerIntent.intent === 'explanation' && !isConfirmReply && !isSeniorDeveloperBuildRequest(effectiveText)) {
+        console.log('[IVXOwnerChatRoute] Explanation intent detected — routing to conversational AI', {
+          reason: ownerIntent.reason,
+        });
+        // Fall through to the normal AI reply path below — do NOT route to worker
+      }
+
+      // BUILD-INTENT ROUTING (runs AFTER diagnostic/status/explanation checks)
+      // — build app, build module, create feature, fix bug, and deploy requests
+      // that are NOT diagnostic must route to the self-hosted Senior Developer
+      // Worker as an owner-approved job. Database inspection only happens when
+      // the owner explicitly asks for it.
       if (isConfirmReply && pendingBuildDraftRef.current) {
         const approvedDraft = pendingBuildDraftRef.current;
         pendingBuildDraftRef.current = null;
@@ -3143,11 +3277,15 @@ export default function IVXOwnerChatRoute() {
         wdSenior?.complete('SUCCESS');
         return;
       }
-      if (!isConfirmReply && isSeniorDeveloperBuildRequest(effectiveText)) {
+      // BUILD-INTENT ROUTING — only route to the worker when the intent
+      // classifier confirms this is a real code_change or deployment request.
+      // A diagnostic request that contains "deploy it" or "fix" must NOT
+      // reach the worker — it was already handled by the diagnostic branch above.
+      if (!isConfirmReply && ownerIntent.routesToWorker && isSeniorDeveloperBuildRequest(effectiveText)) {
         const draft = buildSeniorDeveloperJobDraft(effectiveText);
         await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
         setLastSendAt(new Date().toISOString());
-        wdSenior?.pass('AI_TRIGGER_DECISION', 'branch=senior_developer_build');
+        wdSenior?.pass('AI_TRIGGER_DECISION', `branch=senior_developer_build intent=${ownerIntent.intent}`);
         // Submit directly to the autonomous senior developer worker.
         // The worker will execute audits/diagnosis/code edits/tests autonomously
         // and pause at WAITING_APPROVAL before any production mutation.
