@@ -12,6 +12,7 @@ import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-onl
 import {
   APP_GENERATOR_SUPPORTED_KINDS,
   IVX_APP_GENERATOR_MARKER,
+  IVX_APP_GENERATOR_TOOL_NAME,
   generateApp,
   getAppGeneratorTool,
   materializeApp,
@@ -21,6 +22,7 @@ import {
   type GeneratedAppBlueprint,
   type GeneratedFile,
 } from '../services/ivx-app-generator';
+import { IVX_FACTORY_ENGINE_MARKER } from '../services/ivx-autonomous-coder-factory';
 
 export const OPTIONS = (): Response => ownerOnlyOptions();
 
@@ -44,12 +46,48 @@ export async function handleAppGeneratorStatusRequest(request: Request): Promise
   if (!auth.ok) return auth.response;
   try {
     const tool = await getAppGeneratorTool();
+    const registered = Boolean(tool);
+    // If not yet registered, attempt a lazy boot registration so the status
+    // endpoint is self-healing — no manual /register call needed.
+    let bootError: string | null = null;
+    if (!registered) {
+      try {
+        const registration = await registerAndVerifyAppGeneratorTool();
+        if (registration.selfTestPassed) {
+          return ownerOnlyJson({
+            ok: true,
+            marker: IVX_APP_GENERATOR_MARKER,
+            supportedKinds: APP_GENERATOR_SUPPORTED_KINDS,
+            registered: true,
+            initialized: true,
+            tool: IVX_APP_GENERATOR_TOOL_NAME,
+            factory: IVX_FACTORY_ENGINE_MARKER,
+            factoryAvailable: true,
+            registryReady: true,
+            ownerGated: true,
+            runtimeReady: true,
+            toolRecord: registration.tool as unknown as Record<string, unknown>,
+          });
+        }
+        bootError = 'Self-test failed during lazy registration.';
+      } catch (regError) {
+        bootError = regError instanceof Error ? regError.message : 'Lazy registration failed.';
+      }
+    }
     return ownerOnlyJson({
       ok: true,
       marker: IVX_APP_GENERATOR_MARKER,
       supportedKinds: APP_GENERATOR_SUPPORTED_KINDS,
-      registered: Boolean(tool),
-      tool: tool as unknown as Record<string, unknown> | null,
+      registered,
+      initialized: registered,
+      tool: registered ? IVX_APP_GENERATOR_TOOL_NAME : null,
+      toolRecord: tool as unknown as Record<string, unknown> | null,
+      factory: IVX_FACTORY_ENGINE_MARKER,
+      factoryAvailable: true,
+      registryReady: registered,
+      ownerGated: true,
+      runtimeReady: registered,
+      bootError,
     });
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Failed to read app-generator status.' }, 500);
