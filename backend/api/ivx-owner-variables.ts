@@ -1004,6 +1004,28 @@ async function testSupabaseProvider(values: StoredSecretMap): Promise<ProviderRe
   }
 }
 
+/** Run an STS GetCallerIdentity call with an explicit credential pair.
+ * Returns null on success, or a short diagnostic string on failure. */
+async function probeStsWithCredentials(
+  accessKeyId: string,
+  secretAccessKey: string,
+  sessionToken: string | undefined,
+  region: string,
+): Promise<string | null> {
+  try {
+    const awsSts = await import('@aws-sdk/client-sts');
+    const client = new awsSts.STSClient({
+      region,
+      credentials: { accessKeyId, secretAccessKey, ...(sessionToken ? { sessionToken } : {}) },
+    });
+    await client.send(new awsSts.GetCallerIdentityCommand({}));
+    return null;
+  } catch (error) {
+    return error instanceof Error ? sanitizeExternalErrorDetail(error.message).slice(0, 120) : 'unknown';
+  }
+}
+
+// AWS provider test — dual-source diagnostic (env vs encrypted store)
 async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {
   // Resolve credentials from process.env FIRST (the live runtime), then fall
   // back to the encrypted owner-variable store. This matches every other AWS
@@ -1017,6 +1039,13 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
   const sessionToken =
     readEnv('IVX_AWS_READONLY_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN') || undefined;
   const region = readEnv('AWS_REGION') || values.AWS_REGION || 'us-east-1';
+  // Also capture the STORE-ONLY values (what's in the encrypted Supabase store
+  // but NOT in process.env) to test independently. This reveals whether the
+  // store holds a different (possibly correct) pair that self-sync overwrote.
+  // StoredSecretMap is keyed by OwnerVariableName; access via a loose record.
+  const storeValues = values as Record<string, string>;
+  const storeAccessKeyId = storeValues.IVX_AWS_READONLY_ACCESS_KEY_ID || storeValues.AWS_ACCESS_KEY_ID || '';
+  const storeSecretAccessKey = storeValues.IVX_AWS_READONLY_SECRET_ACCESS_KEY || storeValues.AWS_SECRET_ACCESS_KEY || '';
   const required: OwnerVariableName[] = ['IVX_AWS_READONLY_ACCESS_KEY_ID', 'IVX_AWS_READONLY_SECRET_ACCESS_KEY', 'AWS_REGION'];
   const missing = required.filter((name) => !values[name] && !readEnv(name));
   if (missing.length > 0 || !accessKeyId || !secretAccessKey) {
@@ -1123,10 +1152,26 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
       `accessKeyPrefix=${accessKeyId.slice(0, 4)}`,
       `secretPrefix=${secretAccessKey.slice(0, 3)}`,
       `secretSuffix=${secretAccessKey.slice(-2)}`,
+      `storeKeyPresent=${Boolean(storeAccessKeyId)}`,
+      `storeKeyLen=${storeAccessKeyId.length}`,
+      `storeSecretPresent=${Boolean(storeSecretAccessKey)}`,
+      `storeSecretLen=${storeSecretAccessKey.length}`,
+      `storeKeyDiffersFromEnv=${storeAccessKeyId && storeAccessKeyId !== accessKeyId ? 'YES' : 'no'}`,
+      `storeSecretDiffersFromEnv=${storeSecretAccessKey && storeSecretAccessKey !== secretAccessKey ? 'YES' : 'no'}`,
       ...(diagnostics.length > 0 ? diagnostics : ['all-format-checks-passed']),
       rawSigV4Result,
     ].join(', ');
-    const detail = `${errorMsg} | Diag: ${diagSummary}`;
+    // If the store holds a DIFFERENT pair, test it independently. This is the
+    // last developer-controlled diagnostic: if the store pair succeeds where
+    // the env pair fails, the fix is to update Render env from the store.
+    let storeProbeResult = '';
+    if (storeAccessKeyId && storeSecretAccessKey && (storeAccessKeyId !== accessKeyId || storeSecretAccessKey !== secretAccessKey)) {
+      const storeErr = await probeStsWithCredentials(storeAccessKeyId, storeSecretAccessKey, undefined, region);
+      storeProbeResult = storeErr ? `storeProbe=FAIL(${storeErr.slice(0, 80)})` : 'storeProbe=SUCCESS';
+    } else {
+      storeProbeResult = 'storeProbe=SKIPPED(store==env or store empty)';
+    }
+    const detail = `${errorMsg} | Diag: ${diagSummary}, ${storeProbeResult}`;
     return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: detail };
   }
 }
