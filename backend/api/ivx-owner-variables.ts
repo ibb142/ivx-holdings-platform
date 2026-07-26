@@ -1067,8 +1067,9 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
       const host = 'sts.amazonaws.com';
       const service = 'sts';
       const now = new Date();
-      const yyyymmdd = now.toISOString().slice(0, 8);
-      const hhmmss = now.toISOString().slice(11, 19).replace(/:/g, '');
+      const isoNow = now.toISOString(); // e.g. "2026-07-26T03:25:39.123Z"
+      const yyyymmdd = isoNow.slice(0, 10).replace(/-/g, ''); // "20260726"
+      const hhmmss = isoNow.slice(11, 19).replace(/:/g, ''); // "032539"
       const amzDate = `${yyyymmdd}T${hhmmss}Z`;
       const dateStamp = yyyymmdd;
       const payload = 'Action=GetCallerIdentity&Version=2011-06-15';
