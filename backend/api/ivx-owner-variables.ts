@@ -1005,21 +1005,129 @@ async function testSupabaseProvider(values: StoredSecretMap): Promise<ProviderRe
 }
 
 async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {
-  const accessKeyId = values.IVX_AWS_READONLY_ACCESS_KEY_ID;
-  const secretAccessKey = values.IVX_AWS_READONLY_SECRET_ACCESS_KEY;
-  const region = values.AWS_REGION || 'us-east-1';
+  // Resolve credentials from process.env FIRST (the live runtime), then fall
+  // back to the encrypted owner-variable store. This matches every other AWS
+  // code path in the codebase (ivx-ai-brain-tool-executor, ivx-apk-distribution,
+  // getIVXOwnerVariableRuntimeValue) and prevents a stale encrypted-store value
+  // from causing SignatureDoesNotMatch when the runtime env has been rotated.
+  const accessKeyId =
+    readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') || readEnv('AWS_ACCESS_KEY_ID') || values.IVX_AWS_READONLY_ACCESS_KEY_ID || '';
+  const secretAccessKey =
+    readEnv('IVX_AWS_READONLY_SECRET_ACCESS_KEY') || readEnv('AWS_SECRET_ACCESS_KEY') || values.IVX_AWS_READONLY_SECRET_ACCESS_KEY || '';
+  const sessionToken =
+    readEnv('IVX_AWS_READONLY_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN') || undefined;
+  const region = readEnv('AWS_REGION') || values.AWS_REGION || 'us-east-1';
   const required: OwnerVariableName[] = ['IVX_AWS_READONLY_ACCESS_KEY_ID', 'IVX_AWS_READONLY_SECRET_ACCESS_KEY', 'AWS_REGION'];
-  const missing = required.filter((name) => !values[name]);
-  if (missing.length > 0) {
-    return { provider: 'aws', status: 'missing', requiredVariableNames: required, savedVariableNames: required.filter((name) => Boolean(values[name])), missingVariableNames: missing, lastTestedAt: null, secretValuesReturned: false };
+  const missing = required.filter((name) => !values[name] && !readEnv(name));
+  if (missing.length > 0 || !accessKeyId || !secretAccessKey) {
+    const savedNames = required.filter((name) => Boolean(values[name] || readEnv(name)));
+    return { provider: 'aws', status: 'missing', requiredVariableNames: required, savedVariableNames: savedNames, missingVariableNames: missing.length > 0 ? missing : required.filter((name) => !savedNames.includes(name)), lastTestedAt: null, secretValuesReturned: false };
   }
+  // Diagnostic checks: detect hidden characters, URL-decoding artifacts, and
+  // whitespace corruption that cause SignatureDoesNotMatch even with valid creds.
+  // AWS secret keys are base64-like [A-Za-z0-9/+=] and should contain NO spaces,
+  // newlines, or control characters.
+  const accessKeyHasSpaces = /\s/.test(accessKeyId);
+  const secretHasSpaces = /\s/.test(secretAccessKey);
+  const secretHasNewlines = /[\r\n]/.test(secretAccessKey);
+  const accessKeyNonAscii = accessKeyId.split('').some((c) => c.charCodeAt(0) > 127);
+  const secretNonAscii = secretAccessKey.split('').some((c) => c.charCodeAt(0) > 127);
+  // Check for URL-decoding artifact: + decoded to space (Render env var issue)
+  const secretHasSpaceFromPlus = secretAccessKey.includes(' ');
+  // AWS access key IDs must match [A-Z0-9]{20}, typically AKIA-prefixed
+  const accessKeyFormatValid = /^[A-Z0-9]{20}$/.test(accessKeyId);
+  // AWS secret access keys are 40 chars [A-Za-z0-9/+=]
+  const secretFormatValid = /^[A-Za-z0-9/+=]{40}$/.test(secretAccessKey);
+
+  const diagnostics: string[] = [];
+  if (accessKeyHasSpaces) diagnostics.push('accessKeyId contains whitespace (possible URL-decoding artifact)');
+  if (secretHasSpaces) diagnostics.push('secretAccessKey contains spaces (possible +→space URL-decoding by Render)');
+  if (secretHasNewlines) diagnostics.push('secretAccessKey contains newlines (trailing line break not trimmed)');
+  if (accessKeyNonAscii) diagnostics.push('accessKeyId contains non-ASCII characters');
+  if (secretNonAscii) diagnostics.push('secretAccessKey contains non-ASCII characters');
+  if (!accessKeyFormatValid) diagnostics.push(`accessKeyId format invalid (expected [A-Z0-9]{20}, got len=${accessKeyId.length})`);
+  if (!secretFormatValid) diagnostics.push(`secretAccessKey format invalid (expected [A-Za-z0-9/+=]{40}, got len=${secretAccessKey.length})`);
+
   try {
     const awsSts = await import('@aws-sdk/client-sts');
-    const client = new awsSts.STSClient({ region, credentials: { accessKeyId: accessKeyId ?? '', secretAccessKey: secretAccessKey ?? '' } });
+    const credentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string } = {
+      accessKeyId,
+      secretAccessKey,
+      ...(sessionToken ? { sessionToken } : {}),
+    };
+    const client = new awsSts.STSClient({ region, credentials });
     await client.send(new awsSts.GetCallerIdentityCommand({}));
     return { provider: 'aws', status: 'tested', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false };
   } catch (error) {
-    return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'AWS read-only identity test failed.' };
+    // If the SDK fails, try a raw SigV4 request to rule out SDK issues.
+    // This manually signs an STS GetCallerIdentity POST with HMAC-SHA256.
+    let rawSigV4Result = '';
+    try {
+      const crypto = await import('node:crypto');
+      const host = 'sts.amazonaws.com';
+      const service = 'sts';
+      const now = new Date();
+      const isoNow = now.toISOString(); // e.g. "2026-07-26T03:25:39.123Z"
+      const yyyymmdd = isoNow.slice(0, 10).replace(/-/g, ''); // "20260726"
+      const hhmmss = isoNow.slice(11, 19).replace(/:/g, ''); // "032539"
+      const amzDate = `${yyyymmdd}T${hhmmss}Z`;
+      const dateStamp = yyyymmdd;
+      const payload = 'Action=GetCallerIdentity&Version=2011-06-15';
+      const payloadHash = crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
+      const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
+      const signedHeaders = 'host;x-amz-date';
+      const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+      const canonicalRequestHash = crypto.createHash('sha256').update(canonicalRequest, 'utf8').digest('hex');
+      const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+      const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${canonicalRequestHash}`;
+      const kDate = crypto.createHmac('sha256', `AWS4${secretAccessKey}`).update(dateStamp, 'utf8').digest();
+      const kRegion = crypto.createHmac('sha256', kDate).update(region, 'utf8').digest();
+      const kService = crypto.createHmac('sha256', kRegion).update(service, 'utf8').digest();
+      const kSigning = crypto.createHmac('sha256', kService).update('aws4_request', 'utf8').digest();
+      const signature = crypto.createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+      const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+      const rawResponse = await fetch(`https://${host}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+          'X-Amz-Date': amzDate,
+          Authorization: authorization,
+          'Content-Length': String(Buffer.byteLength(payload)),
+        },
+        body: payload,
+      });
+      const rawText = await rawResponse.text();
+      if (rawResponse.ok) {
+        rawSigV4Result = `rawSigV4=SUCCESS(httpStatus=${rawResponse.status})`;
+      } else {
+        const errMatch = rawText.match(/<Message>([^<]+)<\/Message>/);
+        rawSigV4Result = `rawSigV4=FAIL(httpStatus=${rawResponse.status}, msg=${errMatch ? errMatch[1] : rawText.slice(0, 200)})`;
+      }
+    } catch (rawError) {
+      rawSigV4Result = `rawSigV4=ERROR(${rawError instanceof Error ? rawError.message.slice(0, 100) : 'unknown'})`;
+    }
+    const errorMsg = error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'AWS read-only identity test failed.';
+    // Always include diagnostic info (even when all checks pass) so the owner
+    // can see the credential metadata that explains WHY SigV4 fails.
+    const diagSummary = [
+      `accessKeyLen=${accessKeyId.length}`,
+      `secretLen=${secretAccessKey.length}`,
+      `accessKeyFormat=${accessKeyFormatValid ? 'OK' : 'BAD'}`,
+      `secretFormat=${secretFormatValid ? 'OK' : 'BAD'}`,
+      `hasSpaces=${secretHasSpaceFromPlus ? 'YES' : 'no'}`,
+      `hasNewlines=${secretHasNewlines ? 'YES' : 'no'}`,
+      `nonAscii=${secretNonAscii ? 'YES' : 'no'}`,
+      `sessionToken=${sessionToken ? 'present' : 'none'}`,
+      `region=${region}`,
+      `source=${readEnv('AWS_ACCESS_KEY_ID') ? 'env:AWS_ACCESS_KEY_ID' : readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') ? 'env:IVX_AWS_READONLY' : 'store'}`,
+      `accessKeyPrefix=${accessKeyId.slice(0, 4)}`,
+      `secretPrefix=${secretAccessKey.slice(0, 3)}`,
+      `secretSuffix=${secretAccessKey.slice(-2)}`,
+      ...(diagnostics.length > 0 ? diagnostics : ['all-format-checks-passed']),
+      rawSigV4Result,
+    ].join(', ');
+    const detail = `${errorMsg} | Diag: ${diagSummary}`;
+    return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: detail };
   }
 }
 
