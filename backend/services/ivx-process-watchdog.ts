@@ -190,7 +190,7 @@ export function runWithWatchdog(
       status: WatchdogResult['status'],
       exitCode: number | null,
       signal: WatchdogResult['signal'],
-      extra: Partial<Pick<WatchdogResult, 'error' | 'timeoutMs'>> = {},
+      extra: { error?: string; timeoutMs?: number } = {},
     ): WatchdogResult {
       const endedAt = new Date().toISOString();
       const base = {

@@ -85,7 +85,7 @@ function resolveTargetFile(): string {
     process.env.GITHUB_WORKSPACE,   // GitHub Actions runner
     process.env.RENDER_WORKSPACE,    // Render worker (if set)
     process.cwd(),                   // Render worker / local CLI
-  ].filter((p): p is string => Boolean(p) && p.length > 0);
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0);
 
   // 3. Add module-relative resolution as fallback (local dev)
   try {

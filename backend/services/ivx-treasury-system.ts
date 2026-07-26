@@ -91,6 +91,8 @@ export interface AccountSummary {
   roiPercent: number | null;
   irrPercent: number | null;
   netWorthInsideIVX: number;
+  totalDistributions: number;
+  lastActivityDate: string;
   transactionCount: number;
   generatedAt: string;
 }
@@ -127,6 +129,7 @@ export type TransactionStatus =
   | 'reversed';
 
 export interface LedgerEntry {
+  id: string;
   transactionId: string;
   date: string;
   time: string;
@@ -419,6 +422,13 @@ export async function getAccountSummary(accountId: string): Promise<AccountSumma
   cashflows.sort((a, b) => a.date.getTime() - b.date.getTime());
   const irr = computeIRRPercent(cashflows);
 
+  const lastActivityDate = entries.length > 0
+    ? entries.reduce((latest, e) => e.timestamp > latest ? e.timestamp : latest, entries[0].timestamp)
+    : '';
+  const totalDistributions = entries
+    .filter((e) => e.status === 'completed' && ['distribution', 'dividend', 'interest', 'profit'].includes(e.type))
+    .reduce((sum, e) => sum + e.amount, 0);
+
   return {
     accountId: account.accountId,
     userId: account.userId,
@@ -432,6 +442,8 @@ export async function getAccountSummary(accountId: string): Promise<AccountSumma
     portfolioValue: round2(portfolioValue),
     unrealizedGainLoss: round2(unrealized),
     realizedGainLoss: round2(realized),
+    totalDistributions: round2(totalDistributions),
+    lastActivityDate,
     roiPercent: roi,
     irrPercent: irr,
     netWorthInsideIVX: round2(cash + portfolioValue),
@@ -487,6 +499,7 @@ export async function recordTransaction(input: RecordTransactionInput): Promise<
 
   const entry: LedgerEntry = {
     ...core,
+    id: transactionId,
     date: timestamp.slice(0, 10),
     time: timestamp.slice(11, 19),
     status: approval ? 'pending_approval' : (input.status ?? 'completed'),

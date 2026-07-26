@@ -78,6 +78,10 @@ export interface IVXOwnerAITaskRow {
   render_deploy_id: string | null;
   runtime_sha: string | null;
   proof_ledger_id: string | null;
+  task_version: number;
+  recovery_attempt: number;
+  pre_deploy_runtime_sha: string | null;
+  resume_phase: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -248,6 +252,21 @@ export async function getTask(id: string): Promise<IVXOwnerAITaskRow | null> {
   if (!res.ok) return null;
   const rows = await res.json().catch(() => []) as IVXOwnerAITaskRow[];
   return rows[0] ?? null;
+}
+
+/** List self-deploy tasks that are in a resumable state (LIVE_VERIFYING with a deploy ID). */
+export async function listSelfDeployResumableTasks(limit: number = 20): Promise<IVXOwnerAITaskRow[]> {
+  const capped = Math.min(Math.max(limit, 1), 100);
+  try {
+    const res = await restFetch(`${TASKS_TABLE}?status=eq.LIVE_VERIFYING&render_deploy_id=not.is.null&order=created_at.desc&limit=${capped}`, {
+      method: 'GET',
+      headers: restHeaders(),
+    });
+    if (!res.ok) return [];
+    return await res.json().catch(() => []) as IVXOwnerAITaskRow[];
+  } catch {
+    return [];
+  }
 }
 
 export async function listTasks(limit: number = 20): Promise<IVXOwnerAITaskRow[]> {

@@ -205,6 +205,7 @@ export interface NormalizedRegistrationSuccess {
   email: string;
   requiresVerification: boolean;
   resumeToken: string;
+  fanoutErrors?: { step: string; error: string }[];
 }
 
 export type NormalizedRegistrationResult = NormalizedRegistrationSuccess | NormalizedRegistrationError;
@@ -495,7 +496,7 @@ export async function orchestrateRegistration(
       });
 
       // Canonical member sync (Supabase `members` table) — non-fatal but logged.
-      const fanoutErrors: string[] = [];
+      const fanoutErrors: { step: string; error: string }[] = [];
       try {
         const canonicalResult = await upsertCanonicalMember({
           fullName: `${input.firstName} ${input.lastName}`.trim(),
@@ -515,11 +516,11 @@ export async function orchestrateRegistration(
           pictureUrl: input.pictureUrl || '',
         });
         if (canonicalResult && canonicalResult.ok === false) {
-          fanoutErrors.push(`canonical:${canonicalResult.error || 'unknown'}`);
+          fanoutErrors.push({ step: 'canonical', error: canonicalResult.error || 'unknown' });
           console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalResult.error || 'unknown');
         }
       } catch (canonicalErr) {
-        fanoutErrors.push(`canonical:${canonicalErr instanceof Error ? canonicalErr.message : 'unknown'}`);
+        fanoutErrors.push({ step: 'canonical', error: canonicalErr instanceof Error ? canonicalErr.message : 'unknown' });
         console.error('[RegistrationOrchestrator] upsertCanonicalMember failed:', canonicalErr instanceof Error ? canonicalErr.message : 'unknown');
       }
 
@@ -554,7 +555,7 @@ export async function orchestrateRegistration(
         });
         if (!roleResult.ok) {
           for (const re of roleResult.errors) {
-            fanoutErrors.push(`role_specific:${re}`);
+            fanoutErrors.push({ step: 'role_specific', error: String(re) });
           }
         }
       }

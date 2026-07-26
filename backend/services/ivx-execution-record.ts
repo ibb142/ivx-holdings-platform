@@ -47,7 +47,7 @@ export type IVXExecutionRecord = {
   /** Commands executed. */
   commands: { command: string; exit_code: number | null; output_summary: string }[];
   /** Tests run and their results. */
-  tests: { name: string; passed: boolean; duration_ms: number | null }[];
+  tests: { name: string; passed: boolean; duration_ms: number | null; passedCount?: number | null; failedCount?: number | null; command?: string }[];
   /** QA results. */
   qa_results: {
     platform: string;
@@ -64,6 +64,10 @@ export type IVXExecutionRecord = {
     check: string;
     result: string;
     timestamp: number;
+    name?: string;
+    ok?: boolean;
+    httpStatus?: number | null;
+    url?: string;
   }[];
   /** All evidence collected. */
   evidence: { type?: string; kind?: string; value: string; label?: string; timestamp: number | string; verified?: boolean }[];

@@ -18,6 +18,7 @@ export type RealtimeAdapterConfig = {
   enabled: boolean;
   redisUrl: string | null;
   instanceId: string;
+  marker: string;
   maxPayloadBytes: number;
   pingIntervalMs: number;
   pingTimeoutMs: number;
@@ -31,6 +32,7 @@ export function getRealtimeConfig(): RealtimeAdapterConfig {
     enabled,
     redisUrl,
     instanceId,
+    marker: ADAPTER_MARKER,
     maxPayloadBytes: 1_000_000,
     pingIntervalMs: 10_000,
     pingTimeoutMs: 30_000,

@@ -2292,6 +2292,7 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
       gitDeployOperator,
       productionVerification,
       changedRouteVerification,
+      liveCommitVerification: { requestedCommit: '', liveCommit: null, match: false, deploymentId: null, deployStatus: null, deployPolled: false, deployReachedTerminalState: false, deployPollAttempts: 0, versionEndpoint: '', versionHttpStatus: null, versionAttempts: 0, error: 'patch approval missing', secretValuesReturned: false },
       memoryState: { stored: true, memoryKey, loadedEntries: loadedMemory.length },
       logs,
       auditFiles: { json: relativeFromRoot(projectRoot, jsonPath), jsonl: relativeFromRoot(projectRoot, jsonlPath) },

@@ -113,8 +113,8 @@ function testsPerformed(record: IVXExecutionRecord): string {
     return 'No tests were run.';
   }
   const lines = record.tests.map((t) => {
-    const counts = t.passedCount !== null && t.failedCount !== null ? ` (${t.passedCount} pass / ${t.failedCount} fail)` : '';
-    return `  - ${t.name}: ${t.passed ? 'PASS' : 'FAIL'}${counts} — ${t.command}`;
+    const counts = t.passedCount != null && t.failedCount != null ? ` (${t.passedCount} pass / ${t.failedCount} fail)` : '';
+    return `  - ${t.name}: ${t.passed ? 'PASS' : 'FAIL'}${counts} — ${t.command ?? ''}`;
   });
   return `Tests run (${record.tests.length}):\n${lines.join('\n')}`;
 }
@@ -131,9 +131,9 @@ function productionProof(record: IVXExecutionRecord): string {
   } else {
     parts.push('Deployment: none (no deployment occurred)');
   }
-  const health = record.production_checks.find((c) => c.name.includes('health'));
+  const health = record.production_checks.find((c) => (c.name ?? c.check).includes('health'));
   if (health) {
-    parts.push(`Health: ${health.ok ? 'OK' : 'FAIL'} (${health.httpStatus ?? 'n/a'}) — ${health.url}`);
+    parts.push(`Health: ${health.ok ? 'OK' : 'FAIL'} (${health.httpStatus ?? 'n/a'}) — ${health.url ?? ''}`);
   } else {
     parts.push('Health: not checked');
   }

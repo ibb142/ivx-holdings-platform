@@ -109,7 +109,7 @@ function generateDirectAnswer(
   if (validation.verdict === 'FAILED') {
     return `The requested problem was not fixed.`;
   }
-  if (validation.verdict === 'NO_CHANGE') {
+  if (validation.verdict === 'NO_CHANGE_REQUIRED') {
     return `No code change was required for this task.`;
   }
   return `The requested problem is NOT COMPLETED. ${validation.reasons.join('; ')}`;

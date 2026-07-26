@@ -5060,15 +5060,25 @@ app.options('/api/ivx/deals/:dealId/pathways', () => publicFeatureOptions());
 app.get('/api/ivx/deals/:dealId/pathways', async (c) => handleGetDealPathways(c.req.raw, c.req.param('dealId')));
 app.put('/api/ivx/deals/:dealId/pathways', async (c) => {
   const { assertIVXRegisteredOwnerBearer } = await import('./api/owner-only');
-  const authResult = await assertIVXRegisteredOwnerBearer(c.req.raw);
-  if (!authResult.ok) return authResult.response!;
-  return handleUpdateDealPathways(c.req.raw, c.req.param('dealId'), authResult.userId);
+  let authCtx: { context: import('./api/owner-only').IVXOwnerRequestContext; approval: import('./api/owner-only').IVXOwnerMutationApprovalProof };
+  try {
+    authCtx = await assertIVXRegisteredOwnerBearer(c.req.raw, 'update_deal_pathways');
+  } catch (err) {
+    const e = err as { status?: number; message?: string };
+    return c.json({ error: e.message ?? 'Owner auth failed' }, (e.status ?? 403) as 400 | 401 | 403 | 404 | 500);
+  }
+  return handleUpdateDealPathways(c.req.raw, c.req.param('dealId'), authCtx.approval.userId ?? '');
 });
 app.post('/api/ivx/deals/:dealId/publish', async (c) => {
   const { assertIVXRegisteredOwnerBearer } = await import('./api/owner-only');
-  const authResult = await assertIVXRegisteredOwnerBearer(c.req.raw);
-  if (!authResult.ok) return authResult.response!;
-  return handlePublishDeal(c.req.raw, c.req.param('dealId'), authResult.userId);
+  let authCtx: { context: import('./api/owner-only').IVXOwnerRequestContext; approval: import('./api/owner-only').IVXOwnerMutationApprovalProof };
+  try {
+    authCtx = await assertIVXRegisteredOwnerBearer(c.req.raw, 'publish_deal');
+  } catch (err) {
+    const e = err as { status?: number; message?: string };
+    return c.json({ error: e.message ?? 'Owner auth failed' }, (e.status ?? 403) as 400 | 401 | 403 | 404 | 500);
+  }
+  return handlePublishDeal(c.req.raw, c.req.param('dealId'), authCtx.approval.userId ?? '');
 });
 app.get('/api/ivx/deals/:dealId/sync-report', async (c) => handleGetSyncReport(c.req.raw, c.req.param('dealId')));
 app.get('/api/ivx/deals/:dealId/audit-trail', async (c) => handleGetAuditTrail(c.req.raw, c.req.param('dealId')));
