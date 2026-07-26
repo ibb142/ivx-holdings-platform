@@ -1005,17 +1005,32 @@ async function testSupabaseProvider(values: StoredSecretMap): Promise<ProviderRe
 }
 
 async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {
-  const accessKeyId = values.IVX_AWS_READONLY_ACCESS_KEY_ID;
-  const secretAccessKey = values.IVX_AWS_READONLY_SECRET_ACCESS_KEY;
-  const region = values.AWS_REGION || 'us-east-1';
+  // Resolve credentials from process.env FIRST (the live runtime), then fall
+  // back to the encrypted owner-variable store. This matches every other AWS
+  // code path in the codebase (ivx-ai-brain-tool-executor, ivx-apk-distribution,
+  // getIVXOwnerVariableRuntimeValue) and prevents a stale encrypted-store value
+  // from causing SignatureDoesNotMatch when the runtime env has been rotated.
+  const accessKeyId =
+    readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') || readEnv('AWS_ACCESS_KEY_ID') || values.IVX_AWS_READONLY_ACCESS_KEY_ID || '';
+  const secretAccessKey =
+    readEnv('IVX_AWS_READONLY_SECRET_ACCESS_KEY') || readEnv('AWS_SECRET_ACCESS_KEY') || values.IVX_AWS_READONLY_SECRET_ACCESS_KEY || '';
+  const sessionToken =
+    readEnv('IVX_AWS_READONLY_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN') || undefined;
+  const region = readEnv('AWS_REGION') || values.AWS_REGION || 'us-east-1';
   const required: OwnerVariableName[] = ['IVX_AWS_READONLY_ACCESS_KEY_ID', 'IVX_AWS_READONLY_SECRET_ACCESS_KEY', 'AWS_REGION'];
-  const missing = required.filter((name) => !values[name]);
-  if (missing.length > 0) {
-    return { provider: 'aws', status: 'missing', requiredVariableNames: required, savedVariableNames: required.filter((name) => Boolean(values[name])), missingVariableNames: missing, lastTestedAt: null, secretValuesReturned: false };
+  const missing = required.filter((name) => !values[name] && !readEnv(name));
+  if (missing.length > 0 || !accessKeyId || !secretAccessKey) {
+    const savedNames = required.filter((name) => Boolean(values[name] || readEnv(name)));
+    return { provider: 'aws', status: 'missing', requiredVariableNames: required, savedVariableNames: savedNames, missingVariableNames: missing.length > 0 ? missing : required.filter((name) => !savedNames.includes(name)), lastTestedAt: null, secretValuesReturned: false };
   }
   try {
     const awsSts = await import('@aws-sdk/client-sts');
-    const client = new awsSts.STSClient({ region, credentials: { accessKeyId: accessKeyId ?? '', secretAccessKey: secretAccessKey ?? '' } });
+    const credentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string } = {
+      accessKeyId,
+      secretAccessKey,
+      ...(sessionToken ? { sessionToken } : {}),
+    };
+    const client = new awsSts.STSClient({ region, credentials });
     await client.send(new awsSts.GetCallerIdentityCommand({}));
     return { provider: 'aws', status: 'tested', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false };
   } catch (error) {
