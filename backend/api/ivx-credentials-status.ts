@@ -18,6 +18,7 @@ import { readDurableJson, writeDurableJson } from '../services/ivx-durable-store
 import { maskPhone, resolveAlertPhone, GUARDIAN_STATE_FILE_PATH, EMPTY_GUARDIAN_STATE } from './ivx-owner-auth-guardian';
 import type { GuardianState } from './ivx-owner-auth-guardian';
 import { getProviderHealth } from '../services/ivx-provider-state-machine';
+import { requestIVXAIText } from '../ivx-ai-runtime';
 import path from 'node:path';
 
 export const IVX_CREDENTIALS_STATUS_MARKER = 'ivx-credentials-status-2026-07-17';
@@ -216,17 +217,33 @@ async function testAiGateway(): Promise<CredentialRow> {
   if (!stored) {
     return { service: 'AI Gateway', variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY', environment: 'render', stored: false, injected: false, authenticated: false, permissionTest: 'absent', runtimeTest: 'variable absent', httpStatus: null, securityCheck: 'server-only', blocker: 'AI gateway key not injected', worker: 'W12', finalStatus: 'BLOCKED', testedAt };
   }
-  // Use the authoritative internal provider state machine as primary proof.
-  // The vck_ key routes through the Rork AI toolkit proxy, NOT directly against
-  // ai-gateway.vercel.sh — a direct external call returns HTTP 400 even when the
-  // key is valid. The provider state machine tracks the real outcome of live
-  // model calls made by the IA runtime (owner-ai, autonomous engines, etc.).
-  const health = getProviderHealth();
+  // Live test: call the internal AI runtime directly (the same path owner-ai uses).
+  // A valid text answer is the authoritative proof that the gateway key works end-to-end.
+  // This also latches the provider state machine to PROVIDER_READY on success.
   const keyPrefix = key.slice(0, 4) + '***';
   const keySource = openaiKey ? 'OPENAI_API_KEY' : 'AI_GATEWAY_API_KEY';
-  const providerReady = health.state === 'PROVIDER_READY' || health.state === 'FALLBACK_READY';
-  const credentialValid = health.credentialValid === true && health.credentialLoaded === true;
-  const authenticated = providerReady && credentialValid;
+  let liveAnswer: string | null = null;
+  let liveError: string | null = null;
+  let liveHttpStatus: number | null = null;
+  try {
+    const result = await requestIVXAIText({
+      module: 'ivx-credentials-audit',
+      requestId: `cred-ai-${Date.now()}`,
+      prompt: 'Reply with only the number 1.',
+      maxOutputTokens: 10,
+    });
+    liveAnswer = (result?.text ?? '').trim();
+    if (!liveAnswer) liveError = 'empty response';
+  } catch (error: unknown) {
+    liveError = error instanceof Error ? error.message.slice(0, 150) : String(error).slice(0, 150);
+    // Extract HTTP status from common error message patterns
+    const statusMatch = liveError.match(/status=(\d{3})/);
+    if (statusMatch) liveHttpStatus = Number.parseInt(statusMatch[1], 10);
+  }
+  const authenticated = liveAnswer !== null && liveAnswer.length > 0 && liveError === null;
+  // Also consult the provider state machine for a secondary signal
+  const health = getProviderHealth();
+  const detail = `provider=${health.provider}, model=${health.model}, state=${health.state}, credentialLoaded=${health.credentialLoaded}`;
   return {
     service: 'AI Gateway',
     variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY',
@@ -234,13 +251,11 @@ async function testAiGateway(): Promise<CredentialRow> {
     stored: true,
     injected: true,
     authenticated,
-    permissionTest: authenticated
-      ? `provider state=${health.state}; key ${keyPrefix} via ${keySource}; model=${health.model}; lastHttpStatus=${health.lastHttpStatus ?? 'n/a'}`
-      : `key present (${keyPrefix} via ${keySource}) but provider not ready (state=${health.state})`,
-    runtimeTest: `getProviderHealth() → state=${health.state}, provider=${health.provider}, credentialValid=${health.credentialValid}, credentialLoaded=${health.credentialLoaded}, lastHttpStatus=${health.lastHttpStatus ?? 'n/a'}`,
-    httpStatus: health.lastHttpStatus,
+    permissionTest: authenticated ? `live chat completion OK (key ${keyPrefix} via ${keySource}); answer="${liveAnswer?.slice(0, 20) ?? ''}"` : `key present (${keyPrefix} via ${keySource}) but live call failed: ${liveError ?? 'unknown'}`,
+    runtimeTest: `requestIVXAIText(prompt="Reply with only the number 1.") → ${authenticated ? `answer="${liveAnswer?.slice(0, 20) ?? ''}"` : `error=${liveError}`} | ${detail}`,
+    httpStatus: authenticated ? 200 : liveHttpStatus,
     securityCheck: 'server-only',
-    blocker: authenticated ? null : `AI provider not ready (state=${health.state}${health.error ? ', error=' + health.error.slice(0, 80) : ''})`,
+    blocker: authenticated ? null : `AI gateway live call failed (${liveError ?? 'unknown'})`,
     worker: 'W12',
     finalStatus: authenticated ? 'VERIFIED' : 'PARTIAL',
     testedAt,
