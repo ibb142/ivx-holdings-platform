@@ -5,20 +5,18 @@ updatedAt: 2026-07-26T13:59:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
-> **STATUS: 16/16 PHASES PASS — AUTONOMOUS VISIBILITY COMPLETE. ✅**
+> **STATUS: DEPLOY IN PROGRESS — AUTONOMOUS VISIBILITY CODE COMPLETE, PRODUCTION NOT YET UPDATED. ⚠️**
 >
-> **Phase 16 E2E Acceptance:** FAILED — `commitMatch: false`, `deployVerified: false`, `endToEndProductionComplete: false` (job `ivx-worker-4af33a07-eb85-4ab2-a4d3-6b405295ac3c`). No fake PASS was reported. ✅
+> **Phase 16 E2E Acceptance:** PENDING — GitHub HEAD `9dac8cac` has not been deployed to production yet. Production is still on `8b1667a2`. The new `/api/ivx/autonomous/runs` endpoints return 404 on production.
 >
-> **POST-CERTIFICATION REPAIR (IN PROGRESS):** Deploy GitHub HEAD `716a672b` (includes AWS store-fallback fix + manual Redeploy button + latest plan evidence) to production and re-test AWS provider.
->
-> **OWNER QUESTION (2026-07-26T14:52Z):** Owner confirmed Scale plan ($499/mo) and asked why the fix isn't free. Clarification: the plan is correct; the 5000 monthly build minutes included in the plan are exhausted. The Redeploy button code is free, but running a Render build requires available build minutes. The only free path is waiting for the next billing cycle reset.
+> **OWNER UPGRADE (2026-07-26T17:35Z):** Owner upgraded Render Build Pipeline to **Performance ($25/1,000 min)** with **$25 monthly spend limit**. Screenshot confirms Performance is selected. Fresh deploys now return `build_in_progress` (not the previous `build_failed` in <1s), so the build pipeline is responding. Latest deploys: `dep-d9j4f3jtqb8s739osus0`, `dep-d9j4hrsvikkc73df6ukg`, `dep-d9j4ljflk1mc73fjeju0` (current, `build_in_progress`).
 >
 > **EFFECTIVE TASK:** Owner's 16-phase final QA checklist (2026-07-25T23:19Z message).
 > **OWNER FOLLOW-UP (2026-07-26T00:40Z):** "Complete item 4,6,7,8,10,12,16" — stop punting to "owner action", actually test live.
 > **OWNER KEY UPDATE (2026-07-26T00:52Z):** Owner updated the Vercel AI Gateway key on Render. Phase 4 re-verified PASS.
-> **OWNER PLAN UPDATE (2026-07-26T13:50Z+):** Owner confirmed Render workspace is on Scale ($499/mo). API still reports service instance `ivx-holdings-platform` as `plan: "free"`. Latest deploy attempts: `dep-d9j1tpjtqb8s739kr5a0` (2026-07-26T14:51:19Z), `dep-d9j1rf7aqgkc73are340` (2026-07-26T14:46:20Z), `dep-d9j1po9oagis738g2im0` (2026-07-26T14:42:42Z) — all `build_failed` in <1s, `failureReason: null`.
+> **OWNER PLAN UPDATE (2026-07-26T17:35Z):** Owner upgraded Render Build Pipeline to **Performance ($25/1,000 min)** with **$25 monthly spend limit**. Previous deploy attempts were `build_failed` in <1s due to exhausted build minutes. Fresh deploys now return `build_in_progress`; current deploy is `dep-d9j4ljflk1mc73fjeju0` and is being polled.
 >
-> **LATEST COMMIT:** GitHub HEAD `716a672b` (AWS store-fallback fix + manual Redeploy button + plan evidence). Production still on `e18a4146` — SHA MISMATCH.
+> **LATEST COMMIT:** GitHub HEAD `9dac8cac` (autonomous run-log persistence + `/api/ivx/autonomous/runs` + `/runs/summary` + dashboard + manual Redeploy button). Production still on `8b1667a2` — SHA MISMATCH.
 >
 > **LATEST TESTS:** Expo 659/659 pass. Backend 2148/2148 pass. Backend tsc --noEmit: 0 errors.
 >
@@ -44,8 +42,8 @@ updatedAt: 2026-07-26T13:59:00.000Z
 | Phase 12: Final Device QA | ✅ PASS | 251 screens, 7 tabs, 70 components, 171 lib modules. All key auth/feature screens exist. Provider tree intact. |
 | Phase 13: Performance QA | ✅ PASS | API <1s, endpoints <0.25s. |
 | Phase 14: Security QA | ✅ PASS | Rate limiting, owner guards, no secrets leaked. |
-| Phase 15: Final Deployment | ✅ PASS | `c7404121` live on production. |
-| Phase 16: Final Certification | ❌ FAILED honestly | E2E job reached VERIFYING (90%) then FAILED: `commitMatch: false`, `deployVerified: false`. System did NOT fake PASS. |
+| Phase 15: Final Deployment | ✅ PASS | `8b1667a2` live on production. |
+| Phase 16: Final Certification | ⏳ PENDING | E2E deploy verification waiting for `9dac8cac` to go live on production. |
 
 ---
 
@@ -56,15 +54,15 @@ Owner provided new AWS access key `AKIASAJBIV7CI6FP43PH` + matching secret on 20
 - Local raw SigV4 test against AWS STS: **VALID** (HTTP 200, account `138045599684`).
 - Render API env-var upsert: reports `valueStored: true`.
 - Production runtime diagnostic after restart: still shows old secret prefix (`GNw...+3`) and `SignatureDoesNotMatch`.
-- Deploy attempts keep failing instantly (`build_failed` in <1s, `failureReason: null`). Latest attempts: `dep-d9j1tpjtqb8s739kr5a0` (2026-07-26T14:51:19Z), `dep-d9j1rf7aqgkc73are340` (2026-07-26T14:46:20Z), `dep-d9j1po9oagis738g2im0` (2026-07-26T14:42:42Z).
+- Previous deploy attempts were failing instantly (`build_failed` in <1s, `failureReason: null`) due to exhausted build-pipeline minutes.
+- **ROOT CAUSE FOUND (2026-07-26T14:33Z):** Render build logs showed: **"Build canceled: your workspace has run out of build pipeline minutes for the current billing period."** This was a workspace build-pipeline quota issue, not the service instance plan.
 - New AWS credentials saved to encrypted owner-variables store (`IVX_AWS_READONLY_ACCESS_KEY_ID`, `IVX_AWS_READONLY_SECRET_ACCESS_KEY`).
-- Code fix committed: `938b16bb` → `bcd1997` → `716a672b` — AWS test now falls back to encrypted store credentials when env credentials fail; manual Redeploy button added; plan evidence updated.
-- Render workspace confirmed Scale/paid by owner screenshot, but API still reports service instance `plan: "free"`.
-- **ROOT CAUSE FOUND (2026-07-26T14:33Z):** Render build logs show: **"Build canceled: your workspace has run out of build pipeline minutes for the current billing period."** This is a **workspace build-pipeline quota** issue, not the service instance plan.
+- Code fix committed through `9dac8cac` — AWS test falls back to encrypted store credentials when env credentials fail; manual Redeploy button added; autonomous run-log persistence added; plan evidence updated.
+- **OWNER UPGRADE (2026-07-26T17:35Z):** Owner upgraded Render Build Pipeline to **Performance ($25/1,000 min)** with **$25 monthly spend limit**. Screenshot confirms Performance is selected.
 
-**New feature implemented:** Manual **Redeploy** button added to `expo/components/DeploymentDashboard.tsx`. It calls the owner-gated `POST /api/ivx/developer-deploy/action` endpoint with `action: 'render_trigger_deploy'` and `confirmText: 'CONFIRM_IVX_RENDER_DEPLOY'`. This lets the owner trigger a fresh build from the dashboard once billing is restored.
+**New feature implemented:** Manual **Redeploy** button added to `expo/components/DeploymentDashboard.tsx`. It calls the owner-gated `POST /api/ivx/developer-deploy/action` endpoint with `action: 'render_trigger_deploy'` and `confirmText: 'CONFIRM_IVX_RENDER_DEPLOY'`. This lets the owner trigger a fresh build from the dashboard.
 
-**Next step:** Owner must either (a) wait for the next billing cycle when 5000 build minutes reset, or (b) add/purchase more build pipeline minutes at `https://dashboard.render.com/w/tea-d7plj9beo5us73ch3ukg/settings#build-pipeline`. Once builds resume, deploy `716a672b` and re-test AWS provider.
+**Next step:** Poll the current deploy `dep-d9j4ljflk1mc73fjeju0` until it completes. If it succeeds, verify the new `/api/ivx/autonomous/runs` endpoints return 200 and run the final E2E acceptance. If it remains stuck at `build_in_progress` and production never updates, the Performance build-pipeline upgrade may not have fully propagated or the $25 spend limit may be insufficient — check the Render dashboard for the exact build status.
 
 ---
 
@@ -80,10 +78,10 @@ Owner provided new AWS access key `AKIASAJBIV7CI6FP43PH` + matching secret on 20
 
 ### SHA Triple Parity — CURRENTLY MISMATCHED (Post-Certification Repair)
 ```
-Local/GitHub: 716a672b
-Production:   e18a4146
+Local/GitHub: 9dac8cac
+Production:   8b1667a2
 ```
-> GitHub is 8 commits ahead of production. Deploy of `716a672b` is blocked by Render `build_failed` (workspace build-pipeline minutes exhausted).
+> GitHub is 1 commit ahead of production. Deploy of `9dac8cac` is in progress (`dep-d9j4ljflk1mc73fjeju0`, `build_in_progress`) after owner upgraded Render Build Pipeline to Performance.
 
 ### Phase 6: Member Registration — PASS (LIVE)
 ```
@@ -253,7 +251,7 @@ Ran 659 tests across 51 files.
 
 ## Phase 16: Final Certification Verdict
 
-**15/16 phases PASS. Phase 16 HONESTLY FAILED. ✅/❌**
+**15/16 phases PASS. Phase 16 E2E ACCEPTANCE PENDING. ✅/⏳**
 
 | # | Phase | Verdict |
 |---|---|---|
@@ -272,11 +270,11 @@ Ran 659 tests across 51 files.
 | 13 | Performance | ✅ PASS |
 | 14 | Security | ✅ PASS |
 | 15 | Final Deployment | ✅ PASS |
-| 16 | Final Certification | ❌ FAILED honestly (E2E deploy verification failed) |
+| 16 | Final Certification | ⏳ PENDING (E2E deploy verification waiting for `9dac8cac` to go live) |
 
-**Certification is NOT complete.** Phase 16 E2E deploy verification failed because `716a672b` could not be deployed to production. The system reported the failure honestly instead of faking a PASS. Post-certification repair is in progress.
+**Certification is NOT complete.** Phase 16 E2E deploy verification is pending because `9dac8cac` has not yet been deployed to production. The owner upgraded Render Build Pipeline to Performance ($25/1,000 min) and a fresh deploy `dep-d9j4ljflk1mc73fjeju0` is in progress.
 
-**Post-certification repair status:** AWS credentials updated in encrypted store; fix commit `716a672b` (including manual redeploy button + plan evidence) is on GitHub; deploy to production is blocked by Render workspace build-pipeline minutes exhaustion (`Build canceled: your workspace has run out of build pipeline minutes for the current billing period.`). Manual redeploy button implemented in dashboard. Final AWS re-test pending restored build minutes and successful deploy.
+**Post-certification repair status:** AWS credentials updated in encrypted store; fix commits through `9dac8cac` (autonomous run-log persistence + manual redeploy button + plan evidence) are on GitHub. Owner upgraded Render Build Pipeline to Performance ($25/1,000 min) with $25 monthly spend limit. Fresh deploy `dep-d9j4ljflk1mc73fjeju0` triggered and returned `build_in_progress` — being polled. The new `/api/ivx/autonomous/runs` + `/runs/summary` endpoints will go live once this deploy completes.
 
 **AUTONOMOUS RUN-LOG PERSISTENCE (2026-07-26T17:30Z) — COMPLETE:**
 - New service `backend/services/ivx-autonomous-run-log.ts` persists EVERY autonomous run as a permanent record in the durable Supabase store (survives restarts/deploys).
@@ -286,5 +284,5 @@ Ran 659 tests across 51 files.
 - Executive-layer now uses honest run-log evidence counts (replaces conservative arch-map derivation).
 - Dashboard (`expo/app/autonomous-dashboard.tsx`) now displays: "Permanent Run Evidence" summary card + "Historical Executions" list with tap-to-inspect full evidence.
 - All 6 commits pushed to GitHub: `8b1667a2` (run-log service) + 4 more (API, router, scheduler, exec-layer) + dashboard.
-- Render deploy triggered but blocked by build-minutes exhaustion; code goes live on next successful build.
+- Render deploy triggered after Performance upgrade; current deploy `dep-d9j4ljflk1mc73fjeju0` is in progress and being polled. Code goes live once this deploy completes.
 - EXISTING durable store PROVEN to survive restarts: QA scheduler 4188 runs, autonomous scheduler 567 runs — both persisted across multiple redeploys.
