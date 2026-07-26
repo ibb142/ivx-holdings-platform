@@ -1060,8 +1060,22 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
     return { provider: 'aws', status: 'tested', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false };
   } catch (error) {
     const errorMsg = error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'AWS read-only identity test failed.';
-    // Append diagnostics to the error message so the owner can see WHY it fails
-    const detail = diagnostics.length > 0 ? `${errorMsg} | Diagnostics: ${diagnostics.join('; ')}.` : errorMsg;
+    // Always include diagnostic info (even when all checks pass) so the owner
+    // can see the credential metadata that explains WHY SigV4 fails.
+    const diagSummary = [
+      `accessKeyLen=${accessKeyId.length}`,
+      `secretLen=${secretAccessKey.length}`,
+      `accessKeyFormat=${accessKeyFormatValid ? 'OK' : 'BAD'}`,
+      `secretFormat=${secretFormatValid ? 'OK' : 'BAD'}`,
+      `hasSpaces=${secretHasSpaceFromPlus ? 'YES' : 'no'}`,
+      `hasNewlines=${secretHasNewlines ? 'YES' : 'no'}`,
+      `nonAscii=${secretNonAscii ? 'YES' : 'no'}`,
+      `sessionToken=${sessionToken ? 'present' : 'none'}`,
+      `region=${region}`,
+      `source=${readEnv('AWS_ACCESS_KEY_ID') ? 'env:AWS_ACCESS_KEY_ID' : readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') ? 'env:IVX_AWS_READONLY' : 'store'}`,
+      ...(diagnostics.length > 0 ? diagnostics : ['all-format-checks-passed']),
+    ].join(', ');
+    const detail = `${errorMsg} | Diag: ${diagSummary}`;
     return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: detail };
   }
 }
