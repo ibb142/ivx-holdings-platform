@@ -1066,8 +1066,11 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
       const crypto = await import('node:crypto');
       const host = 'sts.amazonaws.com';
       const service = 'sts';
-      const amzDate = new Date().toISOString().replace(/[:-]\.\d{3}/g, '').replace(/(\d{8})T(\d{6})/, '$1T$2');
-      const dateStamp = amzDate.slice(0, 8);
+      const now = new Date();
+      const yyyymmdd = now.toISOString().slice(0, 8);
+      const hhmmss = now.toISOString().slice(11, 19).replace(/:/g, '');
+      const amzDate = `${yyyymmdd}T${hhmmss}Z`;
+      const dateStamp = yyyymmdd;
       const payload = 'Action=GetCallerIdentity&Version=2011-06-15';
       const payloadHash = crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
       const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
