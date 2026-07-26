@@ -897,10 +897,24 @@ export async function buildExecutiveLayer(now: number = Date.now()): Promise<Exe
     safe(() => buildAiArchitectureMap('executive-layer'), null as { autonomousRunClassification?: { completedWithEvidence: number; completedWithoutEvidence: number; failed: number } } | null),
   ]);
 
-  // Audit 2026-07-19 Finding 3: pass the authoritative autonomous-run evidence
-  // classification through to the autonomous-actions view so the UI can split
-  // totalRuns into runsWithEvidence vs runsWithoutEvidence honestly.
-  const runEvidence = archMap?.autonomousRunClassification ?? undefined;
+  // Audit 2026-07-19 Finding 3 + 2026-07-26 run-log upgrade: prefer the
+  // PERMANENT run-log summary (one durable record per execution, with concrete
+  // evidence artifacts) over the conservative architecture-map derivation.
+  // Falls back to the arch-map classification when the run log is empty.
+  let runEvidence = archMap?.autonomousRunClassification ?? undefined;
+  try {
+    const { summarizeAutonomousRunLog } = await import('./ivx-autonomous-run-log');
+    const runLogSummary = await summarizeAutonomousRunLog(500);
+    if (runLogSummary && runLogSummary.totalRuns > 0) {
+      runEvidence = {
+        completedWithEvidence: runLogSummary.runsWithEvidence,
+        completedWithoutEvidence: runLogSummary.runsWithoutEvidence,
+        failed: runLogSummary.failed,
+      };
+    }
+  } catch {
+    // run-log read is best-effort; keep the arch-map fallback.
+  }
 
   // business-impact and autonomous dashboards are required for derivation; if a
   // reader failed, fall back to a freshly-built empty-but-valid dashboard.

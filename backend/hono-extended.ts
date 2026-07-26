@@ -15,6 +15,8 @@
  *   POST /api/ivx/autonomous/auth-guardian/alert  — owner SMS alert (AWS SNS)
  *   GET  /api/ivx/autonomous/qa                   — continuous QA scheduler status
  *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix
+ *   GET  /api/ivx/autonomous/runs               — permanent per-run evidence records (newest first)
+ *   GET  /api/ivx/autonomous/runs/summary       — aggregated honest evidence counts
  *   GET  /api/ivx/autonomous/migrations           — migration history vs repo manifest
  *   POST /api/ivx/autonomous/migrations/run       — apply pending repo migrations (owner bearer)
  *   GET  /api/ivx/autonomous/ia                   — 12-IA operating model state (roster/queue/factory/locks)
@@ -59,6 +61,11 @@ import {
   ownerCredentialStatusOptions,
   handleOwnerCredentialStatusGet,
 } from './api/ivx-owner-credential-status';
+import {
+  autonomousRunsOptions,
+  handleAutonomousRunsGet,
+  handleAutonomousRunsSummaryGet,
+} from './api/ivx-autonomous-runs';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -90,6 +97,11 @@ app.post('/api/ivx/autonomous/ia/lock', async (context) => handleIALockPost(cont
 
 app.options('/api/ivx/owner/credential-status', () => ownerCredentialStatusOptions());
 app.get('/api/ivx/owner/credential-status', async (context) => handleOwnerCredentialStatusGet(context.req.raw));
+
+app.options('/api/ivx/autonomous/runs', () => autonomousRunsOptions());
+app.get('/api/ivx/autonomous/runs', async (context) => handleAutonomousRunsGet(context.req.raw));
+app.options('/api/ivx/autonomous/runs/summary', () => autonomousRunsOptions());
+app.get('/api/ivx/autonomous/runs/summary', async (context) => handleAutonomousRunsSummaryGet(context.req.raw));
 
 startAutonomousQAScheduler();
 

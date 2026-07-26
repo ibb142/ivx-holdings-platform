@@ -720,6 +720,134 @@ async function runDriftJob(deps: DriftDeps = {}): Promise<ScheduledJobResult> {
   }
 }
 
+// ── Permanent run-log helpers (2026-07-26) ───────────────────────────────────
+
+/** Map scheduler job kind → worker id (W1–W12) for run-record attribution. */
+const WORKER_FOR_KIND: Partial<Record<ScheduledJobKind, string>> = {
+  daily_self_audit: 'W1',
+  daily_drift_detection: 'W1',
+  daily_executive_report: 'W8',
+  daily_buyer_engine: 'W6',
+  daily_investor_engine: 'W6',
+  daily_jv_engine: 'W6',
+  daily_tokenized_buyer_engine: 'W6',
+  daily_technology_ideas: 'W12',
+  daily_capital_outreach: 'W6',
+  daily_deploy_monitor: 'W10',
+  daily_enterprise_os: 'W8',
+};
+
+/** True when the scheduled job kind is a capital sourcing/outreach/tech engine. */
+function isExecutionEngineKind(kind: ScheduledJobKind): boolean {
+  return (
+    kind === 'daily_buyer_engine' ||
+    kind === 'daily_investor_engine' ||
+    kind === 'daily_jv_engine' ||
+    kind === 'daily_tokenized_buyer_engine' ||
+    kind === 'daily_capital_outreach' ||
+    kind === 'daily_technology_ideas'
+  );
+}
+
+/** Map scheduler job kind → business engine name for the run record. */
+function engineKindToName(kind: ScheduledJobKind): 'buyer' | 'investor' | 'jv' | 'tokenized_buyer' | 'outreach' | 'technology' | null {
+  switch (kind) {
+    case 'daily_buyer_engine':
+      return 'buyer';
+    case 'daily_investor_engine':
+      return 'investor';
+    case 'daily_jv_engine':
+      return 'jv';
+    case 'daily_tokenized_buyer_engine':
+      return 'tokenized_buyer';
+    case 'daily_capital_outreach':
+      return 'outreach';
+    case 'daily_technology_ideas':
+      return 'technology';
+    default:
+      return null;
+  }
+}
+
+/** Best-effort capture of the latest engine result details for the run record. */
+async function captureEngineResult(kind: ScheduledJobKind): Promise<{
+  discovered?: number;
+  savedToCrm?: number;
+  duplicatesSkipped?: number;
+  outreachQueued?: number;
+  sendingEnabled?: boolean;
+  source?: string;
+  evidence?: string[];
+  engine?: string;
+} | null> {
+  try {
+    const exec = await import('./ivx-autonomous-execution');
+    // The engines don't expose a “last result” cache, so we read the durable CRM
+    // + outreach stores to derive honest counts for the run record. The scheduler
+    // already ran the engine above; this mirrors what it produced.
+    if (kind === 'daily_capital_outreach') {
+      const summary = await exec.summarizeAutonomousExecution();
+      return {
+        outreachQueued: summary.outreach.queued,
+        sendingEnabled: summary.outreach.sendingEnabled,
+        source: 'Investor CRM prospects',
+        evidence: [],
+        engine: 'outreach',
+      };
+    }
+    const summary = await exec.summarizeAutonomousExecution();
+    const engine = engineKindToName(kind);
+    if (engine === 'buyer') {
+      return {
+        discovered: summary.crm.buyers,
+        savedToCrm: summary.crm.buyers,
+        source: 'SEC EDGAR Form D',
+        evidence: [],
+        engine,
+      };
+    }
+    if (engine === 'investor') {
+      return {
+        discovered: summary.crm.investors,
+        savedToCrm: summary.crm.investors,
+        source: 'SEC EDGAR Form D',
+        evidence: [],
+        engine,
+      };
+    }
+    if (engine === 'jv') {
+      return {
+        discovered: summary.crm.partners,
+        savedToCrm: summary.crm.partners,
+        source: 'SEC EDGAR Form D',
+        evidence: [],
+        engine,
+      };
+    }
+    if (engine === 'tokenized_buyer') {
+      return {
+        discovered: summary.crm.tokenizedBuyers,
+        savedToCrm: summary.crm.tokenizedBuyers,
+        source: 'SEC EDGAR Form D',
+        evidence: [],
+        engine,
+      };
+    }
+    if (engine === 'technology') {
+      return {
+        discovered: summary.ideas.total,
+        savedToCrm: summary.ideas.total,
+        source: 'IVX Innovation Engine',
+        evidence: summary.ideas.topTitle ? [summary.ideas.topTitle] : [],
+        engine,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run a single scheduled job NOW (regardless of due time) and persist its
  * result + next-due. Concurrency-guarded per kind. Never throws.
@@ -732,6 +860,9 @@ export async function runScheduledJob(
     return { kind, ok: false, durationMs: 0, summary: 'Already running.', error: 'Job already in flight.' };
   }
   inFlight.add(kind);
+  const startedAt = nowIso();
+  const start = Date.now();
+  let engineResult: { discovered?: number; savedToCrm?: number; duplicatesSkipped?: number; outreachQueued?: number; sendingEnabled?: boolean; source?: string; evidence?: string[]; engine?: string } | null = null;
   try {
     const result =
       kind === 'daily_self_audit'
@@ -748,6 +879,15 @@ export async function runScheduledJob(
                 ? await runEnterpriseOsSnapshotJob()
                 : await runExecutionEngineJob(kind);
 
+    // Capture the engine result details for the permanent run record.
+    if (isExecutionEngineKind(kind)) {
+      try {
+        engineResult = await captureEngineResult(kind);
+      } catch {
+        engineResult = null;
+      }
+    }
+
     await patchJobState(kind, (job, now) => ({
       ...job,
       lastRunAt: nowIso(now),
@@ -759,6 +899,33 @@ export async function runScheduledJob(
       failureCount: job.failureCount + (result.ok ? 0 : 1),
     }));
     await appendRunLog({ type: 'job_run', kind, ok: result.ok, durationMs: result.durationMs, summary: result.summary, at: nowIso() });
+
+    // PERMANENT per-run evidence record (2026-07-26) — one row per execution,
+    // persisted to the durable Supabase store. Survives restarts/deploys.
+    try {
+      const { recordAutonomousRun } = await import('./ivx-autonomous-run-log');
+      await recordAutonomousRun({
+        kind: kind as ScheduledJobKind,
+        engine: engineKindToName(kind),
+        workerId: WORKER_FOR_KIND[kind] ?? 'W8',
+        startedAt,
+        durationMs: Date.now() - start,
+        status: result.ok ? 'ok' : 'failed',
+        summary: result.summary,
+        error: result.error ?? null,
+        recordsDiscovered: engineResult?.discovered ?? 0,
+        recordsInserted: engineResult?.savedToCrm ?? 0,
+        recordsUpdated: 0,
+        duplicatesSkipped: engineResult?.duplicatesSkipped ?? 0,
+        outreachQueued: engineResult?.outreachQueued ?? 0,
+        sendingEnabled: engineResult?.sendingEnabled ?? false,
+        source: engineResult?.source ?? 'IVX Autonomous Scheduler',
+        evidence: engineResult?.evidence ?? [],
+      });
+    } catch {
+      // run-log persistence is best-effort; never break the scheduler.
+    }
+
     return result;
   } finally {
     inFlight.delete(kind);

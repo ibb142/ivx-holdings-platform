@@ -42,6 +42,8 @@ const GUARDIAN_URL = `${API_BASE}/api/ivx/autonomous/auth-guardian`;
 const QA_URL = `${API_BASE}/api/ivx/autonomous/qa`;
 const CREDENTIALS_URL = `${API_BASE}/api/ivx/autonomous/credentials`;
 const EXECUTIVE_URL = `${API_BASE}/api/ivx/executive-layer`;
+const RUNS_URL = `${API_BASE}/api/ivx/autonomous/runs`;
+const RUNS_SUMMARY_URL = `${API_BASE}/api/ivx/autonomous/runs/summary`;
 const POLL_INTERVAL_MS = 15_000;
 
 type LedgerWorker = { id: string; name: string; scope: string };
@@ -228,6 +230,41 @@ type ExecutiveResponse = {
   };
 };
 
+type RunRecord = {
+  runId: string;
+  kind: string;
+  engine: string | null;
+  workerId: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  status: string;
+  recordsDiscovered: number;
+  recordsInserted: number;
+  recordsUpdated: number;
+  duplicatesSkipped: number;
+  outreachQueued: number;
+  sendingEnabled: boolean;
+  error: string | null;
+  summary: string;
+  source: string;
+  evidence: string[];
+  hasEvidence: boolean;
+  commitSha: string | null;
+  deploymentSha: string | null;
+  marker: string;
+};
+
+type RunsSummary = {
+  ok: boolean;
+  totalRuns: number;
+  runsWithEvidence: number;
+  runsWithoutEvidence: number;
+  failed: number;
+  byEngine?: Array<{ kind: string; engine: string | null; runCount: number; lastRunAt: string | null; lastStatus: string | null; lastSummary: string | null; withEvidence: number }>;
+  note?: string;
+};
+
 const STATUS_COLORS: Record<string, string> = {
   VERIFIED: '#34D399',
   DONE: '#34D399',
@@ -266,6 +303,9 @@ export default function AutonomousDashboardScreen() {
   const [qa, setQa] = useState<QAResponse | null>(null);
   const [creds, setCreds] = useState<CredentialsResponse | null>(null);
   const [executive, setExecutive] = useState<ExecutiveResponse | null>(null);
+  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [runsSummary, setRunsSummary] = useState<RunsSummary | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLedger = useCallback(async (silent: boolean) => {
@@ -296,11 +336,13 @@ export default function AutonomousDashboardScreen() {
       setData(json);
       setLastFetchedAt(new Date().toISOString());
       try {
-        const [guardianResponse, qaResponse, credsResponse, execResponse] = await Promise.all([
+        const [guardianResponse, qaResponse, credsResponse, execResponse, runsResponse, runsSummaryResponse] = await Promise.all([
           fetch(GUARDIAN_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
           fetch(QA_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
           fetch(CREDENTIALS_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
           fetch(EXECUTIVE_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${RUNS_URL}?limit=50`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+          fetch(RUNS_SUMMARY_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
         ]);
         if (guardianResponse.ok) {
           const guardianJson = (await guardianResponse.json()) as GuardianResponse;
@@ -317,6 +359,14 @@ export default function AutonomousDashboardScreen() {
         if (execResponse.ok) {
           const execJson = (await execResponse.json()) as ExecutiveResponse;
           if (execJson.ok) setExecutive(execJson);
+        }
+        if (runsResponse.ok) {
+          const runsJson = (await runsResponse.json()) as { ok: boolean; runs?: RunRecord[] };
+          if (runsJson.ok && Array.isArray(runsJson.runs)) setRuns(runsJson.runs);
+        }
+        if (runsSummaryResponse.ok) {
+          const summaryJson = (await runsSummaryResponse.json()) as RunsSummary;
+          if (summaryJson.ok) setRunsSummary(summaryJson);
         }
       } catch (guardianError) {
         console.log('[AutonomousDashboard] guardian/qa fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
@@ -445,6 +495,93 @@ export default function AutonomousDashboardScreen() {
                   </View>
                 </View>
               ))}
+            </View>
+          ) : null}
+
+          {runsSummary ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <ListChecks size={16} color="#34D399" />
+                <Text style={styles.cardHeader}>Permanent Run Evidence</Text>
+                <Text style={[styles.guardianBadge, { color: runsSummary.runsWithoutEvidence === 0 ? '#34D399' : '#FBBF24' }]}>
+                  {runsSummary.runsWithEvidence}/{runsSummary.totalRuns} EVIDENCED
+                </Text>
+              </View>
+              <Text style={styles.guardianMeta}>
+                {runsSummary.totalRuns} permanent records · {runsSummary.runsWithEvidence} with evidence · {runsSummary.runsWithoutEvidence} without · {runsSummary.failed} failed · survives restarts/deploys
+              </Text>
+              {(runsSummary.byEngine ?? []).map((eng) => (
+                <View key={eng.kind} style={styles.probeRow}>
+                  <View style={[styles.statusDot, { backgroundColor: eng.lastStatus === 'ok' ? '#34D399' : '#F87171' }]} />
+                  <View style={styles.probeTextWrap}>
+                    <Text style={styles.probeName}>{eng.kind.replace('daily_', '').replace(/_/g, ' ')}</Text>
+                    <Text style={styles.probeDetail}>
+                      {eng.runCount} run(s) · {eng.withEvidence} evidenced · last {formatTime(eng.lastRunAt)}
+                    </Text>
+                    {eng.lastSummary ? <Text style={styles.probeDetail}>{eng.lastSummary}</Text> : null}
+                  </View>
+                </View>
+              ))}
+              {runsSummary.note ? <Text style={styles.jobEvidence}>{runsSummary.note}</Text> : null}
+            </View>
+          ) : null}
+
+          {runs.length > 0 ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Clock size={16} color="#60A5FA" />
+                <Text style={styles.cardHeader}>Historical Executions ({runs.length})</Text>
+                <Text style={[styles.guardianBadge, { color: '#60A5FA' }]}>NEWEST FIRST</Text>
+              </View>
+              <Text style={styles.guardianMeta}>
+                Tap any run to inspect full evidence (records, source URLs, commit/deploy SHA, errors).
+              </Text>
+              {runs.map((run) => {
+                const expanded = expandedRunId === run.runId;
+                return (
+                  <TouchableOpacity
+                    key={run.runId}
+                    style={styles.jobRow}
+                    onPress={() => setExpandedRunId(expanded ? null : run.runId)}
+                    testID={`run-${run.runId}`}
+                  >
+                    <View style={styles.jobTopRow}>
+                      <View style={[styles.statusDot, { backgroundColor: run.status === 'ok' ? '#34D399' : '#F87171' }]} />
+                      <Text style={styles.jobId}>{run.engine ?? run.kind.replace('daily_', '')}</Text>
+                      <Text style={[styles.jobStatus, { color: run.status === 'ok' ? '#34D399' : '#F87171' }]}>{run.status.toUpperCase()}</Text>
+                      {run.hasEvidence ? <Text style={[styles.jobStatus, { color: '#34D399', fontSize: 10 }]}>EVIDENCED</Text> : null}
+                      <Text style={styles.jobWorker}>{run.workerId}</Text>
+                      {expanded ? <ChevronDown size={14} color="#64748B" /> : <ChevronRight size={14} color="#64748B" />}
+                    </View>
+                    <Text style={styles.jobTitle}>{run.summary}</Text>
+                    <Text style={styles.jobMeta}>{formatTime(run.finishedAt)} · {(run.durationMs / 1000).toFixed(1)}s</Text>
+                    {expanded ? (
+                      <View style={styles.jobDetail}>
+                        <Text style={styles.jobMeta}>Run ID: {run.runId}</Text>
+                        <Text style={styles.jobMeta}>Kind: {run.kind}</Text>
+                        <Text style={styles.jobMeta}>Started: {formatTime(run.startedAt)}</Text>
+                        <Text style={styles.jobMeta}>Finished: {formatTime(run.finishedAt)}</Text>
+                        <Text style={styles.jobMeta}>Discovered: {run.recordsDiscovered} · Inserted: {run.recordsInserted} · Updated: {run.recordsUpdated} · Duplicates: {run.duplicatesSkipped}</Text>
+                        {run.outreachQueued > 0 ? <Text style={styles.jobMeta}>Outreach queued: {run.outreachQueued} · sending {run.sendingEnabled ? 'enabled' : 'disabled'}</Text> : null}
+                        <Text style={styles.jobMeta}>Source: {run.source || '—'}</Text>
+                        {run.error ? <Text style={styles.jobBlocker}>Error: {run.error}</Text> : null}
+                        {run.evidence.length > 0 ? (
+                          <View style={styles.incidentBox}>
+                            <Text style={styles.incidentHeader}>Evidence artifacts ({run.evidence.length})</Text>
+                            {run.evidence.slice(0, 8).map((ev, i) => (
+                              <Text key={`${run.runId}-ev${i}`} style={styles.jobEvidence}>· {ev}</Text>
+                            ))}
+                          </View>
+                        ) : (
+                          <Text style={styles.jobBlocker}>No evidence artifacts for this run.</Text>
+                        )}
+                        {run.commitSha ? <Text style={styles.jobMeta}>Commit SHA: {run.commitSha.slice(0, 12)}</Text> : null}
+                        {run.deploymentSha ? <Text style={styles.jobMeta}>Deploy SHA: {run.deploymentSha.slice(0, 12)}</Text> : null}
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : null}
 
@@ -656,7 +793,7 @@ export default function AutonomousDashboardScreen() {
           </View>
 
           <Text style={styles.footerNote}>
-            Source: {data?.marker ?? '—'} · durable backend ledger · auto-refresh every 30s
+            Source: {data?.marker ?? '—'} · durable backend ledger · run-log {runsSummary ? `v${runsSummary.totalRuns}` : 'pending'} · auto-refresh every 15s
           </Text>
         </ScrollView>
       )}
