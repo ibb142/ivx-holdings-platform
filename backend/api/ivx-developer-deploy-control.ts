@@ -34,6 +34,7 @@ type PgPoolConstructor = new (config: {
 }) => PgPoolLike;
 
 type DeveloperDeployAction =
+  | 'render_get_deploy_status'
   | 'github_commit_file'
   | 'github_create_branch'
   | 'github_create_pull_request'
@@ -192,6 +193,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'ai_generate_docs'
     || normalized === 'test_api_endpoint'
     || normalized === 'render_get_logs'
+    || normalized === 'render_get_deploy_status'
     || normalized === 'autonomous_feature_cycle'
     || normalized === 'github_commit_multi_file'
  ) {
@@ -228,7 +230,8 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'ai_performance_analysis'
     || action === 'ai_generate_docs'
     || action === 'test_api_endpoint'
-    || action === 'render_get_logs';
+    || action === 'render_get_logs'
+    || action === 'render_get_deploy_status';
 }
 
 /** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
@@ -256,7 +259,7 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'render_trigger_deploy') {
     return RENDER_DEPLOY_CONFIRM_TEXT;
   }
-  if (action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source') {
+  if (action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source' || action === 'render_get_deploy_status') {
     return RENDER_SERVICE_CONFIRM_TEXT;
   }
   if (action === 'cloudfront_invalidate') {
@@ -2010,8 +2013,8 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'autonomous_feature_cycle', 'github_commit_multi_file'],
-      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status', 'autonomous_feature_cycle', 'github_commit_multi_file'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status'],
       ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -2021,7 +2024,7 @@ async function buildStatus(): Promise<Record<string, unknown>> {
       serviceIdConfigured: renderServiceConfigured,
       credentialSource: renderCredentialSource,
       serviceName: readEnv('RENDER_SERVICE_NAME') || 'ivx-holdings-platform',
-      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs'],
+      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs', 'render_get_deploy_status'],
       deployConfirmationTextRequired: RENDER_DEPLOY_CONFIRM_TEXT,
       serviceUpdateConfirmationTextRequired: RENDER_SERVICE_CONFIRM_TEXT,
     },
@@ -3162,6 +3165,62 @@ export async function runRenderGetLogs(input: Record<string, unknown>): Promise<
   };
 }
 
+async function runRenderGetDeployStatus(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const renderApiKey = readEnv('RENDER_API_KEY') || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY');
+  if (!renderApiKey) {
+    throw new Error('RENDER_API_KEY is not configured in the backend runtime.');
+  }
+  const serviceId = readEnv('RENDER_SERVICE_ID') || await getIVXOwnerVariableRuntimeValue('RENDER_SERVICE_ID') || readTrimmed(input.serviceId);
+  if (!serviceId) {
+    throw new Error('RENDER_SERVICE_ID is not configured and no serviceId was provided in input.');
+  }
+  const deployId = readTrimmed(input.deployId);
+  // Render Deploy API: GET /v1/services/{serviceId}/deploys or /v1/services/{serviceId}/deploys/{deployId}
+  const url = deployId
+    ? `${RENDER_API_BASE_URL}/services/${serviceId}/deploys/${deployId}`
+    : `${RENDER_API_BASE_URL}/services/${serviceId}/deploys`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${renderApiKey}`,
+    },
+  });
+  const text = await response.text();
+  let data: unknown = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = text.slice(0, 1000);
+  }
+  if (!response.ok) {
+    return {
+      provider: 'render',
+      action: 'render_get_deploy_status',
+      serviceId,
+      deployId: deployId || null,
+      httpStatus: response.status,
+      ok: false,
+      error: typeof data === 'string' ? data : JSON.stringify(data).slice(0, 500),
+      readOnly: true,
+      secretValuesReturned: false,
+      timestamp: nowIso(),
+    };
+  }
+  return {
+    provider: 'render',
+    action: 'render_get_deploy_status',
+    serviceId,
+    deployId: deployId || null,
+    httpStatus: response.status,
+    ok: true,
+    data,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 /**
  * Write action (owner-approved): autonomous feature cycle — designs a feature via AI,
  * generates the code via AI, commits it to GitHub, optionally deploys to Render,
@@ -3611,6 +3670,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'render_get_logs') {
     return await runRenderGetLogs(input);
+  }
+  if (action === 'render_get_deploy_status') {
+    return await runRenderGetDeployStatus(input);
   }
   if (action === 'autonomous_feature_cycle') {
     return await runAutonomousFeatureCycle(input);
