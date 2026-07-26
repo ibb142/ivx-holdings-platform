@@ -69,6 +69,8 @@ import {
   MapPin,
   Send,
   Sliders,
+  Cpu,
+  Radio,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
@@ -624,6 +626,28 @@ export default function AdminDashboard() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.autonomousLiveCard}
+          onPress={() => router.push('/autonomous-dashboard' as any)}
+          activeOpacity={0.8}
+          testID="admin-autonomous-live-work-btn"
+        >
+          <View style={styles.autonomousLiveCardInner}>
+            <View style={styles.autonomousLiveCardIcon}>
+              <Cpu size={22} color="#062218" />
+            </View>
+            <View style={styles.autonomousLiveCardText}>
+              <View style={styles.autonomousLiveCardLiveRow}>
+                <View style={styles.autonomousLiveCardLiveDot} />
+                <Text style={styles.autonomousLiveCardLiveLabel}>AUTONOMOUS LIVE WORK</Text>
+              </View>
+              <Text style={styles.autonomousLiveCardTitle}>Autonomous Live Work</Text>
+              <Text style={styles.autonomousLiveCardSub}>Buyers · Investors · JV · Tokenized · Outreach · Tech ideas</Text>
+            </View>
+            <Radio size={18} color="#00E676" />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.activationCard}
           onPress={() => router.push('/activation-center' as any)}
           activeOpacity={0.8}
@@ -1105,6 +1129,64 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1.5,
     borderColor: '#00E676',
+  },
+  autonomousLiveCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 8,
+    backgroundColor: '#041C14',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#00E676',
+  },
+  autonomousLiveCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  autonomousLiveCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 13,
+    backgroundColor: '#00E676',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  autonomousLiveCardText: {
+    flex: 1,
+  },
+  autonomousLiveCardLiveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 2,
+  },
+  autonomousLiveCardLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00E676',
+  },
+  autonomousLiveCardLiveLabel: {
+    fontSize: 10,
+    fontWeight: '800' as const,
+    color: '#00E676',
+    letterSpacing: 1.2,
+  },
+  autonomousLiveCardTitle: {
+    fontSize: 17,
+    fontWeight: '800' as const,
+    color: Colors.text,
+  },
+  autonomousLiveCardSub: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 3,
   },
   systemCardInner: {
     flexDirection: 'row',

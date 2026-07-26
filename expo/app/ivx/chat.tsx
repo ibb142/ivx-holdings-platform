@@ -6013,6 +6013,14 @@ export default function IVXOwnerChatRoute() {
                       <Text style={styles.graphActionButtonText}>Stream</Text>
                     </Pressable>
                     <Pressable
+                      style={[styles.graphActionButton, { backgroundColor: '#00E676' }]}
+                      onPress={() => router.push('/autonomous-dashboard' as never)}
+                      testID="ivx-owner-open-autonomous-live-work"
+                    >
+                      <Cpu size={13} color={Colors.black} />
+                      <Text style={styles.graphActionButtonText}>Autonomous Live Work</Text>
+                    </Pressable>
+                    <Pressable
                       style={styles.graphActionButton}
                       onPress={() => router.push('/ivx/live-work' as never)}
                       testID="ivx-owner-open-live-work"

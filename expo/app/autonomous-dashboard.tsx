@@ -41,7 +41,8 @@ const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
 const GUARDIAN_URL = `${API_BASE}/api/ivx/autonomous/auth-guardian`;
 const QA_URL = `${API_BASE}/api/ivx/autonomous/qa`;
 const CREDENTIALS_URL = `${API_BASE}/api/ivx/autonomous/credentials`;
-const POLL_INTERVAL_MS = 30_000;
+const EXECUTIVE_URL = `${API_BASE}/api/ivx/executive-layer`;
+const POLL_INTERVAL_MS = 15_000;
 
 type LedgerWorker = { id: string; name: string; scope: string };
 
@@ -200,6 +201,33 @@ type LedgerResponse = {
   approvals?: LedgerApproval[];
 };
 
+type EngineAction = {
+  kind: string;
+  label: string;
+  status: string;
+  lastRunAt: string;
+  runCount: number;
+  summary: string;
+};
+
+type AutonomousActionsView = {
+  schedulerEnabled: boolean;
+  totalRuns: number;
+  runsWithEvidence: number;
+  runsWithoutEvidence: number;
+  loopsRun: number;
+  outcomesRecorded: number;
+  actions: EngineAction[];
+};
+
+type ExecutiveResponse = {
+  ok: boolean;
+  error?: string;
+  executive?: {
+    autonomousActions?: AutonomousActionsView;
+  };
+};
+
 const STATUS_COLORS: Record<string, string> = {
   VERIFIED: '#34D399',
   DONE: '#34D399',
@@ -237,6 +265,7 @@ export default function AutonomousDashboardScreen() {
   const [guardian, setGuardian] = useState<GuardianResponse | null>(null);
   const [qa, setQa] = useState<QAResponse | null>(null);
   const [creds, setCreds] = useState<CredentialsResponse | null>(null);
+  const [executive, setExecutive] = useState<ExecutiveResponse | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLedger = useCallback(async (silent: boolean) => {
@@ -267,10 +296,11 @@ export default function AutonomousDashboardScreen() {
       setData(json);
       setLastFetchedAt(new Date().toISOString());
       try {
-        const [guardianResponse, qaResponse, credsResponse] = await Promise.all([
+        const [guardianResponse, qaResponse, credsResponse, execResponse] = await Promise.all([
           fetch(GUARDIAN_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
           fetch(QA_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
           fetch(CREDENTIALS_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+          fetch(EXECUTIVE_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
         ]);
         if (guardianResponse.ok) {
           const guardianJson = (await guardianResponse.json()) as GuardianResponse;
@@ -283,6 +313,10 @@ export default function AutonomousDashboardScreen() {
         if (credsResponse.ok) {
           const credsJson = (await credsResponse.json()) as CredentialsResponse;
           if (credsJson.ok) setCreds(credsJson);
+        }
+        if (execResponse.ok) {
+          const execJson = (await execResponse.json()) as ExecutiveResponse;
+          if (execJson.ok) setExecutive(execJson);
         }
       } catch (guardianError) {
         console.log('[AutonomousDashboard] guardian/qa fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
@@ -384,6 +418,33 @@ export default function AutonomousDashboardScreen() {
                 <StatPill label="Workers" value={counts.workers} color="#60A5FA" />
                 <StatPill label="Approvals" value={counts.pendingApprovals} color="#F97316" />
               </View>
+            </View>
+          ) : null}
+
+          {executive?.executive?.autonomousActions ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Activity size={16} color="#34D399" />
+                <Text style={styles.cardHeader}>Live Engine Runs</Text>
+                <Text style={[styles.guardianBadge, { color: executive.executive.autonomousActions.schedulerEnabled ? '#34D399' : '#F87171' }]}>
+                  {executive.executive.autonomousActions.schedulerEnabled ? 'SCHEDULER ON' : 'SCHEDULER OFF'}
+                </Text>
+              </View>
+              <Text style={styles.guardianMeta}>
+                {executive.executive.autonomousActions.totalRuns} total runs · {executive.executive.autonomousActions.runsWithEvidence} with evidence · {executive.executive.autonomousActions.runsWithoutEvidence} without · {executive.executive.autonomousActions.loopsRun} loops
+              </Text>
+              {(executive.executive.autonomousActions.actions ?? []).map((action) => (
+                <View key={action.kind} style={styles.probeRow}>
+                  <View style={[styles.statusDot, { backgroundColor: action.status === 'ok' ? '#34D399' : action.status === 'blocked' ? '#F87171' : '#FBBF24' }]} />
+                  <View style={styles.probeTextWrap}>
+                    <Text style={styles.probeName}>{action.label}</Text>
+                    <Text style={styles.probeDetail}>
+                      {action.runCount} runs · {formatTime(action.lastRunAt)}
+                    </Text>
+                    <Text style={styles.probeDetail}>{action.summary}</Text>
+                  </View>
+                </View>
+              ))}
             </View>
           ) : null}
 

@@ -603,13 +603,14 @@ export default function AdminDashboardScreen() {
               <Text style={styles.kpiName}>real execution feed</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.kpiCard}
+              style={[styles.kpiCard, { borderWidth: 1.5, borderColor: Colors.positive, backgroundColor: Colors.positive + '12' }]}
               onPress={() => router.push('/autonomous-dashboard' as any)}
+              testID="admin-dashboard-autonomous-live-work-btn"
             >
               <Cpu size={18} color={Colors.positive} />
-              <Text style={styles.kpiName}>Autonomous Dashboard</Text>
+              <Text style={[styles.kpiName, { fontWeight: '800' as const, color: Colors.positive }]}>AUTONOMOUS LIVE WORK</Text>
               <Text style={styles.kpiValue}>W1-12</Text>
-              <Text style={styles.kpiName}>job ledger + QA</Text>
+              <Text style={styles.kpiName}>job ledger + QA + engines</Text>
             </TouchableOpacity>
           </View>
         </View>
