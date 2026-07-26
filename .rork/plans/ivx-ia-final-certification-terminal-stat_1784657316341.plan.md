@@ -7,6 +7,8 @@ updatedAt: 2026-07-26T00:52:00.000Z
 
 > **STATUS: 16/16 PHASES PASS. FULL CERTIFICATION COMPLETE. ✅**
 >
+> **POST-CERTIFICATION REPAIR TASK (2026-07-26T04:30Z+):** Owner provided new AWS credentials and asked to deploy/verify. AWS provider currently FAIL in production runtime. This repair task is in progress and not yet reflected in the 16-phase summary below.
+>
 > **EFFECTIVE TASK:** Owner's 16-phase final QA checklist (2026-07-25T23:19Z message).
 > **OWNER FOLLOW-UP (2026-07-26T00:40Z):** "Complete item 4,6,7,8,10,12,16" — stop punting to "owner action", actually test live.
 > **OWNER KEY UPDATE (2026-07-26T00:52Z):** Owner updated the Vercel AI Gateway key on Render. Phase 4 re-verified PASS.
@@ -39,6 +41,20 @@ updatedAt: 2026-07-26T00:52:00.000Z
 | Phase 14: Security QA | ✅ PASS | Rate limiting, owner guards, no secrets leaked. |
 | Phase 15: Final Deployment | ✅ PASS | `c7404121` live on production. |
 | Phase 16: Final Certification | ✅ 16/16 PASS | All phases PASS with live production evidence. |
+
+---
+
+## Post-Certification Repair — AWS Credentials (IN PROGRESS)
+
+Owner provided new AWS access key `AKIASAJBIV7CI6FP43PH` + matching secret on 2026-07-26T04:30Z+.
+
+- Local raw SigV4 test against AWS STS: **VALID** (HTTP 200, account `138045599684`).
+- Render API env-var upsert: reports `valueStored: true`.
+- Production runtime diagnostic after restart: still shows old secret prefix (`GNw...+3`) and `SignatureDoesNotMatch`.
+- Deploy attempts (`57800746`) fail instantly (`build_failed` in ~0.5s, `failureReason: null`).
+- Suspected blocker: `IVX_FORCE_DEPLOY_SHA`, `IVX_FORCE_REDEPLOY`, `IVX_FORCE_DEPLOY_AT` env vars on Render service may be pinning/rejecting deploys.
+
+**Next step:** Clear force-deploy env vars in Render dashboard or identify why Render env-var updates are not taking effect in the running container.
 
 ---
 
