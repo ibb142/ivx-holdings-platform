@@ -20,8 +20,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  Alert,
+  Platform,
 } from 'react-native';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, ExternalLink, ChevronRight } from 'lucide-react-native';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, ExternalLink, ChevronRight, Rocket } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -261,6 +264,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  redeploySection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  redeployButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.green,
+    borderRadius: 12,
+  },
+  redeployButtonDisabled: {
+    opacity: 0.6,
+  },
+  redeployButtonText: {
+    color: '#0B0B0B',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  redeployHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: COLORS.yellow,
+    textAlign: 'center',
+  },
+  redeployResult: {
+    marginTop: 10,
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+  },
+  redeployResultText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
 });
 
 // ─── Component ────────────────────────────────────────────────────────
@@ -269,6 +311,8 @@ export default function DeploymentDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [redeploying, setRedeploying] = useState(false);
+  const [redeployResult, setRedeployResult] = useState<{ ok: boolean; deployId?: string | null; status?: string | null; error?: string | null } | null>(null);
 
   const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.ivxholding.com';
 
@@ -290,6 +334,85 @@ export default function DeploymentDashboard() {
       setLoading(false);
     }
   }, [API_BASE]);
+
+  const getOwnerBearer = useCallback(async () => {
+    try {
+      const result = await supabase.auth.getSession();
+      const token = result.data?.session?.access_token;
+      return typeof token === 'string' && token.length > 0 ? token : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const confirmRedeploy = useCallback((title: string, message: string): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+        ? window.confirm(`${title}\n\n${message}`)
+        : true;
+      return Promise.resolve(ok);
+    }
+    return new Promise((resolve) => {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Redeploy', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+  }, []);
+
+  const handleRedeploy = useCallback(async () => {
+    const proceed = await confirmRedeploy(
+      'Trigger fresh Render deploy?',
+      'This queues a fresh build of the latest GitHub commit on Render. Only proceed after resolving any billing/build-pipeline issues.',
+    );
+    if (!proceed) return;
+
+    setRedeploying(true);
+    setRedeployResult(null);
+
+    const bearer = await getOwnerBearer();
+    if (!bearer) {
+      setRedeploying(false);
+      setRedeployResult({ ok: false, error: 'No signed-in owner session. Sign in as the IVX owner and retry.' });
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/ivx/developer-deploy/action`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${bearer}`,
+        },
+        body: JSON.stringify({
+          action: 'render_trigger_deploy',
+          confirm: true,
+          confirmText: 'CONFIRM_IVX_RENDER_DEPLOY',
+          input: { clearCache: true },
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const ok = res.ok && json.ok !== false;
+      const result = (json.result ?? json) as Record<string, unknown>;
+      const deployId =
+        (typeof result.deployId === 'string' ? result.deployId : null) ||
+        (typeof (result.deploy as Record<string, unknown>)?.id === 'string' ? (result.deploy as Record<string, unknown>).id : null) ||
+        null;
+      const status = (typeof result.status === 'string' ? result.status : null) || null;
+      setRedeployResult({
+        ok,
+        deployId,
+        status,
+        error: ok ? null : (typeof json.error === 'string' ? json.error : `HTTP ${res.status}`),
+      });
+      if (ok) void fetchDashboard();
+    } catch (err) {
+      setRedeployResult({ ok: false, error: err instanceof Error ? err.message : 'Failed to trigger redeploy' });
+    } finally {
+      setRedeploying(false);
+    }
+  }, [API_BASE, confirmRedeploy, fetchDashboard, getOwnerBearer]);
 
   useEffect(() => {
     fetchDashboard();
@@ -344,6 +467,37 @@ export default function DeploymentDashboard() {
         <TouchableOpacity style={styles.refreshButton} onPress={fetchDashboard}>
           <RefreshCw size={18} color={COLORS.textSecondary} />
         </TouchableOpacity>
+      </View>
+
+      {/* Manual Redeploy */}
+      <View style={styles.redeploySection}>
+        <TouchableOpacity
+          style={[styles.redeployButton, redeploying && styles.redeployButtonDisabled]}
+          onPress={handleRedeploy}
+          disabled={redeploying || brain.deployInProgress}
+          testID="deployment-dashboard-redeploy-button"
+        >
+          {redeploying ? (
+            <ActivityIndicator size="small" color="#0B0B0B" />
+          ) : (
+            <Rocket size={18} color="#0B0B0B" />
+          )}
+          <Text style={styles.redeployButtonText}>
+            {redeploying ? 'Queueing fresh deploy…' : 'Redeploy latest commit'}
+          </Text>
+        </TouchableOpacity>
+        {brain.deployInProgress && !redeploying && (
+          <Text style={styles.redeployHint}>A deploy is already in progress.</Text>
+        )}
+        {redeployResult && (
+          <View style={[styles.redeployResult, redeployResult.ok ? { backgroundColor: COLORS.greenBg, borderColor: COLORS.green } : { backgroundColor: COLORS.redBg, borderColor: COLORS.red }]}>
+            <Text style={[styles.redeployResultText, { color: redeployResult.ok ? COLORS.green : COLORS.red }]}>
+              {redeployResult.ok
+                ? `Redeploy queued${redeployResult.deployId ? ` :: ${redeployResult.deployId}` : ''}${redeployResult.status ? ` (${redeployResult.status})` : ''}`
+                : redeployResult.error ?? 'Redeploy failed'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Overall Status Badge */}
