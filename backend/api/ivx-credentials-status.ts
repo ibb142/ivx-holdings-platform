@@ -496,7 +496,7 @@ async function testAiGateway(): Promise<CredentialRow> {
   const rawResult = await safeFetch(rawEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: rawModel, messages: [{ role: 'user', content: 'Reply with only the number 1.' }], max_tokens: 10 }),
+    body: JSON.stringify({ model: rawModel, messages: [{ role: 'user', content: 'Reply with only the number 1.' }], max_tokens: 16 }),
   });
   let rawAnswer: string | null = null;
   let rawError: string | null = null;
@@ -521,7 +521,7 @@ async function testAiGateway(): Promise<CredentialRow> {
       module: 'ivx-credentials-audit',
       requestId: `cred-ai-${Date.now()}`,
       prompt: 'Reply with only the number 1.',
-      maxOutputTokens: 10,
+      maxOutputTokens: 16,
     });
     liveAnswer = (result?.text ?? '').trim();
     if (!liveAnswer) liveError = 'empty response';
