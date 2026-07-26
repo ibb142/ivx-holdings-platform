@@ -1010,12 +1010,12 @@ describe('IVX Production Monitor — Check Schedule', () => {
 
 describe('IVX Production Monitor — Check Runners', () => {
   it('runHealthCheck returns a CheckResult', async () => {
-    const result = await runHealthCheck('https://api.ivxholding.com');
+    const result = await runHealthCheck('https://api.ivxholding.com', 4000);
     expect(result.checkId).toBeDefined();
     expect(result.category).toBe('API_HEALTH');
     expect(result.status).toBeDefined();
     expect(result.checkedAt).toBeDefined();
-  });
+  }, 15000);
 
   it('runLandingCheck returns a CheckResult', async () => {
     const result = await runLandingCheck('https://ivxholding.com');

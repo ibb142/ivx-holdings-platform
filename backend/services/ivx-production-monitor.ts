@@ -101,10 +101,10 @@ export type CheckResult = {
 
 // ─── Check Runners ─────────────────────────────────────────────────
 
-export async function runHealthCheck(baseUrl: string): Promise<CheckResult> {
+export async function runHealthCheck(baseUrl: string, timeoutMs: number = 10000): Promise<CheckResult> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(10000) });
+    const resp = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(timeoutMs) });
     const data = await resp.json() as Record<string, unknown>;
     const status = data.status === 'healthy' ? 'HEALTHY' : 'DEGRADED';
     const issue = status === 'HEALTHY' ? null : classifyIssue({ productionUnavailable: true });
