@@ -12,12 +12,13 @@ export type IVXOwnerAISemanticIntent =
   | 'code_retrieval'
   | 'explicit_tool_request'
   | 'app_build_planning'
+  | 'app_generator_execution'
   | 'self_developer_execution'
   | 'daily_self_improvement'
   | 'media_generation_3d'
   | 'normal_question';
 
-export type IVXOwnerAIRouteDecision = 'clarification' | 'time_tool' | 'tool_grounded_gpt' | 'self_developer' | 'self_improvement' | 'gpt_conversation';
+export type IVXOwnerAIRouteDecision = 'clarification' | 'time_tool' | 'tool_grounded_gpt' | 'self_developer' | 'self_improvement' | 'gpt_conversation' | 'app_generator';
 
 export type IVXOwnerAIPlannerDecision = {
   semanticIntent: IVXOwnerAISemanticIntent;
@@ -786,6 +787,33 @@ export function buildIVXOwnerAIPlannerDecision(prompt: string): IVXOwnerAIPlanne
   // with a phased "once approved we'll proceed" plan. Pure report/list/audit requests
   // (handled below) keep producing structured answers; only actionable build/fix/ship
   // task blocks execute here.
+  // ── APP GENERATOR ROUTE (Phase 3) ─────────────────────────────────────
+  // Explicit owner commands to CREATE a new app/module/service from scratch
+  // or scaffold a new project MUST route to the app generator tool
+  // (ivx_app_generator), NOT the generic senior-developer narrative path.
+  // This closes the gap where "create a new app from scratch" returned fake
+  // "RUNNING 65%" theater instead of invoking the real generator.
+  const hasAppGeneratorSignal = /\b(?:create|scaffold|build|generate)\s+(?:a\s+)?(?:new\s+)?(?:app|application|module|service)\s+(?:from\s+scratch|project|skeleton|shell|template|called\s+|named\s+)/i.test(normalized)
+    || /\bnew\s+app\s+from\s+scratch/i.test(normalized)
+    || /\bscaffold\s+(?:a\s+)?(?:new\s+)?(?:app|project|module)/i.test(normalized)
+    || /\b(?:create|add|build)\s+(?:a\s+)?(?:new\s+)?(?:ivx\s+)?module\b/i.test(normalized)
+    || /\bscaffold\s+(?:a\s+)?(?:new\s+)?(?:backend|mobile|web|automation)\s+(?:service|feature|dashboard)/i.test(normalized);
+  // Exclude prompts that target the OWN IVX system (engine, pipeline, platform)
+  // — those are in-repo execution, not new-app creation.
+  if (hasAppGeneratorSignal && !targetsOwnSystemBuild(normalized) && !asksToBuildApp(normalized)) {
+    return {
+      semanticIntent: 'app_generator_execution',
+      route: 'app_generator',
+      useTools: true,
+      toolHints: ['ivx_app_generator'],
+      requiresLongResponse: false,
+      requiresTaskDecomposition: true,
+      memoryMode: 'load_recent_and_persist_turn',
+      fallbackPolicy: 'fail_visible_not_canned',
+      reason: 'The owner explicitly requested creating/scaffolding a new app, module, or service from scratch. Route to the ivx_app_generator tool to produce a real blueprint + scaffold, not the generic senior-developer narrative path.',
+    };
+  }
+
   const hasBuildOrExecuteVerb = /\b(build|create|implement|develop|add|wire|integrate|set\s*up|spin\s*up|ship|deploy|launch|configure|finish|complete|fix|patch|code|repair|refactor|migrate|generate|remove|delete|eliminate|clean\s*up|clear|hide|strip|get\s+rid\s+of|turn\s+off)\b/.test(normalized);
   const isBuildOrExecuteTaskBlock = isExecutionOrTaskBlock
     && hasBuildOrExecuteVerb
