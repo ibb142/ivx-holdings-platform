@@ -149,6 +149,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+async function runAllEngines(): Promise<void> {
+  const engines = ['buyer', 'investor', 'jv', 'tokenized_buyer', 'outreach', 'technology'];
+  for (const engine of engines) {
+    console.log(`Running ${engine} engine`);
+    // TODO: Implement actual engine running logic and persistence here
+  }
+}
+
 // Provider auto-detection: the key prefix determines the correct endpoint.
 //   vck_  → Vercel AI Gateway (https://ai-gateway.vercel.sh/v1)
 //   sk-   → OpenAI direct API (https://api.openai.com/v1)
