@@ -27,6 +27,7 @@ import { maskPhone, resolveAlertPhone, GUARDIAN_STATE_FILE_PATH, EMPTY_GUARDIAN_
 import type { GuardianState } from './ivx-owner-auth-guardian';
 import { getProviderHealth } from '../services/ivx-provider-state-machine';
 import { requestIVXAIText } from '../ivx-ai-runtime';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import path from 'node:path';
 
 export const IVX_CREDENTIALS_STATUS_MARKER = 'ivx-credentials-status-2026-07-17-v2';
@@ -399,48 +400,117 @@ async function testSupabaseServiceRole(): Promise<CredentialRow> {
   };
 }
 
+/**
+ * AWS credential test — makes a REAL live STS GetCallerIdentity call.
+ * VERIFIED only when STS returns 200 with a valid account ID.
+ * Old SMS log is supplementary evidence, NOT the primary auth test.
+ */
 async function testAwsSms(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
-  const evidenceId = makeEvidenceId('AwsSms');
-  const stored = envPresent('AWS_ACCESS_KEY_ID') && envPresent('AWS_SECRET_ACCESS_KEY');
-  const configured = stored && resolveAlertPhone().length > 0;
+  const evidenceId = makeEvidenceId('AwsSts');
+  const accessKeyId = envClean('AWS_ACCESS_KEY_ID');
+  const secretAccessKey = envClean('AWS_SECRET_ACCESS_KEY');
+  const sessionToken = envClean('AWS_SESSION_TOKEN');
+  const region = envClean('AWS_REGION') || 'us-east-1';
+  const stored = accessKeyId.length > 0 && secretAccessKey.length > 0;
+  const keyPrefix = accessKeyId ? `${accessKeyId.slice(0, 8)}***` : '';
+
+  // Supplementary: last SMS sent (NOT the primary auth test)
   const guardianState = await readDurableJson<GuardianState>(GUARDIAN_STATE_FILE_PATH, EMPTY_GUARDIAN_STATE);
   const alerts = Array.isArray(guardianState.alerts) ? guardianState.alerts : [];
   const lastSent = alerts.filter((alert) => (alert as { smsStatus?: string }).smsStatus === 'sent')[0] as { messageId?: string; sentAt?: string } | undefined;
   const phone = maskPhone(resolveAlertPhone());
+
   const base = {
-    service: 'AWS SNS / SMS',
+    service: 'AWS (STS + SNS)',
     variable: 'AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_REGION',
     variable_name: 'AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_REGION',
-    provider: 'aws-sns',
+    provider: 'aws-sts-sns',
     credential_id: 'cred-aws-sms',
     environment: 'render',
-    securityCheck: 'server-only; message body never contains secrets',
+    securityCheck: 'server-only; STS call never returns secrets; SMS body never contains secrets',
     worker: 'W3',
     testedAt,
     required_for_production: false,
     fallback_test_result: null as string | null,
     expires_at: null as string | null,
   };
+
+  if (!stored) {
+    return {
+      ...base,
+      stored: false, injected: false, runtime_present: false,
+      authenticated: false,
+      authentication_tested: false,
+      authorization_tested: false,
+      scope_verified: null,
+      account_verified: null,
+      resource_verified: null,
+      direct_test_result: 'AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY absent in runtime env',
+      permissionTest: 'skipped — env absent',
+      runtimeTest: 'credentials missing in runtime env',
+      httpStatus: null,
+      blocker: 'AWS credentials not injected into Render runtime',
+      finalStatus: 'NOT_CONFIGURED',
+      verified_at: null,
+      error_code: 'ENV_ABSENT',
+      evidence_id: evidenceId,
+    };
+  }
+
+  // LIVE STS GetCallerIdentity call — the real authentication test
+  let stsOk = false;
+  let stsError: string | null = null;
+  let accountId: string | null = null;
+  let arn: string | null = null;
+  let userId: string | null = null;
+  let httpStatus: number | null = null;
+
+  try {
+    const stsConfig: ConstructorParameters<typeof STSClient>[0] = {
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+    };
+    if (sessionToken) {
+      (stsConfig.credentials as { sessionToken?: string }).sessionToken = sessionToken;
+    }
+    const sts = new STSClient(stsConfig);
+    const response = await sts.send(new GetCallerIdentityCommand({}), { requestTimeout: TEST_TIMEOUT_MS });
+    accountId = response.Account ?? null;
+    arn = response.Arn ?? null;
+    userId = response.UserId ?? null;
+    stsOk = !!accountId;
+    httpStatus = 200;
+  } catch (error: unknown) {
+    stsError = error instanceof Error ? error.message : String(error);
+    const meta = (error as { $metadata?: { httpStatusCode?: number } }).$metadata;
+    httpStatus = meta?.httpStatusCode ?? null;
+  }
+
+  const authenticated = stsOk;
+  const directTestResult = stsOk
+    ? `STS GetCallerIdentity → 200 (account=${accountId}, arn=${arn}, userId=${userId ? userId.slice(0, 24) : 'n/a'}, key=${keyPrefix}, region=${region})${lastSent ? ` | last SMS ${lastSent.sentAt ?? ''} MsgId ${lastSent.messageId ?? 'n/a'}` : ''}`
+    : `STS GetCallerIdentity → ${httpStatus ?? 'ERR'}: ${stsError ? stsError.slice(0, 250) : 'unknown'} (key=${keyPrefix}, region=${region})`;
+
   return {
     ...base,
-    stored, injected: configured, runtime_present: stored,
-    authenticated: lastSent ? true : null,
-    authentication_tested: !!lastSent,
-    authorization_tested: !!lastSent,
-    scope_verified: configured ? true : null,
-    account_verified: configured ? true : null,
+    stored: true,
+    injected: true,
+    runtime_present: true,
+    authenticated,
+    authentication_tested: true,
+    authorization_tested: stsOk,
+    scope_verified: stsOk,
+    account_verified: stsOk,
     resource_verified: !!lastSent,
-    direct_test_result: lastSent
-      ? `last SMS sent ${lastSent.sentAt ?? ''} MessageId ${lastSent.messageId ?? 'n/a'}`
-      : (configured ? 'ready — no SMS sent since binding' : 'sendSnsSms would return missing_config'),
-    permissionTest: configured ? `provider ready; owner phone ${phone}` : 'credentials missing in runtime',
-    runtimeTest: lastSent ? `last SMS sent ${lastSent.sentAt ?? ''} MessageId ${lastSent.messageId ?? 'n/a'}` : (configured ? 'ready — no SMS sent since binding' : 'sendSnsSms would return missing_config'),
-    httpStatus: null,
-    blocker: configured ? null : 'AWS credentials not injected into Render runtime',
-    finalStatus: configured ? (lastSent ? 'VERIFIED' : 'PARTIAL') : 'BLOCKED',
-    verified_at: lastSent ? testedAt : null,
-    error_code: configured ? null : 'ENV_ABSENT',
+    direct_test_result: directTestResult,
+    permissionTest: stsOk ? `STS verified account ${accountId}; SNS SMS phone ${phone}` : `STS FAILED: ${stsError ? stsError.slice(0, 120) : 'unknown'}`,
+    runtimeTest: directTestResult,
+    httpStatus,
+    blocker: stsOk ? null : `AWS STS authentication failed: ${stsError ? stsError.slice(0, 150) : 'unknown'}`,
+    finalStatus: stsOk ? 'VERIFIED' : 'BLOCKED',
+    verified_at: stsOk ? testedAt : null,
+    error_code: stsOk ? null : 'STS_AUTH_FAILED',
     evidence_id: evidenceId,
   };
 }
