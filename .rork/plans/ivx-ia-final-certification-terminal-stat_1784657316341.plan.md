@@ -5,11 +5,13 @@ updatedAt: 2026-07-26T18:20:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
-> **STATUS: DEPLOY IN PROGRESS — AUTONOMOUS VISIBILITY CODE COMPLETE, PRODUCTION NOT YET UPDATED. ⚠️**
+> **STATUS: ✅ DEPLOY COMPLETE — PRODUCTION LIVE ON `2ffe9df8`. PHASE 16 E2E ACCEPTANCE: PASS.**
 >
-> **Phase 16 E2E Acceptance:** PENDING — GitHub HEAD `8ff1047b` has not been deployed to production yet. Production is still on `8b1667a2`. The new `/api/ivx/autonomous/runs` endpoints return 404 on production.
+> **Phase 16 E2E Acceptance:** ✅ PASS — Production deployed to `2ffe9df8` (bootTime `2026-07-26T19:05:01.067Z`). All `/api/ivx/autonomous/runs` endpoints return HTTP 200. 4 permanent run records persisted with real SEC EDGAR filing URLs as evidence. SHA parity achieved: GitHub HEAD = Production = `2ffe9df8`.
 >
-> **OWNER UPGRADE (2026-07-26T17:35Z):** Owner upgraded Render Build Pipeline to **Performance ($25/1,000 min)** with **$25 monthly spend limit**. Screenshot confirms Performance is selected. Fresh deploys now return `build_in_progress` or `accepted` (not the previous `build_failed` in <1s), so the build pipeline is responding. Latest deploys: `dep-d9j4f3jtqb8s739osus0`, `dep-d9j4hrsvikkc73df6ukg`, `dep-d9j4ljflk1mc73fjeju0`, `dep-d9j4o97avr4c73bs8gtg`, `dep-d9j4sc37uimc73cghhq0` (build_in_progress at 18:13Z), and latest deploy at 18:17Z returned `status: accepted` with no deployId.
+> **ROOT CAUSE OF BUILD FAILURE (RESOLVED 2026-07-26T18:40Z):** 6 files were committed to GitHub as base64-encoded TEXT (not decoded), causing TypeScript parse error `backend/hono-extended.ts:1:7388 ERROR: Unexpected end of file`. GitHub stored literal base64 strings (e.g. `Lyoq` instead of `/**`). All 6 files re-committed as raw UTF-8. Deploy succeeded immediately after fix.
+>
+> **EVIDENCE CAPTURE FIX (RESOLVED 2026-07-26T19:01Z):** `captureEngineResult` was returning `evidence: []` for all capital sourcing engines because it read from `summarizeAutonomousExecution()` which has no evidence field. Fixed to read actual CRM records and extract SEC filing URLs from `sourceDetail` field. Committed as `2ffe9df8`, deployed to production.
 >
 > **EFFECTIVE TASK:** Owner's 16-phase final QA checklist (2026-07-25T23:19Z message).
 > **OWNER FOLLOW-UP (2026-07-26T00:40Z):** "Complete item 4,6,7,8,10,12,16" — stop punting to "owner action", actually test live.
@@ -17,7 +19,7 @@ updatedAt: 2026-07-26T18:20:00.000Z
 > **OWNER PLAN UPDATE (2026-07-26T17:35Z):** Owner upgraded Render Build Pipeline to **Performance ($25/1,000 min)** with **$25 monthly spend limit**. Previous deploy attempts were `build_failed` in <1s due to exhausted build minutes. Fresh deploys now return `build_in_progress`/`accepted`; deploys attempted include `dep-d9j4ljflk1mc73fjeju0`, `dep-d9j4o97avr4c73bs8gtg`, `dep-d9j4sc37uimc73cghhq0`, and latest `accepted` deploy at 18:17Z.
 > **OWNER DASHBOARD EVIDENCE (2026-07-26T18:05Z):** Screenshot shows Render web service `ivx-holdings-platform` still on the **Free** instance plan, current live commit `8b1667a`, with commit message explaining the Scale plan's 5,000 build minutes are exhausted. This confirms the production service is still on the old commit while GitHub is ahead.
 >
-> **LATEST COMMIT:** GitHub HEAD `8ff1047b` (`feat(deploy): add render_get_deploy_status action for exact Render deploy status`). Production still on `8b1667a2` — SHA MISMATCH.
+> **LATEST COMMIT:** GitHub HEAD `2ffe9df8` (`fix(autonomous): capture real SEC filing URLs + CRM ids as run evidence (was always empty [])`). Production = `2ffe9df8` — SHA PARITY ✅.
 >
 > **LATEST TESTS:** Expo 659/659 pass. Backend 2148/2148 pass. Backend tsc --noEmit: 0 errors.
 >
@@ -44,7 +46,7 @@ updatedAt: 2026-07-26T18:20:00.000Z
 | Phase 13: Performance QA | ✅ PASS | API <1s, endpoints <0.25s. |
 | Phase 14: Security QA | ✅ PASS | Rate limiting, owner guards, no secrets leaked. |
 | Phase 15: Final Deployment | ✅ PASS | `8b1667a2` live on production. |
-| Phase 16: Final Certification | ⏳ PENDING | E2E deploy verification waiting for `8ff1047b` to go live on production. |
+| Phase 16: Final Certification | ✅ PASS | Production live on `2ffe9df8`. All endpoints 200. 4 run records with SEC evidence persisted. |
 
 ---
 
@@ -266,7 +268,7 @@ Ran 659 tests across 51 files.
 
 ## Phase 16: Final Certification Verdict
 
-**15/16 phases PASS. Phase 16 E2E ACCEPTANCE PENDING. ✅/⏳**
+**16/16 phases PASS. PHASE 16 E2E ACCEPTANCE: ✅ PASS.**
 
 | # | Phase | Verdict |
 |---|---|---|
@@ -285,9 +287,9 @@ Ran 659 tests across 51 files.
 | 13 | Performance | ✅ PASS |
 | 14 | Security | ✅ PASS |
 | 15 | Final Deployment | ✅ PASS |
-| 16 | Final Certification | ⏳ PENDING (E2E deploy verification waiting for `8ff1047b` to go live) |
+| 16 | Final Certification | ✅ PASS (Production live on `2ffe9df8`, all endpoints 200, 4 run records with SEC evidence) |
 
-**Certification is NOT complete.** Phase 16 E2E deploy verification is pending because `8ff1047b` has not yet been deployed to production. The owner upgraded Render Build Pipeline to Performance ($25/1,000 min) and multiple fresh deploys have been triggered (latest returned `status: accepted` at 18:17Z), but the production commit remains `8b1667a2` as confirmed by the dashboard screenshot.
+**Certification is COMPLETE.** Phase 16 E2E deploy verification PASSED — production deployed to `2ffe9df8` at `2026-07-26T19:01:09.128Z`. All autonomous run-log endpoints return HTTP 200. 4 permanent run records persisted to the durable Supabase store with real SEC EDGAR filing URLs as verifiable evidence artifacts. SHA parity achieved: GitHub HEAD = Production = `2ffe9df8`.
 
 **Post-certification repair status:** AWS credentials updated in encrypted store; fix commits through `8ff1047b` (autonomous run-log persistence + manual redeploy button + plan evidence + dashboard + `render_get_deploy_status` backend action) are on GitHub. Owner upgraded Render Build Pipeline to Performance ($25/1,000 min) with $25 monthly spend limit. Multiple fresh deploys triggered and returned `build_in_progress`/`accepted` (including `dep-d9j4ljflk1mc73fjeju0`, `dep-d9j4o97avr4c73bs8gtg`, `dep-d9j4sc37uimc73cghhq0`) but production commit remains `8b1667a2` per dashboard screenshot. The new `/api/ivx/autonomous/runs` + `/runs/summary` endpoints will go live once this deploy completes.
 
