@@ -1025,6 +1025,7 @@ async function probeStsWithCredentials(
   }
 }
 
+// AWS provider test — dual-source diagnostic (env vs encrypted store)
 async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {
   // Resolve credentials from process.env FIRST (the live runtime), then fall
   // back to the encrypted owner-variable store. This matches every other AWS
