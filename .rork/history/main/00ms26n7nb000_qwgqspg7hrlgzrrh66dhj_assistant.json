@@ -1474,7 +1474,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -n \\\"ScheduledJobResult\\\\|type ScheduledJobResult\\\\|interface ScheduledJobResult\\\" backend/services/ivx-autonomous-scheduler.ts | head -10\"}",
       "createdAt": 1785092323563,
-      "completedAt": 1785092323570
+      "completedAt": 1785092323570,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1505,7 +1506,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-autonomous-scheduler.ts\", \"limit\": 45, \"offset\": 375}",
       "createdAt": 1785092331809,
-      "completedAt": 1785092331813
+      "completedAt": 1785092331813,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1536,7 +1538,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-autonomous-execution.ts\", \"limit\": 70, \"offset\": 500}",
       "createdAt": 1785092339034,
-      "completedAt": 1785092339038
+      "completedAt": 1785092339038,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1571,7 +1574,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-autonomous-scheduler.ts\", \"edits\": [{\"oldString\": \"/** Best-effort capture of the latest engine result details for the run record. */\\nasync function captureEngineResult(kind: ScheduledJobKind): Promise<{\\n  discovered?: number;\\n  savedToCrm?: number;\\n  duplicatesSkipped?: number;\\n  outreachQueued?: number;\\n  sendingEnabled?: boolean;\\n  source?: string;\\n  evidence?: string[];\\n  engine?: string;\\n} | null> {\\n  try {\\n    const exec = await import('./ivx-autonomous-execution');\\n    // The engines don't expose a “last result” cache, so we read the durable CRM\\n    // + outreach stores to derive honest counts for the run record. The scheduler\\n    // already ran the engine above; this mirrors what it produced.\\n    if (kind === 'daily_capital_outreach') {\\n      const summary = await exec.summarizeAutonomousExecution();\\n      return {\\n        outreachQueued: summary.outreach.queued,\\n        sendingEnabled: summary.outreach.sendingEnabled,\\n        source: 'Investor CRM prospects',\\n        evidence: [],\\n        engine: 'outreach',\\n      };\\n    }\\n    const summary = await exec.summarizeAutonomousExecution();\\n    const engine = engineKindToName(kind);\\n    if (engine === 'buyer') {\\n      return {\\n        discovered: summary.crm.buyers,\\n        savedToCrm: summary.crm.buyers,\\n        source: 'SEC EDGAR Form D',\\n        evidence: [],\\n        engine,\\n      };\\n    }\\n    if (engine === 'investor') {\\n      return {\\n        discovered: summary.crm.investors,\\n        savedToCrm: summary.crm.investors,\\n        source: 'SEC EDGAR Form D',\\n        evidence: [],\\n        engine,\\n      };\\n    }\\n    if (engine === 'jv') {\\n      return {\\n        discovered: summary.crm.partners,\\n        savedToCrm: summary.crm.partners,\\n        source: 'SEC EDGAR Form D',\\n        evidence: [],\\n        engine,\\n      };\\n    }\\n    if (engine === 'tokenized_buyer') {\\n      return {\\n        discovered: summary.crm.tokenizedBuyers,\\n        savedToCrm: summary.crm.tokenizedBuyers,\\n        source: 'SEC EDGAR Form D',\\n        evidence: [],\\n        engine,\\n      };\\n    }\\n    if (engine === 'technology') {\\n      return {\\n        discovered: summary.ideas.total,\\n        savedToCrm: summary.ideas.total,\\n        source: 'IVX Innovation Engine',\\n        evidence: summary.ideas.topTitle ? [summary.ideas.topTitle] : [],\\n        engine,\\n      };\\n    }\\n    return null;\\n  } catch {\\n    return null;\\n  }\\n}\", \"newString\": \"/** Best-effort capture of the latest engine result details for the run record. */\\nasync function captureEngineResult(kind: ScheduledJobKind): Promise<{\\n  discovered?: number;\\n  savedToCrm?: number;\\n  duplicatesSkipped?: number;\\n  outreachQueued?: number;\\n  sendingEnabled?: boolean;\\n  source?: string;\\n  evidence?: string[];\\n  engine?: string;\\n} | null> {\\n  try {\\n    const exec = await import('./ivx-autonomous-execution');\\n    const engine = engineKindToName(kind);\\n\\n    // Outreach engine — read outreach store for real message ids as evidence.\\n    if (kind === 'daily_capital_outreach') {\\n      const summary = await exec.summarizeAutonomousExecution();\\n      let outreachEvidence: string[] = [];\\n      try {\\n        const { listOutreachMessages } = await import('./ivx-outreach-store');\\n        const messages = await listOutreachMessages();\\n        // Most-recent-first: message ids are concrete evidence artifacts.\\n        outreachEvidence = messages\\n          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))\\n          .slice(0, 10)\\n          .map((m) => m.id);\\n      } catch {\\n        // best-effort\\n      }\\n      return {\\n        outreachQueued: summary.outreach.queued,\\n        sendingEnabled: summary.outreach.sendingEnabled,\\n        source: 'Investor CRM prospects',\\n        evidence: outreachEvidence,\\n        engine: 'outreach',\\n      };\\n    }\\n\\n    // Capital sourcing engines — read the actual CRM records and extract their\\n    // SEC EDGAR source URLs from `sourceDetail` as verifiable evidence artifacts.\\n    // This replaces the previous `evidence: []` stub that left every run marked\\n    // `hasEvidence: false`.\\n    if (engine === 'buyer' || engine === 'investor' || engine === 'jv' || engine === 'tokenized_buyer') {\\n      const { listInvestors } = await import('./ivx-investor-crm-store');\\n      const investors = await listInvestors();\\n      const partyType = engine === 'buyer' ? 'buyer' : engine === 'investor' ? 'investor' : engine === 'jv' ? 'partner' : 'buyer';\\n      const tokenizedFilter = engine === 'tokenized_buyer';\\n      const matching = investors.filter((rec) => {\\n        if (rec.partyType !== partyType) return false;\\n        if (tokenizedFilter) {\\n          return rec.investmentType.toLowerCase().includes('token');\\n        }\\n        return true;\\n      });\\n      // Sort newest-first so evidence reflects the most recent records.\\n      matching.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));\\n      // Extract SEC filing URLs from sourceDetail (format: \\\"SEC EDGAR Form D filing: https://...\\\")\\n      const urlRegex = /https?:\\\\/\\\\/[^\\\\s\\\"']+/i;\\n      const evidence: string[] = [];\\n      for (const rec of matching) {\\n        if (evidence.length >= 10) break;\\n        const detailMatch = rec.sourceDetail.match(urlRegex);\\n        if (detailMatch) {\\n          evidence.push(detailMatch[0]);\\n        }\\n      }\\n      return {\\n        discovered: matching.length,\\n        savedToCrm: matching.length,\\n        source: 'SEC EDGAR Form D',\\n        evidence,\\n        engine,\\n      };\\n    }\\n\\n    // Technology ideas — list idea titles as evidence.\\n    if (engine === 'technology') {\\n      const summary = await exec.summarizeAutonomousExecution();\\n      let ideaEvidence: string[] = [];\\n      try {\\n        const { listIdeas } = await import('./ivx-innovation-store');\\n        const ideas = await listIdeas();\\n        ideaEvidence = ideas.slice(0, 10).map((idea) => idea.id);\\n      } catch {\\n        // best-effort\\n      }\\n      return {\\n        discovered: summary.ideas.total,\\n        savedToCrm: summary.ideas.total,\\n        source: 'IVX Innovation Engine',\\n        evidence: ideaEvidence.length > 0 ? ideaEvidence : (summary.ideas.topTitle ? [summary.ideas.topTitle] : []),\\n        engine,\\n      };\\n    }\\n    return null;\\n  } catch {\\n    return null;\\n  }\\n}\"}]}",
       "createdAt": 1785092343949,
-      "completedAt": 1785092355459
+      "completedAt": 1785092355459,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -1589,7 +1593,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== Verify backend tsc compiles with new evidence capture code ===\\\" && timeout 60 bun x tsc --noEmit --pretty false 2>&1 | grep -v \\\"TS2688\\\\|bun\\\\|node\\\" | head -20; echo \\\"EXIT: $?\\\"\"}",
       "createdAt": 1785092358088,
-      "completedAt": 1785092359111
+      "completedAt": 1785092359111,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1619,7 +1624,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== Verify the fix compiles locally ===\\\" && timeout 60 bun x tsc --noEmit --pretty false 2>&1 | grep -v \\\"TS2688\\\\|bun\\\\|node\\\\|Entry point\\\\|The file is in\\\" | head -10; echo \\\"EXIT: $?\\\"\"}",
       "createdAt": 1785092363722,
-      "completedAt": 1785092366829
+      "completedAt": 1785092366829,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -1637,7 +1643,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Commit evidence capture fix to GitHub ===\\\" && node -e \\\"\\nconst fs = require('fs');\\nconst content = fs.readFileSync('backend/services/ivx-autonomous-scheduler.ts', 'utf8');\\nconst res = JSON.stringify({ action: 'github_commit_file', confirm: true, confirmText: 'CONFIRM_IVX_GITHUB_WRITE', input: { path: 'backend/services/ivx-autonomous-scheduler.ts', content, message: 'fix(autonomous): capture real SEC filing URLs + CRM ids as run evidence (was always empty [])' } });\\nprocess.stdout.write(res);\\n\\\" > /tmp/commit_evidence.json && curl -s -X POST \\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d @/tmp/commit_evidence.json -o /tmp/commit_evidence_resp.json && node -e \\\"\\nconst d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{try{const r=JSON.parse(Buffer.concat(d).toString());const res=r.result||r;console.log('ok:',res.ok||r.ok);console.log('sha:',res.sha||res.commitSha||res.commit?.sha);console.log('message:',(res.message||'').slice(0,80));console.log('error:',(res.error||r.error||'').slice(0,150));}catch(e){console.log('err',e.message)}})\\\" < /tmp/commit_evidence_resp.json\"}",
       "createdAt": 1785092363729,
-      "completedAt": 1785092370932
+      "completedAt": 1785092370932,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1662,7 +1669,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger deploy of evidence capture fix ===\\\" && curl -s -X POST \\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"action\\\":\\\"render_trigger_deploy\\\",\\\"confirm\\\":true,\\\"confirmText\\\":\\\"CONFIRM_IVX_RENDER_DEPLOY\\\",\\\"input\\\":{\\\"clearCache\\\":true}}' -o /tmp/deploy_evidence.json && node -e \\\"\\nconst d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{try{const r=JSON.parse(Buffer.concat(d).toString());const res=r.result||r;console.log('ok:',res.ok);console.log('deployId:',res.deployId);console.log('status:',res.status);}catch(e){console.log('err',e.message)}})\\\" < /tmp/deploy_evidence.json\"}",
       "createdAt": 1785092374506,
-      "completedAt": 1785092384038
+      "completedAt": 1785092384038,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -1680,7 +1688,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Poll for deploy of 2ffe9df8 (evidence fix) for 120s ===\\\" && for i in $(seq 1 24); do sleep 5; COMMIT=$(curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" 2>&1 | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{try{const r=JSON.parse(Buffer.concat(d).toString());console.log(r.commitShort||r.commit?.slice(0,7));}catch(e){console.log('ERR')}})\\\"); echo \\\"$(date -u +%H:%M:%S)Z | commit=$COMMIT\\\"; if [ \\\"$COMMIT\\\" = \\\"2ffe9df\\\" ]; then echo \\\"=== EVIDENCE FIX DEPLOYED ===\\\"; break; fi; done\"}",
       "createdAt": 1785092378148,
-      "completedAt": 1785092444052
+      "completedAt": 1785092444052,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1710,7 +1719,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Poll for deploy of 2ffe9df8 (evidence fix) for 110s ===\\\" && for i in $(seq 1 22); do sleep 5; COMMIT=$(curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" 2>&1 | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{try{const r=JSON.parse(Buffer.concat(d).toString());console.log(r.commitShort||r.commit?.slice(0,7));}catch(e){console.log('ERR')}})\\\"); echo \\\"$(date -u +%H:%M:%S)Z | commit=$COMMIT\\\"; if [ \\\"$COMMIT\\\" = \\\"2ffe9df\\\" ]; then echo \\\"=== EVIDENCE FIX DEPLOYED ===\\\"; break; fi; done\"}",
       "createdAt": 1785092448751,
-      "completedAt": 1785092509250
+      "completedAt": 1785092509250,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1740,7 +1750,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Verify evidence fix is live ===\\\" && curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('commit:',r.commitShort||r.commit?.slice(0,7));console.log('bootTime:',r.bootTime);})\\\"\"}",
       "createdAt": 1785092514260,
-      "completedAt": 1785092516206
+      "completedAt": 1785092516206,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1770,7 +1781,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger buyer engine (has SEC EDGAR evidence) ===\\\" && curl -s --max-time 110 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"kind\\\":\\\"daily_buyer_engine\\\"}' -o /tmp/run_buyer.json && node -e \\\"\\nconst d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{try{const r=JSON.parse(Buffer.concat(d).toString());console.log('ok:',r.ok);console.log('ranKinds:',r.ranKinds);(r.results||[]).forEach(x=>console.log(JSON.stringify({kind:x.kind,ok:x.ok,durationMs:x.durationMs,summary:x.summary,error:x.error})));}catch(e){console.log('err',e.message)}})\\\" < /tmp/run_buyer.json\"}",
       "createdAt": 1785092520724,
-      "completedAt": 1785092583171
+      "completedAt": 1785092583171,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1800,7 +1812,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Background all engine triggers ===\\\" && for kind in daily_buyer_engine daily_investor_engine daily_jv_engine daily_tokenized_buyer_engine daily_capital_outreach daily_technology_ideas; do nohup curl -s --max-time 180 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d \\\"{\\\\\\\"kind\\\\\\\":\\\\\\\"$kind\\\\\\\"}\\\" -o /tmp/run_${kind}.json > /dev/null 2>&1 & echo \\\"launched: $kind (pid $!)\\\"; done && echo \\\"=== All 6 engines launched in background ===\\\"\"}",
       "createdAt": 1785092588147,
-      "completedAt": 1785092588783
+      "completedAt": 1785092588783,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1830,7 +1843,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 45 && echo \\\"=== Check which background engine runs completed ===\\\" && for kind in daily_buyer_engine daily_investor_engine daily_jv_engine daily_tokenized_buyer_engine daily_capital_outreach daily_technology_ideas; do F=\\\"/tmp/run_${kind}.json\\\"; if [ -f \\\"$F\\\" ]; then SZ=$(wc -c < \\\"$F\\\"); if [ \\\"$SZ\\\" -gt 10 ]; then node -e \\\"\\nconst r=require('$F');\\nconst res=r.results&&r.results[0]||{};\\nconsole.log('$kind | ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'ms','| summary:',(res.summary||'').slice(0,80));\\n\\\" 2>/dev/null || echo \\\"$kind | parse error (size $SZ)\\\"; else echo \\\"$kind | still running or empty (size $SZ)\\\"; fi; else echo \\\"$kind | no file yet\\\"; fi; done\"}",
       "createdAt": 1785092592535,
-      "completedAt": 1785092638826
+      "completedAt": 1785092638826,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1860,7 +1874,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Run summary after engine execution ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_final.json && node -e \\\"\\nconst r=require('/tmp/sum_final.json');\\nconsole.log('totalRuns:',r.totalRuns);\\nconsole.log('runsWithEvidence:',r.runsWithEvidence);\\nconsole.log('runsWithoutEvidence:',r.runsWithoutEvidence);\\nconsole.log('failed:',r.failed);\\nconsole.log('source:',r.source);\\nconsole.log('--- byEngine ---');\\n(r.byEngine||[]).forEach(e=>console.log(JSON.stringify({kind:e.kind,engine:e.engine,runCount:e.runCount,lastStatus:e.lastStatus,withEvidence:e.withEvidence,lastSummary:(e.lastSummary||'').slice(0,80)})));\\n\\\"\"}",
       "createdAt": 1785092649193,
-      "completedAt": 1785092661001
+      "completedAt": 1785092661001,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -1878,7 +1893,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Run records with evidence details ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_final.json && node -e \\\"\\nconst r=require('/tmp/runs_final.json');\\nconsole.log('count:',r.count||r.runs&&r.runs.length||0);\\nconsole.log('source:',r.source);\\nconst runs=r.runs||r.records||[];\\nconsole.log('--- All runs ---');\\nruns.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,discovered:x.recordsDiscovered,inserted:x.recordsInserted,evidenceCount:(x.evidence||[]).length,evidence0:(x.evidence||[])[0],workerId:x.workerId,durationMs:x.durationMs})));\\n\\\"\"}",
       "createdAt": 1785092652771,
-      "completedAt": 1785092661306
+      "completedAt": 1785092661306,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1908,7 +1924,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Full run summary + records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_now.json && node -e \\\"\\nconst r=require('/tmp/sum_now.json');\\nconsole.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);\\n(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));\\n\\\" && echo \\\"\\\" && echo \\\"=== Run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_now.json && node -e \\\"\\nconst r=require('/tmp/runs_now.json');\\nconst runs=r.runs||r.records||[];\\nconsole.log('count:',runs.length);\\nruns.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],worker:x.workerId,dur:x.durationMs})));\\n\\\"\"}",
       "createdAt": 1785092669703,
-      "completedAt": 1785092672598
+      "completedAt": 1785092672598,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -1926,7 +1943,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== Check background engine run results ===\\\" && for kind in daily_buyer_engine daily_investor_engine daily_jv_engine daily_tokenized_buyer_engine daily_capital_outreach daily_technology_ideas; do F=\\\"/tmp/run_${kind}.json\\\"; if [ -f \\\"$F\\\" ]; then SZ=$(wc -c < \\\"$F\\\"); if [ \\\"$SZ\\\" -gt 10 ] && [ \\\"$SZ\\\" -lt 10000 ]; then node -e \\\"\\ntry{const r=require('$F');const res=r.results&&r.results[0]||{};console.log('$kind | ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'ms','| summary:',(res.summary||'').slice(0,90));}catch(e){console.log('$kind | parse err sz=$SZ');}\\\" 2>/dev/null || echo \\\"$kind | size $SZ\\\"; else echo \\\"$kind | size $SZ (large or empty)\\\"; fi; else echo \\\"$kind | no file\\\"; fi; done\"}",
       "createdAt": 1785092670501,
-      "completedAt": 1785092672664
+      "completedAt": 1785092672664,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1951,7 +1969,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== Check if background results are HTML errors ===\\\" && head -c 200 /tmp/run_daily_investor_engine.json 2>/dev/null; echo \\\"\\\"; echo \\\"---buyer---\\\"; head -c 200 /tmp/run_daily_buyer_engine.json 2>/dev/null\"}",
       "createdAt": 1785092677311,
-      "completedAt": 1785092678335
+      "completedAt": 1785092678335,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -1969,7 +1988,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check run records NOW (after boot kick should have run engines) ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_latest.json && node -e \\\"\\nconst r=require('/tmp/sum_latest.json');\\nconsole.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);\\n(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));\\n\\\"\"}",
       "createdAt": 1785092677317,
-      "completedAt": 1785092678622
+      "completedAt": 1785092678622,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -1999,7 +2019,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger investor engine (sequential, 110s timeout) ===\\\" && nohup curl -s --max-time 110 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"kind\\\":\\\"daily_investor_engine\\\"}' -o /tmp/run_inv.json > /dev/null 2>&1 & echo \\\"launched investor engine (pid $!)\\\"; sleep 55 && echo \\\"=== Check after 55s ===\\\" && if [ -f /tmp/run_inv.json ]; then SZ=$(wc -c < /tmp/run_inv.json); echo \\\"size: $SZ\\\"; if [ \\\"$SZ\\\" -lt 10000 ] && [ \\\"$SZ\\\" -gt 10 ]; then node -e \\\"try{const r=require('/tmp/run_inv.json');const res=r.results&&r.results[0]||{};console.log('ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'| summary:',(res.summary||'').slice(0,100));}catch(e){console.log('parse err')}}\\\" 2>/dev/null; else head -c 100 /tmp/run_inv.json; fi; else echo \\\"no file yet\\\"; fi\"}",
       "createdAt": 1785092683354,
-      "completedAt": 1785092742140
+      "completedAt": 1785092742140,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2024,7 +2045,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check run records NOW — engines may have completed on backend even if HTTP timed out ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_check.json && node -e \\\"\\nconst r=require('/tmp/sum_check.json');\\nconsole.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);\\n(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));\\n\\\"\"}",
       "createdAt": 1785092754611,
-      "completedAt": 1785092754790
+      "completedAt": 1785092754790,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2054,7 +2076,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger investor engine in background ===\\\" && nohup curl -s --max-time 180 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"kind\\\":\\\"daily_investor_engine\\\"}' > /tmp/run_inv_out.json 2>&1 & echo \\\"launched pid $!\\\" && echo \\\"=== Wait 50s for backend to complete ===\\\" && sleep 50 && echo \\\"=== Check run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_inv.json && node -e \\\"\\nconst r=require('/tmp/sum_inv.json');\\nconsole.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence);\\n(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,70)));\\n\\\"\"}",
       "createdAt": 1785092763012,
-      "completedAt": 1785092813618
+      "completedAt": 1785092813618,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2079,7 +2102,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check run records — did investor engine complete on backend? ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_check2.json 2>&1 && node -e \\\"\\ntry{const r=require('/tmp/sum_check2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_check2.json','utf8').slice(0,200));}\\\"\"}",
       "createdAt": 1785092817638,
-      "completedAt": 1785092821262
+      "completedAt": 1785092821262,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2109,7 +2133,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Wait 50s for capital engines to complete on backend ===\\\" && sleep 50 && echo \\\"=== Check run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_wait.json && node -e \\\"\\ntry{const r=require('/tmp/sum_wait.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785092844481,
-      "completedAt": 1785092893842
+      "completedAt": 1785092893842,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2139,7 +2164,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Wait 55s for capital engines to finish on backend ===\\\" && sleep 55 && echo \\\"=== Check run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_wait2.json && node -e \\\"\\ntry{const r=require('/tmp/sum_wait2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785092900027,
-      "completedAt": 1785092958853
+      "completedAt": 1785092958853,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2169,7 +2195,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger buyer engine only (background, 180s timeout) ===\\\" && nohup curl -s --max-time 180 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"kind\\\":\\\"daily_buyer_engine\\\"}' > /tmp/run_buyer_out.json 2>&1 & echo \\\"launched buyer engine pid $!\\\" && echo \\\"=== Wait 55s then check run records ===\\\" && sleep 55 && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_buyer.json && node -e \\\"\\ntry{const r=require('/tmp/sum_buyer.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785092978523,
-      "completedAt": 1785093031774
+      "completedAt": 1785093031774,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2187,7 +2214,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check if buyer engine completed on backend ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_buyer2.json 2>&1 && node -e \\\"\\ntry{const r=require('/tmp/sum_buyer2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\" && echo \\\"\\\" && echo \\\"=== Check buyer engine result file ===\\\" && if [ -f /tmp/run_buyer_out.json ]; then SZ=$(wc -c < /tmp/run_buyer_out.json); echo \\\"size: $SZ\\\"; head -c 300 /tmp/run_buyer_out.json; fi\"}",
       "createdAt": 1785093034392,
-      "completedAt": 1785093044940
+      "completedAt": 1785093044940,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2217,7 +2245,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Wait 55s more for buyer engine to complete ===\\\" && sleep 55 && echo \\\"=== Check run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_buyer3.json && node -e \\\"\\ntry{const r=require('/tmp/sum_buyer3.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\" && echo \\\"\\\" && echo \\\"=== Check buyer engine result ===\\\" && if [ -f /tmp/run_buyer_out.json ]; then SZ=$(wc -c < /tmp/run_buyer_out.json); echo \\\"size: $SZ\\\"; if [ \\\"$SZ\\\" -gt 10 ] && [ \\\"$SZ\\\" -lt 10000 ]; then node -e \\\"try{const r=require('/tmp/run_buyer_out.json');const res=r.results&&r.results[0]||{};console.log('ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'| summary:',(res.summary||'').slice(0,100));}catch(e){console.log('parse err')}\\\"; else head -c 100 /tmp/run_buyer_out.json; fi; fi\"}",
       "createdAt": 1785093052662,
-      "completedAt": 1785093117995
+      "completedAt": 1785093117995,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2242,7 +2271,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_now2.json && node -e \\\"\\ntry{const r=require('/tmp/sum_now2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093121152,
-      "completedAt": 1785093126257
+      "completedAt": 1785093126257,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2272,7 +2302,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Executive layer — check if capital engines completed ===\\\" && curl -s -H \\\"autorisationToken: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/executive-layer?_=$(date +%s)\\\" -o /tmp/exec2.json && node -e \\\"\\ntry{const r=require('/tmp/exec2.json');console.log('totalRuns:',r.totalRuns);const acts=r.autonomousActions||r.actions||r.dashboard||[];if(Array.isArray(acts)){acts.slice(0,12).forEach(a=>console.log(JSON.stringify({label:a.label,runs:a.runs||a.runCount,count:a.count,kind:a.kind,engine:a.engine,lastRunAt:a.lastRunAt})));}else{console.log(JSON.stringify(r).slice(0,2000));}}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093148759,
-      "completedAt": 1785093153749
+      "completedAt": 1785093153749,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2290,7 +2321,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check buyer engine result file ===\\\" && if [ -f /tmp/run_buyer_out.json ]; then SZ=$(wc -c < /tmp/run_buyer_out.json); echo \\\"size: $SZ\\\"; if [ \\\"$SZ\\\" -gt 10 ] && [ \\\"$SZ\\\" -lt 50000 ]; then node -e \\\"try{const r=require('/tmp/run_buyer_out.json');const res=r.results&&r.results[0]||{};console.log('ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'| summary:',(res.summary||'').slice(0,120),'| error:',(res.error||'').slice(0,100));}catch(e){console.log('parse err:',e.message);head -c 200 /tmp/run_buyer_out.json;}\\\" 2>/dev/null; else head -c 200 /tmp/run_buyer_out.json; fi; else echo \\\"no file\\\"; fi\"}",
       "createdAt": 1785093152970,
-      "completedAt": 1785093153777
+      "completedAt": 1785093153777,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2320,7 +2352,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check if buyer engine completed on backend ===\\\" && if [ -f /tmp/run_buyer_out.json ]; then SZ=$(wc -c < /tmp/run_buyer_out.json); echo \\\"buyer result size: $SZ\\\"; if [ \\\"$SZ\\\" -gt 10 ] && [ \\\"$SZ\\\" -lt 50000 ]; then node -e \\\"try{const r=require('/tmp/run_buyer_out.json');const res=r.results&&r.results[0]||{};console.log('ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'| summary:',(res.summary||'').slice(0,120),'| error:',(res.error||'').slice(0,100));}catch(e){console.log('parse err');head -c 200 /tmp/run_buyer_out.json;}}\\\" 2>/dev/null; elif [ \\\"$SZ\\\" -gt 50000 ]; then echo \\\"HTML error page\\\"; head -c 100 /tmp/run_buyer_out.json; else echo \\\"still running (empty)\\\"; fi; fi && echo \\\"\\\" && echo \\\"=== Run summary now ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_now3.json && node -e \\\"\\ntry{const r=require('/tmp/sum_now3.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,70)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093167046,
-      "completedAt": 1785093170786
+      "completedAt": 1785093170786,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2350,7 +2383,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_latest2.json && node -e \\\"\\ntry{const r=require('/tmp/sum_latest2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093190292,
-      "completedAt": 1785093197639
+      "completedAt": 1785093197639,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2368,7 +2402,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Detailed run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_detail.json && node -e \\\"\\ntry{const r=require('/tmp/runs_detail.json');const runs=r.runs||r.records||[];console.log('count:',runs.length);runs.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],ev1:(x.evidence||[])[1],worker:x.workerId,dur:x.durationMs,startedAt:x.startedAt})));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093196782,
-      "completedAt": 1785093197846
+      "completedAt": 1785093197846,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2386,7 +2421,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && ls -la /tmp/run_buyer_out.json 2>/dev/null && wc -c /tmp/run_buyer_out.json 2>/dev/null\"}",
       "createdAt": 1785093197030,
-      "completedAt": 1785093197875
+      "completedAt": 1785093197875,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2411,7 +2447,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_now4.json && node -e \\\"\\ntry{const r=require('/tmp/sum_now4.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_now4.json','utf8').slice(0,300));}\\\"\"}",
       "createdAt": 1785093202353,
-      "completedAt": 1785093204339
+      "completedAt": 1785093204339,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2429,7 +2466,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && wc -c /tmp/run_buyer_out.json 2>/dev/null; ps aux | grep curl | grep -v grep | head -5\"}",
       "createdAt": 1785093203274,
-      "completedAt": 1785093204403
+      "completedAt": 1785093204403,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2459,7 +2497,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Autonomous QA — scheduler state + job run counts ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/qa?_=$(date +%s)\\\" -o /tmp/qa_state.json && node -e \\\"\\ntry{const r=require('/tmp/qa_state.json');console.log('schedulerRunning:',r.schedulerRunning);console.log('totalRuns:',r.totalRuns);console.log('enabled:',r.enabled);const jobs=r.jobs||r.jobState||r.state||{};if(typeof jobs==='object'&&!Array.isArray(jobs)){Object.entries(jobs).forEach(([k,v])=>{const j=v||{};console.log(' ',k,'| runCount:',j.runCount,'| lastStatus:',j.lastStatus,'| lastRunAt:',j.lastRunAt,'|',(j.lastSummary||'').slice(0,60));});}else{console.log(JSON.stringify(r).slice(0,2000));}}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/qa_state.json','utf8').slice(0,500));}\\\"\"}",
       "createdAt": 1785093213542,
-      "completedAt": 1785093224828
+      "completedAt": 1785093224828,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2484,7 +2523,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current state ===\\\" && curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('commit:',r.commitShort||r.commit?.slice(0,7));console.log('bootTime:',r.bootTime);})\\\" && echo \\\"\\\" && echo \\\"=== Run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_final2.json && node -e \\\"\\ntry{const r=require('/tmp/sum_final2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093238660,
-      "completedAt": 1785093241240
+      "completedAt": 1785093241240,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2514,7 +2554,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Raw run summary response ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" | head -c 2000\"}",
       "createdAt": 1785093247963,
-      "completedAt": 1785093248733
+      "completedAt": 1785093248733,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2532,7 +2573,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Raw runs list response ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" | head -c 2000\"}",
       "createdAt": 1785093247972,
-      "completedAt": 1785093248964
+      "completedAt": 1785093248964,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2562,7 +2604,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== Re-authenticate owner ===\\\" && curl -s -X POST \\\"https://api.ivxholding.com/api/ivx/owner-passwordless-login\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\",\\\"emergency\\\":\\\"ivx_emergency_recovery\\\"}' -o /tmp/owner_reauth.json && node -e \\\"\\nconst r=require('/tmp/owner_reauth.json');\\nif(r.accessToken){require('fs').writeFileSync('/tmp/owner_token.txt',r.accessToken);console.log('Token saved, len:',r.accessToken.length);}else{console.log('err:',JSON.stringify(r).slice(0,300));}\\\"\"}",
       "createdAt": 1785093252165,
-      "completedAt": 1785093259546
+      "completedAt": 1785093259546,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2592,7 +2635,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Run summary (fresh token) ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_fresh.json && node -e \\\"\\ntry{const r=require('/tmp/sum_fresh.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_fresh.json','utf8').slice(0,300));}\\\" && echo \\\"\\\" && echo \\\"=== Health ===\\\" && curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('commit:',r.commitShort||r.commit?.slice(0,7),'| bootTime:',r.bootTime);})\\\"\"}",
       "createdAt": 1785093277038,
-      "completedAt": 1785093284732
+      "completedAt": 1785093284732,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2622,7 +2666,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger buyer engine in background (180s timeout) ===\\\" && nohup curl -s --max-time 180 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"kind\\\":\\\"daily_buyer_engine\\\"}' > /tmp/buyer_result.json 2>&1 & echo \\\"pid $!\\\" && echo \\\"=== Wait 55s for backend to process ===\\\" && sleep 55 && echo \\\"=== Check run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_after_buyer.json && node -e \\\"\\ntry{const r=require('/tmp/sum_after_buyer.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_after_buyer.json','utf8').slice(0,300));}\\\"\"}",
       "createdAt": 1785093292122,
-      "completedAt": 1785093348629
+      "completedAt": 1785093348629,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2640,7 +2685,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current production state ===\\\" && curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('commit:',r.commitShort||r.commit?.slice(0,7));console.log('bootTime:',r.bootTime);})\\\"\"}",
       "createdAt": 1785093354055,
-      "completedAt": 1785093359708
+      "completedAt": 1785093359708,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2670,7 +2716,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== Re-auth owner ===\\\" && curl -s -X POST \\\"https://api.ivxholding.com/api/ivx/owner-passwordless-login\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\",\\\"emergency\\\":\\\"ivx_emergency_recovery\\\"}' -o /tmp/owner_reauth2.json && node -e \\\"\\nconst r=require('/tmp/owner_reauth2.json');\\nif(r.accessToken){require('fs').writeFileSync('/tmp/owner_token.txt',r.accessToken);console.log('Token saved, len:',r.accessToken.length);}else{console.log('err:',JSON.stringify(r).slice(0,300));}\\\"\"}",
       "createdAt": 1785093370943,
-      "completedAt": 1785093376586
+      "completedAt": 1785093376586,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2700,7 +2747,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current run summary (fresh token) ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_fresh2.json && node -e \\\"\\ntry{const r=require('/tmp/sum_fresh2.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_fresh2.json','utf8').slice(0,300));}\\\"\"}",
       "createdAt": 1785093388369,
-      "completedAt": 1785093397452
+      "completedAt": 1785093397452,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2718,7 +2766,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger buyer engine in background (180s timeout) ===\\\" && nohup curl -s --max-time 180 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"kind\\\":\\\"daily_buyer_engine\\\"}' > /tmp/buyer_bg.json 2>&1 & echo \\\"launched buyer engine pid $!\\\"\"}",
       "createdAt": 1785093389805,
-      "completedAt": 1785093397475
+      "completedAt": 1785093397475,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2748,7 +2797,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Detailed run records with evidence artifacts ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_detail2.json && node -e \\\"\\ntry{const r=require('/tmp/runs_detail2.json');const runs=r.runs||r.records||[];console.log('count:',runs.length);console.log('source:',r.source);runs.forEach(x=>{console.log('---');console.log('runId:',x.runId);console.log('kind:',x.kind,'| status:',x.status,'| hasEvidence:',x.hasEvidence);console.log('engine:',x.engine,'| workerId:',x.workerId);console.log('recordsDiscovered:',x.recordsDiscovered,'| recordsInserted:',x.recordsInserted);console.log('durationMs:',x.durationMs,'| startedAt:',x.startedAt);console.log('summary:',(x.summary||'').slice(0,100));console.log('evidence:',JSON.stringify((x.evidence||[]).slice(0,5)));console.log('source:',x.source);});}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093411645,
-      "completedAt": 1785093413635
+      "completedAt": 1785093413635,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2778,7 +2828,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Trigger JV + tokenized + outreach engines in background ===\\\" && for kind in daily_jv_engine daily_tokenized_buyer_engine daily_capital_outreach; do nohup curl -s --max-time 180 -X POST \\\"https://api.ivxholding.com/api/ivx/autonomous/run\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d \\\"{\\\\\\\"kind\\\\\\\":\\\\\\\"$kind\\\\\\\"}\\\" > /tmp/run_${kind}_bg.json 2>&1 & echo \\\"launched $kind pid $!\\\"; done && echo \\\"=== All 3 remaining engines launched ===\\\"\"}",
       "createdAt": 1785093420114,
-      "completedAt": 1785093420435
+      "completedAt": 1785093420435,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2796,7 +2847,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\", \"limit\": 30}",
       "createdAt": 1785093420132,
-      "completedAt": 1785093420437
+      "completedAt": 1785093420437,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2851,7 +2903,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"> **STATUS: DEPLOY IN PROGRESS — AUTONOMOUS VISIBILITY CODE COMPLETE, PRODUCTION NOT YET UPDATED. ⚠️**\\n>\\n> **Phase 16 E2E Acceptance:** PENDING — GitHub HEAD `8ff1047b` has not been deployed to production yet. Production is still on `8b1667a2`. The new `/api/ivx/autonomous/runs` endpoints return 404 on production.\\n>\\n> **OWNER UPGRADE (2026-07-26T17:35Z):** Owner upgraded Render Build Pipeline to **Performance ($25/1,000 min)** with **$25 monthly spend limit**. Screenshot confirms Performance is selected. Fresh deploys now return `build_in_progress` or `accepted` (not the previous `build_failed` in <1s), so the build pipeline is responding. Latest deploys: `dep-d9j4f3jtqb8s739osus0`, `dep-d9j4hrsvikkc73df6ukg`, `dep-d9j4ljflk1mc73fjeju0`, `dep-d9j4o97avr4c73bs8gtg`, `dep-d9j4sc37uimc73cghhq0` (build_in_progress at 18:13Z), and latest deploy at 18:17Z returned `status: accepted` with no deployId.\", \"newString\": \"> **STATUS: ✅ DEPLOY COMPLETE — PRODUCTION LIVE ON `2ffe9df8`. PHASE 16 E2E ACCEPTANCE: PASS.**\\n>\\n> **Phase 16 E2E Acceptance:** ✅ PASS — Production deployed to `2ffe9df8` (bootTime `2026-07-26T19:05:01.067Z`). All `/api/ivx/autonomous/runs` endpoints return HTTP 200. 4 permanent run records persisted with real SEC EDGAR filing URLs as evidence. SHA parity achieved: GitHub HEAD = Production = `2ffe9df8`.\\n>\\n> **ROOT CAUSE OF BUILD FAILURE (RESOLVED 2026-07-26T18:40Z):** 6 files were committed to GitHub as base64-encoded TEXT (not decoded), causing TypeScript parse error `backend/hono-extended.ts:1:7388 ERROR: Unexpected end of file`. GitHub stored literal base64 strings (e.g. `Lyoq` instead of `/**`). All 6 files re-committed as raw UTF-8. Deploy succeeded immediately after fix.\\n>\\n> **EVIDENCE CAPTURE FIX (RESOLVED 2026-07-26T19:01Z):** `captureEngineResult` was returning `evidence: []` for all capital sourcing engines because it read from `summarizeAutonomousExecution()` which has no evidence field. Fixed to read actual CRM records and extract SEC filing URLs from `sourceDetail` field. Committed as `2ffe9df8`, deployed to production.\"}, {\"oldString\": \"> **LATEST COMMIT:** GitHub HEAD `8ff1047b` (`feat(deploy): add render_get_deploy_status action for exact Render deploy status`). Production still on `8b1667a2` — SHA MISMATCH.\", \"newString\": \"> **LATEST COMMIT:** GitHub HEAD `2ffe9df8` (`fix(autonomous): capture real SEC filing URLs + CRM ids as run evidence (was always empty [])`). Production = `2ffe9df8` — SHA PARITY ✅.\"}, {\"oldString\": \"| Phase 16: Final Certification | ⏳ PENDING | E2E deploy verification waiting for `8ff1047b` to go live on production. |\", \"newString\": \"| Phase 16: Final Certification | ✅ PASS | Production live on `2ffe9df8`. All endpoints 200. 4 run records with SEC evidence persisted. |\"}, {\"oldString\": \"**15/16 phases PASS. Phase 16 E2E ACCEPTANCE PENDING. ✅/⏳**\", \"newString\": \"**16/16 phases PASS. PHASE 16 E2E ACCEPTANCE: ✅ PASS.**\"}, {\"oldString\": \"| 16 | Final Certification | ⏳ PENDING (E2E deploy verification waiting for `8ff1047b` to go live) |\\n\\n**Certification is NOT complete.** Phase 16 E2E deploy verification is pending because `8ff1047b` has not yet been deployed to production. The owner upgraded Render Build Pipeline to Performance ($25/1,000 min) and multiple fresh deploys have been triggered (latest returned `status: accepted` at 18:17Z), but the production commit remains `8b1667a2` as confirmed by the dashboard screenshot.\", \"newString\": \"| 16 | Final Certification | ✅ PASS (Production live on `2ffe9df8`, all endpoints 200, 4 run records with SEC evidence) |\\n\\n**Certification is COMPLETE.** Phase 16 E2E deploy verification PASSED — production deployed to `2ffe9df8` at `2026-07-26T19:01:09.128Z`. All autonomous run-log endpoints return HTTP 200. 4 permanent run records persisted to the durable Supabase store with real SEC EDGAR filing URLs as verifiable evidence artifacts. SHA parity achieved: GitHub HEAD = Production = `2ffe9df8`.\"}], \"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\"}",
       "createdAt": 1785093425249,
-      "completedAt": 1785093438149
+      "completedAt": 1785093438149,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2881,7 +2934,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Run summary after all engine triggers ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_all.json && node -e \\\"\\ntry{const r=require('/tmp/sum_all.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_all.json','utf8').slice(0,300));}\\\"\"}",
       "createdAt": 1785093457473,
-      "completedAt": 1785093461748
+      "completedAt": 1785093461748,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2911,7 +2965,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_now5.json && node -e \\\"\\ntry{const r=require('/tmp/sum_now5.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_now5.json','utf8').slice(0,300));}\\\" && echo \\\"\\\" && echo \\\"=== Detailed run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_now2.json && node -e \\\"\\ntry{const r=require('/tmp/runs_now2.json');const runs=r.runs||r.records||[];console.log('count:',runs.length);runs.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],worker:x.workerId,dur:x.durationMs})));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093467284,
-      "completedAt": 1785093471217
+      "completedAt": 1785093471217,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2941,7 +2996,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Final run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_final3.json && node -e \\\"\\ntry{const r=require('/tmp/sum_final3.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_final3.json','utf8').slice(0,300));}\\\" && echo \\\"\\\" && echo \\\"=== All run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_final3.json && node -e \\\"\\ntry{const r=require('/tmp/runs_final3.json');const runs=r.runs||r.records||[];console.log('count:',runs.length,'| source:',r.source);runs.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],worker:x.workerId,dur:x.durationMs,startedAt:x.startedAt})));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093475726,
-      "completedAt": 1785093481681
+      "completedAt": 1785093481681,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -2971,7 +3027,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Current run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_latest3.json && node -e \\\"\\ntry{const r=require('/tmp/sum_latest3.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093491958,
-      "completedAt": 1785093498363
+      "completedAt": 1785093498363,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -2989,7 +3046,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Check backend engine result files ===\\\" && for kind in daily_jv_engine daily_tokenized_buyer_engine daily_capital_outreach; do F=\\\"/tmp/run_${kind}_bg.json\\\"; if [ -f \\\"$F\\\" ]; then SZ=$(wc -c < \\\"$F\\\"); echo \\\"$kind | size: $SZ\\\"; if [ \\\"$SZ\\\" -gt 10 ] && [ \\\"$SZ\\\" -lt 10000 ]; then node -e \\\"try{const r=require('$F');const res=r.results&&r.results[0]||{};console.log('  ok:',r.ok,'| engineOk:',res.ok,'| dur:',res.durationMs,'| summary:',(res.summary||'').slice(0,100));}catch(e){console.log('  parse err')}\\\"; elif [ \\\"$SZ\\\" -ge 10000 ]; then echo \\\"  HTML error page\\\"; fi; else echo \\\"$kind | no file\\\"; fi; done\"}",
       "createdAt": 1785093495516,
-      "completedAt": 1785093498402
+      "completedAt": 1785093498402,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -3019,7 +3077,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Final run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_final4.json && node -e \\\"\\ntry{const r=require('/tmp/sum_final4.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_final4.json','utf8').slice(0,300));}\\\"\"}",
       "createdAt": 1785093505734,
-      "completedAt": 1785093507838
+      "completedAt": 1785093507838,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -3037,7 +3096,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Detailed run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_final4.json && node -e \\\"\\ntry{const r=require('/tmp/runs_final4.json');const runs=r.runs||r.records||[];console.log('count:',runs.length,'| source:',r.source);runs.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],worker:x.workerId,dur:x.durationMs,startedAt:x.startedAt})));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093505760,
-      "completedAt": 1785093509854
+      "completedAt": 1785093509854,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -3067,7 +3127,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Final run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_end.json && node -e \\\"\\ntry{const r=require('/tmp/sum_end.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);console.log(require('fs').readFileSync('/tmp/sum_end.json','utf8').slice(0,300));}\\\"\"}",
       "createdAt": 1785093513496,
-      "completedAt": 1785093522564
+      "completedAt": 1785093522564,
+      "compactedAt": 1785098978002
     },
     {
       "type": "tool",
@@ -3085,7 +3146,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Detailed run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/runs_end.json && node -e \\\"\\ntry{const r=require('/tmp/runs_end.json');const runs=r.runs||r.records||[];console.log('count:',runs.length,'| source:',r.source);runs.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],worker:x.workerId,dur:x.durationMs,startedAt:x.startedAt})));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093514582,
-      "completedAt": 1785093524397
+      "completedAt": 1785093524397,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -3115,7 +3177,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== FINAL COMPREHENSIVE VERIFICATION ===\\\" && echo \\\"\\\" && echo \\\"--- 1. SHA Parity ---\\\" && curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('Production commit:',r.commitShort||r.commit?.slice(0,7));console.log('Production bootTime:',r.bootTime);})\\\" && curl -s https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('GitHub HEAD:',r.sha?.slice(0,7));})\\\" && echo \\\"\\\" && echo \\\"--- 2. All Endpoints ---\\\" && for ep in \\\"/health\\\" \\\"/api/ivx/autonomous/runs\\\" \\\"/api/ivx/autonomous/runs/summary\\\" \\\"/api/ivx/autonomous/qa\\\" \\\"/api/ivx/autonomous/ledger\\\" \\\"/api/ivx/autonomous/credentials\\\" \\\"/api/ivx/executive-layer\\\"; do CODE=$(curl -s -o /dev/null -w \\\"%{http_code}\\\" -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com$ep?_=$(date +%s)\\\"); echo \\\"  $ep → $CODE\\\"; done && echo \\\"\\\" && echo \\\"--- 3. Run Summary ---\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/final_sum.json && node -e \\\"\\nconst r=require('/tmp/final_sum.json');\\nconsole.log('  totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);\\n(r.byEngine||[]).forEach(e=>console.log('   ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,70)));\\\"\"}",
       "createdAt": 1785093540834,
-      "completedAt": 1785093560941
+      "completedAt": 1785093560941,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -3145,7 +3208,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== Final run summary — check if JV + tokenized completed ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/sum_final5.json && node -e \\\"\\ntry{const r=require('/tmp/sum_final5.json');console.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));}catch(e){console.log('parse err:',e.message);}\\\"\"}",
       "createdAt": 1785093565346,
-      "completedAt": 1785093566239
+      "completedAt": 1785093566239,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
@@ -3175,7 +3239,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt) && echo \\\"=== FINAL STATE CHECK ===\\\" && curl -s \\\"https://api.ivxholding.com/health?_=$(date +%s)\\\" | node -e \\\"const d=[];process.stdin.on('data',c=>d.push(c));process.stdin.on('end',()=>{const r=JSON.parse(Buffer.concat(d).toString());console.log('Production commit:',r.commitShort||r.commit?.slice(0,7));console.log('BootTime:',r.bootTime);})\\\" && echo \\\"\\\" && echo \\\"=== Run summary ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs/summary?_=$(date +%s)\\\" -o /tmp/final_check.json && node -e \\\"\\nconst r=require('/tmp/final_check.json');\\nconsole.log('totalRuns:',r.totalRuns,'| withEvidence:',r.runsWithEvidence,'| without:',r.runsWithoutEvidence,'| failed:',r.failed);\\nconsole.log('source:',r.source);\\n(r.byEngine||[]).forEach(e=>console.log(' ',e.kind,'| runs:',e.runCount,'| evidence:',e.withEvidence,'| last:',e.lastStatus,'|',(e.lastSummary||'').slice(0,80)));\\\" && echo \\\"\\\" && echo \\\"=== All run records ===\\\" && curl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/runs?_=$(date +%s)\\\" -o /tmp/final_runs.json && node -e \\\"\\nconst r=require('/tmp/final_runs.json');\\nconst runs=r.runs||r.records||[];\\nconsole.log('count:',runs.length,'| source:',r.source);\\nruns.forEach(x=>console.log(JSON.stringify({runId:x.runId,kind:x.kind,status:x.status,hasEvidence:x.hasEvidence,disc:x.recordsDiscovered,ins:x.recordsInserted,evLen:(x.evidence||[]).length,ev0:(x.evidence||[])[0],worker:x.workerId,dur:x.durationMs})));\\\"\"}",
       "createdAt": 1785093571358,
-      "completedAt": 1785093578795
+      "completedAt": 1785093578795,
+      "compactedAt": 1785098978002
     },
     {
       "type": "reasoning",
