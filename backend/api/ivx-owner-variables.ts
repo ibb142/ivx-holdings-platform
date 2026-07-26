@@ -1059,6 +1059,49 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
     await client.send(new awsSts.GetCallerIdentityCommand({}));
     return { provider: 'aws', status: 'tested', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false };
   } catch (error) {
+    // If the SDK fails, try a raw SigV4 request to rule out SDK issues.
+    // This manually signs an STS GetCallerIdentity POST with HMAC-SHA256.
+    let rawSigV4Result = '';
+    try {
+      const crypto = await import('node:crypto');
+      const host = 'sts.amazonaws.com';
+      const service = 'sts';
+      const amzDate = new Date().toISOString().replace(/[:-]\.\d{3}/g, '').replace(/(\d{8})T(\d{6})/, '$1T$2');
+      const dateStamp = amzDate.slice(0, 8);
+      const payload = 'Action=GetCallerIdentity&Version=2011-06-15';
+      const payloadHash = crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
+      const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
+      const signedHeaders = 'host;x-amz-date';
+      const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+      const canonicalRequestHash = crypto.createHash('sha256').update(canonicalRequest, 'utf8').digest('hex');
+      const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+      const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${canonicalRequestHash}`;
+      const kDate = crypto.createHmac('sha256', `AWS4${secretAccessKey}`).update(dateStamp, 'utf8').digest();
+      const kRegion = crypto.createHmac('sha256', kDate).update(region, 'utf8').digest();
+      const kService = crypto.createHmac('sha256', kRegion).update(service, 'utf8').digest();
+      const kSigning = crypto.createHmac('sha256', kService).update('aws4_request', 'utf8').digest();
+      const signature = crypto.createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+      const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+      const rawResponse = await fetch(`https://${host}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+          'X-Amz-Date': amzDate,
+          Authorization: authorization,
+          'Content-Length': String(Buffer.byteLength(payload)),
+        },
+        body: payload,
+      });
+      const rawText = await rawResponse.text();
+      if (rawResponse.ok) {
+        rawSigV4Result = `rawSigV4=SUCCESS(httpStatus=${rawResponse.status})`;
+      } else {
+        const errMatch = rawText.match(/<Message>([^<]+)<\/Message>/);
+        rawSigV4Result = `rawSigV4=FAIL(httpStatus=${rawResponse.status}, msg=${errMatch ? errMatch[1] : rawText.slice(0, 200)})`;
+      }
+    } catch (rawError) {
+      rawSigV4Result = `rawSigV4=ERROR(${rawError instanceof Error ? rawError.message.slice(0, 100) : 'unknown'})`;
+    }
     const errorMsg = error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'AWS read-only identity test failed.';
     // Always include diagnostic info (even when all checks pass) so the owner
     // can see the credential metadata that explains WHY SigV4 fails.
@@ -1073,7 +1116,11 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
       `sessionToken=${sessionToken ? 'present' : 'none'}`,
       `region=${region}`,
       `source=${readEnv('AWS_ACCESS_KEY_ID') ? 'env:AWS_ACCESS_KEY_ID' : readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') ? 'env:IVX_AWS_READONLY' : 'store'}`,
+      `accessKeyPrefix=${accessKeyId.slice(0, 4)}`,
+      `secretPrefix=${secretAccessKey.slice(0, 3)}`,
+      `secretSuffix=${secretAccessKey.slice(-2)}`,
       ...(diagnostics.length > 0 ? diagnostics : ['all-format-checks-passed']),
+      rawSigV4Result,
     ].join(', ');
     const detail = `${errorMsg} | Diag: ${diagSummary}`;
     return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: detail };
