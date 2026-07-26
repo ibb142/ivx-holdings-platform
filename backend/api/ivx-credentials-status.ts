@@ -56,14 +56,14 @@ function envClean(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-async function safeFetch(url: string, init?: RequestInit): Promise<{ status: number | null; body: string; error: string | null }> {
+async function safeFetch(url: string, init?: RequestInit): Promise<{ status: number | null; body: string; error: string | null; headers: Headers | null }> {
   try {
     const response = await fetch(url, { ...init, signal: AbortSignal.timeout(TEST_TIMEOUT_MS) });
     const body = await response.text();
-    return { status: response.status, body: body.slice(0, 2000), error: null };
+    return { status: response.status, body: body.slice(0, 2000), error: null, headers: response.headers };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return { status: null, body: '', error: message.slice(0, 200) };
+    return { status: null, body: '', error: message.slice(0, 200), headers: null };
   }
 }
 
@@ -94,23 +94,33 @@ async function testGitHub(): Promise<CredentialRow> {
   const user = await safeFetch('https://api.github.com/user', { headers });
   const slug = repoSlugFromUrl();
   const repo = await safeFetch(`https://api.github.com/repos/${slug}`, { headers });
+  // Read X-OAuth-Scopes header to check for workflow scope (classic PAT)
+  const oauthScopesHeader = user.headers?.get('x-oauth-scopes') ?? '';
+  const scopesList = oauthScopesHeader.split(',').map((s) => s.trim()).filter(Boolean);
+  const hasWorkflowScope = scopesList.some((s) => s === 'workflow' || s === 'repo');
+  const hasExplicitWorkflowScope = scopesList.some((s) => s === 'workflow');
   let permissionTest = 'unknown';
+  let push = false;
+  let admin = false;
   try {
     const parsed = JSON.parse(repo.body) as { permissions?: { push?: boolean; admin?: boolean } };
-    const push = parsed.permissions?.push === true;
-    permissionTest = push ? 'push+admin OK; workflow scope ABSENT (scope=repo)' : 'push permission missing';
+    push = parsed.permissions?.push === true;
+    admin = parsed.permissions?.admin === true;
+    permissionTest = push ? `push+admin OK; scopes=[${oauthScopesHeader || 'none'}]; workflow=${hasExplicitWorkflowScope ? 'PRESENT' : 'ABSENT'}` : 'push permission missing';
   } catch {
-    permissionTest = `repo read HTTP ${repo.status ?? 'ERR'}`;
+    permissionTest = `repo read HTTP ${repo.status ?? 'ERR'}; scopes=[${oauthScopesHeader || 'none'}]`;
   }
   const authenticated = user.status === 200 && repo.status === 200;
+  // VERIFIED requires: authenticated + push permission + workflow scope present
+  const fullyVerified = authenticated && push && hasExplicitWorkflowScope;
   return {
     ...base,
     authenticated,
     permissionTest,
-    runtimeTest: `GET /user → ${user.status ?? user.error}; GET /repos/${slug} → ${repo.status ?? repo.error}`,
+    runtimeTest: `GET /user → ${user.status ?? user.error} (scopes: ${oauthScopesHeader || 'none'}); GET /repos/${slug} → ${repo.status ?? repo.error} (push=${push}, admin=${admin})`,
     httpStatus: user.status,
-    blocker: authenticated ? 'workflow scope absent — CI workflow registration requires new token scope (APR-004)' : 'GitHub auth failed',
-    finalStatus: authenticated ? 'PARTIAL' : 'BLOCKED',
+    blocker: authenticated ? (hasExplicitWorkflowScope ? null : 'workflow scope absent — CI workflow registration requires new token scope (APR-004)') : 'GitHub auth failed',
+    finalStatus: fullyVerified ? 'VERIFIED' : (authenticated ? 'PARTIAL' : 'BLOCKED'),
   };
 }
 
@@ -192,10 +202,39 @@ async function testAwsSms(): Promise<CredentialRow> {
   };
 }
 
-function testAiGateway(): CredentialRow {
+async function testAiGateway(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
-  const stored = envPresent('AI_GATEWAY_API_KEY') || envPresent('OPENAI_API_KEY');
-  return { service: 'AI Gateway', variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY', environment: 'render', stored, injected: stored, authenticated: null, permissionTest: stored ? 'key present with expected gateway format' : 'absent', runtimeTest: stored ? 'presence + format verified; live model calls exercised by IA services' : 'variable absent', httpStatus: null, securityCheck: 'server-only', blocker: stored ? null : 'AI gateway key not injected', worker: 'W12', finalStatus: stored ? 'PARTIAL' : 'BLOCKED', testedAt };
+  const key = envClean('AI_GATEWAY_API_KEY') || envClean('OPENAI_API_KEY');
+  const stored = key.length > 0;
+  if (!stored) {
+    return { service: 'AI Gateway', variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY', environment: 'render', stored: false, injected: false, authenticated: false, permissionTest: 'absent', runtimeTest: 'variable absent', httpStatus: null, securityCheck: 'server-only', blocker: 'AI gateway key not injected', worker: 'W12', finalStatus: 'BLOCKED', testedAt };
+  }
+  // Live test: call the AI gateway with a minimal chat completion
+  const gatewayUrl = envClean('AI_GATEWAY_BASE_URL') || 'https://ai-gateway.vercel.sh/v1/chat/completions';
+  const testUrl = gatewayUrl.endsWith('/chat/completions') ? gatewayUrl : (gatewayUrl.endsWith('/v1') ? gatewayUrl + '/chat/completions' : gatewayUrl.replace(/\/?$/, '') + '/v1/chat/completions');
+  const result = await safeFetch(testUrl, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: '1+1' }], max_tokens: 5 }),
+  });
+  const authenticated = result.status !== null && result.status >= 200 && result.status < 300;
+  const keyPrefix = key.slice(0, 4) + '***';
+  return {
+    service: 'AI Gateway',
+    variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY',
+    environment: 'render',
+    stored: true,
+    injected: true,
+    authenticated,
+    permissionTest: authenticated ? `live chat completion OK (key ${keyPrefix})` : `key present (${keyPrefix}) but live call failed`,
+    runtimeTest: `POST ${testUrl} → HTTP ${result.status ?? result.error}`,
+    httpStatus: result.status,
+    securityCheck: 'server-only',
+    blocker: authenticated ? null : `AI gateway live test failed (HTTP ${result.status ?? result.error})`,
+    worker: 'W12',
+    finalStatus: authenticated ? 'VERIFIED' : 'PARTIAL',
+    testedAt,
+  };
 }
 
 function supabaseProjectRef(): string {
@@ -250,15 +289,16 @@ export async function handleCredentialsStatusGet(request: Request): Promise<Resp
     return ownerOnlyJson({ ok: false, error: message }, 401);
   }
 
-  const [github, render, supabaseAnon, supabaseServiceRole, awsSms, databaseUrl] = await Promise.all([
+  const [github, render, supabaseAnon, supabaseServiceRole, awsSms, databaseUrl, aiGateway] = await Promise.all([
     testGitHub(),
     testRender(),
     testSupabaseAnon(),
     testSupabaseServiceRole(),
     testAwsSms(),
     testDatabaseUrl(),
+    testAiGateway(),
   ]);
-  const rows: CredentialRow[] = [github, render, supabaseAnon, supabaseServiceRole, awsSms, testAiGateway(), databaseUrl, testOwnerIdentity()];
+  const rows: CredentialRow[] = [github, render, supabaseAnon, supabaseServiceRole, awsSms, aiGateway, databaseUrl, testOwnerIdentity()];
 
   const state = await readDurableJson<CredentialsState>(STATE_FILE, { marker: IVX_CREDENTIALS_STATUS_MARKER, totalRuns: 0, lastRunAt: null });
   state.totalRuns += 1;
