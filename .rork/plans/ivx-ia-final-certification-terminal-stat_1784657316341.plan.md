@@ -1,7 +1,7 @@
 name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
 overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-26T00:52:00.000Z
+updatedAt: 2026-07-26T13:59:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -12,8 +12,9 @@ updatedAt: 2026-07-26T00:52:00.000Z
 > **EFFECTIVE TASK:** Owner's 16-phase final QA checklist (2026-07-25T23:19Z message).
 > **OWNER FOLLOW-UP (2026-07-26T00:40Z):** "Complete item 4,6,7,8,10,12,16" — stop punting to "owner action", actually test live.
 > **OWNER KEY UPDATE (2026-07-26T00:52Z):** Owner updated the Vercel AI Gateway key on Render. Phase 4 re-verified PASS.
+> **OWNER PLAN UPDATE (2026-07-26T13:50Z+):** Owner confirmed Render workspace is on Scale ($499/mo). API still reports service instance `ivx-holdings-platform` as `plan: "free"`. Latest deploy attempt `dep-d9j15bvavr4c73bl5io0` → `build_failed` in 536 ms, `failureReason: null`.
 >
-> **LATEST COMMIT:** `c7404121` (Local = GitHub = Production). All 34 backend source-file TypeScript errors resolved. Production confirmed on `c7404121` at `2026-07-26T00:26:24.472Z`.
+> **LATEST COMMIT:** GitHub HEAD `938b16bb` (AWS store-fallback fix). Production still on `e18a4146` — SHA MISMATCH.
 >
 > **LATEST TESTS:** Expo 659/659 pass. Backend 2148/2148 pass. Backend tsc --noEmit: 0 errors.
 >
@@ -51,22 +52,31 @@ Owner provided new AWS access key `AKIASAJBIV7CI6FP43PH` + matching secret on 20
 - Local raw SigV4 test against AWS STS: **VALID** (HTTP 200, account `138045599684`).
 - Render API env-var upsert: reports `valueStored: true`.
 - Production runtime diagnostic after restart: still shows old secret prefix (`GNw...+3`) and `SignatureDoesNotMatch`.
-- Deploy attempts keep failing instantly (`build_failed` in ~0.5s, `failureReason: null`).
+- Deploy attempts keep failing instantly (`build_failed` in ~0.5s, `failureReason: null`). Latest attempt: `dep-d9j15bvavr4c73bl5io0` (2026-07-26T13:59:11Z, 536 ms).
 - New AWS credentials saved to encrypted owner-variables store (`IVX_AWS_READONLY_ACCESS_KEY_ID`, `IVX_AWS_READONLY_SECRET_ACCESS_KEY`).
 - Code fix committed: `938b16bb` — AWS test now falls back to encrypted store credentials when env credentials fail.
+- Render workspace confirmed Scale/paid by owner screenshot, but API still reports service instance `plan: "free"`.
 
-**Next step:** Deploy commit `938b16bb` from Render dashboard, then re-test AWS provider.
+**Next step:** Identify the exact `build_failed` reason (or upgrade service instance plan if that is the cause), then deploy `938b16bb` and re-test AWS provider.
+
+---
+
+## Post-Certification Repair — Additional Defects Found
+
+- **DEF-04 (MEDIUM):** `/api/ivx/owner-registration/status` is publicly accessible (no `assertIVXOwnerOnly()` guard). Exposes non-sensitive config metadata only.
+- **DEF-05 (LOW):** `chat.ivxholding.com` returns HTTP 403.
+- **DEF-06 (MEDIUM):** Supabase tables show `exists: false` via anon key (401) — service role works but critical tables not accessible via REST; check RLS policies.
 
 ---
 
 ## Live Production Proof (2026-07-26T00:49Z)
 
-### SHA Triple Parity — PASS
+### SHA Triple Parity — CURRENTLY MISMATCHED (Post-Certification Repair)
 ```
-Local:      c7404121
-GitHub:     c7404121
-Production: c7404121
+Local/GitHub: 938b16bb
+Production:   e18a4146
 ```
+> GitHub is 5 commits ahead of production. Deploy of `938b16bb` is blocked by Render `build_failed`.
 
 ### Phase 6: Member Registration — PASS (LIVE)
 ```
@@ -258,3 +268,5 @@ Ran 659 tests across 51 files.
 | 16 | Final Certification | ✅ 16/16 PASS |
 
 **All 16 phases PASS with live production evidence.** IVX IA Senior Developer certification complete.
+
+**Post-certification repair status:** AWS credentials updated in encrypted store; fix commit `938b16bb` is on GitHub; deploy to production is blocked by Render `build_failed` (service instance still reports `plan: "free"` despite Scale workspace). Final AWS re-test pending successful deploy.

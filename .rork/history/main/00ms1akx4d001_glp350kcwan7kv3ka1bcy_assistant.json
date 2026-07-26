@@ -356,7 +356,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-owner-variables.ts\", \"limit\": 60, \"offset\": 1000}",
       "createdAt": 1785037413538,
-      "completedAt": 1785037413806
+      "completedAt": 1785037413806,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -375,7 +376,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-owner-variables.ts\", \"limit\": 50, \"offset\": 820}",
       "createdAt": 1785037413539,
-      "completedAt": 1785037413807
+      "completedAt": 1785037413807,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -406,7 +408,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-owner-variables.ts\", \"limit\": 75, \"offset\": 1059}",
       "createdAt": 1785037431398,
-      "completedAt": 1785037431402
+      "completedAt": 1785037431402,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -446,7 +449,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {\\n  // Resolve credentials from process.env FIRST (the live runtime), then fall\\n  // back to the encrypted owner-variable store. This matches every other AWS\\n  // code path in the codebase (ivx-ai-brain-tool-executor, ivx-apk-distribution,\\n  // getIVXOwnerVariableRuntimeValue) and prevents a stale encrypted-store value\\n  // from causing SignatureDoesNotMatch when the runtime env has been rotated.\\n  const accessKeyId =\\n    readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') || readEnv('AWS_ACCESS_KEY_ID') || values.IVX_AWS_READONLY_ACCESS_KEY_ID || '';\\n  const secretAccessKey =\\n    readEnv('IVX_AWS_READONLY_SECRET_ACCESS_KEY') || readEnv('AWS_SECRET_ACCESS_KEY') || values.IVX_AWS_READONLY_SECRET_ACCESS_KEY || '';\\n  const sessionToken =\\n    readEnv('IVX_AWS_READONLY_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN') || undefined;\\n  const region = readEnv('AWS_REGION') || values.AWS_REGION || 'us-east-1';\", \"newString\": \"/** Run an STS GetCallerIdentity call with an explicit credential pair.\\n * Returns null on success, or a short diagnostic string on failure. */\\nasync function probeStsWithCredentials(\\n  accessKeyId: string,\\n  secretAccessKey: string,\\n  sessionToken: string | undefined,\\n  region: string,\\n): Promise<string | null> {\\n  try {\\n    const awsSts = await import('@aws-sdk/client-sts');\\n    const client = new awsSts.STSClient({\\n      region,\\n      credentials: { accessKeyId, secretAccessKey, ...(sessionToken ? { sessionToken } : {}) },\\n    });\\n    await client.send(new awsSts.GetCallerIdentityCommand({}));\\n    return null;\\n  } catch (error) {\\n    return error instanceof Error ? sanitizeExternalErrorDetail(error.message).slice(0, 120) : 'unknown';\\n  }\\n}\\n\\nasync function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {\\n  // Resolve credentials from process.env FIRST (the live runtime), then fall\\n  // back to the encrypted owner-variable store. This matches every other AWS\\n  // code path in the codebase (ivx-ai-brain-tool-executor, ivx-apk-distribution,\\n  // getIVXOwnerVariableRuntimeValue) and prevents a stale encrypted-store value\\n  // from causing SignatureDoesNotMatch when the runtime env has been rotated.\\n  const accessKeyId =\\n    readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') || readEnv('AWS_ACCESS_KEY_ID') || values.IVX_AWS_READONLY_ACCESS_KEY_ID || '';\\n  const secretAccessKey =\\n    readEnv('IVX_AWS_READONLY_SECRET_ACCESS_KEY') || readEnv('AWS_SECRET_ACCESS_KEY') || values.IVX_AWS_READONLY_SECRET_ACCESS_KEY || '';\\n  const sessionToken =\\n    readEnv('IVX_AWS_READONLY_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN') || undefined;\\n  const region = readEnv('AWS_REGION') || values.AWS_REGION || 'us-east-1';\\n  // Also capture the STORE-ONLY values (what's in the encrypted Supabase store\\n  // but NOT in process.env) to test independently. This reveals whether the\\n  // store holds a different (possibly correct) pair that self-sync overwrote.\\n  const storeAccessKeyId = values.IVX_AWS_READONLY_ACCESS_KEY_ID || values.AWS_ACCESS_KEY_ID || '';\\n  const storeSecretAccessKey = values.IVX_AWS_READONLY_SECRET_ACCESS_KEY || values.AWS_SECRET_ACCESS_KEY || '';\"}, {\"oldString\": \"      `source=${readEnv('AWS_ACCESS_KEY_ID') ? 'env:AWS_ACCESS_KEY_ID' : readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') ? 'env:IVX_AWS_READONLY' : 'store'}`,\\n      `accessKeyPrefix=${accessKeyId.slice(0, 4)}`,\\n      `secretPrefix=${secretAccessKey.slice(0, 3)}`,\\n      `secretSuffix=${secretAccessKey.slice(-2)}`,\\n      ...(diagnostics.length > 0 ? diagnostics : ['all-format-checks-passed']),\\n      rawSigV4Result,\\n    ].join(', ');\\n    const detail = `${errorMsg} | Diag: ${diagSummary}`;\", \"newString\": \"      `source=${readEnv('AWS_ACCESS_KEY_ID') ? 'env:AWS_ACCESS_KEY_ID' : readEnv('IVX_AWS_READONLY_ACCESS_KEY_ID') ? 'env:IVX_AWS_READONLY' : 'store'}`,\\n      `accessKeyPrefix=${accessKeyId.slice(0, 4)}`,\\n      `secretPrefix=${secretAccessKey.slice(0, 3)}`,\\n      `secretSuffix=${secretAccessKey.slice(-2)}`,\\n      `storeKeyPresent=${Boolean(storeAccessKeyId)}`,\\n      `storeKeyLen=${storeAccessKeyId.length}`,\\n      `storeSecretPresent=${Boolean(storeSecretAccessKey)}`,\\n      `storeSecretLen=${storeSecretAccessKey.length}`,\\n      `storeKeyDiffersFromEnv=${storeAccessKeyId && storeAccessKeyId !== accessKeyId ? 'YES' : 'no'}`,\\n      `storeSecretDiffersFromEnv=${storeSecretAccessKey && storeSecretAccessKey !== secretAccessKey ? 'YES' : 'no'}`,\\n      ...(diagnostics.length > 0 ? diagnostics : ['all-format-checks-passed']),\\n      rawSigV4Result,\\n    ].join(', ');\\n    // If the store holds a DIFFERENT pair, test it independently. This is the\\n    // last developer-controlled diagnostic: if the store pair succeeds where\\n    // the env pair fails, the fix is to update Render env from the store.\\n    let storeProbeResult = '';\\n    if (storeAccessKeyId && storeSecretAccessKey && (storeAccessKeyId !== accessKeyId || storeSecretAccessKey !== secretAccessKey)) {\\n      const storeErr = await probeStsWithCredentials(storeAccessKeyId, storeSecretAccessKey, undefined, region);\\n      storeProbeResult = storeErr ? `storeProbe=FAIL(${storeErr.slice(0, 80)})` : 'storeProbe=SUCCESS';\\n    } else {\\n      storeProbeResult = 'storeProbe=SKIPPED(store==env or store empty)';\\n    }\\n    const detail = `${errorMsg} | Diag: ${diagSummary}, ${storeProbeResult}`;\"}], \"filePath\": \"backend/api/ivx-owner-variables.ts\"}",
       "createdAt": 1785037453761,
-      "completedAt": 1785037476580
+      "completedAt": 1785037476580,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -470,7 +474,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --pretty 2>&1 | head -20 && echo \\\"EXIT: ${PIPESTATUS[0]}\\\"\", \"cwd\": \"/home/user/rork-app/backend\"}",
       "createdAt": 1785037482889,
-      "completedAt": 1785037498862
+      "completedAt": 1785037498862,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -505,7 +510,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"  // Also capture the STORE-ONLY values (what's in the encrypted Supabase store\\n  // but NOT in process.env) to test independently. This reveals whether the\\n  // store holds a different (possibly correct) pair that self-sync overwrote.\\n  // StoredSecretMap is keyed by OwnerVariableName; access via a loose record.\\n  const storeValues = values as Record<string, string>;\\n  const storeAccessKeyId = storeValues.IVX_AWS_READONLY_ACCESS_KEY_ID || storeValues.AWS_ACCESS_KEY_ID || '';\\n  const storeSecretAccessKey = storeValues.IVX_AWS_READONLY_SECRET_ACCESS_KEY || storeValues.AWS_SECRET_ACCESS_KEY || '';\", \"oldString\": \"  // Also capture the STORE-ONLY values (what's in the encrypted Supabase store\\n  // but NOT in process.env) to test independently. This reveals whether the\\n  // store holds a different (possibly correct) pair that self-sync overwrote.\\n  const storeAccessKeyId = values.IVX_AWS_READONLY_ACCESS_KEY_ID || values.AWS_ACCESS_KEY_ID || '';\\n  const storeSecretAccessKey = values.IVX_AWS_READONLY_SECRET_ACCESS_KEY || values.AWS_SECRET_ACCESS_KEY || '';\"}], \"filePath\": \"backend/api/ivx-owner-variables.ts\"}",
       "createdAt": 1785037505688,
-      "completedAt": 1785037508390
+      "completedAt": 1785037508390,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -536,7 +542,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --pretty 2>&1 | head -20 && echo \\\"EXIT: $?\\\"\", \"cwd\": \"/home/user/rork-app/backend\"}",
       "createdAt": 1785037521018,
-      "completedAt": 1785037538498
+      "completedAt": 1785037538498,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -567,7 +574,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bun -e \\\"\\nconst fs = require('fs');\\nconst content = fs.readFileSync('backend/api/ivx-owner-variables.ts', 'utf8');\\nconst token = fs.readFileSync('/tmp/owner_token.txt', 'utf8').trim();\\nfetch('https://api.ivxholding.com/api/ivx/developer-deploy/action', {\\n  method: 'POST',\\n  headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },\\n  body: JSON.stringify({\\n    action: 'github_commit_file',\\n    input: { path: 'backend/api/ivx-owner-variables.ts', content, message: 'diag(aws): test encrypted-store credentials independently from process.env' },\\n    confirm: true, confirmText: 'CONFIRM_IVX_GITHUB_WRITE'\\n  })\\n}).then(r => r.json()).then(d => console.log('commit:', d.result?.commitSha, '| ok:', d.ok))\\n.catch(e => console.log('err:', e.message));\\n\\\" 2>&1 && echo \\\"\\\" && echo \\\"=== TRIGGER DEPLOY ===\\\" && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 -X POST \\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"action\\\":\\\"render_trigger_deploy\\\",\\\"confirm\\\":true,\\\"confirmText\\\":\\\"CONFIRM_IVX_RENDER_DEPLOY\\\"}' 2>/dev/null | bun -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('deploy:', d.ok);\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037546479,
-      "completedAt": 1785037559365
+      "completedAt": 1785037559365,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -598,7 +606,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s for ef1b5bb1 container...\\\" && sleep 55 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037565699,
-      "completedAt": 1785037621902
+      "completedAt": 1785037621902,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -629,7 +638,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 40s more for ef1b5bb1 container...\\\" && sleep 40 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037628086,
-      "completedAt": 1785037668929
+      "completedAt": 1785037668929,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -660,7 +670,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 45s more for ef1b5bb1 container...\\\" && sleep 45 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037678757,
-      "completedAt": 1785037724250
+      "completedAt": 1785037724250,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -691,7 +702,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== CHECK DEPLOY STATUS ===\\\" && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\nconsole.log('uptime:', d.uptimeSeconds);\\n\\\" 2>&1 && echo \\\"\\\" && echo \\\"=== GITHUB HEAD ===\\\" && curl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" 2>/dev/null | bun -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('githubHead:', d.sha ? d.sha.slice(0,8) : 'unknown');\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037729864,
-      "completedAt": 1785037731547
+      "completedAt": 1785037731547,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -715,7 +727,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== RE-TRIGGER DEPLOY (ef1b5bb1) ===\\\" && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 -X POST \\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"action\\\":\\\"render_trigger_deploy\\\",\\\"confirm\\\":true,\\\"confirmText\\\":\\\"CONFIRM_IVX_RENDER_DEPLOY\\\"}' 2>/dev/null | bun -e \\\"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log('deploy triggered:', d.ok, '| detail:', d.detail || d.result || '');\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037737800,
-      "completedAt": 1785037738932
+      "completedAt": 1785037738932,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -739,7 +752,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 60s for ef1b5bb1 deploy...\\\" && sleep 60 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037745706,
-      "completedAt": 1785037807413
+      "completedAt": 1785037807413,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -770,7 +784,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037811006,
-      "completedAt": 1785037811022
+      "completedAt": 1785037811022,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -801,7 +816,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 50s for ef1b5bb1 deploy to complete...\\\" && sleep 50 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037818900,
-      "completedAt": 1785037867557
+      "completedAt": 1785037867557,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -825,7 +841,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037872095,
-      "completedAt": 1785037874554
+      "completedAt": 1785037874554,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -856,7 +873,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 45s for ef1b5bb1 deploy...\\\" && sleep 45 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037881155,
-      "completedAt": 1785037927795
+      "completedAt": 1785037927795,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -887,7 +905,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s for ef1b5bb1 deploy...\\\" && sleep 55 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037933007,
-      "completedAt": 1785037991009
+      "completedAt": 1785037991009,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -918,7 +937,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 50 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785037995185,
-      "completedAt": 1785038046031
+      "completedAt": 1785038046031,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -942,7 +962,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 50 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038048454,
-      "completedAt": 1785038099042
+      "completedAt": 1785038099042,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -973,7 +994,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038103397,
-      "completedAt": 1785038107565
+      "completedAt": 1785038107565,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1004,7 +1026,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038114500,
-      "completedAt": 1785038114514
+      "completedAt": 1785038114514,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1035,7 +1058,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== DEPLOY STATUS ===\\\" && curl -sS --max-time 15 -X POST \\\"https://api.ivxholding.com/api/ivx/developer-deploy/action\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"action\\\":\\\"render_deploy_status\\\",\\\"input\\\":{\\\"deployId\\\":\\\"dep-d9io7artqb8s7396bdn0\\\"},\\\"confirm\\\":true,\\\"confirmText\\\":\\\"CONFIRM_IVX_RENDER_DEPLOY\\\"}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconst r=d.result||d;\\nconsole.log('status:', r.status);\\nconsole.log('finishedAt:', r.finishedAt);\\nconsole.log('createdAt:', r.createdAt);\\nconsole.log('commit:', r.commit ? r.commit.id : 'n/a');\\nconsole.log('error:', d.error || r.error);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038122358,
-      "completedAt": 1785038123859
+      "completedAt": 1785038123859,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1173,7 +1197,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"render_deploy_status|renderDeployStatus|deploy_status|deployStatus|render.*status\", \"path\": \"backend/api\"}",
       "createdAt": 1785038127027,
-      "completedAt": 1785038127333
+      "completedAt": 1785038127333,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -1197,7 +1222,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== DEPLOY STATUS via deploy-tools ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nif (d.deploys) {\\n  const latest = d.deploys[0];\\n  console.log('latest deploy id:', latest?.id);\\n  console.log('status:', latest?.status);\\n  console.log('commit:', latest?.commit?.id);\\n  console.log('createdAt:', latest?.createdAt);\\n  console.log('finishedAt:', latest?.finishedAt);\\n} else {\\n  console.log('keys:', Object.keys(d).join(', '));\\n  console.log('error:', d.error);\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038134044,
-      "completedAt": 1785038134658
+      "completedAt": 1785038134658,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -1221,7 +1247,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== DEPLOY DETAILS (full) ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nif (d.deploys) {\\n  for (const dep of d.deploys.slice(0,3)) {\\n    console.log('---');\\n    console.log('id:', dep.id);\\n    console.log('status:', dep.status);\\n    console.log('commit:', dep.commit?.id || 'n/a');\\n    console.log('createdAt:', dep.createdAt);\\n    console.log('finishedAt:', dep.finishedAt);\\n    console.log('updatedAt:', dep.updatedAt);\\n    if (dep.commit) console.log('commitObj:', JSON.stringify(dep.commit));\\n  }\\n}\\nconsole.log('keys:', Object.keys(d).join(', '));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038141111,
-      "completedAt": 1785038141437
+      "completedAt": 1785038141437,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1252,7 +1279,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RENDER SERVICE STATUS ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=status\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconst s=d.service||d;\\nconsole.log('serviceId:', s.id);\\nconsole.log('name:', s.name);\\nconsole.log('status:', s.status);\\nconsole.log('suspenders:', s.suspenders);\\nconsole.log('repoUrl:', s.repo);\\nconsole.log('branch:', s.branch);\\nconsole.log('autoDeploy:', s.autoDeploy);\\nconsole.log('lastDeploy:', s.lastDeploy);\\nconsole.log('createdAt:', s.createdAt);\\nif (d.error) console.log('error:', d.error);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038164882,
-      "completedAt": 1785038166527
+      "completedAt": 1785038166527,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -1271,7 +1299,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== LATEST DEPLOY DETAILS ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('total deploys returned:', d.deploys?.length);\\nfor (const dep of (d.deploys||[]).slice(0,6)) {\\n  console.log('---');\\n  console.log('id:', dep.id, '| status:', dep.status, '| created:', dep.createdAt?.slice(11,19), '| finished:', dep.finishedAt?.slice(11,19));\\n  console.log('  commitId:', dep.commit?.id || 'n/a', '| commitMsg:', dep.commit?.message?.slice(0,60) || 'n/a');\\n  console.log('  raw keys:', Object.keys(dep).join(', '));\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038166032,
-      "completedAt": 1785038166736
+      "completedAt": 1785038166736,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1302,7 +1331,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,5)) {\\n  console.log('---');\\n  console.log('id:', dep.id, '| status:', dep.status);\\n  console.log('commitSha:', dep.commitSha || 'n/a');\\n  console.log('commitMessage:', dep.commitMessage || 'n/a');\\n  console.log('failureReason:', dep.failureReason || 'n/a');\\n  console.log('createdAt:', dep.createdAt, '| finishedAt:', dep.finishedAt, '| duration:', dep.duration);\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038179937,
-      "completedAt": 1785038179961
+      "completedAt": 1785038179961,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1333,7 +1363,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== FULL SERVICE OBJECT ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=service\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconst s=d.service||d;\\nconsole.log('full service:', JSON.stringify(s, null, 2).slice(0, 3000));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038193260,
-      "completedAt": 1785038193463
+      "completedAt": 1785038193463,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -1352,7 +1383,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== CHECK: IS PRODUCTION STILL SERVING? ===\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('status:', d.status);\\nconsole.log('commitShort:', d.commitShort);\\nconsole.log('bootTime:', d.bootTime);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038193273,
-      "completedAt": 1785038194732
+      "completedAt": 1785038194732,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1415,7 +1447,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/api/ivx-deployment-tools.ts\", \"pattern\": \"triggerDeploy|render_trigger_deploy|deploys\\\\/|\\\\/deploys|clearCache|clearUrl|commitId|commitSha\"}",
       "createdAt": 1785038202771,
-      "completedAt": 1785038204201
+      "completedAt": 1785038204201,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -1434,7 +1467,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== GET DEPLOY LOGS (direct Render API) ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=1\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconst dep=d.deploys?.[0];\\nconsole.log('id:', dep?.id);\\nconsole.log('full:', JSON.stringify(dep, null, 2));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038202775,
-      "completedAt": 1785038204456
+      "completedAt": 1785038204456,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1465,7 +1499,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-deployment-tools.ts\", \"limit\": 60, \"offset\": 100}",
       "createdAt": 1785038212348,
-      "completedAt": 1785038214134
+      "completedAt": 1785038214134,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -1484,7 +1519,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== TRY CLEAR-CACHE DEPLOY ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploy\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"clearCache\\\":true}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('deployId:', d.deployId || d.result?.deployId);\\nconsole.log('status:', d.status || d.result?.status);\\nconsole.log('error:', d.error);\\nconsole.log('full:', JSON.stringify(d).slice(0,800));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038213716,
-      "completedAt": 1785038214242
+      "completedAt": 1785038214242,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1592,7 +1628,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/api/ivx-deployment-tools.ts\", \"pattern\": \"triggerDeploy|POST.*deploy|action.*deploy|handleRender\"}",
       "createdAt": 1785038223065,
-      "completedAt": 1785038223077
+      "completedAt": 1785038223077,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -1718,7 +1755,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/hono.ts\", \"pattern\": \"deploy-tools|render.*deploy|handleRenderDeploy\"}",
       "createdAt": 1785038223068,
-      "completedAt": 1785038223077
+      "completedAt": 1785038223077,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1836,7 +1874,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/services\", \"pattern\": \"triggerRenderDeploy|triggerDeploy|renderTriggerDeploy\"}",
       "createdAt": 1785038229691,
-      "completedAt": 1785038230758
+      "completedAt": 1785038230758,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -1855,7 +1894,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== TRY DIRECT DEPLOY ENDPOINT (POST /deploy-tools/render/deploy) ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render/deploy\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"clearCache\\\":true}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nconsole.log('deploy:', JSON.stringify(d.deploy).slice(0,500));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038229693,
-      "completedAt": 1785038231632
+      "completedAt": 1785038231632,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1886,7 +1926,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 75s for clear-cache build...\\\" && sleep 75 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038236144,
-      "completedAt": 1785038300985
+      "completedAt": 1785038300985,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1917,7 +1958,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038306121,
-      "completedAt": 1785038306336
+      "completedAt": 1785038306336,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1948,7 +1990,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 50 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038311442,
-      "completedAt": 1785038361955
+      "completedAt": 1785038361955,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -1979,7 +2022,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038367248,
-      "completedAt": 1785038368333
+      "completedAt": 1785038368333,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2010,7 +2054,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=3\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,3)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| created:', dep.createdAt?.slice(11,19), '| finished:', dep.finishedAt?.slice(11,19), '| duration:', dep.duration);\\n  console.log('  commitSha:', (dep.commitSha||'').slice(0,8), '| failureReason:', dep.failureReason);\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038375056,
-      "completedAt": 1785038378198
+      "completedAt": 1785038378198,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2041,7 +2086,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-deployment-tools/render-tool.ts\", \"limit\": 60, \"offset\": 190}",
       "createdAt": 1785038389086,
-      "completedAt": 1785038389195
+      "completedAt": 1785038389195,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -2060,7 +2106,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RENDER SERVICE DETAILS (raw API) ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=service\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log(JSON.stringify(d, null, 2).slice(0, 2000));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038389088,
-      "completedAt": 1785038389457
+      "completedAt": 1785038389457,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2091,7 +2138,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== GET DEPLOY DETAILS DIRECTLY (dep-d9iob5vaqgkc73adg3qg) ===\\\" && curl -sS --max-time 15 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/invoke\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"tool\\\":\\\"render\\\",\\\"action\\\":\\\"get-deploy\\\",\\\"params\\\":{\\\"deployId\\\":\\\"dep-d9iob5vaqgkc73adg3qg\\\"}}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nif (d.result) console.log('result:', JSON.stringify(d.result, null, 2).slice(0, 2000));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038404804,
-      "completedAt": 1785038404830
+      "completedAt": 1785038404830,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2122,7 +2170,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 90s for Render rate limit to clear...\\\" && sleep 90 && echo \\\"Done waiting\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038410678,
-      "completedAt": 1785038472362
+      "completedAt": 1785038472362,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2153,7 +2202,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038479846,
-      "completedAt": 1785038479864
+      "completedAt": 1785038479864,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2184,7 +2234,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 50s for Render rate limit to clear...\\\" && sleep 50 && echo \\\"Done\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038486874,
-      "completedAt": 1785038535317
+      "completedAt": 1785038535317,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2215,7 +2266,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RETRY DEPLOY (clear-cache) ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render/deploy\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"clearCache\\\":true}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nconsole.log('deploy:', JSON.stringify(d.deploy).slice(0,500));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038541965,
-      "completedAt": 1785038545016
+      "completedAt": 1785038545016,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2246,7 +2298,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s for build to complete...\\\" && sleep 55 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038549821,
-      "completedAt": 1785038605115
+      "completedAt": 1785038605115,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2275,7 +2328,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork\"}",
       "createdAt": 1785038617190,
-      "completedAt": 1785038617208
+      "completedAt": 1785038617208,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2306,7 +2360,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=2\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,2)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| created:', dep.createdAt?.slice(11,19), '| finished:', dep.finishedAt?.slice(11,19), '| duration:', dep.duration);\\n  console.log('  commitSha:', (dep.commitSha||'').slice(0,8), '| failureReason:', dep.failureReason);\\n}\\n\\\" 2>&1 && echo \\\"\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('PROD:', 'bootTime:', d.bootTime, '| commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038622477,
-      "completedAt": 1785038626256
+      "completedAt": 1785038626256,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2337,7 +2392,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== INSPECT ENCRYPTED STORE AWS VARIABLES ===\\\" && curl -sS --max-time 15 -X POST \\\"https://api.ivxholding.com/api/ivx/owner-variables/inspect\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"names\\\":[\\\"IVX_AWS_READONLY_ACCESS_KEY_ID\\\",\\\"IVX_AWS_READONLY_SECRET_ACCESS_KEY\\\",\\\"AWS_ACCESS_KEY_ID\\\",\\\"AWS_SECRET_ACCESS_KEY\\\",\\\"AWS_REGION\\\"]}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nif (d.results) {\\n  for (const r of d.results) {\\n    console.log('---');\\n    console.log('name:', r.name);\\n    console.log('envPresent:', r.envPresent);\\n    console.log('envLength:', r.envLength);\\n    console.log('envMask:', r.envMask);\\n    console.log('storePresent:', r.storePresent);\\n    console.log('storeLength:', r.storeLength);\\n    console.log('storeMask:', r.storeMask);\\n    console.log('storeDiffersFromEnv:', r.storeDiffersFromEnv);\\n  }\\n} else if (d.report) {\\n  console.log('report:', JSON.stringify(d.report, null, 2).slice(0, 2000));\\n} else {\\n  console.log('keys:', Object.keys(d).join(', '));\\n  console.log('full:', JSON.stringify(d).slice(0, 1500));\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038663605,
-      "completedAt": 1785038663649
+      "completedAt": 1785038663649,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2510,7 +2566,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/hono.ts\", \"pattern\": \"owner-variables\"}",
       "createdAt": 1785038669786,
-      "completedAt": 1785038669793
+      "completedAt": 1785038669793,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -2566,7 +2623,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/api/ivx-owner-variables.ts\", \"pattern\": \"export async function handle|export function handle\"}",
       "createdAt": 1785038669788,
-      "completedAt": 1785038669794
+      "completedAt": 1785038669794,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2597,7 +2655,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 50s for Render rate limit to clear...\\\" && sleep 50 && echo \\\"Done\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038676133,
-      "completedAt": 1785038726477
+      "completedAt": 1785038726477,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2628,7 +2687,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RETRY DEPLOY (clear-cache) ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render/deploy\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"clearCache\\\":true}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nconsole.log('deploy:', JSON.stringify(d.deploy).slice(0,500));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038730704,
-      "completedAt": 1785038732687
+      "completedAt": 1785038732687,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2659,7 +2719,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 50 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038741475,
-      "completedAt": 1785038789706
+      "completedAt": 1785038789706,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2690,7 +2751,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038795685,
-      "completedAt": 1785038795701
+      "completedAt": 1785038795701,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2721,7 +2783,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=3\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,3)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| created:', dep.createdAt?.slice(11,19), '| finished:', dep.finishedAt?.slice(11,19), '| duration:', dep.duration);\\n  console.log('  commitSha:', (dep.commitSha||'').slice(0,8), '| failureReason:', dep.failureReason);\\n}\\n\\\" 2>&1 && echo \\\"\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('PROD:', 'bootTime:', d.bootTime, '| commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038803028,
-      "completedAt": 1785038803064
+      "completedAt": 1785038803064,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2752,7 +2815,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== OWNER VARIABLES STATUS (encrypted store) ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/owner-variables/status\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nif (d.variables) {\\n  const aws = d.variables.filter(v => /AWS|S3|CLOUDFRONT/i.test(v.name));\\n  console.log('AWS variables in encrypted store:', aws.length);\\n  for (const v of aws) {\\n    console.log('---');\\n    console.log('name:', v.name);\\n    console.log('present:', v.present !== false);\\n    console.log('maskedPreview:', v.maskedPreview || v.masked || 'n/a');\\n    console.log('length:', v.length || v.valueLength || 'n/a');\\n    console.log('updated:', v.updatedAt || 'n/a');\\n  }\\n} else {\\n  console.log('keys:', Object.keys(d).join(', '));\\n  console.log('full:', JSON.stringify(d).slice(0, 2000));\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038893397,
-      "completedAt": 1785038893468
+      "completedAt": 1785038893468,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -2771,7 +2835,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== CHECK IF deploy failure is rate limit or commit-specific ===\\\" && echo \\\"Getting last successful deploy...\\\" && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=20\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconst deploys = d.deploys || [];\\nconsole.log('Total deploys returned:', deploys.length);\\n// Find the last successful deploy\\nconst successful = deploys.filter(dep => dep.status === 'live' || dep.status === 'build_in_progress' || dep.status === 'update_in_progress' || dep.status === 'created');\\nconst failed = deploys.filter(dep => dep.status === 'build_failed' || dep.status === 'update_failed' || dep.status === 'canceled' || dep.status === 'deactivated');\\nconsole.log('Successful/active:', successful.length, '| Failed:', failed.length);\\nif (successful.length > 0) {\\n  const s = successful[0];\\n  console.log('Last successful:', s.id, '| status:', s.status, '| commit:', (s.commitSha||'').slice(0,8), '| created:', s.createdAt?.slice(11,19));\\n}\\nconsole.log('--- All deploys ---');\\nfor (const dep of deploys) {\\n  console.log((dep.commitSha||'').slice(0,8), '|', dep.status, '|', dep.createdAt?.slice(11,19), '|', dep.duration+'s');\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038893428,
-      "completedAt": 1785038893469
+      "completedAt": 1785038893469,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2802,7 +2867,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== REFRESH OWNER TOKEN ===\\\" && curl -sS --max-time 15 -X POST \\\"https://api.ivxholding.com/api/ivx/owner-passwordless-login\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\",\\\"emergency\\\":\\\"ivx_emergency_recovery\\\"}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('success:', d.success);\\nif (d.accessToken) {\\n  require('fs').writeFileSync('/tmp/owner_token.txt', d.accessToken);\\n  console.log('token saved, length:', d.accessToken.length);\\n} else {\\n  console.log('error:', d.error);\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038901406,
-      "completedAt": 1785038901428
+      "completedAt": 1785038901428,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2833,7 +2899,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (1/5) for Render rate limit to clear...\\\" && sleep 55 && echo \\\"Done 1/5\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038919510,
-      "completedAt": 1785038970122
+      "completedAt": 1785038970122,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2864,7 +2931,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (2/5) for Render rate limit to clear...\\\" && sleep 55 && echo \\\"Done 2/5\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785038983852,
-      "completedAt": 1785039039749
+      "completedAt": 1785039039749,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2895,7 +2963,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (3/5) for Render rate limit to clear...\\\" && sleep 55 && echo \\\"Done 3/5\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039044569,
-      "completedAt": 1785039098638
+      "completedAt": 1785039098638,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2926,7 +2995,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RETRY DEPLOY (clear-cache, after rate limit wait) ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render/deploy\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"clearCache\\\":true}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nconsole.log('deploy:', JSON.stringify(d.deploy).slice(0,500));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039103251,
-      "completedAt": 1785039107455
+      "completedAt": 1785039107455,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -2957,7 +3027,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s for ef1b5bb1 build...\\\" && sleep 55 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039115928,
-      "completedAt": 1785039173214
+      "completedAt": 1785039173214,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -2981,7 +3052,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=3\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,3)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| created:', dep.createdAt?.slice(11,19), '| finished:', dep.finishedAt?.slice(11,19), '| duration:', dep.duration);\\n}\\n\\\" 2>&1 && echo \\\"\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('PROD:', 'bootTime:', d.bootTime, '| commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039175944,
-      "completedAt": 1785039177634
+      "completedAt": 1785039177634,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3012,7 +3084,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (1/4) for Render rate limit to clear...\\\" && sleep 55 && echo \\\"Done 1/4\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039183301,
-      "completedAt": 1785039239072
+      "completedAt": 1785039239072,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3043,7 +3116,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (2/4) for Render rate limit...\\\" && sleep 55 && echo \\\"Done 2/4\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039248244,
-      "completedAt": 1785039300299
+      "completedAt": 1785039300299,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3074,7 +3148,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (3/4) for Render rate limit...\\\" && sleep 55 && echo \\\"Done 3/4\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039308899,
-      "completedAt": 1785039363110
+      "completedAt": 1785039363110,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -3098,7 +3173,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 55s (4/4) for Render rate limit...\\\" && sleep 55 && echo \\\"Done 4/4\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039368224,
-      "completedAt": 1785039423190
+      "completedAt": 1785039423190,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3129,7 +3205,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RETRY DEPLOY (clear-cache) ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render/deploy\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"clearCache\\\":true}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nconsole.log('deploy:', JSON.stringify(d.deploy).slice(0,500));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039427636,
-      "completedAt": 1785039429340
+      "completedAt": 1785039429340,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3160,7 +3237,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 30 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039433717,
-      "completedAt": 1785039463639
+      "completedAt": 1785039463639,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3191,7 +3269,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=3\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,3)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| created:', dep.createdAt?.slice(11,19), '| finished:', dep.finishedAt?.slice(11,19), '| duration:', dep.duration);\\n}\\n\\\" 2>&1 && echo \\\"\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('PROD:', 'bootTime:', d.bootTime, '| commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039473329,
-      "completedAt": 1785039473362
+      "completedAt": 1785039473362,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3222,7 +3301,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== MAKE NEW COMMIT ON TOP OF ef1b5bb1 ===\\\" && bun -e \\\"\\nconst fs = require('fs');\\nlet content = fs.readFileSync('backend/api/ivx-owner-variables.ts', 'utf8');\\n// Add a trivial comment to force a new commit SHA\\ncontent = content.replace(\\n  'async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {',\\n  '// AWS provider test — dual-source diagnostic (env vs encrypted store)\\\\nasync function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadiness> {'\\n);\\nfs.writeFileSync('backend/api/ivx-owner-variables.ts', content);\\nconst token = fs.readFileSync('/tmp/owner_token.txt', 'utf8').trim();\\nfetch('https://api.ivxholding.com/api/ivx/developer-deploy/action', {\\n  method: 'POST',\\n  headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },\\n  body: JSON.stringify({\\n    action: 'github_commit_file',\\n    input: { path: 'backend/api/ivx-owner-variables.ts', content, message: 'diag(aws): dual-source diagnostic — fresh commit for Render deploy' },\\n    confirm: true, confirmText: 'CONFIRM_IVX_GITHUB_WRITE'\\n  })\\n}).then(r => r.json()).then(d => console.log('commit:', d.result?.commitSha, '| ok:', d.ok))\\n.catch(e => console.log('err:', e.message));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039488773,
-      "completedAt": 1785039492580
+      "completedAt": 1785039492580,
+      "compactedAt": 1785073954383
     },
     {
       "type": "text",
@@ -3246,7 +3326,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"Waiting 40s for Render auto-deploy of 365cbcc0...\\\" && sleep 40 && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=5\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,5)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| commit:', (dep.commitSha||'').slice(0,8), '| created:', dep.createdAt?.slice(11,19), '| duration:', dep.duration);\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039498647,
-      "completedAt": 1785039538649
+      "completedAt": 1785039538649,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3277,7 +3358,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== GET DEPLOY LOGS VIA RENDER API ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/invoke\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"tool\\\":\\\"render\\\",\\\"action\\\":\\\"deploy\\\",\\\"params\\\":{\\\"clearCache\\\":true}}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('error:', d.error);\\nconsole.log('result:', JSON.stringify(d.result||d).slice(0,1000));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039553626,
-      "completedAt": 1785039556106
+      "completedAt": 1785039556106,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -3296,7 +3378,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-deployment-tools/render-tool.ts\", \"limit\": 60, \"offset\": 1}",
       "createdAt": 1785039555390,
-      "completedAt": 1785039556107
+      "completedAt": 1785039556107,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3327,7 +3410,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && sleep 20 && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('bootTime:', d.bootTime);\\nconsole.log('commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039560742,
-      "completedAt": 1785039581018
+      "completedAt": 1785039581018,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3358,7 +3442,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=deploys&limit=5\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nfor (const dep of (d.deploys||[]).slice(0,5)) {\\n  console.log('id:', dep.id, '| status:', dep.status, '| commit:', (dep.commitSha||'').slice(0,8), '| created:', dep.createdAt?.slice(11,19), '| duration:', dep.duration);\\n}\\n\\\" 2>&1 && echo \\\"\\\" && curl -sS --max-time 10 \\\"https://api.ivxholding.com/version\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('PROD:', 'bootTime:', d.bootTime, '| commitShort:', d.commitShort);\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039585745,
-      "completedAt": 1785039586548
+      "completedAt": 1785039586548,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3441,7 +3526,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend/services/ivx-deployment-tools\", \"pattern\": \"logs|getDeploy|deployId|/deploys/\"}",
       "createdAt": 1785039606061,
-      "completedAt": 1785039606093
+      "completedAt": 1785039606093,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -3460,7 +3546,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== GET RENDER DEPLOY LOGS (direct API) ===\\\" && curl -sS --max-time 20 -X POST \\\"https://api.ivxholding.com/api/ivx/deploy-tools/invoke\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"tool\\\":\\\"render\\\",\\\"action\\\":\\\"status\\\",\\\"params\\\":{}}' 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconsole.log('ok:', d.ok);\\nconsole.log('full result:', JSON.stringify(d.result||d).slice(0,3000));\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039606068,
-      "completedAt": 1785039606094
+      "completedAt": 1785039606094,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3492,7 +3579,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"path\": \"backend\", \"pattern\": \"IVX_FORCE_DEPLOY_SHA|IVX_FORCE_REDEPLOY|IVX_FORCE_DEPLOY_AT\"}",
       "createdAt": 1785039617792,
-      "completedAt": 1785039620781
+      "completedAt": 1785039620781,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -3511,7 +3599,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== GET FULL ENV VARS LIST ===\\\" && curl -sS --max-time 15 \\\"https://api.ivxholding.com/api/ivx/deploy-tools/render?action=service\\\" -H \\\"Authorization: Bearer $TOKEN\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nif (d.envVars) {\\n  for (const v of d.envVars) {\\n    if (/FORCE|DEPLOY|AWS|S3|CLOUDFRONT/i.test(v.key)) {\\n      console.log(v.key, '=', v.value || v.generatedValue ? '***configured***' : 'empty');\\n    }\\n  }\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039617795,
-      "completedAt": 1785039621035
+      "completedAt": 1785039621035,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3544,7 +3633,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"IVX_FORCE_DEPLOY|IVX_FORCE_REDEPLOY\", \"path\": \".\", \"include\": \"*.ts\"}",
       "createdAt": 1785039640330,
-      "completedAt": 1785039640348
+      "completedAt": 1785039640348,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -3563,7 +3653,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -rn 'IVX_FORCE_DEPLOY\\\\|IVX_FORCE_REDEPLOY' Dockerfile render.yaml server.ts package.json 2>&1 | head -20\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039640333,
-      "completedAt": 1785039640349
+      "completedAt": 1785039640349,
+      "compactedAt": 1785073954383
     },
     {
       "type": "tool",
@@ -3580,7 +3671,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"Dockerfile\"}",
       "createdAt": 1785039640342,
-      "completedAt": 1785039640349
+      "completedAt": 1785039640349,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3611,7 +3703,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RUN ALL 7 PROVIDER TESTS (on e18a4146) ===\\\" && curl -sS --max-time 60 -X POST \\\"https://api.ivxholding.com/api/ivx/owner-variables/test\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d '{}' 2>/dev/null > /tmp/all_providers.json && bun -e \\\"\\nconst d=require('/tmp/all_providers.json');\\nconsole.log('ok:', d.ok);\\nif (d.results) {\\n  for (const r of d.results) {\\n    console.log('---');\\n    console.log('provider:', r.provider);\\n    console.log('status:', r.status);\\n    console.log('httpStatus:', r.httpStatus || 'n/a');\\n    if (r.error) console.log('error:', r.error.slice(0, 200));\\n  }\\n} else if (d.providerResults) {\\n  for (const r of d.providerResults) {\\n    console.log('---');\\n    console.log('provider:', r.provider);\\n    console.log('status:', r.status);\\n    console.log('httpStatus:', r.httpStatus || 'n/a');\\n    if (r.error) console.log('error:', r.error.slice(0, 200));\\n  }\\n} else {\\n  console.log('keys:', Object.keys(d).join(', '));\\n  console.log('full:', JSON.stringify(d).slice(0, 2000));\\n}\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039713771,
-      "completedAt": 1785039713808
+      "completedAt": 1785039713808,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
@@ -3642,7 +3735,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null) && echo \\\"=== RUNNING ALL 7 PROVIDER TESTS INDIVIDUALLY ===\\\" && for provider in github render supabase aws ai security storage; do\\n  echo \\\"--- Testing: $provider ---\\\"\\n  curl -sS --max-time 30 -X POST \\\"https://api.ivxholding.com/api/ivx/owner-variables/test\\\" -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" -d \\\"{\\\\\\\"provider\\\\\\\":\\\\\\\"$provider\\\\\\\"}\\\" 2>/dev/null | bun -e \\\"\\nconst d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));\\nconst r=d.providerResult||d.result||d;\\nconsole.log('provider:', r.provider || '$provider');\\nconsole.log('status:', r.status);\\nconsole.log('httpStatus:', r.httpStatus || 'n/a');\\nif (r.error) console.log('error:', r.error.slice(0, 300));\\nconsole.log('ok:', d.ok);\\n\\\" 2>&1\\n  echo \\\"\\\"\\ndone 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1785039718167,
-      "completedAt": 1785039723916
+      "completedAt": 1785039723916,
+      "compactedAt": 1785073954383
     },
     {
       "type": "reasoning",
