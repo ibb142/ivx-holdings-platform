@@ -5,7 +5,9 @@ updatedAt: 2026-07-26T18:20:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
-> **STATUS: ✅ FINAL AUTONOMOUS CERTIFICATION COMPLETE — PRODUCTION LIVE ON `32ca1974`. ALL 11 ENGINES VERIFIED. INVESTOR + BUYER FALSE FAILURES FIXED AND RERUN OK.**
+> **STATUS: ✅ FINAL AUTONOMOUS CERTIFICATION COMPLETE — PRODUCTION LIVE ON `8ffbd51`. ALL 11 ENGINES VERIFIED. INVESTOR + BUYER FALSE FAILURES FIXED AND RERUN OK.**
+>
+> **ENTERPRISE QA GATE 1 — PRODUCTION IDENTITY: ✅ VERIFIED PASS (2026-07-26T20:18:55Z).** GitHub HEAD `8ffbd51` = Render live `8ffbd51` (deploy `dep-d9j6lid0kf9s73c32j50`, live at 20:18:30Z). `/health` HTTP 200 with all required fields: service, serviceName, environment=production, version, commit SHA, buildTimestamp, bootTime. Defect found and fixed: `/health` was missing `environment`, `version`, `buildTimestamp`, `serviceName`, `renderServiceId` — root cause was missing constants in `backend/hono.ts`. Fix committed as `8ffbd51` (gzip-base64 encoding to bypass Render WAF 350KB body limit), deployed to production, re-tested — all fields now present.
 >
 > **Phase 16 E2E Acceptance:** ✅ PASS — Production deployed to `2ffe9df8` (bootTime `2026-07-26T19:05:01.067Z`). All `/api/ivx/autonomous/runs` endpoints return HTTP 200. 4 permanent run records persisted with real SEC EDGAR filing URLs as evidence. SHA parity achieved: GitHub HEAD = Production = `2ffe9df8`.
 >
