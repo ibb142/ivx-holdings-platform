@@ -938,21 +938,47 @@ export async function handleIVXOwnerRegistrationStatusRequest(request?: Request)
   const lookupEmail = sanitizeEmail(url?.searchParams.get('email') ?? '');
   const ownerEmailLookup = lookupEmail ? await buildOwnerEmailLookup(lookupEmail) : null;
 
-  return json({
+  // DEF-04 fix: The email lookup MUST stay public — the mobile app calls this
+  // endpoint during pre-login registration flow (no bearer token available yet).
+  // However, backend config metadata (supabaseUrlConfigured, serviceRoleConfigured,
+  // ownerEmailAllowlistConfigured) is sensitive operational intel that must only
+  // be revealed to an authenticated owner. Unauthenticated callers get the email
+  // lookup result only; owner callers get the full config metadata as well.
+  let ownerVerified = false;
+  if (request) {
+    try {
+      const { assertIVXOwnerOnly } = await import('./owner-only');
+      await assertIVXOwnerOnly(request);
+      ownerVerified = true;
+    } catch {
+      ownerVerified = false;
+    }
+  }
+
+  const publicPayload: Record<string, unknown> = {
     ok: true,
     routeRegistered: true,
     route: 'POST /api/ivx/owner-registration',
     statusRoute: 'GET /api/ivx/owner-registration/status',
-    auditRoute: 'GET /api/ivx/owner-signup-audit',
-    repairRoute: 'POST /api/ivx/owner-registration/repair',
     deploymentMarker: DEPLOYMENT_MARKER,
-    supabaseUrlConfigured: Boolean(readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL)),
-    serviceRoleConfigured: Boolean(readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) || readTrimmed(process.env.SUPABASE_SERVICE_KEY)),
-    ownerEmailAllowlistConfigured: getAllowedOwnerRegistrationEmails().length > 0,
     ...(ownerEmailLookup ? { ownerEmailLookup } : {}),
     secretValuesReturned: false,
     timestamp: nowIso(),
-  });
+  };
+
+  if (ownerVerified) {
+    return json({
+      ...publicPayload,
+      auditRoute: 'GET /api/ivx/owner-signup-audit',
+      repairRoute: 'POST /api/ivx/owner-registration/repair',
+      supabaseUrlConfigured: Boolean(readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL)),
+      serviceRoleConfigured: Boolean(readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) || readTrimmed(process.env.SUPABASE_SERVICE_KEY)),
+      ownerEmailAllowlistConfigured: getAllowedOwnerRegistrationEmails().length > 0,
+      ownerOnly: true,
+    });
+  }
+
+  return json(publicPayload);
 }
 
 export async function handleIVXOwnerRegistrationRequest(request: Request): Promise<Response> {

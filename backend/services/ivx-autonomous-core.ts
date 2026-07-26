@@ -167,7 +167,18 @@ export async function buildAutonomousDashboard(): Promise<AutonomousDashboard> {
   const openIncidents = incidents.filter((incident) => incident.status === 'open' || incident.status === 'diagnosing').length;
   const resolvedIncidents = incidents.filter((incident) => incident.status === 'resolved').length;
 
-  const databaseConfigured = readEnvFlag('DATABASE_URL') || readEnvFlag('POSTGRES_URL') || readEnvFlag('SUPABASE_DB_URL');
+  // DEF-fix: databaseConfigured previously only checked for a direct Postgres connection
+  // string (DATABASE_URL / POSTGRES_URL / SUPABASE_DB_URL), which are NOT set on the Render
+  // runtime. The backend persists durable state through the Supabase REST API using
+  // EXPO_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (service-role). Recognize that
+  // configuration as a valid, configured database so the dashboard reports `online` and
+  // `databaseConfigured: true` instead of a false `partial` / `false`.
+  const databaseConfigured = Boolean(
+    readEnvFlag('DATABASE_URL')
+    || readEnvFlag('POSTGRES_URL')
+    || readEnvFlag('SUPABASE_DB_URL')
+    || (readEnvFlag('EXPO_PUBLIC_SUPABASE_URL') && (readEnvFlag('SUPABASE_SERVICE_ROLE_KEY') || readEnvFlag('SUPABASE_SERVICE_KEY'))),
+  );
   const githubConfigured = readEnvFlag('GITHUB_TOKEN') && readEnvFlag('GITHUB_REPO_URL');
   const mode: 'production' | 'development' = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
