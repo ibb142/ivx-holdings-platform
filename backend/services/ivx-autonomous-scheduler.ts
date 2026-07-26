@@ -782,63 +782,85 @@ async function captureEngineResult(kind: ScheduledJobKind): Promise<{
 } | null> {
   try {
     const exec = await import('./ivx-autonomous-execution');
-    // The engines don't expose a “last result” cache, so we read the durable CRM
-    // + outreach stores to derive honest counts for the run record. The scheduler
-    // already ran the engine above; this mirrors what it produced.
+    const engine = engineKindToName(kind);
+
+    // Outreach engine — read outreach store for real message ids as evidence.
     if (kind === 'daily_capital_outreach') {
       const summary = await exec.summarizeAutonomousExecution();
+      let outreachEvidence: string[] = [];
+      try {
+        const { listOutreachMessages } = await import('./ivx-outreach-store');
+        const messages = await listOutreachMessages();
+        // Most-recent-first: message ids are concrete evidence artifacts.
+        outreachEvidence = messages
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+          .slice(0, 10)
+          .map((m) => m.id);
+      } catch {
+        // best-effort
+      }
       return {
         outreachQueued: summary.outreach.queued,
         sendingEnabled: summary.outreach.sendingEnabled,
         source: 'Investor CRM prospects',
-        evidence: [],
+        evidence: outreachEvidence,
         engine: 'outreach',
       };
     }
-    const summary = await exec.summarizeAutonomousExecution();
-    const engine = engineKindToName(kind);
-    if (engine === 'buyer') {
+
+    // Capital sourcing engines — read the actual CRM records and extract their
+    // SEC EDGAR source URLs from `sourceDetail` as verifiable evidence artifacts.
+    // This replaces the previous `evidence: []` stub that left every run marked
+    // `hasEvidence: false`.
+    if (engine === 'buyer' || engine === 'investor' || engine === 'jv' || engine === 'tokenized_buyer') {
+      const { listInvestors } = await import('./ivx-investor-crm-store');
+      const investors = await listInvestors();
+      const partyType = engine === 'buyer' ? 'buyer' : engine === 'investor' ? 'investor' : engine === 'jv' ? 'partner' : 'buyer';
+      const tokenizedFilter = engine === 'tokenized_buyer';
+      const matching = investors.filter((rec) => {
+        if (rec.partyType !== partyType) return false;
+        if (tokenizedFilter) {
+          return rec.investmentType.toLowerCase().includes('token');
+        }
+        return true;
+      });
+      // Sort newest-first so evidence reflects the most recent records.
+      matching.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      // Extract SEC filing URLs from sourceDetail (format: "SEC EDGAR Form D filing: https://...")
+      const urlRegex = /https?:\/\/[^\s"']+/i;
+      const evidence: string[] = [];
+      for (const rec of matching) {
+        if (evidence.length >= 10) break;
+        const detailMatch = rec.sourceDetail.match(urlRegex);
+        if (detailMatch) {
+          evidence.push(detailMatch[0]);
+        }
+      }
       return {
-        discovered: summary.crm.buyers,
-        savedToCrm: summary.crm.buyers,
+        discovered: matching.length,
+        savedToCrm: matching.length,
         source: 'SEC EDGAR Form D',
-        evidence: [],
+        evidence,
         engine,
       };
     }
-    if (engine === 'investor') {
-      return {
-        discovered: summary.crm.investors,
-        savedToCrm: summary.crm.investors,
-        source: 'SEC EDGAR Form D',
-        evidence: [],
-        engine,
-      };
-    }
-    if (engine === 'jv') {
-      return {
-        discovered: summary.crm.partners,
-        savedToCrm: summary.crm.partners,
-        source: 'SEC EDGAR Form D',
-        evidence: [],
-        engine,
-      };
-    }
-    if (engine === 'tokenized_buyer') {
-      return {
-        discovered: summary.crm.tokenizedBuyers,
-        savedToCrm: summary.crm.tokenizedBuyers,
-        source: 'SEC EDGAR Form D',
-        evidence: [],
-        engine,
-      };
-    }
+
+    // Technology ideas — list idea titles as evidence.
     if (engine === 'technology') {
+      const summary = await exec.summarizeAutonomousExecution();
+      let ideaEvidence: string[] = [];
+      try {
+        const { listIdeas } = await import('./ivx-innovation-store');
+        const ideas = await listIdeas();
+        ideaEvidence = ideas.slice(0, 10).map((idea) => idea.id);
+      } catch {
+        // best-effort
+      }
       return {
         discovered: summary.ideas.total,
         savedToCrm: summary.ideas.total,
         source: 'IVX Innovation Engine',
-        evidence: summary.ideas.topTitle ? [summary.ideas.topTitle] : [],
+        evidence: ideaEvidence.length > 0 ? ideaEvidence : (summary.ideas.topTitle ? [summary.ideas.topTitle] : []),
         engine,
       };
     }
