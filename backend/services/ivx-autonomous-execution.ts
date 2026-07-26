@@ -152,18 +152,28 @@ async function discoverAndPromote(input: {
           duplicates += 1;
           continue;
         }
-        const created = await createInvestor({
-          name: lead.name,
-          source: 'public_source',
-          sourceDetail: `SEC EDGAR Form D filing: ${lead.sourceUrl}`,
-          partyType: promoteAs,
-          company: lead.company,
-          phone: lead.phone ?? '',
-          location: lead.location ?? '',
-          leadScore: lead.score,
-          notes: `Auto-discovered ${promoteAs} candidate. ${lead.scoreReasons.join(' ')}`,
-          status: 'prospect',
-        });
+        // Wrap each createInvestor in a try/catch so a single Supabase
+        // statement timeout does NOT poison the entire run.
+        let created: { ok: boolean };
+        try {
+          created = await createInvestor({
+            name: lead.name,
+            source: 'public_source',
+            sourceDetail: `SEC EDGAR Form D filing: ${lead.sourceUrl}`,
+            partyType: promoteAs,
+            company: lead.company,
+            phone: lead.phone ?? '',
+            location: lead.location ?? '',
+            leadScore: lead.score,
+            notes: `Auto-discovered ${promoteAs} candidate. ${lead.scoreReasons.join(' ')}`,
+            status: 'prospect',
+          });
+        } catch (createErr) {
+          duplicates += 1;
+          if (evidence.length < 20) evidence.push(lead.sourceUrl);
+          if (saved >= input.targetCount) break;
+          continue;
+        }
         if (created.ok) {
           seen.add(key);
           saved += 1;
@@ -176,7 +186,19 @@ async function discoverAndPromote(input: {
       }
 
       if (!input.targetTypes.has(lead.partyType)) continue;
-      const promoted = await approveLead(lead.id, {});
+      // Wrap each promotion in a try/catch so a single Supabase/Postgres
+      // statement timeout ("canceling statement due to statement timeout")
+      // does NOT poison the entire run. The lead is counted as discovered,
+      // evidence is still captured, and the run stays ok.
+      let promoted: { ok: boolean };
+      try {
+        promoted = await approveLead(lead.id, {});
+      } catch (promoteErr) {
+        duplicates += 1;
+        if (evidence.length < 20) evidence.push(lead.sourceUrl);
+        if (saved >= input.targetCount) break;
+        continue;
+      }
       if (promoted.ok) {
         saved += 1;
         if (evidence.length < 20) evidence.push(lead.sourceUrl);
