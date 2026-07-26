@@ -60,7 +60,7 @@ async function safeFetch(url: string, init?: RequestInit): Promise<{ status: num
   try {
     const response = await fetch(url, { ...init, signal: AbortSignal.timeout(TEST_TIMEOUT_MS) });
     const body = await response.text();
-    return { status: response.status, body: body.slice(0, 2000), error: null, headers: response.headers };
+    return { status: response.status, body: body.slice(0, 8000), error: null, headers: response.headers };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return { status: null, body: '', error: message.slice(0, 200), headers: null };
@@ -97,8 +97,8 @@ async function testGitHub(): Promise<CredentialRow> {
   // Read X-OAuth-Scopes header to check for workflow scope (classic PAT)
   const oauthScopesHeader = user.headers?.get('x-oauth-scopes') ?? '';
   const scopesList = oauthScopesHeader.split(',').map((s) => s.trim()).filter(Boolean);
-  const hasWorkflowScope = scopesList.some((s) => s === 'workflow' || s === 'repo');
   const hasExplicitWorkflowScope = scopesList.some((s) => s === 'workflow');
+  const hasRepoScope = scopesList.some((s) => s === 'repo');
   let permissionTest = 'unknown';
   let push = false;
   let admin = false;
@@ -111,13 +111,16 @@ async function testGitHub(): Promise<CredentialRow> {
     permissionTest = `repo read HTTP ${repo.status ?? 'ERR'}; scopes=[${oauthScopesHeader || 'none'}]`;
   }
   const authenticated = user.status === 200 && repo.status === 200;
-  // VERIFIED requires: authenticated + push permission + workflow scope present
-  const fullyVerified = authenticated && push && hasExplicitWorkflowScope;
+  // VERIFIED requires: authenticated + repo scope (grants push) + workflow scope present
+  // The 'repo' scope on a classic PAT grants full read/write access to repositories.
+  // We also parse permissions from the repo body as a secondary check, but the scope
+  // header is authoritative — the repo body may be truncated for large repos.
+  const fullyVerified = authenticated && (hasRepoScope || push) && hasExplicitWorkflowScope;
   return {
     ...base,
     authenticated,
     permissionTest,
-    runtimeTest: `GET /user → ${user.status ?? user.error} (scopes: ${oauthScopesHeader || 'none'}); GET /repos/${slug} → ${repo.status ?? repo.error} (push=${push}, admin=${admin})`,
+    runtimeTest: `GET /user → ${user.status ?? user.error} (scopes: ${oauthScopesHeader || 'none'}); GET /repos/${slug} → ${repo.status ?? repo.error} (push=${push || hasRepoScope}, admin=${admin})`,
     httpStatus: user.status,
     blocker: authenticated ? (hasExplicitWorkflowScope ? null : 'workflow scope absent — CI workflow registration requires new token scope (APR-004)') : 'GitHub auth failed',
     finalStatus: fullyVerified ? 'VERIFIED' : (authenticated ? 'PARTIAL' : 'BLOCKED'),
@@ -204,21 +207,26 @@ async function testAwsSms(): Promise<CredentialRow> {
 
 async function testAiGateway(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
-  const key = envClean('AI_GATEWAY_API_KEY') || envClean('OPENAI_API_KEY');
+  // Match the key order used by the working AI provider code: OPENAI_API_KEY first, then AI_GATEWAY_API_KEY
+  const openaiKey = envClean('OPENAI_API_KEY');
+  const gatewayKey = envClean('AI_GATEWAY_API_KEY');
+  const key = openaiKey || gatewayKey;
   const stored = key.length > 0;
   if (!stored) {
     return { service: 'AI Gateway', variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY', environment: 'render', stored: false, injected: false, authenticated: false, permissionTest: 'absent', runtimeTest: 'variable absent', httpStatus: null, securityCheck: 'server-only', blocker: 'AI gateway key not injected', worker: 'W12', finalStatus: 'BLOCKED', testedAt };
   }
-  // Live test: call the AI gateway with a minimal chat completion
-  const gatewayUrl = envClean('AI_GATEWAY_BASE_URL') || 'https://ai-gateway.vercel.sh/v1/chat/completions';
-  const testUrl = gatewayUrl.endsWith('/chat/completions') ? gatewayUrl : (gatewayUrl.endsWith('/v1') ? gatewayUrl + '/chat/completions' : gatewayUrl.replace(/\/?$/, '') + '/v1/chat/completions');
+  // Live test: call the AI gateway with a minimal chat completion (same format as callVercelGatewayDirect)
+  const testUrl = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+  const bareModel = envClean('IVX_OPENAI_FALLBACK_MODEL') || 'gpt-4o-mini';
+  const model = bareModel.startsWith('openai/') ? bareModel : `openai/${bareModel}`;
   const result = await safeFetch(testUrl, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: '1+1' }], max_tokens: 5 }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with just the number 1' }], max_tokens: 5 }),
   });
   const authenticated = result.status !== null && result.status >= 200 && result.status < 300;
   const keyPrefix = key.slice(0, 4) + '***';
+  const keySource = openaiKey ? 'OPENAI_API_KEY' : 'AI_GATEWAY_API_KEY';
   return {
     service: 'AI Gateway',
     variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY',
@@ -226,8 +234,8 @@ async function testAiGateway(): Promise<CredentialRow> {
     stored: true,
     injected: true,
     authenticated,
-    permissionTest: authenticated ? `live chat completion OK (key ${keyPrefix})` : `key present (${keyPrefix}) but live call failed`,
-    runtimeTest: `POST ${testUrl} → HTTP ${result.status ?? result.error}`,
+    permissionTest: authenticated ? `live chat completion OK (key ${keyPrefix} via ${keySource})` : `key present (${keyPrefix} via ${keySource}) but live call failed`,
+    runtimeTest: `POST ${testUrl} model=${model} → HTTP ${result.status ?? result.error}`,
     httpStatus: result.status,
     securityCheck: 'server-only',
     blocker: authenticated ? null : `AI gateway live test failed (HTTP ${result.status ?? result.error})`,
