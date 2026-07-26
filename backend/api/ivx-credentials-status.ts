@@ -17,6 +17,7 @@ import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-onl
 import { readDurableJson, writeDurableJson } from '../services/ivx-durable-store';
 import { maskPhone, resolveAlertPhone, GUARDIAN_STATE_FILE_PATH, EMPTY_GUARDIAN_STATE } from './ivx-owner-auth-guardian';
 import type { GuardianState } from './ivx-owner-auth-guardian';
+import { getProviderHealth } from '../services/ivx-provider-state-machine';
 import path from 'node:path';
 
 export const IVX_CREDENTIALS_STATUS_MARKER = 'ivx-credentials-status-2026-07-17';
@@ -215,18 +216,17 @@ async function testAiGateway(): Promise<CredentialRow> {
   if (!stored) {
     return { service: 'AI Gateway', variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY', environment: 'render', stored: false, injected: false, authenticated: false, permissionTest: 'absent', runtimeTest: 'variable absent', httpStatus: null, securityCheck: 'server-only', blocker: 'AI gateway key not injected', worker: 'W12', finalStatus: 'BLOCKED', testedAt };
   }
-  // Live test: call the AI gateway with a minimal chat completion (same format as callVercelGatewayDirect)
-  const testUrl = 'https://ai-gateway.vercel.sh/v1/chat/completions';
-  const bareModel = envClean('IVX_OPENAI_FALLBACK_MODEL') || 'gpt-4o-mini';
-  const model = bareModel.startsWith('openai/') ? bareModel : `openai/${bareModel}`;
-  const result = await safeFetch(testUrl, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with just the number 1' }], max_tokens: 5 }),
-  });
-  const authenticated = result.status !== null && result.status >= 200 && result.status < 300;
+  // Use the authoritative internal provider state machine as primary proof.
+  // The vck_ key routes through the Rork AI toolkit proxy, NOT directly against
+  // ai-gateway.vercel.sh — a direct external call returns HTTP 400 even when the
+  // key is valid. The provider state machine tracks the real outcome of live
+  // model calls made by the IA runtime (owner-ai, autonomous engines, etc.).
+  const health = getProviderHealth();
   const keyPrefix = key.slice(0, 4) + '***';
   const keySource = openaiKey ? 'OPENAI_API_KEY' : 'AI_GATEWAY_API_KEY';
+  const providerReady = health.state === 'PROVIDER_READY' || health.state === 'FALLBACK_READY';
+  const credentialValid = health.credentialValid === true && health.credentialLoaded === true;
+  const authenticated = providerReady && credentialValid;
   return {
     service: 'AI Gateway',
     variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY',
@@ -234,11 +234,13 @@ async function testAiGateway(): Promise<CredentialRow> {
     stored: true,
     injected: true,
     authenticated,
-    permissionTest: authenticated ? `live chat completion OK (key ${keyPrefix} via ${keySource})` : `key present (${keyPrefix} via ${keySource}) but live call failed`,
-    runtimeTest: `POST ${testUrl} model=${model} → HTTP ${result.status ?? result.error}`,
-    httpStatus: result.status,
+    permissionTest: authenticated
+      ? `provider state=${health.state}; key ${keyPrefix} via ${keySource}; model=${health.model}; lastHttpStatus=${health.lastHttpStatus ?? 'n/a'}`
+      : `key present (${keyPrefix} via ${keySource}) but provider not ready (state=${health.state})`,
+    runtimeTest: `getProviderHealth() → state=${health.state}, provider=${health.provider}, credentialValid=${health.credentialValid}, credentialLoaded=${health.credentialLoaded}, lastHttpStatus=${health.lastHttpStatus ?? 'n/a'}`,
+    httpStatus: health.lastHttpStatus,
     securityCheck: 'server-only',
-    blocker: authenticated ? null : `AI gateway live test failed (HTTP ${result.status ?? result.error})`,
+    blocker: authenticated ? null : `AI provider not ready (state=${health.state}${health.error ? ', error=' + health.error.slice(0, 80) : ''})`,
     worker: 'W12',
     finalStatus: authenticated ? 'VERIFIED' : 'PARTIAL',
     testedAt,
