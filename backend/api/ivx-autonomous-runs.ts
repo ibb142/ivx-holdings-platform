@@ -1,1 +1,87 @@
-LyoqCiAqIElWWCBBdXRvbm9tb3VzIFJ1biBMb2cgQVBJIChvd25lci1vbmx5KSDigJQgMjAyNi0wNy0yNi4KICoKICogICBHRVQgL2FwaS9pdngvYXV0b25vbW91cy9ydW5zICAgICAgICAgIOKGkiByZWNlbnQgcGVybWFuZW50IHJ1biByZWNvcmRzIChuZXdlc3QgZmlyc3QpCiAqICAgR0VUIC9hcGkvaXZ4L2F1dG9ub21vdXMvcnVucy9zdW1tYXJ5ICDihpIgYWdncmVnYXRlZCBldmlkZW5jZSBjb3VudHMgKGhvbmVzdCkKICoKICogVGhpcyBpcyB0aGUgcGVybWFuZW50IHBlci1ydW4gZXZpZGVuY2UgbGF5ZXI6IGV2ZXJ5IGF1dG9ub21vdXMgZW5naW5lL3NjaGVkdWxlcgogKiBydW4gaXMgcGVyc2lzdGVkIGFzIGFuIGluZGl2aWR1YWwgcmVjb3JkIGluIHRoZSBkdXJhYmxlIFN1cGFiYXNlIHN0b3JlIGFuZCBpcwogKiByZWFkYWJsZSBoZXJlLiBSZWNvcmRzIHN1cnZpdmUgc2VydmVyIHJlc3RhcnRzLCBSZW5kZXIgcmVkZXBsb3lzLCBhbmQgc2NoZWR1bGVyCiAqIHJlc3RhcnRzLiBObyBtb2NrIGRhdGEg4oCUIGV2ZXJ5IHJlY29yZCBpcyBncm91bmRlZCBpbiBhIHJlYWwgZXhlY3V0aW9uLgogKi8KaW1wb3J0IHsgYXNzZXJ0SVZYT3duZXJPbmx5LCBvd25lck9ubHlKc29uLCBvd25lck9ubHlPcHRpb25zIH0gZnJvbSAnLi9vd25lci1vbmx5JzsKaW1wb3J0IHsgcmVhZEF1dG9ub21vdXNSdW5zLCBzdW1tYXJpemVBdXRvbm9tb3VzUnVuTG9nIH0gZnJvbSAnLi4vc2VydmljZXMvaXZ4LWF1dG9ub21vdXMtcnVuLWxvZyc7CgpleHBvcnQgY29uc3QgSVZYX0FVVE9OT01PVVNfUlVOU19NQVJLRVIgPSAnaXZ4LWF1dG9ub21vdXMtcnVucy1hcGktMjAyNi0wNy0yNic7CgpleHBvcnQgZnVuY3Rpb24gYXV0b25vbW91c1J1bnNPcHRpb25zKCk6IFJlc3BvbnNlIHsKICByZXR1cm4gb3duZXJPbmx5T3B0aW9ucygpOwp9CgovKiogR0VUIC9hcGkvaXZ4L2F1dG9ub21vdXMvcnVucyDigJQgcmVjZW50IHBlcm1hbmVudCBydW4gcmVjb3JkcyAobmV3ZXN0IGZpcnN0KS4gKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZUF1dG9ub21vdXNSdW5zR2V0KHJlcXVlc3Q6IFJlcXVlc3QpOiBQcm9taXNlPFJlc3BvbnNlPiB7CiAgdHJ5IHsKICAgIGF3YWl0IGFzc2VydElWWE93bmVyT25seShyZXF1ZXN0KTsKICB9IGNhdGNoIChlcnIpIHsKICAgIGNvbnN0IG1lc3NhZ2UgPSBlcnIgaW5zdGFuY2VvZiBFcnJvciA/IGVyci5tZXNzYWdlIDogJ3VuYXV0aG9yaXplZCc7CiAgICByZXR1cm4gb3duZXJPbmx5SnNvbih7IG9rOiBmYWxzZSwgZXJyb3I6IG1lc3NhZ2UgfSwgNDAxKTsKICB9CgogIGNvbnN0IHVybCA9IG5ldyBVUkwocmVxdWVzdC51cmwpOwogIGNvbnN0IGxpbWl0UGFyYW0gPSB1cmwuc2VhcmNoUGFyYW1zLmdldCgnbGltaXQnKTsKICBjb25zdCBsaW1pdCA9IE1hdGgubWF4KDEsIE1hdGgubWluKDUwMCwgTnVtYmVyLnBhcnNlSW50KGxpbWl0UGFyYW0gPz8gJzEwMCcsIDEwKSB8fCAxMDApKTsKICBjb25zdCBlbmdpbmUgPSB1cmwuc2VhcmNoUGFyYW1zLmdldCgnZW5naW5lJyk7CiAgY29uc3Qga2luZCA9IHVybC5zZWFyY2hQYXJhbXMuZ2V0KCdraW5kJyk7CgogIGxldCBydW5zID0gYXdhaXQgcmVhZEF1dG9ub21vdXNSdW5zKGxpbWl0KTsKICBpZiAoZW5naW5lKSB7CiAgICBydW5zID0gcnVucy5maWx0ZXIoKHIpID0+IHIuZW5naW5lID09PSBlbmdpbmUpOwogIH0KICBpZiAoa2luZCkgewogICAgcnVucyA9IHJ1bnMuZmlsdGVyKChyKSA9PiByLmtpbmQgPT09IGtpbmQpOwogIH0KCiAgcmV0dXJuIG93bmVyT25seUpzb24oewogICAgb2s6IHRydWUsCiAgICBtYXJrZXI6IElWWF9BVVRPTk9NT1VTX1JVTlNfTUFSS0VSLAogICAgZ2VuZXJhdGVkQXQ6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICAgIHNvdXJjZTogJ2R1cmFibGVfc3RvcmUnLAogICAgY291bnQ6IHJ1bnMubGVuZ3RoLAogICAgcnVuczogcnVucyBhcyB1bmtub3duIGFzIFJlY29yZDxzdHJpbmcsIHVua25vd24+LAogIH0gYXMgdW5rbm93biBhcyBSZWNvcmQ8c3RyaW5nLCB1bmtub3duPik7Cn0KCi8qKiBHRVQgL2FwaS9pdngvYXV0b25vbW91cy9ydW5zL3N1bW1hcnkg4oCUIGFnZ3JlZ2F0ZWQgaG9uZXN0IGV2aWRlbmNlIGNvdW50cy4gKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZUF1dG9ub21vdXNSdW5zU3VtbWFyeUdldChyZXF1ZXN0OiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBhd2FpdCBhc3NlcnRJVlhPd25lck9ubHkocmVxdWVzdCk7CiAgfSBjYXRjaCAoZXJyKSB7CiAgICBjb25zdCBtZXNzYWdlID0gZXJyIGluc3RhbmNlb2YgRXJyb3IgPyBlcnIubWVzc2FnZSA6ICd1bmF1dGhvcml6ZWQnOwogICAgcmV0dXJuIG93bmVyT25seUpzb24oeyBvazogZmFsc2UsIGVycm9yOiBtZXNzYWdlIH0sIDQwMSk7CiAgfQoKICBjb25zdCBzdW1tYXJ5ID0gYXdhaXQgc3VtbWFyaXplQXV0b25vbW91c1J1bkxvZyg1MDApOwogIGlmICghc3VtbWFyeSkgewogICAgcmV0dXJuIG93bmVyT25seUpzb24oewogICAgICBvazogdHJ1ZSwKICAgICAgbWFya2VyOiBJVlhfQVVUT05PTU9VU19SVU5TX01BUktFUiwKICAgICAgZ2VuZXJhdGVkQXQ6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICAgICAgc291cmNlOiAnZHVyYWJsZV9zdG9yZScsCiAgICAgIHRvdGFsUnVuczogMCwKICAgICAgcnVuc1dpdGhFdmlkZW5jZTogMCwKICAgICAgcnVuc1dpdGhvdXRFdmlkZW5jZTogMCwKICAgICAgZmFpbGVkOiAwLAogICAgICBieUVuZ2luZTogW10sCiAgICAgIG5vdGU6ICdObyBwZXJtYW5lbnQgcnVuIHJlY29yZHMgeWV0LiBSZWNvcmRzIGFwcGVhciBhZnRlciB0aGUgbmV4dCBhdXRvbm9tb3VzIGV4ZWN1dGlvbi4nLAogICAgfSBhcyB1bmtub3duIGFzIFJlY29yZDxzdHJpbmcsIHVua25vd24+KTsKICB9CgogIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgIG9rOiB0cnVlLAogICAgbWFya2VyOiBJVlhfQVVUT05PTU9VU19SVU5TX01BUktFUiwKICAgIGdlbmVyYXRlZEF0OiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCksCiAgICBzb3VyY2U6ICdkdXJhYmxlX3N0b3JlJywKICAgIC4uLnN1bW1hcnksCiAgICBub3RlOiBgJHtzdW1tYXJ5LnRvdGFsUnVuc30gcGVybWFuZW50IHJ1biByZWNvcmQocykg4oCUICR7c3VtbWFyeS5ydW5zV2l0aEV2aWRlbmNlfSB3aXRoIGV2aWRlbmNlLCAke3N1bW1hcnkucnVuc1dpdGhvdXRFdmlkZW5jZX0gd2l0aG91dCwgJHtzdW1tYXJ5LmZhaWxlZH0gZmFpbGVkLiBFdmVyeSBydW4gaXMgcGVyc2lzdGVkIHRvIHRoZSBkdXJhYmxlIFN1cGFiYXNlIHN0b3JlIGFuZCBzdXJ2aXZlcyByZXN0YXJ0cy9kZXBsb3lzLmAsCiAgfSBhcyB1bmtub3duIGFzIFJlY29yZDxzdHJpbmcsIHVua25vd24+KTsKfQo=
+/**
+ * IVX Autonomous Run Log API (owner-only) — 2026-07-26.
+ *
+ *   GET /api/ivx/autonomous/runs          → recent permanent run records (newest first)
+ *   GET /api/ivx/autonomous/runs/summary  → aggregated evidence counts (honest)
+ *
+ * This is the permanent per-run evidence layer: every autonomous engine/scheduler
+ * run is persisted as an individual record in the durable Supabase store and is
+ * readable here. Records survive server restarts, Render redeploys, and scheduler
+ * restarts. No mock data — every record is grounded in a real execution.
+ */
+import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { readAutonomousRuns, summarizeAutonomousRunLog } from '../services/ivx-autonomous-run-log';
+
+export const IVX_AUTONOMOUS_RUNS_MARKER = 'ivx-autonomous-runs-api-2026-07-26';
+
+export function autonomousRunsOptions(): Response {
+  return ownerOnlyOptions();
+}
+
+/** GET /api/ivx/autonomous/runs — recent permanent run records (newest first). */
+export async function handleAutonomousRunsGet(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unauthorized';
+    return ownerOnlyJson({ ok: false, error: message }, 401);
+  }
+
+  const url = new URL(request.url);
+  const limitParam = url.searchParams.get('limit');
+  const limit = Math.max(1, Math.min(500, Number.parseInt(limitParam ?? '100', 10) || 100));
+  const engine = url.searchParams.get('engine');
+  const kind = url.searchParams.get('kind');
+
+  let runs = await readAutonomousRuns(limit);
+  if (engine) {
+    runs = runs.filter((r) => r.engine === engine);
+  }
+  if (kind) {
+    runs = runs.filter((r) => r.kind === kind);
+  }
+
+  return ownerOnlyJson({
+    ok: true,
+    marker: IVX_AUTONOMOUS_RUNS_MARKER,
+    generatedAt: new Date().toISOString(),
+    source: 'durable_store',
+    count: runs.length,
+    runs: runs as unknown as Record<string, unknown>,
+  } as unknown as Record<string, unknown>);
+}
+
+/** GET /api/ivx/autonomous/runs/summary — aggregated honest evidence counts. */
+export async function handleAutonomousRunsSummaryGet(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unauthorized';
+    return ownerOnlyJson({ ok: false, error: message }, 401);
+  }
+
+  const summary = await summarizeAutonomousRunLog(500);
+  if (!summary) {
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_AUTONOMOUS_RUNS_MARKER,
+      generatedAt: new Date().toISOString(),
+      source: 'durable_store',
+      totalRuns: 0,
+      runsWithEvidence: 0,
+      runsWithoutEvidence: 0,
+      failed: 0,
+      byEngine: [],
+      note: 'No permanent run records yet. Records appear after the next autonomous execution.',
+    } as unknown as Record<string, unknown>);
+  }
+
+  return ownerOnlyJson({
+    ok: true,
+    marker: IVX_AUTONOMOUS_RUNS_MARKER,
+    generatedAt: new Date().toISOString(),
+    source: 'durable_store',
+    ...summary,
+    note: `${summary.totalRuns} permanent run record(s) — ${summary.runsWithEvidence} with evidence, ${summary.runsWithoutEvidence} without, ${summary.failed} failed. Every run is persisted to the durable Supabase store and survives restarts/deploys.`,
+  } as unknown as Record<string, unknown>);
+}
