@@ -77,6 +77,8 @@ import {
 } from '../../expo/shared/ivx';
 import {
   assertIVXOwnerOnly,
+  assertIVXRegisteredOwnerBearer,
+  IVXOwnerApprovalError,
   ownerOnlyJson,
   ownerOnlyOptions,
   type IVXOwnerRequestContext,
@@ -5525,7 +5527,37 @@ async function getIVXOwnerAIUsageStats(): Promise<{
   }
 }
 
-export async function handleIVXOwnerAIProxyStatus(): Promise<Response> {
+/**
+ * Public-safe AI status — minimal info, no credentials, no internal paths,
+ * no deployment controls. Safe for unauthenticated callers.
+ */
+export function handleIVXOwnerAIPublicStatus(): Response {
+  const model = getOwnerAIModel();
+  const snapshot = getIVXAIConfigurationSnapshot(model);
+  return ownerOnlyJson({
+    ok: true,
+    aiProviderReady: snapshot.configured,
+    model: snapshot.model,
+    timestamp: nowIso(),
+  });
+}
+
+/**
+ * Internal owner-only AI proxy status — requires a valid owner JWT.
+ * Returns runtime details, gateway config flags, audit logging state, and
+ * deployment marker. Unauthenticated requests get 401; non-owner gets 403.
+ */
+export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Response> {
+  try {
+    await assertIVXRegisteredOwnerBearer(request, 'owner_ai_proxy_status');
+  } catch (error) {
+    const status = error instanceof IVXOwnerApprovalError ? error.status : 401;
+    return ownerOnlyJson({
+      ok: false,
+      error: status === 401 ? 'Authentication required.' : 'Owner access required.',
+    }, status as 401 | 403);
+  }
+
   const model = getOwnerAIModel();
   const snapshot = getIVXAIConfigurationSnapshot(model);
   const hasAiGatewayKey = readBackendEnv('AI_GATEWAY_API_KEY').length > 0;

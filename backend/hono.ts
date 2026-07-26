@@ -13,7 +13,7 @@ import {
   securityHeadersMiddleware,
   getEnterpriseMetrics,
 } from './middleware/ivx-enterprise-middleware';
-import { GET, OPTIONS as ownerAIOptions, handleIVXOwnerAIProxyStatus, handleIVXOwnerAIRequest, handleIVXOwnerAIToolRequest } from './api/ivx-owner-ai';
+import { GET, OPTIONS as ownerAIOptions, handleIVXOwnerAIProxyStatus, handleIVXOwnerAIPublicStatus, handleIVXOwnerAIRequest, handleIVXOwnerAIToolRequest } from './api/ivx-owner-ai';
 import {
   handleIVXIaMemoryDeleteRequest,
   handleIVXIaMemoryForgetNameRequest,
@@ -3164,14 +3164,19 @@ app.get('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId', async (conte
 app.post('/api/ivx/senior-developer/autonomous-worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));
 app.get('/api/ivx/senior-developer/worker/jobs/:taskId', async (context) => handleSeniorDeveloperWorkerJobRequest(context.req.raw, context.req.param('taskId')));
 app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context) => handleSeniorDevWorkerApprove(context.req.raw, context.req.param('taskId')));
+// Public-safe AI status — minimal info, no credentials, no internal details.
+app.get('/api/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
+app.get('/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
+
+// Owner-only AI proxy status — requires valid owner JWT, returns internal runtime details.
 app.options('/api/ivx/owner-ai/proxy-status', () => ownerAIOptions());
-app.get('/api/ivx/owner-ai/proxy-status', () => handleIVXOwnerAIProxyStatus());
+app.get('/api/ivx/owner-ai/proxy-status', (context) => handleIVXOwnerAIProxyStatus(context.req.raw));
 app.options('/api/ivx/owner-ai/status', () => ownerAIOptions());
-app.get('/api/ivx/owner-ai/status', () => handleIVXOwnerAIProxyStatus());
+app.get('/api/ivx/owner-ai/status', (context) => handleIVXOwnerAIProxyStatus(context.req.raw));
 app.options('/ivx/owner-ai/proxy-status', () => ownerAIOptions());
-app.get('/ivx/owner-ai/proxy-status', () => handleIVXOwnerAIProxyStatus());
+app.get('/ivx/owner-ai/proxy-status', (context) => handleIVXOwnerAIProxyStatus(context.req.raw));
 app.options('/ivx/owner-ai/status', () => ownerAIOptions());
-app.get('/ivx/owner-ai/status', () => handleIVXOwnerAIProxyStatus());
+app.get('/ivx/owner-ai/status', (context) => handleIVXOwnerAIProxyStatus(context.req.raw));
 app.options('/api/ivx/owner-ai/diagnostics', () => ivxOwnerAIDiagnosticsOptions());
 app.get('/api/ivx/owner-ai/diagnostics', async (context) => handleIVXOwnerAIDiagnosticsListRequest(context.req.raw));
 app.options('/api/ivx/owner-ai/diagnostics/client-event', () => ivxOwnerAIDiagnosticsOptions());
