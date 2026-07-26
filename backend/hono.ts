@@ -128,6 +128,43 @@ import {
   handleAppGeneratorScaffoldRequest,
 } from './api/ivx-app-generator';
 import {
+  registerAndVerifyAppGeneratorTool as bootRegisterAppGeneratorTool,
+  getAppGeneratorTool as bootGetAppGeneratorTool,
+  IVX_APP_GENERATOR_MARKER as APP_GEN_MARKER,
+  IVX_APP_GENERATOR_TOOL_NAME as APP_GEN_TOOL_NAME,
+} from './services/ivx-app-generator';
+import { IVX_FACTORY_ENGINE_MARKER as APP_GEN_FACTORY_MARKER } from './services/ivx-autonomous-coder-factory';
+
+// ── BOOT-TIME APP-GENERATOR REGISTRATION (Phase 2) ──────────────────────────
+// Registers + self-tests + enables the Universal App Generator tool at server
+// boot so it is immediately available — no manual /register call needed.
+let appGeneratorBootRegistered = false;
+let appGeneratorBootInitialized = false;
+let appGeneratorBootError: string | null = null;
+let appGeneratorBootCheckedAt = '';
+async function bootRegisterAppGenerator(): Promise<void> {
+  try {
+    const registration = await bootRegisterAppGeneratorTool();
+    appGeneratorBootRegistered = registration.selfTestPassed;
+    appGeneratorBootInitialized = true;
+    appGeneratorBootError = registration.selfTestPassed ? null : 'Self-test failed during boot registration.';
+    appGeneratorBootCheckedAt = new Date().toISOString();
+    console.log('[IVXBoot] App generator boot registration:', {
+      registered: appGeneratorBootRegistered,
+      selfTestPassed: registration.selfTestPassed,
+      toolName: APP_GEN_TOOL_NAME,
+      marker: APP_GEN_MARKER,
+      checkedAt: appGeneratorBootCheckedAt,
+    });
+  } catch (error) {
+    appGeneratorBootError = error instanceof Error ? error.message : 'Boot registration failed.';
+    appGeneratorBootCheckedAt = new Date().toISOString();
+    console.error('[IVXBoot] App generator boot registration FAILED:', appGeneratorBootError);
+  }
+}
+// Fire-and-forget at module load (runs once per server boot).
+void bootRegisterAppGenerator();
+import {
   OPTIONS as credentialReadinessOptions,
   handleCredentialReadinessRequest,
   handleCredentialDeploymentRequest,
@@ -2893,6 +2930,18 @@ app.get('/health', async (context) => {
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
     bootTime: SERVER_BOOT_TIME,
+    appGenerator: {
+      registered: appGeneratorBootRegistered,
+      initialized: appGeneratorBootInitialized,
+      toolAvailable: appGeneratorBootRegistered,
+      factoryAvailable: true,
+      registryReady: appGeneratorBootRegistered,
+      toolName: APP_GEN_TOOL_NAME,
+      marker: APP_GEN_MARKER,
+      factoryMarker: APP_GEN_FACTORY_MARKER,
+      bootError: appGeneratorBootError,
+      bootCheckedAt: appGeneratorBootCheckedAt,
+    },
     autonomousCoreRoutesRegistered: true,
     frontendUrl: 'https://chat.ivxholding.com',
     apiUrl: 'https://api.ivxholding.com',
