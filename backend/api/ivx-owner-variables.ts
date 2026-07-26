@@ -1023,6 +1023,31 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
     const savedNames = required.filter((name) => Boolean(values[name] || readEnv(name)));
     return { provider: 'aws', status: 'missing', requiredVariableNames: required, savedVariableNames: savedNames, missingVariableNames: missing.length > 0 ? missing : required.filter((name) => !savedNames.includes(name)), lastTestedAt: null, secretValuesReturned: false };
   }
+  // Diagnostic checks: detect hidden characters, URL-decoding artifacts, and
+  // whitespace corruption that cause SignatureDoesNotMatch even with valid creds.
+  // AWS secret keys are base64-like [A-Za-z0-9/+=] and should contain NO spaces,
+  // newlines, or control characters.
+  const accessKeyHasSpaces = /\s/.test(accessKeyId);
+  const secretHasSpaces = /\s/.test(secretAccessKey);
+  const secretHasNewlines = /[\r\n]/.test(secretAccessKey);
+  const accessKeyNonAscii = accessKeyId.split('').some((c) => c.charCodeAt(0) > 127);
+  const secretNonAscii = secretAccessKey.split('').some((c) => c.charCodeAt(0) > 127);
+  // Check for URL-decoding artifact: + decoded to space (Render env var issue)
+  const secretHasSpaceFromPlus = secretAccessKey.includes(' ');
+  // AWS access key IDs must match [A-Z0-9]{20}, typically AKIA-prefixed
+  const accessKeyFormatValid = /^[A-Z0-9]{20}$/.test(accessKeyId);
+  // AWS secret access keys are 40 chars [A-Za-z0-9/+=]
+  const secretFormatValid = /^[A-Za-z0-9/+=]{40}$/.test(secretAccessKey);
+
+  const diagnostics: string[] = [];
+  if (accessKeyHasSpaces) diagnostics.push('accessKeyId contains whitespace (possible URL-decoding artifact)');
+  if (secretHasSpaces) diagnostics.push('secretAccessKey contains spaces (possible +→space URL-decoding by Render)');
+  if (secretHasNewlines) diagnostics.push('secretAccessKey contains newlines (trailing line break not trimmed)');
+  if (accessKeyNonAscii) diagnostics.push('accessKeyId contains non-ASCII characters');
+  if (secretNonAscii) diagnostics.push('secretAccessKey contains non-ASCII characters');
+  if (!accessKeyFormatValid) diagnostics.push(`accessKeyId format invalid (expected [A-Z0-9]{20}, got len=${accessKeyId.length})`);
+  if (!secretFormatValid) diagnostics.push(`secretAccessKey format invalid (expected [A-Za-z0-9/+=]{40}, got len=${secretAccessKey.length})`);
+
   try {
     const awsSts = await import('@aws-sdk/client-sts');
     const credentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string } = {
@@ -1034,7 +1059,10 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
     await client.send(new awsSts.GetCallerIdentityCommand({}));
     return { provider: 'aws', status: 'tested', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false };
   } catch (error) {
-    return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'AWS read-only identity test failed.' };
+    const errorMsg = error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'AWS read-only identity test failed.';
+    // Append diagnostics to the error message so the owner can see WHY it fails
+    const detail = diagnostics.length > 0 ? `${errorMsg} | Diagnostics: ${diagnostics.join('; ')}.` : errorMsg;
+    return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: detail };
   }
 }
 
