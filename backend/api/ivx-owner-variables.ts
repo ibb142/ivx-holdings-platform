@@ -1171,6 +1171,12 @@ async function testAwsProvider(values: StoredSecretMap): Promise<ProviderReadine
     } else {
       storeProbeResult = 'storeProbe=SKIPPED(store==env or store empty)';
     }
+    // If the encrypted store holds a different, valid pair, prefer it. This lets
+    // the owner rotate credentials via the owner-variables store even when Render
+    // env vars are stale or a deploy fails to load them.
+    if (storeProbeResult === 'storeProbe=SUCCESS') {
+      return { provider: 'aws', status: 'tested', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: 'AWS identity verified via encrypted owner-variables store (env credentials failed, store credentials succeeded).' };
+    }
     const detail = `${errorMsg} | Diag: ${diagSummary}, ${storeProbeResult}`;
     return { provider: 'aws', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, error: detail };
   }

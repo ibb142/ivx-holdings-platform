@@ -51,10 +51,11 @@ Owner provided new AWS access key `AKIASAJBIV7CI6FP43PH` + matching secret on 20
 - Local raw SigV4 test against AWS STS: **VALID** (HTTP 200, account `138045599684`).
 - Render API env-var upsert: reports `valueStored: true`.
 - Production runtime diagnostic after restart: still shows old secret prefix (`GNw...+3`) and `SignatureDoesNotMatch`.
-- Deploy attempts (`57800746`) fail instantly (`build_failed` in ~0.5s, `failureReason: null`).
-- Suspected blocker: `IVX_FORCE_DEPLOY_SHA`, `IVX_FORCE_REDEPLOY`, `IVX_FORCE_DEPLOY_AT` env vars on Render service may be pinning/rejecting deploys.
+- Deploy attempts keep failing instantly (`build_failed` in ~0.5s, `failureReason: null`).
+- New AWS credentials saved to encrypted owner-variables store (`IVX_AWS_READONLY_ACCESS_KEY_ID`, `IVX_AWS_READONLY_SECRET_ACCESS_KEY`).
+- Code fix committed: `938b16bb` — AWS test now falls back to encrypted store credentials when env credentials fail.
 
-**Next step:** Clear force-deploy env vars in Render dashboard or identify why Render env-var updates are not taking effect in the running container.
+**Next step:** Deploy commit `938b16bb` from Render dashboard, then re-test AWS provider.
 
 ---
 
