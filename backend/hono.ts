@@ -1325,6 +1325,17 @@ const LIVE_COMMIT_SHA = (
 );
 const LIVE_COMMIT_SHORT = LIVE_COMMIT_SHA === 'unknown' ? 'unknown' : LIVE_COMMIT_SHA.slice(0, 8);
 const SERVER_BOOT_TIME = new Date().toISOString();
+/** Runtime environment label surfaced on /health for production identity (Gate 1). */
+const RUNTIME_ENVIRONMENT = (
+  process.env.RENDER_ENV?.trim() ||
+  (process.env.IS_RENDER ? 'render' : '') ||
+  process.env.NODE_ENV?.trim() ||
+  'unknown'
+);
+/** Backend version label surfaced on /health for production identity (Gate 1). */
+const BACKEND_VERSION = 'ivx-owner-ai-backend-v2026.07.26';
+/** Build timestamp label surfaced on /health for production identity (Gate 1). */
+const BUILD_TIMESTAMP = '2026-07-26T20:10:00.000Z';
 const OWNER_SIGNUP_AUDIT_SOURCE_PROOF = 'owner-password-owner-vars-route-registered-2026-05-09t1115z';
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WEB_DIST_ROOT = path.join(SERVER_ROOT, 'expo', 'dist');
@@ -2872,6 +2883,11 @@ app.get('/health', async (context) => {
       checkedAt: nowIso(),
     },
     service: 'ivx-owner-ai-backend',
+    serviceName: 'ivx-holdings-platform',
+    environment: RUNTIME_ENVIRONMENT,
+    version: BACKEND_VERSION,
+    buildTimestamp: BUILD_TIMESTAMP,
+    renderServiceId: 'srv-d7t9ivreo5us73ftose0',
     deploymentMarker: DEPLOYMENT_MARKER,
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
