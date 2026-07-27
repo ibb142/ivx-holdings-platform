@@ -1067,6 +1067,20 @@ import {
   handlePermissionMatrix,
   handleTaskStates,
 } from './api/ivx-autonomous-task-engine-api';
+import {
+  enterpriseRegistrationOptions,
+  handleEnterpriseRegisterRequest,
+  handleCreateInvitationRequest,
+  handleAcceptInvitationRequest,
+  handleRevokeInvitationRequest,
+  handleMembershipActionRequest,
+  handleCheckAccessRequest,
+  handleEnterpriseRegistrationSummaryRequest,
+  handleListEnterprisesRequest,
+  handleGetEnterpriseRequest,
+  handleListMembershipsRequest,
+  handleUpdateVerificationRequest,
+} from './api/ivx-enterprise-registration-api';
 import { startEnterpriseReportScheduler } from './services/ivx-enterprise-reporting';
 import {
   OPTIONS as roleAgentsOptions,
@@ -5101,6 +5115,29 @@ app.get('/api/ivx/autonomous-task-engine/approvals', async (c) => handleListAppr
 app.post('/api/ivx/autonomous-task-engine/approvals', async (c) => handleCreateApproval(c));
 app.post('/api/ivx/autonomous-task-engine/approvals/consume', async (c) => handleConsumeApproval(c));
 app.get('/api/ivx/autonomous-task-engine/validate/:taskId', async (c) => handleValidateCompletion(c));
+
+// ── Enterprise Registration ───────────────────────────────────────────
+app.options('/api/ivx/enterprise-registration/register', () => enterpriseRegistrationOptions());
+app.post('/api/ivx/enterprise-registration/register', async (c) => handleEnterpriseRegisterRequest(c.req.raw));
+app.options('/api/ivx/enterprise-registration/invitations', () => enterpriseRegistrationOptions());
+app.post('/api/ivx/enterprise-registration/invitations', async (c) => handleCreateInvitationRequest(c.req.raw));
+app.options('/api/ivx/enterprise-registration/invitations/accept', () => enterpriseRegistrationOptions());
+app.post('/api/ivx/enterprise-registration/invitations/accept', async (c) => handleAcceptInvitationRequest(c.req.raw));
+app.options('/api/ivx/enterprise-registration/invitations/:invitationId/revoke', () => enterpriseRegistrationOptions());
+app.post('/api/ivx/enterprise-registration/invitations/:invitationId/revoke', async (c) => handleRevokeInvitationRequest(c.req.raw, c.req.param('invitationId')));
+app.options('/api/ivx/enterprise-registration/memberships/:action', () => enterpriseRegistrationOptions());
+app.post('/api/ivx/enterprise-registration/memberships/:action', async (c) => handleMembershipActionRequest(c.req.raw, c.req.param('action')));
+app.get('/api/ivx/enterprise-registration/access/:enterpriseId', async (c) => handleCheckAccessRequest(c.req.raw, c.req.param('enterpriseId')));
+app.options('/api/ivx/enterprise-registration/summary', () => enterpriseRegistrationOptions());
+app.get('/api/ivx/enterprise-registration/summary', async (c) => handleEnterpriseRegistrationSummaryRequest(c.req.raw));
+app.options('/api/ivx/enterprise-registration/enterprises', () => enterpriseRegistrationOptions());
+app.get('/api/ivx/enterprise-registration/enterprises', async (c) => handleListEnterprisesRequest(c.req.raw));
+app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId', () => enterpriseRegistrationOptions());
+app.get('/api/ivx/enterprise-registration/enterprises/:enterpriseId', async (c) => handleGetEnterpriseRequest(c.req.raw, c.req.param('enterpriseId')));
+app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId/memberships', () => enterpriseRegistrationOptions());
+app.get('/api/ivx/enterprise-registration/enterprises/:enterpriseId/memberships', async (c) => handleListMembershipsRequest(c.req.raw, c.req.param('enterpriseId')));
+app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId/verification', () => enterpriseRegistrationOptions());
+app.post('/api/ivx/enterprise-registration/enterprises/:enterpriseId/verification', async (c) => handleUpdateVerificationRequest(c.req.raw, c.req.param('enterpriseId')));
 
 // ── Project Engagement (Instagram-Style Cards) ───────────────────────
 const PROJECT_ENGAGEMENT_PATH = '/api/projects/:projectId/engagement';
