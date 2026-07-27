@@ -1081,6 +1081,11 @@ import {
   handleListMembershipsRequest,
   handleUpdateVerificationRequest,
 } from './api/ivx-enterprise-registration-api';
+import {
+  migrationOptions,
+  handleRunMigrationRequest,
+  handleMigrationStatusRequest,
+} from './api/ivx-db-migration';
 import { startEnterpriseReportScheduler } from './services/ivx-enterprise-reporting';
 import {
   OPTIONS as roleAgentsOptions,
@@ -5138,6 +5143,12 @@ app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId/membersh
 app.get('/api/ivx/enterprise-registration/enterprises/:enterpriseId/memberships', async (c) => handleListMembershipsRequest(c.req.raw, c.req.param('enterpriseId')));
 app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId/verification', () => enterpriseRegistrationOptions());
 app.post('/api/ivx/enterprise-registration/enterprises/:enterpriseId/verification', async (c) => handleUpdateVerificationRequest(c.req.raw, c.req.param('enterpriseId')));
+
+// ── Database Migration Runner ────────────────────────────────────────
+app.options('/api/ivx/db-migration/run', () => migrationOptions());
+app.post('/api/ivx/db-migration/run', async (c) => handleRunMigrationRequest(c.req.raw));
+app.options('/api/ivx/db-migration/status', () => migrationOptions());
+app.get('/api/ivx/db-migration/status', async (c) => handleMigrationStatusRequest(c.req.raw));
 
 // ── Project Engagement (Instagram-Style Cards) ───────────────────────
 const PROJECT_ENGAGEMENT_PATH = '/api/projects/:projectId/engagement';
