@@ -46,6 +46,7 @@ type DeveloperDeployAction =
   | 'github_list_workflow_runs'
   | 'github_get_workflow_run'
   | 'github_token_scopes'
+  | 'github_list_webhooks'
   | 'verify_url_sha256'
   | 'render_trigger_deploy'
   | 'render_restart_service'
@@ -150,6 +151,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'github_list_workflow_runs'
     || normalized === 'github_get_workflow_run'
     || normalized === 'github_token_scopes'
+    || normalized === 'github_list_webhooks'
     || normalized === 'verify_url_sha256'
     || normalized === 'render_trigger_deploy'
     || normalized === 'render_restart_service'
@@ -210,6 +212,7 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'github_list_workflow_runs'
     || action === 'github_get_workflow_run'
     || action === 'github_token_scopes'
+    || action === 'github_list_webhooks'
     || action === 'verify_url_sha256'
     || action === 'github_read_file'
     || action === 'github_search_code'
@@ -1564,6 +1567,48 @@ export async function runGithubTokenScopes(input: Record<string, unknown>): Prom
   };
 }
 
+/** Read-only: lists all webhooks on the owner GitHub repo so we can detect any Rork-managed hook.
+ *  Uses the backend's authenticated GITHUB_TOKEN to call GET /repos/{owner}/{repo}/hooks.
+ *  Returns webhook URLs (masked if they look like they contain a token), events, and active status.
+ *  Never returns the token value. */
+export async function runGithubListWebhooks(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const headers = await githubHeaders();
+  const hooksResponse = await fetchJson(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/hooks`, { method: 'GET', headers });
+  const hooks = Array.isArray(hooksResponse.data) ? hooksResponse.data : [];
+  const summarized = hooks.map((hook: unknown) => {
+    const h = readRecord(hook);
+    const config = readRecord(h.config);
+    const rawUrl = readTrimmed(config.url) || readTrimmed(h.url) || '';
+    const maskedUrl = rawUrl.replace(/(ghp_|ghs_|gho_|github_pat_)[A-Za-z0-9_]+/gi, '$1***MASKED***');
+    const isRork = /rork/i.test(rawUrl);
+    return {
+      id: typeof h.id === 'number' ? h.id : null,
+      url: maskedUrl,
+      isRork,
+      events: Array.isArray(h.events) ? h.events : [],
+      active: h.active === true,
+      createdAt: readTrimmed(h.created_at) || null,
+    };
+  });
+  const rorkHooks = summarized.filter((h: { isRork: boolean }) => h.isRork);
+  return {
+    provider: 'github',
+    action: 'github_list_webhooks',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    totalWebhooks: summarized.length,
+    rorkWebhookCount: rorkHooks.length,
+    webhooks: summarized,
+    rorkHooks,
+    apiOk: hooksResponse.ok,
+    apiStatus: hooksResponse.status,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 const ARTIFACT_VERIFY_HOST_SUFFIXES = ['ivxholding.com', 'github.com', 'githubusercontent.com', 'amazonaws.com', 'supabase.co', 'cloudfront.net'];
 const MAX_ARTIFACT_VERIFY_BYTES = 524_288_000;
 
@@ -2013,8 +2058,8 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status', 'autonomous_feature_cycle', 'github_commit_multi_file'],
-      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'github_list_webhooks', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status', 'autonomous_feature_cycle', 'github_commit_multi_file'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'github_list_webhooks', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status'],
       ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -3547,6 +3592,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'github_token_scopes') {
     return await runGithubTokenScopes(input);
+  }
+  if (action === 'github_list_webhooks') {
+    return await runGithubListWebhooks(input);
   }
   if (action === 'verify_url_sha256') {
     return await runVerifyUrlSha256(input);
