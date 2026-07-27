@@ -335,6 +335,22 @@ async function deploy() {
   }
   console.log('   ✅ capture.html + /capture uploaded');
 
+  console.log('\n📤 Uploading enterprise-register.html (three-step enterprise registration UI)...');
+  let enterpriseHtml = readFileSync('./ivxholding-landing/enterprise-register.html', 'utf-8');
+  enterpriseHtml = enterpriseHtml.replace(/__IVX_API_BASE_URL__/g, apiBaseUrl || PRODUCTION_BACKEND_URL);
+  enterpriseHtml = enterpriseHtml.replace(/__IVX_BACKEND_URL__/g, backendUrl || apiBaseUrl || PRODUCTION_BACKEND_URL);
+  // Serve at /enterprise-register (no extension) and /enterprise-register.html so links work either way.
+  for (const key of ['enterprise-register.html', 'enterprise-register']) {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: enterpriseHtml,
+      ContentType: 'text/html; charset=utf-8',
+      CacheControl: LANDING_HTML_CACHE_CONTROL,
+    }));
+  }
+  console.log('   ✅ enterprise-register.html + /enterprise-register uploaded');
+
   console.log('\n📤 Uploading ivx-config.json (Supabase credentials for fallback)...');
   const configJson = JSON.stringify({
     supabaseUrl: supabaseUrl || '',

@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+(function() {
+  try {
+    var host = window.location.host;
+    if (host && host.toLowerCase().indexOf('www.') === 0) {
+      var canonical = 'https://ivxholding.com' + window.location.pathname + window.location.search + window.location.hash;
+      window.location.replace(canonical);
+    }
+  } catch(e) {}
+})();
+</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#000000" />
+  <title>IVX Holdings — Enterprise Registration</title>
+  <meta name="description" content="Register your enterprise on IVX Holdings. Create a company account, select your role, and submit enterprise details for review." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://ivxholding.com/enterprise-register" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <meta name="ivx-api-url" content="__IVX_API_BASE_URL__" />
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #141414;
+      --surface-elevated: #1A1A1A;
+      --surface-border: #2A2A2A;
+      --text: #ffffff;
+      --text-secondary: #909090;
+      --gold: #E6C200;
+      --gold-light: #FFF2A3;
+      --gold-secondary: #FFD700;
+      --error: #FF4D4D;
+      --success: #00C48C;
+      --warning: #F59E0B;
+      --input-bg: #1A1A1A;
+      --input-border: #333333;
+      --input-placeholder: #555555;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 0 16px 80px;
+    }
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--surface-border);
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 100;
+    }
+    .header-back {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 15px;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .header-back:hover { color: var(--text); background: var(--surface); }
+    .header-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .header-spacer { width: 40px; }
+    /* Progress */
+    .progress {
+      display: flex;
+      align-items: center;
+      padding: 24px 0;
+      gap: 0;
+    }
+    .progress-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 80px;
+    }
+    .progress-circle {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid var(--surface-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      transition: all 0.2s;
+    }
+    .progress-circle.complete {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #000;
+    }
+    .progress-circle.current {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+    .progress-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .progress-label.current { color: var(--text); }
+    .progress-line {
+      flex: 1;
+      height: 2px;
+      background: var(--surface-border);
+      margin-bottom: 22px;
+      transition: background 0.2s;
+    }
+    .progress-line.complete { background: var(--gold); }
+    /* Steps */
+    .step { display: none; }
+    .step.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .step-title {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .step-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+    /* Form fields */
+    .field { margin-bottom: 16px; }
+    .field-row { display: flex; gap: 12px; }
+    .field-half { flex: 1; }
+    .field-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 10px;
+      padding: 0 12px;
+      transition: border-color 0.15s;
+    }
+    .input-wrapper.error { border-color: var(--error); }
+    .input-wrapper:focus-within { border-color: var(--gold); }
+    .input-icon { margin-right: 10px; color: var(--text-secondary); flex-shrink: 0; }
+    .input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 16px;
+      padding: 14px 0;
+      font-family: inherit;
+      width: 100%;
+    }
+    .input::placeholder { color: var(--input-placeholder); }
+    select.input {
+      padding: 14px 12px;
+      margin: 0 -12px;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23909090' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+    .password-toggle {
+      background: none;
+      border: none;
+      padding: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+    .field-error {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--error);
+    }
+    /* Consent */
+    .consent { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .consent-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .consent-row input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+    .consent-text { font-size: 14px; color: var(--text); }
+    .consent-link { color: var(--gold); font-weight: 600; text-decoration: none; }
+    /* Role cards */
+    .role-grid { display: grid; gap: 12px; }
+    .role-card {
+      background: var(--surface);
+      border: 1.5px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .role-card:hover { border-color: var(--surface-border); }
+    .role-card.selected {
+      border-color: var(--gold);
+      background: rgba(230,194,0,0.06);
+    }
+    .role-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .role-radio {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid var(--surface-border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .role-card.selected .role-radio {
+      border-color: var(--gold);
+      background: var(--gold);
+    }
+    .role-radio-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #000;
+      display: none;
+    }
+    .role-card.selected .role-radio-dot { display: block; }
+    .role-label { font-size: 16px; font-weight: 700; color: var(--text); }
+    .role-card.selected .role-label { color: var(--gold); }
+    .role-desc { font-size: 13px; color: var(--text-secondary); }
+    .role-info {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: rgba(230,194,0,0.06);
+      border: 1px solid rgba(230,194,0,0.2);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .role-info svg { color: var(--gold); flex-shrink: 0; margin-top: 1px; }
+    /* Document info */
+    .doc-info {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .doc-info svg { color: var(--text-secondary); flex-shrink: 0; margin-top: 1px; }
+    /* Review */
+    .review-section {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .review-section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .review-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .review-row:last-child { border-bottom: none; }
+    .review-label { font-size: 14px; color: var(--text-secondary); }
+    .review-value { font-size: 14px; font-weight: 600; color: var(--text); text-align: right; }
+    /* Server error */
+    .server-error {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: rgba(255,77,77,0.08);
+      border: 1px solid rgba(255,77,77,0.2);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: var(--error);
+    }
+    .server-error svg { flex-shrink: 0; margin-top: 1px; }
+    /* Footer buttons */
+    .footer {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .btn-back {
+      flex: 1;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid var(--surface-border);
+      background: none;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+    }
+    .btn-back:hover { background: var(--surface); }
+    .btn-next {
+      flex: 2;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--gold);
+      color: #000;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.15s;
+      font-family: inherit;
+    }
+    .btn-next:hover { opacity: 0.9; }
+    .btn-next:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-submit {
+      flex: 2;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--gold);
+      color: #000;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: inherit;
+    }
+    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Spinner */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Confirmation */
+    .confirmation {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .confirmation-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(0,196,140,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .confirmation-icon svg { color: var(--success); }
+    .confirmation-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .confirmation-subtitle {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+    .confirmation-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    .confirmation-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .confirmation-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .confirmation-label { font-size: 13px; color: var(--text-secondary); }
+    .confirmation-value { font-size: 13px; font-weight: 600; color: var(--text); text-align: right; }
+    .confirmation-mono {
+      font-size: 11px;
+      color: var(--gold);
+      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+      text-align: right;
+      word-break: break-all;
+      max-width: 60%;
+    }
+    .confirmation-divider {
+      height: 1px;
+      background: var(--surface-border);
+      margin: 12px 0;
+    }
+    .next-steps {
+      background: rgba(230,194,0,0.06);
+      border: 1px solid rgba(230,194,0,0.2);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .next-steps-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+    .next-steps-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 20px;
+      white-space: pre-line;
+    }
+    .btn-done {
+      width: 100%;
+      padding: 16px;
+      border-radius: 10px;
+      border: none;
+      background: var(--gold);
+      color: #000;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    /* Responsive */
+    @media (min-width: 768px) {
+      .container { max-width: 720px; }
+      .role-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .step-title { font-size: 22px; }
+      .field-row { flex-direction: column; gap: 0; }
+      .progress-step { width: 60px; }
+      .progress-label { font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <a href="/" class="header-back" aria-label="Back to home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </a>
+      <div class="header-title">Enterprise Registration</div>
+      <div class="header-spacer"></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress" id="progress-bar">
+      <div class="progress-step">
+        <div class="progress-circle current" id="prog-circle-0">1</div>
+        <div class="progress-label current" id="prog-label-0">Account</div>
+      </div>
+      <div class="progress-line" id="prog-line-0"></div>
+      <div class="progress-step">
+        <div class="progress-circle" id="prog-circle-1">2</div>
+        <div class="progress-label" id="prog-label-1">Role</div>
+      </div>
+      <div class="progress-line" id="prog-line-1"></div>
+      <div class="progress-step">
+        <div class="progress-circle" id="prog-circle-2">3</div>
+        <div class="progress-label" id="prog-label-2">Enterprise</div>
+      </div>
+    </div>
+
+    <!-- STEP 1: Account -->
+    <div class="step active" id="step-account" role="region" aria-label="Step 1: Account">
+      <h1 class="step-title">Create Your Account</h1>
+      <p class="step-subtitle">Step 1 of 3 — Enter your personal details to create your IVX account.</p>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="firstName">First Name</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="firstName" placeholder="John" autocomplete="given-name" aria-label="First name" />
+          </div>
+          <div class="field-error" id="err-firstName" style="display:none"></div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="lastName">Last Name</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="lastName" placeholder="Smith" autocomplete="family-name" aria-label="Last name" />
+          </div>
+          <div class="field-error" id="err-lastName" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="email">Email</label>
+        <div class="input-wrapper">
+          <input class="input" type="email" id="email" placeholder="john@company.com" autocomplete="email" aria-label="Email" />
+        </div>
+        <div class="field-error" id="err-email" style="display:none"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="phone">Phone</label>
+        <div class="input-wrapper">
+          <input class="input" type="tel" id="phone" placeholder="+1 555 123 4567" autocomplete="tel" aria-label="Phone number" />
+        </div>
+        <div class="field-error" id="err-phone" style="display:none"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="password">Password</label>
+        <div class="input-wrapper" id="pw-wrapper">
+          <input class="input" type="password" id="password" placeholder="Min 12 chars, 1 uppercase, 1 number" autocomplete="new-password" aria-label="Password" aria-describedby="err-password" />
+          <button class="password-toggle" id="pw-toggle" type="button" aria-label="Show password">
+            <svg id="pw-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-error" id="err-password" style="display:none"></div>
+      </div>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="dateOfBirth">Date of Birth (MM/DD/YYYY)</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="dateOfBirth" placeholder="01/15/1990" inputmode="numeric" aria-label="Date of birth" />
+          </div>
+          <div class="field-error" id="err-dateOfBirth" style="display:none"></div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="gender">Gender</label>
+          <div class="input-wrapper">
+            <select class="input" id="gender" aria-label="Gender">
+              <option value="">Select...</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </select>
+          </div>
+          <div class="field-error" id="err-gender" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="country">Country</label>
+          <div class="input-wrapper">
+            <select class="input" id="country" aria-label="Country">
+              <option value="United States">United States (+1)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="zipCode">ZIP / Postal Code</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="zipCode" placeholder="10001" autocomplete="postal-code" aria-label="ZIP postal code" />
+          </div>
+          <div class="field-error" id="err-zipCode" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="consent">
+        <div class="consent-row">
+          <input type="checkbox" id="acceptTerms" aria-label="Accept Terms of Service" />
+          <label class="consent-text" for="acceptTerms">I accept the <a href="/legal" class="consent-link">Terms of Service</a></label>
+        </div>
+        <div class="field-error" id="err-acceptTerms" style="display:none"></div>
+        <div class="consent-row">
+          <input type="checkbox" id="acceptPrivacy" aria-label="Accept Privacy Policy" />
+          <label class="consent-text" for="acceptPrivacy">I accept the <a href="/legal" class="consent-link">Privacy Policy</a></label>
+        </div>
+        <div class="field-error" id="err-acceptPrivacy" style="display:none"></div>
+      </div>
+
+      <div class="footer">
+        <a href="/" class="btn-back" style="text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;">Cancel</a>
+        <button class="btn-next" id="btn-next-1" type="button">Continue</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Role -->
+    <div class="step" id="step-role" role="region" aria-label="Step 2: Role">
+      <h1 class="step-title">Select Your Primary Role</h1>
+      <p class="step-subtitle">Step 2 of 3 — Choose how your enterprise will participate on IVX Holdings.</p>
+      <div class="role-grid" id="role-grid"></div>
+      <div class="field-error" id="err-primaryRole" style="display:none"></div>
+      <div class="role-info">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Enterprise registration creates a company entity with you as the owner. KYC and AML verification will be required after registration.
+      </div>
+      <div class="footer">
+        <button class="btn-back" id="btn-back-2" type="button">Back</button>
+        <button class="btn-next" id="btn-next-2" type="button">Continue</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Enterprise -->
+    <div class="step" id="step-enterprise" role="region" aria-label="Step 3: Enterprise details">
+      <h1 class="step-title">Enterprise Details</h1>
+      <p class="step-subtitle">Step 3 of 3 — Enter your company information.</p>
+
+      <div class="field">
+        <label class="field-label" for="legalName">Legal Company Name</label>
+        <div class="input-wrapper">
+          <input class="input" type="text" id="legalName" placeholder="Acme Holdings LLC" aria-label="Legal company name" />
+        </div>
+        <div class="field-error" id="err-legalName" style="display:none"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="displayName">Display Company Name</label>
+        <div class="input-wrapper">
+          <input class="input" type="text" id="displayName" placeholder="Acme Holdings" aria-label="Display company name" />
+        </div>
+        <div class="field-error" id="err-displayName" style="display:none"></div>
+      </div>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="companyType">Company Type</label>
+          <div class="input-wrapper">
+            <select class="input" id="companyType" aria-label="Company type">
+              <option value="">Select...</option>
+              <option value="llc">LLC</option>
+              <option value="c_corp">C Corporation</option>
+              <option value="s_corp">S Corporation</option>
+              <option value="partnership">Partnership</option>
+              <option value="sole_proprietor">Sole Proprietor</option>
+              <option value="trust">Trust</option>
+              <option value="nonprofit">Nonprofit</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field-error" id="err-companyType" style="display:none"></div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="industry">Industry</label>
+          <div class="input-wrapper">
+            <select class="input" id="industry" aria-label="Industry">
+              <option value="">Select...</option>
+              <option>Real Estate</option><option>Technology</option><option>Finance</option>
+              <option>Healthcare</option><option>Construction</option><option>Manufacturing</option>
+              <option>Retail</option><option>Hospitality</option><option>Energy</option>
+              <option>Agriculture</option><option>Other</option>
+            </select>
+          </div>
+          <div class="field-error" id="err-industry" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="website">Website (optional)</label>
+        <div class="input-wrapper">
+          <input class="input" type="url" id="website" placeholder="https://acme.com" aria-label="Website" />
+        </div>
+        <div class="field-error" id="err-website" style="display:none"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="address">Business Address</label>
+        <div class="input-wrapper">
+          <input class="input" type="text" id="address" placeholder="123 Main Street" aria-label="Business address" />
+        </div>
+        <div class="field-error" id="err-address" style="display:none"></div>
+      </div>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="city">City</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="city" placeholder="New York" aria-label="City" />
+          </div>
+          <div class="field-error" id="err-city" style="display:none"></div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="state">State / Province</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="state" placeholder="NY" aria-label="State province" />
+          </div>
+          <div class="field-error" id="err-state" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="postalCode">ZIP / Postal Code</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="postalCode" placeholder="10001" aria-label="Enterprise ZIP postal code" />
+          </div>
+          <div class="field-error" id="err-postalCode" style="display:none"></div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="teamSize">Team Size</label>
+          <div class="input-wrapper">
+            <input class="input" type="number" id="teamSize" placeholder="10" min="1" max="100000" aria-label="Team size" />
+          </div>
+          <div class="field-error" id="err-teamSize" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field field-half">
+          <label class="field-label" for="authorizedRepresentative">Authorized Representative</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="authorizedRepresentative" placeholder="John Smith" aria-label="Authorized representative" />
+          </div>
+          <div class="field-error" id="err-authorizedRepresentative" style="display:none"></div>
+        </div>
+        <div class="field field-half">
+          <label class="field-label" for="representativeTitle">Representative Title</label>
+          <div class="input-wrapper">
+            <input class="input" type="text" id="representativeTitle" placeholder="CEO" aria-label="Representative title" />
+          </div>
+          <div class="field-error" id="err-representativeTitle" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="businessCategory">Business Category</label>
+        <div class="input-wrapper">
+          <select class="input" id="businessCategory" aria-label="Business category">
+            <option value="">Select...</option>
+            <option>Investment</option><option>Development</option><option>Brokerage</option>
+            <option>Lending</option><option>Construction</option><option>Property Management</option>
+            <option>Consulting</option><option>Other</option>
+          </select>
+        </div>
+        <div class="field-error" id="err-businessCategory" style="display:none"></div>
+      </div>
+
+      <div class="doc-info">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Supporting documents (optional) can be uploaded after registration in your enterprise dashboard.
+      </div>
+
+      <div class="footer">
+        <button class="btn-back" id="btn-back-3" type="button">Back</button>
+        <button class="btn-next" id="btn-review-3" type="button">Review</button>
+      </div>
+    </div>
+
+    <!-- REVIEW -->
+    <div class="step" id="step-review" role="region" aria-label="Review">
+      <h1 class="step-title">Review Your Registration</h1>
+      <p class="step-subtitle">Please verify all information before submitting.</p>
+      <div id="review-content"></div>
+      <div id="review-server-error"></div>
+      <div class="footer">
+        <button class="btn-back" id="btn-back-review" type="button">Back</button>
+        <button class="btn-submit" id="btn-submit" type="button">
+          <span id="submit-text">Submit Registration</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CONFIRMATION -->
+    <div class="step" id="step-confirmation" role="region" aria-label="Confirmation">
+      <div class="confirmation">
+        <div class="confirmation-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <h1 class="confirmation-title">Registration Received</h1>
+        <p class="confirmation-subtitle">Your enterprise registration has been submitted successfully.</p>
+        <div class="confirmation-card" id="confirmation-card"></div>
+        <div class="next-steps">
+          <div class="next-steps-title">Next Steps</div>
+          <div class="next-steps-text">1. Verify your email address
+2. Verify your phone number
+3. Complete KYC and AML verification
+4. Await enterprise review by IVX Holdings</div>
+        </div>
+        <a href="/login" class="btn-done" style="text-decoration:none;display:flex;align-items:center;justify-content:center;">Continue to Login</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // ─── Config ────────────────────────────────────────────────────────
+    var API_BASE = '__IVX_API_BASE_URL__'.replace(/\/$/, '');
+    if (API_BASE.indexOf('__IVX_') === 0 || !API_BASE) {
+      API_BASE = 'https://api.ivxholding.com';
+    }
+    var MEMBER_REGISTER_URL = API_BASE + '/api/members/register';
+    var ENTERPRISE_REGISTER_URL = API_BASE + '/api/ivx/enterprise-registration/register';
+    var DRAFT_KEY = 'ivx_enterprise_registration_draft';
+    var DRAFT_EXPIRY_MS = 24 * 60 * 60 * 1000;
+
+    // ─── Role options ──────────────────────────────────────────────────
+    var ROLES = [
+      { id: 'enterprise', label: 'Enterprise', desc: 'Register a company entity as the primary account holder.' },
+      { id: 'investor', label: 'Investor', desc: 'Capital partner seeking real estate investment opportunities.' },
+      { id: 'buyer', label: 'Buyer', desc: 'Acquiring properties directly through the platform.' },
+      { id: 'jv_partner', label: 'JV Partner', desc: 'Joint venture partnership for shared deals.' },
+      { id: 'tokenized_interest', label: 'Tokenized Interest', desc: 'Fractional tokenized property interests.' },
+      { id: 'broker_agent', label: 'Broker or Agent', desc: 'Licensed broker or agent facilitating transactions.' },
+      { id: 'lender', label: 'Lender', desc: 'Providing capital or financing for deals.' },
+      { id: 'vendor_contractor', label: 'Vendor or Contractor', desc: 'Service provider for real estate projects.' },
+    ];
+
+    // ─── State ─────────────────────────────────────────────────────────
+    var state = {
+      currentStep: 0, // 0=account, 1=role, 2=enterprise, 3=review, 4=confirmation
+      formValues: {},
+      isSubmitting: false,
+      idempotencyKey: '',
+      result: { enterpriseId: '', authUserId: '', traceId: '' },
+    };
+
+    function generateIdempotencyKey() {
+      return 'ivx-ent-web-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10);
+    }
+    state.idempotencyKey = generateIdempotencyKey();
+
+    // ─── Validation ────────────────────────────────────────────────────
+    function validateEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase());
+    }
+    function validatePhone(phone) {
+      return /^\+?[\d\s\-()]{10,}$/.test(phone.trim());
+    }
+    function validatePassword(pw) {
+      if (pw.length < 12) return 'Password must be at least 12 characters.';
+      if (pw.length > 128) return 'Password must be at most 128 characters.';
+      if (!/[A-Z]/.test(pw)) return 'Password must contain at least 1 uppercase letter.';
+      if (!/[0-9]/.test(pw)) return 'Password must contain at least 1 number.';
+      return null;
+    }
+    function validateWebsite(url) {
+      if (!url.trim()) return true;
+      try { new URL(url.startsWith('http') ? url : 'https://' + url); return true; } catch(e) { return false; }
+    }
+    function validateZip(zip) { return /^[A-Za-z0-9\s\-]{3,10}$/.test(zip.trim()); }
+
+    function validateStep1() {
+      var errors = {};
+      var v = state.formValues;
+      if (!v.firstName || !v.firstName.trim()) errors.firstName = 'First name is required.';
+      if (!v.lastName || !v.lastName.trim()) errors.lastName = 'Last name is required.';
+      if (!v.email || !v.email.trim()) errors.email = 'Email is required.';
+      else if (!validateEmail(v.email)) errors.email = 'Please enter a valid email address.';
+      if (!v.phone || !v.phone.trim()) errors.phone = 'Phone number is required.';
+      else if (!validatePhone(v.phone)) errors.phone = 'Please enter a valid phone number.';
+      var pwErr = validatePassword(v.password || '');
+      if (pwErr) errors.password = pwErr;
+      if (!v.dateOfBirth || !v.dateOfBirth.trim()) errors.dateOfBirth = 'Date of birth is required.';
+      if (!v.gender) errors.gender = 'Gender is required.';
+      if (!v.zipCode || !v.zipCode.trim()) errors.zipCode = 'ZIP / postal code is required.';
+      else if (!validateZip(v.zipCode)) errors.zipCode = 'Please enter a valid ZIP / postal code.';
+      if (!v.acceptTerms) errors.acceptTerms = 'You must accept the Terms of Service.';
+      if (!v.acceptPrivacy) errors.acceptPrivacy = 'You must accept the Privacy Policy.';
+      return errors;
+    }
+
+    function validateStep2() {
+      var errors = {};
+      if (!state.formValues.primaryRole) errors.primaryRole = 'Please select a primary role.';
+      return errors;
+    }
+
+    function validateStep3() {
+      var errors = {};
+      var v = state.formValues;
+      if (!v.legalName || v.legalName.trim().length < 2) errors.legalName = 'Legal company name is required (minimum 2 characters).';
+      if (!v.displayName || !v.displayName.trim()) errors.displayName = 'Display company name is required.';
+      if (!v.companyType) errors.companyType = 'Please select a company type.';
+      if (!v.industry) errors.industry = 'Please select an industry.';
+      if (v.website && v.website.trim() && !validateWebsite(v.website)) errors.website = 'Please enter a valid website URL.';
+      if (!v.address || !v.address.trim()) errors.address = 'Business address is required.';
+      if (!v.city || !v.city.trim()) errors.city = 'City is required.';
+      if (!v.state || !v.state.trim()) errors.state = 'State / province is required.';
+      if (!v.postalCode || !v.postalCode.trim()) errors.postalCode = 'ZIP / postal code is required.';
+      else if (!validateZip(v.postalCode)) errors.postalCode = 'Please enter a valid ZIP / postal code.';
+      if (!v.authorizedRepresentative || v.authorizedRepresentative.trim().length < 2) errors.authorizedRepresentative = 'Authorized representative is required.';
+      if (!v.representativeTitle || !v.representativeTitle.trim()) errors.representativeTitle = 'Representative title is required.';
+      var teamSize = parseInt(v.teamSize, 10);
+      if (!v.teamSize || isNaN(teamSize) || teamSize < 1 || teamSize > 100000) errors.teamSize = 'Team size must be a number between 1 and 100,000.';
+      if (!v.businessCategory) errors.businessCategory = 'Please select a business category.';
+      return errors;
+    }
+
+    // ─── Error display ─────────────────────────────────────────────────
+    function showErrors(errors) {
+      // Clear all
+      var allErrDivs = document.querySelectorAll('[id^="err-"]');
+      allErrDivs.forEach(function(d) { d.style.display = 'none'; d.textContent = ''; });
+      // Show new
+      Object.keys(errors).forEach(function(field) {
+        var el = document.getElementById('err-' + field);
+        if (el) {
+          el.textContent = errors[field];
+          el.style.display = 'flex';
+          // Mark input wrapper
+          var input = document.getElementById(field);
+          if (input && input.closest) {
+            var wrapper = input.closest('.input-wrapper');
+            if (wrapper) wrapper.classList.add('error');
+          }
+        }
+      });
+    }
+
+    function clearInputError(field) {
+      var el = document.getElementById('err-' + field);
+      if (el) { el.style.display = 'none'; el.textContent = ''; }
+      var input = document.getElementById(field);
+      if (input && input.closest) {
+        var wrapper = input.closest('.input-wrapper');
+        if (wrapper) wrapper.classList.remove('error');
+      }
+    }
+
+    // ─── Collect form values ───────────────────────────────────────────
+    function collectFormValues() {
+      var ids = ['firstName','lastName','email','phone','password','dateOfBirth','gender',
+        'country','zipCode','acceptTerms','acceptPrivacy',
+        'legalName','displayName','companyType','industry','website','address','city','state',
+        'postalCode','teamSize','authorizedRepresentative','representativeTitle','businessCategory'];
+      var vals = {};
+      ids.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'checkbox') vals[id] = el.checked;
+        else vals[id] = el.value;
+      });
+      vals.primaryRole = state.formValues.primaryRole || '';
+      state.formValues = vals;
+    }
+
+    // ─── Step navigation ───────────────────────────────────────────────
+    var STEP_NAMES = ['account', 'role', 'enterprise', 'review', 'confirmation'];
+    var stepDivs = ['step-account','step-role','step-enterprise','step-review','step-confirmation'];
+
+    function showStep(index) {
+      stepDivs.forEach(function(id, i) {
+        var el = document.getElementById(id);
+        if (el) el.classList.toggle('active', i === index);
+      });
+      state.currentStep = index;
+      updateProgress(index);
+      // Save draft (except confirmation)
+      if (index < 4) saveDraft();
+      // Browser history support
+      var hash = '#' + STEP_NAMES[index];
+      if (window.location.hash !== hash) {
+        history.pushState({ step: index }, '', hash);
+      }
+      window.scrollTo(0, 0);
+    }
+
+    function updateProgress(stepIndex) {
+      var visibleSteps = 3;
+      var effective = stepIndex >= 3 ? visibleSteps : stepIndex;
+      for (var i = 0; i < visibleSteps; i++) {
+        var circle = document.getElementById('prog-circle-' + i);
+        var label = document.getElementById('prog-label-' + i);
+        if (!circle || !label) continue;
+        circle.classList.remove('complete', 'current');
+        label.classList.remove('current');
+        if (i < effective) { circle.classList.add('complete'); circle.innerHTML = '&#10003;'; }
+        else if (i === effective) { circle.classList.add('current'); circle.textContent = (i + 1); }
+        else { circle.textContent = (i + 1); }
+        if (i === effective) label.classList.add('current');
+        var line = document.getElementById('prog-line-' + i);
+        if (line) line.classList.toggle('complete', i < effective);
+      }
+      // Hide progress bar on confirmation
+      var progBar = document.getElementById('progress-bar');
+      if (progBar) progBar.style.display = stepIndex >= 4 ? 'none' : 'flex';
+    }
+
+    function goNext() {
+      collectFormValues();
+      if (state.currentStep === 0) {
+        var errs1 = validateStep1();
+        if (Object.keys(errs1).length > 0) { showErrors(errs1); return; }
+        showStep(1);
+      } else if (state.currentStep === 1) {
+        var errs2 = validateStep2();
+        if (Object.keys(errs2).length > 0) { showErrors(errs2); return; }
+        showStep(2);
+      } else if (state.currentStep === 2) {
+        var errs3 = validateStep3();
+        if (Object.keys(errs3).length > 0) { showErrors(errs3); return; }
+        renderReview();
+        showStep(3);
+      }
+    }
+
+    function goBack() {
+      if (state.currentStep > 0 && state.currentStep < 4) {
+        showStep(state.currentStep - 1);
+      } else if (state.currentStep === 0) {
+        window.location.href = '/';
+      }
+    }
+
+    // ─── Render role cards ─────────────────────────────────────────────
+    function renderRoleCards() {
+      var grid = document.getElementById('role-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      ROLES.forEach(function(role) {
+        var card = document.createElement('div');
+        card.className = 'role-card';
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', 'Select role: ' + role.label);
+        card.innerHTML =
+          '<div class="role-card-header">' +
+            '<div class="role-radio"><div class="role-radio-dot"></div></div>' +
+            '<div class="role-label">' + role.label + '</div>' +
+          '</div>' +
+          '<div class="role-desc">' + role.desc + '</div>';
+        var selectRole = function() {
+          state.formValues.primaryRole = role.id;
+          document.querySelectorAll('.role-card').forEach(function(c) { c.classList.remove('selected'); });
+          card.classList.add('selected');
+          clearInputError('primaryRole');
+        };
+        card.addEventListener('click', selectRole);
+        card.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectRole(); } });
+        grid.appendChild(card);
+      });
+    }
+
+    // ─── Render review ─────────────────────────────────────────────────
+    function renderReview() {
+      var v = state.formValues;
+      var roleLabel = (ROLES.find(function(r) { return r.id === v.primaryRole; }) || {}).label || v.primaryRole;
+      var companyTypeLabel = v.companyType;
+      var typeMap = { llc: 'LLC', c_corp: 'C Corporation', s_corp: 'S Corporation', partnership: 'Partnership', sole_proprietor: 'Sole Proprietor', trust: 'Trust', nonprofit: 'Nonprofit', other: 'Other' };
+      if (typeMap[v.companyType]) companyTypeLabel = typeMap[v.companyType];
+
+      var html = '';
+      html += '<div class="review-section"><div class="review-section-title">Account</div>';
+      html += reviewRow('Name', v.firstName + ' ' + v.lastName);
+      html += reviewRow('Email', v.email);
+      html += reviewRow('Phone', v.phone);
+      html += reviewRow('Country', v.country);
+      html += '</div>';
+      html += '<div class="review-section"><div class="review-section-title">Role</div>';
+      html += reviewRow('Primary Role', roleLabel);
+      html += '</div>';
+      html += '<div class="review-section"><div class="review-section-title">Enterprise</div>';
+      html += reviewRow('Legal Name', v.legalName);
+      html += reviewRow('Display Name', v.displayName);
+      html += reviewRow('Company Type', companyTypeLabel);
+      html += reviewRow('Industry', v.industry);
+      html += reviewRow('Website', v.website);
+      html += reviewRow('Address', v.address + ', ' + v.city + ', ' + v.state + ' ' + v.postalCode);
+      html += reviewRow('Representative', v.authorizedRepresentative + ' (' + v.representativeTitle + ')');
+      html += reviewRow('Team Size', v.teamSize);
+      html += reviewRow('Business Category', v.businessCategory);
+      html += '</div>';
+      var el = document.getElementById('review-content');
+      if (el) el.innerHTML = html;
+    }
+
+    function reviewRow(label, val) {
+      return '<div class="review-row"><div class="review-label">' + label + '</div><div class="review-value">' + (val || '—') + '</div></div>';
+    }
+
+    // ─── Draft storage ─────────────────────────────────────────────────
+    function saveDraft() {
+      collectFormValues();
+      var v = state.formValues;
+      var draft = {
+        formValues: {},
+        currentStep: state.currentStep,
+        draftUpdatedAt: new Date().toISOString(),
+        idempotencyKey: state.idempotencyKey,
+      };
+      // Copy all except password
+      Object.keys(v).forEach(function(k) {
+        if (k === 'password') draft.formValues.passwordEntered = !!v.password;
+        else draft.formValues[k] = v[k];
+      });
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch(e) {}
+    }
+
+    function loadDraft() {
+      try {
+        var raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return null;
+        var draft = JSON.parse(raw);
+        var updated = new Date(draft.draftUpdatedAt).getTime();
+        if (isNaN(updated) || Date.now() - updated > DRAFT_EXPIRY_MS) {
+          localStorage.removeItem(DRAFT_KEY);
+          return null;
+        }
+        return draft;
+      } catch(e) { return null; }
+    }
+
+    function clearDraft() {
+      try { localStorage.removeItem(DRAFT_KEY); } catch(e) {}
+    }
+
+    function restoreDraft(draft) {
+      if (!draft || !draft.formValues) return;
+      var fv = draft.formValues;
+      Object.keys(fv).forEach(function(k) {
+        if (k === 'passwordEntered') return;
+        var el = document.getElementById(k);
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = !!fv[k];
+        else el.value = fv[k] || '';
+      });
+      state.formValues.primaryRole = fv.primaryRole || '';
+      if (fv.primaryRole) {
+        var cards = document.querySelectorAll('.role-card');
+        cards.forEach(function(c, i) {
+          if (ROLES[i] && ROLES[i].id === fv.primaryRole) c.classList.add('selected');
+        });
+      }
+      state.idempotencyKey = draft.idempotencyKey || state.idempotencyKey;
+      var startStep = draft.currentStep && draft.currentStep < 3 ? draft.currentStep : 0;
+      if (startStep > 0) showStep(startStep);
+    }
+
+    // ─── Error message mapping ─────────────────────────────────────────
+    function userFriendlyError(code, fallback) {
+      var map = {
+        INVALID_INPUT: 'Please check all required fields and try again.',
+        DUPLICATE_ENTERPRISE: 'An enterprise with this legal name or website already exists.',
+        DUPLICATE_LEGAL_NAME: 'An enterprise with this legal name already exists.',
+        DUPLICATE_DOMAIN: 'An enterprise with this website domain already exists.',
+        CREATION_FAILED: 'We could not create the enterprise. Please try again.',
+        MEMBERSHIP_FAILED: 'Enterprise created, but membership binding failed. Contact support.',
+        NOT_AUTHORIZED: 'You are not authorized to perform this action.',
+        INVALID_EMAIL: 'This email is already registered. Please sign in instead.',
+        WEAK_PASSWORD: 'Password does not meet the minimum requirements.',
+        AUTH_CREATION_FAILED: 'A previous attempt is still processing. Please wait and try again.',
+        UNKNOWN_ERROR: 'An unexpected error occurred. Please try again.',
+      };
+      return map[code] || fallback || 'An error occurred. Please try again.';
+    }
+
+    // ─── Submit ────────────────────────────────────────────────────────
+    function showServerError(msg) {
+      var el = document.getElementById('review-server-error');
+      if (el) {
+        el.innerHTML = '<div class="server-error"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' + msg + '</div>';
+      }
+    }
+
+    async function handleSubmit() {
+      if (state.isSubmitting) return; // Double-submit protection
+      state.isSubmitting = true;
+      var btn = document.getElementById('btn-submit');
+      var txt = document.getElementById('submit-text');
+      if (btn) btn.disabled = true;
+      if (txt) txt.innerHTML = '<span class="spinner"></span>';
+
+      collectFormValues();
+      var v = state.formValues;
+
+      // Hide previous error
+      var errEl = document.getElementById('review-server-error');
+      if (errEl) errEl.innerHTML = '';
+
+      try {
+        // STEP 1: Register individual member
+        var individualResp = await fetch(MEMBER_REGISTER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: v.email.trim().toLowerCase(),
+            password: v.password,
+            firstName: v.firstName.trim(),
+            lastName: v.lastName.trim(),
+            dateOfBirth: v.dateOfBirth,
+            gender: v.gender,
+            phone: v.phone.trim(),
+            country: v.country,
+            zipCode: v.zipCode.trim(),
+            roles: [v.primaryRole],
+            acceptTerms: v.acceptTerms,
+            registrationRequestId: state.idempotencyKey,
+          }),
+        });
+        var individualResult = await individualResp.json().catch(function() { return {}; });
+
+        if (!individualResult.ok || !individualResult.authUserId) {
+          var errMsg = userFriendlyError(individualResult.code || '', individualResult.message || individualResult.error || 'Registration failed.');
+          showServerError(errMsg);
+          state.isSubmitting = false;
+          if (btn) btn.disabled = false;
+          if (txt) txt.textContent = 'Submit Registration';
+          return;
+        }
+
+        var authUserId = individualResult.authUserId;
+
+        // STEP 2: Register enterprise
+        var enterpriseResp = await fetch(ENTERPRISE_REGISTER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ownerAuthUserId: authUserId,
+            legalName: v.legalName.trim(),
+            displayName: v.displayName.trim(),
+            companyType: v.companyType,
+            industry: v.industry,
+            website: v.website.trim(),
+            address: v.address.trim() + ', ' + v.city.trim() + ', ' + v.state.trim() + ' ' + v.postalCode.trim() + ', ' + (v.country || ''),
+            authorizedRepresentative: v.authorizedRepresentative.trim(),
+            representativeJobTitle: v.representativeTitle.trim(),
+            teamSize: parseInt(v.teamSize, 10) || 1,
+            businessCategory: v.businessCategory,
+            sourceChannel: 'enterprise_registration_web',
+            traceId: individualResult.traceId,
+          }),
+        });
+        var enterpriseResult = await enterpriseResp.json().catch(function() { return {}; });
+
+        if (!enterpriseResult.ok || !enterpriseResult.enterpriseId) {
+          var entErrMsg = userFriendlyError(enterpriseResult.errorCode || '', enterpriseResult.error || 'Enterprise registration failed.');
+          showServerError(entErrMsg);
+          state.isSubmitting = false;
+          if (btn) btn.disabled = false;
+          if (txt) txt.textContent = 'Submit Registration';
+          return;
+        }
+
+        // Success — clear draft, show confirmation
+        clearDraft();
+        state.result.enterpriseId = enterpriseResult.enterpriseId;
+        state.result.authUserId = authUserId;
+        state.result.traceId = enterpriseResult.traceId;
+        renderConfirmation();
+        showStep(4);
+
+      } catch (err) {
+        var msg = err && err.message ? err.message : 'Network error. Please check your connection and try again.';
+        showServerError(userFriendlyError('', msg));
+      } finally {
+        state.isSubmitting = false;
+        if (btn) btn.disabled = false;
+        if (txt) txt.textContent = 'Submit Registration';
+      }
+    }
+
+    function renderConfirmation() {
+      var v = state.formValues;
+      var card = document.getElementById('confirmation-card');
+      if (!card) return;
+      card.innerHTML =
+        '<div class="confirmation-card-title">Enterprise Details</div>' +
+        confirmRow('Enterprise Name', v.legalName) +
+        confirmRow('Member Name', v.firstName + ' ' + v.lastName) +
+        confirmRow('Registration Status', 'Pending Verification') +
+        confirmRow('Email Verification', 'Not Verified') +
+        confirmRow('Phone Verification', 'Not Verified') +
+        confirmRow('Enterprise Review', 'Not Started') +
+        '<div class="confirmation-divider"></div>' +
+        confirmRow('Enterprise ID', state.result.enterpriseId, true) +
+        confirmRow('Auth User ID', state.result.authUserId, true) +
+        confirmRow('Trace ID', state.result.traceId, true);
+    }
+
+    function confirmRow(label, val, mono) {
+      var valClass = mono ? 'confirmation-mono' : 'confirmation-value';
+      return '<div class="confirmation-row"><div class="confirmation-label">' + label + '</div><div class="' + valClass + '">' + (val || '—') + '</div></div>';
+    }
+
+    // ─── Event listeners ───────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      renderRoleCards();
+
+      // Password toggle
+      var pwToggle = document.getElementById('pw-toggle');
+      var pwInput = document.getElementById('password');
+      var pwEye = document.getElementById('pw-eye');
+      if (pwToggle && pwInput) {
+        pwToggle.addEventListener('click', function() {
+          pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+          if (pwEye) {
+            pwEye.innerHTML = pwInput.type === 'password'
+              ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+              : '<path d="M17.94 17.94c-.6.6-1.3 1.1-2.06 1.5"/><path d="M1 1l22 22"/><path d="M9.9 4.24c.7-.16 1.4-.24 2.1-.24 7 0 11 8 11 8a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.06 6.06A13.16 13.16 0 0 0 1 12s4 8 11 8a13.16 13.16 0 0 0 5.94-1.94"/>';
+          }
+        });
+      }
+
+      // Clear error on input
+      var inputs = document.querySelectorAll('.input, select.input');
+      inputs.forEach(function(input) {
+        input.addEventListener('input', function() { clearInputError(input.id); });
+        input.addEventListener('change', function() { clearInputError(input.id); });
+      });
+
+      // Buttons
+      var btnNext1 = document.getElementById('btn-next-1');
+      if (btnNext1) btnNext1.addEventListener('click', goNext);
+      var btnNext2 = document.getElementById('btn-next-2');
+      if (btnNext2) btnNext2.addEventListener('click', goNext);
+      var btnReview3 = document.getElementById('btn-review-3');
+      if (btnReview3) btnReview3.addEventListener('click', function() {
+        collectFormValues();
+        var errs = validateStep3();
+        if (Object.keys(errs).length > 0) { showErrors(errs); return; }
+        renderReview();
+        showStep(3);
+      });
+      var btnBack2 = document.getElementById('btn-back-2');
+      if (btnBack2) btnBack2.addEventListener('click', goBack);
+      var btnBack3 = document.getElementById('btn-back-3');
+      if (btnBack3) btnBack3.addEventListener('click', goBack);
+      var btnBackReview = document.getElementById('btn-back-review');
+      if (btnBackReview) btnBackReview.addEventListener('click', goBack);
+      var btnSubmit = document.getElementById('btn-submit');
+      if (btnSubmit) btnSubmit.addEventListener('click', handleSubmit);
+
+      // Browser back/forward
+      window.addEventListener('popstate', function(e) {
+        var step = (e.state && typeof e.state.step === 'number') ? e.state.step : 0;
+        if (step >= 0 && step < 5) showStep(step);
+      });
+
+      // Restore draft
+      var draft = loadDraft();
+      if (draft) restoreDraft(draft);
+
+      // Set initial hash
+      if (window.location.hash) {
+        var hashStep = window.location.hash.replace('#', '');
+        var stepIdx = STEP_NAMES.indexOf(hashStep);
+        if (stepIdx >= 0 && stepIdx < 4) showStep(stepIdx);
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

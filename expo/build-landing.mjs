@@ -124,6 +124,14 @@ if (!existsSync(distApiDir)) {
 
 writeFileSync(distDir + '/index.html', html, 'utf-8');
 console.log('   ✅ index.html built → ivxholding-landing/dist/index.html');
+
+// Enterprise registration page (ITEM 2)
+let enterpriseHtml = readFileSync('./ivxholding-landing/enterprise-register.html', 'utf-8');
+enterpriseHtml = enterpriseHtml.replace(/__IVX_API_BASE_URL__/g, API_BASE_URL);
+enterpriseHtml = enterpriseHtml.replace(/__IVX_BACKEND_URL__/g, BACKEND_URL);
+writeFileSync(distDir + '/enterprise-register.html', enterpriseHtml, 'utf-8');
+console.log('   ✅ enterprise-register.html built → ivxholding-landing/dist/enterprise-register.html');
+
 copyFileSync('./ivxholding-landing/landing-support-chat.css', distDir + '/landing-support-chat.css');
 copyFileSync('./ivxholding-landing/landing-support-chat.js', distDir + '/landing-support-chat.js');
 console.log('   ✅ landing support chat assets copied → ivxholding-landing/dist/landing-support-chat.*');
