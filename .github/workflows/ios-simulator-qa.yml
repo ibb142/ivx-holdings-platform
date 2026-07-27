@@ -48,6 +48,10 @@ env:
   EXPO_PUBLIC_QA_BUILD: 'true'
   OWNER_EMAIL: iperez4242@gmail.com
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   build-and-test:
     name: iOS Simulator Build + Maestro QA
@@ -149,9 +153,18 @@ jobs:
           echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
           echo "Workspace: $WORKSPACE"
           xcodebuild -list -workspace "$WORKSPACE" 2>&1 | tee xcode-list.log
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>&1 | awk '/Schemes:/{getline; print}' | xargs)
+          # More robust scheme extraction — grab first non-empty line after "Schemes:"
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>&1 | awk '/Schemes:/{found=1; next} found && NF{print; exit}' | xargs)
           echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
-          echo "Scheme: $SCHEME"
+          echo "Scheme: '$SCHEME'"
+          if [ -z "$SCHEME" ]; then
+            echo "::error::No scheme found — xcodebuild cannot proceed"
+            echo "=== Full xcodebuild -list output ==="
+            cat xcode-list.log
+            exit 1
+          fi
+          # Show build settings for diagnostics
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -sdk iphonesimulator -configuration Debug -showBuildSettings 2>&1 | tee xcode-showbuildsettings.log | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION' || true
 
       - name: Build iOS simulator app
         id: build
@@ -200,9 +213,11 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           exit 1
 
-      - name: Find built .app bundle
+      - name: Find built .app bundle and post diagnostics
         id: app
         working-directory: expo/ios
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "=== Searching for .app bundle in build output ==="
           echo "=== build/ directory tree (first 50 dirs) ==="
@@ -216,11 +231,49 @@ jobs:
             echo "=== Full build directory listing (first 100 files) ==="
             find build -type f 2>/dev/null | head -100 || echo "build dir empty or missing"
             echo "=== Build config settings (CONFIGURATION_BUILD_DIR) ==="
-            xcodebuild -workspace "${{ steps.xcode.outputs.workspace }}" -scheme "${{ steps.xcode.outputs.scheme }}" -sdk iphonesimulator -configuration Debug -showBuildSettings 2>&1 | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR' || echo "showBuildSettings failed"
+            cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR' || echo "showBuildSettings not available"
             echo "### Build Diagnostics" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             find build -maxdepth 5 -type d 2>/dev/null | head -50 >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            # Create a GitHub issue with diagnostics so we can see the build output
+            # without admin access to the Actions logs.
+            DIAG_BODY=$(cat <<'DIAGEOF'
+          ## iOS Simulator QA Build Diagnostics
+
+          **Commit:** ${GITHUB_SHA}
+          **Run:** ${GITHUB_RUN_ID}
+
+          ### xcodebuild -list output
+          ```
+          DIAGEOF
+          )
+            DIAG_BODY="${DIAG_BODY}
+$(cat xcode-list.log 2>/dev/null || echo 'xcode-list.log not found')
+```
+
+          ### showBuildSettings (key vars)
+          ```
+$(cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION|SDKROOT' || echo 'not available')
+```
+
+          ### build.log (last 200 lines)
+          ```
+$(tail -200 build.log 2>/dev/null || echo 'build.log not found')
+```
+
+          ### build/ directory tree
+          ```
+$(find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo 'no build dir')
+```
+          "
+            # Use gh CLI to create issue (gh is pre-installed on GitHub Actions runners)
+            gh issue create \
+              --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
+              --body "$DIAG_BODY" \
+              --label "ios-qa-diagnostic" \
+              --label "automated" \
+              2>&1 || echo "gh issue create failed — check GH_TOKEN permissions"
             exit 1
           fi
           # Make path absolute for simctl install
