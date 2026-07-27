@@ -5168,9 +5168,6 @@ app.options('/api/ivx/payments/transactions', () => handlePaymentOptions());
 app.get('/api/ivx/payments/transactions', async (c) => handleGetTransactions(c.req.raw));
 app.options('/api/ivx/payments/receipts/:receiptId', () => handlePaymentOptions());
 app.get('/api/ivx/payments/receipts/:receiptId', async (c) => handleGetReceipt(c.req.raw, c.req.param('receiptId')));
-app.get('/api/ivx/payments/:paymentId', async (c) => handleGetPayment(c.req.raw, c.req.param('paymentId')));
-app.options('/api/ivx/payments/:paymentId/refund', () => handlePaymentOptions());
-app.post('/api/ivx/payments/:paymentId/refund', async (c) => handleRefundPayment(c.req.raw, c.req.param('paymentId')));
 app.options('/api/ivx/payments/admin/all', () => handlePaymentOptions());
 app.get('/api/ivx/payments/admin/all', async (c) => handleAdminGetAllPayments(c.req.raw));
 app.options('/api/ivx/payments/admin/stats', () => handlePaymentOptions());
@@ -5187,6 +5184,11 @@ app.options('/api/ivx/payments/jv-applications/:appId/review', () => handlePayme
 app.post('/api/ivx/payments/jv-applications/:appId/review', async (c) => handleReviewJVApplication(c.req.raw, c.req.param('appId')));
 app.options('/api/ivx/payments/buyer-offers/:offerId/review', () => handlePaymentOptions());
 app.post('/api/ivx/payments/buyer-offers/:offerId/review', async (c) => handleReviewBuyerOffer(c.req.raw, c.req.param('offerId')));
+// Parametric route MUST come after all literal single-segment GET routes to avoid
+// shadowing 'buyer-offers' / 'jv-applications' / 'admin' as :paymentId (DEF-07).
+app.get('/api/ivx/payments/:paymentId', async (c) => handleGetPayment(c.req.raw, c.req.param('paymentId')));
+app.options('/api/ivx/payments/:paymentId/refund', () => handlePaymentOptions());
+app.post('/api/ivx/payments/:paymentId/refund', async (c) => handleRefundPayment(c.req.raw, c.req.param('paymentId')));
 
 // Property Admin (public-features alias)
 app.options('/api/ivx/property-admin', () => publicFeatureOptions());

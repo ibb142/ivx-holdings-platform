@@ -1,7 +1,7 @@
 name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
 overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-26T18:20:00.000Z
+updatedAt: 2026-07-27T01:25:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -36,6 +36,8 @@ updatedAt: 2026-07-26T18:20:00.000Z
 > **LATEST TESTS:** Expo 659/659 pass. Backend 2148/2148 pass. Backend tsc --noEmit: 0 errors.
 >
 > **AI PROVIDER:** PASS — `PROVIDER_READY`, `lastHttpStatus: 200`. Owner AI chat returned real gateway response (7×8=56).
+>
+> **DEEP QA — 5 CRITICAL FLOWS (2026-07-27T01:25Z, production `9bee5ed7`):** 4/5 PASS, 1 real defect found and fixed (DEF-07). Member registration ✅ (live `authUserId 9a1be8ac...`). Investor application ✅ (live `applicationId inv_app_ms2jnq22_xn18rp`, AI review score 96, 7 alerts auto-created). Buyer offer POST ✅ (live `buyer_offer_f9726e80...` on `perez-residence-001`). JV deals ✅ (`perez-residence-001` with full financials + pool tiers). Tokenization ✅ (GET list + POST draft `tkn-1f9ee732...`). DEF-07: `GET /api/ivx/payments/buyer-offers` returned 404 due to route shadowing — `GET /api/ivx/payments/:paymentId` was registered BEFORE literal single-segment GET routes (`buyer-offers`, `jv-applications`), so the literal path was captured as `:paymentId` → `handleGetPayment` → NOT_FOUND. Fix: reordered routes so the parametric `:paymentId` route is registered AFTER all literal single-segment GET routes. Backend tsc: 0 errors after fix. Fix pending deploy to production.
 
 ---
 
