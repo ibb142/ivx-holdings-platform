@@ -89,13 +89,15 @@ jobs:
           echo "=== npm version ==="
           npm --version
           echo "=== expo package version ==="
-          node -e "console.log('expo version:', require('expo/package.json').version)"
+          node -e "console.log('expo version:', require('expo/package.json').version)" 2>&1 || echo "expo package not found"
+          echo "=== expo-router installed? ==="
+          node -e "console.log('expo-router:', require('expo-router/package.json').version)" 2>&1 || echo "expo-router NOT FOUND"
           echo "=== .bin/expo symlink ==="
           ls -la node_modules/.bin/expo 2>/dev/null || echo "No .bin/expo symlink"
-          echo "=== Try direct CLI ==="
-          node node_modules/expo/cli.js --version 2>&1 || echo "Direct CLI failed"
-          echo "=== Try npx --no-install ==="
-          npx --no-install expo --version 2>&1 || echo "npx --no-install failed"
+          echo "=== expo bin entry ==="
+          ls -la node_modules/expo/bin/cli.js 2>/dev/null || echo "No expo/bin/cli.js"
+          echo "=== .bin/expo --version ==="
+          node_modules/.bin/expo --version 2>&1 || echo ".bin/expo failed"
 
       - name: Expo prebuild (generate native iOS project)
         working-directory: expo
@@ -104,13 +106,18 @@ jobs:
         run: |
           set -x
           echo "=== Starting prebuild ==="
-          node node_modules/expo/cli.js prebuild --platform ios --clean --no-install 2>&1 | tee prebuild-output.log
-          echo "=== Prebuild exit code: $? ==="
-          if [ -d "ios" ]; then
-            echo "ios directory exists — prebuild may have succeeded"
+          # Use the local .bin/expo symlink (npm install creates it).
+          # Do NOT use npx (may download wrong version) or node_modules/expo/cli.js (wrong path).
+          node_modules/.bin/expo prebuild --platform ios --clean --no-install 2>&1 | tee prebuild-output.log
+          PREBUILD_EXIT=${PIPESTATUS[0]}
+          echo "=== Prebuild exit code: $PREBUILD_EXIT ==="
+          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
+            echo "ios directory with Podfile exists — prebuild succeeded"
             ls -la ios/ | head -10
           else
             echo "ios directory does NOT exist — prebuild failed"
+            echo "=== Retrying with npx --no-install ==="
+            npx --no-install expo prebuild --platform ios --clean --no-install 2>&1 | tee -a prebuild-output.log || true
           fi
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
@@ -283,6 +290,7 @@ jobs:
             simulator-app.log
             simulator-log-history.txt
             simulator-info.txt
+            expo/prebuild-output.log
             expo/ios/build.log
             expo/ios/xcode-list.log
             expo/maestro-launch-results.xml
