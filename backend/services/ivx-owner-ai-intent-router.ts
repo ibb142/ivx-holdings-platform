@@ -798,9 +798,12 @@ export function buildIVXOwnerAIPlannerDecision(prompt: string): IVXOwnerAIPlanne
     || /\bscaffold\s+(?:a\s+)?(?:new\s+)?(?:app|project|module)/i.test(normalized)
     || /\b(?:create|add|build)\s+(?:a\s+)?(?:new\s+)?(?:ivx\s+)?module\b/i.test(normalized)
     || /\bscaffold\s+(?:a\s+)?(?:new\s+)?(?:backend|mobile|web|automation)\s+(?:service|feature|dashboard)/i.test(normalized);
-  // Exclude prompts that target the OWN IVX system (engine, pipeline, platform)
-  // — those are in-repo execution, not new-app creation.
-  if (hasAppGeneratorSignal && !targetsOwnSystemBuild(normalized) && !asksToBuildApp(normalized)) {
+  // NOTE: do NOT exclude via targetsOwnSystemBuild here — "module" triggers it
+  // as a system component, but "create a new module from scratch called X" is
+  // NEW module creation, not an in-repo build of the own IVX system.
+  // The hasAppGeneratorSignal regex is specific enough (requires
+  // create/scaffold/build/generate + app/module/service + from scratch/called/named).
+  if (hasAppGeneratorSignal && !asksToBuildApp(normalized)) {
     return {
       semanticIntent: 'app_generator_execution',
       route: 'app_generator',
