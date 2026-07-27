@@ -220,63 +220,46 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "=== Searching for .app bundle in build output ==="
-          echo "=== build/ directory tree (first 50 dirs) ==="
           find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "No build directory"
-          echo "=== Searching for .app bundles ==="
           APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "=== Recursive search in entire ios/ ==="
-            find . -name "*.app" -type d 2>/dev/null | head -10
             echo "::error::No .app bundle found in build output"
-            echo "=== Full build directory listing (first 100 files) ==="
-            find build -type f 2>/dev/null | head -100 || echo "build dir empty or missing"
-            echo "=== Build config settings (CONFIGURATION_BUILD_DIR) ==="
-            cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR' || echo "showBuildSettings not available"
-            echo "### Build Diagnostics" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            find build -maxdepth 5 -type d 2>/dev/null | head -50 >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            # Create a GitHub issue with diagnostics so we can see the build output
-            # without admin access to the Actions logs.
-            DIAG_BODY=$(cat <<'DIAGEOF'
-          ## iOS Simulator QA Build Diagnostics
-
-          **Commit:** ${GITHUB_SHA}
-          **Run:** ${GITHUB_RUN_ID}
-
-          ### xcodebuild -list output
-          ```
-          DIAGEOF
-          )
-            DIAG_BODY="${DIAG_BODY}
-$(cat xcode-list.log 2>/dev/null || echo 'xcode-list.log not found')
-```
-
-          ### showBuildSettings (key vars)
-          ```
-$(cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION|SDKROOT' || echo 'not available')
-```
-
-          ### build.log (last 200 lines)
-          ```
-$(tail -200 build.log 2>/dev/null || echo 'build.log not found')
-```
-
-          ### build/ directory tree
-          ```
-$(find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo 'no build dir')
-```
-          "
-            # Use gh CLI to create issue (gh is pre-installed on GitHub Actions runners)
+            find build -type f 2>/dev/null | head -100 || echo "build dir empty"
+            # Write diagnostics to a file and create a GitHub issue so we can
+            # see the build output without admin access to Actions logs.
+            {
+              echo "## iOS Simulator QA Build Diagnostics"
+              echo ""
+              echo "**Commit:** ${GITHUB_SHA}"
+              echo "**Run:** ${GITHUB_RUN_ID}"
+              echo ""
+              echo "### xcodebuild -list output"
+              echo '```'
+              cat xcode-list.log 2>/dev/null || echo "not found"
+              echo '```'
+              echo ""
+              echo "### showBuildSettings (key vars)"
+              echo '```'
+              cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION|SDKROOT' || echo "not available"
+              echo '```'
+              echo ""
+              echo "### build.log (last 250 lines)"
+              echo '```'
+              tail -250 build.log 2>/dev/null || echo "not found"
+              echo '```'
+              echo ""
+              echo "### build/ directory tree"
+              echo '```'
+              find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "no build dir"
+              echo '```'
+            } > diagnostic-body.md
             gh issue create \
               --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
-              --body "$DIAG_BODY" \
+              --body-file diagnostic-body.md \
               --label "ios-qa-diagnostic" \
-              --label "automated" \
-              2>&1 || echo "gh issue create failed — check GH_TOKEN permissions"
+              2>&1 || echo "gh issue create failed"
             exit 1
           fi
-          # Make path absolute for simctl install
           APP_PATH_ABS="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
           echo "path=$APP_PATH_ABS" >> $GITHUB_OUTPUT
           echo "App bundle: $APP_PATH_ABS"
