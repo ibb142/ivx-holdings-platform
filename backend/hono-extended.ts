@@ -66,6 +66,16 @@ import {
   handleAutonomousRunsGet,
   handleAutonomousRunsSummaryGet,
 } from './api/ivx-autonomous-runs';
+import {
+  OPTIONS as scopedMemoryOptions,
+  handleStatus as handleScopedMemoryStatus,
+  handleCreate as handleScopedMemoryCreate,
+  handleRetrieve as handleScopedMemoryRetrieve,
+  handleBuildContext as handleScopedMemoryBuildContext,
+  handleRevoke as handleScopedMemoryRevoke,
+  handleOwnerOverride as handleScopedMemoryOwnerOverride,
+  handleValidate as handleScopedMemoryValidate,
+} from './api/ivx-scoped-memory';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -102,6 +112,22 @@ app.options('/api/ivx/autonomous/runs', () => autonomousRunsOptions());
 app.get('/api/ivx/autonomous/runs', async (context) => handleAutonomousRunsGet(context.req.raw));
 app.options('/api/ivx/autonomous/runs/summary', () => autonomousRunsOptions());
 app.get('/api/ivx/autonomous/runs/summary', async (context) => handleAutonomousRunsSummaryGet(context.req.raw));
+
+// GATE 1 — Scoped Memory (4-layer isolation: task / agent / company / enterprise)
+app.options('/api/ivx/scoped-memory/status', () => scopedMemoryOptions());
+app.get('/api/ivx/scoped-memory/status', async (context) => handleScopedMemoryStatus(context.req.raw));
+app.options('/api/ivx/scoped-memory/create', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/create', async (context) => handleScopedMemoryCreate(context.req.raw));
+app.options('/api/ivx/scoped-memory/retrieve', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/retrieve', async (context) => handleScopedMemoryRetrieve(context.req.raw));
+app.options('/api/ivx/scoped-memory/build-context', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/build-context', async (context) => handleScopedMemoryBuildContext(context.req.raw));
+app.options('/api/ivx/scoped-memory/revoke', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/revoke', async (context) => handleScopedMemoryRevoke(context.req.raw));
+app.options('/api/ivx/scoped-memory/owner-override', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/owner-override', async (context) => handleScopedMemoryOwnerOverride(context.req.raw));
+app.options('/api/ivx/scoped-memory/validate', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/validate', async (context) => handleScopedMemoryValidate(context.req.raw));
 
 startAutonomousQAScheduler();
 
