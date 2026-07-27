@@ -156,8 +156,10 @@ jobs:
       - name: Build iOS simulator app
         id: build
         working-directory: expo/ios
+        continue-on-error: true
         run: |
           set -o pipefail
+          echo "=== Starting xcodebuild ==="
           xcodebuild \
             -workspace "${{ steps.xcode.outputs.workspace }}" \
             -scheme "${{ steps.xcode.outputs.scheme }}" \
@@ -169,7 +171,32 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             2>&1 | tee build.log
-          echo "Build completed successfully"
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "=== xcodebuild exit code: $BUILD_EXIT ==="
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "=== BUILD FAILED — last 150 lines of build.log ==="
+            tail -150 build.log
+            echo "### Build Failure — Last 150 Lines" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -150 build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "build_status=failed" >> $GITHUB_OUTPUT
+          else
+            echo "Build completed successfully"
+            echo "build_status=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check build result
+        working-directory: expo/ios
+        if: steps.build.outputs.build_status != 'success'
+        run: |
+          echo "::error::xcodebuild failed (exit code non-zero). See build.log artifact and step summary for details."
+          echo "=== Dumping full build.log to step summary ==="
+          echo "### Full Build Log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(build.log not found)"
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit 1
 
       - name: Find built .app bundle
         id: app
