@@ -196,6 +196,14 @@ CREATE TABLE IF NOT EXISTS public.lenders (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Add columns if the table already existed without them
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS member_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS lending_category TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS minimum_amount NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS maximum_amount NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS states_served TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS licensing_status TEXT NOT NULL DEFAULT 'not_started';
+ALTER TABLE public.lenders ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 
 CREATE INDEX IF NOT EXISTS idx_lenders_member ON public.lenders(member_id) WHERE member_id != '';
 CREATE INDEX IF NOT EXISTS idx_lenders_status ON public.lenders(status);
@@ -216,6 +224,13 @@ CREATE TABLE IF NOT EXISTS public.vendor_contractors (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Add columns if the table already existed without them
+ALTER TABLE public.vendor_contractors ADD COLUMN IF NOT EXISTS member_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.vendor_contractors ADD COLUMN IF NOT EXISTS service_category TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.vendor_contractors ADD COLUMN IF NOT EXISTS service_description TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.vendor_contractors ADD COLUMN IF NOT EXISTS states_served TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.vendor_contractors ADD COLUMN IF NOT EXISTS licensing_status TEXT NOT NULL DEFAULT 'not_started';
+ALTER TABLE public.vendor_contractors ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 
 CREATE INDEX IF NOT EXISTS idx_vendor_contractors_member ON public.vendor_contractors(member_id) WHERE member_id != '';
 CREATE INDEX IF NOT EXISTS idx_vendor_contractors_status ON public.vendor_contractors(status);
