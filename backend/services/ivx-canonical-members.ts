@@ -32,6 +32,25 @@ export interface CanonicalMemberInput {
   landingSubmissionId?: string;
   pictureUrl?: string;
   createdAt?: string;
+  // --- Canonical identity model fields (ITEM 1) ---
+  enterpriseId?: string;
+  countryCode?: string;
+  primaryRole?: string;
+  secondaryRoles?: string[];
+  registrationType?: 'individual' | 'enterprise';
+  registrationStatus?: 'pending' | 'completed' | 'failed';
+  emailVerifiedAt?: string;
+  phoneVerifiedAt?: string;
+  identityStatus?: 'active' | 'suspended' | 'pending_verification';
+  kycStatus?: 'not_started' | 'pending' | 'in_review' | 'approved' | 'rejected';
+  amlStatus?: 'not_started' | 'pending' | 'in_review' | 'approved' | 'rejected';
+  ownerReviewStatus?: 'not_started' | 'pending' | 'approved' | 'rejected';
+  sourceChannel?: string;
+  dataOrigin?: string;
+  termsVersion?: string;
+  privacyVersion?: string;
+  termsAcceptedAt?: string;
+  auditTraceId?: string;
 }
 
 export interface CanonicalMemberRow {
@@ -53,6 +72,27 @@ export interface CanonicalMemberRow {
   landing_submission_id: string | null;
   created_at: string;
   updated_at: string;
+  // --- Canonical identity model fields (ITEM 1) ---
+  normalized_email: string | null;
+  enterprise_id: string | null;
+  normalized_phone: string | null;
+  country_code: string | null;
+  primary_role: string | null;
+  secondary_roles: string[] | null;
+  registration_type: string | null;
+  registration_status: string | null;
+  email_verified_at: string | null;
+  phone_verified_at: string | null;
+  identity_status: string | null;
+  kyc_status: string | null;
+  aml_status: string | null;
+  owner_review_status: string | null;
+  source_channel: string | null;
+  data_origin: string | null;
+  terms_version: string | null;
+  privacy_version: string | null;
+  terms_accepted_at: string | null;
+  audit_trace_id: string | null;
 }
 
 export interface BackfillResult {
@@ -195,6 +235,8 @@ export async function upsertCanonicalMember(
             full_name: (input.fullName || '').trim(),
             email,
             phone,
+            normalized_email: email || null,
+            normalized_phone: normPhoneDigits(phone) || null,
             member_type: normalizeMemberType(input.memberType),
             source: (input.source || 'landing_page').trim() || 'landing_page',
             source_detail: (input.sourceDetail || '').trim(),
@@ -207,6 +249,25 @@ export async function upsertCanonicalMember(
             picture_url: (input.pictureUrl || '').trim(),
             auth_user_id: (input.authUserId || '').trim() || null,
             landing_submission_id: (input.landingSubmissionId || '').trim() || null,
+            // --- Canonical identity model fields (ITEM 1) ---
+            enterprise_id: (input.enterpriseId || '').trim() || null,
+            country_code: (input.countryCode || '').trim() || null,
+            primary_role: (input.primaryRole || '').trim() || null,
+            secondary_roles: JSON.stringify(input.secondaryRoles || []),
+            registration_type: input.registrationType || 'individual',
+            registration_status: input.registrationStatus || 'completed',
+            email_verified_at: input.emailVerifiedAt || (input.emailVerified ? createdAt : null),
+            phone_verified_at: input.phoneVerifiedAt || (input.smsVerified ? createdAt : null),
+            identity_status: input.identityStatus || 'active',
+            kyc_status: input.kycStatus || 'not_started',
+            aml_status: input.amlStatus || 'not_started',
+            owner_review_status: input.ownerReviewStatus || 'not_started',
+            source_channel: (input.sourceChannel || input.source || 'landing_page').trim() || 'landing_page',
+            data_origin: (input.dataOrigin || 'landing_page').trim() || 'landing_page',
+            terms_version: (input.termsVersion || '').trim() || null,
+            privacy_version: (input.privacyVersion || '').trim() || null,
+            terms_accepted_at: input.termsAcceptedAt || null,
+            audit_trace_id: (input.auditTraceId || '').trim() || null,
             created_at: createdAt,
             updated_at: nowIso(),
           }),
@@ -236,6 +297,43 @@ export async function upsertCanonicalMember(
     if (input.verificationStatus && input.verificationStatus !== 'unverified' && existing.verification_status === 'unverified') {
       patch.verification_status = input.verificationStatus;
     }
+    // --- Canonical identity model merges (ITEM 1) ---
+    if (!existing.normalized_email && email) patch.normalized_email = email;
+    if (!existing.normalized_phone && normPhoneDigits(phone)) patch.normalized_phone = normPhoneDigits(phone);
+    if (!existing.enterprise_id && (input.enterpriseId || '').trim()) patch.enterprise_id = (input.enterpriseId || '').trim();
+    if (!existing.country_code && (input.countryCode || '').trim()) patch.country_code = (input.countryCode || '').trim();
+    if (!existing.primary_role && (input.primaryRole || '').trim()) patch.primary_role = (input.primaryRole || '').trim();
+    if (input.secondaryRoles && input.secondaryRoles.length > 0 && (!existing.secondary_roles || (Array.isArray(existing.secondary_roles) && existing.secondary_roles.length === 0))) {
+      patch.secondary_roles = JSON.stringify(input.secondaryRoles);
+    }
+    if (input.registrationType && existing.registration_type !== input.registrationType) {
+      patch.registration_type = input.registrationType;
+    }
+    if (input.registrationStatus && existing.registration_status !== input.registrationStatus && input.registrationStatus === 'completed') {
+      patch.registration_status = input.registrationStatus;
+    }
+    if (input.emailVerifiedAt && !existing.email_verified_at) patch.email_verified_at = input.emailVerifiedAt;
+    if (input.phoneVerifiedAt && !existing.phone_verified_at) patch.phone_verified_at = input.phoneVerifiedAt;
+    if (input.identityStatus && existing.identity_status !== input.identityStatus && input.identityStatus === 'active') {
+      patch.identity_status = input.identityStatus;
+    }
+    if (input.kycStatus && existing.kyc_status === 'not_started' && input.kycStatus !== 'not_started') {
+      patch.kyc_status = input.kycStatus;
+    }
+    if (input.amlStatus && existing.aml_status === 'not_started' && input.amlStatus !== 'not_started') {
+      patch.aml_status = input.amlStatus;
+    }
+    if (input.ownerReviewStatus && existing.owner_review_status === 'not_started' && input.ownerReviewStatus !== 'not_started') {
+      patch.owner_review_status = input.ownerReviewStatus;
+    }
+    if (!existing.source_channel && (input.sourceChannel || input.source || '').trim()) {
+      patch.source_channel = (input.sourceChannel || input.source || '').trim();
+    }
+    if (!existing.data_origin && (input.dataOrigin || '').trim()) patch.data_origin = (input.dataOrigin || '').trim();
+    if (!existing.terms_version && (input.termsVersion || '').trim()) patch.terms_version = (input.termsVersion || '').trim();
+    if (!existing.privacy_version && (input.privacyVersion || '').trim()) patch.privacy_version = (input.privacyVersion || '').trim();
+    if (!existing.terms_accepted_at && input.termsAcceptedAt) patch.terms_accepted_at = input.termsAcceptedAt;
+    if (!existing.audit_trace_id && (input.auditTraceId || '').trim()) patch.audit_trace_id = (input.auditTraceId || '').trim();
     const existingCreated = new Date(existing.created_at).getTime();
     if (new Date(createdAt).getTime() < existingCreated) patch.created_at = createdAt;
 
