@@ -41,6 +41,16 @@ import {
 } from '@/lib/chat-attachments';
 import { loadChatHistory, saveChatHistory } from '@/lib/chat-persistence';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
+import {
+  isAtBottom as isAtBottomEngine,
+  shouldShowJumpButton,
+  createScrollRetrySchedule,
+  shouldRetryScroll,
+  getScrollToIndexTarget,
+  shouldUseScrollToIndexFallback,
+  getWebScrollDelay,
+  MAX_SCROLL_RETRIES,
+} from '@/src/modules/chat/chatScrollEngine';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'waiting';
 
@@ -135,36 +145,67 @@ export default function InvestorSupportChat({
     return Math.max(insets.bottom + accessoryInset, 8 + accessoryInset);
   }, [extraBottomInset, insets.bottom, isCard, isKeyboardVisible]);
 
+  // DEF-SCROLL-1/2/3/4 FIX: Retry-based scroll with scrollToIndex fallback.
+  // The old single-attempt scrollToEnd silently failed when the FlatList
+  // hadn't finished measuring dynamic message bubbles, leaving the viewport
+  // at the top (months-old messages). The retry loop gives the layout engine
+  // multiple frames to measure content, and the scrollToIndex fallback
+  // forces a measurement on the last item.
   const scrollToLatest = useCallback((animated: boolean = true) => {
-    // On web, requestAnimationFrame fires before the FlatList has measured
-    // dynamic message bubbles, so scrollToEnd lands at the wrong position.
-    // Using a small delay ensures the DOM has rendered before scrolling.
-    const doScroll = () => {
+    const schedule = createScrollRetrySchedule(MAX_SCROLL_RETRIES);
+    const useIndexFallback = shouldUseScrollToIndexFallback(Platform.OS);
+
+    const attemptScroll = (attempt: number) => {
       const list = messagesListRef.current;
       if (!list) return;
-      if (Platform.OS === 'web') {
-        // On web, scrollToEnd is unreliable — use scrollToIndex with last item
+
+      const doScroll = () => {
+        const currentList = messagesListRef.current;
+        if (!currentList) return;
+
         try {
-          list.scrollToEnd({ animated });
+          currentList.scrollToEnd({ animated: attempt === 0 ? animated : false });
         } catch {
-          // Fallback: try scrollToEnd on next frame
-          requestAnimationFrame(() => {
-            try { list.scrollToEnd({ animated: false }); } catch { /* noop */ }
-          });
+          // scrollToEnd can throw on empty lists — ignore
         }
+
+        // DEF-SCROLL-2 FIX: On native, scrollToEnd can silently fail when
+        // the FlatList hasn't finished laying out. scrollToIndex forces a
+        // measurement on the target item, making the scroll reliable.
+        if (useIndexFallback) {
+          const targetIndex = getScrollToIndexTarget(messages.length);
+          if (targetIndex >= 0) {
+            try {
+              currentList.scrollToIndex({
+                index: targetIndex,
+                animated: false,
+                viewPosition: 1,
+              });
+            } catch {
+              // scrollToIndex can throw if the index is out of range
+              // during rapid updates — the retry loop handles this.
+            }
+          }
+        }
+      };
+
+      if (Platform.OS === 'web') {
+        const delay = getWebScrollDelay(attempt);
+        setTimeout(doScroll, delay);
       } else {
-        list.scrollToEnd({ animated });
+        requestAnimationFrame(doScroll);
+      }
+
+      // Schedule next retry if attempts remain
+      if (shouldRetryScroll(attempt, MAX_SCROLL_RETRIES)) {
+        setTimeout(() => attemptScroll(attempt + 1), schedule[attempt + 1] ?? 400);
       }
     };
 
-    if (Platform.OS === 'web') {
-      setTimeout(doScroll, 50);
-    } else {
-      requestAnimationFrame(doScroll);
-    }
+    attemptScroll(0);
     isAtBottomRef.current = true;
     setShowJumpToLatest(false);
-  }, []);
+  }, [messages.length]);
 
   useEffect(() => {
     if (isAtBottomRef.current) {
@@ -180,14 +221,22 @@ export default function InvestorSupportChat({
     }).start();
   }, [showJumpToLatest, jumpButtonAnim]);
 
+  // DEF-SCROLL-5 FIX: Use the engine's dynamic threshold which accounts for
+  // large message bubbles (image attachments are 180px+). The old fixed 80px
+  // threshold caused isAtBottomRef to flip to false after a layout pass when
+  // the last message was an image, stopping auto-scroll prematurely.
   const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
     const isScrollable = contentSize.height > layoutMeasurement.height + 40;
-    const atBottom = distanceFromBottom < 80;
+    const atBottom = isAtBottomEngine(
+      contentOffset.y,
+      contentSize.height,
+      layoutMeasurement.height,
+      messages.length,
+    );
     isAtBottomRef.current = atBottom;
-    setShowJumpToLatest(isScrollable && !atBottom);
-  }, []);
+    setShowJumpToLatest(shouldShowJumpButton(isScrollable, atBottom));
+  }, [messages.length]);
 
   useEffect(() => {
     let cancelled = false;
