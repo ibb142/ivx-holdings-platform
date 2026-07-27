@@ -655,7 +655,7 @@ async function testSupabaseManagement(): Promise<CredentialRow> {
     securityCheck: 'server-only; sbp_ token never in client bundles',
     worker: 'W6',
     testedAt,
-    required_for_production: true, // Required for schema migrations — Phase 5
+    required_for_production: false, // Decision B (2026-07-27): Management API token is revoked (HTTP 401) and NOT required for production. DB operations work via service role key. Schema migrations via Management API are DISABLED until owner provides a fresh token.
     fallback_test_result: null as string | null,
     expires_at: null as string | null,
   };
