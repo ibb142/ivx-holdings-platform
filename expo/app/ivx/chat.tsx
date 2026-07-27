@@ -47,7 +47,7 @@ import { useAuth } from '@/lib/auth-context';
 import { isAdminRole } from '@/lib/auth-helpers';
 import { IVX_BASELINE_OWNER_EMAILS } from '@/shared/ivx/access-control';
 import { resolveDevTestModeContext } from '@/lib/dev-test-mode';
-import { getIVXAccessToken, getIVXOwnerAIConfigAudit, type IVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
+import { getIVXAccessToken, getIVXOwnerAIConfigAudit, IVX_CANONICAL_API_BASE_URL, type IVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
 import { runOwnerSessionPreflight, OWNER_SESSION_REQUIRED_LABEL } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { safeSetString } from '@/lib/safe-clipboard';
@@ -68,6 +68,13 @@ import IVXAdvancedExecutionMode from '@/components/IVXAdvancedExecutionMode';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import _IVXLiveWorkVisibility from '@/components/IVXLiveWorkVisibility';
 import { resolveAIExecutionStage, formatAIExecutionStage, type AIExecutionStage } from '@/src/modules/chat/services/chatMessageUtils';
+import { ChatQaPanel } from '@/src/modules/chat/components/ChatQaPanel';
+import {
+  collectChatQaMetrics,
+  generateQaTraceId,
+  IVX_CHAT_QA_PANEL_ENABLED,
+  type ChatQaMetrics,
+} from '@/src/modules/chat/services/chatQaDiagnostics';
 import {
   getActiveRuntimeSource,
   getRuntimeSourceLabel,
@@ -918,6 +925,14 @@ export default function IVXOwnerChatRoute() {
   const [passwordlessLoading, setPasswordlessLoading] = useState<boolean>(false);
   const [showScrollToLatest, setShowScrollToLatest] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  // Chat QA diagnostic panel — owner-only, temporary, removable after certification.
+  const [showQaPanel, setShowQaPanel] = useState<boolean>(false);
+  const [qaTraceId] = useState<string>(() => generateQaTraceId());
+  const [qaSubmitting, setQaSubmitting] = useState<boolean>(false);
+  const [qaSubmitResult, setQaSubmitResult] = useState<'idle' | 'success' | 'error' | null>(null);
+  const [firstContentOffsetRecorded, setFirstContentOffsetRecorded] = useState<number | null>(null);
+  const duplicateMessageCountRef = useRef<number>(0);
+  const lastReconnectTimeRef = useRef<string | null>(null);
   const isOpenAccessBuild = isOpenAccessModeEnabled();
   const localFirstChatMode = useMemo<boolean>(() => isIVXLocalFirstChatEnabled(), []);
   const ownerId = useMemo<string>(() => user?.id ?? userId ?? (isOpenAccessBuild || localFirstChatMode ? 'ivx-local-owner' : ''), [isOpenAccessBuild, localFirstChatMode, user?.id, userId]);
@@ -1433,6 +1448,10 @@ export default function IVXOwnerChatRoute() {
     }
     // Canonical server-created order with a stable message-ID tiebreak.
     // This keeps reloads and realtime duplicates from moving existing bubbles.
+    // QA diagnostics: track how many duplicates were removed by the dedup layer.
+    const rawCount = messages.length + visibleTransientAssistantMessages.length + pendingOwnerMessages.length;
+    const dedupCount = Math.max(0, rawCount - deduped.size);
+    duplicateMessageCountRef.current = dedupCount;
     return sortMessagesByCanonicalOrder(Array.from(deduped.values()));
   }, [conversationQuery.data?.id, messages, ownerId, ownerLabel, pendingOwnerMessages, transientAssistantMessages]);
 
@@ -1741,6 +1760,9 @@ export default function IVXOwnerChatRoute() {
           }
           console.log('[IVXOwnerChatRoute] Realtime subscription state:', status);
           setRealtimeSubscriptionState(status);
+          if (status === 'SUBSCRIBED' || status === 'reconnected') {
+            lastReconnectTimeRef.current = new Date().toISOString();
+          }
         });
 
         if (!mounted) {
@@ -5502,6 +5524,59 @@ export default function IVXOwnerChatRoute() {
   }, [controlRoomItems]);
   const shouldShowDiagnosticsToggle = developerToolsAllowed;
 
+  // ── Chat QA Diagnostics ──
+  // Collect a live metrics snapshot for the owner-only QA panel. This reads
+  // ONLY structural metadata (IDs, counts, booleans) — no message contents,
+  // no tokens, no PII. The panel is gated behind developerToolsAllowed (owner
+  // auth) and can be disabled by setting IVX_CHAT_QA_PANEL_ENABLED = false.
+  const qaMetrics = useMemo<ChatQaMetrics>(() => {
+    return collectChatQaMetrics({
+      conversationId: canonicalConversationId,
+      activeRoomId: ownerSessionIdRef.current,
+      invertedData,
+      displayedMessages,
+      listInverted: true,
+      firstContentOffset: firstContentOffsetRecorded,
+      initialPositionApplied: !initialScrollPending,
+      userNearLatest: isAtBottomRef.current,
+      yellowArrowVisible: showScrollToLatest,
+      hasMoreOlderMessages: hasMoreOlderMessagesRef.current,
+      duplicateMessageCount: duplicateMessageCountRef.current,
+      realtimeSubscriptionCount: realtimeSubscriptionState ? 1 : 0,
+      lastReconnectTime: lastReconnectTimeRef.current,
+      traceId: qaTraceId,
+    });
+  }, [canonicalConversationId, invertedData, displayedMessages, firstContentOffsetRecorded, initialScrollPending, showScrollToLatest, realtimeSubscriptionState, qaTraceId]);
+
+  const handleSubmitQaEvidence = useCallback(async (report: string) => {
+    setQaSubmitting(true);
+    setQaSubmitResult(null);
+    try {
+      const token = await getIVXAccessToken();
+      const baseUrl = IVX_CANONICAL_API_BASE_URL;
+      const res = await fetch(`${baseUrl}/api/ivx/chat-qa/evidence`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: report,
+      });
+      if (res.ok) {
+        setQaSubmitResult('success');
+        console.log('[IVXChatQA] Evidence submitted successfully, traceId:', qaTraceId);
+      } else {
+        setQaSubmitResult('error');
+        console.log('[IVXChatQA] Evidence submission failed:', res.status);
+      }
+    } catch (error) {
+      setQaSubmitResult('error');
+      console.log('[IVXChatQA] Evidence submission error:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      setQaSubmitting(false);
+    }
+  }, [qaTraceId]);
+
   // INVERTED FLATLIST: With `inverted={true}`, the newest message is at the
   // TOP of the data array (index 0) and visually at the BOTTOM (anchored).
   // "Scroll to latest" = scroll to offset 0 (the top of the inverted list).
@@ -5555,6 +5630,10 @@ export default function IVXOwnerChatRoute() {
     const distanceFromLatest = Math.abs(contentOffset.y);
     const maxScroll = Math.max(0, contentSize.height - layoutMeasurement.height);
     const atBottom = distanceFromLatest < 96;
+    // QA diagnostics: record the first content offset observed after initial layout.
+    if (firstContentOffsetRecorded === null && displayedMessages.length > 0) {
+      setFirstContentOffsetRecorded(Math.round(contentOffset.y * 100) / 100);
+    }
     const atTopOfInverted = maxScroll > 0 && contentOffset.y >= maxScroll - 120;
     if (atBottom !== isAtBottomRef.current) {
       isAtBottomRef.current = atBottom;
@@ -5764,6 +5843,19 @@ export default function IVXOwnerChatRoute() {
                       >
                         <Terminal size={12} color={showDiagnostics ? Colors.black : Colors.primary} />
                         <Text style={[styles.controlRoomToggleText, showDiagnostics ? styles.controlRoomToggleTextActive : null]}>{showDiagnostics ? 'Chat' : 'Control'}</Text>
+                      </Pressable>
+                    ) : null}
+                    {IVX_CHAT_QA_PANEL_ENABLED && developerToolsAllowed ? (
+                      <Pressable
+                        style={[styles.controlRoomToggle, { marginLeft: 4 }]}
+                        onPress={() => setShowQaPanel(true)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Open Chat QA diagnostic panel"
+                        testID="ivx-owner-chat-qa-toggle"
+                      >
+                        <ClipboardList size={12} color={Colors.primary} />
+                        <Text style={styles.controlRoomToggleText}>QA</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -7054,6 +7146,15 @@ export default function IVXOwnerChatRoute() {
       >
         <Terminal size={16} color={Colors.text} />
       </Pressable>
+      {showQaPanel && IVX_CHAT_QA_PANEL_ENABLED && developerToolsAllowed ? (
+        <ChatQaPanel
+          metrics={qaMetrics}
+          onClose={() => setShowQaPanel(false)}
+          onSubmitEvidence={handleSubmitQaEvidence}
+          submitting={qaSubmitting}
+          submitResult={qaSubmitResult}
+        />
+      ) : null}
     </ErrorBoundary>
   );
 }
