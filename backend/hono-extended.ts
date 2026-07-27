@@ -1,1 +1,134 @@
-LyoqCiAqIElWWCBIb25vIEV4dGVuZGVkIOKAlCByb3V0ZSBleHRlbnNpb24gbGF5ZXIgb24gdG9wIG9mIGJhY2tlbmQvaG9uby50cy4KICoKICogV0hZIFRISVMgRklMRSBFWElTVFM6CiAqIGJhY2tlbmQvaG9uby50cyAoMzA2S0IpIGV4Y2VlZHMgdGhlIENsb3VkZmxhcmUgV0FGIHJlcXVlc3Qtc2l6ZSBjZWlsaW5nCiAqICh+MTAw4oCTMjAwS0IpIGVuZm9yY2VkIG9uIHRoZSBvd25lciBkZXBsb3kgQVBJLCBzbyBuZXcgcm91dGVzIGNhbm5vdCBiZQogKiByZWdpc3RlcmVkIGJ5IHJlLWNvbW1pdHRpbmcgdGhlIGZ1bGwgZmlsZSB0aHJvdWdoIHRoZSBndWFyZGVkIHBpcGVsaW5lLgogKiBUaGlzIHNtYWxsIG1vZHVsZSBpbXBvcnRzIHRoZSBleGlzdGluZyBhcHAgYW5kIHJlZ2lzdGVycyBhZGRpdGlvbmFsIHJvdXRlcy4KICogc2VydmVyLnRzIGltcG9ydHMgVEhJUyBtb2R1bGUsIHNvIGFsbCBvcmlnaW5hbCByb3V0ZXMgcmVtYWluIHVudG91Y2hlZC4KICoKICogUm91dGVzIHJlZ2lzdGVyZWQgaGVyZToKICogICBHRVQgIC9hcGkvaXZ4L2F1dG9ub21vdXMvbGVkZ2VyICAgICAgICAgICAgICAg4oCUIG93bmVyLW9ubHkgVzHigJNXMTIgam9iIGxlZGdlcgogKiAgIFBPU1QgL2FwaS9pdngvYXV0b25vbW91cy9sZWRnZXIvdXBkYXRlICAgICAgICDigJQgb3duZXItYXBwcm92ZWQgam9iIHN0YXRlIGNoYW5nZQogKiAgIEdFVCAgL2FwaS9pdngvYXV0b25vbW91cy9hdXRoLWd1YXJkaWFuICAgICAgICDigJQgT3duZXIgQXV0aCBHdWFyZGlhbiBsaXZlIHByb2JlcwogKiAgIFBPU1QgL2FwaS9pdngvYXV0b25vbW91cy9hdXRoLWd1YXJkaWFuL2FsZXJ0ICDigJQgb3duZXIgU01TIGFsZXJ0IChBV1MgU05TKQogKiAgIEdFVCAgL2FwaS9pdngvYXV0b25vbW91cy9xYSAgICAgICAgICAgICAgICAgICDigJQgY29udGludW91cyBRQSBzY2hlZHVsZXIgc3RhdHVzCiAqICAgR0VUICAvYXBpL2l2eC9hdXRvbm9tb3VzL2NyZWRlbnRpYWxzICAgICAgICAgIOKAlCBsaXZlIGNyZWRlbnRpYWwgYmluZGluZyBtYXRyaXgKICogICBHRVQgIC9hcGkvaXZ4L2F1dG9ub21vdXMvcnVucyAgICAgICAgICAgICAgIOKAlCBwZXJtYW5lbnQgcGVyLXJ1biBldmlkZW5jZSByZWNvcmRzIChuZXdlc3QgZmlyc3QpCiAqICAgR0VUICAvYXBpL2l2eC9hdXRvbm9tb3VzL3J1bnMvc3VtbWFyeSAgICAgICDigJQgYWdncmVnYXRlZCBob25lc3QgZXZpZGVuY2UgY291bnRzCiAqICAgR0VUICAvYXBpL2l2eC9hdXRvbm9tb3VzL21pZ3JhdGlvbnMgICAgICAgICAgIOKAlCBtaWdyYXRpb24gaGlzdG9yeSB2cyByZXBvIG1hbmlmZXN0CiAqICAgUE9TVCAvYXBpL2l2eC9hdXRvbm9tb3VzL21pZ3JhdGlvbnMvcnVuICAgICAgIOKAlCBhcHBseSBwZW5kaW5nIHJlcG8gbWlncmF0aW9ucyAob3duZXIgYmVhcmVyKQogKiAgIEdFVCAgL2FwaS9pdngvYXV0b25vbW91cy9pYSAgICAgICAgICAgICAgICAgICDigJQgMTItSUEgb3BlcmF0aW5nIG1vZGVsIHN0YXRlIChyb3N0ZXIvcXVldWUvZmFjdG9yeS9sb2NrcykKICogICBQT1NUIC9hcGkvaXZ4L2F1dG9ub21vdXMvaWEvdGFzayAgICAgICAgICAgICAg4oCUIGNyZWF0ZS91cGRhdGUgYW4gSUEgdGFzayAob3duZXIgYmVhcmVyKQogKiAgIFBPU1QgL2FwaS9pdngvYXV0b25vbW91cy9pYS9sb2NrICAgICAgICAgICAgICDigJQgYWNxdWlyZS9yZWxlYXNlIGEgY3JpdGljYWwtZmlsZSBsb2NrIChvd25lciBiZWFyZXIpCiAqCiAqIFNpZGUgZWZmZWN0OiBzdGFydHMgdGhlIGluLXByb2Nlc3MgY29udGludW91cyBRQSBzY2hlZHVsZXIgKGhlYWx0aCA1bSwKICogYXV0aCAxNW0sIGZ1bGwgbWF0cml4IDJoKSBvbiBzZXJ2aWNlIGJvb3QuCiAqLwppbXBvcnQgYXBwIGZyb20gJy4vaG9ubyc7CmltcG9ydCB7CiAgYXV0b25vbW91c0pvYkxlZGdlck9wdGlvbnMsCiAgaGFuZGxlQXV0b25vbW91c0pvYkxlZGdlckdldCwKICBoYW5kbGVBdXRvbm9tb3VzSm9iTGVkZ2VyVXBkYXRlLAp9IGZyb20gJy4vYXBpL2l2eC1hdXRvbm9tb3VzLWpvYi1sZWRnZXInOwppbXBvcnQgewogIG93bmVyQXV0aEd1YXJkaWFuT3B0aW9ucywKICBoYW5kbGVPd25lckF1dGhHdWFyZGlhbkdldCwKICBoYW5kbGVPd25lckF1dGhHdWFyZGlhbkFsZXJ0LAp9IGZyb20gJy4vYXBpL2l2eC1vd25lci1hdXRoLWd1YXJkaWFuJzsKaW1wb3J0IHsKICBzdGFydEF1dG9ub21vdXNRQVNjaGVkdWxlciwKICBhdXRvbm9tb3VzUUFPcHRpb25zLAogIGhhbmRsZUF1dG9ub21vdXNRQUdldCwKfSBmcm9tICcuL2FwaS9pdngtYXV0aC1xYS1zY2hlZHVsZXInOwppbXBvcnQgewogIGNyZWRlbnRpYWxzU3RhdHVzT3B0aW9ucywKICBoYW5kbGVDcmVkZW50aWFsc1N0YXR1c0dldCwKfSBmcm9tICcuL2FwaS9pdngtY3JlZGVudGlhbHMtc3RhdHVzJzsKaW1wb3J0IHsKICBtaWdyYXRpb25SdW5uZXJPcHRpb25zLAogIGhhbmRsZU1pZ3JhdGlvblN0YXR1c0dldCwKICBoYW5kbGVNaWdyYXRpb25SdW5Qb3N0LAp9IGZyb20gJy4vYXBpL2l2eC1taWdyYXRpb24tcnVubmVyJzsKaW1wb3J0IHsKICBpYU9yY2hlc3RyYXRvck9wdGlvbnMsCiAgaGFuZGxlSUFTdGF0dXNHZXQsCiAgaGFuZGxlSUFUYXNrUG9zdCwKICBoYW5kbGVJQUxvY2tQb3N0LAp9IGZyb20gJy4vYXBpL2l2eC1pYS1vcmNoZXN0cmF0b3InOwppbXBvcnQgewogIG93bmVyQ3JlZGVudGlhbFN0YXR1c09wdGlvbnMsCiAgaGFuZGxlT3duZXJDcmVkZW50aWFsU3RhdHVzR2V0LAp9IGZyb20gJy4vYXBpL2l2eC1vd25lci1jcmVkZW50aWFsLXN0YXR1cyc7CmltcG9ydCB7CiAgYXV0b25vbW91c1J1bnNPcHRpb25zLAogIGhhbmRsZUF1dG9ub21vdXNSdW5zR2V0LAogIGhhbmRsZUF1dG9ub21vdXNSdW5zU3VtbWFyeUdldCwKfSBmcm9tICcuL2FwaS9pdngtYXV0b25vbW91cy1ydW5zJzsKaW1wb3J0IHsKICBPUFRJT05TIGFzIHNjb3BlZE1lbW9yeU9wdGlvbnMsCiAgaGFuZGxlU3RhdHVzIGFzIGhhbmRsZVNjb3BlZE1lbW9yeVN0YXR1cywKICBoYW5kbGVDcmVhdGUgYXMgaGFuZGxlU2NvcGVkTWVtb3J5Q3JlYXRlLAogIGhhbmRsZVJldHJpZXZlIGFzIGhhbmRsZVNjb3BlZE1lbW9yeVJldHJpZXZlLAogIGhhbmRsZUJ1aWxkQ29udGV4dCBhcyBoYW5kbGVTY29wZWRNZW1vcnlCdWlsZENvbnRleHQsCiAgaGFuZGxlUmV2b2tlIGFzIGhhbmRsZVNjb3BlZE1lbW9yeVJldm9rZSwKICBoYW5kbGVPd25lck92ZXJyaWRlIGFzIGhhbmRsZVNjb3BlZE1lbW9yeU93bmVyT3ZlcnJpZGUsCiAgaGFuZGxlVmFsaWRhdGUgYXMgaGFuZGxlU2NvcGVkTWVtb3J5VmFsaWRhdGUsCn0gZnJvbSAnLi9hcGkvaXZ4LXNjb3BlZC1tZW1vcnknOwoKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvbGVkZ2VyJywgKCkgPT4gYXV0b25vbW91c0pvYkxlZGdlck9wdGlvbnMoKSk7CmFwcC5nZXQoJy9hcGkvaXZ4L2F1dG9ub21vdXMvbGVkZ2VyJywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZUF1dG9ub21vdXNKb2JMZWRnZXJHZXQoY29udGV4dC5yZXEucmF3KSk7CmFwcC5vcHRpb25zKCcvYXBpL2l2eC9hdXRvbm9tb3VzL2xlZGdlci91cGRhdGUnLCAoKSA9PiBhdXRvbm9tb3VzSm9iTGVkZ2VyT3B0aW9ucygpKTsKYXBwLnBvc3QoJy9hcGkvaXZ4L2F1dG9ub21vdXMvbGVkZ2VyL3VwZGF0ZScsIGFzeW5jIChjb250ZXh0KSA9PiBoYW5kbGVBdXRvbm9tb3VzSm9iTGVkZ2VyVXBkYXRlKGNvbnRleHQucmVxLnJhdykpOwoKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvYXV0aC1ndWFyZGlhbicsICgpID0+IG93bmVyQXV0aEd1YXJkaWFuT3B0aW9ucygpKTsKYXBwLmdldCgnL2FwaS9pdngvYXV0b25vbW91cy9hdXRoLWd1YXJkaWFuJywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZU93bmVyQXV0aEd1YXJkaWFuR2V0KGNvbnRleHQucmVxLnJhdykpOwphcHAub3B0aW9ucygnL2FwaS9pdngvYXV0b25vbW91cy9hdXRoLWd1YXJkaWFuL2FsZXJ0JywgKCkgPT4gb3duZXJBdXRoR3VhcmRpYW5PcHRpb25zKCkpOwphcHAucG9zdCgnL2FwaS9pdngvYXV0b25vbW91cy9hdXRoLWd1YXJkaWFuL2FsZXJ0JywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZU93bmVyQXV0aEd1YXJkaWFuQWxlcnQoY29udGV4dC5yZXEucmF3KSk7CgphcHAub3B0aW9ucygnL2FwaS9pdngvYXV0b25vbW91cy9xYScsICgpID0+IGF1dG9ub21vdXNRQU9wdGlvbnMoKSk7CmFwcC5nZXQoJy9hcGkvaXZ4L2F1dG9ub21vdXMvcWEnLCBhc3luYyAoY29udGV4dCkgPT4gaGFuZGxlQXV0b25vbW91c1FBR2V0KGNvbnRleHQucmVxLnJhdykpOwoKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvY3JlZGVudGlhbHMnLCAoKSA9PiBjcmVkZW50aWFsc1N0YXR1c09wdGlvbnMoKSk7CmFwcC5nZXQoJy9hcGkvaXZ4L2F1dG9ub21vdXMvY3JlZGVudGlhbHMnLCBhc3luYyAoY29udGV4dCkgPT4gaGFuZGxlQ3JlZGVudGlhbHNTdGF0dXNHZXQoY29udGV4dC5yZXEucmF3KSk7CgphcHAub3B0aW9ucygnL2FwaS9pdngvYXV0b25vbW91cy9taWdyYXRpb25zJywgKCkgPT4gbWlncmF0aW9uUnVubmVyT3B0aW9ucygpKTsKYXBwLmdldCgnL2FwaS9pdngvYXV0b25vbW91cy9taWdyYXRpb25zJywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZU1pZ3JhdGlvblN0YXR1c0dldChjb250ZXh0LnJlcS5yYXcpKTsKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvbWlncmF0aW9ucy9ydW4nLCAoKSA9PiBtaWdyYXRpb25SdW5uZXJPcHRpb25zKCkpOwphcHAucG9zdCgnL2FwaS9pdngvYXV0b25vbW91cy9taWdyYXRpb25zL3J1bicsIGFzeW5jIChjb250ZXh0KSA9PiBoYW5kbGVNaWdyYXRpb25SdW5Qb3N0KGNvbnRleHQucmVxLnJhdykpOwoKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvaWEnLCAoKSA9PiBpYU9yY2hlc3RyYXRvck9wdGlvbnMoKSk7CmFwcC5nZXQoJy9hcGkvaXZ4L2F1dG9ub21vdXMvaWEnLCBhc3luYyAoY29udGV4dCkgPT4gaGFuZGxlSUFTdGF0dXNHZXQoY29udGV4dC5yZXEucmF3KSk7CmFwcC5vcHRpb25zKCcvYXBpL2l2eC9hdXRvbm9tb3VzL2lhL3Rhc2snLCAoKSA9PiBpYU9yY2hlc3RyYXRvck9wdGlvbnMoKSk7CmFwcC5wb3N0KCcvYXBpL2l2eC9hdXRvbm9tb3VzL2lhL3Rhc2snLCBhc3luYyAoY29udGV4dCkgPT4gaGFuZGxlSUFUYXNrUG9zdChjb250ZXh0LnJlcS5yYXcpKTsKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvaWEvbG9jaycsICgpID0+IGlhT3JjaGVzdHJhdG9yT3B0aW9ucygpKTsKYXBwLnBvc3QoJy9hcGkvaXZ4L2F1dG9ub21vdXMvaWEvbG9jaycsIGFzeW5jIChjb250ZXh0KSA9PiBoYW5kbGVJQUxvY2tQb3N0KGNvbnRleHQucmVxLnJhdykpOwoKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L293bmVyL2NyZWRlbnRpYWwtc3RhdHVzJywgKCkgPT4gb3duZXJDcmVkZW50aWFsU3RhdHVzT3B0aW9ucygpKTsKYXBwLmdldCgnL2FwaS9pdngvb3duZXIvY3JlZGVudGlhbC1zdGF0dXMnLCBhc3luYyAoY29udGV4dCkgPT4gaGFuZGxlT3duZXJDcmVkZW50aWFsU3RhdHVzR2V0KGNvbnRleHQucmVxLnJhdykpOwoKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L2F1dG9ub21vdXMvcnVucycsICgpID0+IGF1dG9ub21vdXNSdW5zT3B0aW9ucygpKTsKYXBwLmdldCgnL2FwaS9pdngvYXV0b25vbW91cy9ydW5zJywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZUF1dG9ub21vdXNSdW5zR2V0KGNvbnRleHQucmVxLnJhdykpOwphcHAub3B0aW9ucygnL2FwaS9pdngvYXV0b25vbW91cy9ydW5zL3N1bW1hcnknLCAoKSA9PiBhdXRvbm9tb3VzUnVuc09wdGlvbnMoKSk7CmFwcC5nZXQoJy9hcGkvaXZ4L2F1dG9ub21vdXMvcnVucy9zdW1tYXJ5JywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZUF1dG9ub21vdXNSdW5zU3VtbWFyeUdldChjb250ZXh0LnJlcS5yYXcpKTsKCi8vIEdBVEUgMSDigJQgU2NvcGVkIE1lbW9yeSAoNC1sYXllciBpc29sYXRpb246IHRhc2sgLyBhZ2VudCAvIGNvbXBhbnkgLyBlbnRlcnByaXNlKQphcHAub3B0aW9ucygnL2FwaS9pdngvc2NvcGVkLW1lbW9yeS9zdGF0dXMnLCAoKSA9PiBzY29wZWRNZW1vcnlPcHRpb25zKCkpOwphcHAuZ2V0KCcvYXBpL2l2eC9zY29wZWQtbWVtb3J5L3N0YXR1cycsIGFzeW5jIChjb250ZXh0KSA9PiBoYW5kbGVTY29wZWRNZW1vcnlTdGF0dXMoY29udGV4dC5yZXEucmF3KSk7CmFwcC5vcHRpb25zKCcvYXBpL2l2eC9zY29wZWQtbWVtb3J5L2NyZWF0ZScsICgpID0+IHNjb3BlZE1lbW9yeU9wdGlvbnMoKSk7CmFwcC5wb3N0KCcvYXBpL2l2eC9zY29wZWQtbWVtb3J5L2NyZWF0ZScsIGFzeW5jIChjb250ZXh0KSA9PiBoYW5kbGVTY29wZWRNZW1vcnlDcmVhdGUoY29udGV4dC5yZXEucmF3KSk7CmFwcC5vcHRpb25zKCcvYXBpL2l2eC9zY29wZWQtbWVtb3J5L3JldHJpZXZlJywgKCkgPT4gc2NvcGVkTWVtb3J5T3B0aW9ucygpKTsKYXBwLnBvc3QoJy9hcGkvaXZ4L3Njb3BlZC1tZW1vcnkvcmV0cmlldmUnLCBhc3luYyAoY29udGV4dCkgPT4gaGFuZGxlU2NvcGVkTWVtb3J5UmV0cmlldmUoY29udGV4dC5yZXEucmF3KSk7CmFwcC5vcHRpb25zKCcvYXBpL2l2eC9zY29wZWQtbWVtb3J5L2J1aWxkLWNvbnRleHQnLCAoKSA9PiBzY29wZWRNZW1vcnlPcHRpb25zKCkpOwphcHAucG9zdCgnL2FwaS9pdngvc2NvcGVkLW1lbW9yeS9idWlsZC1jb250ZXh0JywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZVNjb3BlZE1lbW9yeUJ1aWxkQ29udGV4dChjb250ZXh0LnJlcS5yYXcpKTsKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L3Njb3BlZC1tZW1vcnkvcmV2b2tlJywgKCkgPT4gc2NvcGVkTWVtb3J5T3B0aW9ucygpKTsKYXBwLnBvc3QoJy9hcGkvaXZ4L3Njb3BlZC1tZW1vcnkvcmV2b2tlJywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZVNjb3BlZE1lbW9yeVJldm9rZShjb250ZXh0LnJlcS5yYXcpKTsKYXBwLm9wdGlvbnMoJy9hcGkvaXZ4L3Njb3BlZC1tZW1vcnkvb3duZXItb3ZlcnJpZGUnLCAoKSA9PiBzY29wZWRNZW1vcnlPcHRpb25zKCkpOwphcHAucG9zdCgnL2FwaS9pdngvc2NvcGVkLW1lbW9yeS9vd25lci1vdmVycmlkZScsIGFzeW5jIChjb250ZXh0KSA9PiBoYW5kbGVTY29wZWRNZW1vcnlPd25lck92ZXJyaWRlKGNvbnRleHQucmVxLnJhdykpOwphcHAub3B0aW9ucygnL2FwaS9pdngvc2NvcGVkLW1lbW9yeS92YWxpZGF0ZScsICgpID0+IHNjb3BlZE1lbW9yeU9wdGlvbnMoKSk7CmFwcC5wb3N0KCcvYXBpL2l2eC9zY29wZWQtbWVtb3J5L3ZhbGlkYXRlJywgYXN5bmMgKGNvbnRleHQpID0+IGhhbmRsZVNjb3BlZE1lbW9yeVZhbGlkYXRlKGNvbnRleHQucmVxLnJhdykpOwoKc3RhcnRBdXRvbm9tb3VzUUFTY2hlZHVsZXIoKTsKCmV4cG9ydCBkZWZhdWx0IGFwcDs=
+/**
+ * IVX Hono Extended — route extension layer on top of backend/hono.ts.
+ *
+ * WHY THIS FILE EXISTS:
+ * backend/hono.ts (306KB) exceeds the Cloudflare WAF request-size ceiling
+ * (~100–200KB) enforced on the owner deploy API, so new routes cannot be
+ * registered by re-committing the full file through the guarded pipeline.
+ * This small module imports the existing app and registers additional routes.
+ * server.ts imports THIS module, so all original routes remain untouched.
+ *
+ * Routes registered here:
+ *   GET  /api/ivx/autonomous/ledger               — owner-only W1–W12 job ledger
+ *   POST /api/ivx/autonomous/ledger/update        — owner-approved job state change
+ *   GET  /api/ivx/autonomous/auth-guardian        — Owner Auth Guardian live probes
+ *   POST /api/ivx/autonomous/auth-guardian/alert  — owner SMS alert (AWS SNS)
+ *   GET  /api/ivx/autonomous/qa                   — continuous QA scheduler status
+ *   GET  /api/ivx/autonomous/credentials          — live credential binding matrix
+ *   GET  /api/ivx/autonomous/runs               — permanent per-run evidence records (newest first)
+ *   GET  /api/ivx/autonomous/runs/summary       — aggregated honest evidence counts
+ *   GET  /api/ivx/autonomous/migrations           — migration history vs repo manifest
+ *   POST /api/ivx/autonomous/migrations/run       — apply pending repo migrations (owner bearer)
+ *   GET  /api/ivx/autonomous/ia                   — 12-IA operating model state (roster/queue/factory/locks)
+ *   POST /api/ivx/autonomous/ia/task              — create/update an IA task (owner bearer)
+ *   POST /api/ivx/autonomous/ia/lock              — acquire/release a critical-file lock (owner bearer)
+ *
+ * Side effect: starts the in-process continuous QA scheduler (health 5m,
+ * auth 15m, full matrix 2h) on service boot.
+ */
+import app from './hono';
+import {
+  autonomousJobLedgerOptions,
+  handleAutonomousJobLedgerGet,
+  handleAutonomousJobLedgerUpdate,
+} from './api/ivx-autonomous-job-ledger';
+import {
+  ownerAuthGuardianOptions,
+  handleOwnerAuthGuardianGet,
+  handleOwnerAuthGuardianAlert,
+} from './api/ivx-owner-auth-guardian';
+import {
+  startAutonomousQAScheduler,
+  autonomousQAOptions,
+  handleAutonomousQAGet,
+} from './api/ivx-auth-qa-scheduler';
+import {
+  credentialsStatusOptions,
+  handleCredentialsStatusGet,
+} from './api/ivx-credentials-status';
+import {
+  migrationRunnerOptions,
+  handleMigrationStatusGet,
+  handleMigrationRunPost,
+} from './api/ivx-migration-runner';
+import {
+  iaOrchestratorOptions,
+  handleIAStatusGet,
+  handleIATaskPost,
+  handleIALockPost,
+} from './api/ivx-ia-orchestrator';
+import {
+  ownerCredentialStatusOptions,
+  handleOwnerCredentialStatusGet,
+} from './api/ivx-owner-credential-status';
+import {
+  autonomousRunsOptions,
+  handleAutonomousRunsGet,
+  handleAutonomousRunsSummaryGet,
+} from './api/ivx-autonomous-runs';
+import {
+  OPTIONS as scopedMemoryOptions,
+  handleStatus as handleScopedMemoryStatus,
+  handleCreate as handleScopedMemoryCreate,
+  handleRetrieve as handleScopedMemoryRetrieve,
+  handleBuildContext as handleScopedMemoryBuildContext,
+  handleRevoke as handleScopedMemoryRevoke,
+  handleOwnerOverride as handleScopedMemoryOwnerOverride,
+  handleValidate as handleScopedMemoryValidate,
+} from './api/ivx-scoped-memory';
+
+app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
+app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
+app.options('/api/ivx/autonomous/ledger/update', () => autonomousJobLedgerOptions());
+app.post('/api/ivx/autonomous/ledger/update', async (context) => handleAutonomousJobLedgerUpdate(context.req.raw));
+
+app.options('/api/ivx/autonomous/auth-guardian', () => ownerAuthGuardianOptions());
+app.get('/api/ivx/autonomous/auth-guardian', async (context) => handleOwnerAuthGuardianGet(context.req.raw));
+app.options('/api/ivx/autonomous/auth-guardian/alert', () => ownerAuthGuardianOptions());
+app.post('/api/ivx/autonomous/auth-guardian/alert', async (context) => handleOwnerAuthGuardianAlert(context.req.raw));
+
+app.options('/api/ivx/autonomous/qa', () => autonomousQAOptions());
+app.get('/api/ivx/autonomous/qa', async (context) => handleAutonomousQAGet(context.req.raw));
+
+app.options('/api/ivx/autonomous/credentials', () => credentialsStatusOptions());
+app.get('/api/ivx/autonomous/credentials', async (context) => handleCredentialsStatusGet(context.req.raw));
+
+app.options('/api/ivx/autonomous/migrations', () => migrationRunnerOptions());
+app.get('/api/ivx/autonomous/migrations', async (context) => handleMigrationStatusGet(context.req.raw));
+app.options('/api/ivx/autonomous/migrations/run', () => migrationRunnerOptions());
+app.post('/api/ivx/autonomous/migrations/run', async (context) => handleMigrationRunPost(context.req.raw));
+
+app.options('/api/ivx/autonomous/ia', () => iaOrchestratorOptions());
+app.get('/api/ivx/autonomous/ia', async (context) => handleIAStatusGet(context.req.raw));
+app.options('/api/ivx/autonomous/ia/task', () => iaOrchestratorOptions());
+app.post('/api/ivx/autonomous/ia/task', async (context) => handleIATaskPost(context.req.raw));
+app.options('/api/ivx/autonomous/ia/lock', () => iaOrchestratorOptions());
+app.post('/api/ivx/autonomous/ia/lock', async (context) => handleIALockPost(context.req.raw));
+
+app.options('/api/ivx/owner/credential-status', () => ownerCredentialStatusOptions());
+app.get('/api/ivx/owner/credential-status', async (context) => handleOwnerCredentialStatusGet(context.req.raw));
+
+app.options('/api/ivx/autonomous/runs', () => autonomousRunsOptions());
+app.get('/api/ivx/autonomous/runs', async (context) => handleAutonomousRunsGet(context.req.raw));
+app.options('/api/ivx/autonomous/runs/summary', () => autonomousRunsOptions());
+app.get('/api/ivx/autonomous/runs/summary', async (context) => handleAutonomousRunsSummaryGet(context.req.raw));
+
+// GATE 1 — Scoped Memory (4-layer isolation: task / agent / company / enterprise)
+app.options('/api/ivx/scoped-memory/status', () => scopedMemoryOptions());
+app.get('/api/ivx/scoped-memory/status', async (context) => handleScopedMemoryStatus(context.req.raw));
+app.options('/api/ivx/scoped-memory/create', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/create', async (context) => handleScopedMemoryCreate(context.req.raw));
+app.options('/api/ivx/scoped-memory/retrieve', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/retrieve', async (context) => handleScopedMemoryRetrieve(context.req.raw));
+app.options('/api/ivx/scoped-memory/build-context', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/build-context', async (context) => handleScopedMemoryBuildContext(context.req.raw));
+app.options('/api/ivx/scoped-memory/revoke', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/revoke', async (context) => handleScopedMemoryRevoke(context.req.raw));
+app.options('/api/ivx/scoped-memory/owner-override', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/owner-override', async (context) => handleScopedMemoryOwnerOverride(context.req.raw));
+app.options('/api/ivx/scoped-memory/validate', () => scopedMemoryOptions());
+app.post('/api/ivx/scoped-memory/validate', async (context) => handleScopedMemoryValidate(context.req.raw));
+
+startAutonomousQAScheduler();
+
+export default app;
