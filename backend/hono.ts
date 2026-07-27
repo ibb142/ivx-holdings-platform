@@ -6170,7 +6170,7 @@ app.post('/api/ivx/autonomous/monitor/run', async (c) => {
   const { runChecksForCadence } = await import('./services/ivx-production-monitor');
   const body = await c.req.json().catch(() => ({}));
   const cadence = body.cadence || '5min';
-  const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://api.ivxholding.com';
+  const baseUrl = 'https://api.ivxholding.com';
   const results = await runChecksForCadence(cadence, {
     baseUrl,
     landingUrl: 'https://ivxholding.com',
