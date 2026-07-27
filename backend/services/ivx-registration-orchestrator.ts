@@ -514,6 +514,22 @@ export async function orchestrateRegistration(
           authUserId,
           landingSubmissionId: registrationRequestId,
           pictureUrl: input.pictureUrl || '',
+          // --- Canonical identity model fields (ITEM 1) ---
+          countryCode: input.country || undefined,
+          primaryRole: input.roles && input.roles.length > 0 ? input.roles[0] : 'member',
+          secondaryRoles: input.roles && input.roles.length > 1 ? input.roles.slice(1) : [],
+          registrationType: 'individual',
+          registrationStatus: 'completed',
+          identityStatus: 'active',
+          kycStatus: 'not_started',
+          amlStatus: 'not_started',
+          ownerReviewStatus: 'not_started',
+          sourceChannel: 'landing_page',
+          dataOrigin: 'auth_users',
+          termsVersion: input.acceptTerms ? 'v1' : undefined,
+          privacyVersion: input.acceptTerms ? 'v1' : undefined,
+          termsAcceptedAt: input.acceptTerms ? new Date().toISOString() : undefined,
+          auditTraceId: traceId,
         });
         if (canonicalResult && canonicalResult.ok === false) {
           fanoutErrors.push({ step: 'canonical', error: canonicalResult.error || 'unknown' });

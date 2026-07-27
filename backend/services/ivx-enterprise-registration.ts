@@ -22,6 +22,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
+import { upsertCanonicalMember } from './ivx-canonical-members';
 
 const DEPLOYMENT_MARKER = 'ivx-enterprise-registration-v1';
 
@@ -577,7 +578,29 @@ export async function registerEnterprise(
     // Non-fatal — KYC can be started later
   }
 
-  // Step 6: audit
+  // Step 6: sync canonical member with enterprise identity fields (ITEM 1)
+  try {
+    await upsertCanonicalMember({
+      authUserId: input.ownerAuthUserId,
+      email: '', // email comes from auth.users profile; we don't have it here
+      enterpriseId,
+      registrationType: 'enterprise',
+      registrationStatus: 'completed',
+      identityStatus: 'active',
+      kycStatus: 'not_started',
+      amlStatus: 'not_started',
+      ownerReviewStatus: 'not_started',
+      sourceChannel: input.sourceChannel || 'enterprise_registration',
+      dataOrigin: 'enterprise_registration',
+      primaryRole: 'enterprise_owner',
+      auditTraceId: traceId,
+    });
+  } catch (canonicalErr) {
+    console.error('[EnterpriseReg] Canonical member sync failed:', canonicalErr instanceof Error ? canonicalErr.message : 'unknown');
+    // Non-fatal — enterprise + membership + KYC are already created
+  }
+
+  // Step 7: audit
   await writeAuditEvent({
     traceId,
     authUserId: input.ownerAuthUserId,
