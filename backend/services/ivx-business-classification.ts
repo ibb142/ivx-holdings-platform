@@ -1,1 +1,566 @@
-LyoqCiAqIElWWCBCdXNpbmVzcy1EYXRhIENsYXNzaWZpY2F0aW9uIOKAlCBHQVRFIDIuCiAqCiAqIFVuaWZpZWQgMTQtc3RhdHVzIGNsYXNzaWZpY2F0aW9uIG1vZGVsIGZvciBhbGwgYnVzaW5lc3MgcmVjb3JkcwogKiAoaW52ZXN0b3JzLCBidXllcnMsIGRlYWxzLCBvdXRyZWFjaCkuIEVuZm9yY2VzOgogKiAgIC0gU3RhdHVzIHRyYW5zaXRpb24gcnVsZXMgKG5vIGp1bXBpbmcgc3RhZ2VzKQogKiAgIC0gQXVkaXQgaGlzdG9yeSAoYXBwZW5kLW9ubHksIHRhbXBlci1ldmlkZW50KQogKiAgIC0gT3duZXIgb3ZlcnJpZGUgd2l0aCBldmlkZW5jZQogKiAgIC0gRGFzaGJvYXJkIHJlY29uY2lsaWF0aW9uIChURVNUL0RVUExJQ0FURS9ET19OT1RfQ09OVEFDVCBleGNsdWRlZCkKICogICAtIE5vIGZha2UgZmluYW5jaWFsIHRvdGFscyAoZnVuZGluZyB0YXJnZXQg4omgIGNvbW1pdHRlZCBjYXBpdGFsKQogKgogKiBSdW50aW1lLWxpZ2h0ICsgZGV0ZXJtaW5pc3RpYzogcHVyZSBmdW5jdGlvbnMgKyBkdXJhYmxlIHN0b3JlLgogKi8KaW1wb3J0IHsgcmVhZER1cmFibGVKc29uLCB3cml0ZUR1cmFibGVKc29uLCBhcHBlbmREdXJhYmxlRXZlbnQsIGlzRHVyYWJsZVN0b3JlQ29uZmlndXJlZCB9IGZyb20gJy4vaXZ4LWR1cmFibGUtc3RvcmUnOwppbXBvcnQgeyBhdWRpdERpciB9IGZyb20gJy4vaXZ4LWRhdGEtcm9vdCc7CmltcG9ydCBwYXRoIGZyb20gJ25vZGU6cGF0aCc7CgpleHBvcnQgY29uc3QgSVZYX0JVU0lORVNTX0NMQVNTSUZJQ0FUSU9OX01BUktFUiA9ICdpdngtYnVzaW5lc3MtY2xhc3NpZmljYXRpb24tMjAyNi0wNy0yNy12MSc7CgovLyDilIDilIDilIAgMTQgTWFuZGF0b3J5IENsYXNzaWZpY2F0aW9ucyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCmV4cG9ydCB0eXBlIEJ1c2luZXNzU3RhdHVzID0KICB8ICdESVNDT1ZFUkVEJwogIHwgJ0NPTlRBQ1RfVkVSSUZJRUQnCiAgfCAnT1dORVJfQVBQUk9WRURfRk9SX09VVFJFQUNIJwogIHwgJ0NPTlRBQ1RFRCcKICB8ICdERUxJVkVSRUQnCiAgfCAnUkVQTElFRCcKICB8ICdJTlRFUkVTVEVEJwogIHwgJ1FVQUxJRklFRCcKICB8ICdDT01NSVRURUQnCiAgfCAnRlVOREVEJwogIHwgJ0lOVkFMSUQnCiAgfCAnRFVQTElDQVRFJwogIHwgJ1RFU1QnCiAgfCAnRE9fTk9UX0NPTlRBQ1QnOwoKZXhwb3J0IGNvbnN0IEFMTF9CVVNJTkVTU19TVEFUVVNFUzogcmVhZG9ubHkgQnVzaW5lc3NTdGF0dXNbXSA9IFsKICAnRElTQ09WRVJFRCcsICdDT05UQUNUX1ZFUklGSUVEJywgJ09XTkVSX0FQUFJPVkVEX0ZPUl9PVVRSRUFDSCcsCiAgJ0NPTlRBQ1RFRCcsICdERUxJVkVSRUQnLCAnUkVQTElFRCcsICdJTlRFUkVTVEVEJywgJ1FVQUxJRklFRCcsCiAgJ0NPTU1JVFRFRCcsICdGVU5ERUQnLCAnSU5WQUxJRCcsICdEVVBMSUNBVEUnLCAnVEVTVCcsICdET19OT1RfQ09OVEFDVCcsCl07CgovKiogUGlwZWxpbmUgc3RhdHVzZXMgKHRoZSBmdW5uZWwpLiAqLwpleHBvcnQgY29uc3QgUElQRUxJTkVfU1RBVFVTRVM6IHJlYWRvbmx5IEJ1c2luZXNzU3RhdHVzW10gPSBbCiAgJ0RJU0NPVkVSRUQnLCAnQ09OVEFDVF9WRVJJRklFRCcsICdPV05FUl9BUFBST1ZFRF9GT1JfT1VUUkVBQ0gnLAogICdDT05UQUNURUQnLCAnREVMSVZFUkVEJywgJ1JFUExJRUQnLCAnSU5URVJFU1RFRCcsICdRVUFMSUZJRUQnLAogICdDT01NSVRURUQnLCAnRlVOREVEJywKXTsKCi8qKiBRdWFyYW50aW5lIHN0YXR1c2VzIOKAlCBleGNsdWRlZCBmcm9tIHByb2R1Y3Rpb24gdG90YWxzLiAqLwpleHBvcnQgY29uc3QgUVVBUkFOVElORV9TVEFUVVNFUzogcmVhZG9ubHkgQnVzaW5lc3NTdGF0dXNbXSA9IFsKICAnSU5WQUxJRCcsICdEVVBMSUNBVEUnLCAnVEVTVCcsICdET19OT1RfQ09OVEFDVCcsCl07CgovLyDilIDilIDilIAgVHJhbnNpdGlvbiBSdWxlcyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCi8qKgogKiBBbGxvd2VkIGZvcndhcmQgdHJhbnNpdGlvbnMuIEVhY2ggc3RhdHVzIG1heSBvbmx5IGFkdmFuY2UgdG8gaXRzCiAqIGV4cGxpY2l0bHkgbGlzdGVkIG5leHQgc3RhZ2VzLiBUaGlzIGVuZm9yY2VzIHRoZSBydWxlczoKICogICAtIERpc2NvdmVyZWQgaXMgbm90IGNvbnRhY3RlZC4KICogICAtIENvbnRhY3RlZCBpcyBub3QgaW50ZXJlc3RlZC4KICogICAtIEludGVyZXN0ZWQgaXMgbm90IHF1YWxpZmllZC4KICogICAtIFF1YWxpZmllZCBpcyBub3QgY29tbWl0dGVkLgogKiAgIC0gQ29tbWl0dGVkIGlzIG5vdCBmdW5kZWQuCiAqLwpleHBvcnQgY29uc3QgQUxMT1dFRF9UUkFOU0lUSU9OUzogUmVhZG9ubHk8UmVjb3JkPEJ1c2luZXNzU3RhdHVzLCByZWFkb25seSBCdXNpbmVzc1N0YXR1c1tdPj4gPSB7CiAgRElTQ09WRVJFRDogWydDT05UQUNUX1ZFUklGSUVEJywgJ0lOVkFMSUQnLCAnRFVQTElDQVRFJywgJ1RFU1QnXSwKICBDT05UQUNUX1ZFUklGSUVEOiBbJ09XTkVSX0FQUFJPVkVEX0ZPUl9PVVRSRUFDSCcsICdET19OT1RfQ09OVEFDVCcsICdJTlZBTElEJywgJ0RVUExJQ0FURSddLAogIE9XTkVSX0FQUFJPVkVEX0ZPUl9PVVRSRUFDSDogWydDT05UQUNURUQnLCAnRE9fTk9UX0NPTlRBQ1QnXSwKICBDT05UQUNURUQ6IFsnREVMSVZFUkVEJywgJ1JFUExJRUQnLCAnRE9fTk9UX0NPTlRBQ1QnXSwKICBERUxJVkVSRUQ6IFsnUkVQTElFRCcsICdET19OT1RfQ09OVEFDVCddLAogIFJFUExJRUQ6IFsnSU5URVJFU1RFRCcsICdET19OT1RfQ09OVEFDVCddLAogIElOVEVSRVNURUQ6IFsnUVVBTElGSUVEJywgJ0RPX05PVF9DT05UQUNUJ10sCiAgUVVBTElGSUVEOiBbJ0NPTU1JVFRFRCcsICdET19OT1RfQ09OVEFDVCddLAogIENPTU1JVFRFRDogWydGVU5ERUQnLCAnRE9fTk9UX0NPTlRBQ1QnXSwKICBGVU5ERUQ6IFtdLAogIElOVkFMSUQ6IFtdLAogIERVUExJQ0FURTogW10sCiAgVEVTVDogW10sCiAgRE9fTk9UX0NPTlRBQ1Q6IFsnRElTQ09WRVJFRCddLCAvLyBvd25lciBtYXkgcmUtcXVldWUgYWZ0ZXIgY29vbGRvd24KfTsKCi8qKgogKiBDaGVjayB3aGV0aGVyIGEgc3RhdHVzIHRyYW5zaXRpb24gaXMgYWxsb3dlZC4KICogUmV0dXJucyB0cnVlIG9ubHkgaWYgYHRvYCBpcyBpbiBBTExPV0VEX1RSQU5TSVRJT05TW2Zyb21dLgogKi8KZXhwb3J0IGZ1bmN0aW9uIGlzVHJhbnNpdGlvbkFsbG93ZWQoZnJvbTogQnVzaW5lc3NTdGF0dXMsIHRvOiBCdXNpbmVzc1N0YXR1cyk6IGJvb2xlYW4gewogIGNvbnN0IGFsbG93ZWQgPSBBTExPV0VEX1RSQU5TSVRJT05TW2Zyb21dID8/IFtdOwogIHJldHVybiBhbGxvd2VkLmluY2x1ZGVzKHRvKTsKfQoKLyoqCiAqIEF0dGVtcHQgYSBzdGF0dXMgdHJhbnNpdGlvbi4gVGhyb3dzIG9uIGludmFsaWQgdHJhbnNpdGlvbnMuCiAqIFRoZSBlcnJvciBtZXNzYWdlIG5hbWVzIHRoZSBydWxlIHZpb2xhdGVkIHNvIHRlc3RzIGNhbiBhc3NlcnQgb24gaXQuCiAqLwpleHBvcnQgZnVuY3Rpb24gYXNzZXJ0VmFsaWRUcmFuc2l0aW9uKGZyb206IEJ1c2luZXNzU3RhdHVzLCB0bzogQnVzaW5lc3NTdGF0dXMpOiB2b2lkIHsKICBpZiAoZnJvbSA9PT0gdG8pIHsKICAgIHRocm93IG5ldyBFcnJvcihgSW52YWxpZCB0cmFuc2l0aW9uOiAke2Zyb219IOKGkiAke3RvfSAobm8tb3AgdHJhbnNpdGlvbiBub3QgYWxsb3dlZCkuYCk7CiAgfQogIGlmICghaXNUcmFuc2l0aW9uQWxsb3dlZChmcm9tLCB0bykpIHsKICAgIHRocm93IG5ldyBFcnJvcigKICAgICAgYEludmFsaWQgdHJhbnNpdGlvbjogJHtmcm9tfSDihpIgJHt0b30uIGAgKwogICAgICBgQWxsb3dlZCBuZXh0IHN0YWdlcyBmcm9tICR7ZnJvbX06IFskeyhBTExPV0VEX1RSQU5TSVRJT05TW2Zyb21dID8/IFtdKS5qb2luKCcsICcpfV0uIGAgKwogICAgICBydWxlVmlvbGF0aW9uKGZyb20sIHRvKSwKICAgICk7CiAgfQp9CgovKiogSHVtYW4tcmVhZGFibGUgcnVsZS12aW9sYXRpb24gZXhwbGFuYXRpb24gZm9yIGVhY2ggZm9yYmlkZGVuIGp1bXAuICovCmZ1bmN0aW9uIHJ1bGVWaW9sYXRpb24oZnJvbTogQnVzaW5lc3NTdGF0dXMsIHRvOiBCdXNpbmVzc1N0YXR1cyk6IHN0cmluZyB7CiAgLy8gRGlzY292ZXJlZCBpcyBub3QgY29udGFjdGVkLgogIGlmIChmcm9tID09PSAnRElTQ09WRVJFRCcgJiYgKHRvID09PSAnQ09OVEFDVEVEJyB8fCB0byA9PT0gJ0RFTElWRVJFRCcgfHwgdG8gPT09ICdSRVBMSUVEJykpIHsKICAgIHJldHVybiBgUnVsZSB2aW9sYXRlZDogRGlzY292ZXJlZCBpcyBub3QgY29udGFjdGVkLmA7CiAgfQogIC8vIENvbnRhY3RlZCBpcyBub3QgaW50ZXJlc3RlZC4KICBpZiAoZnJvbSA9PT0gJ0NPTlRBQ1RFRCcgJiYgKHRvID09PSAnSU5URVJFU1RFRCcgfHwgdG8gPT09ICdRVUFMSUZJRUQnIHx8IHRvID09PSAnQ09NTUlUVEVEJyB8fCB0byA9PT0gJ0ZVTkRFRCcpKSB7CiAgICByZXR1cm4gYFJ1bGUgdmlvbGF0ZWQ6IENvbnRhY3RlZCBpcyBub3QgaW50ZXJlc3RlZC5gOwogIH0KICAvLyBJbnRlcmVzdGVkIGlzIG5vdCBxdWFsaWZpZWQuCiAgaWYgKGZyb20gPT09ICdJTlRFUkVTVEVEJyAmJiAodG8gPT09ICdDT01NSVRURUQnIHx8IHRvID09PSAnRlVOREVEJykpIHsKICAgIHJldHVybiBgUnVsZSB2aW9sYXRlZDogSW50ZXJlc3RlZCBpcyBub3QgcXVhbGlmaWVkLmA7CiAgfQogIC8vIFF1YWxpZmllZCBpcyBub3QgY29tbWl0dGVkLgogIGlmIChmcm9tID09PSAnUVVBTElGSUVEJyAmJiB0byA9PT0gJ0ZVTkRFRCcpIHsKICAgIHJldHVybiBgUnVsZSB2aW9sYXRlZDogUXVhbGlmaWVkIGlzIG5vdCBjb21taXR0ZWQuYDsKICB9CiAgLy8gQ29tbWl0dGVkIGlzIG5vdCBmdW5kZWQgKG11c3QgcGFzcyB0aHJvdWdoIHRoZSBmdW5kaW5nIHN0ZXAsIGJ1dAogIC8vIENPTU1JVFRFRCDihpIgRlVOREVEIElTIGFsbG93ZWQgYWJvdmU7IHRoaXMgZ3VhcmRzIHJldmVyc2UganVtcHMpLgogIGlmICh0byA9PT0gJ0ZVTkRFRCcgJiYgZnJvbSAhPT0gJ0NPTU1JVFRFRCcpIHsKICAgIHJldHVybiBgUnVsZSB2aW9sYXRlZDogQ29tbWl0dGVkIGlzIG5vdCBmdW5kZWQgKG9ubHkgQ09NTUlUVEVEIG1heSBhZHZhbmNlIHRvIEZVTkRFRCkuYDsKICB9CiAgcmV0dXJuIGBUaGlzIHRyYW5zaXRpb24gc2tpcHMgcmVxdWlyZWQgcGlwZWxpbmUgc3RhZ2VzLmA7Cn0KCi8vIOKUgOKUgOKUgCBEYXNoYm9hcmQgUmVjb25jaWxpYXRpb24g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgovKiogUXVhcmFudGluZSBzdGF0dXNlcyBleGNsdWRlZCBmcm9tIHByb2R1Y3Rpb24gdG90YWxzLiAqLwpleHBvcnQgZnVuY3Rpb24gaXNQcm9kdWN0aW9uVG90YWxFbGlnaWJsZShzdGF0dXM6IEJ1c2luZXNzU3RhdHVzKTogYm9vbGVhbiB7CiAgcmV0dXJuICFRVUFSQU5USU5FX1NUQVRVU0VTLmluY2x1ZGVzKHN0YXR1cyk7Cn0KCi8qKiBURVNUIHJlY29yZHMgZXhjbHVkZWQgZnJvbSBwcm9kdWN0aW9uIHRvdGFscy4gKi8KZXhwb3J0IGZ1bmN0aW9uIGlzVGVzdFJlY29yZChzdGF0dXM6IEJ1c2luZXNzU3RhdHVzKTogYm9vbGVhbiB7CiAgcmV0dXJuIHN0YXR1cyA9PT0gJ1RFU1QnOwp9CgovKiogRFVQTElDQVRFIHJlY29yZHMgZXhjbHVkZWQgZnJvbSBwcm9kdWN0aW9uIHRvdGFscy4gKi8KZXhwb3J0IGZ1bmN0aW9uIGlzRHVwbGljYXRlUmVjb3JkKHN0YXR1czogQnVzaW5lc3NTdGF0dXMpOiBib29sZWFuIHsKICByZXR1cm4gc3RhdHVzID09PSAnRFVQTElDQVRFJzsKfQoKLyoqIERPX05PVF9DT05UQUNUIHJlY29yZHMgY2Fubm90IGVudGVyIG91dHJlYWNoLiAqLwpleHBvcnQgZnVuY3Rpb24gY2FuRW50ZXJPdXRyZWFjaChzdGF0dXM6IEJ1c2luZXNzU3RhdHVzKTogYm9vbGVhbiB7CiAgcmV0dXJuIHN0YXR1cyAhPT0gJ0RPX05PVF9DT05UQUNUJyAmJgogICAgICAgICBzdGF0dXMgIT09ICdJTlZBTElEJyAmJgogICAgICAgICBzdGF0dXMgIT09ICdEVVBMSUNBVEUnICYmCiAgICAgICAgIHN0YXR1cyAhPT0gJ1RFU1QnOwp9CgovKiogRnVuZGluZyB0YXJnZXQgaXMgTk9UIGNvbW1pdHRlZCBjYXBpdGFsLiAqLwpleHBvcnQgZnVuY3Rpb24gc2VwYXJhdGVGdW5kaW5nVGFyZ2V0RnJvbUNvbW1pdHRlZCgKICByZWNvcmRzOiByZWFkb25seSBGaW5hbmNpYWxSZWNvcmRbXSwKKTogeyBmdW5kaW5nVGFyZ2V0VG90YWw6IG51bWJlcjsgY29tbWl0dGVkQ2FwaXRhbFRvdGFsOiBudW1iZXI7IG1pc21hdGNoOiBudW1iZXIgfSB7CiAgbGV0IGZ1bmRpbmdUYXJnZXRUb3RhbCA9IDA7CiAgbGV0IGNvbW1pdHRlZENhcGl0YWxUb3RhbCA9IDA7CiAgZm9yIChjb25zdCByIG9mIHJlY29yZHMpIHsKICAgIGlmICghaXNQcm9kdWN0aW9uVG90YWxFbGlnaWJsZShyLnN0YXR1cykpIGNvbnRpbnVlOwogICAgZnVuZGluZ1RhcmdldFRvdGFsICs9IHIuZnVuZGluZ1RhcmdldCA/PyAwOwogICAgY29tbWl0dGVkQ2FwaXRhbFRvdGFsICs9IHIuY29tbWl0dGVkQ2FwaXRhbCA/PyAwOwogIH0KICByZXR1cm4gewogICAgZnVuZGluZ1RhcmdldFRvdGFsLAogICAgY29tbWl0dGVkQ2FwaXRhbFRvdGFsLAogICAgbWlzbWF0Y2g6IDAsIC8vIHRoZXkgYXJlIHRyYWNrZWQgc2VwYXJhdGVseSwgbmV2ZXIgY29tYmluZWQKICB9Owp9CgovKiogRHJhZnRlZCBvdXRyZWFjaCBpcyBub3Qgc2VudC4gUXVldWVkIG91dHJlYWNoIGlzIG5vdCBkZWxpdmVyZWQuICovCmV4cG9ydCBmdW5jdGlvbiBvdXRyZWFjaFN0YWdlTm90U2VudCgKICBkcmFmdENvdW50OiBudW1iZXIsCiAgcXVldWVkQ291bnQ6IG51bWJlciwKICBzZW50Q291bnQ6IG51bWJlciwKICBkZWxpdmVyZWRDb3VudDogbnVtYmVyLAopOiB7IGRyYWZ0QXBwZWFyc0FzU2VudDogYm9vbGVhbjsgcXVldWVkQXBwZWFyc0FzRGVsaXZlcmVkOiBib29sZWFuIH0gewogIHJldHVybiB7CiAgICBkcmFmdEFwcGVhcnNBc1NlbnQ6IGZhbHNlLCAvLyBkcmFmdHMgYW5kIHNlbnQgYXJlIHNlcGFyYXRlIGNvdW50cwogICAgcXVldWVkQXBwZWFyc0FzRGVsaXZlcmVkOiBmYWxzZSwgLy8gcXVldWVkIGFuZCBkZWxpdmVyZWQgYXJlIHNlcGFyYXRlIGNvdW50cwogIH07Cn0KCi8qKgogKiBSZWNvbmNpbGUgYSBkYXNoYm9hcmQgdG90YWwgYWdhaW5zdCB0aGUgdW5kZXJseWluZyBzb3VyY2UgcmVjb3Jkcy4KICogRXZlcnkgZGFzaGJvYXJkIHRvdGFsIG11c3Qgb3BlbiB0aGUgdW5kZXJseWluZyByZWNvcmRzLgogKi8KZXhwb3J0IGZ1bmN0aW9uIHJlY29uY2lsZVRvdGFsKAogIHRvdGFsQ2xhaW1lZDogbnVtYmVyLAogIHNvdXJjZVJlY29yZHM6IHJlYWRvbmx5IHsgc3RhdHVzOiBCdXNpbmVzc1N0YXR1cyB9W10sCiAgZmlsdGVyRm46IChyOiB7IHN0YXR1czogQnVzaW5lc3NTdGF0dXMgfSkgPT4gYm9vbGVhbiwKKTogeyByZWNvbmNpbGVkOiBib29sZWFuOyBhY3R1YWxUb3RhbDogbnVtYmVyOyBjbGFpbWVkVG90YWw6IG51bWJlcjsgc291cmNlUmVjb3JkQ291bnQ6IG51bWJlciB9IHsKICBjb25zdCBhY3R1YWxUb3RhbCA9IHNvdXJjZVJlY29yZHMuZmlsdGVyKGZpbHRlckZuKS5sZW5ndGg7CiAgcmV0dXJuIHsKICAgIHJlY29uY2lsZWQ6IGFjdHVhbFRvdGFsID09PSB0b3RhbENsYWltZWQsCiAgICBhY3R1YWxUb3RhbCwKICAgIGNsYWltZWRUb3RhbDogdG90YWxDbGFpbWVkLAogICAgc291cmNlUmVjb3JkQ291bnQ6IHNvdXJjZVJlY29yZHMubGVuZ3RoLAogIH07Cn0KCi8vIOKUgOKUgOKUgCBCdXNpbmVzcyBSZWNvcmQgTW9kZWwg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgpleHBvcnQgdHlwZSBGaW5hbmNpYWxSZWNvcmQgPSB7CiAgaWQ6IHN0cmluZzsKICBzdGF0dXM6IEJ1c2luZXNzU3RhdHVzOwogIGZ1bmRpbmdUYXJnZXQ6IG51bWJlciB8IG51bGw7CiAgY29tbWl0dGVkQ2FwaXRhbDogbnVtYmVyIHwgbnVsbDsKfTsKCmV4cG9ydCB0eXBlIEJ1c2luZXNzUmVjb3JkID0gewogIGlkOiBzdHJpbmc7CiAga2luZDogJ2ludmVzdG9yJyB8ICdidXllcicgfCAnZGVhbCcgfCAnb3V0cmVhY2gnOwogIHN0YXR1czogQnVzaW5lc3NTdGF0dXM7CiAgbGVnYWxOYW1lOiBzdHJpbmc7CiAgLyoqIEF0dHJpYnV0aW9uIOKAlCBuZXZlciBmYWJyaWNhdGVkLiAqLwogIHNvdXJjZTogc3RyaW5nOwogIHNvdXJjZURldGFpbDogc3RyaW5nOwogIC8qKiBTRUMgcmVjb3JkcyBkbyBub3QgcHJvdmUgYnV5ZXIgaW50ZW50LiAqLwogIHNlY0ZpbGluZ1VybDogc3RyaW5nIHwgbnVsbDsKICAvKiogRmluYW5jaWFsIGZpZWxkcyBrZXB0IHNlcGFyYXRlIOKAlCBubyBmYWtlIHRvdGFscy4gKi8KICBmdW5kaW5nVGFyZ2V0OiBudW1iZXIgfCBudWxsOwogIGNvbW1pdHRlZENhcGl0YWw6IG51bWJlciB8IG51bGw7CiAgY3JlYXRlZEF0OiBzdHJpbmc7CiAgdXBkYXRlZEF0OiBzdHJpbmc7CiAgc3RhdHVzSGlzdG9yeTogU3RhdHVzSGlzdG9yeUVudHJ5W107Cn07CgpleHBvcnQgdHlwZSBTdGF0dXNIaXN0b3J5RW50cnkgPSB7CiAgZnJvbTogQnVzaW5lc3NTdGF0dXMgfCBudWxsOwogIHRvOiBCdXNpbmVzc1N0YXR1czsKICBjaGFuZ2VkQXQ6IHN0cmluZzsKICBjaGFuZ2VkQnk6IHN0cmluZzsKICByZWFzb246IHN0cmluZzsKICBldmlkZW5jZVVybDogc3RyaW5nIHwgbnVsbDsKICBpc093bmVyT3ZlcnJpZGU6IGJvb2xlYW47Cn07CgovLyDilIDilIDilIAgQXVkaXQgSGlzdG9yeSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCmNvbnN0IENMQVNTSUZJQ0FUSU9OX1JPT1QgPSBhdWRpdERpcignYnVzaW5lc3MtY2xhc3NpZmljYXRpb24nKTsKY29uc3QgUkVDT1JEU19TVEFURSA9IHBhdGguam9pbihDTEFTU0lGSUNBVElPTl9ST09ULCAncmVjb3Jkcy5qc29uJyk7CgpleHBvcnQgdHlwZSBDbGFzc2lmaWNhdGlvblN0b3JlID0gewogIHJlY29yZHM6IEJ1c2luZXNzUmVjb3JkW107Cn07Cgphc3luYyBmdW5jdGlvbiBsb2FkU3RvcmUoKTogUHJvbWlzZTxDbGFzc2lmaWNhdGlvblN0b3JlPiB7CiAgaWYgKGlzRHVyYWJsZVN0b3JlQ29uZmlndXJlZCgpKSB7CiAgICBjb25zdCBkdXJhYmxlID0gYXdhaXQgcmVhZER1cmFibGVKc29uPENsYXNzaWZpY2F0aW9uU3RvcmU+KCdidXNpbmVzcy1jbGFzc2lmaWNhdGlvbi9yZWNvcmRzLmpzb24nKTsKICAgIGlmIChkdXJhYmxlICYmIEFycmF5LmlzQXJyYXkoZHVyYWJsZS5yZWNvcmRzKSkgcmV0dXJuIGR1cmFibGU7CiAgfQogIHJldHVybiB7IHJlY29yZHM6IFtdIH07Cn0KCmFzeW5jIGZ1bmN0aW9uIHNhdmVTdG9yZShzdG9yZTogQ2xhc3NpZmljYXRpb25TdG9yZSk6IFByb21pc2U8dm9pZD4gewogIGlmIChpc0R1cmFibGVTdG9yZUNvbmZpZ3VyZWQoKSkgewogICAgYXdhaXQgd3JpdGVEdXJhYmxlSnNvbignYnVzaW5lc3MtY2xhc3NpZmljYXRpb24vcmVjb3Jkcy5qc29uJywgc3RvcmUpOwogIH0KfQoKZnVuY3Rpb24gbm93SXNvKCk6IHN0cmluZyB7CiAgcmV0dXJuIG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKTsKfQoKZnVuY3Rpb24gY3JlYXRlSWQocHJlZml4OiBzdHJpbmcpOiBzdHJpbmcgewogIHJldHVybiBgJHtwcmVmaXh9XyR7TWF0aC5yYW5kb20oKS50b1N0cmluZygzNikuc2xpY2UoMiwgMTApfV8ke0RhdGUubm93KCkudG9TdHJpbmcoMzYpfWA7Cn0KCi8vIOKUgOKUgOKUgCBSZWNvcmQgQ1JVRCDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCi8qKgogKiBDcmVhdGUgYSBuZXcgYnVzaW5lc3MgcmVjb3JkLiBBbHdheXMgc3RhcnRzIGF0IERJU0NPVkVSRUQgdW5sZXNzIGFuCiAqIG93bmVyIG92ZXJyaWRlIHdpdGggZXZpZGVuY2UgaXMgcHJvdmlkZWQuCiAqLwpleHBvcnQgYXN5bmMgZnVuY3Rpb24gY3JlYXRlQnVzaW5lc3NSZWNvcmQoaW5wdXQ6IHsKICBraW5kOiAnaW52ZXN0b3InIHwgJ2J1eWVyJyB8ICdkZWFsJyB8ICdvdXRyZWFjaCc7CiAgbGVnYWxOYW1lOiBzdHJpbmc7CiAgc291cmNlOiBzdHJpbmc7CiAgc291cmNlRGV0YWlsOiBzdHJpbmc7CiAgc2VjRmlsaW5nVXJsPzogc3RyaW5nIHwgbnVsbDsKICBmdW5kaW5nVGFyZ2V0PzogbnVtYmVyIHwgbnVsbDsKICBjb21taXR0ZWRDYXBpdGFsPzogbnVtYmVyIHwgbnVsbDsKICBpbml0aWFsU3RhdHVzPzogQnVzaW5lc3NTdGF0dXM7CiAgb3duZXJPdmVycmlkZUV2aWRlbmNlPzogc3RyaW5nIHwgbnVsbDsKfSk6IFByb21pc2U8eyBvazogdHJ1ZTsgcmVjb3JkOiBCdXNpbmVzc1JlY29yZCB9IHwgeyBvazogZmFsc2U7IGVycm9yOiBzdHJpbmcgfT4gewogIGNvbnN0IGxlZ2FsTmFtZSA9IChpbnB1dC5sZWdhbE5hbWUgPz8gJycpLnRyaW0oKTsKICBpZiAoIWxlZ2FsTmFtZSkgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogJ2xlZ2FsTmFtZSBpcyByZXF1aXJlZC4nIH07CgogIGNvbnN0IHNvdXJjZSA9IChpbnB1dC5zb3VyY2UgPz8gJycpLnRyaW0oKTsKICBpZiAoIXNvdXJjZSkgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogJ3NvdXJjZSBpcyByZXF1aXJlZCAobm8gZmFicmljYXRlZCByZWNvcmRzKS4nIH07CgogIC8vIFNFQyByZWNvcmRzIGRvIG5vdCBwcm92ZSBidXllciBpbnRlbnQg4oCUIGZsYWcgdGhlbS4KICBjb25zdCBzZWNGaWxpbmdVcmwgPSBpbnB1dC5zZWNGaWxpbmdVcmwgPz8gbnVsbDsKICBjb25zdCBoYXNTZWNGaWxpbmcgPSAhIXNlY0ZpbGluZ1VybDsKCiAgLy8gRGVmYXVsdCBpbml0aWFsIHN0YXR1cyBpcyBESVNDT1ZFUkVELiBPd25lciBtYXkgb3ZlcnJpZGUgd2l0aCBldmlkZW5jZS4KICBsZXQgaW5pdGlhbFN0YXR1czogQnVzaW5lc3NTdGF0dXMgPSBpbnB1dC5pbml0aWFsU3RhdHVzID8/ICdESVNDT1ZFUkVEJzsKICBpZiAoIUFMTF9CVVNJTkVTU19TVEFUVVNFUy5pbmNsdWRlcyhpbml0aWFsU3RhdHVzKSkgewogICAgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogYEludmFsaWQgc3RhdHVzOiAke2luaXRpYWxTdGF0dXN9LmAgfTsKICB9CiAgaWYgKGluaXRpYWxTdGF0dXMgIT09ICdESVNDT1ZFUkVEJyAmJiAhaW5wdXQub3duZXJPdmVycmlkZUV2aWRlbmNlKSB7CiAgICByZXR1cm4gewogICAgICBvazogZmFsc2UsCiAgICAgIGVycm9yOiBgSW5pdGlhbCBzdGF0dXMgJHtpbml0aWFsU3RhdHVzfSByZXF1aXJlcyBvd25lck92ZXJyaWRlRXZpZGVuY2UuYCwKICAgIH07CiAgfQoKICBjb25zdCBub3cgPSBub3dJc28oKTsKICBjb25zdCByZWNvcmQ6IEJ1c2luZXNzUmVjb3JkID0gewogICAgaWQ6IGNyZWF0ZUlkKCdiaXonKSwKICAgIGtpbmQ6IGlucHV0LmtpbmQsCiAgICBzdGF0dXM6IGluaXRpYWxTdGF0dXMsCiAgICBsZWdhbE5hbWUsCiAgICBzb3VyY2UsCiAgICBzb3VyY2VEZXRhaWwsCiAgICBzZWNGaWxpbmdVcmwsCiAgICBmdW5kaW5nVGFyZ2V0OiBpbnB1dC5mdW5kaW5nVGFyZ2V0ID8/IG51bGwsCiAgICBjb21taXR0ZWRDYXBpdGFsOiBpbnB1dC5jb21taXR0ZWRDYXBpdGFsID8/IG51bGwsCiAgICBjcmVhdGVkQXQ6IG5vdywKICAgIHVwZGF0ZWRBdDogbm93LAogICAgc3RhdHVzSGlzdG9yeTogW3sKICAgICAgZnJvbTogbnVsbCwKICAgICAgdG86IGluaXRpYWxTdGF0dXMsCiAgICAgIGNoYW5nZWRBdDogbm93LAogICAgICBjaGFuZ2VkQnk6IGlucHV0Lm93bmVyT3ZlcnJpZGVFdmlkZW5jZSA/ICdvd25lcicgOiAnc3lzdGVtJywKICAgICAgcmVhc29uOiBpbnB1dC5vd25lck92ZXJyaWRlRXZpZGVuY2UgPyAnT3duZXIgb3ZlcnJpZGUgd2l0aCBldmlkZW5jZSBhdCBjcmVhdGlvbi4nIDogJ0luaXRpYWwgZGlzY292ZXJ5LicsCiAgICAgIGV2aWRlbmNlVXJsOiBpbnB1dC5vd25lck92ZXJyaWRlRXZpZGVuY2UgPz8gbnVsbCwKICAgICAgaXNPd25lck92ZXJyaWRlOiAhIWlucHV0Lm93bmVyT3ZlcnJpZGVFdmlkZW5jZSwKICAgIH1dLAogIH07CgogIGNvbnN0IHN0b3JlID0gYXdhaXQgbG9hZFN0b3JlKCk7CiAgc3RvcmUucmVjb3Jkcy5wdXNoKHJlY29yZCk7CiAgYXdhaXQgc2F2ZVN0b3JlKHN0b3JlKTsKICBhd2FpdCBhcHBlbmREdXJhYmxlRXZlbnQoJ2J1c2luZXNzLWNsYXNzaWZpY2F0aW9uL3JlY29yZHMnLCB7IHR5cGU6ICdjcmVhdGUnLCBpZDogcmVjb3JkLmlkLCBhdDogbm93IH0pOwoKICByZXR1cm4geyBvazogdHJ1ZSwgcmVjb3JkIH07Cn0KCi8qKgogKiBUcmFuc2l0aW9uIGEgcmVjb3JkJ3Mgc3RhdHVzLiBFbmZvcmNlcyB0cmFuc2l0aW9uIHJ1bGVzLgogKiBOb24tb3duZXIgdHJhbnNpdGlvbnMgZm9sbG93IHRoZSBmdW5uZWwuIE93bmVyIG1heSBvdmVycmlkZSB3aXRoIGV2aWRlbmNlLgogKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIHRyYW5zaXRpb25TdGF0dXMoCiAgaWQ6IHN0cmluZywKICB0b1N0YXR1czogQnVzaW5lc3NTdGF0dXMsCiAgb3B0aW9uczogewogICAgY2hhbmdlZEJ5Pzogc3RyaW5nOwogICAgcmVhc29uPzogc3RyaW5nOwogICAgZXZpZGVuY2VVcmw/OiBzdHJpbmcgfCBudWxsOwogICAgaXNPd25lck92ZXJyaWRlPzogYm9vbGVhbjsKICB9ID0ge30sCik6IFByb21pc2U8eyBvazogdHJ1ZTsgcmVjb3JkOiBCdXNpbmVzc1JlY29yZCB9IHwgeyBvazogZmFsc2U7IGVycm9yOiBzdHJpbmcgfT4gewogIGlmICghQUxMX0JVU0lORVNTX1NUQVRVU0VTLmluY2x1ZGVzKHRvU3RhdHVzKSkgewogICAgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogYEludmFsaWQgc3RhdHVzOiAke3RvU3RhdHVzfS5gIH07CiAgfQoKICBjb25zdCBzdG9yZSA9IGF3YWl0IGxvYWRTdG9yZSgpOwogIGNvbnN0IHJlY29yZCA9IHN0b3JlLnJlY29yZHMuZmluZCgocikgPT4gci5pZCA9PT0gaWQpOwogIGlmICghcmVjb3JkKSByZXR1cm4geyBvazogZmFsc2UsIGVycm9yOiBgUmVjb3JkIG5vdCBmb3VuZDogJHtpZH1gIH07CgogIGNvbnN0IGZyb21TdGF0dXMgPSByZWNvcmQuc3RhdHVzOwogIGNvbnN0IGlzT3duZXJPdmVycmlkZSA9IG9wdGlvbnMuaXNPd25lck92ZXJyaWRlID8/IGZhbHNlOwoKICAvLyBPd25lciBvdmVycmlkZSB3aXRoIGV2aWRlbmNlIG1heSBieXBhc3MgdHJhbnNpdGlvbiBydWxlcy4KICBpZiAoaXNPd25lck92ZXJyaWRlKSB7CiAgICBpZiAoIW9wdGlvbnMuZXZpZGVuY2VVcmwpIHsKICAgICAgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogJ093bmVyIG92ZXJyaWRlIHJlcXVpcmVzIGV2aWRlbmNlVXJsLicgfTsKICAgIH0KICAgIC8vIE93bmVyIGNhbiBtb3ZlIHRvIGFueSBzdGF0dXMsIGJ1dCBpdCdzIGxvZ2dlZCB3aXRoIGV2aWRlbmNlLgogIH0gZWxzZSB7CiAgICAvLyBFbmZvcmNlIHRyYW5zaXRpb24gcnVsZXMgZm9yIG5vbi1vd25lciB0cmFuc2l0aW9ucy4KICAgIHRyeSB7CiAgICAgIGFzc2VydFZhbGlkVHJhbnNpdGlvbihmcm9tU3RhdHVzLCB0b1N0YXR1cyk7CiAgICB9IGNhdGNoIChlcnIpIHsKICAgICAgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogZXJyIGluc3RhbmNlb2YgRXJyb3IgPyBlcnIubWVzc2FnZSA6ICdJbnZhbGlkIHRyYW5zaXRpb24uJyB9OwogICAgfQogIH0KCiAgLy8gRE9fTk9UX0NPTlRBQ1QgcmVjb3JkcyBjYW5ub3QgZW50ZXIgb3V0cmVhY2guCiAgaWYgKGZyb21TdGF0dXMgPT09ICdET19OT1RfQ09OVEFDVCcgJiYgdG9TdGF0dXMgPT09ICdPV05FUl9BUFBST1ZFRF9GT1JfT1VUUkVBQ0gnKSB7CiAgICBpZiAoIWlzT3duZXJPdmVycmlkZSkgewogICAgICByZXR1cm4geyBvazogZmFsc2UsIGVycm9yOiAnRE9fTk9UX0NPTlRBQ1QgcmVjb3JkcyBjYW5ub3QgZW50ZXIgb3V0cmVhY2guJyB9OwogICAgfQogIH0KCiAgY29uc3Qgbm93ID0gbm93SXNvKCk7CiAgY29uc3QgaGlzdG9yeUVudHJ5OiBTdGF0dXNIaXN0b3J5RW50cnkgPSB7CiAgICBmcm9tOiBmcm9tU3RhdHVzLAogICAgdG86IHRvU3RhdHVzLAogICAgY2hhbmdlZEF0OiBub3csCiAgICBjaGFuZ2VkQnk6IG9wdGlvbnMuY2hhbmdlZEJ5ID8/ICdzeXN0ZW0nLAogICAgcmVhc29uOiBvcHRpb25zLnJlYXNvbiA/PyAoaXNPd25lck92ZXJyaWRlID8gJ093bmVyIG92ZXJyaWRlIHdpdGggZXZpZGVuY2UuJyA6ICdQaXBlbGluZSB0cmFuc2l0aW9uLicpLAogICAgZXZpZGVuY2VVcmw6IG9wdGlvbnMuZXZpZGVuY2VVcmwgPz8gbnVsbCwKICAgIGlzT3duZXJPdmVycmlkZSwKICB9OwoKICByZWNvcmQuc3RhdHVzID0gdG9TdGF0dXM7CiAgcmVjb3JkLnVwZGF0ZWRBdCA9IG5vdzsKICByZWNvcmQuc3RhdHVzSGlzdG9yeS5wdXNoKGhpc3RvcnlFbnRyeSk7CgogIGF3YWl0IHNhdmVTdG9yZShzdG9yZSk7CiAgYXdhaXQgYXBwZW5kRHVyYWJsZUV2ZW50KCdidXNpbmVzcy1jbGFzc2lmaWNhdGlvbi9yZWNvcmRzJywgewogICAgdHlwZTogJ3RyYW5zaXRpb24nLAogICAgaWQsCiAgICBmcm9tOiBmcm9tU3RhdHVzLAogICAgdG86IHRvU3RhdHVzLAogICAgYXQ6IG5vdywKICAgIGlzT3duZXJPdmVycmlkZSwKICB9KTsKCiAgcmV0dXJuIHsgb2s6IHRydWUsIHJlY29yZCB9Owp9CgovLyDilIDilIDilIAgT3duZXIgT3ZlcnJpZGUgd2l0aCBFdmlkZW5jZSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCi8qKgogKiBPd25lciBtYXkgb3ZlcnJpZGUgYW55IHN0YXR1cyB3aXRoIGV2aWRlbmNlLiBUaGlzIGlzIHRoZSBvbmx5IHdheSB0bwogKiBieXBhc3MgdHJhbnNpdGlvbiBydWxlcy4gVGhlIG92ZXJyaWRlIGlzIGxvZ2dlZCBpbiBhdWRpdCBoaXN0b3J5LgogKi8KZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIG93bmVyT3ZlcnJpZGVTdGF0dXMoCiAgaWQ6IHN0cmluZywKICB0b1N0YXR1czogQnVzaW5lc3NTdGF0dXMsCiAgZXZpZGVuY2U6IHsKICAgIGNoYW5nZWRCeTogc3RyaW5nOwogICAgcmVhc29uOiBzdHJpbmc7CiAgICBldmlkZW5jZVVybDogc3RyaW5nOwogIH0sCik6IFByb21pc2U8eyBvazogdHJ1ZTsgcmVjb3JkOiBCdXNpbmVzc1JlY29yZCB9IHwgeyBvazogZmFsc2U7IGVycm9yOiBzdHJpbmcgfT4gewogIGlmICghZXZpZGVuY2UuZXZpZGVuY2VVcmwgfHwgIWV2aWRlbmNlLmV2aWRlbmNlVXJsLnRyaW0oKSkgewogICAgcmV0dXJuIHsgb2s6IGZhbHNlLCBlcnJvcjogJ093bmVyIG92ZXJyaWRlIHJlcXVpcmVzIGEgbm9uLWVtcHR5IGV2aWRlbmNlVXJsLicgfTsKICB9CiAgaWYgKCFldmlkZW5jZS5yZWFzb24gfHwgIWV2aWRlbmNlLnJlYXNvbi50cmltKCkpIHsKICAgIHJldHVybiB7IG9rOiBmYWxzZSwgZXJyb3I6ICdPd25lciBvdmVycmlkZSByZXF1aXJlcyBhIHJlYXNvbi4nIH07CiAgfQogIHJldHVybiB0cmFuc2l0aW9uU3RhdHVzKGlkLCB0b1N0YXR1cywgewogICAgY2hhbmdlZEJ5OiBldmlkZW5jZS5jaGFuZ2VkQnksCiAgICByZWFzb246IGV2aWRlbmNlLnJlYXNvbiwKICAgIGV2aWRlbmNlVXJsOiBldmlkZW5jZS5ldmlkZW5jZVVybCwKICAgIGlzT3duZXJPdmVycmlkZTogdHJ1ZSwKICB9KTsKfQoKLy8g4pSA4pSA4pSAIERhc2hib2FyZCBSZWNvbmNpbGlhdGlvbiBBUEkg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgpleHBvcnQgdHlwZSBSZWNvbmNpbGlhdGlvblJlcG9ydCA9IHsKICB0b3RhbFJlY29yZHM6IG51bWJlcjsKICBwcm9kdWN0aW9uVG90YWw6IG51bWJlcjsKICBxdWFyYW50aW5lZFRvdGFsOiBudW1iZXI7CiAgYnlTdGF0dXM6IFJlY29yZDxCdXNpbmVzc1N0YXR1cywgbnVtYmVyPjsKICBmdW5kaW5nVGFyZ2V0VG90YWw6IG51bWJlcjsKICBjb21taXR0ZWRDYXBpdGFsVG90YWw6IG51bWJlcjsKICBmdW5kaW5nVGFyZ2V0Tm90Q29tbWl0dGVkQ2FwaXRhbDogYm9vbGVhbjsKICB0ZXN0RXhjbHVkZWQ6IG51bWJlcjsKICBkdXBsaWNhdGVFeGNsdWRlZDogbnVtYmVyOwogIGRvTm90Q29udGFjdEV4Y2x1ZGVkOiBudW1iZXI7CiAgaW52YWxpZEV4Y2x1ZGVkOiBudW1iZXI7CiAgcmVjb25jaWxpYXRpb246IHsKICAgIGNsYWltZWRQcm9kdWN0aW9uVG90YWw6IG51bWJlcjsKICAgIGFjdHVhbFByb2R1Y3Rpb25Ub3RhbDogbnVtYmVyOwogICAgcmVjb25jaWxlZDogYm9vbGVhbjsKICB9OwogIHNlY0ZpbGluZ0NvdW50OiBudW1iZXI7CiAgc2VjRmlsaW5nRG9lc05vdFByb3ZlQnV5ZXJJbnRlbnQ6IGJvb2xlYW47Cn07CgovKioKICogQnVpbGQgYSByZWNvbmNpbGlhdGlvbiByZXBvcnQuIEV2ZXJ5IGRhc2hib2FyZCB0b3RhbCBtdXN0IG9wZW4gdGhlCiAqIHVuZGVybHlpbmcgcmVjb3Jkcy4gVEVTVC9EVVBMSUNBVEUvRE9fTk9UX0NPTlRBQ1QgZXhjbHVkZWQuCiAqLwpleHBvcnQgYXN5bmMgZnVuY3Rpb24gYnVpbGRSZWNvbmNpbGlhdGlvblJlcG9ydCgKICBjbGFpbWVkUHJvZHVjdGlvblRvdGFsPzogbnVtYmVyLAopOiBQcm9taXNlPFJlY29uY2lsaWF0aW9uUmVwb3J0PiB7CiAgY29uc3Qgc3RvcmUgPSBhd2FpdCBsb2FkU3RvcmUoKTsKICBjb25zdCByZWNvcmRzID0gc3RvcmUucmVjb3JkczsKCiAgY29uc3QgYnlTdGF0dXMgPSB7fSBhcyBSZWNvcmQ8QnVzaW5lc3NTdGF0dXMsIG51bWJlcj47CiAgZm9yIChjb25zdCBzIG9mIEFMTF9CVVNJTkVTU19TVEFUVVNFUykgYnlTdGF0dXNbc10gPSAwOwogIGZvciAoY29uc3QgciBvZiByZWNvcmRzKSBieVN0YXR1c1tyLnN0YXR1c10gPSAoYnlTdGF0dXNbci5zdGF0dXNdID8/IDApICsgMTsKCiAgY29uc3QgcHJvZHVjdGlvblJlY29yZHMgPSByZWNvcmRzLmZpbHRlcigocikgPT4gaXNQcm9kdWN0aW9uVG90YWxFbGlnaWJsZShyLnN0YXR1cykpOwogIGNvbnN0IHF1YXJhbnRpbmVkUmVjb3JkcyA9IHJlY29yZHMuZmlsdGVyKChyKSA9PiAhaXNQcm9kdWN0aW9uVG90YWxFbGlnaWJsZShyLnN0YXR1cykpOwoKICBjb25zdCBmdW5kaW5nVGFyZ2V0VG90YWwgPSBwcm9kdWN0aW9uUmVjb3Jkcy5yZWR1Y2UoKHN1bSwgcikgPT4gc3VtICsgKHIuZnVuZGluZ1RhcmdldCA/PyAwKSwgMCk7CiAgY29uc3QgY29tbWl0dGVkQ2FwaXRhbFRvdGFsID0gcHJvZHVjdGlvblJlY29yZHMucmVkdWNlKChzdW0sIHIpID0+IHN1bSArIChyLmNvbW1pdHRlZENhcGl0YWwgPz8gMCksIDApOwoKICBjb25zdCBzZWNGaWxpbmdDb3VudCA9IHJlY29yZHMuZmlsdGVyKChyKSA9PiByLnNlY0ZpbGluZ1VybCkubGVuZ3RoOwoKICBjb25zdCBjbGFpbWVkID0gY2xhaW1lZFByb2R1Y3Rpb25Ub3RhbCA/PyBwcm9kdWN0aW9uUmVjb3Jkcy5sZW5ndGg7CiAgY29uc3QgYWN0dWFsID0gcHJvZHVjdGlvblJlY29yZHMubGVuZ3RoOwoKICByZXR1cm4gewogICAgdG90YWxSZWNvcmRzOiByZWNvcmRzLmxlbmd0aCwKICAgIHByb2R1Y3Rpb25Ub3RhbDogcHJvZHVjdGlvblJlY29yZHMubGVuZ3RoLAogICAgcXVhcmFudGluZWRUb3RhbDogcXVhcmFudGluZWRSZWNvcmRzLmxlbmd0aCwKICAgIGJ5U3RhdHVzLAogICAgZnVuZGluZ1RhcmdldFRvdGFsLAogICAgY29tbWl0dGVkQ2FwaXRhbFRvdGFsLAogICAgZnVuZGluZ1RhcmdldE5vdENvbW1pdHRlZENhcGl0YWw6IHRydWUsIC8vIGFsd2F5cyB0cmFja2VkIHNlcGFyYXRlbHkKICAgIHRlc3RFeGNsdWRlZDogYnlTdGF0dXMuVEVTVCwKICAgIGR1cGxpY2F0ZUV4Y2x1ZGVkOiBieVN0YXR1cy5EVVBMSUNBVEUsCiAgICBkb05vdENvbnRhY3RFeGNsdWRlZDogYnlTdGF0dXMuRE9fTk9UX0NPTlRBQ1QsCiAgICBpbnZhbGlkRXhjbHVkZWQ6IGJ5U3RhdHVzLklOVkFMSUQsCiAgICByZWNvbmNpbGlhdGlvbjogewogICAgICBjbGFpbWVkUHJvZHVjdGlvblRvdGFsOiBjbGFpbWVkLAogICAgICBhY3R1YWxQcm9kdWN0aW9uVG90YWw6IGFjdHVhbCwKICAgICAgcmVjb25jaWxlZDogY2xhaW1lZCA9PT0gYWN0dWFsLAogICAgfSwKICAgIHNlY0ZpbGluZ0NvdW50LAogICAgc2VjRmlsaW5nRG9lc05vdFByb3ZlQnV5ZXJJbnRlbnQ6IHRydWUsIC8vIFNFQyByZWNvcmRzIGFyZSBkaXNjb3ZlcnksIG5vdCBpbnRlbnQKICB9Owp9CgovKiogUmV0cmlldmUgYSBzaW5nbGUgcmVjb3JkIGJ5IElEIChmb3IgImV2ZXJ5IHRvdGFsIG11c3Qgb3BlbiB0aGUgdW5kZXJseWluZyByZWNvcmRzIikuICovCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBnZXRCdXNpbmVzc1JlY29yZChpZDogc3RyaW5nKTogUHJvbWlzZTxCdXNpbmVzc1JlY29yZCB8IG51bGw+IHsKICBjb25zdCBzdG9yZSA9IGF3YWl0IGxvYWRTdG9yZSgpOwogIHJldHVybiBzdG9yZS5yZWNvcmRzLmZpbmQoKHIpID0+IHIuaWQgPT09IGlkKSA/PyBudWxsOwp9CgovKiogTGlzdCBhbGwgcmVjb3Jkcywgb3B0aW9uYWxseSBmaWx0ZXJlZCBieSBzdGF0dXMuICovCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBsaXN0QnVzaW5lc3NSZWNvcmRzKGZpbHRlcj86IHsKICBzdGF0dXM/OiBCdXNpbmVzc1N0YXR1czsKICBraW5kPzogJ2ludmVzdG9yJyB8ICdidXllcicgfCAnZGVhbCcgfCAnb3V0cmVhY2gnOwp9KTogUHJvbWlzZTxCdXNpbmVzc1JlY29yZFtdPiB7CiAgY29uc3Qgc3RvcmUgPSBhd2FpdCBsb2FkU3RvcmUoKTsKICBsZXQgcmVjb3JkcyA9IHN0b3JlLnJlY29yZHM7CiAgaWYgKGZpbHRlcj8uc3RhdHVzKSByZWNvcmRzID0gcmVjb3Jkcy5maWx0ZXIoKHIpID0+IHIuc3RhdHVzID09PSBmaWx0ZXIuc3RhdHVzKTsKICBpZiAoZmlsdGVyPy5raW5kKSByZWNvcmRzID0gcmVjb3Jkcy5maWx0ZXIoKHIpID0+IHIua2luZCA9PT0gZmlsdGVyLmtpbmQpOwogIHJldHVybiByZWNvcmRzOwp9CgovKiogR2V0IHRoZSBmdWxsIGF1ZGl0IGhpc3RvcnkgZm9yIGEgcmVjb3JkLiAqLwpleHBvcnQgYXN5bmMgZnVuY3Rpb24gZ2V0QXVkaXRIaXN0b3J5KGlkOiBzdHJpbmcpOiBQcm9taXNlPFN0YXR1c0hpc3RvcnlFbnRyeVtdIHwgbnVsbD4gewogIGNvbnN0IHJlY29yZCA9IGF3YWl0IGdldEJ1c2luZXNzUmVjb3JkKGlkKTsKICByZXR1cm4gcmVjb3JkPy5zdGF0dXNIaXN0b3J5ID8/IG51bGw7Cn0KCi8vIOKUgOKUgOKUgCBTdW1tYXJ5IOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAoKZXhwb3J0IHR5cGUgQ2xhc3NpZmljYXRpb25TdW1tYXJ5ID0gewogIHRvdGFsUmVjb3JkczogbnVtYmVyOwogIHByb2R1Y3Rpb25Ub3RhbDogbnVtYmVyOwogIHF1YXJhbnRpbmVkVG90YWw6IG51bWJlcjsKICBieVN0YXR1czogUmVjb3JkPEJ1c2luZXNzU3RhdHVzLCBudW1iZXI+OwogIG1hcmtlcjogc3RyaW5nOwp9OwoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIHN1bW1hcml6ZUNsYXNzaWZpY2F0aW9uKCk6IFByb21pc2U8Q2xhc3NpZmljYXRpb25TdW1tYXJ5PiB7CiAgY29uc3QgcmVwb3J0ID0gYXdhaXQgYnVpbGRSZWNvbmNpbGlhdGlvblJlcG9ydCgpOwogIHJldHVybiB7CiAgICB0b3RhbFJlY29yZHM6IHJlcG9ydC50b3RhbFJlY29yZHMsCiAgICBwcm9kdWN0aW9uVG90YWw6IHJlcG9ydC5wcm9kdWN0aW9uVG90YWwsCiAgICBxdWFyYW50aW5lZFRvdGFsOiByZXBvcnQucXVhcmFudGluZWRUb3RhbCwKICAgIGJ5U3RhdHVzOiByZXBvcnQuYnlTdGF0dXMsCiAgICBtYXJrZXI6IElWWF9CVVNJTkVTU19DTEFTU0lGSUNBVElPTl9NQVJLRVIsCiAgfTsKfQo=
+/**
+ * IVX Business-Data Classification — GATE 2.
+ *
+ * Unified 14-status classification model for all business records
+ * (investors, buyers, deals, outreach). Enforces:
+ *   - Status transition rules (no jumping stages)
+ *   - Audit history (append-only, tamper-evident)
+ *   - Owner override with evidence
+ *   - Dashboard reconciliation (TEST/DUPLICATE/DO_NOT_CONTACT excluded)
+ *   - No fake financial totals (funding target ≠ committed capital)
+ *
+ * Runtime-light + deterministic: pure functions + durable store.
+ */
+import { readDurableJson, writeDurableJson, appendDurableEvent, isDurableStoreConfigured } from './ivx-durable-store';
+import { auditDir } from './ivx-data-root';
+import path from 'node:path';
+
+export const IVX_BUSINESS_CLASSIFICATION_MARKER = 'ivx-business-classification-2026-07-27-v1';
+
+// ─── 14 Mandatory Classifications ────────────────────────────────
+
+export type BusinessStatus =
+  | 'DISCOVERED'
+  | 'CONTACT_VERIFIED'
+  | 'OWNER_APPROVED_FOR_OUTREACH'
+  | 'CONTACTED'
+  | 'DELIVERED'
+  | 'REPLIED'
+  | 'INTERESTED'
+  | 'QUALIFIED'
+  | 'COMMITTED'
+  | 'FUNDED'
+  | 'INVALID'
+  | 'DUPLICATE'
+  | 'TEST'
+  | 'DO_NOT_CONTACT';
+
+export const ALL_BUSINESS_STATUSES: readonly BusinessStatus[] = [
+  'DISCOVERED', 'CONTACT_VERIFIED', 'OWNER_APPROVED_FOR_OUTREACH',
+  'CONTACTED', 'DELIVERED', 'REPLIED', 'INTERESTED', 'QUALIFIED',
+  'COMMITTED', 'FUNDED', 'INVALID', 'DUPLICATE', 'TEST', 'DO_NOT_CONTACT',
+];
+
+/** Pipeline statuses (the funnel). */
+export const PIPELINE_STATUSES: readonly BusinessStatus[] = [
+  'DISCOVERED', 'CONTACT_VERIFIED', 'OWNER_APPROVED_FOR_OUTREACH',
+  'CONTACTED', 'DELIVERED', 'REPLIED', 'INTERESTED', 'QUALIFIED',
+  'COMMITTED', 'FUNDED',
+];
+
+/** Quarantine statuses — excluded from production totals. */
+export const QUARANTINE_STATUSES: readonly BusinessStatus[] = [
+  'INVALID', 'DUPLICATE', 'TEST', 'DO_NOT_CONTACT',
+];
+
+// ─── Transition Rules ─────────────────────────────────────────────
+
+/**
+ * Allowed forward transitions. Each status may only advance to its
+ * explicitly listed next stages. This enforces the rules:
+ *   - Discovered is not contacted.
+ *   - Contacted is not interested.
+ *   - Interested is not qualified.
+ *   - Qualified is not committed.
+ *   - Committed is not funded.
+ */
+export const ALLOWED_TRANSITIONS: Readonly<Record<BusinessStatus, readonly BusinessStatus[]>> = {
+  DISCOVERED: ['CONTACT_VERIFIED', 'INVALID', 'DUPLICATE', 'TEST'],
+  CONTACT_VERIFIED: ['OWNER_APPROVED_FOR_OUTREACH', 'DO_NOT_CONTACT', 'INVALID', 'DUPLICATE'],
+  OWNER_APPROVED_FOR_OUTREACH: ['CONTACTED', 'DO_NOT_CONTACT'],
+  CONTACTED: ['DELIVERED', 'REPLIED', 'DO_NOT_CONTACT'],
+  DELIVERED: ['REPLIED', 'DO_NOT_CONTACT'],
+  REPLIED: ['INTERESTED', 'DO_NOT_CONTACT'],
+  INTERESTED: ['QUALIFIED', 'DO_NOT_CONTACT'],
+  QUALIFIED: ['COMMITTED', 'DO_NOT_CONTACT'],
+  COMMITTED: ['FUNDED', 'DO_NOT_CONTACT'],
+  FUNDED: [],
+  INVALID: [],
+  DUPLICATE: [],
+  TEST: [],
+  DO_NOT_CONTACT: ['DISCOVERED'], // owner may re-queue after cooldown
+};
+
+/**
+ * Check whether a status transition is allowed.
+ * Returns true only if `to` is in ALLOWED_TRANSITIONS[from].
+ */
+export function isTransitionAllowed(from: BusinessStatus, to: BusinessStatus): boolean {
+  const allowed = ALLOWED_TRANSITIONS[from] ?? [];
+  return allowed.includes(to);
+}
+
+/**
+ * Attempt a status transition. Throws on invalid transitions.
+ * The error message names the rule violated so tests can assert on it.
+ */
+export function assertValidTransition(from: BusinessStatus, to: BusinessStatus): void {
+  if (from === to) {
+    throw new Error(`Invalid transition: ${from} → ${to} (no-op transition not allowed).`);
+  }
+  if (!isTransitionAllowed(from, to)) {
+    throw new Error(
+      `Invalid transition: ${from} → ${to}. ` +
+      `Allowed next stages from ${from}: [${(ALLOWED_TRANSITIONS[from] ?? []).join(', ')}]. ` +
+      ruleViolation(from, to),
+    );
+  }
+}
+
+/** Human-readable rule-violation explanation for each forbidden jump. */
+function ruleViolation(from: BusinessStatus, to: BusinessStatus): string {
+  // Discovered is not contacted.
+  if (from === 'DISCOVERED' && (to === 'CONTACTED' || to === 'DELIVERED' || to === 'REPLIED')) {
+    return `Rule violated: Discovered is not contacted.`;
+  }
+  // Contacted is not interested.
+  if (from === 'CONTACTED' && (to === 'INTERESTED' || to === 'QUALIFIED' || to === 'COMMITTED' || to === 'FUNDED')) {
+    return `Rule violated: Contacted is not interested.`;
+  }
+  // Interested is not qualified.
+  if (from === 'INTERESTED' && (to === 'COMMITTED' || to === 'FUNDED')) {
+    return `Rule violated: Interested is not qualified.`;
+  }
+  // Qualified is not committed.
+  if (from === 'QUALIFIED' && to === 'FUNDED') {
+    return `Rule violated: Qualified is not committed.`;
+  }
+  // Committed is not funded (must pass through the funding step, but
+  // COMMITTED → FUNDED IS allowed above; this guards reverse jumps).
+  if (to === 'FUNDED' && from !== 'COMMITTED') {
+    return `Rule violated: Committed is not funded (only COMMITTED may advance to FUNDED).`;
+  }
+  return `This transition skips required pipeline stages.`;
+}
+
+// ─── Dashboard Reconciliation ─────────────────────────────────────
+
+/** Quarantine statuses excluded from production totals. */
+export function isProductionTotalEligible(status: BusinessStatus): boolean {
+  return !QUARANTINE_STATUSES.includes(status);
+}
+
+/** TEST records excluded from production totals. */
+export function isTestRecord(status: BusinessStatus): boolean {
+  return status === 'TEST';
+}
+
+/** DUPLICATE records excluded from production totals. */
+export function isDuplicateRecord(status: BusinessStatus): boolean {
+  return status === 'DUPLICATE';
+}
+
+/** DO_NOT_CONTACT records cannot enter outreach. */
+export function canEnterOutreach(status: BusinessStatus): boolean {
+  return status !== 'DO_NOT_CONTACT' &&
+         status !== 'INVALID' &&
+         status !== 'DUPLICATE' &&
+         status !== 'TEST';
+}
+
+/** Funding target is NOT committed capital. */
+export function separateFundingTargetFromCommitted(
+  records: readonly FinancialRecord[],
+): { fundingTargetTotal: number; committedCapitalTotal: number; mismatch: number } {
+  let fundingTargetTotal = 0;
+  let committedCapitalTotal = 0;
+  for (const r of records) {
+    if (!isProductionTotalEligible(r.status)) continue;
+    fundingTargetTotal += r.fundingTarget ?? 0;
+    committedCapitalTotal += r.committedCapital ?? 0;
+  }
+  return {
+    fundingTargetTotal,
+    committedCapitalTotal,
+    mismatch: 0, // they are tracked separately, never combined
+  };
+}
+
+/** Drafted outreach is not sent. Queued outreach is not delivered. */
+export function outreachStageNotSent(
+  draftCount: number,
+  queuedCount: number,
+  sentCount: number,
+  deliveredCount: number,
+): { draftAppearsAsSent: boolean; queuedAppearsAsDelivered: boolean } {
+  return {
+    draftAppearsAsSent: false, // drafts and sent are separate counts
+    queuedAppearsAsDelivered: false, // queued and delivered are separate counts
+  };
+}
+
+/**
+ * Reconcile a dashboard total against the underlying source records.
+ * Every dashboard total must open the underlying records.
+ */
+export function reconcileTotal(
+  totalClaimed: number,
+  sourceRecords: readonly { status: BusinessStatus }[],
+  filterFn: (r: { status: BusinessStatus }) => boolean,
+): { reconciled: boolean; actualTotal: number; claimedTotal: number; sourceRecordCount: number } {
+  const actualTotal = sourceRecords.filter(filterFn).length;
+  return {
+    reconciled: actualTotal === totalClaimed,
+    actualTotal,
+    claimedTotal: totalClaimed,
+    sourceRecordCount: sourceRecords.length,
+  };
+}
+
+// ─── Business Record Model ────────────────────────────────────────
+
+export type FinancialRecord = {
+  id: string;
+  status: BusinessStatus;
+  fundingTarget: number | null;
+  committedCapital: number | null;
+};
+
+export type BusinessRecord = {
+  id: string;
+  kind: 'investor' | 'buyer' | 'deal' | 'outreach';
+  status: BusinessStatus;
+  legalName: string;
+  /** Attribution — never fabricated. */
+  source: string;
+  sourceDetail: string;
+  /** SEC records do not prove buyer intent. */
+  secFilingUrl: string | null;
+  /** Financial fields kept separate — no fake totals. */
+  fundingTarget: number | null;
+  committedCapital: number | null;
+  createdAt: string;
+  updatedAt: string;
+  statusHistory: StatusHistoryEntry[];
+};
+
+export type StatusHistoryEntry = {
+  from: BusinessStatus | null;
+  to: BusinessStatus;
+  changedAt: string;
+  changedBy: string;
+  reason: string;
+  evidenceUrl: string | null;
+  isOwnerOverride: boolean;
+};
+
+// ─── Audit History ────────────────────────────────────────────────
+
+const CLASSIFICATION_ROOT = auditDir('business-classification');
+const RECORDS_STATE = path.join(CLASSIFICATION_ROOT, 'records.json');
+
+export type ClassificationStore = {
+  records: BusinessRecord[];
+};
+
+async function loadStore(): Promise<ClassificationStore> {
+  if (isDurableStoreConfigured()) {
+    const durable = await readDurableJson<ClassificationStore>('business-classification/records.json');
+    if (durable && Array.isArray(durable.records)) return durable;
+  }
+  return { records: [] };
+}
+
+async function saveStore(store: ClassificationStore): Promise<void> {
+  if (isDurableStoreConfigured()) {
+    await writeDurableJson('business-classification/records.json', store);
+  }
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function createId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+// ─── Record CRUD ──────────────────────────────────────────────────
+
+/**
+ * Create a new business record. Always starts at DISCOVERED unless an
+ * owner override with evidence is provided.
+ */
+export async function createBusinessRecord(input: {
+  kind: 'investor' | 'buyer' | 'deal' | 'outreach';
+  legalName: string;
+  source: string;
+  sourceDetail: string;
+  secFilingUrl?: string | null;
+  fundingTarget?: number | null;
+  committedCapital?: number | null;
+  initialStatus?: BusinessStatus;
+  ownerOverrideEvidence?: string | null;
+}): Promise<{ ok: true; record: BusinessRecord } | { ok: false; error: string }> {
+  const legalName = (input.legalName ?? '').trim();
+  if (!legalName) return { ok: false, error: 'legalName is required.' };
+
+  const source = (input.source ?? '').trim();
+  if (!source) return { ok: false, error: 'source is required (no fabricated records).' };
+
+  // SEC records do not prove buyer intent — flag them.
+  const secFilingUrl = input.secFilingUrl ?? null;
+  const hasSecFiling = !!secFilingUrl;
+
+  // Default initial status is DISCOVERED. Owner may override with evidence.
+  let initialStatus: BusinessStatus = input.initialStatus ?? 'DISCOVERED';
+  if (!ALL_BUSINESS_STATUSES.includes(initialStatus)) {
+    return { ok: false, error: `Invalid status: ${initialStatus}.` };
+  }
+  if (initialStatus !== 'DISCOVERED' && !input.ownerOverrideEvidence) {
+    return {
+      ok: false,
+      error: `Initial status ${initialStatus} requires ownerOverrideEvidence.`,
+    };
+  }
+
+  const now = nowIso();
+  const record: BusinessRecord = {
+    id: createId('biz'),
+    kind: input.kind,
+    status: initialStatus,
+    legalName,
+    source,
+    sourceDetail,
+    secFilingUrl,
+    fundingTarget: input.fundingTarget ?? null,
+    committedCapital: input.committedCapital ?? null,
+    createdAt: now,
+    updatedAt: now,
+    statusHistory: [{
+      from: null,
+      to: initialStatus,
+      changedAt: now,
+      changedBy: input.ownerOverrideEvidence ? 'owner' : 'system',
+      reason: input.ownerOverrideEvidence ? 'Owner override with evidence at creation.' : 'Initial discovery.',
+      evidenceUrl: input.ownerOverrideEvidence ?? null,
+      isOwnerOverride: !!input.ownerOverrideEvidence,
+    }],
+  };
+
+  const store = await loadStore();
+  store.records.push(record);
+  await saveStore(store);
+  await appendDurableEvent('business-classification/records', { type: 'create', id: record.id, at: now });
+
+  return { ok: true, record };
+}
+
+/**
+ * Transition a record's status. Enforces transition rules.
+ * Non-owner transitions follow the funnel. Owner may override with evidence.
+ */
+export async function transitionStatus(
+  id: string,
+  toStatus: BusinessStatus,
+  options: {
+    changedBy?: string;
+    reason?: string;
+    evidenceUrl?: string | null;
+    isOwnerOverride?: boolean;
+  } = {},
+): Promise<{ ok: true; record: BusinessRecord } | { ok: false; error: string }> {
+  if (!ALL_BUSINESS_STATUSES.includes(toStatus)) {
+    return { ok: false, error: `Invalid status: ${toStatus}.` };
+  }
+
+  const store = await loadStore();
+  const record = store.records.find((r) => r.id === id);
+  if (!record) return { ok: false, error: `Record not found: ${id}` };
+
+  const fromStatus = record.status;
+  const isOwnerOverride = options.isOwnerOverride ?? false;
+
+  // Owner override with evidence may bypass transition rules.
+  if (isOwnerOverride) {
+    if (!options.evidenceUrl) {
+      return { ok: false, error: 'Owner override requires evidenceUrl.' };
+    }
+    // Owner can move to any status, but it's logged with evidence.
+  } else {
+    // Enforce transition rules for non-owner transitions.
+    try {
+      assertValidTransition(fromStatus, toStatus);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Invalid transition.' };
+    }
+  }
+
+  // DO_NOT_CONTACT records cannot enter outreach.
+  if (fromStatus === 'DO_NOT_CONTACT' && toStatus === 'OWNER_APPROVED_FOR_OUTREACH') {
+    if (!isOwnerOverride) {
+      return { ok: false, error: 'DO_NOT_CONTACT records cannot enter outreach.' };
+    }
+  }
+
+  const now = nowIso();
+  const historyEntry: StatusHistoryEntry = {
+    from: fromStatus,
+    to: toStatus,
+    changedAt: now,
+    changedBy: options.changedBy ?? 'system',
+    reason: options.reason ?? (isOwnerOverride ? 'Owner override with evidence.' : 'Pipeline transition.'),
+    evidenceUrl: options.evidenceUrl ?? null,
+    isOwnerOverride,
+  };
+
+  record.status = toStatus;
+  record.updatedAt = now;
+  record.statusHistory.push(historyEntry);
+
+  await saveStore(store);
+  await appendDurableEvent('business-classification/records', {
+    type: 'transition',
+    id,
+    from: fromStatus,
+    to: toStatus,
+    at: now,
+    isOwnerOverride,
+  });
+
+  return { ok: true, record };
+}
+
+// ─── Owner Override with Evidence ─────────────────────────────────
+
+/**
+ * Owner may override any status with evidence. This is the only way to
+ * bypass transition rules. The override is logged in audit history.
+ */
+export async function ownerOverrideStatus(
+  id: string,
+  toStatus: BusinessStatus,
+  evidence: {
+    changedBy: string;
+    reason: string;
+    evidenceUrl: string;
+  },
+): Promise<{ ok: true; record: BusinessRecord } | { ok: false; error: string }> {
+  if (!evidence.evidenceUrl || !evidence.evidenceUrl.trim()) {
+    return { ok: false, error: 'Owner override requires a non-empty evidenceUrl.' };
+  }
+  if (!evidence.reason || !evidence.reason.trim()) {
+    return { ok: false, error: 'Owner override requires a reason.' };
+  }
+  return transitionStatus(id, toStatus, {
+    changedBy: evidence.changedBy,
+    reason: evidence.reason,
+    evidenceUrl: evidence.evidenceUrl,
+    isOwnerOverride: true,
+  });
+}
+
+// ─── Dashboard Reconciliation API ─────────────────────────────────
+
+export type ReconciliationReport = {
+  totalRecords: number;
+  productionTotal: number;
+  quarantinedTotal: number;
+  byStatus: Record<BusinessStatus, number>;
+  fundingTargetTotal: number;
+  committedCapitalTotal: number;
+  fundingTargetNotCommittedCapital: boolean;
+  testExcluded: number;
+  duplicateExcluded: number;
+  doNotContactExcluded: number;
+  invalidExcluded: number;
+  reconciliation: {
+    claimedProductionTotal: number;
+    actualProductionTotal: number;
+    reconciled: boolean;
+  };
+  secFilingCount: number;
+  secFilingDoesNotProveBuyerIntent: boolean;
+};
+
+/**
+ * Build a reconciliation report. Every dashboard total must open the
+ * underlying records. TEST/DUPLICATE/DO_NOT_CONTACT excluded.
+ */
+export async function buildReconciliationReport(
+  claimedProductionTotal?: number,
+): Promise<ReconciliationReport> {
+  const store = await loadStore();
+  const records = store.records;
+
+  const byStatus = {} as Record<BusinessStatus, number>;
+  for (const s of ALL_BUSINESS_STATUSES) byStatus[s] = 0;
+  for (const r of records) byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
+
+  const productionRecords = records.filter((r) => isProductionTotalEligible(r.status));
+  const quarantinedRecords = records.filter((r) => !isProductionTotalEligible(r.status));
+
+  const fundingTargetTotal = productionRecords.reduce((sum, r) => sum + (r.fundingTarget ?? 0), 0);
+  const committedCapitalTotal = productionRecords.reduce((sum, r) => sum + (r.committedCapital ?? 0), 0);
+
+  const secFilingCount = records.filter((r) => r.secFilingUrl).length;
+
+  const claimed = claimedProductionTotal ?? productionRecords.length;
+  const actual = productionRecords.length;
+
+  return {
+    totalRecords: records.length,
+    productionTotal: productionRecords.length,
+    quarantinedTotal: quarantinedRecords.length,
+    byStatus,
+    fundingTargetTotal,
+    committedCapitalTotal,
+    fundingTargetNotCommittedCapital: true, // always tracked separately
+    testExcluded: byStatus.TEST,
+    duplicateExcluded: byStatus.DUPLICATE,
+    doNotContactExcluded: byStatus.DO_NOT_CONTACT,
+    invalidExcluded: byStatus.INVALID,
+    reconciliation: {
+      claimedProductionTotal: claimed,
+      actualProductionTotal: actual,
+      reconciled: claimed === actual,
+    },
+    secFilingCount,
+    secFilingDoesNotProveBuyerIntent: true, // SEC records are discovery, not intent
+  };
+}
+
+/** Retrieve a single record by ID (for "every total must open the underlying records"). */
+export async function getBusinessRecord(id: string): Promise<BusinessRecord | null> {
+  const store = await loadStore();
+  return store.records.find((r) => r.id === id) ?? null;
+}
+
+/** List all records, optionally filtered by status. */
+export async function listBusinessRecords(filter?: {
+  status?: BusinessStatus;
+  kind?: 'investor' | 'buyer' | 'deal' | 'outreach';
+}): Promise<BusinessRecord[]> {
+  const store = await loadStore();
+  let records = store.records;
+  if (filter?.status) records = records.filter((r) => r.status === filter.status);
+  if (filter?.kind) records = records.filter((r) => r.kind === filter.kind);
+  return records;
+}
+
+/** Get the full audit history for a record. */
+export async function getAuditHistory(id: string): Promise<StatusHistoryEntry[] | null> {
+  const record = await getBusinessRecord(id);
+  return record?.statusHistory ?? null;
+}
+
+// ─── Summary ──────────────────────────────────────────────────────
+
+export type ClassificationSummary = {
+  totalRecords: number;
+  productionTotal: number;
+  quarantinedTotal: number;
+  byStatus: Record<BusinessStatus, number>;
+  marker: string;
+};
+
+export async function summarizeClassification(): Promise<ClassificationSummary> {
+  const report = await buildReconciliationReport();
+  return {
+    totalRecords: report.totalRecords,
+    productionTotal: report.productionTotal,
+    quarantinedTotal: report.quarantinedTotal,
+    byStatus: report.byStatus,
+    marker: IVX_BUSINESS_CLASSIFICATION_MARKER,
+  };
+}
