@@ -1047,6 +1047,26 @@ import {
   OPTIONS as enterpriseMasterOptions,
   handleEnterpriseMasterRequest,
 } from './api/ivx-enterprise-master';
+import {
+  handleAutonomousTaskEngine,
+  handleListObjectives,
+  handleCreateObjective,
+  handleListTasks,
+  handleCreateTask,
+  handleGetTask,
+  handleTransitionTask,
+  handleAddEvidence,
+  handleMarkCriterion,
+  handleLeaseTask,
+  handleHeartbeat,
+  handleReleaseLease,
+  handleListApprovals,
+  handleCreateApproval,
+  handleConsumeApproval,
+  handleValidateCompletion,
+  handlePermissionMatrix,
+  handleTaskStates,
+} from './api/ivx-autonomous-task-engine-api';
 import { startEnterpriseReportScheduler } from './services/ivx-enterprise-reporting';
 import {
   OPTIONS as roleAgentsOptions,
@@ -5060,6 +5080,27 @@ app.options('/api/ivx/enterprise-master', () => enterpriseMasterOptions());
 app.get('/api/ivx/enterprise-master', async (c) => handleEnterpriseMasterRequest(c.req.raw));
 app.get('/api/ivx/enterprise-master/*', async (c) => handleEnterpriseMasterRequest(c.req.raw));
 app.post('/api/ivx/enterprise-master/*', async (c) => handleEnterpriseMasterRequest(c.req.raw));
+
+// ── Autonomous Task Engine — 23-state machine, objective planning, approval gate ─
+// All routes are owner-only (enforced by the existing owner-auth middleware).
+app.get('/api/ivx/autonomous-task-engine', async (c) => handleAutonomousTaskEngine(c));
+app.get('/api/ivx/autonomous-task-engine/states', async (c) => handleTaskStates(c));
+app.get('/api/ivx/autonomous-task-engine/permission-matrix', async (c) => handlePermissionMatrix(c));
+app.get('/api/ivx/autonomous-task-engine/objectives', async (c) => handleListObjectives(c));
+app.post('/api/ivx/autonomous-task-engine/objectives', async (c) => handleCreateObjective(c));
+app.get('/api/ivx/autonomous-task-engine/tasks', async (c) => handleListTasks(c));
+app.post('/api/ivx/autonomous-task-engine/tasks', async (c) => handleCreateTask(c));
+app.get('/api/ivx/autonomous-task-engine/tasks/:taskId', async (c) => handleGetTask(c));
+app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/transition', async (c) => handleTransitionTask(c));
+app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/evidence', async (c) => handleAddEvidence(c));
+app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/criterion', async (c) => handleMarkCriterion(c));
+app.post('/api/ivx/autonomous-task-engine/lease', async (c) => handleLeaseTask(c));
+app.post('/api/ivx/autonomous-task-engine/lease/:taskId/heartbeat', async (c) => handleHeartbeat(c));
+app.post('/api/ivx/autonomous-task-engine/lease/:taskId/release', async (c) => handleReleaseLease(c));
+app.get('/api/ivx/autonomous-task-engine/approvals', async (c) => handleListApprovals(c));
+app.post('/api/ivx/autonomous-task-engine/approvals', async (c) => handleCreateApproval(c));
+app.post('/api/ivx/autonomous-task-engine/approvals/consume', async (c) => handleConsumeApproval(c));
+app.get('/api/ivx/autonomous-task-engine/validate/:taskId', async (c) => handleValidateCompletion(c));
 
 // ── Project Engagement (Instagram-Style Cards) ───────────────────────
 const PROJECT_ENGAGEMENT_PATH = '/api/projects/:projectId/engagement';
