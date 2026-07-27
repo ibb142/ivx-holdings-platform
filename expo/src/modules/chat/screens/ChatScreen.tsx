@@ -689,17 +689,21 @@ export function ChatScreen({
   const hasScrolledToLatestRef = useRef<boolean>(false);
 
   const scrollToBottom = useCallback((animated: boolean) => {
+    // INVERTED FLATLIST: offset 0 = newest message (visually at bottom).
+    // Single deterministic call — no setTimeout, no retry loop.
     requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated });
+      listRef.current?.scrollToOffset({ offset: 0, animated });
       isNearBottomRef.current = true;
       setShowScrollToLatest(false);
     });
   }, []);
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
-    const nearBottom = distanceFromBottom < 100;
+    const { contentOffset } = event.nativeEvent;
+    // INVERTED FLATLIST: offset 0 = newest message (visually at bottom).
+    // User is "at bottom" (latest) when contentOffset.y is near 0.
+    const distanceFromLatest = Math.abs(contentOffset.y);
+    const nearBottom = distanceFromLatest < 100;
     isNearBottomRef.current = nearBottom;
     setShowScrollToLatest(!nearBottom && messages.length > 0);
   }, [messages.length]);
@@ -1724,31 +1728,28 @@ export function ChatScreen({
     };
   }, [isOwnerRoomConversation, stableConversationId, stableCurrentUserId]);
 
-  // Auto-scroll to latest only on initial load or when near the bottom.
-  // Do NOT force-scroll when the user is reading older messages.
+  // INVERTED FLATLIST: The list naturally anchors at offset 0 (newest)
+  // on first layout. No setTimeout, no scrollToEnd needed. Just mark as
+  // scrolled once messages are present.
   useEffect(() => {
     if (messages.length === 0) {
       return;
     }
 
-    // First load: scroll to bottom without animation to avoid visible jump
+    // First load: inverted list already at newest — mark as scrolled.
     if (!hasScrolledToLatestRef.current) {
-      const timeout = setTimeout(() => {
-        listRef.current?.scrollToEnd({ animated: false });
-        hasScrolledToLatestRef.current = true;
-        isNearBottomRef.current = true;
-      }, 50);
-      return () => clearTimeout(timeout);
+      hasScrolledToLatestRef.current = true;
+      isNearBottomRef.current = true;
+      return;
     }
 
-    // Subsequent messages: only auto-scroll if user is near the bottom
+    // Subsequent messages: only auto-scroll if user is near the bottom (latest).
     if (isNearBottomRef.current) {
-      const timeout = setTimeout(() => {
-        scrollToBottom(true);
-      }, 80);
-      return () => clearTimeout(timeout);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      });
     }
-  }, [messages.length, scrollToBottom]);
+  }, [messages.length]);
 
   useEffect(() => {
     const queryKey = getChatMessagesQueryKey(stableConversationId);
@@ -1834,6 +1835,14 @@ export function ChatScreen({
     return messages.filter((message) => !isInternalChatTranscriptMessage(message));
   }, [messages]);
 
+  // INVERTED FLATLIST FIX (Phase 2): Reverse the messages so the newest is at
+  // index 0. Combined with `inverted={true}` on the FlatList, the list
+  // naturally anchors at the newest message on first layout — zero setTimeout,
+  // zero retry loop, zero race condition. This is the WhatsApp/iMessage pattern
+  // and eliminates the defect where the chat opened on old messages because
+  // scrollToEnd fired before dynamic bubble layout measurement completed.
+  const invertedMessages = useMemo<ChatMessage[]>(() => [...visibleMessages].reverse(), [visibleMessages]);
+
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessage }) => {
       return (
@@ -1876,7 +1885,7 @@ export function ChatScreen({
         <View style={styles.body}>
           <FlatList
             ref={listRef}
-            data={visibleMessages}
+            data={invertedMessages}
             keyExtractor={(item) => item.id}
             renderItem={renderMessage}
             style={styles.list}
@@ -1891,6 +1900,7 @@ export function ChatScreen({
             maxToRenderPerBatch={10}
             initialNumToRender={15}
             windowSize={10}
+            inverted={true}
 
             refreshControl={
               <RefreshControl
@@ -1902,14 +1912,18 @@ export function ChatScreen({
               />
             }
             onContentSizeChange={() => {
+              // INVERTED FLATLIST: list anchors at offset 0 (newest) on first
+              // layout. Only re-anchor if user is near the bottom (latest).
               if (!isLoadingOlder && isNearBottomRef.current) {
-                scrollToBottom(visibleMessages.length > 1);
+                listRef.current?.scrollToOffset({ offset: 0, animated: false });
               }
             }}
             onLayout={() => {
+              // INVERTED FLATLIST: list anchors at offset 0 (newest) on first
+              // layout. Mark as scrolled immediately — no scrollToEnd needed.
               if (!isLoadingOlder && !hasScrolledToLatestRef.current) {
-                listRef.current?.scrollToEnd({ animated: false });
                 hasScrolledToLatestRef.current = true;
+                isNearBottomRef.current = true;
               }
             }}
             ListEmptyComponent={
