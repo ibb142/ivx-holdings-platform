@@ -1,1 +1,337 @@
-LyoqCiAqIElWWCBTY29wZWQgTWVtb3J5IOKAlCBvd25lci1vbmx5IEhUVFAgcm91dGVzIChHQVRFIDEpLgogKgogKiBGb3VyLWxheWVyIG1lbW9yeSBpc29sYXRpb246IHRhc2sgLyBhZ2VudCAvIGNvbXBhbnkgLyBlbnRlcnByaXNlLgogKiBFbmZvcmNlcyBjcm9zcy1hZ2VudCwgY3Jvc3MtY29tcGFueSwgYW5kIGRpdmlzaW9uLWxldmVsIGlzb2xhdGlvbi4KICovCmltcG9ydCB7IGFzc2VydElWWE93bmVyT25seSwgb3duZXJPbmx5SnNvbiwgb3duZXJPbmx5T3B0aW9ucyB9IGZyb20gJy4vb3duZXItb25seSc7CmltcG9ydCB7CiAgY3JlYXRlU2NvcGVkTWVtb3J5LAogIHJldHJpZXZlU2NvcGVkTWVtb3J5LAogIGJ1aWxkU2NvcGVkQ29udGV4dFBhY2thZ2UsCiAgcmV2b2tlTWVtb3J5LAogIGFwcGx5T3duZXJJbnN0cnVjdGlvbk92ZXJyaWRlLAogIHN1bW1hcml6ZVNjb3BlZE1lbW9yeSwKICB2YWxpZGF0ZVNjb3BlZE1lbW9yeUlucHV0LAogIGlzU2NvcGVkTWVtb3J5U2VjcmV0LAogIElWWF9TQ09QRURfTUVNT1JZX01BUktFUiwKICB0eXBlIE1lbW9yeUxheWVyLAogIHR5cGUgTWVtb3J5S2luZCwKICB0eXBlIEVudGVycHJpc2VNZW1vcnlLaW5kLAogIHR5cGUgTWVtb3J5QWNjZXNzQ29udGV4dCwKfSBmcm9tICcuLi9zZXJ2aWNlcy9pdngtc2NvcGVkLW1lbW9yeS1zdG9yZSc7CgpmdW5jdGlvbiByZWFkVHJpbW1lZCh2YWx1ZTogdW5rbm93bik6IHN0cmluZyB7CiAgcmV0dXJuIHR5cGVvZiB2YWx1ZSA9PT0gJ3N0cmluZycgPyB2YWx1ZS50cmltKCkgOiAnJzsKfQoKZnVuY3Rpb24gc2FuaXRpemVFcnJvcihlcnJvcjogdW5rbm93biwgZmFsbGJhY2s6IHN0cmluZyk6IHN0cmluZyB7CiAgY29uc3QgcmF3ID0gZXJyb3IgaW5zdGFuY2VvZiBFcnJvciA/IGVycm9yLm1lc3NhZ2UgOiBmYWxsYmFjazsKICByZXR1cm4gcmF3CiAgICAucmVwbGFjZSgvKEJlYXJlclxzKylbQS1aYS16MC05Ll9cLV0rL2dpLCAnJDFbcmVkYWN0ZWRdJykKICAgIC5yZXBsYWNlKC8oYXBpa2V5Wz06XVxzKilbQS1aYS16MC05Ll9cLV0rL2dpLCAnJDFbcmVkYWN0ZWRdJykKICAgIC5zbGljZSgwLCAzMjApIHx8IGZhbGxiYWNrOwp9CgpmdW5jdGlvbiBnZXRFcnJvclN0YXR1cyhlcnJvcjogdW5rbm93bik6IG51bWJlciB7CiAgY29uc3QgbXNnID0gZXJyb3IgaW5zdGFuY2VvZiBFcnJvciA/IGVycm9yLm1lc3NhZ2UudG9Mb3dlckNhc2UoKSA6ICcnOwogIGlmIChtc2cuaW5jbHVkZXMoJ21pc3NpbmcgYmVhcmVyIHRva2VuJykgfHwgbXNnLmluY2x1ZGVzKCdpbnZhbGlkIG9yIGV4cGlyZWQnKSkgcmV0dXJuIDQwMTsKICBpZiAobXNnLmluY2x1ZGVzKCdwcml2aWxlZ2VkIGl2eCBhY2Nlc3MgaXMgcmVxdWlyZWQnKSkgcmV0dXJuIDQwMzsKICBpZiAobXNnLmluY2x1ZGVzKCdyZXF1aXJlZCcpIHx8IG1zZy5pbmNsdWRlcygnbm90IGNvbmZpZ3VyZWQnKSkgcmV0dXJuIDUwMzsKICByZXR1cm4gNTAwOwp9CgpmdW5jdGlvbiBlcnJvclJlc3BvbnNlKGVycm9yOiB1bmtub3duKTogUmVzcG9uc2UgewogIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgIG9rOiBmYWxzZSwKICAgIGVycm9yOiBzYW5pdGl6ZUVycm9yKGVycm9yLCAnSVZYIHNjb3BlZCBtZW1vcnkgcm91dGUgZmFpbGVkLicpLAogICAgbWFya2VyOiBJVlhfU0NPUEVEX01FTU9SWV9NQVJLRVIsCiAgICB0aW1lc3RhbXA6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICB9LCBnZXRFcnJvclN0YXR1cyhlcnJvcikpOwp9CgpleHBvcnQgZnVuY3Rpb24gT1BUSU9OUygpOiBSZXNwb25zZSB7CiAgcmV0dXJuIG93bmVyT25seU9wdGlvbnMoKTsKfQoKLy8g4pSA4pSA4pSAIFN0YXR1cyAvIFN1bW1hcnkg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlU3RhdHVzKHJlcXVlc3Q6IFJlcXVlc3QpOiBQcm9taXNlPFJlc3BvbnNlPiB7CiAgdHJ5IHsKICAgIGF3YWl0IGFzc2VydElWWE93bmVyT25seShyZXF1ZXN0KTsKICAgIGNvbnN0IHN1bW1hcnkgPSBhd2FpdCBzdW1tYXJpemVTY29wZWRNZW1vcnkoKTsKICAgIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgICAgb2s6IHRydWUsCiAgICAgIG1hcmtlcjogSVZYX1NDT1BFRF9NRU1PUllfTUFSS0VSLAogICAgICBzdW1tYXJ5LAogICAgICBsYXllcnM6IFsndGFzaycsICdhZ2VudCcsICdjb21wYW55JywgJ2VudGVycHJpc2UnXSwKICAgICAgdGltZXN0YW1wOiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCksCiAgICB9KTsKICB9IGNhdGNoIChlcnJvcikgewogICAgcmV0dXJuIGVycm9yUmVzcG9uc2UoZXJyb3IpOwogIH0KfQoKLy8g4pSA4pSA4pSAIENyZWF0ZSBNZW1vcnkg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgp0eXBlIENyZWF0ZUJvZHkgPSB7CiAgbGF5ZXI/OiB1bmtub3duOwogIHNjb3BlSWQ/OiB1bmtub3duOwogIGtpbmQ/OiB1bmtub3duOwogIGNvbnRlbnQ/OiB1bmtub3duOwogIHNvdXJjZT86IHVua25vd247CiAgc291cmNlVHlwZT86IHVua25vd247CiAgc291cmNlTGFiZWw/OiB1bmtub3duOwogIHRhZ3M/OiB1bmtub3duOwogIGV4cGlyZXNBdD86IHVua25vd247CiAgc291cmNlRmlsZVBhdGg/OiB1bmtub3duOwogIHNvdXJjZUNvbW1pdFNoYT86IHVua25vd247CiAgd3JpdGVDdHg/OiB1bmtub3duOwp9OwoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZUNyZWF0ZShyZXF1ZXN0OiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBhd2FpdCBhc3NlcnRJVlhPd25lck9ubHkocmVxdWVzdCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVxdWVzdC5qc29uKCkuY2F0Y2goKCkgPT4gKHt9KSkgYXMgQ3JlYXRlQm9keTsKCiAgICAvLyBCdWlsZCB3cml0ZSBjb250ZXh0IGZyb20gYm9keSBvciBkZWZhdWx0IHRvIG93bmVyLgogICAgY29uc3Qgd3JpdGVDdHggPSBib2R5LndyaXRlQ3R4ICYmIHR5cGVvZiBib2R5LndyaXRlQ3R4ID09PSAnb2JqZWN0JwogICAgICA/IGJvZHkud3JpdGVDdHggYXMgTWVtb3J5QWNjZXNzQ29udGV4dAogICAgICA6IHsgYWdlbnRJZDogJ293bmVyJywgY29tcGFueUlkOiBudWxsLCB0YXNrSWQ6IG51bGwsIGlzT3duZXI6IHRydWUgfTsKCiAgICBjb25zdCByZXN1bHQgPSBhd2FpdCBjcmVhdGVTY29wZWRNZW1vcnkoewogICAgICBsYXllcjogcmVhZFRyaW1tZWQoYm9keS5sYXllcikgYXMgTWVtb3J5TGF5ZXIsCiAgICAgIHNjb3BlSWQ6IHJlYWRUcmltbWVkKGJvZHkuc2NvcGVJZCksCiAgICAgIGtpbmQ6IHJlYWRUcmltbWVkKGJvZHkua2luZCkgYXMgTWVtb3J5S2luZCwKICAgICAgY29udGVudDogcmVhZFRyaW1tZWQoYm9keS5jb250ZW50KSwKICAgICAgc291cmNlOiByZWFkVHJpbW1lZChib2R5LnNvdXJjZSksCiAgICAgIHNvdXJjZVR5cGU6IChyZWFkVHJpbW1lZChib2R5LnNvdXJjZVR5cGUpIGFzICdmaWxlJyB8ICdhcGknIHwgJ293bmVyJyB8ICdhZ2VudCcgfCAnc3lzdGVtJykgfHwgJ3N5c3RlbScsCiAgICAgIHNvdXJjZUxhYmVsOiByZWFkVHJpbW1lZChib2R5LnNvdXJjZUxhYmVsKSwKICAgICAgdGFnczogQXJyYXkuaXNBcnJheShib2R5LnRhZ3MpID8gYm9keS50YWdzIDogdW5kZWZpbmVkLAogICAgICBleHBpcmVzQXQ6IGJvZHkuZXhwaXJlc0F0ID8gU3RyaW5nKGJvZHkuZXhwaXJlc0F0KSA6IG51bGwsCiAgICAgIHNvdXJjZUZpbGVQYXRoOiBib2R5LnNvdXJjZUZpbGVQYXRoID8gU3RyaW5nKGJvZHkuc291cmNlRmlsZVBhdGgpIDogbnVsbCwKICAgICAgc291cmNlQ29tbWl0U2hhOiBib2R5LnNvdXJjZUNvbW1pdFNoYSA/IFN0cmluZyhib2R5LnNvdXJjZUNvbW1pdFNoYSkgOiBudWxsLAogICAgICB3cml0ZUN0eCwKICAgIH0pOwoKICAgIGlmICghcmVzdWx0Lm9rKSB7CiAgICAgIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgICAgICBvazogZmFsc2UsCiAgICAgICAgZXJyb3I6IHJlc3VsdC5lcnJvciwKICAgICAgICBtYXJrZXI6IElWWF9TQ09QRURfTUVNT1JZX01BUktFUiwKICAgICAgfSwgNDAwKTsKICAgIH0KCiAgICByZXR1cm4gb3duZXJPbmx5SnNvbih7CiAgICAgIG9rOiB0cnVlLAogICAgICBtYXJrZXI6IElWWF9TQ09QRURfTUVNT1JZX01BUktFUiwKICAgICAgcmVjb3JkOiByZXN1bHQucmVjb3JkLAogICAgICB0aW1lc3RhbXA6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICAgIH0sIDIwMSk7CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIHJldHVybiBlcnJvclJlc3BvbnNlKGVycm9yKTsKICB9Cn0KCi8vIOKUgOKUgOKUgCBSZXRyaWV2ZSBNZW1vcnkg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgp0eXBlIFJldHJpZXZlQm9keSA9IHsKICBxdWVyeT86IHVua25vd247CiAgYWNjZXNzQ3R4PzogdW5rbm93bjsKfTsKCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBoYW5kbGVSZXRyaWV2ZShyZXF1ZXN0OiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBhd2FpdCBhc3NlcnRJVlhPd25lck9ubHkocmVxdWVzdCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVxdWVzdC5qc29uKCkuY2F0Y2goKCkgPT4gKHt9KSkgYXMgUmV0cmlldmVCb2R5OwoKICAgIGNvbnN0IHF1ZXJ5ID0gKGJvZHkucXVlcnkgJiYgdHlwZW9mIGJvZHkucXVlcnkgPT09ICdvYmplY3QnID8gYm9keS5xdWVyeSA6IHt9KSBhcyBSZWNvcmQ8c3RyaW5nLCB1bmtub3duPjsKICAgIGNvbnN0IGFjY2Vzc0N0eCA9IChib2R5LmFjY2Vzc0N0eCAmJiB0eXBlb2YgYm9keS5hY2Nlc3NDdHggPT09ICdvYmplY3QnCiAgICAgID8gYm9keS5hY2Nlc3NDdHgKICAgICAgOiB7IGFnZW50SWQ6ICdvd25lcicsIGNvbXBhbnlJZDogbnVsbCwgdGFza0lkOiBudWxsLCBpc093bmVyOiB0cnVlIH0pIGFzIE1lbW9yeUFjY2Vzc0NvbnRleHQ7CgogICAgY29uc3QgcmVzdWx0ID0gYXdhaXQgcmV0cmlldmVTY29wZWRNZW1vcnkoCiAgICAgIHsKICAgICAgICBsYXllcjogcmVhZFRyaW1tZWQocXVlcnkubGF5ZXIpIGFzIE1lbW9yeUxheWVyIHx8IHVuZGVmaW5lZCwKICAgICAgICBzY29wZUlkOiByZWFkVHJpbW1lZChxdWVyeS5zY29wZUlkKSB8fCB1bmRlZmluZWQsCiAgICAgICAga2luZDogcmVhZFRyaW1tZWQocXVlcnkua2luZCkgYXMgTWVtb3J5S2luZCB8fCB1bmRlZmluZWQsCiAgICAgICAgdGFnczogQXJyYXkuaXNBcnJheShxdWVyeS50YWdzKSA/IHF1ZXJ5LnRhZ3MgYXMgc3RyaW5nW10gOiB1bmRlZmluZWQsCiAgICAgICAgc2VhcmNoOiByZWFkVHJpbW1lZChxdWVyeS5zZWFyY2gpIHx8IHVuZGVmaW5lZCwKICAgICAgICBpbmNsdWRlUmV2b2tlZDogcXVlcnkuaW5jbHVkZVJldm9rZWQgPT09IHRydWUsCiAgICAgICAgaW5jbHVkZUV4cGlyZWQ6IHF1ZXJ5LmluY2x1ZGVFeHBpcmVkID09PSB0cnVlLAogICAgICAgIGluY2x1ZGVTdXBlcnNlZGVkOiBxdWVyeS5pbmNsdWRlU3VwZXJzZWRlZCA9PT0gdHJ1ZSwKICAgICAgICBsaW1pdDogcXVlcnkubGltaXQgPyBOdW1iZXIocXVlcnkubGltaXQpIDogdW5kZWZpbmVkLAogICAgICB9LAogICAgICBhY2Nlc3NDdHgsCiAgICApOwoKICAgIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgICAgb2s6IHRydWUsCiAgICAgIG1hcmtlcjogSVZYX1NDT1BFRF9NRU1PUllfTUFSS0VSLAogICAgICByZWNvcmRzOiByZXN1bHQucmVjb3JkcywKICAgICAgY291bnQ6IHJlc3VsdC5yZWNvcmRzLmxlbmd0aCwKICAgICAgZGVuaWVkOiByZXN1bHQuZGVuaWVkLAogICAgICB0aW1lc3RhbXA6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICAgIH0pOwogIH0gY2F0Y2ggKGVycm9yKSB7CiAgICByZXR1cm4gZXJyb3JSZXNwb25zZShlcnJvcik7CiAgfQp9CgovLyDilIDilIDilIAgQnVpbGQgQ29udGV4dCBQYWNrYWdlIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAoKdHlwZSBCdWlsZENvbnRleHRCb2R5ID0gewogIGFjY2Vzc0N0eD86IHVua25vd247CiAgdGFza0lkPzogdW5rbm93bjsKICB0YXNrS2V5d29yZHM/OiB1bmtub3duOwogIGN1cnJlbnRDb21taXRTaGE/OiB1bmtub3duOwogIHNlYXJjaD86IHVua25vd247CiAgbGltaXQ/OiB1bmtub3duOwp9OwoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZUJ1aWxkQ29udGV4dChyZXF1ZXN0OiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBhd2FpdCBhc3NlcnRJVlhPd25lck9ubHkocmVxdWVzdCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVxdWVzdC5qc29uKCkuY2F0Y2goKCkgPT4gKHt9KSkgYXMgQnVpbGRDb250ZXh0Qm9keTsKCiAgICBjb25zdCBhY2Nlc3NDdHggPSAoYm9keS5hY2Nlc3NDdHggJiYgdHlwZW9mIGJvZHkuYWNjZXNzQ3R4ID09PSAnb2JqZWN0JwogICAgICA/IGJvZHkuYWNjZXNzQ3R4CiAgICAgIDogeyBhZ2VudElkOiAnb3duZXInLCBjb21wYW55SWQ6IG51bGwsIHRhc2tJZDogbnVsbCwgaXNPd25lcjogdHJ1ZSB9KSBhcyBNZW1vcnlBY2Nlc3NDb250ZXh0OwoKICAgIGNvbnN0IGN0eFBhY2thZ2UgPSBhd2FpdCBidWlsZFNjb3BlZENvbnRleHRQYWNrYWdlKGFjY2Vzc0N0eCwgewogICAgICB0YXNrSWQ6IGJvZHkudGFza0lkID8gU3RyaW5nKGJvZHkudGFza0lkKSA6IHVuZGVmaW5lZCwKICAgICAgdGFza0tleXdvcmRzOiBBcnJheS5pc0FycmF5KGJvZHkudGFza0tleXdvcmRzKSA/IGJvZHkudGFza0tleXdvcmRzIGFzIHN0cmluZ1tdIDogdW5kZWZpbmVkLAogICAgICBjdXJyZW50Q29tbWl0U2hhOiBib2R5LmN1cnJlbnRDb21taXRTaGEgPyBTdHJpbmcoYm9keS5jdXJyZW50Q29tbWl0U2hhKSA6IHVuZGVmaW5lZCwKICAgICAgc2VhcmNoOiBib2R5LnNlYXJjaCA/IFN0cmluZyhib2R5LnNlYXJjaCkgOiB1bmRlZmluZWQsCiAgICAgIGxpbWl0OiBib2R5LmxpbWl0ID8gTnVtYmVyKGJvZHkubGltaXQpIDogdW5kZWZpbmVkLAogICAgfSk7CgogICAgcmV0dXJuIG93bmVyT25seUpzb24oewogICAgICBvazogdHJ1ZSwKICAgICAgbWFya2VyOiBJVlhfU0NPUEVEX01FTU9SWV9NQVJLRVIsCiAgICAgIGNvbnRleHRQYWNrYWdlOiBjdHhQYWNrYWdlLAogICAgICB0aW1lc3RhbXA6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICAgIH0pOwogIH0gY2F0Y2ggKGVycm9yKSB7CiAgICByZXR1cm4gZXJyb3JSZXNwb25zZShlcnJvcik7CiAgfQp9CgovLyDilIDilIDilIAgUmV2b2tlIE1lbW9yeSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCnR5cGUgUmV2b2tlQm9keSA9IHsKICBpZD86IHVua25vd247CiAgcmV2b2tlZEJ5PzogdW5rbm93bjsKICB3cml0ZUN0eD86IHVua25vd247Cn07CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlUmV2b2tlKHJlcXVlc3Q6IFJlcXVlc3QpOiBQcm9taXNlPFJlc3BvbnNlPiB7CiAgdHJ5IHsKICAgIGF3YWl0IGFzc2VydElWWE93bmVyT25seShyZXF1ZXN0KTsKICAgIGNvbnN0IGJvZHkgPSBhd2FpdCByZXF1ZXN0Lmpzb24oKS5jYXRjaCgoKSA9PiAoe30pKSBhcyBSZXZva2VCb2R5OwogICAgY29uc3QgaWQgPSByZWFkVHJpbW1lZChib2R5LmlkKTsKICAgIGlmICghaWQpIHsKICAgICAgcmV0dXJuIG93bmVyT25seUpzb24oeyBvazogZmFsc2UsIGVycm9yOiAnaWQgaXMgcmVxdWlyZWQuJywgbWFya2VyOiBJVlhfU0NPUEVEX01FTU9SWV9NQVJLRVIgfSwgNDAwKTsKICAgIH0KCiAgICBjb25zdCB3cml0ZUN0eCA9IGJvZHkud3JpdGVDdHggJiYgdHlwZW9mIGJvZHkud3JpdGVDdHggPT09ICdvYmplY3QnCiAgICAgID8gYm9keS53cml0ZUN0eCBhcyBNZW1vcnlBY2Nlc3NDb250ZXh0CiAgICAgIDogeyBhZ2VudElkOiAnb3duZXInLCBjb21wYW55SWQ6IG51bGwsIHRhc2tJZDogbnVsbCwgaXNPd25lcjogdHJ1ZSB9OwoKICAgIGNvbnN0IHJlc3VsdCA9IGF3YWl0IHJldm9rZU1lbW9yeShpZCwgcmVhZFRyaW1tZWQoYm9keS5yZXZva2VkQnkpIHx8ICdvd25lcicsIHdyaXRlQ3R4KTsKICAgIGlmICghcmVzdWx0Lm9rKSB7CiAgICAgIHJldHVybiBvd25lck9ubHlKc29uKHsgb2s6IGZhbHNlLCBlcnJvcjogcmVzdWx0LmVycm9yLCBtYXJrZXI6IElWWF9TQ09QRURfTUVNT1JZX01BUktFUiB9LCA0MDApOwogICAgfQoKICAgIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgICAgb2s6IHRydWUsCiAgICAgIG1hcmtlcjogSVZYX1NDT1BFRF9NRU1PUllfTUFSS0VSLAogICAgICByZWNvcmQ6IHJlc3VsdC5yZWNvcmQsCiAgICAgIHRpbWVzdGFtcDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLAogICAgfSk7CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIHJldHVybiBlcnJvclJlc3BvbnNlKGVycm9yKTsKICB9Cn0KCi8vIOKUgOKUgOKUgCBPd25lciBJbnN0cnVjdGlvbiBPdmVycmlkZSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCnR5cGUgT3ZlcnJpZGVCb2R5ID0gewogIGtpbmQ/OiB1bmtub3duOwogIGNvbnRlbnQ/OiB1bmtub3duOwogIHNvdXJjZUxhYmVsPzogdW5rbm93bjsKICB0YWdzPzogdW5rbm93bjsKfTsKCmNvbnN0IFZBTElEX0VOVEVSUFJJU0VfS0lORFM6IFJlYWRvbmx5U2V0PHN0cmluZz4gPSBuZXcgU2V0KFsKICAnaXZ4X3BvbGljeScsICdvd25lcl9yZXN0cmljdGlvbicsICdzZWN1cml0eV9ydWxlJywgJ2FwcHJvdmFsX3JlcXVpcmVtZW50JywgJ2FyY2hpdGVjdHVyZV9jb250ZXh0JywKXSk7CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlT3duZXJPdmVycmlkZShyZXF1ZXN0OiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBhd2FpdCBhc3NlcnRJVlhPd25lck9ubHkocmVxdWVzdCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVxdWVzdC5qc29uKCkuY2F0Y2goKCkgPT4gKHt9KSkgYXMgT3ZlcnJpZGVCb2R5OwogICAgY29uc3Qga2luZCA9IHJlYWRUcmltbWVkKGJvZHkua2luZCk7CiAgICBpZiAoIVZBTElEX0VOVEVSUFJJU0VfS0lORFMuaGFzKGtpbmQpKSB7CiAgICAgIHJldHVybiBvd25lck9ubHlKc29uKHsKICAgICAgICBvazogZmFsc2UsCiAgICAgICAgZXJyb3I6ICdraW5kIG11c3QgYmUgYW4gZW50ZXJwcmlzZS1sYXllciBraW5kIChpdnhfcG9saWN5IHwgb3duZXJfcmVzdHJpY3Rpb24gfCBzZWN1cml0eV9ydWxlIHwgYXBwcm92YWxfcmVxdWlyZW1lbnQgfCBhcmNoaXRlY3R1cmVfY29udGV4dCkuJywKICAgICAgICBtYXJrZXI6IElWWF9TQ09QRURfTUVNT1JZX01BUktFUiwKICAgICAgfSwgNDAwKTsKICAgIH0KCiAgICBjb25zdCByZXN1bHQgPSBhd2FpdCBhcHBseU93bmVySW5zdHJ1Y3Rpb25PdmVycmlkZSh7CiAgICAgIGtpbmQ6IGtpbmQgYXMgRW50ZXJwcmlzZU1lbW9yeUtpbmQsCiAgICAgIGNvbnRlbnQ6IHJlYWRUcmltbWVkKGJvZHkuY29udGVudCksCiAgICAgIHNvdXJjZUxhYmVsOiByZWFkVHJpbW1lZChib2R5LnNvdXJjZUxhYmVsKSwKICAgICAgdGFnczogQXJyYXkuaXNBcnJheShib2R5LnRhZ3MpID8gYm9keS50YWdzIGFzIHN0cmluZ1tdIDogdW5kZWZpbmVkLAogICAgfSk7CgogICAgaWYgKCFyZXN1bHQub2spIHsKICAgICAgcmV0dXJuIG93bmVyT25seUpzb24oeyBvazogZmFsc2UsIGVycm9yOiByZXN1bHQuZXJyb3IsIG1hcmtlcjogSVZYX1NDT1BFRF9NRU1PUllfTUFSS0VSIH0sIDQwMCk7CiAgICB9CgogICAgcmV0dXJuIG93bmVyT25seUpzb24oewogICAgICBvazogdHJ1ZSwKICAgICAgbWFya2VyOiBJVlhfU0NPUEVEX01FTU9SWV9NQVJLRVIsCiAgICAgIHJlY29yZDogcmVzdWx0LnJlY29yZCwKICAgICAgdGltZXN0YW1wOiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCksCiAgICB9LCAyMDEpOwogIH0gY2F0Y2ggKGVycm9yKSB7CiAgICByZXR1cm4gZXJyb3JSZXNwb25zZShlcnJvcik7CiAgfQp9CgovLyDilIDilIDilIAgVmFsaWRhdGlvbiBIZWxwZXIg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgp0eXBlIFZhbGlkYXRlQm9keSA9IHsKICBsYXllcj86IHVua25vd247CiAgc2NvcGVJZD86IHVua25vd247CiAga2luZD86IHVua25vd247CiAgY29udGVudD86IHVua25vd247CiAgc291cmNlPzogdW5rbm93bjsKfTsKCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBoYW5kbGVWYWxpZGF0ZShyZXF1ZXN0OiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBhd2FpdCBhc3NlcnRJVlhPd25lck9ubHkocmVxdWVzdCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVxdWVzdC5qc29uKCkuY2F0Y2goKCkgPT4gKHt9KSkgYXMgVmFsaWRhdGVCb2R5OwogICAgY29uc3QgcmVzdWx0ID0gdmFsaWRhdGVTY29wZWRNZW1vcnlJbnB1dCh7CiAgICAgIGxheWVyOiBib2R5LmxheWVyLAogICAgICBzY29wZUlkOiBib2R5LnNjb3BlSWQsCiAgICAgIGtpbmQ6IGJvZHkua2luZCwKICAgICAgY29udGVudDogYm9keS5jb250ZW50LAogICAgICBzb3VyY2U6IGJvZHkuc291cmNlLAogICAgfSk7CiAgICByZXR1cm4gb3duZXJPbmx5SnNvbih7CiAgICAgIG9rOiB0cnVlLAogICAgICBtYXJrZXI6IElWWF9TQ09QRURfTUVNT1JZX01BUktFUiwKICAgICAgdmFsaWQ6IHJlc3VsdC5vaywKICAgICAgZXJyb3I6IHJlc3VsdC5vayA/IG51bGwgOiByZXN1bHQuZXJyb3IsCiAgICAgIGlzU2VjcmV0OiBpc1Njb3BlZE1lbW9yeVNlY3JldChTdHJpbmcoYm9keS5jb250ZW50ID8/ICcnKSksCiAgICAgIHRpbWVzdGFtcDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLAogICAgfSk7CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIHJldHVybiBlcnJvclJlc3BvbnNlKGVycm9yKTsKICB9Cn0K
+/**
+ * IVX Scoped Memory — owner-only HTTP routes (GATE 1).
+ *
+ * Four-layer memory isolation: task / agent / company / enterprise.
+ * Enforces cross-agent, cross-company, and division-level isolation.
+ */
+import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import {
+  createScopedMemory,
+  retrieveScopedMemory,
+  buildScopedContextPackage,
+  revokeMemory,
+  applyOwnerInstructionOverride,
+  summarizeScopedMemory,
+  validateScopedMemoryInput,
+  isScopedMemorySecret,
+  IVX_SCOPED_MEMORY_MARKER,
+  type MemoryLayer,
+  type MemoryKind,
+  type EnterpriseMemoryKind,
+  type MemoryAccessContext,
+} from '../services/ivx-scoped-memory-store';
+
+function readTrimmed(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function sanitizeError(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : fallback;
+  return raw
+    .replace(/(Bearer\s+)[A-Za-z0-9._\-]+/gi, '$1[redacted]')
+    .replace(/(apikey[=:]\s*)[A-Za-z0-9._\-]+/gi, '$1[redacted]')
+    .slice(0, 320) || fallback;
+}
+
+function getErrorStatus(error: unknown): number {
+  const msg = error instanceof Error ? error.message.toLowerCase() : '';
+  if (msg.includes('missing bearer token') || msg.includes('invalid or expired')) return 401;
+  if (msg.includes('privileged ivx access is required')) return 403;
+  if (msg.includes('required') || msg.includes('not configured')) return 503;
+  return 500;
+}
+
+function errorResponse(error: unknown): Response {
+  return ownerOnlyJson({
+    ok: false,
+    error: sanitizeError(error, 'IVX scoped memory route failed.'),
+    marker: IVX_SCOPED_MEMORY_MARKER,
+    timestamp: new Date().toISOString(),
+  }, getErrorStatus(error));
+}
+
+export function OPTIONS(): Response {
+  return ownerOnlyOptions();
+}
+
+// ─── Status / Summary ─────────────────────────────────────────────
+
+export async function handleStatus(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const summary = await summarizeScopedMemory();
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      summary,
+      layers: ['task', 'agent', 'company', 'enterprise'],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+// ─── Create Memory ────────────────────────────────────────────────
+
+type CreateBody = {
+  layer?: unknown;
+  scopeId?: unknown;
+  kind?: unknown;
+  content?: unknown;
+  source?: unknown;
+  sourceType?: unknown;
+  sourceLabel?: unknown;
+  tags?: unknown;
+  expiresAt?: unknown;
+  sourceFilePath?: unknown;
+  sourceCommitSha?: unknown;
+  writeCtx?: unknown;
+};
+
+export async function handleCreate(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const body = await request.json().catch(() => ({})) as CreateBody;
+
+    // Build write context from body or default to owner.
+    const writeCtx = body.writeCtx && typeof body.writeCtx === 'object'
+      ? body.writeCtx as MemoryAccessContext
+      : { agentId: 'owner', companyId: null, taskId: null, isOwner: true };
+
+    const result = await createScopedMemory({
+      layer: readTrimmed(body.layer) as MemoryLayer,
+      scopeId: readTrimmed(body.scopeId),
+      kind: readTrimmed(body.kind) as MemoryKind,
+      content: readTrimmed(body.content),
+      source: readTrimmed(body.source),
+      sourceType: (readTrimmed(body.sourceType) as 'file' | 'api' | 'owner' | 'agent' | 'system') || 'system',
+      sourceLabel: readTrimmed(body.sourceLabel),
+      tags: Array.isArray(body.tags) ? body.tags : undefined,
+      expiresAt: body.expiresAt ? String(body.expiresAt) : null,
+      sourceFilePath: body.sourceFilePath ? String(body.sourceFilePath) : null,
+      sourceCommitSha: body.sourceCommitSha ? String(body.sourceCommitSha) : null,
+      writeCtx,
+    });
+
+    if (!result.ok) {
+      return ownerOnlyJson({
+        ok: false,
+        error: result.error,
+        marker: IVX_SCOPED_MEMORY_MARKER,
+      }, 400);
+    }
+
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      record: result.record,
+      timestamp: new Date().toISOString(),
+    }, 201);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+// ─── Retrieve Memory ──────────────────────────────────────────────
+
+type RetrieveBody = {
+  query?: unknown;
+  accessCtx?: unknown;
+};
+
+export async function handleRetrieve(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const body = await request.json().catch(() => ({})) as RetrieveBody;
+
+    const query = (body.query && typeof body.query === 'object' ? body.query : {}) as Record<string, unknown>;
+    const accessCtx = (body.accessCtx && typeof body.accessCtx === 'object'
+      ? body.accessCtx
+      : { agentId: 'owner', companyId: null, taskId: null, isOwner: true }) as MemoryAccessContext;
+
+    const result = await retrieveScopedMemory(
+      {
+        layer: readTrimmed(query.layer) as MemoryLayer || undefined,
+        scopeId: readTrimmed(query.scopeId) || undefined,
+        kind: readTrimmed(query.kind) as MemoryKind || undefined,
+        tags: Array.isArray(query.tags) ? query.tags as string[] : undefined,
+        search: readTrimmed(query.search) || undefined,
+        includeRevoked: query.includeRevoked === true,
+        includeExpired: query.includeExpired === true,
+        includeSuperseded: query.includeSuperseded === true,
+        limit: query.limit ? Number(query.limit) : undefined,
+      },
+      accessCtx,
+    );
+
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      records: result.records,
+      count: result.records.length,
+      denied: result.denied,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+// ─── Build Context Package ────────────────────────────────────────
+
+type BuildContextBody = {
+  accessCtx?: unknown;
+  taskId?: unknown;
+  taskKeywords?: unknown;
+  currentCommitSha?: unknown;
+  search?: unknown;
+  limit?: unknown;
+};
+
+export async function handleBuildContext(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const body = await request.json().catch(() => ({})) as BuildContextBody;
+
+    const accessCtx = (body.accessCtx && typeof body.accessCtx === 'object'
+      ? body.accessCtx
+      : { agentId: 'owner', companyId: null, taskId: null, isOwner: true }) as MemoryAccessContext;
+
+    const ctxPackage = await buildScopedContextPackage(accessCtx, {
+      taskId: body.taskId ? String(body.taskId) : undefined,
+      taskKeywords: Array.isArray(body.taskKeywords) ? body.taskKeywords as string[] : undefined,
+      currentCommitSha: body.currentCommitSha ? String(body.currentCommitSha) : undefined,
+      search: body.search ? String(body.search) : undefined,
+      limit: body.limit ? Number(body.limit) : undefined,
+    });
+
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      contextPackage: ctxPackage,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+// ─── Revoke Memory ────────────────────────────────────────────────
+
+type RevokeBody = {
+  id?: unknown;
+  revokedBy?: unknown;
+  writeCtx?: unknown;
+};
+
+export async function handleRevoke(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const body = await request.json().catch(() => ({})) as RevokeBody;
+    const id = readTrimmed(body.id);
+    if (!id) {
+      return ownerOnlyJson({ ok: false, error: 'id is required.', marker: IVX_SCOPED_MEMORY_MARKER }, 400);
+    }
+
+    const writeCtx = body.writeCtx && typeof body.writeCtx === 'object'
+      ? body.writeCtx as MemoryAccessContext
+      : { agentId: 'owner', companyId: null, taskId: null, isOwner: true };
+
+    const result = await revokeMemory(id, readTrimmed(body.revokedBy) || 'owner', writeCtx);
+    if (!result.ok) {
+      return ownerOnlyJson({ ok: false, error: result.error, marker: IVX_SCOPED_MEMORY_MARKER }, 400);
+    }
+
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      record: result.record,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+// ─── Owner Instruction Override ───────────────────────────────────
+
+type OverrideBody = {
+  kind?: unknown;
+  content?: unknown;
+  sourceLabel?: unknown;
+  tags?: unknown;
+};
+
+const VALID_ENTERPRISE_KINDS: ReadonlySet<string> = new Set([
+  'ivx_policy', 'owner_restriction', 'security_rule', 'approval_requirement', 'architecture_context',
+]);
+
+export async function handleOwnerOverride(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const body = await request.json().catch(() => ({})) as OverrideBody;
+    const kind = readTrimmed(body.kind);
+    if (!VALID_ENTERPRISE_KINDS.has(kind)) {
+      return ownerOnlyJson({
+        ok: false,
+        error: 'kind must be an enterprise-layer kind (ivx_policy | owner_restriction | security_rule | approval_requirement | architecture_context).',
+        marker: IVX_SCOPED_MEMORY_MARKER,
+      }, 400);
+    }
+
+    const result = await applyOwnerInstructionOverride({
+      kind: kind as EnterpriseMemoryKind,
+      content: readTrimmed(body.content),
+      sourceLabel: readTrimmed(body.sourceLabel),
+      tags: Array.isArray(body.tags) ? body.tags as string[] : undefined,
+    });
+
+    if (!result.ok) {
+      return ownerOnlyJson({ ok: false, error: result.error, marker: IVX_SCOPED_MEMORY_MARKER }, 400);
+    }
+
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      record: result.record,
+      timestamp: new Date().toISOString(),
+    }, 201);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+// ─── Validation Helper ────────────────────────────────────────────
+
+type ValidateBody = {
+  layer?: unknown;
+  scopeId?: unknown;
+  kind?: unknown;
+  content?: unknown;
+  source?: unknown;
+};
+
+export async function handleValidate(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const body = await request.json().catch(() => ({})) as ValidateBody;
+    const result = validateScopedMemoryInput({
+      layer: body.layer,
+      scopeId: body.scopeId,
+      kind: body.kind,
+      content: body.content,
+      source: body.source,
+    });
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_SCOPED_MEMORY_MARKER,
+      valid: result.ok,
+      error: result.ok ? null : result.error,
+      isSecret: isScopedMemorySecret(String(body.content ?? '')),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
