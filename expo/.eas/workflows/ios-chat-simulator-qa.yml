@@ -1,0 +1,101 @@
+# EAS Workflow: iOS Simulator Build + Maestro Chat QA
+#
+# Runs on EAS cloud infrastructure (macOS runners).
+# Requires: EXPO_TOKEN in EAS secrets, EAS project configured.
+#
+# Trigger: eas workflow ios-chat-simulator-qa --non-interactive
+# Or:      eas workflow .eas/workflows/ios-chat-simulator-qa.yml
+
+name: ios-chat-simulator-qa
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "expo/app/ivx/chat.tsx"
+      - "expo/src/modules/chat/**"
+      - "expo/.maestro/**"
+  workflow_dispatch:
+
+defaults:
+  resource_class: m-medium
+  env:
+    OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+    OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+    EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+
+jobs:
+  build-ios-simulator:
+    name: Build iOS Simulator App
+    steps:
+      - uses: actions/checkout
+        with:
+          path: expo
+      - uses: actions/setup-node
+        with:
+          node-version: 20
+      - uses: actions/setup-bun
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        working-directory: expo
+        run: bun install --frozen-lockfile
+      - name: Build iOS simulator
+        working-directory: expo
+        run: |
+          export EXPO_PUBLIC_SOURCE_COMMIT_SHA="${{ github.sha }}"
+          export EXPO_PUBLIC_QA_BUILD=true
+          npx eas-cli build --profile ios-simulator-qa --platform ios --non-interactive --output=build/ios-simulator.tar.gz
+      - name: Upload build artifact
+        uses: actions/upload-artifact
+        with:
+          name: ios-simulator-build
+          path: expo/build/ios-simulator.tar.gz
+          retention-days: 14
+
+  maestro-chat-qa:
+    name: Run Maestro Chat QA (20-step)
+    needs: build-ios-simulator
+    steps:
+      - uses: actions/checkout
+        with:
+          path: expo
+      - uses: actions/setup-node
+        with:
+          node-version: 20
+      - uses: actions/setup-bun
+        with:
+          bun-version: latest
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          export PATH="$HOME/.maestro/bin:$PATH"
+          maestro --version
+      - name: Download build artifact
+        uses: actions/download-artifact
+        with:
+          name: ios-simulator-build
+          path: expo/build
+      - name: Boot iOS Simulator
+        run: |
+          xcrun simctl boot "iPhone 15 Pro" || true
+          xcrun simctl install booted expo/build/IVXHoldings.app
+      - name: Run 20-step chat QA
+        working-directory: expo
+        run: |
+          export PATH="$HOME/.maestro/bin:$PATH"
+          export OWNER_EMAIL="${{ secrets.OWNER_EMAIL }}"
+          export OWNER_PASSWORD="${{ secrets.OWNER_PASSWORD }}"
+          maestro test .maestro/ivx-chat-full-qa.yaml --format junit --output maestro-results.xml
+      - name: Upload Maestro results
+        uses: actions/upload-artifact
+        with:
+          name: maestro-chat-qa-results
+          path: expo/maestro-results.xml
+          retention-days: 30
+      - name: Upload screenshots
+        uses: actions/upload-artifact
+        with:
+          name: maestro-screenshots
+          path: expo/.maestro/screenshots/
+          retention-days: 14
