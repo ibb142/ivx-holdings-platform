@@ -199,17 +199,22 @@ export function classifyFailure(error: unknown): FailureClass {
   if (error instanceof Error) {
     const explicit = (error as Error & { failureClass?: FailureClass }).failureClass;
     if (explicit === 'transient' || explicit === 'permanent') return explicit;
-    const msg = error.message.toLowerCase();
-    if (msg.includes('timeout') || msg.includes('timed out')) return 'transient';
-    if (msg.includes('network') || msg.includes('fetch failed') || msg.includes('econnreset')) return 'transient';
-    if (msg.includes('rate_limit') || msg.includes('rate limited') || msg.includes('429')) return 'transient';
-    if (msg.includes('schema cache') || msg.includes('pgrst205')) return 'transient';
-    if (msg.includes('service unavailable') || msg.includes('503')) return 'transient';
-    if (msg.includes('bad gateway') || msg.includes('502')) return 'transient';
-    if (msg.includes('invalid') || msg.includes('malformed') || msg.includes('bad_request')) return 'permanent';
-    if (msg.includes('auth') && !msg.includes('timeout')) return 'permanent';
-    if (msg.includes('not found') || msg.includes('404')) return 'permanent';
   }
+  // Normalize to a message string — the live API passes errors as strings
+  // (body.error), not Error instances, so we must classify both forms.
+  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : String(error ?? '');
+  const msg = raw.toLowerCase();
+  if (!msg) return 'unknown';
+  if (msg.includes('timeout') || msg.includes('timed out')) return 'transient';
+  if (msg.includes('network') || msg.includes('fetch failed') || msg.includes('econnreset')) return 'transient';
+  if (msg.includes('rate_limit') || msg.includes('rate limited') || msg.includes('429')) return 'transient';
+  if (msg.includes('schema cache') || msg.includes('pgrst205')) return 'transient';
+  if (msg.includes('service unavailable') || msg.includes('503')) return 'transient';
+  if (msg.includes('bad gateway') || msg.includes('502')) return 'transient';
+  if (msg.includes('invalid') || msg.includes('malformed') || msg.includes('bad_request')) return 'permanent';
+  if (msg.includes('auth') && !msg.includes('timeout')) return 'permanent';
+  if (msg.includes('not found') || msg.includes('404')) return 'permanent';
+  if (msg.includes('[permanent]')) return 'permanent';
   return 'unknown';
 }
 
