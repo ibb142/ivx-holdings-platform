@@ -32,6 +32,24 @@ const SEC_ARCHIVES_BASE = 'https://www.sec.gov/Archives/edgar/data';
 const FETCH_TIMEOUT_MS = 15_000;
 /** SEC fair-access guidance is ~10 req/s; we stay well under it. */
 const DETAIL_FETCH_DELAY_MS = 140;
+/** Maximum retry attempts for transient network/SEC-gateway failures. */
+const FETCH_MAX_RETRIES = 3;
+/** Base backoff in ms; each retry waits base * 2^attempt (250 → 500 → 1000). */
+const FETCH_BACKOFF_BASE_MS = 250;
+
+/** Classify an error/response as transient (retryable) vs permanent. */
+function isTransientError(error: unknown, status: number | null): boolean {
+  // Network-level failures (fetch failed, ECONNRESET, DNS, abort/timeout).
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('fetch failed') || msg.includes('econnreset') || msg.includes('econnrefused')) return true;
+    if (msg.includes('aborted') || msg.includes('timeout') || msg.includes('etimedout')) return true;
+    if (msg.includes('network') || msg.includes('socket hang up') || msg.includes('eai_again')) return true;
+  }
+  // HTTP 429 (rate limit) and 5xx (gateway/server) are retryable.
+  if (status !== null && (status === 429 || (status >= 500 && status < 600))) return true;
+  return false;
+}
 
 export type InvestorDiscoveryClass = 'buyers' | 'jv_deals';
 
@@ -130,18 +148,42 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Fetch with timeout AND retry-with-exponential-backoff for transient failures.
+ * Retries on: network errors (fetch failed, ECONNRESET, timeout/abort), HTTP 429,
+ * and HTTP 5xx. Non-transient errors (4xx, parse errors) throw immediately.
+ */
 async function timeoutFetch(fetchImpl: FetchLike, url: string, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetchImpl(url, {
-      ...init,
-      signal: controller.signal,
-      headers: { 'User-Agent': SEC_USER_AGENT, Accept: 'application/json', ...(init?.headers ?? {}) },
-    });
-  } finally {
-    clearTimeout(timer);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= FETCH_MAX_RETRIES; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetchImpl(url, {
+        ...init,
+        signal: controller.signal,
+        headers: { 'User-Agent': SEC_USER_AGENT, Accept: 'application/json', ...(init?.headers ?? {}) },
+      });
+      // Retry transient HTTP statuses (429, 5xx) if we have attempts left.
+      if (isTransientError(null, res.status) && attempt < FETCH_MAX_RETRIES) {
+        await sleep(FETCH_BACKOFF_BASE_MS * 2 ** attempt);
+        continue;
+      }
+      return res;
+    } catch (error) {
+      lastError = error;
+      // Retry transient network errors if we have attempts left.
+      if (isTransientError(error, null) && attempt < FETCH_MAX_RETRIES) {
+        await sleep(FETCH_BACKOFF_BASE_MS * 2 ** attempt);
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  // Exhausted all retries — throw the last transient error.
+  throw lastError ?? new Error('timeoutFetch: retries exhausted');
 }
 
 function sleep(ms: number): Promise<void> {
