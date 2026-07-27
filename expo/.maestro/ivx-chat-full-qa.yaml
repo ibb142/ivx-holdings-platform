@@ -20,12 +20,16 @@ tags:
 # ── Step 1: Launch app ──────────────────────────────────────────
 - launchApp:
     clearState: true
-- assertVisible: "IVX"
+- assertVisible:
+    text: "IVX"
+    timeout: 30000
 
 # ── Step 2: Owner login ─────────────────────────────────────────
 - tapOn:
     id: "home-owner-login-entry"
-- assertVisible: "Owner Login"
+- assertVisible:
+    text: "Owner Login"
+    timeout: 5000
 - tapOn:
     id: "login-email"
 - inputText: ${OWNER_EMAIL}
@@ -34,10 +38,13 @@ tags:
 - inputText: ${OWNER_PASSWORD}
 - tapOn:
     id: "login-submit"
-- assertVisible: "IVX"
+- assertVisible:
+    text: "IVX"
+    timeout: 15000
 
 # ── Step 3: Open IVX Chat ───────────────────────────────────────
-- tapOn: "IVX Owner AI"
+- tapOn:
+    id: "tab-chat"
 - assertVisible:
     id: "ivx-owner-chat-composer-dock"
     timeout: 15000
@@ -71,22 +78,18 @@ tags:
     id: "ivx-owner-chat-send"
 
 # ── Step 8: Confirm message appears exactly once ────────────────
-# Wait for the message to appear, then verify no duplicate renders.
-- assertVisible: "QA test message — automated iOS flow"
-    timeout: 10000
+# Wait for the message to appear in the chat list.
+- assertVisible:
+    text: "QA test message — automated iOS flow"
+    timeout: 15000
 
 # ── Step 9: Receive/simulate authorized realtime reply ──────────
 # If the backend is online, an AI reply should appear.
 # If backend is hibernating, this step may timeout — that is acceptable.
-- runFlow:
-    when:
-      visible:
-        id: "ivx-owner-chat-composer-dock"
-        timeout: 30000
-    commands:
-      - assertVisible:
-          id: "ivx-owner-chat-composer-dock"
-          timeout: 5000
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-composer-dock"
+    timeout: 30000
 
 # ── Step 10: Scroll to older messages ───────────────────────────
 # Swipe UP to scroll toward older messages (inverted list: up = older).
@@ -107,8 +110,8 @@ tags:
     duration: 800
 
 # ── Step 12: Confirm visible position remains stable ────────────
-# After pagination loads older messages, the scroll position should
-# not jump. We verify the composer dock is still accessible (not stuck).
+# After pagination loads older messages, scroll back down to verify
+# the position is not stuck or jumped.
 - swipe:
     start: 50%,70%
     end: 50%,30%
@@ -147,19 +150,21 @@ tags:
     point: 50%,10%
 
 # ── Step 17: Background and resume ──────────────────────────────
-- runBackground:
-    duration: 3000
+- backgroundApp
+- waitForAnimationToEnd
+- runApp
 - assertVisible:
     id: "ivx-owner-chat-composer-dock"
     timeout: 10000
 
 # ── Step 18: Restart app ────────────────────────────────────────
-- killApp
+- stopApp
 - launchApp:
     clearState: false
 
 # ── Step 19: Reopen chat ────────────────────────────────────────
-- tapOn: "IVX Owner AI"
+- tapOn:
+    id: "tab-chat"
 - assertVisible:
     id: "ivx-owner-chat-composer-dock"
     timeout: 15000
