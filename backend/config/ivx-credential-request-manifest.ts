@@ -542,7 +542,7 @@ function toRequestField(entry: IVXCredentialManifestEntry): IVXCredentialRequest
     name: entry.name,
     description: entry.description,
     placeholder: entry.placeholder,
-    isPublic: entry.frontendAllowed || entry.name.startsWith('EXPO_PUBLIC_') || entry.name.startsWith('RORK_PUBLIC_') || entry.name.startsWith('VITE_'),
+    isPublic: entry.frontendAllowed || entry.name.startsWith('EXPO_PUBLIC_') || entry.name.startsWith('VITE_'),
     secret: entry.secret,
     renderTarget: entry.renderTarget,
   };
