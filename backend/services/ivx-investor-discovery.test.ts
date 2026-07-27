@@ -150,12 +150,82 @@ describe('discoverInvestors', () => {
   });
 
   it('returns an honest error when the SEC search fails (never fabricates)', async () => {
+    let calls = 0;
     const result = await discoverInvestors({
-      fetchImpl: async () => new Response('rate limited', { status: 429 }),
+      fetchImpl: async () => {
+        calls += 1;
+        // Always 429 — exhausts retries then surfaces the honest error.
+        return new Response('rate limited', { status: 429 });
+      },
       delayMs: 0,
     });
     expect(result.ok).toBe(false);
     expect(result.error).toContain('429');
     expect(result.investors).toHaveLength(0);
+    // Should have retried: 1 initial + 3 retries = 4 calls.
+    expect(calls).toBe(4);
+  });
+
+  it('retries transient 503 then succeeds (the real-world SEC gateway failure)', async () => {
+    let calls = 0;
+    const result = await discoverInvestors({
+      maxPages: 1,
+      fetchImpl: async (url: string) => {
+        if (url.includes('efts.sec.gov')) {
+          calls += 1;
+          // First two search calls fail with 503 (transient gateway).
+          if (calls <= 2) return new Response('gateway timeout', { status: 503 });
+          // Third call succeeds with the real hit.
+          return new Response(
+            JSON.stringify({
+              hits: {
+                total: { value: 1 },
+                hits: [
+                  { _id: '0001035443-26-000002:primary_doc.xml', _source: { ciks: ['0001035443'], adsh: '0001035443-26-000002', file_date: '2026-01-15' } },
+                ],
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(SAMPLE_FORM_D, { status: 200 });
+      },
+      delayMs: 0,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.investors).toHaveLength(1);
+    expect(result.investors[0].entityName).toBe('ALEXANDRIA REAL ESTATE EQUITIES, INC.');
+    // The search endpoint was hit 3 times (2 failures + 1 success).
+    expect(calls).toBe(3);
+  });
+
+  it('retries transient fetch-failed network error then succeeds', async () => {
+    let searchCalls = 0;
+    const result = await discoverInvestors({
+      maxPages: 1,
+      fetchImpl: async (url: string) => {
+        if (url.includes('efts.sec.gov')) {
+          searchCalls += 1;
+          // First call throws a network error (fetch failed), subsequent succeed.
+          if (searchCalls === 1) throw new Error('fetch failed');
+          return new Response(
+            JSON.stringify({
+              hits: {
+                total: { value: 1 },
+                hits: [
+                  { _id: '0001035443-26-000002:primary_doc.xml', _source: { ciks: ['0001035443'], adsh: '0001035443-26-000002', file_date: '2026-01-15' } },
+                ],
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(SAMPLE_FORM_D, { status: 200 });
+      },
+      delayMs: 0,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.investors).toHaveLength(1);
+    expect(searchCalls).toBe(2);
   });
 });
