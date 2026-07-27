@@ -904,7 +904,7 @@ function generateContract(agent: EnterpriseMasterAgent): AgentContract {
       { name: 'error', type: 'string', required: false, description: 'Error message if status is failure' },
       { name: 'tools_used', type: 'array', required: true, description: 'List of tools accessed during execution' },
     ],
-    allowedTaskTypes: agent.capabilities,
+    allowedTaskTypes: [...agent.capabilities, 'audit', 'heartbeat', 'health_check'],
     prohibitedTaskTypes: [...agent.destructiveActions, 'deploy_to_production', 'modify_production_schema', 'delete_data', 'rotate_secrets', 'revoke_tokens'],
     allowedTools: agent.capabilities,
     prohibitedTools: [...agent.destructiveActions, 'deploy_to_production', 'modify_production_schema', 'delete_data', 'rotate_secrets', 'revoke_tokens', 'drop_table', 'truncate_data', 'disable_health_checks', 'deploy_without_approval', 'execute_trades', 'generate_legal_documents', 'launch_campaigns', 'publish_to_app_store', 'force_deploy', 'rollback_production', 'stop_autonomous_system'],
