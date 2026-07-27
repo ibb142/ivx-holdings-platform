@@ -401,17 +401,17 @@ export function enqueueTask(input: {
     return { ok: false, taskId: null, error: `Agent ${input.agentId} is disabled — cannot accept tasks`, deduplicated: false };
   }
 
-  // Check if task type is allowed for this agent
+  // Check if task type is allowed for this agent — exact word match, not substring
   const isAllowed = contract.allowedTaskTypes.some(
-    (t) => t.toLowerCase().includes(input.taskType.toLowerCase()) || input.taskType.toLowerCase().includes(t.toLowerCase()),
+    (t) => t.toLowerCase() === input.taskType.toLowerCase(),
   );
   if (!isAllowed) {
     return { ok: false, taskId: null, error: `Task type "${input.taskType}" is not allowed for agent ${input.agentId} (${contract.agentName})`, deduplicated: false };
   }
 
-  // Check if task type is prohibited
+  // Check if task type is prohibited — exact word match only
   const isProhibited = contract.prohibitedTaskTypes.some(
-    (t) => t.toLowerCase().includes(input.taskType.toLowerCase()) || input.taskType.toLowerCase().includes(t.toLowerCase()),
+    (t) => t.toLowerCase() === input.taskType.toLowerCase(),
   );
   if (isProhibited) {
     return { ok: false, taskId: null, error: `Task type "${input.taskType}" is prohibited for agent ${input.agentId}`, deduplicated: false };
@@ -639,12 +639,12 @@ export async function executeAgentRun(
   // Step 3: Load agent memory (read previous context if any)
   const memResult = readMemory(`${agentId}_memory`, 'last_context', agentId);
 
-  // Step 4: Permission check
+  // Step 4: Permission check — exact word match, not substring
   const isAllowed = contract.allowedTaskTypes.some(
-    (t) => t.toLowerCase().includes(taskType.toLowerCase()) || taskType.toLowerCase().includes(t.toLowerCase()),
+    (t) => t.toLowerCase() === taskType.toLowerCase(),
   );
   const isProhibited = contract.prohibitedTaskTypes.some(
-    (t) => t.toLowerCase().includes(taskType.toLowerCase()) || taskType.toLowerCase().includes(t.toLowerCase()),
+    (t) => t.toLowerCase() === taskType.toLowerCase(),
   );
 
   if (isProhibited) {
