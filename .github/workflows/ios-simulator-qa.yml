@@ -159,8 +159,10 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          echo "=== Starting xcodebuild ==="
-          xcodebuild \
+          echo "=== Starting xcodebuild (with build action) ==="
+          # NOTE: 'build' action is REQUIRED — without it xcodebuild validates
+          # the project and exits 0 but produces no .app bundle.
+          xcodebuild build \
             -workspace "${{ steps.xcode.outputs.workspace }}" \
             -scheme "${{ steps.xcode.outputs.scheme }}" \
             -sdk iphonesimulator \
@@ -203,16 +205,22 @@ jobs:
         working-directory: expo/ios
         run: |
           echo "=== Searching for .app bundle in build output ==="
-          echo "=== build/ directory tree ==="
-          find build -maxdepth 4 -type d 2>/dev/null | head -30 || echo "No build directory"
+          echo "=== build/ directory tree (first 50 dirs) ==="
+          find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "No build directory"
           echo "=== Searching for .app bundles ==="
           APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "=== Recursive search in entire ios/ ==="
             find . -name "*.app" -type d 2>/dev/null | head -10
             echo "::error::No .app bundle found in build output"
-            echo "=== Full build directory listing ==="
-            find build -type f 2>/dev/null | head -50 || echo "build dir empty or missing"
+            echo "=== Full build directory listing (first 100 files) ==="
+            find build -type f 2>/dev/null | head -100 || echo "build dir empty or missing"
+            echo "=== Build config settings (CONFIGURATION_BUILD_DIR) ==="
+            xcodebuild -workspace "${{ steps.xcode.outputs.workspace }}" -scheme "${{ steps.xcode.outputs.scheme }}" -sdk iphonesimulator -configuration Debug -showBuildSettings 2>&1 | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR' || echo "showBuildSettings failed"
+            echo "### Build Diagnostics" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            find build -maxdepth 5 -type d 2>/dev/null | head -50 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
           # Make path absolute for simctl install
@@ -330,6 +338,7 @@ jobs:
             expo/prebuild-output.log
             expo/ios/build.log
             expo/ios/xcode-list.log
+            expo/ios/xcode-showbuildsettings.log
             expo/maestro-launch-results.xml
             expo/maestro-launch.log
             expo/maestro-chat-results.xml
