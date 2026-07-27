@@ -3922,6 +3922,110 @@ app.post('/api/ivx/developer-deploy/action', async (context) => handleIVXDevelop
 // ---- IVX Render Auto-Deploy Fix — public status + owner-approved fix ----
 app.options('/api/ivx/render-auto-deploy/status', () => publicJson({ ok: true }, 204));
 app.get('/api/ivx/render-auto-deploy/status', async (context) => handleRenderAutoDeployStatusRequest(context.req.raw));
+// ---- IVX Chat QA Evidence Ingestion (owner-only) ----
+app.options('/api/ivx/chat-qa/evidence', () => publicJson({ ok: true }, 204));
+app.post('/api/ivx/chat-qa/evidence', async (context) => {
+  try {
+    const { assertIVXOwnerOnly, ownerOnlyJson } = await import('./api/owner-only');
+    const ownerCtx = await assertIVXOwnerOnly(context.req.raw);
+    const body = await context.req.json();
+    const {
+      reportType,
+      traceId,
+      commitSha,
+      appVersion,
+      devicePlatform,
+      metrics,
+      testResults,
+      ownerComments,
+      linkedTask,
+      linkedCommit,
+    } = body || {};
+    if (!traceId || typeof traceId !== 'string') {
+      return ownerOnlyJson({ ok: false, error: 'Missing traceId' }, 400);
+    }
+    // Persist the QA evidence to the durable store (fire-and-forget).
+    try {
+      const { createServiceClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.IVX_SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        const sb = createServiceClient(supabaseUrl, serviceKey);
+        await sb.from('ivx_chat_qa_evidence').insert({
+          trace_id: traceId,
+          report_type: reportType || 'ivx-chat-qa',
+          commit_sha: commitSha || null,
+          app_version: appVersion || null,
+          device_platform: devicePlatform || null,
+          owner_user_id: ownerCtx.userId || null,
+          owner_email_masked: ownerCtx.email ? `${ownerCtx.email.slice(0, 2)}***@${(ownerCtx.email.split('@')[1] || '').slice(0, 5)}` : null,
+          metrics: metrics ? JSON.stringify(metrics) : null,
+          test_results: testResults ? JSON.stringify(testResults) : null,
+          owner_comments: ownerComments || null,
+          linked_task: linkedTask || 'chat-fix-inverted-flatlist',
+          linked_commit: linkedCommit || '0ae6c19f9795',
+          created_at: new Date().toISOString(),
+        });
+      }
+    } catch (dbError) {
+      console.log('[IVXChatQA] Durable store write failed (non-fatal):', dbError instanceof Error ? dbError.message : 'unknown');
+    }
+    console.log('[IVXChatQA] Evidence ingested:', {
+      traceId,
+      commitSha,
+      devicePlatform,
+      ownerUserId: ownerCtx.userId,
+      linkedTask: linkedTask || 'chat-fix-inverted-flatlist',
+    });
+    return ownerOnlyJson({
+      ok: true,
+      traceId,
+      ingestedAt: new Date().toISOString(),
+      linkedTask: linkedTask || 'chat-fix-inverted-flatlist',
+      linkedCommit: linkedCommit || '0ae6c19f9795',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'owner_auth_required';
+    return new Response(JSON.stringify({ ok: false, error: message }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  }
+});
+app.get('/api/ivx/chat-qa/evidence/:traceId', async (context) => {
+  try {
+    const { assertIVXOwnerOnly, ownerOnlyJson } = await import('./api/owner-only');
+    await assertIVXOwnerOnly(context.req.raw);
+    const traceId = context.req.param('traceId');
+    try {
+      const { createServiceClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.IVX_SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        const sb = createServiceClient(supabaseUrl, serviceKey);
+        const { data, error: dbError } = await sb.from('ivx_chat_qa_evidence')
+          .select('*')
+          .eq('trace_id', traceId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (dbError) {
+          return ownerOnlyJson({ ok: false, error: 'db_query_failed' }, 500);
+        }
+        return ownerOnlyJson({ ok: true, evidence: data });
+      }
+      return ownerOnlyJson({ ok: false, error: 'supabase_not_configured' }, 500);
+    } catch (dbError) {
+      return ownerOnlyJson({ ok: false, error: 'db_error' }, 500);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'owner_auth_required';
+    return new Response(JSON.stringify({ ok: false, error: message }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  }
+});
 app.options('/api/ivx/render-auto-deploy/fix', () => publicJson({ ok: true }, 204));
 app.post('/api/ivx/render-auto-deploy/fix', async (context) => handleRenderAutoDeployFixRequest(context.req.raw));
 // Non-auth self-deploy trigger — backend proxies Render deploy using its own credentials
