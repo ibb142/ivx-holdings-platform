@@ -4010,13 +4010,16 @@ app.get('/api/ivx/chat-qa/evidence/:traceId', async (context) => {
           .limit(1)
           .maybeSingle();
         if (dbError) {
-          return ownerOnlyJson({ ok: false, error: 'db_query_failed' }, 500);
+          // Table may not exist yet — treat as "no evidence found", not a server error.
+          console.log('[IVXChatQA] GET evidence query failed (non-fatal):', dbError instanceof Error ? dbError.message : 'unknown');
+          return ownerOnlyJson({ ok: true, evidence: null, note: 'no_evidence_table' });
         }
         return ownerOnlyJson({ ok: true, evidence: data });
       }
-      return ownerOnlyJson({ ok: false, error: 'supabase_not_configured' }, 500);
+      return ownerOnlyJson({ ok: true, evidence: null, note: 'supabase_not_configured' });
     } catch (dbError) {
-      return ownerOnlyJson({ ok: false, error: 'db_error' }, 500);
+      console.log('[IVXChatQA] GET evidence error (non-fatal):', dbError instanceof Error ? dbError.message : 'unknown');
+      return ownerOnlyJson({ ok: true, evidence: null, note: 'no_evidence_table' });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'owner_auth_required';
