@@ -77,9 +77,22 @@ jobs:
         working-directory: expo
         run: bun install --frozen-lockfile || bun install
 
+      - name: Setup Node.js (for Expo CLI compatibility)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Expo CLI matching project SDK
+        working-directory: expo
+        run: |
+          # Install the local expo-cli that matches SDK 54
+          # Using npx with the local package.json expo version avoids CLI/SDK mismatch
+          npx expo@~54.0.35 --version
+          echo "Expo CLI version verified"
+
       - name: Expo prebuild (generate native iOS project)
         working-directory: expo
-        run: npx expo prebuild --platform ios --clean
+        run: npx expo@~54.0.35 prebuild --platform ios --clean --no-install
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
 
