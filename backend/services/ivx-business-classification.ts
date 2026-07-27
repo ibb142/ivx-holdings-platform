@@ -300,7 +300,6 @@ export async function createBusinessRecord(input: {
 
   // SEC records do not prove buyer intent — flag them.
   const secFilingUrl = input.secFilingUrl ?? null;
-  const hasSecFiling = !!secFilingUrl;
 
   // Default initial status is DISCOVERED. Owner may override with evidence.
   let initialStatus: BusinessStatus = input.initialStatus ?? 'DISCOVERED';
@@ -321,7 +320,7 @@ export async function createBusinessRecord(input: {
     status: initialStatus,
     legalName,
     source,
-    sourceDetail,
+    sourceDetail: input.sourceDetail,
     secFilingUrl,
     fundingTarget: input.fundingTarget ?? null,
     committedCapital: input.committedCapital ?? null,
