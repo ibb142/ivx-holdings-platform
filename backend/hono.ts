@@ -1081,6 +1081,7 @@ import {
   handleListMembershipsRequest,
   handleUpdateVerificationRequest,
 } from './api/ivx-enterprise-registration-api';
+import { registerAgentRoutes } from './api/ivx-agent-api';
 import {
   migrationOptions,
   handleRunMigrationRequest,
@@ -5143,6 +5144,9 @@ app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId/membersh
 app.get('/api/ivx/enterprise-registration/enterprises/:enterpriseId/memberships', async (c) => handleListMembershipsRequest(c.req.raw, c.req.param('enterpriseId')));
 app.options('/api/ivx/enterprise-registration/enterprises/:enterpriseId/verification', () => enterpriseRegistrationOptions());
 app.post('/api/ivx/enterprise-registration/enterprises/:enterpriseId/verification', async (c) => handleUpdateVerificationRequest(c.req.raw, c.req.param('enterpriseId')));
+
+// ── Independent Agent System (100 Agents) ────────────────────────────
+registerAgentRoutes(app);
 
 // ── Database Migration Runner ────────────────────────────────────────
 app.options('/api/ivx/db-migration/run', () => migrationOptions());
