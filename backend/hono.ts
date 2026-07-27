@@ -1044,6 +1044,11 @@ import {
   handleEnterpriseOsAudit,
 } from './api/ivx-enterprise-business-os';
 import {
+  OPTIONS as enterpriseMasterOptions,
+  handleEnterpriseMasterRequest,
+} from './api/ivx-enterprise-master';
+import { startEnterpriseReportScheduler } from './services/ivx-enterprise-reporting';
+import {
   OPTIONS as roleAgentsOptions,
   handleRoleAgentRegistry,
   handleRoleAgentState,
@@ -5047,6 +5052,15 @@ app.get('/api/ivx/enterprise-os/agents', async (c) => handleEnterpriseOsAgents(c
 app.post('/api/ivx/enterprise-os/agents/:agentId/run', async (c) => handleEnterpriseOsRunAgent(c.req.raw, c.req.param('agentId')));
 app.get('/api/ivx/enterprise-os/audit', async (c) => handleEnterpriseOsAudit(c.req.raw));
 
+// ── Enterprise Master AI — Phase 2 (100 AI Agents) ────────────────────
+// All routes under /api/ivx/enterprise-master are owner-only and handled by
+// the enterprise master request router in ivx-enterprise-master.ts.
+app.options('/api/ivx/enterprise-master/*', () => enterpriseMasterOptions());
+app.options('/api/ivx/enterprise-master', () => enterpriseMasterOptions());
+app.get('/api/ivx/enterprise-master', async (c) => handleEnterpriseMasterRequest(c.req.raw));
+app.get('/api/ivx/enterprise-master/*', async (c) => handleEnterpriseMasterRequest(c.req.raw));
+app.post('/api/ivx/enterprise-master/*', async (c) => handleEnterpriseMasterRequest(c.req.raw));
+
 // ── Project Engagement (Instagram-Style Cards) ───────────────────────
 const PROJECT_ENGAGEMENT_PATH = '/api/projects/:projectId/engagement';
 app.options(`${PROJECT_ENGAGEMENT_PATH}`, (c) => projectEngagementOptions(c));
@@ -5755,6 +5769,7 @@ try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI
 try { startOwnerAITaskWorker(); } catch (err) { console.warn('[IVXOwnerAI-Hono] owner AI durable task worker failed to start:', err instanceof Error ? err.message : err); }
 try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
 try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
+try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
 
 // ============================================================================
 // IVX Enterprise Time Zone System — register all timezone routes
