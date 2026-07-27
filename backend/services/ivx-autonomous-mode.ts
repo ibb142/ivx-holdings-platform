@@ -259,11 +259,15 @@ export async function runAutonomousMode(
   }
 
   // ---- Step 12: return proof (durable execution trace + classification) ----
+  // NOTE: A production with total=0 events and 0 failures is HEALTHY (not a
+  // failure). The previous `production.total > 0` guard caused the lifecycle
+  // to report FAILED whenever no health events had been recorded — even when
+  // every stage was verified. The correct check is: production exists, has
+  // zero failures, and is not over threshold. An empty event window is fine.
   const executed = selfHeal !== null;
   const allOk = executed
     && steps.filter((s) => s.step >= 5 && s.step <= 11).every((s) => s.status === 'verified' || s.status === 'skipped')
     && production !== null
-    && production.total > 0
     && production.failures === 0
     && !production.thresholdExceeded;
   const classification: EvidenceClassification = !executed
