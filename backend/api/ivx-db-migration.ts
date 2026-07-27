@@ -124,30 +124,37 @@ export async function handleRunMigrationRequest(request: Request): Promise<Respo
     return jsonResponse({ ok: false, error: 'migrationName is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
   }
 
-  // Only allow known migrations
+  // Allow inline SQL to be passed directly (bypasses disk read — useful when the
+  // file on the server is stale and a deploy hasn't completed yet).
+  const inlineSql = typeof body.sql === 'string' && body.sql.trim() ? String(body.sql) : null;
+
+  // Only allow known migrations (when reading from disk)
   const ALLOWED_MIGRATIONS: Record<string, string> = {
     'IVX-ENTERPRISE-REGISTRATION': path.join(process.cwd(), 'expo', 'supabase', 'IVX-ENTERPRISE-REGISTRATION.sql'),
   };
 
-  const filePath = ALLOWED_MIGRATIONS[migrationName];
-  if (!filePath) {
-    return jsonResponse({
-      ok: false,
-      error: `Unknown migration: ${migrationName}. Allowed: ${Object.keys(ALLOWED_MIGRATIONS).join(', ')}`,
-      deploymentMarker: DEPLOYMENT_MARKER,
-    }, 400);
-  }
-
-  // Read the SQL file
+  // Read the SQL — either inline from the request body, or from the server disk.
   let sql: string;
-  try {
-    sql = await readFile(filePath, 'utf8');
-  } catch {
-    return jsonResponse({
-      ok: false,
-      error: `Migration file not found on server: ${filePath}`,
-      deploymentMarker: DEPLOYMENT_MARKER,
-    }, 404);
+  if (inlineSql) {
+    sql = inlineSql;
+  } else {
+    const filePath = ALLOWED_MIGRATIONS[migrationName];
+    if (!filePath) {
+      return jsonResponse({
+        ok: false,
+        error: `Unknown migration: ${migrationName}. Allowed: ${Object.keys(ALLOWED_MIGRATIONS).join(', ')}`,
+        deploymentMarker: DEPLOYMENT_MARKER,
+      }, 400);
+    }
+    try {
+      sql = await readFile(filePath, 'utf8');
+    } catch {
+      return jsonResponse({
+        ok: false,
+        error: `Migration file not found on server: ${filePath}`,
+        deploymentMarker: DEPLOYMENT_MARKER,
+      }, 404);
+    }
   }
 
   // Execute via Management API
