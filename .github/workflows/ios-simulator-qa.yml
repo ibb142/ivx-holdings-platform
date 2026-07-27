@@ -175,13 +175,23 @@ jobs:
         id: app
         working-directory: expo/ios
         run: |
-          APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
+          echo "=== Searching for .app bundle in build output ==="
+          echo "=== build/ directory tree ==="
+          find build -maxdepth 4 -type d 2>/dev/null | head -30 || echo "No build directory"
+          echo "=== Searching for .app bundles ==="
+          APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           if [ -z "$APP_PATH" ]; then
+            echo "=== Recursive search in entire ios/ ==="
+            find . -name "*.app" -type d 2>/dev/null | head -10
             echo "::error::No .app bundle found in build output"
+            echo "=== Full build directory listing ==="
+            find build -type f 2>/dev/null | head -50 || echo "build dir empty or missing"
             exit 1
           fi
-          echo "path=$APP_PATH" >> $GITHUB_OUTPUT
-          echo "App bundle: $APP_PATH"
+          # Make path absolute for simctl install
+          APP_PATH_ABS="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
+          echo "path=$APP_PATH_ABS" >> $GITHUB_OUTPUT
+          echo "App bundle: $APP_PATH_ABS"
 
       - name: Boot iOS Simulator
         id: sim
