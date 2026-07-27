@@ -424,7 +424,7 @@ export function registerAgentRoutes(app: Hono): void {
     }> = [];
 
     for (const contract of ALL_AGENT_CONTRACTS) {
-      const taskType = contract.allowedTools[0] || 'audit';
+      const taskType = 'audit';
       const result = await executeAgentRun(contract.agentId, taskType, { controlled: true });
       results.push({
         agentId: contract.agentId,
