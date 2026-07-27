@@ -178,9 +178,28 @@ export function toSnakeCase(value: string): string {
 
 function pluralSnake(value: string): string {
   const snake = toSnakeCase(value);
-  if (snake.endsWith('y')) return `${snake.slice(0, -1)}ies`;
-  if (snake.endsWith('s')) return snake;
+  // Words ending in 'y' (preceded by a consonant) → 'ies'
+  if (snake.endsWith('y') && !isVowel(snake.charAt(snake.length - 2))) {
+    return `${snake.slice(0, -1)}ies`;
+  }
+  // Words ending in 's', 'x', 'z', 'ch', 'sh' → 'es' (e.g. address→addresses, box→boxes, buzz→buzzes, church→churches)
+  if (snake.endsWith('s') || snake.endsWith('x') || snake.endsWith('z') || snake.endsWith('ch') || snake.endsWith('sh')) {
+    // Words already ending in 'ss' get 'es' (glass→glasses, address→addresses)
+    if (snake.endsWith('ss') || snake.endsWith('us') || snake.endsWith('is')) {
+      return `${snake}es`;
+    }
+    // Singular words ending in 's' that aren't already plural — add 'es'
+    // But if the word already looks plural (ends in 'ses', 'xes', 'zes'), leave it
+    if (snake.endsWith('ses') || snake.endsWith('xes') || snake.endsWith('zes')) {
+      return snake;
+    }
+    return `${snake}es`;
+  }
   return `${snake}s`;
+}
+
+function isVowel(char: string): boolean {
+  return 'aeiou'.includes(char.toLowerCase());
 }
 
 // ---------------------------------------------------------------------------

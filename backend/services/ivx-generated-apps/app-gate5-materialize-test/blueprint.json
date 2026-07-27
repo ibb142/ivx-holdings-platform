@@ -1,0 +1,210 @@
+{
+  "marker": "ivx-app-generator-2026-06-07",
+  "generatedAt": "2026-07-27T12:14:29.121Z",
+  "appId": "app-gate5-materialize-test",
+  "spec": {
+    "name": "Gate5 Materialize Test",
+    "kind": "expo_app",
+    "features": [
+      "Home"
+    ],
+    "entities": [
+      {
+        "name": "Item",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  },
+  "architecture": {
+    "pattern": "Layered MVVM (client) + service-oriented backend",
+    "layers": [
+      {
+        "name": "Presentation",
+        "responsibility": "Screens, navigation, and reusable UI components.",
+        "components": [
+          "HomeScreen"
+        ]
+      },
+      {
+        "name": "State",
+        "responsibility": "Typed context hooks + React Query for server state.",
+        "components": [
+          "useItems"
+        ]
+      },
+      {
+        "name": "API",
+        "responsibility": "Owner-gated HTTP handlers that validate input and call services.",
+        "components": [
+          "ItemApi"
+        ]
+      },
+      {
+        "name": "Domain services",
+        "responsibility": "Pure, deterministic business logic + durable stores.",
+        "components": [
+          "ItemService"
+        ]
+      },
+      {
+        "name": "Data",
+        "responsibility": "Persistence schema and migrations.",
+        "components": [
+          "items"
+        ]
+      }
+    ],
+    "dataFlow": [
+      "UI event → state hook → API call",
+      "API handler validates input + auth",
+      "Service applies business rules",
+      "Store reads/writes persistence",
+      "Typed result returned to caller"
+    ]
+  },
+  "frontend": [
+    {
+      "path": "app/gate5-materialize-test/_layout.tsx",
+      "kind": "frontend",
+      "purpose": "Root layout / navigation entry for Gate5 Materialize Test.",
+      "contents": "export default function Gate5MaterializeTestLayout() {\n  // Navigation + providers for Gate5 Materialize Test.\n  return null;\n}\n"
+    },
+    {
+      "path": "app/gate5-materialize-test/home.tsx",
+      "kind": "frontend",
+      "purpose": "Feature screen: Home.",
+      "contents": "export default function HomeScreen() {\n  // Home\n  return null;\n}\n"
+    },
+    {
+      "path": "app/gate5-materialize-test/item-list.tsx",
+      "kind": "frontend",
+      "purpose": "List + detail screen for Item.",
+      "contents": "export default function ItemListScreen() {\n  // Renders Item records from useItems().\n  return null;\n}\n"
+    }
+  ],
+  "backend": [
+    {
+      "path": "backend/types/gate5-materialize-test-item.ts",
+      "kind": "backend",
+      "purpose": "Type definition for Item.",
+      "contents": "export type Item = {\n  id: string;\n  title: string;\n};\n"
+    },
+    {
+      "path": "backend/services/gate5-materialize-test-item-store.ts",
+      "kind": "backend",
+      "purpose": "Durable store + CRUD for Item.",
+      "contents": "import type { Item } from '../types/gate5-materialize-test-item';\n\nexport async function listItems(): Promise<Item[]> {\n  return [];\n}\n\nexport async function createItem(input: Omit<Item, 'id'>): Promise<Item> {\n  return { id: crypto.randomUUID(), ...input } as Item;\n}\n"
+    },
+    {
+      "path": "backend/api/gate5-materialize-test-item.ts",
+      "kind": "backend",
+      "purpose": "Owner-gated HTTP handlers for Item.",
+      "contents": "import { listItems, createItem } from '../services/gate5-materialize-test-item-store';\n\nexport async function handleItemList(): Promise<Response> {\n  const items = await listItems();\n  return Response.json({ ok: true, items });\n}\n\nexport async function handleItemCreate(request: Request): Promise<Response> {\n  const body = await request.json();\n  const created = await createItem(body);\n  return Response.json({ ok: true, created }, { status: 201 });\n}\n"
+    }
+  ],
+  "database": {
+    "engine": "postgres",
+    "tables": [
+      {
+        "name": "items",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false,
+            "primaryKey": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "nullable": true,
+            "primaryKey": false
+          }
+        ]
+      }
+    ],
+    "migrations": [
+      "create table if not exists items (\n  id uuid primary key not null,\n  title text\n);"
+    ]
+  },
+  "tests": [
+    {
+      "path": "backend/services/gate5-materialize-test-item-store.test.ts",
+      "kind": "test",
+      "purpose": "Unit test for Item store CRUD.",
+      "contents": "import { describe, expect, it } from 'bun:test';\nimport { createItem, listItems } from './gate5-materialize-test-item-store';\n\ndescribe('Item store', () => {\n  it('creates and lists Item', async () => {\n    const before = await listItems();\n    expect(Array.isArray(before)).toBe(true);\n  });\n});\n"
+    }
+  ],
+  "validation": {
+    "passed": true,
+    "summary": "Blueprint validated: 5 checks passed.",
+    "checks": [
+      {
+        "check": "spec_has_name",
+        "passed": true,
+        "detail": "App name \"Gate5 Materialize Test\"."
+      },
+      {
+        "check": "has_features_or_entities",
+        "passed": true,
+        "detail": "1 feature(s), 1 entity(ies)."
+      },
+      {
+        "check": "entity_wired:item",
+        "passed": true,
+        "detail": "Item: table=true, service=true, test=true."
+      },
+      {
+        "check": "frontend_entry_present",
+        "passed": true,
+        "detail": "3 frontend file(s)."
+      },
+      {
+        "check": "deployment_plan_present",
+        "passed": true,
+        "detail": "5 deployment step(s) targeting Expo / EAS + Render backend."
+      }
+    ]
+  },
+  "deploymentPlan": {
+    "target": "Expo / EAS + Render backend",
+    "steps": [
+      {
+        "step": 1,
+        "title": "Run validation",
+        "detail": "Type-check, lint, and run the generated unit tests.",
+        "ownerApprovalRequired": false
+      },
+      {
+        "step": 2,
+        "title": "Open PR",
+        "detail": "Create a feature branch with the Gate5 Materialize Test scaffold and open a pull request.",
+        "ownerApprovalRequired": false
+      },
+      {
+        "step": 3,
+        "title": "Apply DB migrations",
+        "detail": "Run the generated migrations against the target database.",
+        "ownerApprovalRequired": true
+      },
+      {
+        "step": 4,
+        "title": "Merge + deploy",
+        "detail": "Merge to main → CI builds and Render auto-deploys.",
+        "ownerApprovalRequired": true
+      },
+      {
+        "step": 5,
+        "title": "Verify production",
+        "detail": "Confirm /health + smoke-test the new routes before sign-off.",
+        "ownerApprovalRequired": false
+      }
+    ]
+  },
+  "fileCount": 7
+}
