@@ -76,6 +76,19 @@ import {
   handleOwnerOverride as handleScopedMemoryOwnerOverride,
   handleValidate as handleScopedMemoryValidate,
 } from './api/ivx-scoped-memory';
+import {
+  OPTIONS as businessClassificationOptions,
+  handleStatus as handleBusinessClassificationStatus,
+  handleCreate as handleBusinessClassificationCreate,
+  handleTransition as handleBusinessClassificationTransition,
+  handleOwnerOverride as handleBusinessClassificationOwnerOverride,
+  handleReconcile as handleBusinessClassificationReconcile,
+  handleGetRecord as handleBusinessClassificationGetRecord,
+  handleGetHistory as handleBusinessClassificationGetHistory,
+  handleList as handleBusinessClassificationList,
+  handleValidateTransition as handleBusinessClassificationValidateTransition,
+  handleReconcileTotal as handleBusinessClassificationReconcileTotal,
+} from './api/ivx-business-classification';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -128,6 +141,28 @@ app.options('/api/ivx/scoped-memory/owner-override', () => scopedMemoryOptions()
 app.post('/api/ivx/scoped-memory/owner-override', async (context) => handleScopedMemoryOwnerOverride(context.req.raw));
 app.options('/api/ivx/scoped-memory/validate', () => scopedMemoryOptions());
 app.post('/api/ivx/scoped-memory/validate', async (context) => handleScopedMemoryValidate(context.req.raw));
+
+// GATE 2 — Business-Data Classification (14 statuses, transition rules, audit history, reconciliation)
+app.options('/api/ivx/business-classification/status', () => businessClassificationOptions());
+app.get('/api/ivx/business-classification/status', async (context) => handleBusinessClassificationStatus(context.req.raw));
+app.options('/api/ivx/business-classification/create', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/create', async (context) => handleBusinessClassificationCreate(context.req.raw));
+app.options('/api/ivx/business-classification/transition', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/transition', async (context) => handleBusinessClassificationTransition(context.req.raw));
+app.options('/api/ivx/business-classification/owner-override', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/owner-override', async (context) => handleBusinessClassificationOwnerOverride(context.req.raw));
+app.options('/api/ivx/business-classification/reconcile', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/reconcile', async (context) => handleBusinessClassificationReconcile(context.req.raw));
+app.options('/api/ivx/business-classification/list', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/list', async (context) => handleBusinessClassificationList(context.req.raw));
+app.options('/api/ivx/business-classification/validate-transition', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/validate-transition', async (context) => handleBusinessClassificationValidateTransition(context.req.raw));
+app.options('/api/ivx/business-classification/reconcile-total', () => businessClassificationOptions());
+app.post('/api/ivx/business-classification/reconcile-total', async (context) => handleBusinessClassificationReconcileTotal(context.req.raw));
+app.options('/api/ivx/business-classification/record/:id', () => businessClassificationOptions());
+app.get('/api/ivx/business-classification/record/:id', async (context) => handleBusinessClassificationGetRecord(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/business-classification/history/:id', () => businessClassificationOptions());
+app.get('/api/ivx/business-classification/history/:id', async (context) => handleBusinessClassificationGetHistory(context.req.raw, context.req.param('id')));
 
 startAutonomousQAScheduler();
 
