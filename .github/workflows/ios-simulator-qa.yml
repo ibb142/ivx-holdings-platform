@@ -68,12 +68,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Setup Node.js
+      - name: Setup Node.js (Bun removed — its module system breaks Expo config loading)
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -89,15 +84,51 @@ jobs:
       - name: Verify Expo CLI is locally installed
         working-directory: expo
         run: |
+          echo "=== Node version ==="
+          node --version
+          echo "=== npm version ==="
+          npm --version
+          echo "=== expo package version ==="
           node -e "console.log('expo version:', require('expo/package.json').version)"
-          ls -la node_modules/.bin/expo
-          npx --no-install expo --version
+          echo "=== .bin/expo symlink ==="
+          ls -la node_modules/.bin/expo 2>/dev/null || echo "No .bin/expo symlink"
+          echo "=== Try direct CLI ==="
+          node node_modules/expo/cli.js --version 2>&1 || echo "Direct CLI failed"
+          echo "=== Try npx --no-install ==="
+          npx --no-install expo --version 2>&1 || echo "npx --no-install failed"
 
       - name: Expo prebuild (generate native iOS project)
         working-directory: expo
-        run: npx --no-install expo prebuild --platform ios --clean --no-install
+        continue-on-error: true
+        id: prebuild
+        run: |
+          set -x
+          echo "=== Starting prebuild ==="
+          node node_modules/expo/cli.js prebuild --platform ios --clean --no-install 2>&1 | tee prebuild-output.log
+          echo "=== Prebuild exit code: $? ==="
+          if [ -d "ios" ]; then
+            echo "ios directory exists — prebuild may have succeeded"
+            ls -la ios/ | head -10
+          else
+            echo "ios directory does NOT exist — prebuild failed"
+          fi
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Check prebuild result
+        working-directory: expo
+        id: prebuild-check
+        run: |
+          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "Prebuild succeeded — ios directory with Podfile exists"
+          else
+            echo "result=failed" >> $GITHUB_OUTPUT
+            echo "Prebuild failed — no ios directory"
+            echo "=== Full prebuild output ==="
+            cat prebuild-output.log 2>/dev/null || echo "No output log found"
+            exit 1
+          fi
 
       - name: Install CocoaPods
         working-directory: expo/ios
