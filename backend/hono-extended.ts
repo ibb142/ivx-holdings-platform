@@ -89,6 +89,24 @@ import {
   handleValidateTransition as handleBusinessClassificationValidateTransition,
   handleReconcileTotal as handleBusinessClassificationReconcileTotal,
 } from './api/ivx-business-classification';
+import {
+  OPTIONS as failureRecoveryOptions,
+  handleRecoveryStatusRequest,
+  handleRecoveryRegisterRequest,
+  handleRecoveryCheckpointRequest,
+  handleRecoveryCompleteRequest,
+  handleRecoveryFailRequest,
+  handleRecoveryResumeRequest,
+  handleRecoveryGetJobRequest,
+  handleRecoveryListCheckpointsRequest,
+  handleRecoveryListDeadletterRequest,
+  handleRecoveryInspectDeadletterRequest,
+  handleRecoveryReplayDeadletterRequest,
+  handleRecoveryDiscardDeadletterRequest,
+  handleRecoveryRehydrateRequest,
+  handleRecoveryInjectFailureRequest,
+  handleRecoveryExecuteRequest,
+} from './api/ivx-failure-recovery';
 
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (context) => handleAutonomousJobLedgerGet(context.req.raw));
@@ -163,6 +181,38 @@ app.options('/api/ivx/business-classification/record/:id', () => businessClassif
 app.get('/api/ivx/business-classification/record/:id', async (context) => handleBusinessClassificationGetRecord(context.req.raw, context.req.param('id')));
 app.options('/api/ivx/business-classification/history/:id', () => businessClassificationOptions());
 app.get('/api/ivx/business-classification/history/:id', async (context) => handleBusinessClassificationGetHistory(context.req.raw, context.req.param('id')));
+
+// GATE 3 — Controlled Failure and Recovery (checkpointing, retry, deadletter, idempotency, boot rehydration)
+app.options('/api/ivx/failure-recovery/status', () => failureRecoveryOptions());
+app.get('/api/ivx/failure-recovery/status', async (context) => handleRecoveryStatusRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/register', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/register', async (context) => handleRecoveryRegisterRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/checkpoint', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/checkpoint', async (context) => handleRecoveryCheckpointRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/complete', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/complete', async (context) => handleRecoveryCompleteRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/fail', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/fail', async (context) => handleRecoveryFailRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/resume', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/resume', async (context) => handleRecoveryResumeRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/job/:id', () => failureRecoveryOptions());
+app.get('/api/ivx/failure-recovery/job/:id', async (context) => handleRecoveryGetJobRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/failure-recovery/checkpoints', () => failureRecoveryOptions());
+app.get('/api/ivx/failure-recovery/checkpoints', async (context) => handleRecoveryListCheckpointsRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/deadletter', () => failureRecoveryOptions());
+app.get('/api/ivx/failure-recovery/deadletter', async (context) => handleRecoveryListDeadletterRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/deadletter/:id/inspect', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/deadletter/:id/inspect', async (context) => handleRecoveryInspectDeadletterRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/failure-recovery/deadletter/:id/replay', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/deadletter/:id/replay', async (context) => handleRecoveryReplayDeadletterRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/failure-recovery/deadletter/:id/discard', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/deadletter/:id/discard', async (context) => handleRecoveryDiscardDeadletterRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/failure-recovery/rehydrate', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/rehydrate', async (context) => handleRecoveryRehydrateRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/inject-failure', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/inject-failure', async (context) => handleRecoveryInjectFailureRequest(context.req.raw));
+app.options('/api/ivx/failure-recovery/execute', () => failureRecoveryOptions());
+app.post('/api/ivx/failure-recovery/execute', async (context) => handleRecoveryExecuteRequest(context.req.raw));
 
 startAutonomousQAScheduler();
 
