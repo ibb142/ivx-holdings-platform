@@ -76,7 +76,7 @@ export type RuntimeVariableStatus = {
   /** Length of the resolved value (0 when absent) — never the value itself. */
   valueLength: number;
   status: VarStatus;
-  /** True for EXPO_PUBLIC_* / VITE_* / RORK_PUBLIC_* — inlined into the client bundle. */
+  /** True for EXPO_PUBLIC_* / VITE_* — inlined into the client bundle. */
   publicWarning: boolean;
   lastVerifiedAt: string | null;
   verifyDetail: string | null;
@@ -116,9 +116,9 @@ export function maskSecret(value: string): string {
   return `${value.slice(0, 3)}${'*'.repeat(Math.max(4, len - 5))}${value.slice(-2)}`;
 }
 
-/** True for client-inlined public variables (EXPO_PUBLIC_ / VITE_ / RORK_PUBLIC_). */
+/** True for client-inlined public variables (EXPO_PUBLIC_ / VITE_). */
 export function isPublicClientVar(name: string): boolean {
-  return /^(EXPO_PUBLIC_|VITE_|RORK_PUBLIC_)/.test(name);
+  return /^(EXPO_PUBLIC_|VITE_)/.test(name);
 }
 
 /**
