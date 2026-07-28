@@ -24,30 +24,49 @@ const path = require('path');
 const fmtPatchCode = `
   # === FMT Xcode 26 consteval fix ===
   # Fix fmt 11.0.2 consteval errors with Xcode 26 / Apple Clang 21+.
-  # base.h unconditionally #defines FMT_USE_CONSTEVAL inside its detection
-  # chain, so -D flags are overwritten. We patch the header directly AND
-  # force C++17 mode for the fmt target only.
+  # The FMT_STRING macro calls consteval functions that fail under C++20.
+  # Strategy: (1) force C++17 for fmt target, (2) aggressively patch base.h
+  # to force FMT_USE_CONSTEVAL=0 by prepending an override, (3) patch all
+  # fmt headers that reference FMT_USE_CONSTEVAL.
   installer.pods_project.targets.each do |target|
     if target.name == 'fmt'
       target.build_configurations.each do |config|
         config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        # Also add a preprocessor define as belt-and-suspenders
+        defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+        defs << 'FMT_USE_CONSTEVAL=0'
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
       end
     end
   end
 
-  # Also patch base.h to force FMT_USE_CONSTEVAL=0 (belt-and-suspenders)
+  # Aggressively patch base.h — prepend #define FMT_USE_CONSTEVAL 0 at the
+  # very top, before any detection logic runs. This is simpler and more
+  # reliable than regex-replacing specific lines.
   fmt_base = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
   if File.exist?(fmt_base)
     content = File.read(fmt_base)
     unless content.include?('FMT_USE_CONSTEVAL_override_Xcode26')
-      patched = content.gsub(
-        /^(#elif defined\\(__cpp_consteval\\)\\n# define FMT_USE_CONSTEVAL) 1/,
-        "// FMT_USE_CONSTEVAL_override_Xcode26\\n\\\\1 0"
-      )
-      if patched != content
-        File.chmod(0644, fmt_base)
-        File.write(fmt_base, patched)
-        puts "Patch: fmt/base.h FMT_USE_CONSTEVAL=0 for Xcode 26"
+      override = "// FMT_USE_CONSTEVAL_override_Xcode26\\n// Force-disable consteval for fmt 11.0.2 + Xcode 26 compatibility\\n#ifndef FMT_USE_CONSTEVAL\\n#define FMT_USE_CONSTEVAL 0\\n#endif\\n\n"
+      File.chmod(0644, fmt_base)
+      File.write(fmt_base, override + content)
+      puts "Patch: fmt/base.h FMT_USE_CONSTEVAL=0 prepended for Xcode 26"
+    end
+  end
+
+  # Also patch format-inl.h and other fmt headers that may use FMT_STRING
+  fmt_include = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt')
+  if File.directory?(fmt_include)
+    Dir.glob(File.join(fmt_include, '*.h')).each do |header|
+      content = File.read(header)
+      unless content.include?('FMT_USE_CONSTEVAL_override_Xcode26')
+        # Only patch headers that reference FMT_STRING or FMT_USE_CONSTEVAL
+        if content.include?('FMT_STRING') || content.include?('FMT_USE_CONSTEVAL')
+          override = "// FMT_USE_CONSTEVAL_override_Xcode26\\n#ifndef FMT_USE_CONSTEVAL\\n#define FMT_USE_CONSTEVAL 0\\n#endif\\n\n"
+          File.chmod(0644, header)
+          File.write(header, override + content)
+          puts "Patch: #{File.basename(header)} FMT_USE_CONSTEVAL=0 for Xcode 26"
+        end
       end
     end
   end
