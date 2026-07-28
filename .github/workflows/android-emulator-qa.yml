@@ -102,14 +102,28 @@ jobs:
           echo "=== Expo package version ==="
           node -e "console.log('expo:', require('expo/package.json').version)"
 
-      - name: Expo prebuild (generates android dir + runs config plugins)
+      - name: Expo prebuild (generates native Android project)
         working-directory: expo
         run: |
           npx expo prebuild --platform android --clean --no-install
-          echo "=== Verify withDebuggableVariants plugin ran ==="
-          grep -n "debuggableVariants" android/app/build.gradle || echo "WARNING: debuggableVariants not found!"
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Patch build.gradle — force JS bundle in debug builds
+        working-directory: expo
+        run: |
+          echo "=== Before patch ==="
+          grep -n "debuggableVariants" android/app/build.gradle || echo "(not found — default is [\"debug\" which skips JS bundling)"
+          # Replace the commented-out debuggableVariants line with an active one
+          # This forces ALL variants (including debug) to bundle JS + assets
+          sed -i 's|// debuggableVariants = \["liteDebug", "prodDebug"\]|debuggableVariants = []|' android/app/build.gradle
+          echo "=== After patch ==="
+          grep -n "debuggableVariants" android/app/build.gradle
+          if ! grep -q 'debuggableVariants = \[\]' android/app/build.gradle; then
+            echo "=== Fallback: inject after react { ==="
+            sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
+            grep -n "debuggableVariants" android/app/build.gradle
+          fi
 
       - name: Build Android APK (debug with JS bundle + assets)
         id: build
