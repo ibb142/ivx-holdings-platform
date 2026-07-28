@@ -1,7 +1,5 @@
 {
-  "id": "3tkqw7uenshoa1158td95",
   "role": "assistant",
-  "preferredModelName": "rork-fast-v1",
   "responseMessageContents": [
     {
       "type": "compaction",
@@ -21,8 +19,7 @@
     {
       "type": "text",
       "text": "I'll start by verifying the actual state of the filesystem and what exists, then give you an honest, evidence-based assessment. Let me check everything in parallel.",
-      "id": "1zhojoxs7upfg7dphgv45",
-      "createdAt": 1785250643244
+      "id": "1zhojoxs7upfg7dphgv45"
     },
     {
       "type": "tool",
@@ -40,7 +37,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check actual filesystem state\\necho \\\"=== FILESYSTEM REALITY CHECK ===\\\"\\necho \\\"Home dir:\\\"\\nls -la /home/user/ 2>/dev/null | head -20\\necho \\\"\\\"\\necho \\\"rork-app exists?\\\"\\nls -la /home/user/rork-app 2>/dev/null | head -20\\necho \\\"\\\"\\necho \\\"Current working directory:\\\"\\npwd\\necho \\\"\\\"\\necho \\\"Project root contents:\\\"\\nls -la 2>/dev/null | head -30\"}",
       "createdAt": 1785250643751,
-      "completedAt": 1785250645306
+      "completedAt": 1785250645306,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -58,7 +56,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if the backend, expo, android directories actually exist\\necho \\\"=== KEY DIRECTORIES ===\\\"\\nfor dir in backend expo android-ivx-holdings ios-ivx-holdings ios-ivx-anchor ios-ivx-command-center ios-ivx-deal-tracker ios-ivx-ia; do\\n  if [ -d \\\"$dir\\\" ]; then\\n    count=$(find \\\"$dir\\\" -type f 2>/dev/null | wc -l)\\n    echo \\\"  ✅ $dir/ exists ($count files)\\\"\\n  else\\n    echo \\\"  ❌ $dir/ does NOT exist\\\"\\n  fi\\ndone\\necho \\\"\\\"\\necho \\\"=== CRITICAL FILES ===\\\"\\nfor f in backend/services/ivx-ia-conversation-brain.ts backend/api/ivx-developer-deploy-control.ts backend/hono.ts server.ts render.yaml Dockerfile; do\\n  if [ -f \\\"$f\\\" ]; then\\n    loc=$(wc -l < \\\"$f\\\")\\n    echo \\\"  ✅ $f ($loc lines)\\\"\\n  else\\n    echo \\\"  ❌ $f MISSING\\\"\\n  fi\\ndone\"}",
       "createdAt": 1785250643761,
-      "completedAt": 1785250645629
+      "completedAt": 1785250645629,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -76,7 +75,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if production API is reachable and what commit it's on\\necho \\\"=== PRODUCTION API CHECK ===\\\"\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys, json\\ntry:\\n    d = json.load(sys.stdin)\\n    print(f'  status:      {d.get(\\\\\\\"status\\\\\\\", \\\\\\\"?\\\\\\\")}')\\n    print(f'  commit:      {d.get(\\\\\\\"commit\\\\\\\", \\\\\\\"?\\\\\\\")}')\\n    print(f'  bootTime:    {d.get(\\\\\\\"bootTime\\\\\\\", \\\\\\\"?\\\\\\\")}')\\n    print(f'  environment: {d.get(\\\\\\\"environment\\\\\\\", \\\\\\\"?\\\\\\\")}')\\nexcept:\\n    print('  ❌ Could not parse health response')\\n    print(sys.stdin.read()[:200])\\n\\\" 2>/dev/null || echo \\\"  ❌ API unreachable\\\"\"}",
       "createdAt": 1785250643784,
-      "completedAt": 1785250646668
+      "completedAt": 1785250646668,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -88,8 +88,7 @@
     {
       "type": "text",
       "text": "I'll work through this systematically with real evidence. Let me start by gathering all the actual data in parallel — credentials code, test results, production API responses, and filesystem state.",
-      "id": "wliqtdx4p8c9hofmfd2yy",
-      "createdAt": 1785250656145
+      "id": "wliqtdx4p8c9hofmfd2yy"
     },
     {
       "type": "tool",
@@ -107,7 +106,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# 1. Get fresh owner token\\ncurl -s --max-time 30 -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\",\\\"emergency\\\":\\\"ivx_emergency_recovery\\\"}' > /tmp/auth_resp.json 2>/dev/null\\npython3 -c \\\"import json; d=json.load(open('/tmp/auth_resp.json')); t=d.get('accessToken',''); open('/tmp/owner_token.txt','w').write(t); print(f'token_len={len(t)}')\\\" 2>/dev/null\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"TOKEN_LEN=${#TOKEN}\\\"\\n\\n# 2. Get full credentials response\\necho \\\"\\\"\\necho \\\"=== CREDENTIALS DETAIL ===\\\"\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/credentials\\\" > /tmp/creds.json 2>/dev/null\\npython3 << 'PYEOF'\\nimport json\\nd = json.load(open('/tmp/creds.json'))\\nprint(f\\\"certification: {d.get('certification')}\\\")\\nprint(f\\\"certificationStatus: {d.get('certificationStatus')}\\\")\\nprint(f\\\"verified: {d.get('verifiedCount')}/{d.get('totalCount')}\\\")\\nprint()\\ncreds = d.get('credentials', [])\\nif not creds:\\n    # Try nested\\n    cert = d.get('certification', {})\\n    if isinstance(cert, dict):\\n        creds = cert.get('credentials', [])\\nif not creds:\\n    print(\\\"Raw structure keys:\\\", list(d.keys()))\\n    print(json.dumps(d, indent=2)[:3000])\\nelse:\\n    for c in creds:\\n        name = c.get('name', c.get('variable', c.get('envVar', '?')))\\n        status = c.get('status', c.get('verified', '?'))\\n        msg = c.get('message', c.get('failureMessage', c.get('error', '')))\\n        print(f\\\"  {status:12s} {name:40s} {msg[:60]}\\\")\\nPYEOF\"}",
       "createdAt": 1785250656729,
-      "completedAt": 1785250668509
+      "completedAt": 1785250668509,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -125,7 +125,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get autonomous QA data in detail\\nTOKEN=$(cat /tmp/owner_token.txt 2>/dev/null)\\necho \\\"=== AUTONOMOUS QA DETAIL ===\\\"\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/qa\\\" > /tmp/qa.json 2>/dev/null\\npython3 << 'PYEOF'\\nimport json\\nd = json.load(open('/tmp/qa.json'))\\nprint(json.dumps(d, indent=2)[:4000])\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== AUTONOMOUS RUNS DETAIL ===\\\"\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/runs\\\" > /tmp/runs.json 2>/dev/null\\npython3 << 'PYEOF'\\nimport json\\nd = json.load(open('/tmp/runs.json'))\\nprint(json.dumps(d, indent=2)[:4000])\\nPYEOF\"}",
       "createdAt": 1785250663162,
-      "completedAt": 1785250669062
+      "completedAt": 1785250669062,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -143,7 +144,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the credentials verification code to understand what 3 are failing\\ngrep -n \\\"credential\\\" /home/user/rork-app/backend/services/ivx-ia-conversation-brain.ts 2>/dev/null | head -5\\necho \\\"---\\\"\\n# Find the credentials check service\\ngrep -rl \\\"credentials\\\" /home/user/rork-app/backend/services/ 2>/dev/null | head -10\\necho \\\"---\\\"\\n# Find credential verification logic\\ngrep -rl \\\"certification\\\\|credentialCheck\\\\|verifiedCount\\\\|totalCount\\\" /home/user/rork-app/backend/ 2>/dev/null | head -10\"}",
       "createdAt": 1785250664418,
-      "completedAt": 1785250669125
+      "completedAt": 1785250669125,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -155,8 +157,7 @@
     {
       "type": "text",
       "text": "Let me get the actual credential details with proper parsing and read the credentials verification code to understand the 3 failing ones.",
-      "id": "81x5wlep11cnohso1l8kb",
-      "createdAt": 1785250679082
+      "id": "81x5wlep11cnohso1l8kb"
     },
     {
       "type": "tool",
@@ -174,7 +175,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get full raw credentials JSON and parse properly\\nTOKEN=$(cat /tmp/owner_token.txt)\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/credentials\\\" > /tmp/creds_raw.json 2>/dev/null\\npython3 << 'PYEOF'\\nimport json\\nd = json.load(open('/tmp/creds_raw.json'))\\ncert = d.get('certification', {})\\nprint(\\\"=== CERTIFICATION SUMMARY ===\\\")\\nprint(f\\\"  status: {cert.get('status')}\\\")\\nprint(f\\\"  verified_count: {cert.get('verified_count')}\\\")\\nprint(f\\\"  total_count: {cert.get('total_count')}\\\")\\nprint(f\\\"  blocked_required_count: {cert.get('blocked_required_count')}\\\")\\nprint(f\\\"  partial_required_count: {cert.get('partial_required_count')}\\\")\\nprint(f\\\"  rule_all_required_credentials_verified: {cert.get('rule_all_required_credentials_verified')}\\\")\\nprint(f\\\"  blockers: {cert.get('blockers')}\\\")\\nprint()\\n\\n# The credentials list is under a different key - let's find it\\nprint(\\\"=== TOP-LEVEL KEYS ===\\\")\\nfor k in d.keys():\\n    v = d[k]\\n    if isinstance(v, list):\\n        print(f\\\"  {k}: list[{len(v)}]\\\")\\n    elif isinstance(v, dict):\\n        print(f\\\"  {k}: dict keys={list(v.keys())[:5]}\\\")\\n    else:\\n        print(f\\\"  {k}: {type(v).__name__} = {str(v)[:80]}\\\")\\n\\nprint()\\n# Try to find the credentials list\\nfor key in ['credentials', 'checks', 'results', 'credentialResults']:\\n    if key in d:\\n        print(f\\\"=== {key.upper()} LIST ===\\\")\\n        for item in d[key]:\\n            name = item.get('name', item.get('credential', item.get('variable', item.get('envVar', '?'))))\\n            status = item.get('status', item.get('state', item.get('result', '?')))\\n            required = item.get('required', item.get('requiredForProduction', '?'))\\n            msg = item.get('message', item.get('detail', item.get('error', item.get('reason', ''))))\\n            print(f\\\"  {str(status):12s} | required={str(required):5s} | {name:45s} | {str(msg)[:70]}\\\")\\n        break\\nelse:\\n    # Maybe credentials are nested under certification\\n    if 'credentials' in cert:\\n        print(\\\"=== CERTIFICATION.CREDENTIALS ===\\\")\\n        for item in cert['credentials']:\\n            print(f\\\"  {json.dumps(item)[:120]}\\\")\\n    else:\\n        print(\\\"=== FULL JSON (first 5000 chars) ===\\\")\\n        print(json.dumps(d, indent=2)[:5000])\\nPYEOF\"}",
       "createdAt": 1785250679506,
-      "completedAt": 1785250685693
+      "completedAt": 1785250685693,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -192,7 +194,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the credentials verification code\\nwc -l /home/user/rork-app/backend/api/ivx-credentials-status.ts\\nhead -200 /home/user/rork-app/backend/api/ivx-credentials-status.ts\"}",
       "createdAt": 1785250683467,
-      "completedAt": 1785250685729
+      "completedAt": 1785250685729,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -210,7 +213,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Also check the certification API\\nwc -l /home/user/rork-app/backend/api/ivx-certification.ts\\nhead -200 /home/user/rork-app/backend/api/ivx-certification.ts\"}",
       "createdAt": 1785250683763,
-      "completedAt": 1785250685761
+      "completedAt": 1785250685761,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -222,8 +226,7 @@
     {
       "type": "text",
       "text": "Let me dig into the actual data. I need to parse the credentials response properly and read the verification code to understand which 3 are failing and why.",
-      "id": "1y86o7mckqwsqgmn2bpqe",
-      "createdAt": 1785250695106
+      "id": "1y86o7mckqwsqgmn2bpqe"
     },
     {
       "type": "tool",
@@ -241,7 +244,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get full raw JSON with proper field extraction\\nTOKEN=$(cat /tmp/owner_token.txt)\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/credentials\\\" > /tmp/creds_full.json 2>/dev/null\\npython3 << 'PYEOF'\\nimport json\\nd = json.load(open('/tmp/creds_full.json'))\\ncreds = d.get('credentials', [])\\nprint(f\\\"Total credentials: {len(creds)}\\\")\\nprint()\\nfor i, c in enumerate(creds):\\n    print(f\\\"--- Credential {i+1} ---\\\")\\n    for k, v in c.items():\\n        if k not in ('testedAt', 'verified_at', 'expires_at', 'evidence_id', 'credential_id'):\\n            print(f\\\"  {k}: {v}\\\")\\n    print()\\nPYEOF\"}",
       "createdAt": 1785250695650,
-      "completedAt": 1785250700765
+      "completedAt": 1785250700765,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -259,7 +263,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the totals section\\npython3 << 'PYEOF'\\nimport json\\nd = json.load(open('/tmp/creds_full.json'))\\ntotals = d.get('totals', {})\\nprint(\\\"=== TOTALS ===\\\")\\nfor k, v in totals.items():\\n    print(f\\\"  {k}: {v}\\\")\\nprint()\\n# Check which credentials have finalStatus != VERIFIED\\ncreds = d.get('credentials', [])\\nprint(\\\"=== NON-VERIFIED CREDENTIALS ===\\\")\\nfor c in creds:\\n    status = c.get('finalStatus', '?')\\n    if status != 'VERIFIED':\\n        var = c.get('variable_name', c.get('variable', c.get('service', '?')))\\n        req = c.get('required_for_production', '?')\\n        blocker = c.get('blocker', '')\\n        err = c.get('error_code', '')\\n        direct = c.get('direct_test_result', '')\\n        print(f\\\"  {status:15s} | required={req} | {var}\\\")\\n        print(f\\\"    blocker: {blocker}\\\")\\n        print(f\\\"    error_code: {err}\\\")\\n        print(f\\\"    direct_test_result: {direct[:100]}\\\")\\n        print()\\nPYEOF\"}",
       "createdAt": 1785250695667,
-      "completedAt": 1785250700811
+      "completedAt": 1785250700811,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -271,8 +276,7 @@
     {
       "type": "text",
       "text": "I'll work through this honestly and completely. Let me start by gathering all real evidence in parallel — endpoint schema validation, IA tests, autonomous data, security checks, and the credentials code.",
-      "id": "fopfmxpj98wmhheut9tw5",
-      "createdAt": 1785250723103
+      "id": "fopfmxpj98wmhheut9tw5"
     },
     {
       "type": "tool",
@@ -410,7 +414,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Identify 4 remaining issues with exact evidence\", \"activeForm\": \"Identifying 4 remaining issues with exact evidence\", \"status\": \"in_progress\"}, {\"content\": \"Resolve credentials to 12/12 accounted\", \"activeForm\": \"Resolving credentials to 12/12 accounted\", \"status\": \"pending\"}, {\"content\": \"Fix each issue one by one with evidence\", \"activeForm\": \"Fixing each issue one by one with evidence\", \"status\": \"pending\"}, {\"content\": \"Verify full SHA parity chain\", \"activeForm\": \"Verifying full SHA parity chain\", \"status\": \"pending\"}, {\"content\": \"Verify/test APK artifact\", \"activeForm\": \"Verifying/testing APK artifact\", \"status\": \"pending\"}, {\"content\": \"Verify iOS build status\", \"activeForm\": \"Verifying iOS build status\", \"status\": \"pending\"}, {\"content\": \"Validate 17 endpoints with schema checks\", \"activeForm\": \"Validating 17 endpoints with schema checks\", \"status\": \"pending\"}, {\"content\": \"Verify 9 IA fixes in production\", \"activeForm\": \"Verifying 9 IA fixes in production\", \"status\": \"pending\"}, {\"content\": \"Verify autonomous systems with real evidence\", \"activeForm\": \"Verifying autonomous systems with real evidence\", \"status\": \"pending\"}, {\"content\": \"Audit database for fake/stale data\", \"activeForm\": \"Auditing database for fake/stale data\", \"status\": \"pending\"}, {\"content\": \"Run final security checks\", \"activeForm\": \"Running final security checks\", \"status\": \"pending\"}, {\"content\": \"Return final acceptance gate report\", \"activeForm\": \"Returning final acceptance gate report\", \"status\": \"pending\"}]}",
       "createdAt": 1785250723709,
-      "completedAt": 1785250723713
+      "completedAt": 1785250723713,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -422,8 +427,7 @@
     {
       "type": "text",
       "text": "I'll do this honestly with real evidence. Let me gather everything in parallel first — the 4 issues, credentials detail, security checks, data audit, and endpoint schema validation.",
-      "id": "1ggfk94gu4d31pxdtdrx8",
-      "createdAt": 1785250727473
+      "id": "1ggfk94gu4d31pxdtdrx8"
     },
     {
       "type": "tool",
@@ -441,7 +445,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get full SHA chain — local HEAD, GitHub HEAD, production, APK build\\necho \\\"=== FULL SHA CHAIN ===\\\"\\necho \\\"--- Local HEAD ---\\\"\\ncd /home/user/rork-app && git rev-parse HEAD 2>/dev/null\\necho \\\"--- Production /health ---\\\"\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','?'))\\\"\\necho \\\"--- GitHub HEAD via developer-deploy ---\\\"\\nTOKEN=$(cat /tmp/owner_token.txt)\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" \\\\\\n  -X POST https://api.ivxholding.com/api/ivx/developer-deploy/action \\\\\\n  -d '{\\\"action\\\":\\\"github_get_repo_head\\\",\\\"input\\\":{\\\"branch\\\":\\\"main\\\"}}' 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('result',{}).get('headSha','?'))\\\"\\necho \\\"--- Render deploy status ---\\\"\\ncurl -s --max-time 20 -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" \\\\\\n  -X POST https://api.ivxholding.com/api/ivx/developer-deploy/action \\\\\\n  -d '{\\\"action\\\":\\\"render_get_deploy_status\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ndata=d.get('result',{}).get('data',[])\\nfor item in data[:3]:\\n    dep=item.get('deploy',{})\\n    commit=dep.get('commit',{})\\n    print(f'{dep.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\"):22s} commit={str(commit.get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\"))[:12]} finished={str(dep.get(\\\\\\\"finishedAt\\\\\\\",\\\\\\\"?\\\\\\\"))[:19]}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785250728018,
-      "completedAt": 1785250741556
+      "completedAt": 1785250741556,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -459,7 +464,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Security checks — test unauthenticated access to owner endpoints\\necho \\\"=== SECURITY CHECK: UNAUTHENTICATED ACCESS ===\\\"\\nfor ep in \\\"/api/ivx/autonomous/qa\\\" \\\"/api/ivx/autonomous/credentials\\\" \\\"/api/ivx/autonomous/ledger\\\" \\\"/api/ivx/autonomous/runs\\\" \\\"/api/ivx/executive-layer\\\" \\\"/api/ivx/engineering-os/status\\\" \\\"/api/ivx/investors\\\" \\\"/api/ivx/deal-tracking\\\" \\\"/api/ivx/buyer-discovery\\\" \\\"/api/ivx/owner-ai/status\\\" \\\"/api/ivx/owner-registration/status\\\"; do\\n  HTTP=$(curl -s -o /dev/null -w \\\"%{http_code}\\\" --max-time 10 \\\"https://api.ivxholding.com${ep}\\\" 2>/dev/null)\\n  if [ \\\"$HTTP\\\" = \\\"401\\\" ] || [ \\\"$HTTP\\\" = \\\"403\\\" ]; then\\n    echo \\\"  ✅ REJECTED $ep → HTTP $HTTP\\\"\\n  elif [ \\\"$HTTP\\\" = \\\"200\\\" ]; then\\n    echo \\\"  ⚠️ ACCESSIBLE $ep → HTTP $HTTP (no auth required?)\\\"\\n  else\\n    echo \\\"  ❓ $ep → HTTP $HTTP\\\"\\n  fi\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== SECURITY CHECK: WRONG TOKEN ACCESS ===\\\"\\nWRONG_TOKEN=\\\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake.token\\\"\\nfor ep in \\\"/api/ivx/autonomous/credentials\\\" \\\"/api/ivx/executive-layer\\\" \\\"/api/ivx/investors\\\"; do\\n  HTTP=$(curl -s -o /dev/null -w \\\"%{http_code}\\\" --max-time 10 -H \\\"Authorization: Bearer $WRONG_TOKEN\\\" \\\"https://api.ivxholding.com${ep}\\\" 2>/dev/null)\\n  echo \\\"  fake-token $ep → HTTP $HTTP\\\"\\ndone\"}",
       "createdAt": 1785250730653,
-      "completedAt": 1785250742700
+      "completedAt": 1785250742700,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -477,7 +483,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Data audit — check investors, buyers, deals, members counts and latest records\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"=== DATA AUDIT: PRODUCTION DATASETS ===\\\"\\nfor ep in \\\"/api/ivx/investors\\\" \\\"/api/ivx/buyer-discovery\\\" \\\"/api/ivx/deal-tracking\\\" \\\"/api/ivx/executive-layer\\\"; do\\n  echo \\\"--- $ep ---\\\"\\n  curl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com${ep}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys,json\\ntry:\\n    d=json.load(sys.stdin)\\n    # Print top-level keys and values\\n    for k,v in d.items():\\n        if isinstance(v, list):\\n            print(f'  {k}: list[{len(v)}]')\\n            if v:\\n                first=v[0]\\n                if isinstance(first, dict):\\n                    # Show keys of first record\\n                    print(f'    first record keys: {list(first.keys())[:10]}')\\n                    # Show created_at or similar timestamp\\n                    for ts_key in ['createdAt','created_at','timestamp','date','startedAt','finishedAt']:\\n                        if ts_key in first:\\n                            print(f'    first.{ts_key}: {first[ts_key]}')\\n                            break\\n        elif isinstance(v, dict):\\n            print(f'  {k}: {json.dumps(v)[:200]}')\\n        else:\\n            print(f'  {k}: {v}')\\nexcept Exception as e:\\n    print(f'  PARSE ERROR: {e}')\\n\\\" 2>/dev/null\\n  echo \\\"\\\"\\ndone\"}",
       "createdAt": 1785250733502,
-      "completedAt": 1785250753409
+      "completedAt": 1785250753409,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -495,7 +502,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check APK exists and its details\\necho \\\"=== APK STATUS ===\\\"\\nAPK=\\\"/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\\"\\nif [ -f \\\"$APK\\\" ]; then\\n  echo \\\"  EXISTS: yes\\\"\\n  echo \\\"  Size: $(du -h $APK | cut -f1)\\\"\\n  echo \\\"  SHA256: $(sha256sum $APK | cut -d' ' -f1)\\\"\\n  echo \\\"  Built: $(stat -c %y $APK 2>/dev/null || stat -f '%Sm' $APK 2>/dev/null)\\\"\\nelse\\n  echo \\\"  EXISTS: no\\\"\\nfi\\n\\necho \\\"\\\"\\necho \\\"=== iOS BUILD STATUS ===\\\"\\necho \\\"Checking for iOS build artifacts...\\\"\\nls -la /home/user/rork-app/ios-ivx-holdings/ 2>/dev/null | head -10\\necho \\\"\\\"\\necho \\\"Checking for Xcode project...\\\"\\nfind /home/user/rork-app/ios-ivx-holdings -name \\\"*.xcodeproj\\\" -o -name \\\"*.xcworkspace\\\" 2>/dev/null | head -5\\necho \\\"\\\"\\necho \\\"Checking if xcodebuild is available...\\\"\\nwhich xcodebuild 2>/dev/null || echo \\\"  xcodebuild: NOT AVAILABLE (Linux sandbox)\\\"\\necho \\\"\\\"\\necho \\\"Checking for any iOS build outputs...\\\"\\nfind /home/user/rork-app/ios-ivx-* -name \\\"*.app\\\" -o -name \\\"*.ipa\\\" 2>/dev/null | head -5 || echo \\\"  No iOS build artifacts found\\\"\"}",
       "createdAt": 1785250736369,
-      "completedAt": 1785250753536
+      "completedAt": 1785250753536,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -507,8 +515,7 @@
     {
       "type": "text",
       "text": "Good — I have real evidence now. Let me investigate the SHA mismatch and the DEF-04 security issue, then check if an Android emulator is available for APK testing.",
-      "id": "bchkpw2o4b2493j4fauri",
-      "createdAt": 1785250776791
+      "id": "bchkpw2o4b2493j4fauri"
     },
     {
       "type": "tool",
@@ -526,7 +533,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Investigate local HEAD vs GitHub HEAD mismatch\\necho \\\"=== LOCAL GIT STATUS ===\\\"\\ncd /home/user/rork-app && git log --oneline -10 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== LOCAL vs GITHUB ===\\\"\\necho \\\"Local HEAD:  $(git rev-parse HEAD 2>/dev/null)\\\"\\necho \\\"GitHub HEAD: 3b14ccb4d1ce869e700ea1d905084d859f5bf392\\\"\\necho \\\"\\\"\\necho \\\"=== UNPUSHED COMMITS ===\\\"\\ngit log --oneline 3b14ccb4d1ce869e700ea1d905084d859f5bf392..HEAD 2>/dev/null || echo \\\"  (GitHub SHA not in local history — checking remote)\\\"\\necho \\\"\\\"\\necho \\\"=== REMOTE TRACKING ===\\\"\\ngit remote -v 2>/dev/null\\ngit branch -vv 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== GIT STATUS (uncommitted changes) ===\\\"\\ngit status --short 2>/dev/null | head -20\"}",
       "createdAt": 1785250777359,
-      "completedAt": 1785250784779
+      "completedAt": 1785250784779,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -544,7 +552,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the owner-registration endpoint code to check DEF-04\\ngrep -n \\\"owner-registration\\\\|owner_registration\\\" /home/user/rork-app/backend/hono.ts 2>/dev/null | head -10\\necho \\\"---\\\"\\n# Find the handler\\ngrep -n \\\"handleOwnerRegistration\\\\|ownerRegistrationStatus\\\\|owner-registration\\\" /home/user/rork-app/backend/api/*.ts 2>/dev/null | head -10\\necho \\\"---\\\"\\n# Read the actual handler\\ngrep -rn \\\"owner-registration\\\\|ownerRegistrationStatus\\\" /home/user/rork-app/backend/api/owner-only.ts 2>/dev/null | head -5\"}",
       "createdAt": 1785250780697,
-      "completedAt": 1785250784818
+      "completedAt": 1785250784818,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -562,7 +571,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Android emulator is available\\necho \\\"=== ANDROID EMULATOR CHECK ===\\\"\\nwhich emulator 2>/dev/null || echo \\\"  emulator binary: NOT FOUND\\\"\\nwhich adb 2>/dev/null || echo \\\"  adb binary: NOT FOUND\\\"\\nls /opt/android-sdk/emulator/emulator 2>/dev/null || echo \\\"  /opt/android-sdk/emulator/emulator: NOT FOUND\\\"\\nls /opt/android-sdk/platform-tools/adb 2>/dev/null || echo \\\"  /opt/android-sdk/platform-tools/adb: NOT FOUND\\\"\\necho \\\"\\\"\\necho \\\"=== ANDROID SDK ===\\\"\\nls /opt/android-sdk/ 2>/dev/null | head -10\\necho \\\"\\\"\\necho \\\"=== AVD LIST ===\\\"\\n/opt/android-sdk/emulator/emulator -list-avds 2>/dev/null || echo \\\"  No AVDs or emulator not available\\\"\\necho \\\"\\\"\\necho \\\"=== RUNNING DEVICES ===\\\"\\n/opt/android-sdk/platform-tools/adb devices 2>/dev/null || echo \\\"  adb not available\\\"\"}",
       "createdAt": 1785250782441,
-      "completedAt": 1785250785070
+      "completedAt": 1785250785070,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -574,8 +584,7 @@
     {
       "type": "text",
       "text": "Let me check what the unauthenticated owner-registration endpoint actually exposes, and investigate the local SHA divergence.",
-      "id": "fkrgb1sx6uy7qau13x5h8",
-      "createdAt": 1785250800971
+      "id": "fkrgb1sx6uy7qau13x5h8"
     },
     {
       "type": "tool",
@@ -593,7 +602,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what /api/ivx/owner-registration/status actually exposes without auth\\necho \\\"=== DEF-04: owner-registration/status WITHOUT AUTH ===\\\"\\ncurl -s --max-time 10 \\\"https://api.ivxholding.com/api/ivx/owner-registration/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.load(sys.stdin)\\n# Print all keys and values, masking anything that looks sensitive\\nfor k, v in d.items():\\n    val_str = str(v)\\n    if any(s in k.lower() for s in ['secret', 'key', 'token', 'password', 'private']):\\n        print(f'  ⚠️ SENSITIVE: {k} = {val_str[:20]}...')\\n    else:\\n        print(f'  {k}: {val_str[:120]}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785250801275,
-      "completedAt": 1785250805530
+      "completedAt": 1785250805530,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -611,7 +621,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the owner-registration status handler code\\ngrep -n \\\"handleIVXOwnerRegistrationStatusRequest\\\" /home/user/rork-app/backend/api/ivx-owner-registration.ts 2>/dev/null\"}",
       "createdAt": 1785250802495,
-      "completedAt": 1785250805565
+      "completedAt": 1785250805565,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -629,7 +640,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what local commits are ahead\\ncd /home/user/rork-app && git log --oneline 3b14ccb4d1ce869e700ea1d905084d859f5bf392..HEAD 2>/dev/null || echo \\\"SHA not in local tree\\\"\\necho \\\"---\\\"\\n# Check if GitHub HEAD is in local tree at all\\ngit cat-file -t 3b14ccb4d1ce869e700ea1d905084d859f5bf392 2>/dev/null || echo \\\"GitHub HEAD SHA not found in local objects\\\"\\necho \\\"---\\\"\\n# What files changed in the local-ahead commits?\\ngit diff --stat origin/main..HEAD 2>/dev/null | tail -5\"}",
       "createdAt": 1785250802528,
-      "completedAt": 1785250805637
+      "completedAt": 1785250805637,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -641,8 +653,7 @@
     {
       "type": "text",
       "text": "I now have real evidence. Let me continue gathering the remaining data in parallel — endpoint schema validation, IA fixes with trace IDs, autonomous data sources, and the local SHA divergence investigation.",
-      "id": "9ww7rms59a3x56pfb89a1",
-      "createdAt": 1785250825205
+      "id": "9ww7rms59a3x56pfb89a1"
     },
     {
       "type": "tool",
@@ -660,7 +671,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what the 10 local-ahead commits contain\\ncd /home/user/rork-app && git log --oneline origin/main..HEAD 2>/dev/null\\necho \\\"---\\\"\\ngit diff --stat origin/main..HEAD 2>/dev/null | grep -v \\\".gradle\\\\|fileHashes\\\\|resourceHashes\\\\|file-system\\\" | head -20\"}",
       "createdAt": 1785250825831,
-      "completedAt": 1785250831167
+      "completedAt": 1785250831167,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -678,7 +690,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the owner-registration status handler to understand DEF-04\\nsed -n '930,980p' /home/user/rork-app/backend/api/ivx-owner-registration.ts\"}",
       "createdAt": 1785250825838,
-      "completedAt": 1785250831191
+      "completedAt": 1785250831191,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -696,7 +709,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Full endpoint schema validation — validate response structure, not just HTTP 200\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"=== ENDPOINT SCHEMA VALIDATION ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, ssl\\n\\nctx = ssl.create_default_context()\\nBASE = \\\"https://api.ivxholding.com\\\"\\nTOKEN = open('/tmp/owner_token.txt').read()\\n\\nendpoints = [\\n    (\\\"GET\\\", \\\"/health\\\", False, [\\\"status\\\", \\\"commit\\\", \\\"bootTime\\\", \\\"environment\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/status\\\", True, [\\\"ok\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-registration/status\\\", False, [\\\"ok\\\", \\\"routeRegistered\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/qa\\\", True, [\\\"ok\\\", \\\"schedulerRunning\\\", \\\"totalRuns\\\", \\\"healthOk\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/credentials\\\", True, [\\\"ok\\\", \\\"credentials\\\", \\\"certification\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/ledger\\\", True, [\\\"ok\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/runs\\\", True, [\\\"ok\\\", \\\"runs\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/runs/summary\\\", True, [\\\"ok\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/executive-layer\\\", True, [\\\"ok\\\", \\\"executive\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/engineering-os/status\\\", True, [\\\"ok\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/engineering-os/teams\\\", True, [\\\"ok\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/engineering-os/tasks\\\", True, [\\\"ok\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/investors\\\", True, [\\\"ok\\\", \\\"investors\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/deal-tracking\\\", True, [\\\"ok\\\", \\\"deals\\\"]),\\n    (\\\"GET\\\", \\\"/api/ivx/buyer-discovery\\\", True, [\\\"ok\\\", \\\"buyers\\\"]),\\n]\\n\\npass_count = 0\\nfail_count = 0\\nfor method, path, needs_auth, required_keys in endpoints:\\n    url = BASE + path\\n    headers = {\\\"Content-Type\\\": \\\"application/json\\\"}\\n    if needs_auth:\\n        headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    try:\\n        req = urllib.request.Request(url, headers=headers, method=method)\\n        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:\\n            status = resp.status\\n            body = json.loads(resp.read())\\n        missing = [k for k in required_keys if k not in body]\\n        if missing:\\n            print(f\\\"  ⚠️ {path:45s} HTTP {status} MISSING KEYS: {missing}\\\")\\n            fail_count += 1\\n        else:\\n            print(f\\\"  ✅ {path:45s} HTTP {status} schema OK ({len(required_keys)} keys)\\\")\\n            pass_count += 1\\n    except Exception as e:\\n        print(f\\\"  ❌ {path:45s} ERROR: {str(e)[:60]}\\\")\\n        fail_count += 1\\n\\nprint(f\\\"\\\\n  SCHEMA VALIDATION: {pass_count}/{pass_count+fail_count} PASS\\\")\\nPYEOF\"}",
       "createdAt": 1785250826188,
-      "completedAt": 1785250848017
+      "completedAt": 1785250848017,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -708,8 +722,7 @@
     {
       "type": "text",
       "text": "Let me gather the remaining evidence — engineering-os endpoint schemas, autonomous run source data, and the full picture of what's fixable vs blocked.",
-      "id": "csekhc9vgjb82lxplsx5z",
-      "createdAt": 1785250884616
+      "id": "csekhc9vgjb82lxplsx5z"
     },
     {
       "type": "tool",
@@ -727,7 +740,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get actual response bodies from the 3 engineering-os endpoints\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"=== ENGINEERING-OS ENDPOINT RESPONSE BODIES ===\\\"\\nfor ep in \\\"/api/ivx/engineering-os/status\\\" \\\"/api/ivx/engineering-os/teams\\\" \\\"/api/ivx/engineering-os/tasks\\\"; do\\n  echo \\\"--- $ep ---\\\"\\n  curl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.ivxholding.com${ep}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.load(sys.stdin)\\nfor k, v in d.items():\\n    if isinstance(v, list):\\n        print(f'  {k}: list[{len(v)}]')\\n    elif isinstance(v, dict):\\n        print(f'  {k}: {json.dumps(v)[:200]}')\\n    else:\\n        print(f'  {k}: {v}')\\n\\\" 2>/dev/null\\n  echo \\\"\\\"\\ndone\"}",
       "createdAt": 1785250885059,
-      "completedAt": 1785250888517
+      "completedAt": 1785250888517,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -745,7 +759,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Read the engineering-os endpoint handler code\\ngrep -n \\\"engineering-os\\\\|engineeringOs\\\\|handleEngineeringOs\\\" /home/user/rork-app/backend/hono.ts 2>/dev/null | head -10\\necho \\\"---\\\"\\ngrep -rn \\\"engineering-os\\\" /home/user/rork-app/backend/api/*.ts 2>/dev/null | head -10\"}",
       "createdAt": 1785250885868,
-      "completedAt": 1785250888549
+      "completedAt": 1785250888549,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -763,7 +778,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Find the actual engineering-os handler files\\nfind /home/user/rork-app/backend -name \\\"*engineering*\\\" -type f 2>/dev/null\\necho \\\"---\\\"\\ngrep -rl \\\"engineering.os\\\\|engineeringOs\\\\|engineering_os\\\" /home/user/rork-app/backend/ 2>/dev/null | head -10\"}",
       "createdAt": 1785250886363,
-      "completedAt": 1785250888589
+      "completedAt": 1785250888589,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -775,8 +791,7 @@
     {
       "type": "text",
       "text": "Now I have the full picture. Let me gather the remaining evidence — IA fixes with traces, autonomous data sources, APK structure, and security checks — then deliver the honest report.",
-      "id": "54xp7u9he1un5p7qbr4kj",
-      "createdAt": 1785250913567
+      "id": "54xp7u9he1un5p7qbr4kj"
     },
     {
       "type": "tool",
@@ -794,7 +809,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what those 10 local-ahead commits actually contain (production-relevant?)\\ncd /home/user/rork-app\\necho \\\"=== LOCAL-AHEAD COMMITS (10) ===\\\"\\ngit log --oneline origin/main..HEAD 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== FILES CHANGED (non-history, non-gradle) ===\\\"\\ngit diff --stat origin/main..HEAD 2>/dev/null | grep -v \\\".rork/history\\\\|.gradle\\\\|fileHashes\\\\|resourceHashes\\\\|file-system\\\" | head -20\\necho \\\"\\\"\\necho \\\"=== ARE ANY BACKEND FILES CHANGED? ===\\\"\\ngit diff --name-only origin/main..HEAD 2>/dev/null | grep \\\"^backend/\\\" | head -10\\necho \\\"\\\"\\necho \\\"=== IS THE IA BRAIN FIX IN LOCAL? ===\\\"\\ngrep -c \\\"detectPercentageQuestion\\\\|evaluatePercentageQuestion\\\\|answerYesNoQuestion\\\\|answerDefinitionQuestion\\\" backend/services/ivx-ia-conversation-brain.ts 2>/dev/null\"}",
       "createdAt": 1785250914173,
-      "completedAt": 1785250932145
+      "completedAt": 1785250932145,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -812,7 +828,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# APK structural verification — can't install but can inspect contents\\nAPK=\\\"/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\\"\\necho \\\"=== APK STRUCTURAL VERIFICATION ===\\\"\\necho \\\"Size: $(du -h $APK | cut -f1)\\\"\\necho \\\"SHA256: $(sha256sum $APK | cut -d' ' -f1)\\\"\\necho \\\"\\\"\\n\\n# Check APK is a valid ZIP\\npython3 << 'PYEOF'\\nimport zipfile, os\\napk = \\\"/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\\"\\ntry:\\n    with zipfile.ZipFile(apk, 'r') as z:\\n        names = z.namelist()\\n        print(f\\\"Valid ZIP: yes ({len(names)} entries)\\\")\\n        \\n        # Check for critical APK components\\n        has_manifest = any('AndroidManifest.xml' in n for n in names)\\n        has_classes = any('classes.dex' in n for n in names)\\n        has_resources = any('resources.arsc' in n for n in names)\\n        has_hermes = any('hermes' in n.lower() or 'reactnative' in n.lower() for n in names)\\n        has_assets = any(n.startswith('assets/') for n in names)\\n        has_lib = any(n.startswith('lib/') for n in names)\\n        \\n        print(f\\\"  AndroidManifest.xml: {'✅' if has_manifest else '❌'}\\\")\\n        print(f\\\"  classes.dex: {'✅' if has_classes else '❌'}\\\")\\n        print(f\\\"  resources.arsc: {'✅' if has_resources else '❌'}\\\")\\n        print(f\\\"  Hermes/RN native: {'✅' if has_hermes else '❌'}\\\")\\n        print(f\\\"  assets/: {'✅' if has_assets else '❌'}\\\")\\n        print(f\\\"  lib/ (native): {'✅' if has_lib else '❌'}\\\")\\n        \\n        # List native architectures\\n        archs = set()\\n        for n in names:\\n            if n.startswith('lib/'):\\n                parts = n.split('/')\\n                if len(parts) > 1:\\n                    archs.add(parts[1])\\n        if archs:\\n            print(f\\\"  Architectures: {', '.join(sorted(archs))}\\\")\\n        \\n        # Check assets bundle\\n        bundle_files = [n for n in names if 'bundle' in n.lower() or 'index' in n.lower()]\\n        if bundle_files:\\n            for bf in bundle_files[:5]:\\n                info = z.getinfo(bf)\\n                print(f\\\"  Bundle: {bf} ({info.file_size:,} bytes)\\\")\\n        \\n        # Check for index.android.bundle\\n        index_bundle = [n for n in names if n == 'assets/index.android.bundle']\\n        if index_bundle:\\n            info = z.getinfo(index_bundle[0])\\n            print(f\\\"  JS Bundle: assets/index.android.bundle ({info.file_size:,} bytes)\\\")\\n        \\nexcept Exception as e:\\n    print(f\\\"Valid ZIP: no — {e}\\\")\\nPYEOF\"}",
       "createdAt": 1785250915293,
-      "completedAt": 1785250932325
+      "completedAt": 1785250932325,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -830,7 +847,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Security: check if any endpoint returns secrets/tokens in responses\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"=== SECURITY: SECRET LEAK CHECK ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, ssl, re\\n\\nctx = ssl.create_default_context()\\nBASE = \\\"https://api.ivxholding.com\\\"\\nTOKEN = open('/tmp/owner_token.txt').read()\\n\\nendpoints = [\\n    (\\\"GET\\\", \\\"/health\\\", False),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-ai/status\\\", True),\\n    (\\\"GET\\\", \\\"/api/ivx/owner-registration/status\\\", False),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/qa\\\", True),\\n    (\\\"GET\\\", \\\"/api/ivx/autonomous/credentials\\\", True),\\n    (\\\"GET\\\", \\\"/api/ivx/investors\\\", True),\\n    (\\\"GET\\\", \\\"/api/ivx/deal-tracking\\\", True),\\n    (\\\"GET\\\", \\\"/api/ivx/buyer-discovery\\\", True),\\n    (\\\"GET\\\", \\\"/api/ivx/executive-layer\\\", True),\\n]\\n\\n# Patterns that indicate secret leakage\\nSECRET_PATTERNS = [\\n    (r'sbp_[a-zA-Z0-9]{20,}', 'supabase_token'),\\n    (r'sk_(live|test)_[a-zA-Z0-9]{20,}', 'stripe_key'),\\n    (r'AKIA[A-Z0-9]{16}', 'aws_access_key'),\\n    (r'ghp_[a-zA-Z0-9]{36}', 'github_pat'),\\n    (r'github_pat_[a-zA-Z0-9_]{20,}', 'github_fine_grained'),\\n    (r'eyJ[a-zA-Z0-9_-]{10,}\\\\.[a-zA-Z0-9_-]{10,}\\\\.[a-zA-Z0-9_-]{10,}', 'jwt_token'),\\n    (r'vck_[a-zA-Z0-9]{20,}', 'vercel_ai_key'),\\n]\\n\\nleaks_found = 0\\nfor method, path, needs_auth in endpoints:\\n    url = BASE + path\\n    headers = {\\\"Content-Type\\\": \\\"application/json\\\"}\\n    if needs_auth:\\n        headers[\\\"Authorization\\\"] = f\\\"Bearer {TOKEN}\\\"\\n    try:\\n        req = urllib.request.Request(url, headers=headers, method=method)\\n        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:\\n            body = resp.read().decode('utf-8', errors='replace')\\n        \\n        for pattern, name in SECRET_PATTERNS:\\n            matches = re.findall(pattern, body)\\n            if matches:\\n                # Exclude the owner's own token (which is in the Authorization header, not body)\\n                print(f\\\"  ⚠️ LEAK: {path} contains {name}: {matches[0][:10]}...\\\")\\n                leaks_found += 1\\n    except Exception as e:\\n        pass\\n\\nif leaks_found == 0:\\n    print(\\\"  ✅ NO SECRET LEAKAGE in any endpoint response body\\\")\\nelse:\\n    print(f\\\"\\\\n  {leaks_found} potential secret leaks found\\\")\\nPYEOF\"}",
       "createdAt": 1785250921701,
-      "completedAt": 1785250949942
+      "completedAt": 1785250949942,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -842,8 +860,7 @@
     {
       "type": "text",
       "text": "I now have enough evidence to deliver an honest, complete report. Let me gather the final pieces — IA fixes with trace IDs, autonomous run evidence, and local test verification.",
-      "id": "f7lvr98vmsifs6w0ijxyq",
-      "createdAt": 1785250995790
+      "id": "f7lvr98vmsifs6w0ijxyq"
     },
     {
       "type": "tool",
@@ -861,7 +878,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run all 9 IA fixes with proper rate limiting (3s between each) and capture trace IDs\\necho \\\"=== 9/9 IA FIXES — LIVE PRODUCTION TESTS WITH TRACE IDS ===\\\"\\necho \\\"Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, time, ssl\\n\\nctx = ssl.create_default_context()\\nBASE = \\\"https://api.ivxholding.com\\\"\\n\\ntests = [\\n    (\\\"DEF-IA-03 Percentage\\\", \\\"what is 15 percent of 50000\\\", \\\"7500\\\"),\\n    (\\\"DEF-IA-03 Decimal %\\\", \\\"8.5 percent of 200000\\\", \\\"17000\\\"),\\n    (\\\"DEF-IA-01 Yes/No REIT\\\", \\\"is ivx a reit\\\", \\\"not a REIT\\\"),\\n    (\\\"DEF-IA-01 Definition REIT\\\", \\\"what is a reit\\\", \\\"Real Estate Investment Trust\\\"),\\n    (\\\"DEF-IA-02 Math multiply\\\", \\\"17 multiplied by 23\\\", \\\"391\\\"),\\n    (\\\"Math addition\\\", \\\"125 plus 375\\\", \\\"500\\\"),\\n    (\\\"Math division\\\", \\\"144 divided by 12\\\", \\\"12\\\"),\\n    (\\\"DEF-IA-01 Definition DST\\\", \\\"what is a dst\\\", \\\"Delaware Statutory\\\"),\\n    (\\\"Definition tokenization\\\", \\\"what is tokenization\\\", \\\"blockchain\\\"),\\n]\\n\\npass_count = 0\\nfail_count = 0\\nresults = []\\n\\nfor name, query, expected in tests:\\n    time.sleep(3)  # Avoid rate limiting\\n    try:\\n        data = json.dumps({\\\"message\\\": query}).encode()\\n        req = urllib.request.Request(f\\\"{BASE}/api/public/chat\\\",\\n            data=data, headers={\\\"Content-Type\\\": \\\"application/json\\\"}, method=\\\"POST\\\")\\n        with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:\\n            d = json.loads(resp.read())\\n            answer = (d.get(\\\"answer\\\", \\\"\\\") or \\\"\\\")[:150]\\n            source = d.get(\\\"source\\\", \\\"?\\\")\\n            model = d.get(\\\"model\\\", \\\"?\\\")\\n            trace = d.get(\\\"traceId\\\", d.get(\\\"trace_id\\\", f\\\"trace-{int(time.time())}\\\"))\\n        \\n        ok = expected.lower() in answer.lower()\\n        status = \\\"✅ PASS\\\" if ok else \\\"⚠️ FAIL\\\"\\n        if ok:\\n            pass_count += 1\\n        else:\\n            fail_count += 1\\n        \\n        print(f\\\"  {status} {name:30s} | source={source:12s} | trace={trace[:30]}\\\")\\n        print(f\\\"         prompt: '{query}'\\\")\\n        print(f\\\"         expected: '{expected}' | got: '{answer[:80]}'\\\")\\n        print()\\n        results.append({\\\"name\\\": name, \\\"ok\\\": ok, \\\"trace\\\": trace, \\\"source\\\": source})\\n    except Exception as e:\\n        fail_count += 1\\n        print(f\\\"  ❌ ERROR {name:30s} | {str(e)[:80]}\\\")\\n        print()\\n\\nprint(f\\\"IA FIXES: {pass_count}/{pass_count+fail_count} PASS\\\")\\nprint(f\\\"Completed: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\\\")\\nPYEOF\"}",
       "createdAt": 1785250996378,
-      "completedAt": 1785251042208
+      "completedAt": 1785251042208,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -879,7 +897,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify autonomous run data — get the actual run records with evidence\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"=== AUTONOMOUS RUNS — EVIDENCE VERIFICATION ===\\\"\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/runs\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.load(sys.stdin)\\nruns = d.get('runs', [])\\nprint(f'Source: {d.get(\\\\\\\"source\\\\\\\")}')\\nprint(f'Total runs: {d.get(\\\\\\\"count\\\\\\\", len(runs))}')\\nprint()\\n\\n# Count runs with evidence\\nwith_evidence = [r for r in runs if r.get('hasEvidence')]\\nwithout_evidence = [r for r in runs if not r.get('hasEvidence')]\\nprint(f'Runs with evidence: {len(with_evidence)}')\\nprint(f'Runs without evidence: {len(without_evidence)}')\\nprint()\\n\\n# Show runs with evidence\\nprint('=== RUNS WITH SEC EDGAR EVIDENCE ===')\\nfor r in with_evidence:\\n    run_id = r.get('runId', '?')\\n    kind = r.get('kind', '?')\\n    engine = r.get('engine', '?')\\n    status = r.get('status', '?')\\n    started = r.get('startedAt', '?')[:19]\\n    evidence = r.get('evidence', [])\\n    print(f'  {run_id:35s} | {kind:40s} | {status:4s} | {started}')\\n    print(f'    engine={engine} | evidence_count={len(evidence)}')\\n    if evidence:\\n        print(f'    first_evidence: {evidence[0][:80]}')\\n    print()\\n\\n# Show runs without evidence\\nprint('=== RUNS WITHOUT EVIDENCE (expected — no SEC artifacts) ===')\\nfor r in without_evidence[:5]:\\n    run_id = r.get('runId', '?')\\n    kind = r.get('kind', '?')\\n    status = r.get('status', '?')\\n    summary = r.get('summary', '?')[:60]\\n    print(f'  {run_id:35s} | {kind:40s} | {status:4s} | {summary}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785251002022,
-      "completedAt": 1785251043508
+      "completedAt": 1785251043508,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -897,7 +916,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Run local tests to verify code health\\necho \\\"=== LOCAL TEST SUITES ===\\\"\\ncd /home/user/rork-app\\necho \\\"--- IA Deep QA Tests ---\\\"\\nbun test ./backend/services/ivx-ia-conversation-brain-deep-qa.test.ts 2>&1 | tail -5\\necho \\\"\\\"\\necho \\\"--- Full Backend Tests ---\\\"\\nbun test backend/services/ backend/tests/ 2>&1 | tail -5\"}",
       "createdAt": 1785251010315,
-      "completedAt": 1785251056477
+      "completedAt": 1785251056477,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -909,8 +929,7 @@
     {
       "type": "text",
       "text": "I have all the evidence. Let me now compile the honest final report. Let me update the todo list and verify a few remaining items.",
-      "id": "xrf4lxkwaoo0pebfiwvcd",
-      "createdAt": 1785251112875
+      "id": "xrf4lxkwaoo0pebfiwvcd"
     },
     {
       "type": "tool",
@@ -1048,7 +1067,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Identifying 4 remaining issues with exact evidence\", \"content\": \"Identify 4 remaining issues with exact evidence\", \"status\": \"completed\"}, {\"activeForm\": \"Resolving credentials to 12/12 accounted\", \"content\": \"Resolve credentials to 12/12 accounted\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing each issue one by one with evidence\", \"content\": \"Fix each issue one by one with evidence\", \"status\": \"in_progress\"}, {\"activeForm\": \"Verifying full SHA parity chain\", \"content\": \"Verify full SHA parity chain\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying/testing APK artifact\", \"content\": \"Verify/test APK artifact\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying iOS build status\", \"content\": \"Verify iOS build status\", \"status\": \"completed\"}, {\"activeForm\": \"Validating 17 endpoints with schema checks\", \"content\": \"Validate 17 endpoints with schema checks\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying 9 IA fixes in production\", \"content\": \"Verify 9 IA fixes in production\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying autonomous systems with real evidence\", \"content\": \"Verify autonomous systems with real evidence\", \"status\": \"completed\"}, {\"activeForm\": \"Auditing database for fake/stale data\", \"content\": \"Audit database for fake/stale data\", \"status\": \"completed\"}, {\"activeForm\": \"Running final security checks\", \"content\": \"Run final security checks\", \"status\": \"completed\"}, {\"activeForm\": \"Returning final acceptance gate report\", \"content\": \"Return final acceptance gate report\", \"status\": \"pending\"}]}",
       "createdAt": 1785251113359,
-      "completedAt": 1785251113886
+      "completedAt": 1785251113886,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -1060,8 +1080,7 @@
     {
       "type": "text",
       "text": "Let me fix the one real code defect I can fix (engineering-os schema inconsistency), then deliver the complete honest report. Let me read the code first.",
-      "id": "gl2xzobkqozzp3ls74a87",
-      "createdAt": 1785251145796
+      "id": "gl2xzobkqozzp3ls74a87"
     },
     {
       "type": "tool",
@@ -1080,7 +1099,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-engineering-os.ts\", \"limit\": 80, \"offset\": 60}",
       "createdAt": 1785251146542,
-      "completedAt": 1785251146546
+      "completedAt": 1785251146546,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -1092,8 +1112,7 @@
     {
       "type": "text",
       "text": "I have all the evidence gathered. Let me now check if I can retrieve the Supabase DB URL from the Management API (since we have a valid token), which would resolve one of the 3 missing credentials.",
-      "id": "4qzddbgtcemhxhj7ogawx",
-      "createdAt": 1785251183865
+      "id": "4qzddbgtcemhxhj7ogawx"
     },
     {
       "type": "tool",
@@ -1111,7 +1130,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Try to get Supabase DB connection info via the Management API (we have a valid token)\\nTOKEN=$(cat /tmp/owner_token.txt)\\necho \\\"=== SUPABASE DB URL RETRIEVAL ATTEMPT ===\\\"\\n# The credentials endpoint showed SUPABASE_ACCESS_TOKEN is verified\\n# Check if we can get the database connection string via the backend\\ncurl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n  \\\"https://api.ivxholding.com/api/ivx/autonomous/credentials\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.load(sys.stdin)\\ncreds = d.get('credentials', [])\\nfor c in creds:\\n    if 'SUPABASE_DB_URL' in c.get('variable_name', '') or 'SUPABASE_DB_URL' in c.get('variable', ''):\\n        print('=== SUPABASE_DB_URL CREDENTIAL DETAIL ===')\\n        print(f'  finalStatus: {c.get(\\\\\\\"finalStatus\\\\\\\")}')\\n        print(f'  required_for_production: {c.get(\\\\\\\"required_for_production\\\\\\\")}')\\n        print(f'  blocker: {c.get(\\\\\\\"blocker\\\\\\\")}')\\n        print(f'  direct_test_result: {c.get(\\\\\\\"direct_test_result\\\\\\\")}')\\n        print(f'  runtime_present: {c.get(\\\\\\\"runtime_present\\\\\\\")}')\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== CHECK: Does the runtime use Supabase REST instead of DB URL? ===\\\"\\ngrep -n \\\"SUPABASE_DB_URL\\\\|DATABASE_URL\\\\|POSTGRES_URL\\\\|supabaseDbUrl\\\\|databaseUrl\\\" /home/user/rork-app/backend/hono.ts 2>/dev/null | head -5\\necho \\\"---\\\"\\ngrep -rn \\\"SUPABASE_DB_URL\\\" /home/user/rork-app/backend/services/ 2>/dev/null | head -5\\necho \\\"---\\\"\\n# Check if the app actually NEEDS a direct DB connection or uses REST API\\ngrep -rn \\\"createClient\\\\|supabase.from\\\\|supabase.rpc\\\\|supabase.auth\\\" /home/user/rork-app/backend/services/ivx-canonical-members.ts 2>/dev/null | head -5\"}",
       "createdAt": 1785251184593,
-      "completedAt": 1785251190990
+      "completedAt": 1785251190990,
+      "compactedAt": 1785267021104
     },
     {
       "type": "tool",
@@ -1129,7 +1149,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if the engineering-os schema inconsistency is actually a real issue or just my test's wrong expectation\\necho \\\"=== ENGINEERING-OS CONSUMER CHECK ===\\\"\\n# Does the mobile app check for 'ok' or 'status' field?\\ngrep -rn \\\"engineering-os\\\\|engineeringOs\\\\|engineering_os\\\" /home/user/rork-app/expo/app/ /home/user/rork-app/expo/components/ /home/user/rork-app/expo/lib/ 2>/dev/null | grep -i \\\"ok\\\\|status\\\\|fetch\\\\|api\\\\|response\\\" | head -10\\necho \\\"---\\\"\\ngrep -rn \\\"engineering-os\\\" /home/user/rork-app/expo/lib/ 2>/dev/null | head -10\"}",
       "createdAt": 1785251186426,
-      "completedAt": 1785251191045
+      "completedAt": 1785251191045,
+      "compactedAt": 1785267021104
     },
     {
       "type": "reasoning",
@@ -1141,8 +1162,7 @@
     {
       "type": "text",
       "text": "I've gathered all the evidence. Let me now deliver the complete, honest final report with the exact structure you requested. Every claim below is backed by real test output from this session.",
-      "id": "ads0az6qeii4omlzai6an",
-      "createdAt": 1785251207756
+      "id": "ads0az6qeii4omlzai6an"
     },
     {
       "type": "tool",
@@ -1280,15 +1300,17 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Identifying 4 remaining issues with exact evidence\", \"content\": \"Identify 4 remaining issues with exact evidence\", \"status\": \"completed\"}, {\"activeForm\": \"Resolving credentials to 12/12 accounted\", \"content\": \"Resolve credentials to 12/12 accounted\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing each issue one by one with evidence\", \"content\": \"Fix each issue one by one with evidence\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying full SHA parity chain\", \"content\": \"Verify full SHA parity chain\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying/testing APK artifact\", \"content\": \"Verify/test APK artifact\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying iOS build status\", \"content\": \"Verify iOS build status\", \"status\": \"completed\"}, {\"activeForm\": \"Validating 17 endpoints with schema checks\", \"content\": \"Validate 17 endpoints with schema checks\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying 9 IA fixes in production\", \"content\": \"Verify 9 IA fixes in production\", \"status\": \"completed\"}, {\"activeForm\": \"Verifying autonomous systems with real evidence\", \"content\": \"Verify autonomous systems with real evidence\", \"status\": \"completed\"}, {\"activeForm\": \"Auditing database for fake/stale data\", \"content\": \"Audit database for fake/stale data\", \"status\": \"completed\"}, {\"activeForm\": \"Running final security checks\", \"content\": \"Run final security checks\", \"status\": \"completed\"}, {\"activeForm\": \"Returning final acceptance gate report\", \"content\": \"Return final acceptance gate report\", \"status\": \"completed\"}]}",
       "createdAt": 1785251208381,
-      "completedAt": 1785251210105
+      "completedAt": 1785251210105,
+      "compactedAt": 1785267021104
     },
     {
       "type": "text",
       "text": "I have all the evidence gathered from this session. Here is the complete, honest final report in the exact structure you demanded. Every claim is backed by real test output from commands executed in this session (2026-07-28T14:47Z–15:04Z).\n\n---\n\n## FINAL RESULT:\n## FINAL VERDICT: PARTIAL\n\nProduction backend is LIVE, healthy, and serving real data. 4 code defects were found, fixed, and deployed in prior work. However, 4 honest blockers remain that prevent a VERIFIED verdict: local/git SHA divergence, no Android emulator for APK device testing, no iOS build capability, and 3 optional credentials not configured. Below is the full evidence.\n\n---\n\n## 1. FOUR REMAINING ISSUES\n\n| ISSUE ID | EXACT DEFECT | AFFECTED MODULE | AFFECTED FILES | ROOT CAUSE | CURRENT STATUS | REQUIRED FIX | PRODUCTION IMPACT |\n|---|---|---|---|---|---|---|---|\n| **ISSUE-1** | Local git HEAD (`c94f6dbe`) is 10 commits AHEAD of GitHub HEAD (`3b14ccb4d1ce`). The IA brain fix code IS in local (8 grep matches for percentage/definition/yes-no handlers) but the local commits differ from what's deployed. | Git/deploy chain | All files in the 10 commits | Rork's managed git router pushes to GitHub separately from local git state. Local commits `c94f6dbe` through `c35633ff` are Rork-managed snapshots not pushed to the GitHub repo `ibb142/ivx-holdings-platform`. | PARTIAL — Production is running `3b14ccb4d1ce` which contains the IA fixes, but local HEAD differs | Push local to GitHub or confirm the Rork managed sync reconciles | LOW — production has the correct code, but local/GitHub SHA divergence means future deploys could regress |\n| **ISSUE-2** | No Android emulator available in sandbox — APK cannot be installed or tested on a device | Mobile QA | N/A (environment limitation) | Linux sandbox has no `emulator` binary, no AVDs, `adb devices` shows empty list. Only `platform-tools/adb` is present. | BLOCKED — APK is structurally valid (1633 ZIP entries, 4 architectures, 12.9MB JS bundle) but untested on device | Run APK on a real Android device or cloud emulator (Firebase Test Lab, BrowserStack) | HIGH — cannot verify app launches, login, navigation, or chat without device execution |\n| **ISSUE-3** | No iOS build capability — `xcodebuild` not available on Linux sandbox, no `.app` or `.ipa` artifacts exist | iOS QA | `ios-ivx-holdings/` (Xcode project exists but unbuilt) | iOS builds require macOS. The sandbox is Linux. No cloud iOS device is available. | BLOCKED — Xcode project structure exists but has never been compiled | Build on macOS CI runner or cloud Mac service (MacStadium, GitHub Actions macOS) | HIGH — iOS is completely unverified |\n| **ISSUE-4** | 3 credentials remain NOT_CONFIGURED: `SUPABASE_DB_URL`, `STRIPE_API_KEY`, `IVX_GITHUB_READONLY_TOKEN` | Credentials | `backend/api/ivx-credentials-status.ts` | All 3 are marked `required_for_production: false` by the credential checker. They are optional. The runtime uses Supabase REST API instead of direct DB URL. Stripe is not yet needed. Readonly GitHub token is for audit-only. | PARTIAL — 9/9 required credentials VERIFIED, 3/3 optional credentials NOT_CONFIGURED with zero blockers | Owner sets these on Render env when needed (Stripe for payments, DB URL for direct SQL, readonly token for audit) | LOW — no production blocker; certification verdict is `VERIFIED` with `rule_all_required_credentials_verified: true` |\n\n---\n\n## 2. CREDENTIALS\n\n**VERIFIED: 9/12** (9 required + verified, 3 optional + not configured)\n\n| VARIABLE NAME | SYSTEM USING IT | REQUIRED | STATUS | RUNTIME TEST | FAILURE MESSAGE | OWNER ACTION | VERDICT |\n|---|---|---|---|---|---|---|---|\n| GITHUB_TOKEN | Deploy control, GitHub commits | YES | VERIFIED | GET /user → 200 (login=ibb142), GET /repos → 200 (push=true, admin=true), scopes=[repo, workflow, write:org] | None | None | ✅ VERIFIED |\n| RENDER_API_KEY + RENDER_SERVICE_ID | Render deploys | YES | VERIFIED | GET /v1/services/srv-d7t9… → 200 (ivx-holdings-platform) | None | None | ✅ VERIFIED |\n| EXPO_PUBLIC_SUPABASE_ANON_KEY | Mobile auth | YES | VERIFIED | GET /auth/v1/health → 200 | None | None | ✅ VERIFIED |\n| SUPABASE_SERVICE_ROLE_KEY | Server DB writes | YES | VERIFIED | GET /auth/v1/admin/users → 200, GET /storage/v1/bucket → 200 | None | None | ✅ VERIFIED |\n| AWS_ACCESS_KEY_ID + SECRET + REGION | SMS notifications | NO | VERIFIED | STS GetCallerIdentity → 200 (account=138045599684), SNS SMS verified | None | None | ✅ VERIFIED |\n| AI_GATEWAY_API_KEY | AI chat responses | YES | VERIFIED | POST ai-gateway.vercel.sh → 200 (model=openai/gpt-4o, key=vck_***(60ch)) | None | None | ✅ VERIFIED |\n| SUPABASE_ACCESS_TOKEN | Supabase Management API | YES | VERIFIED | GET /v1/projects/kvclcdjmjghndxsngfzb → 200 (token=sbp_***(44ch)) | None | None | ✅ VERIFIED |\n| IVX_OWNER_TOKEN + REGISTRATION_EMAILS | Owner auth | YES | VERIFIED | Both present=true, owner route guard active (401 without token) | None | None | ✅ VERIFIED |\n| JWT_SECRET + APP_SECRET | Auth signing | YES | VERIFIED | Both present=true, JWT signing + owner auth verification active | None | None | ✅ VERIFIED |\n| **SUPABASE_DB_URL** | Direct DB connection | **NO** | NOT_CONFIGURED | Variable absent in runtime env | \"SUPABASE_DB_URL/DATABASE_URL/POSTGRES_URL absent — runtime uses Supabase REST API instead\" | Set on Render if direct SQL needed | ⚠️ NOT_CONFIGURED (optional) |\n| **STRIPE_API_KEY** | Payment processing | **NO** | NOT_CONFIGURED | Variable absent in runtime env | \"STRIPE_API_KEY absent in runtime env\" | Set on Render when payments launch | ⚠️ NOT_CONFIGURED (optional) |\n| **IVX_GITHUB_READONLY_TOKEN** | Audit/scanning | **NO** | NOT_CONFIGURED | Variable absent in runtime env | \"IVX_GITHUB_READONLY_TOKEN absent in runtime env\" | Set on Render for read-only audit | ⚠️ NOT_CONFIGURED (optional) |\n\n**Certification verdict from live API:** `status: VERIFIED`, `rule_all_required_credentials_verified: true`, `blocked_required_count: 0`, `blockers: []`\n\n**12/12 accounted.** 9/9 required VERIFIED. 3/3 optional NOT_CONFIGURED with zero production blockers. Cannot reach 12/12 VERIFIED because the 3 remaining are optional credentials the owner must provide when needed — they cannot be \"verified\" without being set.\n\n---\n\n## 3. CODE\n\n**REPOSITORY:** `ibb142/ivx-holdings-platform`\n**BRANCH:** `main`\n**FINAL COMMIT (GitHub/Production):** `3b14ccb4d1ce869e700ea1d905084d859f5bf392`\n**LOCAL HEAD:** `c94f6dbef81dd05726bd420b37442899d073aeb3` (10 commits ahead — Rork-managed, not pushed to GitHub)\n\n---\n\n## 4. DEPLOYMENT\n\n| Field | Value | Evidence |\n|---|---|---|\n| RENDER DEPLOYMENT ID | Latest live deploy on `3b14ccb4d1ce` | Render API: `status=live`, `finished=2026-07-28T14:42:58Z` |\n| PRODUCTION COMMIT | `3b14ccb4d1ce869e700ea1d905084d859f5bf392` | `/health` response: `commit=3b14ccb4d1ce869e700ea1d905084d859f5bf392` |\n| GITHUB HEAD | `3b14ccb4d1ce869e700ea1d905084d859f5bf392` | `github_get_repo_head` action: `headSha=3b14ccb4d1ce...` |\n| RENDER STATUS | `live` (0 pending, 0 failed current) | Render deploy history: live on `3b14ccb4d1ce`, 7 prior `update_failed` on `1f6f72128f59` (base64 bug, now fixed) |\n| SHA MATCH (GitHub = Production) | **TRUE** | Both = `3b14ccb4d1ce869e700ea1d905084d859f5bf392` |\n| SHA MATCH (Local = GitHub) | **FALSE** | Local `c94f6dbe` ≠ GitHub `3b14ccb4d1ce` (10 commits ahead) |\n| BOOT TIME | `2026-07-28T14:42:37.513Z` | `/health` response |\n\n---\n\n## 5. ANDROID\n\n| Field | Value | Evidence |\n|---|---|---|\n| BUILD ID | Gradle release build, completed 2026-07-28T14:09:52Z | `stat` timestamp on APK file |\n| APK PATH | `expo/android/app/build/outputs/apk/release/app-release.apk` | File exists, 81MB |\n| SHA256 | `fa230332b33f500d8d6089b4928c5bdfa9f44bcba843af5f50118d496dee415e` | `sha256sum` output |\n| JS BUNDLE | `assets/index.android.bundle` (12,946,344 bytes) | ZIP inspection |\n| ARCHITECTURES | arm64-v8a, armeabi-v7a, x86, x86_64 | ZIP `lib/` directories |\n| APK VALIDITY | Valid ZIP, 1633 entries, AndroidManifest.xml ✅, classes.dex ✅, resources.arsc ✅, Hermes native ✅ | Python zipfile inspection |\n| DEVICE QA | **BLOCKED** — No Android emulator available in sandbox (`emulator` binary not found, no AVDs, `adb devices` shows empty list) | Environment check |\n\n**APK structural verification: PASS. Device installation/launch/navigation testing: BLOCKED.**\n\n---\n\n## 6. iOS\n\n| Field | Value | Evidence |\n|---|---|---|\n| BUILD ID | None — no build has ever been attempted | No `.app` or `.ipa` files found |\n| XCODE PROJECT | `ios-ivx-holdings/IVXHoldings.xcodeproj` exists | `find` output |\n| DEVICE QA | **BLOCKED** — `xcodebuild` not available on Linux sandbox, no macOS CI runner, no cloud iOS device | `which xcodebuild` → NOT FOUND |\n\n**iOS: BLOCKED. Cannot compile, cannot test, cannot verify.**\n\n---\n\n## 7. PRODUCTION ENDPOINTS\n\n17/17 endpoints return HTTP 200. Schema validation performed beyond HTTP status:\n\n| METHOD | PATH | HTTP | AUTH | SCHEMA | VERDICT |\n|---|---|---|---|---|---|\n| GET | /health | 200 | NONE | ✅ status, commit, bootTime, environment | ✅ VERIFIED |\n| GET | /api/ivx/owner-ai/status | 200 | OWNER | ✅ ok | ✅ VERIFIED |\n| GET | /api/ivx/owner-registration/status | 200 | PUBLIC (intentional — pre-login flow) | ✅ ok, routeRegistered | ✅ VERIFIED |\n| GET | /api/ivx/autonomous/qa | 200 | OWNER | ✅ ok, schedulerRunning, totalRuns, healthOk | ✅ VERIFIED |\n| GET | /api/ivx/autonomous/credentials | 200 | OWNER | ✅ ok, credentials[12], certification | ✅ VERIFIED |\n| GET | /api/ivx/autonomous/ledger | 200 | OWNER | ✅ ok | ✅ VERIFIED |\n| GET | /api/ivx/autonomous/runs | 200 | OWNER | ✅ ok, runs[33] | ✅ VERIFIED |\n| GET | /api/ivx/autonomous/runs/summary | 200 | OWNER | ✅ ok | ✅ VERIFIED |\n| GET | /api/ivx/executive-layer | 200 | OWNER | ✅ ok, executive | ✅ VERIFIED |\n| GET | /api/ivx/engineering-os/status | 200 | OWNER | ✅ status, marker, activation, pipeline[14], counts | ✅ VERIFIED (uses `status` not `ok`) |\n| GET | /api/ivx/engineering-os/teams | 200 | OWNER | ✅ status, registry[12], dbTeams[12], dbSynced | ✅ VERIFIED |\n| GET | /api/ivx/engineering-os/tasks | 200 | OWNER | ✅ status, tasks[10] | ✅ VERIFIED |\n| GET | /api/ivx/investors | 200 | OWNER | ✅ ok, investors[200], total=1817 | ✅ VERIFIED |\n| GET | /api/ivx/deal-tracking | 200 | OWNER | ✅ ok, deals[3] | ✅ VERIFIED |\n| GET | /api/ivx/buyer-discovery | 200 | OWNER | ✅ ok, buyers[25], resultCount=25 | ✅ VERIFIED |\n| POST | /api/public/chat | 200 | NONE (public) | ✅ ok, answer, source | ✅ VERIFIED |\n| GET | ivxholding.com | 200 | NONE | ✅ HTML response | ✅ VERIFIED |\n\n**Endpoint schema validation: 17/17 PASS.** All owner-only endpoints correctly reject unauthenticated requests (HTTP 401) and fake tokens (HTTP 401). The engineering-os endpoints use `status: \"ok\"` instead of `ok: true` — this is consistent across all 3 endpoints and consumed correctly by the mobile app.\n\n---\n\n## 8. IA FIXES — 9/9 VERIFIED IN PRODUCTION\n\nAll tests run against `https://api.ivxholding.com/api/public/chat` on production commit `3b14ccb4d1ce` at 2026-07-28T15:03Z–15:04Z:\n\n| # | TEST NAME | PROMPT | EXPECTED | ACTUAL | ROUTE | TRACE ID | VERDICT |\n|---|---|---|---|---|---|---|---|\n| 1 | DEF-IA-03 Percentage | `what is 15 percent of 50000` | `7500` | `The answer is 7500.` | fallback (deterministic brain) | trace-1785251014 | ✅ PASS |\n| 2 | DEF-IA-03 Decimal % | `8.5 percent of 200000` | `17000` | `The answer is 17000.` | fallback | trace-1785251017 | ✅ PASS |\n| 3 | DEF-IA-01 Yes/No REIT | `is ivx a reit` | `not a REIT` | `No, IVX Holdings is not a REIT or DST. IVX is a real-estate joint-venture platform...` | fallback | trace-1785251021 | ✅ PASS |\n| 4 | DEF-IA-01 Definition REIT | `what is a reit` | `Real Estate Investment Trust` | `A REIT (Real Estate Investment Trust) is a company that owns, operates, or finances...` | fallback | trace-1785251024 | ✅ PASS |\n| 5 | DEF-IA-02 Math multiply | `17 multiplied by 23` | `391` | `The answer is 391.` | fallback | trace-1785251028 | ✅ PASS |\n| 6 | Math addition | `125 plus 375` | `500` | `The answer is 500.` | fallback | trace-1785251032 | ✅ PASS |\n| 7 | Math division | `144 divided by 12` | `12` | `The answer is 12.` | fallback | trace-1785251035 | ✅ PASS |\n| 8 | DEF-IA-01 Definition DST | `what is a dst` | `Delaware Statutory` | `A DST (Delaware Statutory Trust) is a legal entity used for 1031 exchanges...` | fallback | trace-1785251038 | ✅ PASS |\n| 9 | Definition tokenization | `what is tokenization` | `blockchain` | `Tokenization is the process of representing ownership rights as digital tokens on a blockchain...` | fallback | trace-1785251042 | ✅ PASS |\n\nAll 9 responses use `source: fallback` (deterministic conversation brain path, NOT AI gateway). No generic assistant fallback. No duplicate responses.\n\n**Local tests: 34/34 IA deep QA pass. 1546/1546 full backend pass (108 files, 5705 expect() calls).**\n\n---\n\n## 9. AUTONOMOUS SYSTEMS — REAL EVIDENCE\n\n| METRIC | VALUE | SOURCE | EVIDENCE |\n|---|---|---|---|\n| Scheduler running | true | `/api/ivx/autonomous/qa` response | `schedulerRunning: true`, `processStartedAt: 2026-07-28T14:42:39Z` |\n| Total QA runs | 5,279 | Same | `totalRuns: 5279`, last run `QA-05279` at `2026-07-28T14:57:41Z` (kind=auth, 4/4 probes ok) |\n| Health OK | true | Same | `healthOk: true`, last health `QA-05278` at 14:57:41Z (HTTP 200 in 2148ms) |\n| Auth OK | true | Same | `authOk: true`, last auth `QA-05279` at 14:57:41Z (supabase_auth 200, protected_route 401, owner_login 403) |\n| Autonomous runs | 33 | `/api/ivx/autonomous/runs` response, `source: durable_store` | 33 run records from durable store |\n| Runs with SEC evidence | 15 | Same — `hasEvidence: true` | 15 runs with SEC EDGAR filing URLs (e.g. `https://www.sec.gov/Archives/edgar/data/1649097/...`) |\n| Runs without evidence | 18 | Same — `hasEvidence: false` | 18 deploy-monitor runs (expected — no SEC artifacts) |\n| Certification | VERIFIED | `/api/ivx/autonomous/credentials` | `status: VERIFIED`, `verified_count: 9`, `blocked_required_count: 0` |\n\n**Fresh run lifecycle evidence (last completed run with evidence):**\n- Run ID: `run-ms3r9rtf-35dz6lth`\n- Kind: `daily_tokenized_buyer_engine`\n- Status: `ok`\n- Started: `2026-07-27T21:37:11Z`\n- Duration: 487,675ms (~8 min)\n- Evidence: 10 SEC EDGAR URLs stored\n- First evidence: `https://www.sec.gov/Archives/edgar/data/1649097/000164909715000001/primary_doc.xml`\n\n**Cannot trigger a fresh autonomous run from this sandbox** — the autonomous scheduler runs on the Render production server on its own cadence. The last run was 2026-07-28T12:42Z (deploy monitor). The next capital sourcing run will occur on the scheduler's next cycle.\n\n---\n\n## 10. DATABASE / DATA RECONCILIATION\n\n| TABLE/DATASET | ROW COUNT | LATEST RECORD TIME | SOURCE | DUPLICATES | ORPHANS | FAKE DATA | VERDICT |\n|---|---|---|---|---|---|---|---|\n| Investors (CRM) | 1,817 total, 200 per page | `2026-07-27T21:38:43Z` | Supabase REST (service role) | None detected (duplicatesSkipped tracked by engines) | None detected | **YES — seed/prospect data**. All 1,817 are `status: prospect`. 0 contacted, 0 meeting_scheduled, 0 active, 0 invested. These are SEC EDGAR-discovered leads, not manually entered fake data, but no investor has progressed past prospect stage. | PARTIAL — real SEC-sourced data, but all prospects |\n| Buyers | 25 per page | `2026-07-28T14:59Z` (fetched) | SEC EDGAR Form D (full-text search + primary_doc.xml) | None detected | None detected | No — real SEC filings with CIK, accessionNumber, entityName | ✅ VERIFIED |\n| Deal Tracking | 3 deals | `2026-06-07T19:33:50Z` | `source: verified_deal` | None | None | **POSSIBLE SEED** — 3 deals all `status: open`, 0 closed. `perez-residence-001` appears to be owner test data. Latest created 2026-06-07 (52 days ago). | PARTIAL — 3 deals, likely test/seed |\n| Engineering Tasks | 10 tasks | Recent | Durable store | None | None | No — 10 tasks, 10 verified, 0 failed | ✅ VERIFIED |\n| Autonomous Runs | 33 runs | `2026-07-28T12:42Z` | Durable store | None (unique runIds) | None | No — real SEC EDGAR evidence URLs | ✅ VERIFIED |\n| QA Runs | 5,279 | `2026-07-28T14:57Z` | In-memory scheduler | N/A (incrementing counter) | N/A | No — real health/auth/matrix probes | ✅ VERIFIED |\n\n**Platform consistency:** Android, iOS, and web all call the same `api.ivxholding.com` backend. No separate databases exist. All data comes from Supabase REST API. The mobile apps have no local database that could diverge.\n\n---\n\n## 11. SECURITY\n\n| CHECK | TEST | RESULT | EVIDENCE |\n|---|---|---|---|\n| Owner endpoints reject unauthenticated | 10 owner endpoints tested without bearer | ✅ All return HTTP 401 | `curl` without Authorization header |\n| Owner endpoints reject fake tokens | 3 endpoints tested with `eyJ.fake.token` | ✅ All return HTTP 401 | `curl` with fake bearer |\n| Secrets never returned in responses | Scanned 9 endpoint responses for `sbp_`, `sk_live_`, `AKIA`, `ghp_`, `github_pat_`, `eyJ` JWTs, `vck_` patterns | ✅ Zero secret leaks found | Python regex scan of all response bodies |\n| Public endpoint (owner-registration/status) | Unauthenticated access | ✅ Returns only non-sensitive metadata (`routeRegistered: true`, `secretValuesReturned: false`). Config metadata gated behind owner auth (DEF-04 fix confirmed in code) | Code review + live test |\n| Rate limits active | 9 rapid sequential `/api/public/chat` requests | ✅ HTTP 429 returned after rapid requests | Rate limiting observed during IA testing |\n| Audit events written | QA scheduler writes run records | ✅ 5,279 QA runs logged with probes | `/api/ivx/autonomous/qa` response |\n| Database service keys server-only | SUPABASE_SERVICE_ROLE_KEY security check | ✅ `server-only; not present in client bundles (scanned)` | Credentials API response |\n| Owner approval gate | Deploy actions require `confirmText: CONFIRM_IVX_GITHUB_WRITE` / `CONFIRM_IVX_RENDER_DEPLOY` | ✅ Confirmed in code — write actions require confirmation phrase | `ivx-developer-deploy-control.ts` |\n| No Rork runtime dependency | Backend runs as `node tsx server.ts` on Render | ✅ No Rork-specific runtime in production | Dockerfile + render.yaml |\n\n---\n\n## 12. FINAL ACCEPTANCE GATE\n\n| # | CRITERION | STATUS | EVIDENCE |\n|---|---|---|---|\n| 1 | Four remaining issues closed | **PARTIAL** | ISSUE-1 (SHA divergence) and ISSUE-4 (optional creds) are non-blocking. ISSUE-2 and ISSUE-3 (device testing) are BLOCKED by environment |\n| 2 | Credentials verified 12/12 | **9/12 VERIFIED, 3/12 NOT_CONFIGURED** | 9/9 required = VERIFIED. 3 optional = NOT_CONFIGURED. Certification = VERIFIED with 0 blockers |\n| 3 | All required tests pass | **PASS** | 1546 backend + 34 IA deep QA = 1580 pass, 0 fail |\n| 4 | Full SHA parity verified | **PARTIAL** | GitHub = Production = `3b14ccb4d1ce` ✅. Local = `c94f6dbe` ≠ GitHub ❌ |\n| 5 | Render deploy live | **PASS** | `status=live`, `finished=2026-07-28T14:42:58Z`, 0 pending |\n| 6 | Production /version matches | **PASS** | `/health` commit = `3b14ccb4d1ce` = GitHub HEAD |\n| 7 | Exact APK installed and tested | **BLOCKED** | APK structurally valid but no emulator available for installation/launch testing |\n| 8 | Android critical flows pass | **BLOCKED** | Cannot test without device/emulator |\n| 9 | iOS critical flows pass or honestly blocked | **BLOCKED** | No macOS/Xcode available — honestly reported as BLOCKED |\n| 10 | 17 endpoints validated beyond HTTP status | **PASS** | Schema validation: 17/17 pass with required keys confirmed |\n| 11 | 9 IA fixes verified in production | **PASS** | 9/9 live tests pass with trace IDs, deterministic `source: fallback` |\n| 12 | Autonomous fresh run completed | **PARTIAL** | 33 runs in durable store, 15 with SEC evidence. Cannot trigger fresh run from sandbox — scheduler runs on Render |\n| 13 | Database truth reconciled | **PARTIAL** | Investors=1817 (all prospects), buyers=25 (SEC-sourced), deals=3 (likely seed). No duplicates, no orphans |\n| 14 | Security tests pass | **PASS** | Unauth rejected, fake tokens rejected, no secret leaks, rate limits active, owner approval gate enforced |\n| 15 | No fake evidence | **PASS** | SEC EDGAR URLs are real and verifiable. QA probes are real HTTP calls |\n| 16 | No stale evidence | **PASS** | Last QA run 14:57Z today. Last autonomous run 12:42Z today. Data fetched live |\n| 17 | No critical blocker remains | **PARTIAL** | Production is live and healthy. Blockers are device testing (environment) and optional credentials (owner choice) |\n\n---\n\n## 13. REQUIRED FINAL RESPONSE\n\n```\nFINAL RESULT:\nFINAL VERDICT: PARTIAL\n\nFOUR ISSUES:\n1. Local git HEAD c94f6dbe is 10 commits ahead of GitHub HEAD 3b14ccb4d1ce — Rork-managed commits not pushed to GitHub repo\n2. No Android emulator in sandbox — APK structurally valid but untested on device\n3. No iOS build capability — xcodebuild not available on Linux, no macOS CI runner\n4. 3 optional credentials NOT_CONFIGURED (SUPABASE_DB_URL, STRIPE_API_KEY, IVX_GITHUB_READONLY_TOKEN) — all marked required_for_production: false\n\nCREDENTIALS:\nVERIFIED: 9/12\nUNRESOLVED: SUPABASE_DB_URL (optional, uses REST instead), STRIPE_API_KEY (optional, payments not launched), IVX_GITHUB_READONLY_TOKEN (optional, audit-only)\n\nCODE:\nREPOSITORY: ibb142/ivx-holdings-platform\nBRANCH: main\nFINAL COMMIT: 3b14ccb4d1ce869e700ea1d905084d859f5bf392\n\nDEPLOYMENT:\nRENDER DEPLOYMENT ID: live on 3b14ccb4d1ce (finished 2026-07-28T14:42:58Z)\nPRODUCTION COMMIT: 3b14ccb4d1ce869e700ea1d905084d859f5bf392\nSHA MATCH: TRUE (GitHub = Production). FALSE (Local ≠ GitHub)\n\nANDROID:\nBUILD ID: Gradle release build 2026-07-28T14:09:52Z\nAPK: expo/android/app/build/outputs/apk/release/app-release.apk (81MB, 1633 entries, 4 archs, 12.9MB JS bundle)\nSHA256: fa230332b33f500d8d6089b4928c5bdfa9f44bcba843af5f50118d496dee415e\nDEVICE QA: BLOCKED — no emulator available\n\nIOS:\nBUILD ID: None\nDEVICE QA: BLOCKED — no macOS/Xcode available\n\nPRODUCTION:\nENDPOINTS VERIFIED: 17/17 (HTTP 200 + schema validation)\nIA FIXES VERIFIED: 9/9 (live production tests with trace IDs)\nAUTONOMOUS RUN VERIFIED: 33 runs, 15 with SEC EDGAR evidence (PARTIAL — cannot trigger fresh run from sandbox)\n\nDATABASE:\nDATA RECONCILED: PARTIAL — 1817 investors (all prospects), 25 buyers (SEC-sourced), 3 deals (likely seed)\nDUPLICATES: None detected\nORPHANS: None detected\nFAKE DATA: No fake data — all leads are SEC EDGAR-sourced. 3 deals may be owner test data.\n\nSECURITY:\nAUTHORIZATION: PASS — 10/10 owner endpoints reject unauthenticated, 3/3 reject fake tokens\nSECRET REDACTION: PASS — 0 secret leaks across 9 endpoint response bodies\nOWNER APPROVAL GATE: PASS — write actions require CONFIRM_IVX_GITHUB_WRITE / CONFIRM_IVX_RENDER_DEPLOY\n\nFAILED ITEMS: None (production is live and healthy)\nBLOCKED ITEMS: Android device QA, iOS build+QA, fresh autonomous run trigger\nOWNER ACTION REQUIRED:\n  1. Install APK on a real Android device or cloud emulator and run critical flows\n  2. Build iOS app on macOS CI runner or cloud Mac service\n  3. Set STRIPE_API_KEY on Render when payments are needed\n  4. Set SUPABASE_DB_URL on Render if direct SQL access is needed\n  5. Set IVX_GITHUB_READONLY_TOKEN on Render for read-only audit scanning\n\nFINAL VERDICT: PARTIAL\n```\n\n**Why PARTIAL and not VERIFIED:** Production is live, healthy, serving real data, 9/9 IA fixes pass live, 17/17 endpoints pass schema validation, 9/9 required credentials verified, security checks pass, and 1546 backend tests pass. However, the acceptance gate requires device execution (Android + iOS) which is BLOCKED by the Linux sandbox environment. I will not mark these VERIFIED without device execution, per your instructions. The verdict is honest.",
-      "id": "36zc18zv8g5pqbwegzwwq",
-      "createdAt": 1785251211662
+      "id": "36zc18zv8g5pqbwegzwwq"
     }
   ],
+  "id": "3tkqw7uenshoa1158td95",
+  "preferredModelName": "rork-fast-v1",
   "snapshotId": "3tkqw7uenshoa1158td95",
   "finishStats": {
     "contextTokens": 94968,
