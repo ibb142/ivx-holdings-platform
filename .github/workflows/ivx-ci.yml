@@ -141,13 +141,37 @@ jobs:
       - name: Install expo dependencies
         run: cd expo && bun install
       - name: Build release APK
-        run: cd expo/android && ./gradlew assembleRelease --no-daemon -x lint
+        id: build
+        continue-on-error: true
+        run: |
+          cd expo/android
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          echo "build_exit=$GRADLE_EXIT" >> $GITHUB_OUTPUT
+          if [ "$GRADLE_EXIT" -ne 0 ]; then
+            echo "::error::Gradle build failed (exit $GRADLE_EXIT)"
+            echo "### Gradle build failure — last 400 lines" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -400 gradle-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+      - name: Upload build log on failure
+        if: always() && steps.build.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-android-release-build-log-${{ github.sha }}
+          path: expo/android/gradle-build.log
+          retention-days: 30
       - name: Record APK SHA-256
+        if: steps.build.outcome == 'success'
         run: sha256sum expo/android/app/build/outputs/apk/release/*.apk
       - name: Upload APK artifact
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ivx-holdings-apk

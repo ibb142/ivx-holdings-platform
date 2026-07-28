@@ -1,14 +1,17 @@
-# IVX Android Emulator QA — GitHub Actions Ubuntu Runner
+# IVX Android Release APK Build + Emulator QA
 #
-# Builds a RELEASE APK (with JS bundle + assets), then runs emulator QA.
+# Builds a RELEASE APK (with JS bundle + assets) using the committed
+# expo/android/ directory, then installs it on an emulator and runs Maestro QA.
+#
+# Proven path mirrors ivx-ci.yml android-apk job:
+#   - bun install at root + expo
+#   - NO expo prebuild --clean (uses committed android/ directory)
+#   - assembleRelease
+#   - explicit JAVA_HOME / ANDROID_HOME
 #
 # Triggers:
 #   - Push to main (when chat files, Maestro flows, or this workflow change)
 #   - Manual dispatch via GitHub Actions UI
-#
-# Secrets required (already configured in repo):
-#   - EXPO_PUBLIC_SUPABASE_URL
-#   - EXPO_PUBLIC_SUPABASE_ANON_KEY
 
 name: Android Emulator QA
 
@@ -46,11 +49,11 @@ permissions:
 
 jobs:
   build-and-test:
-    name: Android Emulator Build + QA
+    name: Android Release APK Build + Emulator QA
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
-      build_status: ${{ steps.build.outcome }}
+      build_status: ${{ steps.build.outputs.build_status }}
       apk_path: ${{ steps.apk.outputs.path }}
       apk_hash: ${{ steps.apk.outputs.hash }}
       apk_size: ${{ steps.apk.outputs.size }}
@@ -64,10 +67,8 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -78,36 +79,29 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.0.12077973 cmake;3.22.1'
+          log-accepted-android-sdk-licenses: false
 
-      - name: Install dependencies
+      - name: Install root dependencies
+        run: bun install
+
+      - name: Install Expo dependencies
+        working-directory: expo
+        run: bun install
+
+      - name: Verify tooling
         working-directory: expo
         run: |
-          npm install --legacy-peer-deps
-
-      - name: Verify Expo CLI
-        working-directory: expo
-        run: |
-          echo "=== Node version ==="
+          echo "=== Tool versions ==="
+          bun --version
           node --version
-          echo "=== Expo CLI version ==="
           npx expo --version
-          echo "=== Expo package version ==="
-          node -e "console.log('expo:', require('expo/package.json').version)"
-
-      - name: Expo prebuild (generates native Android project)
-        working-directory: expo
-        run: |
-          npx expo prebuild --platform android --clean --no-install
-        env:
-          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
 
       # ============================================================
-      # Build step uses continue-on-error so that even if the build
-      # fails, the diagnostic step below can capture the error logs
-      # and create a GitHub issue with the actual error message.
+      # Build release APK using committed android/ directory.
+      # continue-on-error lets the log upload step run on failure.
       # ============================================================
-      - name: Build Android APK
+      - name: Build Android release APK
         id: build
         working-directory: expo/android
         continue-on-error: true
@@ -117,11 +111,11 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           set -o pipefail
-          echo "=== Building APK with Gradle ==="
+          echo "=== Building release APK with Gradle ==="
           echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME"
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon -x lint 2>&1 | tee gradle-build.log
+          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log
           GRADLE_EXIT=${PIPESTATUS[0]}
           echo "=== Gradle exit code: $GRADLE_EXIT ==="
           echo "build_exit=$GRADLE_EXIT" >> $GITHUB_OUTPUT
@@ -129,25 +123,34 @@ jobs:
             echo "build_status=success" >> $GITHUB_OUTPUT
           else
             echo "build_status=failed" >> $GITHUB_OUTPUT
-            echo "=== BUILD FAILED — last 500 lines ==="
-            tail -500 gradle-build.log
-            echo "### Build Failure — Last 500 Lines" >> $GITHUB_STEP_SUMMARY
+            echo "=== BUILD FAILED — last 400 lines ==="
+            tail -400 gradle-build.log
+            echo "### Build Failure — Last 400 Lines" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -500 gradle-build.log >> $GITHUB_STEP_SUMMARY
+            tail -400 gradle-build.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
 
-      # ALWAYS run — captures error even when build step fails.
-      # Uses if: always() so it runs regardless of build step outcome.
+      # ALWAYS run — uploads the full Gradle log even when the build fails.
+      - name: Upload Gradle build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-android-release-gradle-log-${{ github.sha }}
+          path: expo/android/gradle-build.log
+          retention-days: 30
+
+      # Create a diagnostic GitHub issue if the build failed.
       - name: Create diagnostic issue on build failure
         if: always() && steps.build.outcome != 'success'
         working-directory: expo/android
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "::error::Gradle build failed. Creating diagnostic issue with error logs."
+          echo "::error::Gradle release build failed. Creating diagnostic issue with error logs."
           {
-            echo "## Android Emulator QA Build Diagnostics"
+            echo "## Android Release APK Build Diagnostics"
             echo ""
             echo "**Commit:** ${GITHUB_SHA}"
             echo "**Run:** ${GITHUB_RUN_ID}"
@@ -158,22 +161,24 @@ jobs:
             tail -800 gradle-build.log 2>/dev/null || echo "gradle-build.log not found"
             echo '```'
           } > diagnostic-body.md
-          gh label create "android-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
-          gh issue create \
-            --title "Android QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
-            --body-file diagnostic-body.md \
-            --label "android-qa-diagnostic" 2>&1 || \
-          gh issue create --title "Android QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
+          # Create issue via GitHub API (gh CLI sometimes fails silently in this runner)
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Content-Type: application/json" \
+            -d "$(python3 -c "import json,sys; print(json.dumps({'title':'Android Release APK Build Diagnostics — ${GITHUB_SHA:0:12}','body':open('diagnostic-body.md').read(),'labels':['android-qa-diagnostic']}))")" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues")
+          echo "Issue create response: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Created issue:', d.get('html_url', d.get('message','unknown')))"
 
       - name: Find built APK
         id: apk
         working-directory: expo/android
         if: steps.build.outcome == 'success'
         run: |
-          echo "=== Searching for APK ==="
-          APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          echo "=== Searching for release APK ==="
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
           if [ -z "$APK_PATH" ]; then
-            echo "::error::No APK found"
+            echo "::error::No release APK found"
             find . -name "*.apk" 2>/dev/null
             exit 1
           fi
@@ -181,7 +186,6 @@ jobs:
           echo "path=$APK_PATH_ABS" >> $GITHUB_OUTPUT
           echo "APK found: $APK_PATH_ABS"
           ls -lh "$APK_PATH_ABS"
-          # Compute SHA256 hash for verification
           APK_HASH=$(sha256sum "$APK_PATH_ABS" | awk '{print $1}')
           echo "hash=$APK_HASH" >> $GITHUB_OUTPUT
           echo "APK SHA256: $APK_HASH"
@@ -189,7 +193,6 @@ jobs:
           echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
           echo "APK size: $APK_SIZE bytes"
 
-      # Upload the APK IMMEDIATELY after finding it, before emulator QA.
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         if: steps.build.outcome == 'success'
@@ -199,11 +202,6 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # ============================================================
-      # Boot Android Emulator + Install + Test
-      # continue-on-error ensures the APK artifact is still available
-      # even if emulator QA fails.
-      # ============================================================
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
         continue-on-error: true
@@ -268,7 +266,6 @@ jobs:
             echo "=== Post-test screenshot ==="
             adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
 
-      # Create diagnostic issue if emulator QA failed
       - name: Emulator QA diagnostics
         if: always() && steps.emu.outcome != 'success' && steps.build.outcome == 'success'
         env:
@@ -302,7 +299,7 @@ jobs:
             --label "android-emulator-diagnostic" 2>&1 || \
           gh issue create --title "Android Emulator QA Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
 
-      - name: Upload all artifacts
+      - name: Upload all QA artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -310,7 +307,6 @@ jobs:
           path: |
             screenshot-*.png
             logcat.txt
-            expo/android/gradle-build.log
             expo/maestro-launch-results.xml
             expo/maestro-launch.log
           retention-days: 30
@@ -318,7 +314,7 @@ jobs:
       - name: Generate QA summary
         if: always()
         run: |
-          echo "## Android Emulator QA Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Android Release APK + Emulator QA Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
@@ -332,6 +328,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- APK: \`ivx-android-apk-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Gradle log: \`ivx-android-release-gradle-log-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Screenshots: \`screenshot-01-launch.png\`, \`screenshot-02-post-test.png\`" >> $GITHUB_STEP_SUMMARY
           echo "- Logcat: \`logcat.txt\`" >> $GITHUB_STEP_SUMMARY
           echo "- Maestro results: \`maestro-launch-results.xml\`" >> $GITHUB_STEP_SUMMARY

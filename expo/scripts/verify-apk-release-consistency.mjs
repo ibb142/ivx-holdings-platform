@@ -16,6 +16,17 @@ const gradleVersion = gradle.match(/versionName\s+["']([^"']+)["']/)?.[1];
 const landingVersions = [...landing.matchAll(/ivx-holdings-v(\d+\.\d+\.\d+)\.apk/g)].map((match) => match[1]);
 const expectedVersion = configVersion;
 
+console.error(JSON.stringify({
+  debug: true,
+  configVersion: configVersion || null,
+  gradleVersion: gradleVersion || null,
+  landingVersionCount: landingVersions.length,
+  landingVersions: [...new Set(landingVersions)],
+  appConfigLength: appConfig.length,
+  gradleLength: gradle.length,
+  landingLength: landing.length,
+}));
+
 if (!expectedVersion || !gradleVersion || landingVersions.length === 0) {
   throw new Error('APK release consistency check could not read every required version source.');
 }
