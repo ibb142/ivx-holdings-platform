@@ -17,9 +17,9 @@
  *   - https://github.com/expo/expo/issues/44229
  */
 
-import { withDangerousMod, type ConfigPlugin } from 'expo/config-plugins';
-import * as fs from 'fs';
-import * as path from 'path';
+const { withDangerousMod } = require('expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 const fmtPatchCode = `
   # === FMT Xcode 26 consteval fix ===
@@ -47,13 +47,13 @@ const fmtPatchCode = `
       if patched != content
         File.chmod(0644, fmt_base)
         File.write(fmt_base, patched)
-        puts "🔧 Patched fmt/base.h to force FMT_USE_CONSTEVAL=0 for Xcode 26"
+        puts "Patch: fmt/base.h FMT_USE_CONSTEVAL=0 for Xcode 26"
       end
     end
   end
 `;
 
-const withFmtXcode26Fix: ConfigPlugin = (config) => {
+const withFmtXcode26Fix = (config) => {
   return withDangerousMod(config, ['ios', (modConfig) => {
     const podfilePath = path.join(
       modConfig.modRequest.platformProjectRoot,
@@ -74,17 +74,12 @@ const withFmtXcode26Fix: ConfigPlugin = (config) => {
     }
 
     // Find the post_install block and inject our patch before the final 'end'
-    // The pattern: react_native_post_install(...) ... end
-    // We need to insert our code inside the post_install block, before 'end'
-
-    // Strategy: find the last 'end' that closes the post_install block
-    // and insert our patch code before it.
     const postInstallMatch = content.match(
       /post_install\s+do\s+\|installer\|[\s\S]*?react_native_post_install\([\s\S]*?\)[\s\S]*?\n(\s*end\s*\n)/
     );
 
     if (postInstallMatch) {
-      const insertPoint = postInstallMatch.index! + postInstallMatch[0].length;
+      const insertPoint = postInstallMatch.index + postInstallMatch[0].length;
       content =
         content.slice(0, insertPoint - postInstallMatch[1].length) +
         fmtPatchCode +
@@ -96,7 +91,7 @@ const withFmtXcode26Fix: ConfigPlugin = (config) => {
         /post_install\s+do\s+\|installer\|[\s\S]*?\n(\s*end\s*\n)/
       );
       if (simpleMatch) {
-        const insertPoint = simpleMatch.index! + simpleMatch[0].length;
+        const insertPoint = simpleMatch.index + simpleMatch[0].length;
         content =
           content.slice(0, insertPoint - simpleMatch[1].length) +
           fmtPatchCode +
@@ -104,7 +99,7 @@ const withFmtXcode26Fix: ConfigPlugin = (config) => {
         console.log('[withFmtXcode26Fix] Injected fmt patch into simple post_install block');
       } else {
         // Last resort: append a new post_install block
-        content += `\npost_install do |installer|\n${fmtPatchCode}\nend\n`;
+        content += '\npost_install do |installer|\n' + fmtPatchCode + '\nend\n';
         console.log('[withFmtXcode26Fix] Appended new post_install block with fmt patch');
       }
     }
@@ -114,4 +109,4 @@ const withFmtXcode26Fix: ConfigPlugin = (config) => {
   }]);
 };
 
-export default withFmtXcode26Fix;
+module.exports = withFmtXcode26Fix;
