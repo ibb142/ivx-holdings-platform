@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import type { ExpoConfig } from 'expo/config';
 import { execSync } from 'child_process';
+import withFmtXcode26Fix from './plugins/withFmtXcode26Fix';
 
 // Dynamically read the current git HEAD SHA at build time.
 // This breaks the circular dependency where hardcoding the SHA
@@ -77,6 +78,12 @@ const config: ExpoConfig = {
         microphonePermission: 'Allow IVX Holdings to capture voice prompts for transcription.',
       },
     ],
+    // Fix fmt 11.0.2 consteval compilation error with Xcode 26 / Apple Clang 21+.
+    // React Native bundles fmt 11.0.2 via RCT-Folly; Xcode 26 enforces stricter
+    // consteval rules that fmt 11.0.2 doesn't handle. fmt 12.1.0 fixes this but
+    // RN hasn't upgraded yet. This plugin patches the Podfile post_install to
+    // force C++17 for the fmt target and patch base.h to disable consteval.
+    withFmtXcode26Fix,
   ],
   experiments: {
     typedRoutes: true,
