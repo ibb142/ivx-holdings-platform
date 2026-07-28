@@ -395,11 +395,11 @@ export default function DeploymentDashboard() {
       const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       const ok = res.ok && json.ok !== false;
       const result = (json.result ?? json) as Record<string, unknown>;
-      const deployId =
+      const deployId: string | null =
         (typeof result.deployId === 'string' ? result.deployId : null) ||
-        (typeof (result.deploy as Record<string, unknown>)?.id === 'string' ? (result.deploy as Record<string, unknown>).id : null) ||
+        (typeof (result.deploy as Record<string, unknown>)?.id === 'string' ? (result.deploy as Record<string, unknown>).id as string : null) ||
         null;
-      const status = (typeof result.status === 'string' ? result.status : null) || null;
+      const status: string | null = (typeof result.status === 'string' ? result.status : null) || null;
       setRedeployResult({
         ok,
         deployId,

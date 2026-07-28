@@ -70,14 +70,14 @@ async function loadAuraPulse(): Promise<AuraPulse> {
   ]);
 
   const unwrap = <T,>(p: PromiseSettledResult<T>, fallback: T): T =>
-    p.status === 'fulfilled' ? p.value : fallback;
+    p.status === 'fulfilled' ? p.value as T : fallback;
 
   return {
-    ai: unwrap(ai, { ok: false, error: 'AI status unavailable' }),
-    qa: unwrap(qa, { ok: false }),
-    credentials: unwrap(credentials, { ok: false }),
-    runs: unwrap(runs, { ok: false }),
-    executive: unwrap(executive, { ok: false }),
+    ai: unwrap<{ ok: boolean; provider?: string; configured?: boolean; model?: string; error?: string }>(ai, { ok: false, error: 'AI status unavailable' }),
+    qa: unwrap<{ ok: boolean; schedulerRunning?: boolean; totalRuns?: number; healthOk?: boolean; authOk?: boolean }>(qa, { ok: false }),
+    credentials: unwrap<{ ok: boolean; certification?: string; verifiedCount?: number; blockedRequiredCount?: number }>(credentials, { ok: false }),
+    runs: unwrap<{ ok: boolean; totalRuns?: number; runsWithEvidence?: number; failedRuns?: number }>(runs, { ok: false }),
+    executive: unwrap<{ ok: boolean; summary?: string; status?: string }>(executive, { ok: false }),
   };
 }
 
