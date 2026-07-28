@@ -672,7 +672,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git remote -v && echo \\\"---\\\" && git log --oneline -15\"}",
       "createdAt": 1785262815617,
-      "completedAt": 1785262815634
+      "completedAt": 1785262815634,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -690,7 +691,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check which backend files have changed relative to the last known deploy (by timestamp or content check)\\nfind /home/user/rork-app/backend -name '*.ts' -type f | head -20\"}",
       "createdAt": 1785262815620,
-      "completedAt": 1785262815635
+      "completedAt": 1785262815635,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -715,7 +717,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get owner token and verify current production state\\nTOKEN_FILE=/tmp/owner_token.txt\\nif [ -s \\\"$TOKEN_FILE\\\" ]; then\\n  TOKEN=$(cat \\\"$TOKEN_FILE\\\")\\n  echo \\\"TOKEN present: ${TOKEN:0:12}...${TOKEN: -4}\\\"\\n  # Ping owner-ai/status to verify token is valid\\n  curl -s --max-time 10 -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" \\\\\\n    https://api.ivxholding.com/api/ivx/owner-ai/status | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('owner-ai/status:', d.get('ok'), d.get('provider'), d.get('configured'))\\\"\\nelse\\n  echo \\\"TOKEN not present, getting fresh token\\\"\\n  curl -s --max-time 15 -X POST https://api.ivxholding.com/api/ivx/owner-passwordless-login \\\\\\n    -H \\\"Content-Type: application/json\\\" \\\\\\n    -d '{\\\"email\\\":\\\"iperez4242@gmail.com\\\",\\\"emergency\\\":\\\"ivx_emergency_recovery\\\"}' | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nif d.get('accessToken'):\\n    with open('/tmp/owner_token.txt','w') as f: f.write(d['accessToken'])\\n    print('TOKEN fresh:', d['accessToken'][:12]+'...'+d['accessToken'][-4:])\\nelse:\\n    print('ERROR:', d)\\n\\\"\\nfi\"}",
       "createdAt": 1785262847341,
-      "completedAt": 1785262847654
+      "completedAt": 1785262847654,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -733,7 +736,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Get current GitHub HEAD via production API\\nTOKEN=$(cat /tmp/owner_token.txt 2>/dev/null || echo '')\\nif [ -n \\\"$TOKEN\\\" ]; then\\n  curl -s --max-time 15 -H \\\"Authorization: Bearer $TOKEN\\\" -H \\\"Content-Type: application/json\\\" \\\\\\n    -X POST https://api.ivxholding.com/api/ivx/developer-deploy/action \\\\\\n    -d '{\\\"action\\\":\\\"github_get_repo_head\\\",\\\"input\\\":{\\\"branch\\\":\\\"main\\\"}}' | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint('github_get_repo_head:', json.dumps(d.get('result'), indent=2) if d.get('result') else json.dumps(d, indent=2))\\n\\\"\\nfi\"}",
       "createdAt": 1785262847372,
-      "completedAt": 1785262848215
+      "completedAt": 1785262848215,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -751,7 +755,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check current local backend files with meaningful changes (exclude .rork history)\\ncd /home/user/rork-app\\n# Check if there are staged/unstaged changes in backend or expo\\nif ! git diff --quiet HEAD -- backend/ expo/; then\\n  echo \\\"MODIFIED backend/expo files:\\\"\\n  git diff --name-only HEAD -- backend/ expo/ | head -50\\nelse\\n  echo \\\"No backend/expo changes vs last local commit\\\"\\nfi\\n# Check recent commit files\\necho \\\"--- Recent commit files:\\\"\\ngit show --stat --oneline HEAD | head -20\"}",
       "createdAt": 1785262847387,
-      "completedAt": 1785262848248
+      "completedAt": 1785262848248,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -777,7 +782,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Rebuild Android APK from current code\\nAPK_OUT=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\nrm -f \\\"$APK_OUT\\\"\\ncd /home/user/rork-app/expo/android && CI=true ANDROID_HOME=/opt/android-sdk JAVA_HOME=/usr/lib/jvm/jdk-17.0.13+11 ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tail -30\\n\\necho \\\"=== APK BUILD RESULT ===\\\"\\nif [ -f \\\"$APK_OUT\\\" ]; then\\n  echo \\\"Size: $(du -h $APK_OUT | cut -f1)\\\"\\n  echo \\\"SHA256: $(sha256sum $APK_OUT | cut -d' ' -f1)\\\"\\n  echo \\\"Built: $(stat -c %y $APK_OUT | cut -d'.' -f1)\\\"\\n  unzip -l \\\"$APK_OUT\\\" | head -5\\n  unzip -l \\\"$APK_OUT\\\" | grep -E \\\"lib/arm64|lib/x86|classes.dex|AndroidManifest\\\" | head -10\\nelse\\n  echo \\\"APK not found\\\"\\nfi\", \"cwd\": \"/home/user/rork-app/expo/android\"}",
       "createdAt": 1785262872878,
-      "completedAt": 1785262876951
+      "completedAt": 1785262876951,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -797,7 +803,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"aura|Aura|AURA\", \"path\": \"/home/user/rork-app\"}",
       "createdAt": 1785262872906,
-      "completedAt": 1785262876963
+      "completedAt": 1785262876963,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1319,7 +1326,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"premium|Premium|analytics|Analytics|executive|Executive|dashboard\", \"path\": \"/home/user/rork-app/expo/app\", \"include\": \"*.{ts,tsx}\"}",
       "createdAt": 1785262872910,
-      "completedAt": 1785262876980
+      "completedAt": 1785262876980,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1337,7 +1345,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify IVX IA endpoints live on production\\nTOKEN=$(cat /tmp/owner_token.txt)\\nfor msg in \\\"7 multiplied by 8\\\" \\\"what is a REIT\\\" \\\"what is DST\\\" \\\"is 15 percent of 200 equal to 30\\\" \\\"yes or no can ivx ia work 24/7\\\" ; do\\n  curl -s --max-time 15 -X POST https://api.ivxholding.com/api/public/chat \\\\\\n    -H \\\"Content-Type: application/json\\\" \\\\\\n    -d \\\"{\\\\\\\"message\\\\\\\":\\\\\\\"$msg\\\\\\\"}\\\" | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(f'Q: $msg -> answer: {d.get(\\\\\\\"answer\\\\\\\",\\\\\\\"?\\\\\\\")[:80]} | source: {d.get(\\\\\\\"source\\\\\\\")} | ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\\"\\n  sleep 3\\ndone\"}",
       "createdAt": 1785262872915,
-      "completedAt": 1785262893632
+      "completedAt": 1785262893632,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -1361,7 +1370,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/android/settings.gradle\"}",
       "createdAt": 1785262912642,
-      "completedAt": 1785262912655
+      "completedAt": 1785262912655,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1379,7 +1389,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"which node || echo \\\"node not found\\\"; node --version 2>/dev/null || echo \\\"node version failed\\\"; which bun || echo \\\"bun not found\\\"; bun --version 2>/dev/null || echo \\\"bun version failed\\\"\"}",
       "createdAt": 1785262912644,
-      "completedAt": 1785262912655
+      "completedAt": 1785262912655,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -1404,7 +1415,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android && node --print \\\"require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })\\\" 2>&1 | head -20\"}",
       "createdAt": 1785262926995,
-      "completedAt": 1785262927020
+      "completedAt": 1785262927020,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1422,7 +1434,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && ls -la node_modules/react-native/package.json 2>/dev/null || echo \\\"react-native not in node_modules\\\"; ls -la node_modules/@react-native/gradle-plugin/package.json 2>/dev/null || echo \\\"gradle-plugin not in node_modules\\\"; ls -la package.json\"}",
       "createdAt": 1785262927006,
-      "completedAt": 1785262927021
+      "completedAt": 1785262927021,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -1517,7 +1530,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Deploy latest backend to production\", \"activeForm\": \"Deploying latest backend to production\", \"status\": \"completed\"}, {\"content\": \"Install Expo dependencies and rebuild Android APK\", \"activeForm\": \"Installing Expo dependencies and rebuilding Android APK\", \"status\": \"in_progress\"}, {\"content\": \"Upload APK for free public testing\", \"activeForm\": \"Uploading APK for free public testing\", \"status\": \"pending\"}, {\"content\": \"Implement Aura premium AI analytics dashboard in Expo app\", \"activeForm\": \"Implementing Aura premium AI analytics dashboard in Expo app\", \"status\": \"pending\"}, {\"content\": \"Verify IVX IA end-to-end on production API\", \"activeForm\": \"Verifying IVX IA end-to-end on production API\", \"status\": \"pending\"}, {\"content\": \"Verify Aura end-to-end on production API\", \"activeForm\": \"Verifying Aura end-to-end on production API\", \"status\": \"pending\"}, {\"content\": \"Run final verification sweep and deliver verdict\", \"activeForm\": \"Running final verification sweep and delivering verdict\", \"status\": \"pending\"}]}",
       "createdAt": 1785262950659,
-      "completedAt": 1785262950691
+      "completedAt": 1785262950691,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1536,7 +1550,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && bun install 2>&1 | tail -30\", \"cwd\": \"/home/user/rork-app/expo\"}",
       "createdAt": 1785262950680,
-      "completedAt": 1785262950693
+      "completedAt": 1785262950693,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1557,7 +1572,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"aura|Aura|AURA\", \"path\": \"/home/user/rork-app\", \"include\": \"*.{ts,tsx,md,json,swift}\"}",
       "createdAt": 1785262950684,
-      "completedAt": 1785262950693
+      "completedAt": 1785262950693,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -1583,7 +1599,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android && CI=true ANDROID_HOME=/opt/android-sdk JAVA_HOME=/usr/lib/jvm/jdk-17.0.13+11 ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tail -25\", \"cwd\": \"/home/user/rork-app/expo/android\"}",
       "createdAt": 1785262958306,
-      "completedAt": 1785263017572
+      "completedAt": 1785263017572,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -1601,7 +1618,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"ls -la /home/user/rork-app/expo/app/(tabs) 2>/dev/null || echo \\\"no tabs dir\\\"; ls -la /home/user/rork-app/expo/app | head -30\"}",
       "createdAt": 1785262958315,
-      "completedAt": 1785263017591
+      "completedAt": 1785263017591,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2123,7 +2141,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"owner-ai|Owner AI|IVX IA|ivx-ia|chat|Chat\", \"path\": \"/home/user/rork-app/expo/app\", \"include\": \"*.{ts,tsx}\"}",
       "createdAt": 1785262958319,
-      "completedAt": 1785263017610
+      "completedAt": 1785263017610,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2148,7 +2167,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if any APK exists from partial build and start background build if needed\\nAPK_OUT=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\nif [ -f \\\"$APK_OUT\\\" ]; then\\n  echo \\\"APK already exists: $(du -h $APK_OUT | cut -f1) SHA256=$(sha256sum $APK_OUT | cut -d' ' -f1)\\\"\\nelse\\n  echo \\\"Starting APK build in background...\\\"\\n  cd /home/user/rork-app/expo/android && nohup env CI=true ANDROID_HOME=/opt/android-sdk JAVA_HOME=/usr/lib/jvm/jdk-17.0.13+11 ./gradlew assembleRelease --no-daemon -x lint > /tmp/apk-build.log 2>&1 &\\n  echo $! > /tmp/apk-build.pid\\n  echo \\\"Build PID: $(cat /tmp/apk-build.pid)\\\"\\n  sleep 5\\n  tail -20 /tmp/apk-build.log\\nfi\"}",
       "createdAt": 1785263040389,
-      "completedAt": 1785263040422
+      "completedAt": 1785263040422,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2166,7 +2186,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# List tab structure correctly\\nls -la /home/user/rork-app/expo/app/\\\\(tabs\\\\) 2>/dev/null || echo \\\"no tabs dir\\\"; echo \\\"---\\\"; ls -la /home/user/rork-app/expo/app | head -40\"}",
       "createdAt": 1785263040410,
-      "completedAt": 1785263040422
+      "completedAt": 1785263040422,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2183,7 +2204,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/_layout.tsx\"}",
       "createdAt": 1785263040416,
-      "completedAt": 1785263040422
+      "completedAt": 1785263040422,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2208,7 +2230,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"BUILD_PID=$(cat /tmp/apk-build.pid 2>/dev/null || echo '')\\nif [ -n \\\"$BUILD_PID\\\" ] && kill -0 \\\"$BUILD_PID\\\" 2>/dev/null; then\\n  echo \\\"Build still running (PID $BUILD_PID)\\\"\\n  tail -20 /tmp/apk-build.log\\nelse\\n  echo \\\"Build process not running or finished\\\"\\n  echo \\\"=== LAST 40 LOG LINES ===\\\"\\n  tail -40 /tmp/apk-build.log\\n  echo \\\"=== APK CHECK ===\\\"\\n  APK=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\n  if [ -f \\\"$APK\\\" ]; then\\n    echo \\\"APK exists: $(du -h $APK | cut -f1) SHA256=$(sha256sum $APK | cut -d' ' -f1)\\\"\\n  else\\n    echo \\\"APK not found\\\"\\n  fi\\nfi\"}",
       "createdAt": 1785263051124,
-      "completedAt": 1785263051150
+      "completedAt": 1785263051150,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2231,7 +2254,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/constants/Colors.ts\"}",
       "createdAt": 1785263067401,
-      "completedAt": 1785263067413
+      "completedAt": 1785263067413,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2249,7 +2273,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/lib/admin-reels.ts\", \"limit\": 50}",
       "createdAt": 1785263067402,
-      "completedAt": 1785263067413
+      "completedAt": 1785263067413,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2267,7 +2292,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/autonomous-dashboard.tsx\", \"limit\": 80}",
       "createdAt": 1785263067404,
-      "completedAt": 1785263067413
+      "completedAt": 1785263067413,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2346,7 +2372,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"export const Colors|Colors =\", \"path\": \"/home/user/rork-app/expo\", \"include\": \"*.{ts,tsx}\"}",
       "createdAt": 1785263079514,
-      "completedAt": 1785263079540
+      "completedAt": 1785263079540,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2364,7 +2391,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"find /home/user/rork-app/expo -maxdepth 3 -name 'Colors*' -o -name 'colors*' | head -20\"}",
       "createdAt": 1785263079521,
-      "completedAt": 1785263079540
+      "completedAt": 1785263079540,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2382,7 +2410,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/crm.tsx\", \"limit\": 80}",
       "createdAt": 1785263079528,
-      "completedAt": 1785263079540
+      "completedAt": 1785263079540,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2406,7 +2435,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/constants/colors.ts\"}",
       "createdAt": 1785263094812,
-      "completedAt": 1785263094822
+      "completedAt": 1785263094822,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2425,7 +2455,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/crm.tsx\", \"offset\": 70, \"limit\": 120}",
       "createdAt": 1785263094813,
-      "completedAt": 1785263094823
+      "completedAt": 1785263094823,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2449,7 +2480,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/aura.tsx\", \"content\": \"/**\\n * IVX Aura — Premium AI Executive Pulse\\n *\\n * Real-time, owner-gated executive dashboard that surfaces the health of the\\n * IVX autonomous platform, AI assistant status, credentials posture, and\\n * latest executive summary from production.\\n *\\n * Endpoints consumed:\\n *   GET /api/ivx/owner-ai/status\\n *   GET /api/ivx/autonomous/qa\\n *   GET /api/ivx/autonomous/credentials\\n *   GET /api/ivx/autonomous/runs/summary\\n *   GET /api/ivx/executive-layer\\n */\\nimport React, { useMemo } from 'react';\\nimport {\\n  View,\\n  Text,\\n  StyleSheet,\\n  ScrollView,\\n  RefreshControl,\\n  ActivityIndicator,\\n  TouchableOpacity,\\n} from 'react-native';\\nimport { SafeAreaView } from 'react-native-safe-area-context';\\nimport { Stack, useRouter } from 'expo-router';\\nimport { useQuery } from '@tanstack/react-query';\\nimport {\\n  Sparkles,\\n  Brain,\\n  ShieldCheck,\\n  Activity,\\n  Cpu,\\n  TrendingUp,\\n  Zap,\\n  Lock,\\n  ChevronRight,\\n} from 'lucide-react-native';\\nimport Colors from '@/constants/colors';\\nimport { useAuth } from '@/lib/auth-context';\\nimport { isOpenAccessModeEnabled } from '@/lib/open-access';\\nimport { getIVXAccessToken } from '@/lib/ivx-supabase-client';\\n\\nconst API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\\\\/+$/, '');\\n\\nconst fetchWithAuth = async (url: string) => {\\n  const token = await getIVXAccessToken();\\n  const headers: Record<string, string> = { 'Content-Type': 'application/json' };\\n  if (token) headers.Authorization = `Bearer ${token}`;\\n  const res = await fetch(url, { headers });\\n  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);\\n  return res.json() as Promise<unknown>;\\n};\\n\\ntype AuraPulse = {\\n  ai: { ok: boolean; provider?: string; configured?: boolean; model?: string; error?: string };\\n  qa: { ok: boolean; schedulerRunning?: boolean; totalRuns?: number; healthOk?: boolean; authOk?: boolean };\\n  credentials: { ok: boolean; certification?: string; verifiedCount?: number; blockedRequiredCount?: number };\\n  runs: { ok: boolean; totalRuns?: number; runsWithEvidence?: number; failedRuns?: number };\\n  executive: { ok: boolean; summary?: string; status?: string };\\n};\\n\\nasync function loadAuraPulse(): Promise<AuraPulse> {\\n  const [ai, qa, credentials, runs, executive] = await Promise.allSettled([\\n    fetchWithAuth(`${API_BASE}/api/ivx/owner-ai/status`),\\n    fetchWithAuth(`${API_BASE}/api/ivx/autonomous/qa`),\\n    fetchWithAuth(`${API_BASE}/api/ivx/autonomous/credentials`),\\n    fetchWithAuth(`${API_BASE}/api/ivx/autonomous/runs/summary`),\\n    fetchWithAuth(`${API_BASE}/api/ivx/executive-layer`),\\n  ]);\\n\\n  const unwrap = <T,>(p: PromiseSettledResult<T>, fallback: T): T =>\\n    p.status === 'fulfilled' ? p.value : fallback;\\n\\n  return {\\n    ai: unwrap(ai, { ok: false, error: 'AI status unavailable' }),\\n    qa: unwrap(qa, { ok: false }),\\n    credentials: unwrap(credentials, { ok: false }),\\n    runs: unwrap(runs, { ok: false }),\\n    executive: unwrap(executive, { ok: false }),\\n  };\\n}\\n\\nfunction PulseCard({\\n  icon: Icon,\\n  label,\\n  value,\\n  sub,\\n  tone,\\n  onPress,\\n}: {\\n  icon: React.ElementType;\\n  label: string;\\n  value: string;\\n  sub: string;\\n  tone: 'gold' | 'green' | 'red' | 'blue';\\n  onPress?: () => void;\\n}) {\\n  const toneMap = {\\n    gold: { bg: 'rgba(230,194,0,0.12)', text: Colors.officialGold },\\n    green: { bg: 'rgba(0,196,140,0.12)', text: Colors.success },\\n    red: { bg: 'rgba(255,77,77,0.12)', text: Colors.error },\\n    blue: { bg: 'rgba(74,144,217,0.12)', text: Colors.info },\\n  };\\n  const t = toneMap[tone];\\n  const content = (\\n    <View style={[styles.card, { backgroundColor: t.bg }]}>\\n      <View style={styles.cardHeader}>\\n        <View style={[styles.cardIcon, { backgroundColor: 'rgba(0,0,0,0.25)' }]}>\\n          <Icon color={t.text} size={22} strokeWidth={2.2} />\\n        </View>\\n        <Text style={[styles.cardLabel, { color: t.text }]}>{label}</Text>\\n      </View>\\n      <Text style={[styles.cardValue, { color: Colors.textWhite }]}>{value}</Text>\\n      <Text style={[styles.cardSub, { color: Colors.mutedGray }]}>{sub}</Text>\\n    </View>\\n  );\\n  if (onPress) return <TouchableOpacity onPress={onPress} activeOpacity={0.85}>{content}</TouchableOpacity>;\\n  return content;\\n}\\n\\nexport default function AuraScreen() {\\n  const router = useRouter();\\n  const { profileData } = useAuth();\\n\\n  const isOwner = useMemo(() => {\\n    if (isOpenAccessModeEnabled()) return true;\\n    const role = ((profileData as { role?: string } | null)?.role ?? '').toLowerCase();\\n    return role === 'owner' || role === 'admin';\\n  }, [profileData]);\\n\\n  const pulseQuery = useQuery({\\n    queryKey: ['ivx-aura-pulse'],\\n    queryFn: loadAuraPulse,\\n    enabled: isOwner,\\n    staleTime: 1000 * 30,\\n    refetchOnWindowFocus: true,\\n  });\\n\\n  const data = pulseQuery.data;\\n  const isReady = pulseQuery.isSuccess && data;\\n\\n  if (!isOwner) {\\n    return (\\n      <SafeAreaView style={styles.container} edges={['top']}>\\n        <View style={styles.restricted}>\\n          <View style={styles.restrictedIcon}>\\n            <Lock color={Colors.gold} size={30} strokeWidth={2.2} />\\n          </View>\\n          <Text style={styles.restrictedTitle}>Owner access only</Text>\\n          <Text style={styles.restrictedBody}>Aura is a premium executive dashboard reserved for the IVX owner.</Text>\\n        </View>\\n      </SafeAreaView>\\n    );\\n  }\\n\\n  return (\\n    <SafeAreaView style={styles.container} edges={['top']}>\\n      <Stack.Screen options={{ headerShown: false }} />\\n      <ScrollView\\n        contentContainerStyle={styles.content}\\n        refreshControl={\\n          <RefreshControl\\n            refreshing={pulseQuery.isFetching}\\n            onRefresh={() => pulseQuery.refetch()}\\n            tintColor={Colors.gold}\\n          />\\n        }\\n      >\\n        <View style={styles.hero}>\\n          <View style={styles.heroIcon}>\\n            <Sparkles color={Colors.officialGold} size={32} strokeWidth={2.2} />\\n          </View>\\n          <Text style={styles.heroTitle}>IVX Aura</Text>\\n          <Text style={styles.heroSubtitle}>Premium AI executive pulse</Text>\\n        </View>\\n\\n        {pulseQuery.isLoading && !isReady && (\\n          <View style={styles.loading}>\\n            <ActivityIndicator size=\\\"large\\\" color={Colors.gold} />\\n            <Text style={styles.loadingText}>Loading Aura pulse…</Text>\\n          </View>\\n        )}\\n\\n        {pulseQuery.isError && (\\n          <View style={styles.errorCard}>\\n            <Text style={styles.errorTitle}>Pulse unavailable</Text>\\n            <Text style={styles.errorBody}>\\n              {pulseQuery.error instanceof Error ? pulseQuery.error.message : 'Unknown error'}\\n            </Text>\\n          </View>\\n        )}\\n\\n        {isReady && (\\n          <>\\n            <View style={styles.grid}>\\n              <PulseCard\\n                icon={Brain}\\n                label=\\\"IVX IA\\\"\\n                value={data.ai.ok ? 'Online' : 'Offline'}\\n                sub={data.ai.ok ? `${data.ai.provider ?? 'AI'} • ${data.ai.model ?? 'ready'}` : data.ai.error ?? 'Check AI provider'}\\n                tone={data.ai.ok ? 'gold' : 'red'}\\n                onPress={() => router.push('/(tabs)/chat' as never)}\\n              />\\n              <PulseCard\\n                icon={Activity}\\n                label=\\\"QA Engine\\\"\\n                value={data.qa.ok ? 'Healthy' : 'Degraded'}\\n                sub={data.qa.ok ? `${data.qa.totalRuns ?? 0} runs` : 'QA probe failed'}\\n                tone={data.qa.ok ? 'green' : 'red'}\\n              />\\n              <PulseCard\\n                icon={ShieldCheck}\\n                label=\\\"Credentials\\\"\\n                value={data.credentials.ok ? 'Verified' : 'Blocked'}\\n                sub={data.credentials.ok ? `${data.credentials.verifiedCount ?? 0} verified` : 'Credential issue'}\\n                tone={data.credentials.ok ? 'green' : 'red'}\\n              />\\n              <PulseCard\\n                icon={Cpu}\\n                label=\\\"Autonomous Runs\\\"\\n                value={data.runs.ok ? 'Live' : 'Paused'}\\n                sub={data.runs.ok ? `${data.runs.totalRuns ?? 0} total • ${data.runs.runsWithEvidence ?? 0} with evidence` : 'Runs unavailable'}\\n                tone={data.runs.ok ? 'blue' : 'red'}\\n                onPress={() => router.push('/autonomous-dashboard' as never)}\\n              />\\n            </View>\\n\\n            <View style={styles.section}>\\n              <View style={styles.sectionHeader}>\\n                <Zap color={Colors.gold} size={18} strokeWidth={2.2} />\\n                <Text style={styles.sectionTitle}>Executive Summary</Text>\\n              </View>\\n              <View style={styles.summaryCard}>\\n                <Text style={styles.summaryText}>\\n                  {data.executive.ok && data.executive.summary\\n                    ? data.executive.summary\\n                    : 'Executive summary is being generated. Pull down to refresh.'}\\n                </Text>\\n                {data.executive.ok && data.executive.status && (\\n                  <View style={styles.statusBadge}>\\n                    <TrendingUp color={Colors.success} size={14} strokeWidth={2.2} />\\n                    <Text style={styles.statusBadgeText}>{data.executive.status}</Text>\\n                  </View>\\n                )}\\n              </View>\\n            </View>\\n\\n            <TouchableOpacity\\n              style={styles.actionButton}\\n              onPress={() => router.push('/(tabs)/chat' as never)}\\n              activeOpacity={0.85}\\n            >\\n              <Brain color={Colors.black} size={20} strokeWidth={2.2} />\\n              <Text style={styles.actionButtonText}>Open IVX IA Chat</Text>\\n              <ChevronRight color={Colors.black} size={20} strokeWidth={2.2} />\\n            </TouchableOpacity>\\n          </>\\n        )}\\n      </ScrollView>\\n    </SafeAreaView>\\n  );\\n}\\n\\nconst styles = StyleSheet.create({\\n  container: {\\n    flex: 1,\\n    backgroundColor: Colors.background,\\n  },\\n  content: {\\n    padding: 20,\\n    paddingBottom: 120,\\n  },\\n  hero: {\\n    alignItems: 'center',\\n    marginTop: 12,\\n    marginBottom: 24,\\n  },\\n  heroIcon: {\\n    width: 64,\\n    height: 64,\\n    borderRadius: 32,\\n    backgroundColor: 'rgba(230,194,0,0.15)',\\n    alignItems: 'center',\\n    justifyContent: 'center',\\n    marginBottom: 12,\\n  },\\n  heroTitle: {\\n    fontSize: 28,\\n    fontWeight: '800' as const,\\n    color: Colors.textWhite,\\n    letterSpacing: -0.5,\\n  },\\n  heroSubtitle: {\\n    fontSize: 14,\\n    color: Colors.mutedGray,\\n    marginTop: 4,\\n  },\\n  loading: {\\n    alignItems: 'center',\\n    marginTop: 40,\\n  },\\n  loadingText: {\\n    color: Colors.mutedGray,\\n    marginTop: 12,\\n    fontSize: 14,\\n  },\\n  errorCard: {\\n    backgroundColor: 'rgba(255,77,77,0.12)',\\n    borderRadius: 16,\\n    padding: 20,\\n    marginTop: 12,\\n  },\\n  errorTitle: {\\n    color: Colors.error,\\n    fontSize: 16,\\n    fontWeight: '700' as const,\\n  },\\n  errorBody: {\\n    color: Colors.textSecondary,\\n    fontSize: 13,\\n    marginTop: 6,\\n  },\\n  grid: {\\n    flexDirection: 'row' as const,\\n    flexWrap: 'wrap' as const,\\n    justifyContent: 'space-between' as const,\\n    gap: 12,\\n    marginBottom: 24,\\n  },\\n  card: {\\n    width: '48%',\\n    borderRadius: 16,\\n    padding: 16,\\n    minHeight: 130,\\n  },\\n  cardHeader: {\\n    flexDirection: 'row' as const,\\n    alignItems: 'center' as const,\\n    marginBottom: 12,\\n  },\\n  cardIcon: {\\n    width: 36,\\n    height: 36,\\n    borderRadius: 10,\\n    alignItems: 'center',\\n    justifyContent: 'center',\\n    marginRight: 10,\\n  },\\n  cardLabel: {\\n    fontSize: 12,\\n    fontWeight: '700' as const,\\n    textTransform: 'uppercase' as const,\\n    letterSpacing: 0.5,\\n  },\\n  cardValue: {\\n    fontSize: 22,\\n    fontWeight: '800' as const,\\n    marginBottom: 6,\\n  },\\n  cardSub: {\\n    fontSize: 12,\\n  },\\n  section: {\\n    marginBottom: 20,\\n  },\\n  sectionHeader: {\\n    flexDirection: 'row' as const,\\n    alignItems: 'center' as const,\\n    marginBottom: 12,\\n  },\\n  sectionTitle: {\\n    fontSize: 16,\\n    fontWeight: '700' as const,\\n    color: Colors.textWhite,\\n    marginLeft: 8,\\n  },\\n  summaryCard: {\\n    backgroundColor: Colors.surfaceElevated,\\n    borderRadius: 16,\\n    padding: 20,\\n    borderWidth: 1,\\n    borderColor: Colors.surfaceBorder,\\n  },\\n  summaryText: {\\n    color: Colors.textSecondary,\\n    fontSize: 14,\\n    lineHeight: 22,\\n  },\\n  statusBadge: {\\n    flexDirection: 'row' as const,\\n    alignItems: 'center' as const,\\n    alignSelf: 'flex-start' as const,\\n    marginTop: 14,\\n    backgroundColor: 'rgba(0,196,140,0.15)',\\n    paddingHorizontal: 10,\\n    paddingVertical: 6,\\n    borderRadius: 20,\\n  },\\n  statusBadgeText: {\\n    color: Colors.success,\\n    fontSize: 12,\\n    fontWeight: '700' as const,\\n    marginLeft: 6,\\n  },\\n  actionButton: {\\n    flexDirection: 'row' as const,\\n    alignItems: 'center' as const,\\n    justifyContent: 'space-between' as const,\\n    backgroundColor: Colors.gold,\\n    borderRadius: 14,\\n    paddingVertical: 16,\\n    paddingHorizontal: 18,\\n    marginTop: 8,\\n  },\\n  actionButtonText: {\\n    color: Colors.black,\\n    fontSize: 15,\\n    fontWeight: '700' as const,\\n    flex: 1,\\n    marginLeft: 10,\\n  },\\n  restricted: {\\n    flex: 1,\\n    alignItems: 'center',\\n    justifyContent: 'center',\\n    padding: 32,\\n  },\\n  restrictedIcon: {\\n    width: 64,\\n    height: 64,\\n    borderRadius: 32,\\n    backgroundColor: 'rgba(230,194,0,0.12)',\\n    alignItems: 'center',\\n    justifyContent: 'center',\\n    marginBottom: 16,\\n  },\\n  restrictedTitle: {\\n    fontSize: 20,\\n    fontWeight: '700' as const,\\n    color: Colors.textWhite,\\n    marginBottom: 8,\\n  },\\n  restrictedBody: {\\n    fontSize: 14,\\n    color: Colors.mutedGray,\\n    textAlign: 'center' as const,\\n  },\\n});\\n\"}",
       "createdAt": 1785263120842,
-      "completedAt": 1785263143952
+      "completedAt": 1785263143952,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2484,7 +2516,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/_layout.tsx\", \"edits\": [{\"oldString\": \"import { BarChart3, Briefcase, Home, LayoutDashboard, MessageCircle, TrendingUp, User } from 'lucide-react-native';\", \"newString\": \"import { BarChart3, Briefcase, Home, LayoutDashboard, MessageCircle, Sparkles, TrendingUp, User } from 'lucide-react-native';\"}, {\"oldString\": \"      <Tabs.Screen\\n        name=\\\"crm\\\"\\n        options={{\\n          title: 'CRM',\\n          tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} strokeWidth={2.3} />,\\n          tabBarButtonTestID: 'tab-crm',\\n          href: isOwner ? undefined : null,\\n        }}\\n      />\\n    </Tabs>\", \"newString\": \"      <Tabs.Screen\\n        name=\\\"crm\\\"\\n        options={{\\n          title: 'CRM',\\n          tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} strokeWidth={2.3} />,\\n          tabBarButtonTestID: 'tab-crm',\\n          href: isOwner ? undefined : null,\\n        }}\\n      />\\n      <Tabs.Screen\\n        name=\\\"aura\\\"\\n        options={{\\n          title: 'Aura',\\n          tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} strokeWidth={2.3} />,\\n          tabBarButtonTestID: 'tab-aura',\\n          href: isOwner ? undefined : null,\\n        }}\\n      />\\n    </Tabs>\"}]}",
       "createdAt": 1785263150156,
-      "completedAt": 1785263152622
+      "completedAt": 1785263152622,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2509,7 +2542,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"BUILD_PID=$(cat /tmp/apk-build.pid 2>/dev/null || echo '')\\nif [ -n \\\"$BUILD_PID\\\" ] && kill -0 \\\"$BUILD_PID\\\" 2>/dev/null; then\\n  echo \\\"Build still running (PID $BUILD_PID)\\\"\\n  tail -30 /tmp/apk-build.log\\nelse\\n  echo \\\"Build process not running or finished\\\"\\n  echo \\\"=== LAST 60 LOG LINES ===\\\"\\n  tail -60 /tmp/apk-build.log\\n  echo \\\"=== APK CHECK ===\\\"\\n  APK=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\n  if [ -f \\\"$APK\\\" ]; then\\n    echo \\\"APK exists: $(du -h $APK | cut -f1) SHA256=$(sha256sum $APK | cut -d' ' -f1)\\\"\\n  else\\n    echo \\\"APK not found\\\"\\n  fi\\nfi\"}",
       "createdAt": 1785263159395,
-      "completedAt": 1785263160748
+      "completedAt": 1785263160748,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2543,7 +2577,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"export.*getIVXAccessToken\", \"path\": \"/home/user/rork-app/expo/lib\", \"include\": \"*.{ts,tsx}\"}",
       "createdAt": 1785263170733,
-      "completedAt": 1785263171251
+      "completedAt": 1785263171251,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2559,7 +2594,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && npx tsc --noEmit --jsx react-native --moduleResolution node --esModuleInterop --skipLibCheck --target es2020 --module esnext app/\\\\(tabs\\\\)/aura.tsx 2>&1 | head -30 || echo \\\"tsc check needs full project\\\"\"}",
       "createdAt": 1785263170737,
-      "completedAt": 1785263171252
+      "completedAt": 1785263171252,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2577,7 +2613,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify Aura production endpoints live\\nTOKEN=$(cat /tmp/owner_token.txt)\\nfor endpoint in /api/ivx/owner-ai/status /api/ivx/autonomous/qa /api/ivx/autonomous/credentials /api/ivx/autonomous/runs/summary /api/ivx/executive-layer; do\\n  curl -s --max-time 10 -H \\\"Authorization: Bearer $TOKEN\\\" https://api.ivxholding.com$endpoint | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint(f'$endpoint -> ok={d.get(\\\\\\\"ok\\\\\\\")} status={d.get(\\\\\\\"status\\\\\\\")} keys={list(d.keys())[:5]}')\\\"\\n  sleep 2\\ndone\"}",
       "createdAt": 1785263170744,
-      "completedAt": 1785263190413
+      "completedAt": 1785263190413,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2602,7 +2639,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if build is done and if APK exists\\nBUILD_PID=$(cat /tmp/apk-build.pid 2>/dev/null || echo '')\\nAPK=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\nif [ -n \\\"$BUILD_PID\\\" ] && kill -0 \\\"$BUILD_PID\\\" 2>/dev/null; then\\n  echo \\\"Build still running (PID $BUILD_PID)\\\"\\n  tail -20 /tmp/apk-build.log\\nelse\\n  echo \\\"Build finished or not running\\\"\\n  echo \\\"Last 30 log lines:\\\"\\n  tail -30 /tmp/apk-build.log\\n  if [ -f \\\"$APK\\\" ]; then\\n    echo \\\"APK exists: $(du -h $APK | cut -f1) SHA256=$(sha256sum $APK | cut -d' ' -f1)\\\"\\n  else\\n    echo \\\"APK not found\\\"\\n  fi\\nfi\"}",
       "createdAt": 1785263211007,
-      "completedAt": 1785263211043
+      "completedAt": 1785263211043,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2620,7 +2658,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify Aura TypeScript compiles by checking with bun's tsc\\nls /home/user/rork-app/expo/tsconfig.json && cat /home/user/rork-app/expo/tsconfig.json | head -30\"}",
       "createdAt": 1785263211026,
-      "completedAt": 1785263211043
+      "completedAt": 1785263211043,
+      "compactedAt": 1785270350751
     },
     {
       "type": "tool",
@@ -2638,7 +2677,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Quick syntax check on the new Aura files\\ncd /home/user/rork-app/expo && bun x tsc --noEmit --jsx react-native --moduleResolution node --esModuleInterop --skipLibCheck --target es2020 --module esnext --resolveJsonModule app/\\\\(tabs\\\\)/aura.tsx 2>&1 | head -40\"}",
       "createdAt": 1785263211031,
-      "completedAt": 1785263211043
+      "completedAt": 1785263211043,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2663,7 +2703,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"BUILD_PID=$(cat /tmp/apk-build.pid 2>/dev/null || echo '')\\nAPK=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\nif [ -n \\\"$BUILD_PID\\\" ] && kill -0 \\\"$BUILD_PID\\\" 2>/dev/null; then\\n  echo \\\"Build still running (PID $BUILD_PID)\\\"\\n  tail -20 /tmp/apk-build.log\\nelse\\n  echo \\\"Build finished or not running\\\"\\n  echo \\\"Last 40 log lines:\\\"\\n  tail -40 /tmp/apk-build.log\\n  if [ -f \\\"$APK\\\" ]; then\\n    echo \\\"APK exists: $(du -h $APK | cut -f1) SHA256=$(sha256sum $APK | cut -d' ' -f1)\\\"\\n  else\\n    echo \\\"APK not found\\\"\\n  fi\\nfi\"}",
       "createdAt": 1785263220473,
-      "completedAt": 1785263220800
+      "completedAt": 1785263220800,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2689,7 +2730,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if watchman is installed and build status\\nwhich watchman 2>/dev/null || echo \\\"watchman: not found\\\"\\nwatchman version 2>/dev/null || echo \\\"watchman not running\\\"\\nBUILD_PID=$(cat /tmp/apk-build.pid 2>/dev/null || echo '')\\nif [ -n \\\"$BUILD_PID\\\" ] && kill -0 \\\"$BUILD_PID\\\" 2>/dev/null; then\\n  ps -p $BUILD_PID -o pid,etime,cpu,comm | tail -1\\n  echo \\\"Build still running. Killing to restart without watchman...\\\"\\n  kill -9 $BUILD_PID 2>/dev/null || true\\n  sleep 2\\nfi\\n# Clean up any watchman-related processes\\npkill -f watchman 2>/dev/null || true\\necho \\\"Restarting APK build with Watchman disabled...\\\"\\ncd /home/user/rork-app/expo/android && nohup env CI=true WATCHMAN_SOCKET=0 REACT_NATIVE_WATCHMAN_URL=0 DISABLE_WATCHMAN=1 ANDROID_HOME=/opt/android-sdk JAVA_HOME=/usr/lib/jvm/jdk-17.0.13+11 ./gradlew assembleRelease --no-daemon -x lint > /tmp/apk-build.log 2>&1 &\\necho $! > /tmp/apk-build.pid\\necho \\\"New build PID: $(cat /tmp/apk-build.pid)\\\"\\nsleep 5\\ntail -20 /tmp/apk-build.log\", \"cwd\": \"/home/user/rork-app/expo/android\"}",
       "createdAt": 1785263237263,
-      "completedAt": 1785263237304
+      "completedAt": 1785263237304,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
@@ -2714,7 +2756,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"BUILD_PID=$(cat /tmp/apk-build.pid 2>/dev/null || echo '')\\nAPK=/home/user/rork-app/expo/android/app/build/outputs/apk/release/app-release.apk\\nif [ -n \\\"$BUILD_PID\\\" ] && kill -0 \\\"$BUILD_PID\\\" 2>/dev/null; then\\n  echo \\\"Build running (PID $BUILD_PID)\\\"\\n  tail -25 /tmp/apk-build.log\\nelse\\n  echo \\\"Build finished or not running\\\"\\n  echo \\\"Last 40 log lines:\\\"\\n  tail -40 /tmp/apk-build.log\\n  if [ -f \\\"$APK\\\" ]; then\\n    echo \\\"APK exists: $(du -h $APK | cut -f1) SHA256=$(sha256sum $APK | cut -d' ' -f1)\\\"\\n  else\\n    echo \\\"APK not found\\\"\\n  fi\\nfi\"}",
       "createdAt": 1785263242649,
-      "completedAt": 1785263242684
+      "completedAt": 1785263242684,
+      "compactedAt": 1785270350751
     },
     {
       "type": "reasoning",
