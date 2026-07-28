@@ -148,9 +148,14 @@ jobs:
             echo "**Commit:** ${GITHUB_SHA}"
             echo "**Run:** ${GITHUB_RUN_ID}"
             echo ""
-            echo "### expo run:ios output (last 400 lines)"
+            echo "### expo run:ios output (last 800 lines)"
             echo '```'
-            tail -400 expo-build.log 2>/dev/null || echo "not found"
+            tail -800 expo-build.log 2>/dev/null || echo "not found"
+            echo '```'
+            echo ""
+            echo "### Error lines extracted"
+            echo '```'
+            grep -i -n 'error:\|fatal\|failed\|cannot\|not found\|** build\|consteval\|xcodebuild exited\|CommandError' expo-build.log 2>/dev/null | tail -60 || echo "no error lines found"
             echo '```'
           } > diagnostic-body.md
           gh label create "ios-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
