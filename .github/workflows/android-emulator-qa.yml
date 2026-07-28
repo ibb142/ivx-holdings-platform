@@ -44,9 +44,8 @@ env:
   OWNER_EMAIL: iperez4242@gmail.com
 
 permissions:
-  contents: write
+  contents: read
   issues: write
-  actions: read
 
 jobs:
   build-and-test:
@@ -202,62 +201,6 @@ jobs:
           path: ${{ steps.apk.outputs.path }}
           retention-days: 30
           if-no-files-found: error
-
-      - name: Create GitHub Release with APK
-        id: release
-        if: steps.build.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        working-directory: expo/android
-        run: |
-          VERSION="1.4.38"
-          TAG="v${VERSION}-android"
-          APK_NAME="ivx-holdings-v${VERSION}.apk"
-          APK_PATH="${{ steps.apk.outputs.path }}"
-          echo "Creating release ${TAG} with APK ${APK_NAME}"
-          RELEASE_BODY=$(cat <<EOF
-          IVX Holdings Android release APK v${VERSION}.
-          - APK SHA-256: ${{ steps.apk.outputs.hash }}
-          - APK size: ${{ steps.apk.outputs.size }} bytes
-          - Commit: ${{ github.sha }}
-          - Workflow run: ${{ github.run_id }}
-          EOF
-          )
-          RELEASE_JSON=$(jq -n \
-            --arg tag "$TAG" \
-            --arg sha "${{ github.sha }}" \
-            --arg name "IVX Holdings Android v${VERSION}" \
-            --arg body "$RELEASE_BODY" \
-            '{tag_name: $tag, target_commitish: $sha, name: $name, body: $body, draft: false, prerelease: true}')
-          RELEASE=$(curl -s -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$RELEASE_JSON" \
-            "https://api.github.com/repos/${{ github.repository }}/releases")
-          echo "Release create response: $RELEASE"
-          RELEASE_ID=$(echo "$RELEASE" | jq -r '.id // empty')
-          UPLOAD_URL=$(echo "$RELEASE" | jq -r '.upload_url // empty' | sed 's/{?name,label}//')
-          if [ -z "$RELEASE_ID" ] || [ -z "$UPLOAD_URL" ]; then
-            echo "::error::Failed to create GitHub release: $RELEASE"
-            exit 1
-          fi
-          echo "Release ID: $RELEASE_ID"
-          echo "Uploading APK..."
-          ASSET=$(curl -s -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/vnd.android.package-archive" \
-            --data-binary "@$APK_PATH" \
-            "${UPLOAD_URL}?name=${APK_NAME}")
-          echo "Asset upload response: $ASSET"
-          ASSET_ID=$(echo "$ASSET" | jq -r '.id // empty')
-          if [ -z "$ASSET_ID" ]; then
-            echo "::error::Failed to upload APK asset: $ASSET"
-            exit 1
-          fi
-          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${APK_NAME}"
-          echo "APK_DOWNLOAD_URL=$DOWNLOAD_URL" >> "$GITHUB_ENV"
-          echo "apk_download_url=$DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
-          echo "APK release asset: $DOWNLOAD_URL"
 
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
