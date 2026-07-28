@@ -111,9 +111,9 @@ jobs:
         timeout-minutes: 30
         run: |
           set -o pipefail
-          echo "=== Building APK with Gradle ==="
+          echo "=== Building RELEASE APK with Gradle (includes JS bundle + assets) ==="
           chmod +x gradlew
-          ./gradlew assembleDebug 2>&1 | tee gradle-build.log
+          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log
           GRADLE_EXIT=${PIPESTATUS[0]}
           echo "=== Gradle exit code: $GRADLE_EXIT ==="
           echo "build_exit=$GRADLE_EXIT" >> $GITHUB_OUTPUT
@@ -160,7 +160,11 @@ jobs:
         working-directory: expo/android
         run: |
           echo "=== Searching for APK ==="
-          APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          # Search release first (has JS bundle), then debug as fallback
+          APK_PATH=$(find . -path "*/release/*.apk" -type f 2>/dev/null | head -1)
+          if [ -z "$APK_PATH" ]; then
+            APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          fi
           if [ -z "$APK_PATH" ]; then
             echo "::error::No APK found"
             find . -name "*.apk" 2>/dev/null
@@ -193,12 +197,12 @@ jobs:
       # script block so the emulator stays alive for every step.
       # reactivecircus/android-emulator-runner@v2 ONLY keeps the emulator
       # booted during its `script` block. Moving steps outside kills adb.
-      # continue-on-error ensures the APK artifact is still available
-      # even if emulator QA fails.
+      # NOTE: We do NOT use continue-on-error here. If the emulator QA
+      # fails, that's a real failure we need to know about. The APK is
+      # already uploaded above so it survives regardless.
       # ============================================================
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
-        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
