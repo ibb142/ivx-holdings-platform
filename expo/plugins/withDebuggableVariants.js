@@ -10,31 +10,16 @@
  * in android/app/build.gradle AFTER `expo prebuild --clean` regenerates it,
  * so the setting survives prebuild. With debuggableVariants = [], ALL variants
  * (including debug) get the JS bundle + assets baked in.
- *
- * The resulting debug APK is ~84MB (matching the release build size) and
- * launches correctly without a Metro server.
  */
 
-const { withProjectBuildGradle } = require('expo/config-plugins');
+const { withDangerousMod } = require('expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 const DEBUGGABLE_VARIANTS_LINE = '    debuggableVariants = []';
 const MARKER = '// === withDebuggableVariants plugin: force JS bundle in all variants ===';
 
 function withDebuggableVariants(config) {
-  return withProjectBuildGradle(config, (modConfig) => {
-    // withProjectBuildGradle gives us the project-level build.gradle,
-    // but we need the app-level one. Use the mod's projectRoot to find it.
-    return modConfig;
-  });
-}
-
-// We actually need to modify android/app/build.gradle, not the project-level one.
-// Use a file-based approach instead.
-const { withDangerousMod } = require('expo/config-plugins');
-const fs = require('fs');
-const path = require('path');
-
-function withDebuggableVariantsFile(config) {
   return withDangerousMod(config, [
     'android',
     (modConfig) => {
@@ -57,12 +42,7 @@ function withDebuggableVariantsFile(config) {
         return modConfig;
       }
 
-      // Find the react { } block and inject debuggableVariants = [] after the opening
-      // The react block starts with "react {" and we want to add our line inside it.
-      // We look for the "/* Variants */" comment block which is the standard Expo/RN
-      // template location for debuggableVariants.
-
-      // Strategy: replace the commented-out debuggableVariants line with the active one
+      // Replace the commented-out debuggableVariants line with the active one
       const commentedPattern = /\/\/\s*debuggableVariants\s*=\s*\["liteDebug",\s*"prodDebug"\]/;
       if (commentedPattern.test(contents)) {
         contents = contents.replace(
@@ -91,4 +71,4 @@ function withDebuggableVariantsFile(config) {
   ]);
 }
 
-module.exports = withDebuggableVariantsFile;
+module.exports = withDebuggableVariants;
