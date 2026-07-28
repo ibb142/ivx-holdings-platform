@@ -170,9 +170,12 @@ jobs:
           ls -lh "$APK_PATH_ABS"
 
       # ============================================================
-      # Boot Android Emulator using reactivecircus/android-emulator-runner
+      # Boot Android Emulator + Install + Test — ALL inside the runner
+      # script block so the emulator stays alive for every step.
+      # reactivecircus/android-emulator-runner@v2 ONLY keeps the emulator
+      # booted during its `script` block. Moving steps outside kills adb.
       # ============================================================
-      - name: Boot Android Emulator
+      - name: Boot Emulator + Install APK + Launch + QA
         id: emu
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -183,49 +186,42 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            echo "Emulator booted"
+            set -e
+            echo "=== Emulator booted ==="
             adb devices
-            # Get emulator info
             EMU_NAME=$(adb shell getprop ro.product.model)
             ANDROID_VER=$(adb shell getprop ro.build.version.release)
             echo "name=$EMU_NAME" >> $GITHUB_OUTPUT
             echo "version=$ANDROID_VER" >> $GITHUB_OUTPUT
             echo "Emulator: $EMU_NAME (Android $ANDROID_VER)"
 
-      - name: Install APK on emulator
-        run: |
-          adb install -r "${{ steps.apk.outputs.path }}"
-          echo "APK installed"
+            echo "=== Installing APK ==="
+            adb install -r "${{ steps.apk.outputs.path }}"
+            echo "APK installed successfully"
 
-      - name: Launch app and capture screenshot
-        run: |
-          adb shell am start -n com.ivxholdings.app/.MainActivity
-          sleep 10
-          adb exec-out screencap -p > screenshot-01-launch.png
-          echo "Launch screenshot saved"
+            echo "=== Launching app ==="
+            adb shell am start -n com.ivxholdings.app/.MainActivity
+            sleep 10
+            adb exec-out screencap -p > screenshot-01-launch.png
+            echo "Launch screenshot saved"
 
-      - name: Capture logcat
-        run: |
-          adb logcat -d -t 500 > logcat.txt 2>&1 || true
+            echo "=== Capturing logcat ==="
+            adb logcat -d -t 500 > logcat.txt 2>&1 || true
 
-      - name: Install Maestro
-        run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
-          maestro --version
+            echo "=== Installing Maestro ==="
+            curl -Ls "https://get.maestro.mobile.dev" | bash
+            echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+            export PATH="$HOME/.maestro/bin:$PATH"
+            maestro --version
 
-      - name: Run Maestro launch test
-        id: maestro-launch
-        working-directory: expo
-        continue-on-error: true
-        run: |
-          # Android Maestro flow (use the same launch test, Maestro supports Android)
-          maestro test .maestro/ivx-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
-          echo "Maestro launch test completed"
+            echo "=== Running Maestro launch test ==="
+            cd "$GITHUB_WORKSPACE/expo"
+            maestro test .maestro/ivx-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log || true
+            echo "maestro_result=completed" >> $GITHUB_OUTPUT
+            echo "Maestro launch test completed"
 
-      - name: Take post-test screenshot
-        run: |
-          adb exec-out screencap -p > screenshot-02-post-test.png || true
+            echo "=== Post-test screenshot ==="
+            adb exec-out screencap -p > screenshot-02-post-test.png || true
 
       - name: Upload all artifacts
         uses: actions/upload-artifact@v4
