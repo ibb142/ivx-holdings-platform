@@ -3435,13 +3435,14 @@ async function runGithubCommitMultiFile(input: Record<string, unknown>): Promise
   }
   const headers = await githubHeaders();
 
-  // Validate and sanitize all file paths
+  // Validate and sanitize all file paths — decode content encoding (base64/gzip-base64)
   const files: Array<{ path: string; content: string }> = [];
   for (const fileEntry of filesRaw) {
     const record = readRecord(fileEntry);
     const filePath = sanitizeRepoPath(record.path);
-    const content = readTrimmed(record.content);
-    if (!content) {
+    const decoded = decodeCommitContent(record);
+    const content = decoded.toString('utf8');
+    if (!content || content.length === 0) {
       throw new Error(`File ${filePath} has empty content.`);
     }
     if (content.length > MAX_COMMIT_CONTENT_LENGTH) {
