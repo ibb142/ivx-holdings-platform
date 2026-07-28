@@ -2,7 +2,6 @@
 import type { ExpoConfig } from 'expo/config';
 import { execSync } from 'child_process';
 import withFmtXcode26Fix from './plugins/withFmtXcode26Fix';
-import withDebuggableVariants from './plugins/withDebuggableVariants';
 
 // Dynamically read the current git HEAD SHA at build time.
 // This breaks the circular dependency where hardcoding the SHA
@@ -85,12 +84,6 @@ const config: ExpoConfig = {
     // RN hasn't upgraded yet. This plugin patches the Podfile post_install to
     // force C++17 for the fmt target and patch base.h to disable consteval.
     withFmtXcode26Fix,
-    // Force JS bundle + assets in ALL build variants (including debug).
-    // Without this, debug builds skip JS bundling (expecting Metro dev server),
-    // producing a ~48MB APK with no JavaScript that crashes on launch.
-    // Setting debuggableVariants=[] in build.gradle via this plugin ensures
-    // CI/CD builds get the full ~84MB APK with JS bundle + assets.
-    withDebuggableVariants,
   ],
   experiments: {
     typedRoutes: true,
