@@ -175,13 +175,15 @@ jobs:
           echo "=== Starting xcodebuild (with build action) ==="
           # NOTE: 'build' action is REQUIRED — without it xcodebuild validates
           # the project and exits 0 but produces no .app bundle.
+          # Use -sdk iphonesimulator WITHOUT -destination (generic destination
+          # is for validation only and may not produce a .app artifact).
+          # Boot a simulator first so xcodebuild can resolve a concrete target.
           xcodebuild build \
             -workspace "${{ steps.xcode.outputs.workspace }}" \
             -scheme "${{ steps.xcode.outputs.scheme }}" \
             -sdk iphonesimulator \
             -configuration Debug \
             -derivedDataPath build \
-            -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -253,11 +255,13 @@ jobs:
               find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "no build dir"
               echo '```'
             } > diagnostic-body.md
+            # Create label first (ignore error if it already exists), then create issue
+            gh label create "ios-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
             gh issue create \
               --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
               --body-file diagnostic-body.md \
               --label "ios-qa-diagnostic" \
-              2>&1 || echo "gh issue create failed"
+              2>&1 || echo "gh issue create failed — trying without label" && gh issue create --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || echo "gh issue create failed completely"
             exit 1
           fi
           APP_PATH_ABS="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
