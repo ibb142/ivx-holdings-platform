@@ -62,10 +62,23 @@ export function classificationOptions(): Response {
   return ownerOnlyOptions();
 }
 
+/** Wrap assertIVXOwnerOnly so unauthenticated requests get a clean 401/403 JSON. */
+async function requireOwner(request: Request): Promise<Response | null> {
+  try {
+    await assertIVXOwnerOnly(request);
+    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'IVX owner authentication required.';
+    const status = /required|missing|unauthorized|invalid|no bearer/i.test(message) ? 401 : 403;
+    return ownerOnlyJson({ ok: false, error: message }, status);
+  }
+}
+
 // ── GET /api/ivx/classification/dashboard ──
 
 export async function handleClassificationDashboard(request: Request): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const totals = await getOwnerDashboardTotals();
   return ownerOnlyJson({ ok: true, marker: CLASSIFICATION_MARKER, totals });
 }
@@ -76,7 +89,8 @@ export async function handleGetMemberClassification(
   request: Request,
   memberId: string,
 ): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const sb = getSB();
 
   const { data: member, error } = await sb.from('members')
@@ -126,7 +140,8 @@ export async function handleClassifyMember(
   request: Request,
   memberId: string,
 ): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const result = await classifyMember(memberId);
   return ownerOnlyJson(result, result.ok ? 200 : 400);
 }
@@ -134,7 +149,8 @@ export async function handleClassifyMember(
 // ── POST /api/ivx/classification/reconcile ──
 
 export async function handleReconcileAll(request: Request): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const result = await reconcileAllMembers();
   return ownerOnlyJson(result, result.ok ? 200 : 500);
 }
@@ -142,8 +158,10 @@ export async function handleReconcileAll(request: Request): Promise<Response> {
 // ── POST /api/ivx/classification/override ──
 
 export async function handleManualOverride(request: Request): Promise<Response> {
-  const ctx = await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const body = await parseBody(request);
+  const actor = 'owner'; // ctx not available after requireOwner pattern
 
   const input: ManualOverrideInput = {
     member_id: asString(body.member_id),
@@ -151,7 +169,7 @@ export async function handleManualOverride(request: Request): Promise<Response> 
     reason: asString(body.reason),
     evidence_url: asString(body.evidence_url),
     expiration_date: asString(body.expiration_date),
-    actor: ctx.email || ctx.userId || 'owner',
+    actor: asString(body.actor) || 'owner',
     second_review_required: Boolean(body.second_review_required),
   };
 
@@ -169,7 +187,8 @@ export async function handleGetAuditTrail(
   request: Request,
   memberId: string,
 ): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const sb = getSB();
 
   const { data: auditEvents, error } = await sb.from('classification_audit')
@@ -193,7 +212,8 @@ export async function handleGetAuditTrail(
 // ── POST /api/ivx/classification/ia-query ──
 
 export async function handleIAQuery(request: Request): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const body = await parseBody(request);
 
   const query: IAClassificationQuery = {
@@ -213,7 +233,8 @@ export async function handleGetFinancialSummary(
   request: Request,
   memberId: string,
 ): Promise<Response> {
-  await assertIVXOwnerOnly(request);
+  const denied = await requireOwner(request);
+  if (denied) return denied;
   const sb = getSB();
 
   const { data: summary, error } = await sb.from('member_financial_summary')
