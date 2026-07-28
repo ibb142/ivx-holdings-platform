@@ -83,7 +83,7 @@ const config: ExpoConfig = {
     // consteval rules that fmt 11.0.2 doesn't handle. fmt 12.1.0 fixes this but
     // RN hasn't upgraded yet. This plugin patches the Podfile post_install to
     // force C++17 for the fmt target and patch base.h to disable consteval.
-    withFmtXcode26Fix,
+    withFmtXcode26Fix as unknown as [string, any],
   ],
   experiments: {
     typedRoutes: true,
