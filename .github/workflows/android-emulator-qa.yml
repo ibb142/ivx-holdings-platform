@@ -105,7 +105,7 @@ jobs:
           ls -la android/app/build.gradle android/app/debug.keystore android/gradlew
           echo "=== No expo prebuild — using committed android dir (matches ivx-ci.yml) ==="
 
-      - name: Build Android APK (Release — includes JS bundle + assets)
+      - name: Build Android APK (debug with JS bundle + assets)
         id: build
         working-directory: expo/android
         timeout-minutes: 30
@@ -114,11 +114,11 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           set -o pipefail
-          echo "=== Building RELEASE APK with Gradle (includes JS bundle + assets) ==="
+          echo "=== Building DEBUG APK with JS bundle + assets (debuggableVariants=[] in build.gradle) ==="
           echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME"
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log
+          ./gradlew assembleDebug --no-daemon -x lint 2>&1 | tee gradle-build.log
           GRADLE_EXIT=${PIPESTATUS[0]}
           echo "=== Gradle exit code: $GRADLE_EXIT ==="
           echo "build_exit=$GRADLE_EXIT" >> $GITHUB_OUTPUT
@@ -166,8 +166,8 @@ jobs:
         working-directory: expo/android
         run: |
           echo "=== Searching for APK ==="
-          # Search release first (has JS bundle), then debug as fallback
-          APK_PATH=$(find . -path "*/release/*.apk" -type f 2>/dev/null | head -1)
+          # Search debug APK (has JS bundle because debuggableVariants=[] forces bundling)
+          APK_PATH=$(find . -path "*/debug/*.apk" -type f 2>/dev/null | head -1)
           if [ -z "$APK_PATH" ]; then
             APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
           fi
