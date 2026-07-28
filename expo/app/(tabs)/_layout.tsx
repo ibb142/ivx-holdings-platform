@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { BarChart3, Briefcase, Home, LayoutDashboard, MessageCircle, TrendingUp, User } from 'lucide-react-native';
+import { BarChart3, Briefcase, Home, LayoutDashboard, MessageCircle, Sparkles, TrendingUp, User } from 'lucide-react-native';
 import { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';
 
 // IVX Crash Shield: route-level diagnostic error boundary for the entire (tabs)
@@ -198,6 +198,15 @@ export default function TabsLayout() {
           title: 'CRM',
           tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} strokeWidth={2.3} />,
           tabBarButtonTestID: 'tab-crm',
+          href: isOwner ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="aura"
+        options={{
+          title: 'Aura',
+          tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} strokeWidth={2.3} />,
+          tabBarButtonTestID: 'tab-aura',
           href: isOwner ? undefined : null,
         }}
       />

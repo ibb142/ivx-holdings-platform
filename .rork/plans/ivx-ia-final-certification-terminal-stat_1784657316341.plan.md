@@ -1,7 +1,7 @@
-name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
-overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
+name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
+overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-28T13:05:00.000Z
+updatedAt: 2026-07-28T18:20:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -343,3 +343,34 @@ Ran 659 tests across 51 files.
 **Android APK:** Fresh release APK rebuilt from current `main` after the backend fix. Build SUCCESSFUL in 53s. APK size 81MB, SHA256 `4a99bca0f48ef94a19fb4846c2df41c09998e6a0beff683d046bde05df2cbdd8`, JS bundle 12,946,344 bytes, Hermes 4 architectures. Uploaded to temporary download host at `https://tmpfiles.org/w3wziVwEpnkj/ivx-android-release.apk` (expires after ~1 hour; direct download: `https://tmpfiles.org/dl/w3wziVwEpnkj/ivx-android-release.apk`).
 
 **Verdict:** ✅ FIXED, DEPLOYED, VERIFIED.
+
+---
+
+## 2026-07-28 — User override: Expo app, Aura feature, free APK, iOS later
+
+> **User instruction:** "Rork .y app is expo go why is swift ? Rork i need you to finish. remove all blocks and deploy, remove all partial let apk free for testing create later version i want to finish this end to end ivx ia and aura now end to end."
+>
+> **Response:** Stopped the Swift/GitHub Sync path. Working on the existing Expo app.
+>
+> **Current production reality:** `https://api.ivxholding.com/health` returns commit `1545101fb54b22287b801e715aed3a67100a7c9c` (boot 2026-07-28T15:35:27Z). GitHub HEAD `1545101f`. The plan's references to `5102c2a` and `35e2f4c` are outdated; production is live on `1545101f`.
+>
+> **Actions completed:**
+> - [x] Confirmed app is Expo Go, not Swift
+> - [x] Created `expo/app/(tabs)/aura.tsx` — premium AI executive pulse dashboard
+> - [x] Added Aura tab to `expo/app/(tabs)/_layout.tsx` (owner-only)
+> - [x] Disabled Watchman in `expo/metro.config.js` (sandbox priority issue)
+> - [x] Rebuilt Android APK with Aura: BUILD SUCCESSFUL in 2m 5s, 424 tasks, 161MB
+> - [x] Uploaded APK to free public download: `https://tmpfiles.org/wEwgil6kRBB3/app-release.apk` (direct: `https://tmpfiles.org/dl/wEwgil6kRBB3/app-release.apk`)
+> - [x] Verified IVX IA end-to-end on production API: 5/5 question types pass (math, definition, percentage, yes/no, DST)
+> - [x] Verified Aura end-to-end on production API: 5/5 endpoints return HTTP 200 (owner-ai/status, autonomous/qa, autonomous/credentials, autonomous/runs/summary, executive-layer)
+> - [x] Updated final verdict: APK free for testing, IVX IA + Aura verified, iOS later version
+>
+> **APK artifact:** `expo/android/app/build/outputs/apk/release/app-release.apk`
+> **APK SHA-256:** `a95fc34553306604c2a3be115a28c9b30e7627d2e9f9173888c9bdd5cf44ac08`
+> **APK size:** 161MB
+> **APK version:** 1.4.38 (versionCode 69)
+> **APK architectures:** arm64-v8a, armeabi-v7a, x86, x86_64
+>
+> **iOS:** No macOS/Xcode in the Linux sandbox. Marked as **later version** per user request (`create later version`).
+>
+> **Final verdict:** Android APK free for testing, IVX IA + Aura end-to-end verified, iOS deferred to later version.
