@@ -91,7 +91,9 @@ type DeveloperDeployAction =
   | 'test_api_endpoint'
   | 'render_get_logs'
   | 'autonomous_feature_cycle'
-  | 'github_commit_multi_file';
+  | 'github_commit_multi_file'
+  | 'github_get_repo_head'
+  | 'developer_deploy_status';
 
 type DeveloperDeployRequest = {
   action?: unknown;
@@ -198,6 +200,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'render_get_deploy_status'
     || normalized === 'autonomous_feature_cycle'
     || normalized === 'github_commit_multi_file'
+    || normalized === 'github_get_repo_head'
+    || normalized === 'developer_deploy_status'
  ) {
     return normalized;
   }
@@ -234,7 +238,9 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'ai_generate_docs'
     || action === 'test_api_endpoint'
     || action === 'render_get_logs'
-    || action === 'render_get_deploy_status';
+    || action === 'render_get_deploy_status'
+    || action === 'github_get_repo_head'
+    || action === 'developer_deploy_status';
 }
 
 /** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
@@ -2058,8 +2064,8 @@ async function buildStatus(): Promise<Record<string, unknown>> {
         GITHUB_TOKEN: readEnv('GITHUB_TOKEN') ? 'env' : githubTokenConfigured ? 'owner_variables' : 'missing',
       },
       requiredTokenPermissions: ['contents:read/write', 'pull_requests:write', 'actions/workflows:write'],
-      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'github_list_webhooks', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status', 'autonomous_feature_cycle', 'github_commit_multi_file'],
-      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_token_scopes', 'github_list_webhooks', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status'],
+      supportedActions: ['github_commit_file', 'github_create_branch', 'github_create_pull_request', 'github_pull_request_status', 'github_merge_pull_request', 'github_create_rollback_tag', 'github_dispatch_workflow', 'github_create_repository', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_get_repo_head', 'github_token_scopes', 'github_list_webhooks', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'autonomous_fix_cycle', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status', 'autonomous_feature_cycle', 'github_commit_multi_file', 'developer_deploy_status'],
+      readOnlyActions: ['github_pull_request_status', 'github_list_workflow_runs', 'github_get_workflow_run', 'github_get_repo_head', 'github_token_scopes', 'github_list_webhooks', 'verify_url_sha256', 'github_read_file', 'github_search_code', 'github_list_directory', 'github_get_file_tree', 'github_get_workflow_logs', 'ai_diagnose_failure', 'ai_analyze_code', 'ai_generate_fix', 'ai_review_architecture', 'analyze_dependencies', 'ai_design_feature', 'ai_generate_code', 'ai_generate_tests', 'ai_refactor_code', 'ai_debug_runtime', 'ai_security_audit', 'ai_performance_analysis', 'ai_generate_docs', 'test_api_endpoint', 'render_get_logs', 'render_get_deploy_status', 'developer_deploy_status'],
       ciWorkflow: '.github/workflows/ivx-ci.yml',
       confirmationTextRequired: GITHUB_CONFIRM_TEXT,
       mergeConfirmationTextRequired: GITHUB_MERGE_CONFIRM_TEXT,
@@ -3559,6 +3565,104 @@ async function runGithubCommitMultiFile(input: Record<string, unknown>): Promise
   };
 }
 
+async function runGithubGetRepoHead(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const headers = await githubHeaders();
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/commits/${encodeURIComponent(branch)}`;
+  const response = await fetchJson(url, { method: 'GET', headers });
+  if (!response.ok) {
+    return {
+      provider: 'github',
+      action: 'github_get_repo_head',
+      owner: repoInfo.owner,
+      repo: repoInfo.repo,
+      branch,
+      httpStatus: response.status,
+      ok: false,
+      error: typeof response.data === 'string' ? response.data : JSON.stringify(response.data).slice(0, 500),
+      readOnly: true,
+      secretValuesReturned: false,
+      timestamp: nowIso(),
+    };
+  }
+  const data = readRecord(response.data);
+  const commit = readRecord(data.commit);
+  const commitMessage = commit.message;
+  const message = typeof commitMessage === 'string' ? commitMessage : '';
+  const author = readRecord(commit.author);
+  const committer = readRecord(commit.committer);
+  const sha = readTrimmed(data.sha);
+  return {
+    provider: 'github',
+    action: 'github_get_repo_head',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    headSha: sha,
+    headCommitMessage: message,
+    headCommitAuthor: author?.name ?? null,
+    headCommitEmail: author?.email ?? null,
+    headCommitDate: committer?.date ?? author?.date ?? null,
+    htmlUrl: readTrimmed(data.html_url),
+    apiUrl: readTrimmed(data.url),
+    httpStatus: response.status,
+    ok: true,
+    readOnly: true,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+async function runDeveloperDeployStatus(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const status = await buildStatus();
+  const githubHeadPromise = runGithubGetRepoHead(input).catch((err: unknown) => ({
+    provider: 'github',
+    action: 'github_get_repo_head',
+    ok: false,
+    error: err instanceof Error ? err.message : 'unknown',
+    readOnly: true,
+    timestamp: nowIso(),
+  }));
+  const renderInput: Record<string, unknown> = {};
+  if (input.serviceId) renderInput.serviceId = input.serviceId;
+  if (input.deployId) renderInput.deployId = input.deployId;
+  const renderStatusPromise = runRenderGetDeployStatus(renderInput).catch((err: unknown) => ({
+    provider: 'render',
+    action: 'render_get_deploy_status',
+    ok: false,
+    error: err instanceof Error ? err.message : 'unknown',
+    readOnly: true,
+    timestamp: nowIso(),
+  }));
+  const [githubHead, renderDeploy] = await Promise.all([githubHeadPromise, renderStatusPromise]);
+  let health: Record<string, unknown> | null = null;
+  try {
+    const healthResp = await fetch('https://api.ivxholding.com/health', { method: 'GET', signal: AbortSignal.timeout(10_000) });
+    const healthText = await healthResp.text();
+    try {
+      health = JSON.parse(healthText) as Record<string, unknown>;
+    } catch {
+      health = { text: healthText.slice(0, 500) };
+    }
+    health = { ...health, httpStatus: healthResp.status, ok: healthResp.ok };
+  } catch (err) {
+    health = { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+  }
+  return {
+    provider: 'ivx',
+    action: 'developer_deploy_status',
+    ok: true,
+    readOnly: true,
+    developerDeployStatus: status,
+    githubHead,
+    renderDeploy,
+    productionHealth: health,
+    timestamp: nowIso(),
+    secretValuesReturned: false,
+  };
+}
+
 async function runAction(action: DeveloperDeployAction, input: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (action === 'github_commit_file') {
     return await runGithubCommitFile(input);
@@ -3727,6 +3831,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'github_commit_multi_file') {
     return await runGithubCommitMultiFile(input);
+  }
+  if (action === 'github_get_repo_head') {
+    return await runGithubGetRepoHead(input);
+  }
+  if (action === 'developer_deploy_status') {
+    return await runDeveloperDeployStatus(input);
   }
   if (action === 'supabase_execute_sql_management') {
     return await runSupabaseExecuteSqlViaManagement(input);

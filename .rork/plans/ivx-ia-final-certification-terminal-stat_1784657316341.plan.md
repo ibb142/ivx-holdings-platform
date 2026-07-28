@@ -1,7 +1,7 @@
 name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
 overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-27T01:55:00.000Z
+updatedAt: 2026-07-28T13:05:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -318,3 +318,28 @@ Ran 659 tests across 51 files.
 - Added `render_get_deploy_status` backend action to query exact Render deploy status via the Render API.
 - Render deploy triggered after Performance upgrade; multiple deploys in progress and being polled. Code goes live once a deploy actually completes.
 - EXISTING durable store PROVEN to survive restarts: QA scheduler 4188 runs, autonomous scheduler 567 runs — both persisted across multiple redeploys.
+
+---
+
+## Post-Certification Repair — Developer-Deploy Read-Only Actions (2026-07-28T13:05Z)
+
+**Owner request:** Add `github_get_repo_head` and `developer_deploy_status` to the owner-gated `POST /api/ivx/developer-deploy/action` endpoint; previous attempts returned `Unsupported IVX developer deploy action`.
+
+**Implementation:**
+- Added `github_get_repo_head` and `developer_deploy_status` to `DeveloperDeployAction` union in `backend/api/ivx-developer-deploy-control.ts`.
+- Added both to `normalizeAction`, `isReadOnlyAction`, `requiredConfirmationText`, `runAction` dispatch, and `buildStatus` supported/readOnly action lists.
+- Implemented `runGithubGetRepoHead(input)` to query `https://api.github.com/repos/{owner}/{repo}/commits/{branch}` and return `headSha`, `headCommitMessage`, `headCommitAuthor`, `headCommitDate`, `htmlUrl`, `apiUrl`, `httpStatus`, `readOnly: true`.
+- Implemented `runDeveloperDeployStatus(input)` to aggregate `buildStatus`, `githubHead`, `renderDeploy`, and `productionHealth` into a single read-only status snapshot.
+
+**Commit:** `5102c2a002a3e748dcd1c17e1b4df6acc5e9a0f2` — `feat(developer-deploy): add github_get_repo_head and developer_deploy_status read-only actions`.
+
+**Deploy:** Render deploy triggered via `render_trigger_deploy` (CONFIRM_IVX_RENDER_DEPLOY). Deploy `dep-d9kafjjncjis73bq2q0g` live at 2026-07-28T13:01:50Z. Production `/health` confirms commit `5102c2a002a3` and bootTime 2026-07-28T13:03:17Z.
+
+**Verification (live production):**
+- `POST /api/ivx/developer-deploy/action` with `github_get_repo_head` → `ok: true`, `headSha: 5102c2a002a3e748dcd1c17e1b4df6acc5e9a0f2`, `httpStatus: 200`, `readOnly: true`.
+- `POST /api/ivx/developer-deploy/action` with `developer_deploy_status` → `ok: true`, includes `githubHead`, `renderDeploy`, `productionHealth` (status=healthy, commit=5102c2a002a3), `readOnly: true`.
+- Both actions require no confirmation phrase (read-only) and return evidence without mutating infrastructure.
+
+**Android APK:** Fresh release APK rebuilt from current `main` after the backend fix. Build SUCCESSFUL in 53s. APK size 81MB, SHA256 `4a99bca0f48ef94a19fb4846c2df41c09998e6a0beff683d046bde05df2cbdd8`, JS bundle 12,946,344 bytes, Hermes 4 architectures. Uploaded to temporary download host at `https://tmpfiles.org/w3wziVwEpnkj/ivx-android-release.apk` (expires after ~1 hour; direct download: `https://tmpfiles.org/dl/w3wziVwEpnkj/ivx-android-release.apk`).
+
+**Verdict:** ✅ FIXED, DEPLOYED, VERIFIED.
