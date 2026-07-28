@@ -1,11 +1,17 @@
 # IVX iOS Simulator QA — GitHub Actions macOS Runner
 #
-# Runs on GitHub's macOS-latest runner with Xcode pre-installed.
-# Builds the Expo iOS simulator app, boots a real iOS Simulator,
-# installs the app, takes screenshots, and runs Maestro flows.
+# Uses `npx expo run:ios` which handles ALL the complexity:
+#   - Expo prebuild (generates native iOS project)
+#   - CocoaPods install
+#   - xcodebuild with CORRECT flags (no manual flag guessing)
+#   - Boots a simulator
+#   - Installs the app
+#   - Launches the app
+#
+# Then we capture screenshots and run Maestro flows.
 #
 # Triggers:
-#   - Push to main (when chat files or Maestro flows change)
+#   - Push to main (when chat files, Maestro flows, or this workflow change)
 #   - Manual dispatch via GitHub Actions UI
 #
 # Secrets required (already configured in repo):
@@ -14,13 +20,6 @@
 #
 # Secret required for full 20-step chat QA (owner must add):
 #   - OWNER_PASSWORD — owner's Supabase password for app login
-#
-# Artifacts uploaded:
-#   - Screenshots (launch, post-test)
-#   - Build log
-#   - Simulator logs
-#   - Maestro JUnit results
-#   - Xcode scheme listing
 
 name: iOS Simulator QA
 
@@ -32,6 +31,9 @@ on:
       - 'expo/src/modules/chat/**'
       - 'expo/.maestro/**'
       - 'expo/eas.json'
+      - 'expo/app.config.ts'
+      - 'expo/package.json'
+      - 'expo/assets/images/**'
       - '.github/workflows/ios-simulator-qa.yml'
   workflow_dispatch:
     inputs:
@@ -72,245 +74,164 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Setup Node.js (Bun removed — its module system breaks Expo config loading)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies (npm for macOS compatibility)
+      - name: Install dependencies
         working-directory: expo
         run: |
-          # npm install creates proper node_modules/.bin symlinks that
-          # bun install does not create on macOS, which caused prebuild
-          # to fail with PluginError: cannot resolve expo-router.
           npm install --legacy-peer-deps
 
-      - name: Verify Expo CLI is locally installed
+      - name: Verify Expo CLI
         working-directory: expo
         run: |
           echo "=== Node version ==="
           node --version
-          echo "=== npm version ==="
-          npm --version
-          echo "=== expo package version ==="
-          node -e "console.log('expo version:', require('expo/package.json').version)" 2>&1 || echo "expo package not found"
-          echo "=== expo-router installed? ==="
+          echo "=== Expo CLI version ==="
+          npx expo --version
+          echo "=== Expo package version ==="
+          node -e "console.log('expo:', require('expo/package.json').version)"
+          echo "=== expo-router version ==="
           node -e "console.log('expo-router:', require('expo-router/package.json').version)" 2>&1 || echo "expo-router NOT FOUND"
-          echo "=== .bin/expo symlink ==="
-          ls -la node_modules/.bin/expo 2>/dev/null || echo "No .bin/expo symlink"
-          echo "=== expo bin entry ==="
-          ls -la node_modules/expo/bin/cli.js 2>/dev/null || echo "No expo/bin/cli.js"
-          echo "=== .bin/expo --version ==="
-          node_modules/.bin/expo --version 2>&1 || echo ".bin/expo failed"
 
-      - name: Expo prebuild (generate native iOS project)
+      # ============================================================
+      # KEY FIX: Use `npx expo run:ios` instead of manual xcodebuild.
+      # Expo's CLI knows the correct xcodebuild flags, destination,
+      # and build settings. Manual xcodebuild was producing exit 0
+      # with no .app bundle because of incorrect -destination flags.
+      # `expo run:ios` handles: prebuild → pod install → xcodebuild
+      # → boot simulator → install app → launch app — all in one.
+      # ============================================================
+      - name: Build and run on iOS Simulator (expo run:ios)
+        id: build
         working-directory: expo
         continue-on-error: true
-        id: prebuild
+        timeout-minutes: 45
         run: |
-          set -x
-          echo "=== Starting prebuild ==="
-          # Use the local .bin/expo symlink (npm install creates it).
-          # Do NOT use npx (may download wrong version) or node_modules/expo/cli.js (wrong path).
-          node_modules/.bin/expo prebuild --platform ios --clean --no-install 2>&1 | tee prebuild-output.log
-          PREBUILD_EXIT=${PIPESTATUS[0]}
-          echo "=== Prebuild exit code: $PREBUILD_EXIT ==="
-          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
-            echo "ios directory with Podfile exists — prebuild succeeded"
-            ls -la ios/ | head -10
+          set -o pipefail
+          echo "=== Starting expo run:ios ==="
+          echo "This handles prebuild + pods + xcodebuild + install + launch"
+          npx expo run:ios --configuration debug 2>&1 | tee expo-build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "=== expo run:ios exit code: $BUILD_EXIT ==="
+          echo "build_exit=$BUILD_EXIT" >> $GITHUB_OUTPUT
+          if [ "$BUILD_EXIT" -eq 0 ]; then
+            echo "build_status=success" >> $GITHUB_OUTPUT
+            echo "Build + install + launch completed successfully"
           else
-            echo "ios directory does NOT exist — prebuild failed"
-            echo "=== Retrying with npx --no-install ==="
-            npx --no-install expo prebuild --platform ios --clean --no-install 2>&1 | tee -a prebuild-output.log || true
+            echo "build_status=failed" >> $GITHUB_OUTPUT
+            echo "=== BUILD FAILED — last 200 lines ==="
+            tail -200 expo-build.log
+            echo "### Build Failure — Last 200 Lines" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -200 expo-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
 
-      - name: Check prebuild result
-        working-directory: expo
-        id: prebuild-check
-        run: |
-          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
-            echo "result=success" >> $GITHUB_OUTPUT
-            echo "Prebuild succeeded — ios directory with Podfile exists"
-          else
-            echo "result=failed" >> $GITHUB_OUTPUT
-            echo "Prebuild failed — no ios directory"
-            echo "=== Full prebuild output ==="
-            cat prebuild-output.log 2>/dev/null || echo "No output log found"
-            exit 1
-          fi
-
-      - name: Install CocoaPods
-        working-directory: expo/ios
-        run: pod install --repo-update
-
-      - name: Discover Xcode workspace and scheme
-        id: xcode
-        working-directory: expo/ios
-        run: |
-          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
-          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
-          echo "Workspace: $WORKSPACE"
-          xcodebuild -list -workspace "$WORKSPACE" 2>&1 | tee xcode-list.log
-          # More robust scheme extraction — grab first non-empty line after "Schemes:"
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>&1 | awk '/Schemes:/{found=1; next} found && NF{print; exit}' | xargs)
-          echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
-          echo "Scheme: '$SCHEME'"
-          if [ -z "$SCHEME" ]; then
-            echo "::error::No scheme found — xcodebuild cannot proceed"
-            echo "=== Full xcodebuild -list output ==="
-            cat xcode-list.log
-            exit 1
-          fi
-          # Show build settings for diagnostics
-          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -sdk iphonesimulator -configuration Debug -showBuildSettings 2>&1 | tee xcode-showbuildsettings.log | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION' || true
-
-      - name: Build iOS simulator app
-        id: build
-        working-directory: expo/ios
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "=== Starting xcodebuild (with build action) ==="
-          # NOTE: 'build' action is REQUIRED — without it xcodebuild validates
-          # the project and exits 0 but produces no .app bundle.
-          # Use -sdk iphonesimulator WITHOUT -destination (generic destination
-          # is for validation only and may not produce a .app artifact).
-          # Boot a simulator first so xcodebuild can resolve a concrete target.
-          xcodebuild build \
-            -workspace "${{ steps.xcode.outputs.workspace }}" \
-            -scheme "${{ steps.xcode.outputs.scheme }}" \
-            -sdk iphonesimulator \
-            -configuration Debug \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            2>&1 | tee build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-          echo "=== xcodebuild exit code: $BUILD_EXIT ==="
-          if [ "$BUILD_EXIT" -ne 0 ]; then
-            echo "=== BUILD FAILED — last 150 lines of build.log ==="
-            tail -150 build.log
-            echo "### Build Failure — Last 150 Lines" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -150 build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "build_status=failed" >> $GITHUB_OUTPUT
-          else
-            echo "Build completed successfully"
-            echo "build_status=success" >> $GITHUB_OUTPUT
-          fi
-
       - name: Check build result
-        working-directory: expo/ios
+        working-directory: expo
         if: steps.build.outputs.build_status != 'success'
-        run: |
-          echo "::error::xcodebuild failed (exit code non-zero). See build.log artifact and step summary for details."
-          echo "=== Dumping full build.log to step summary ==="
-          echo "### Full Build Log" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(build.log not found)"
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          exit 1
-
-      - name: Find built .app bundle and post diagnostics
-        id: app
-        working-directory: expo/ios
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "=== Searching for .app bundle in build output ==="
-          find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "No build directory"
-          APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
+          echo "::error::expo run:ios failed. Creating diagnostic issue with build log."
+          # Post the full build log as a GitHub issue so we can see
+          # the actual error without admin access to Actions logs.
+          {
+            echo "## iOS Simulator QA Build Diagnostics"
+            echo ""
+            echo "**Commit:** ${GITHUB_SHA}"
+            echo "**Run:** ${GITHUB_RUN_ID}"
+            echo ""
+            echo "### expo run:ios output (last 400 lines)"
+            echo '```'
+            tail -400 expo-build.log 2>/dev/null || echo "not found"
+            echo '```'
+          } > diagnostic-body.md
+          gh label create "ios-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
+          gh issue create \
+            --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
+            --body-file diagnostic-body.md \
+            --label "ios-qa-diagnostic" 2>&1 || \
+          gh issue create --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
+          exit 1
+
+      # ============================================================
+      # Find the .app bundle that expo run:ios built.
+      # expo run:ios builds to ios/build/ or ~/Library/Developer/Xcode/DerivedData/
+      # ============================================================
+      - name: Find built .app bundle
+        id: app
+        working-directory: expo
+        run: |
+          echo "=== Searching for .app bundle ==="
+          # Search multiple possible build output locations
+          APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "::error::No .app bundle found in build output"
-            find build -type f 2>/dev/null | head -100 || echo "build dir empty"
-            # Write diagnostics to a file and create a GitHub issue so we can
-            # see the build output without admin access to Actions logs.
-            {
-              echo "## iOS Simulator QA Build Diagnostics"
-              echo ""
-              echo "**Commit:** ${GITHUB_SHA}"
-              echo "**Run:** ${GITHUB_RUN_ID}"
-              echo ""
-              echo "### xcodebuild -list output"
-              echo '```'
-              cat xcode-list.log 2>/dev/null || echo "not found"
-              echo '```'
-              echo ""
-              echo "### showBuildSettings (key vars)"
-              echo '```'
-              cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION|SDKROOT' || echo "not available"
-              echo '```'
-              echo ""
-              echo "### build.log (last 250 lines)"
-              echo '```'
-              tail -250 build.log 2>/dev/null || echo "not found"
-              echo '```'
-              echo ""
-              echo "### build/ directory tree"
-              echo '```'
-              find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "no build dir"
-              echo '```'
-            } > diagnostic-body.md
-            # Create label first (ignore error if it already exists), then create issue
-            gh label create "ios-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
-            gh issue create \
-              --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
-              --body-file diagnostic-body.md \
-              --label "ios-qa-diagnostic" \
-              2>&1 || echo "gh issue create failed — trying without label" && gh issue create --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || echo "gh issue create failed completely"
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d -path "*Debug-iphonesimulator*" 2>/dev/null | head -1)
+          fi
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -1)
+          fi
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No .app bundle found anywhere"
+            echo "=== Searching all of DerivedData ==="
+            find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | head -20
+            find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | head -20
+            echo "=== Searching ios/build ==="
+            find ios/build -type d 2>/dev/null | head -20
             exit 1
           fi
           APP_PATH_ABS="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
           echo "path=$APP_PATH_ABS" >> $GITHUB_OUTPUT
-          echo "App bundle: $APP_PATH_ABS"
+          echo "App bundle found: $APP_PATH_ABS"
 
-      - name: Boot iOS Simulator
+      - name: Get simulator info
         id: sim
         run: |
-          # Find the first available iPhone simulator
-          SIM_INFO=$(xcrun simctl list devices available -j | python3 -c "
+          # Get the booted simulator
+          SIM_INFO=$(xcrun simctl list devices booted -j | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
           for runtime, devices in data['devices'].items():
-              if 'iOS' in runtime:
-                  for d in devices:
-                      if 'iPhone' in d['name'] and d['isAvailable']:
-                          print(json.dumps({'udid': d['udid'], 'name': d['name'], 'runtime': runtime}))
-                          sys.exit(0)
+              for d in devices:
+                  if d['state'] == 'Booted' and 'iPhone' in d['name']:
+                      print(json.dumps({'udid': d['udid'], 'name': d['name'], 'runtime': runtime}))
+                      sys.exit(0)
+          # Fallback: any booted device
+          for runtime, devices in data['devices'].items():
+              for d in devices:
+                  if d['state'] == 'Booted':
+                      print(json.dumps({'udid': d['udid'], 'name': d['name'], 'runtime': runtime}))
+                      sys.exit(0)
           ")
+          if [ -z "$SIM_INFO" ]; then
+            echo "::error::No booted simulator found"
+            xcrun simctl list devices booted
+            exit 1
+          fi
           SIM_ID=$(echo "$SIM_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['udid'])")
           SIM_NAME=$(echo "$SIM_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])")
           SIM_RUNTIME=$(echo "$SIM_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['runtime'])")
           IOS_VERSION=$(echo "$SIM_RUNTIME" | sed 's/.*iOS-//')
-
           echo "sim_id=$SIM_ID" >> $GITHUB_OUTPUT
           echo "sim_name=$SIM_NAME" >> $GITHUB_OUTPUT
           echo "ios_version=$IOS_VERSION" >> $GITHUB_OUTPUT
+          echo "Booted simulator: $SIM_NAME (iOS $IOS_VERSION, UDID: $SIM_ID)"
 
-          echo "Booting simulator: $SIM_NAME (iOS $IOS_VERSION, UDID: $SIM_ID)"
-          xcrun simctl boot "$SIM_ID" 2>/dev/null || true
-          xcrun simctl bootstatus "$SIM_ID" -b
-
-      - name: Install app on simulator
+      - name: Capture launch screenshot
         run: |
-          xcrun simctl install booted "${{ steps.app.outputs.path }}"
-          echo "App installed on simulator"
-
-      - name: Launch app and capture screenshot
-        run: |
-          xcrun simctl launch booted com.ivxholdings.app
-          sleep 10
+          sleep 5
           xcrun simctl io booted screenshot screenshot-01-launch.png
           echo "Launch screenshot saved"
 
       - name: Capture simulator system log
         run: |
-          xcrun simctl spawn booted log stream --level info --predicate 'process == "IVXHoldings" OR process == "ivxholdings"' --timeout 5 > simulator-app.log 2>&1 || true
-          xcrun simctl spawn booted log show --predicate 'process == "IVXHoldings" OR process == "ivxholdings"' --last 5m > simulator-log-history.txt 2>&1 || true
+          xcrun simctl spawn booted log show --last 2m > simulator-log.txt 2>&1 || true
 
       - name: Install Maestro
         run: |
@@ -372,13 +293,9 @@ jobs:
           name: ios-simulator-qa-${{ github.sha }}
           path: |
             screenshot-*.png
-            simulator-app.log
-            simulator-log-history.txt
+            simulator-log.txt
             simulator-info.txt
-            expo/prebuild-output.log
-            expo/ios/build.log
-            expo/ios/xcode-list.log
-            expo/ios/xcode-showbuildsettings.log
+            expo/expo-build.log
             expo/maestro-launch-results.xml
             expo/maestro-launch.log
             expo/maestro-chat-results.xml
@@ -401,6 +318,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- Screenshots: \`screenshot-01-launch.png\`, \`screenshot-02-post-test.png\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Build log: \`expo/ios/build.log\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Simulator logs: \`simulator-app.log\`, \`simulator-log-history.txt\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Build log: \`expo/expo-build.log\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Simulator logs: \`simulator-log.txt\`, \`simulator-info.txt\`" >> $GITHUB_STEP_SUMMARY
           echo "- Maestro results: \`maestro-launch-results.xml\`, \`maestro-chat-results.xml\`" >> $GITHUB_STEP_SUMMARY

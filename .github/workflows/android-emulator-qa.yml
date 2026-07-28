@@ -1,0 +1,258 @@
+# IVX Android Emulator QA — GitHub Actions Ubuntu Runner
+#
+# Uses `npx expo run:android` which handles ALL the complexity:
+#   - Expo prebuild (generates native Android project)
+#   - Gradle build
+#   - Boots an Android emulator
+#   - Installs the APK
+#   - Launches the app
+#
+# Then we capture screenshots and run Maestro flows.
+#
+# Triggers:
+#   - Push to main (when chat files, Maestro flows, or this workflow change)
+#   - Manual dispatch via GitHub Actions UI
+#
+# Secrets required (already configured in repo):
+#   - EXPO_PUBLIC_SUPABASE_URL
+#   - EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+name: Android Emulator QA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/chat/**'
+      - 'expo/.maestro/**'
+      - 'expo/eas.json'
+      - 'expo/app.config.ts'
+      - 'expo/package.json'
+      - 'expo/assets/images/**'
+      - '.github/workflows/android-emulator-qa.yml'
+  workflow_dispatch:
+    inputs:
+      run_full_qa:
+        description: 'Run full chat QA (requires OWNER_PASSWORD secret)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+  EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+  EXPO_PUBLIC_QA_BUILD: 'true'
+  OWNER_EMAIL: iperez4242@gmail.com
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build-and-test:
+    name: Android Emulator Build + QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      build_status: ${{ steps.build.outcome }}
+      apk_path: ${{ steps.apk.outputs.path }}
+      emulator_name: ${{ steps.emu.outputs.name }}
+      android_version: ${{ steps.emu.outputs.version }}
+      maestro_launch_result: ${{ steps.maestro-launch.outcome }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        working-directory: expo
+        run: |
+          npm install --legacy-peer-deps
+
+      - name: Verify Expo CLI
+        working-directory: expo
+        run: |
+          echo "=== Node version ==="
+          node --version
+          echo "=== Expo CLI version ==="
+          npx expo --version
+          echo "=== Expo package version ==="
+          node -e "console.log('expo:', require('expo/package.json').version)"
+
+      - name: Expo prebuild (generate native Android project)
+        working-directory: expo
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+        env:
+          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Build Android APK
+        id: build
+        working-directory: expo/android
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          echo "=== Building APK with Gradle ==="
+          chmod +x gradlew
+          ./gradlew assembleDebug 2>&1 | tee gradle-build.log
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          echo "=== Gradle exit code: $GRADLE_EXIT ==="
+          echo "build_exit=$GRADLE_EXIT" >> $GITHUB_OUTPUT
+          if [ "$GRADLE_EXIT" -eq 0 ]; then
+            echo "build_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "build_status=failed" >> $GITHUB_OUTPUT
+            echo "=== BUILD FAILED — last 200 lines ==="
+            tail -200 gradle-build.log
+            echo "### Build Failure — Last 200 Lines" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -200 gradle-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check build result
+        working-directory: expo/android
+        if: steps.build.outputs.build_status != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error::Gradle build failed. Creating diagnostic issue."
+          {
+            echo "## Android Emulator QA Build Diagnostics"
+            echo ""
+            echo "**Commit:** ${GITHUB_SHA}"
+            echo "**Run:** ${GITHUB_RUN_ID}"
+            echo ""
+            echo "### Gradle build output (last 400 lines)"
+            echo '```'
+            tail -400 gradle-build.log 2>/dev/null || echo "not found"
+            echo '```'
+          } > diagnostic-body.md
+          gh label create "android-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
+          gh issue create \
+            --title "Android QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
+            --body-file diagnostic-body.md \
+            --label "android-qa-diagnostic" 2>&1 || \
+          gh issue create --title "Android QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
+          exit 1
+
+      - name: Find built APK
+        id: apk
+        working-directory: expo/android
+        run: |
+          echo "=== Searching for APK ==="
+          APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::No APK found"
+            find . -name "*.apk" 2>/dev/null
+            exit 1
+          fi
+          APK_PATH_ABS="$(cd "$(dirname "$APK_PATH")" && pwd)/$(basename "$APK_PATH")"
+          echo "path=$APK_PATH_ABS" >> $GITHUB_OUTPUT
+          echo "APK found: $APK_PATH_ABS"
+          ls -lh "$APK_PATH_ABS"
+
+      # ============================================================
+      # Boot Android Emulator using reactivecircus/android-emulator-runner
+      # ============================================================
+      - name: Boot Android Emulator
+        id: emu
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_7
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            echo "Emulator booted"
+            adb devices
+            # Get emulator info
+            EMU_NAME=$(adb shell getprop ro.product.model)
+            ANDROID_VER=$(adb shell getprop ro.build.version.release)
+            echo "name=$EMU_NAME" >> $GITHUB_OUTPUT
+            echo "version=$ANDROID_VER" >> $GITHUB_OUTPUT
+            echo "Emulator: $EMU_NAME (Android $ANDROID_VER)"
+
+      - name: Install APK on emulator
+        run: |
+          adb install -r "${{ steps.apk.outputs.path }}"
+          echo "APK installed"
+
+      - name: Launch app and capture screenshot
+        run: |
+          adb shell am start -n com.ivxholdings.app/.MainActivity
+          sleep 10
+          adb exec-out screencap -p > screenshot-01-launch.png
+          echo "Launch screenshot saved"
+
+      - name: Capture logcat
+        run: |
+          adb logcat -d -t 500 > logcat.txt 2>&1 || true
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+          maestro --version
+
+      - name: Run Maestro launch test
+        id: maestro-launch
+        working-directory: expo
+        continue-on-error: true
+        run: |
+          # Android Maestro flow (use the same launch test, Maestro supports Android)
+          maestro test .maestro/ivx-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
+          echo "Maestro launch test completed"
+
+      - name: Take post-test screenshot
+        run: |
+          adb exec-out screencap -p > screenshot-02-post-test.png || true
+
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-emulator-qa-${{ github.sha }}
+          path: |
+            screenshot-*.png
+            logcat.txt
+            expo/android/gradle-build.log
+            expo/maestro-launch-results.xml
+            expo/maestro-launch.log
+          retention-days: 30
+
+      - name: Generate QA summary
+        if: always()
+        run: |
+          echo "## Android Emulator QA Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit SHA | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Emulator | ${{ steps.emu.outputs.name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android Version | ${{ steps.emu.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Status | \`${{ steps.build.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Maestro Launch | \`${{ steps.maestro-launch.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Screenshots: \`screenshot-01-launch.png\`, \`screenshot-02-post-test.png\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Logcat: \`logcat.txt\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Maestro results: \`maestro-launch-results.xml\`" >> $GITHUB_STEP_SUMMARY
