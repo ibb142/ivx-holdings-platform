@@ -80,6 +80,7 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.0.12077973 cmake;3.22.1'
+          log-accepted-android-sdk-licenses: false
 
       - name: Install root dependencies
         run: bun install
@@ -160,12 +161,14 @@ jobs:
             tail -800 gradle-build.log 2>/dev/null || echo "gradle-build.log not found"
             echo '```'
           } > diagnostic-body.md
-          gh label create "android-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
-          gh issue create \
-            --title "Android Release APK Build Diagnostics — ${GITHUB_SHA:0:12}" \
-            --body-file diagnostic-body.md \
-            --label "android-qa-diagnostic" 2>&1 || \
-          gh issue create --title "Android Release APK Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
+          # Create issue via GitHub API (gh CLI sometimes fails silently in this runner)
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Content-Type: application/json" \
+            -d "$(python3 -c "import json,sys; print(json.dumps({'title':'Android Release APK Build Diagnostics — ${GITHUB_SHA:0:12}','body':open('diagnostic-body.md').read(),'labels':['android-qa-diagnostic']}))")" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues")
+          echo "Issue create response: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Created issue:', d.get('html_url', d.get('message','unknown')))"
 
       - name: Find built APK
         id: apk
