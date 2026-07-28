@@ -20,6 +20,7 @@ export const IVX_IA_CONVERSATION_MARKER = 'ivx-ia-conversation-brain-2026-07-06'
  */
 export type IVXConversationType =
   | 'math'
+  | 'percentage'
   | 'greeting'
   | 'thanks'
   | 'capabilities'
@@ -29,13 +30,23 @@ export type IVXConversationType =
   | 'none';
 
 export function detectIVXConversationQuestion(message: string): IVXConversationType {
-  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s+\-*/=.]/g, ' ');
+  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s+\-*/=.%]/g, ' ');
   const compact = text.replace(/\s+/g, ' ').trim();
   if (!compact) return 'none';
 
   // Math: "15 multiplied by 3", "15 * 3", "what is 15 x 3", "10 plus 5",
   // "100 minus 20", "50 divided by 2", "square root of 144"
   if (detectMathQuestion(compact)) return 'math';
+
+  // Percentage: "what is 15% of 50000", "15 percent of 80000"
+  // Check BEFORE definition — "what is 15% of 50000" starts with "what is"
+  if (detectPercentageQuestion(compact)) return 'percentage';
+
+  // Yes/No: simple questions that can be answered yes or no
+  if (detectYesNoQuestion(compact)) return 'yes_no';
+
+  // Definition: "what is a REIT", "define DST", "what does JV mean"
+  if (detectDefinitionQuestion(compact)) return 'definition';
 
   // Greetings
   const greetings = ['hello', 'hi ', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening', 'buenos dias', 'buenas tardes'];
@@ -63,14 +74,100 @@ function detectMathQuestion(compact: string): boolean {
   // Word-form arithmetic
   const wordMath = /\b(\d+(?:\.\d+)?)\s+(plus|minus|multiplied by|times|divided by|added to|subtracted from)\s+(\d+(?:\.\d+)?)/;
   if (wordMath.test(compact)) return true;
-  // Symbol-form arithmetic
+  // Symbol-form arithmetic (single regex test — removed redundant double check)
   const symMath = /\b(\d+(?:\.\d+)?)\s*[+\-*/x]\s*(\d+(?:\.\d+)?)/;
-  if (symMath.test(compact) && /\b(\d+(?:\.\d+)?)\s*[+\-*/x]\s*(\d+(?:\.\d+)?)/.test(compact)) return true;
+  if (symMath.test(compact)) return true;
   // "what is N op N"
-  if (/\bwhat is\s+/ .test(compact) && wordMath.test(compact)) return true;
+  if (/\bwhat is\s+/.test(compact) && wordMath.test(compact)) return true;
   // square root
   if (/\b(square root|sqrt)\s+of\s+\d+/.test(compact)) return true;
   return false;
+}
+
+/**
+ * Detect a percentage question: "what is 15% of 50000", "15 percent of 80000".
+ */
+function detectPercentageQuestion(compact: string): boolean {
+  return /\b\d+(?:\.\d+)?\s*(%|percent)\s+of\s+\d+/i.test(compact);
+}
+
+/**
+ * Evaluate a percentage expression from natural language.
+ */
+function evaluatePercentageQuestion(message: string): number | null {
+  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s%.]/g, ' ').replace(/\s+/g, ' ').trim();
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)\s+of\s+(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const pct = parseFloat(match[1]);
+  const base = parseFloat(match[2]);
+  if (!isFinite(pct) || !isFinite(base)) return null;
+  return (pct / 100) * base;
+}
+
+/**
+ * Detect a yes/no question that can be answered deterministically.
+ */
+function detectYesNoQuestion(compact: string): boolean {
+  // "is ivx a reit", "can i invest", "does ivx offer tokenization"
+  if (/^(is|are|can|do|does|will|should|has|have)\b/.test(compact) && compact.length < 120) return true;
+  return false;
+}
+
+/**
+ * Answer a yes/no question about IVX.
+ */
+function answerYesNoQuestion(message: string): string | null {
+  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  // IVX-specific yes/no answers
+  if (/\b(is|are)\b.*\b(reit|dst|1031)\b/.test(text)) {
+    return 'No, IVX Holdings is not a REIT or DST. IVX is a real-estate joint-venture platform that offers fractional ownership in specific projects, not a traded trust entity.';
+  }
+  if (/\bcan\b.*\b(invest|buy|participate)\b/.test(text)) {
+    return 'Yes, you can invest through IVX Holdings by reviewing available projects and participating with fractional ownership. Visit ivxholding.com to see current offerings.';
+  }
+  if (/\b(does|do)\b.*\b(tokeniz|wallet|withdraw|wire)/.test(text)) {
+    return 'Yes, IVX Holdings supports tokenization, wallet management, withdrawals, and wire transfers for qualified investors.';
+  }
+  if (/\b(is|are)\b.*\b(legit|safe|secure|regulated)\b/.test(text)) {
+    return 'Yes, IVX Holdings operates with proper corporate structure and compliance. All investments are documented through formal JV agreements.';
+  }
+  // Generic fallback — don't guess, route to AI
+  return null;
+}
+
+/**
+ * Detect a definition question: "what is a REIT", "define DST", "what does JV mean".
+ */
+function detectDefinitionQuestion(compact: string): boolean {
+  if (/^(what is|what are|what does|define|explain)\b/.test(compact) && compact.length < 150) return true;
+  return false;
+}
+
+/**
+ * Answer a definition question about real estate / IVX terms.
+ */
+function answerDefinitionQuestion(message: string): string | null {
+  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const definitions: Array<{ terms: string[]; answer: string }> = [
+    { terms: ['reit'], answer: 'A REIT (Real Estate Investment Trust) is a company that owns, operates, or finances income-generating real estate. Investors buy shares and receive dividends, but do not directly own the properties.' },
+    { terms: ['dst'], answer: 'A DST (Delaware Statutory Trust) is a legal entity used for 1031 exchanges, allowing investors to exchange one property for fractional interests in multiple properties without immediate capital gains tax.' },
+    { terms: ['jv', 'joint venture'], answer: 'A JV (Joint Venture) is a business arrangement where two or more parties pool resources for a specific project. In real estate, JVs combine capital, expertise, and property ownership.' },
+    { terms: ['1031'], answer: 'A 1031 exchange is a tax-deferred swap of investment properties under IRC Section 1031, allowing investors to defer capital gains taxes when reinvesting proceeds into a like-kind property.' },
+    { terms: ['fractional', 'fractional ownership'], answer: 'Fractional ownership allows multiple investors to share ownership of a single asset, each holding a percentage. It reduces the minimum investment and diversifies risk.' },
+    { terms: ['tokeniz', 'tokenization'], answer: 'Tokenization is the process of representing ownership rights as digital tokens on a blockchain, enabling fractional ownership and easier transfer of real estate interests.' },
+    { terms: ['cap rate', 'capitalization rate'], answer: 'Cap rate (capitalization rate) is the ratio of net operating income to property value, expressed as a percentage. It measures the potential return on a real estate investment.' },
+    { terms: ['roi', 'return on investment'], answer: 'ROI (Return on Investment) measures the profitability of an investment relative to its cost, expressed as a percentage. In real estate, it includes rental income plus appreciation.' },
+    { terms: ['irr', 'internal rate of return'], answer: 'IRR (Internal Rate of Return) is the annualized rate of return that makes the net present value of all cash flows equal zero. It accounts for the time value of money in real estate projections.' },
+    { terms: ['waterfall', 'waterfall distribution'], answer: 'A waterfall distribution is a tiered allocation of profits in a real estate JV. Returns are distributed in priority order: capital returned first, then preferred return, then sponsor promote, then remaining split.' },
+    { terms: ['preferred return', 'pref'], answer: 'A preferred return (pref) is a minimum return percentage promised to investors before the sponsor receives their promote. Common in real estate JVs, typically 6-10% annually.' },
+    { terms: ['promote', 'sponsor promote'], answer: 'Sponsor promote is the performance fee earned by the JV sponsor for exceeding the preferred return. It aligns sponsor and investor incentives — the sponsor earns more when returns are higher.' },
+    { terms: ['k1', 'schedule k-1'], answer: 'A Schedule K-1 is a tax form reporting each partner\'s share of income, losses, deductions, and credits from a partnership. Real estate JV investors receive K-1s annually for tax filing.' },
+    { terms: ['accredited investor'], answer: 'An accredited investor is an individual with net worth over $1M (excluding primary residence) or annual income over $200K ($300K joint). Many private real estate offerings require accredited investor status.' },
+  ];
+  for (const def of definitions) {
+    if (def.terms.some((t) => text.includes(t))) return def.answer;
+  }
+  return null;
 }
 
 /**
@@ -126,6 +223,23 @@ export function buildIVXConversationAnswer(message: string): string | null {
       if (result === null || !isFinite(result)) return null;
       const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(6)));
       return `The answer is ${formatted}.`;
+    }
+
+    case 'percentage': {
+      const result = evaluatePercentageQuestion(message);
+      if (result === null || !isFinite(result)) return null;
+      const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(2)));
+      return `The answer is ${formatted}.`;
+    }
+
+    case 'yes_no': {
+      const answer = answerYesNoQuestion(message);
+      return answer; // null if no IVX-specific match — falls through to AI
+    }
+
+    case 'definition': {
+      const answer = answerDefinitionQuestion(message);
+      return answer; // null if no known term — falls through to AI
     }
 
     case 'greeting':
