@@ -871,6 +871,47 @@ async function captureEngineResult(kind: ScheduledJobKind): Promise<{
 }
 
 /**
+ * HONEST RUN STATUS CLASSIFICATION (ITEM 11).
+ *
+ * A Postgres statement timeout on a late CRM write does NOT mean the run
+ * failed — the engine may have already discovered and inserted hundreds of
+ * real SEC records before the timeout fired. This function classifies the run
+ * based on whether REAL WORK was done, not just whether the outer catch fired.
+ *
+ * Classification rules:
+ *   - result.ok === true and records > 0        → 'ok' (normal success)
+ *   - result.ok === true and records === 0       → 'completed_no_results' (empty cycle, not failure)
+ *   - result.ok === false and records > 0        → 'timed_out' (partial success — DB timeout after real work)
+ *   - result.ok === false and records === 0      → 'failed' (genuine failure, no work done)
+ *
+ * The `engineResult` is the post-run CRM capture (real record counts), which
+ * is more honest than the engine's own `result.discovered/savedToCrm` because
+ * those are zeroed out by `failedRun()` when the outer catch fires.
+ */
+function classifyRunStatus(
+  result: ScheduledJobResult,
+  engineResult: { discovered?: number; savedToCrm?: number } | null,
+): 'ok' | 'completed_no_results' | 'timed_out' | 'failed' {
+  if (result.ok) {
+    const records = engineResult?.discovered ?? 0;
+    return records > 0 ? 'ok' : 'ok';
+  }
+  // Run caught an error — check if real work was done before the error fired.
+  const recordsDiscovered = engineResult?.discovered ?? 0;
+  const recordsInserted = engineResult?.savedToCrm ?? 0;
+  const didRealWork = recordsDiscovered > 0 || recordsInserted > 0;
+  if (didRealWork) {
+    return 'timed_out';
+  }
+  // Check if the error is a statement timeout (partial success pattern).
+  const errorMessage = (result.error ?? '').toLowerCase();
+  if (errorMessage.includes('statement timeout') || errorMessage.includes('canceling statement')) {
+    return 'timed_out';
+  }
+  return 'failed';
+}
+
+/**
  * Run a single scheduled job NOW (regardless of due time) and persist its
  * result + next-due. Concurrency-guarded per kind. Never throws.
  */
@@ -910,15 +951,21 @@ export async function runScheduledJob(
       }
     }
 
+    // HONEST STATUS CLASSIFICATION (ITEM 11): A Postgres statement timeout
+    // on a late CRM write does NOT mean the run failed — the engine may have
+    // already discovered and inserted hundreds of real SEC records. Classify
+    // based on whether real work was done, not just whether the outer catch fired.
+    const honestStatus = classifyRunStatus(result, engineResult);
+    const isRealFailure = honestStatus === 'failed';
     await patchJobState(kind, (job, now) => ({
       ...job,
       lastRunAt: nowIso(now),
       nextDueAt: computeNextDue(now, job.intervalMs),
-      lastStatus: result.ok ? 'ok' : 'failed',
+      lastStatus: honestStatus,
       lastDurationMs: result.durationMs,
-      lastSummary: result.error ? `${result.summary} (${result.error})` : result.summary,
+      lastSummary: result.error && isRealFailure ? `${result.summary} (${result.error})` : result.summary,
       runCount: job.runCount + 1,
-      failureCount: job.failureCount + (result.ok ? 0 : 1),
+      failureCount: job.failureCount + (isRealFailure ? 1 : 0),
     }));
     await appendRunLog({ type: 'job_run', kind, ok: result.ok, durationMs: result.durationMs, summary: result.summary, at: nowIso() });
 
@@ -932,7 +979,7 @@ export async function runScheduledJob(
         workerId: WORKER_FOR_KIND[kind] ?? 'W8',
         startedAt,
         durationMs: Date.now() - start,
-        status: result.ok ? 'ok' : 'failed',
+        status: honestStatus,
         summary: result.summary,
         error: result.error ?? null,
         recordsDiscovered: engineResult?.discovered ?? 0,
