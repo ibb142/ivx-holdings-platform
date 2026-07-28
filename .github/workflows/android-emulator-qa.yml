@@ -92,7 +92,7 @@ jobs:
         run: |
           npm install --legacy-peer-deps
 
-      - name: Verify Expo CLI
+      - name: Verify Expo CLI + committed android dir
         working-directory: expo
         run: |
           echo "=== Node version ==="
@@ -101,13 +101,9 @@ jobs:
           npx expo --version
           echo "=== Expo package version ==="
           node -e "console.log('expo:', require('expo/package.json').version)"
-
-      - name: Expo prebuild (generate native Android project)
-        working-directory: expo
-        run: |
-          npx expo prebuild --platform android --clean --no-install
-        env:
-          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
+          echo "=== Android dir exists? ==="
+          ls -la android/app/build.gradle android/app/debug.keystore android/gradlew
+          echo "=== No expo prebuild — using committed android dir (matches ivx-ci.yml) ==="
 
       - name: Build Android APK (Release — includes JS bundle + assets)
         id: build
