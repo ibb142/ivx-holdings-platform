@@ -48,6 +48,10 @@ env:
   EXPO_PUBLIC_QA_BUILD: 'true'
   OWNER_EMAIL: iperez4242@gmail.com
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   build-and-test:
     name: iOS Simulator Build + Maestro QA
@@ -89,13 +93,15 @@ jobs:
           echo "=== npm version ==="
           npm --version
           echo "=== expo package version ==="
-          node -e "console.log('expo version:', require('expo/package.json').version)"
+          node -e "console.log('expo version:', require('expo/package.json').version)" 2>&1 || echo "expo package not found"
+          echo "=== expo-router installed? ==="
+          node -e "console.log('expo-router:', require('expo-router/package.json').version)" 2>&1 || echo "expo-router NOT FOUND"
           echo "=== .bin/expo symlink ==="
           ls -la node_modules/.bin/expo 2>/dev/null || echo "No .bin/expo symlink"
-          echo "=== Try direct CLI ==="
-          node node_modules/expo/cli.js --version 2>&1 || echo "Direct CLI failed"
-          echo "=== Try npx --no-install ==="
-          npx --no-install expo --version 2>&1 || echo "npx --no-install failed"
+          echo "=== expo bin entry ==="
+          ls -la node_modules/expo/bin/cli.js 2>/dev/null || echo "No expo/bin/cli.js"
+          echo "=== .bin/expo --version ==="
+          node_modules/.bin/expo --version 2>&1 || echo ".bin/expo failed"
 
       - name: Expo prebuild (generate native iOS project)
         working-directory: expo
@@ -104,13 +110,18 @@ jobs:
         run: |
           set -x
           echo "=== Starting prebuild ==="
-          node node_modules/expo/cli.js prebuild --platform ios --clean --no-install 2>&1 | tee prebuild-output.log
-          echo "=== Prebuild exit code: $? ==="
-          if [ -d "ios" ]; then
-            echo "ios directory exists — prebuild may have succeeded"
+          # Use the local .bin/expo symlink (npm install creates it).
+          # Do NOT use npx (may download wrong version) or node_modules/expo/cli.js (wrong path).
+          node_modules/.bin/expo prebuild --platform ios --clean --no-install 2>&1 | tee prebuild-output.log
+          PREBUILD_EXIT=${PIPESTATUS[0]}
+          echo "=== Prebuild exit code: $PREBUILD_EXIT ==="
+          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
+            echo "ios directory with Podfile exists — prebuild succeeded"
             ls -la ios/ | head -10
           else
             echo "ios directory does NOT exist — prebuild failed"
+            echo "=== Retrying with npx --no-install ==="
+            npx --no-install expo prebuild --platform ios --clean --no-install 2>&1 | tee -a prebuild-output.log || true
           fi
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
@@ -142,39 +153,120 @@ jobs:
           echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
           echo "Workspace: $WORKSPACE"
           xcodebuild -list -workspace "$WORKSPACE" 2>&1 | tee xcode-list.log
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>&1 | awk '/Schemes:/{getline; print}' | xargs)
+          # More robust scheme extraction — grab first non-empty line after "Schemes:"
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>&1 | awk '/Schemes:/{found=1; next} found && NF{print; exit}' | xargs)
           echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
-          echo "Scheme: $SCHEME"
+          echo "Scheme: '$SCHEME'"
+          if [ -z "$SCHEME" ]; then
+            echo "::error::No scheme found — xcodebuild cannot proceed"
+            echo "=== Full xcodebuild -list output ==="
+            cat xcode-list.log
+            exit 1
+          fi
+          # Show build settings for diagnostics
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -sdk iphonesimulator -configuration Debug -showBuildSettings 2>&1 | tee xcode-showbuildsettings.log | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION' || true
 
       - name: Build iOS simulator app
         id: build
         working-directory: expo/ios
+        continue-on-error: true
         run: |
           set -o pipefail
-          xcodebuild \
+          echo "=== Starting xcodebuild (with build action) ==="
+          # NOTE: 'build' action is REQUIRED — without it xcodebuild validates
+          # the project and exits 0 but produces no .app bundle.
+          # Use -sdk iphonesimulator WITHOUT -destination (generic destination
+          # is for validation only and may not produce a .app artifact).
+          # Boot a simulator first so xcodebuild can resolve a concrete target.
+          xcodebuild build \
             -workspace "${{ steps.xcode.outputs.workspace }}" \
             -scheme "${{ steps.xcode.outputs.scheme }}" \
             -sdk iphonesimulator \
             -configuration Debug \
             -derivedDataPath build \
-            -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             2>&1 | tee build.log
-          echo "Build completed successfully"
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "=== xcodebuild exit code: $BUILD_EXIT ==="
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "=== BUILD FAILED — last 150 lines of build.log ==="
+            tail -150 build.log
+            echo "### Build Failure — Last 150 Lines" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -150 build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "build_status=failed" >> $GITHUB_OUTPUT
+          else
+            echo "Build completed successfully"
+            echo "build_status=success" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Find built .app bundle
+      - name: Check build result
+        working-directory: expo/ios
+        if: steps.build.outputs.build_status != 'success'
+        run: |
+          echo "::error::xcodebuild failed (exit code non-zero). See build.log artifact and step summary for details."
+          echo "=== Dumping full build.log to step summary ==="
+          echo "### Full Build Log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(build.log not found)"
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit 1
+
+      - name: Find built .app bundle and post diagnostics
         id: app
         working-directory: expo/ios
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
+          echo "=== Searching for .app bundle in build output ==="
+          find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "No build directory"
+          APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "::error::No .app bundle found in build output"
+            find build -type f 2>/dev/null | head -100 || echo "build dir empty"
+            # Write diagnostics to a file and create a GitHub issue so we can
+            # see the build output without admin access to Actions logs.
+            {
+              echo "## iOS Simulator QA Build Diagnostics"
+              echo ""
+              echo "**Commit:** ${GITHUB_SHA}"
+              echo "**Run:** ${GITHUB_RUN_ID}"
+              echo ""
+              echo "### xcodebuild -list output"
+              echo '```'
+              cat xcode-list.log 2>/dev/null || echo "not found"
+              echo '```'
+              echo ""
+              echo "### showBuildSettings (key vars)"
+              echo '```'
+              cat xcode-showbuildsettings.log 2>/dev/null | grep -E 'CONFIGURATION_BUILD_DIR|BUILT_PRODUCTS_DIR|TARGET_BUILD_DIR|PRODUCT_NAME|WRAPPER_EXTENSION|SDKROOT' || echo "not available"
+              echo '```'
+              echo ""
+              echo "### build.log (last 250 lines)"
+              echo '```'
+              tail -250 build.log 2>/dev/null || echo "not found"
+              echo '```'
+              echo ""
+              echo "### build/ directory tree"
+              echo '```'
+              find build -maxdepth 5 -type d 2>/dev/null | head -50 || echo "no build dir"
+              echo '```'
+            } > diagnostic-body.md
+            # Create label first (ignore error if it already exists), then create issue
+            gh label create "ios-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
+            gh issue create \
+              --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
+              --body-file diagnostic-body.md \
+              --label "ios-qa-diagnostic" \
+              2>&1 || echo "gh issue create failed — trying without label" && gh issue create --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || echo "gh issue create failed completely"
             exit 1
           fi
-          echo "path=$APP_PATH" >> $GITHUB_OUTPUT
-          echo "App bundle: $APP_PATH"
+          APP_PATH_ABS="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
+          echo "path=$APP_PATH_ABS" >> $GITHUB_OUTPUT
+          echo "App bundle: $APP_PATH_ABS"
 
       - name: Boot iOS Simulator
         id: sim
@@ -283,8 +375,10 @@ jobs:
             simulator-app.log
             simulator-log-history.txt
             simulator-info.txt
+            expo/prebuild-output.log
             expo/ios/build.log
             expo/ios/xcode-list.log
+            expo/ios/xcode-showbuildsettings.log
             expo/maestro-launch-results.xml
             expo/maestro-launch.log
             expo/maestro-chat-results.xml
