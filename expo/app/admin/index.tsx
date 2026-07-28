@@ -70,7 +70,6 @@ import {
   Send,
   Sliders,
   Cpu,
-  Radio,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
