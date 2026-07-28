@@ -1,13 +1,6 @@
 # IVX Android Emulator QA — GitHub Actions Ubuntu Runner
 #
-# Uses `npx expo run:android` which handles ALL the complexity:
-#   - Expo prebuild (generates native Android project)
-#   - Gradle build
-#   - Boots an Android emulator
-#   - Installs the APK
-#   - Launches the app
-#
-# Then we capture screenshots and run Maestro flows.
+# Builds a RELEASE APK (with JS bundle + assets), then runs emulator QA.
 #
 # Triggers:
 #   - Push to main (when chat files, Maestro flows, or this workflow change)
@@ -109,32 +102,22 @@ jobs:
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
 
-      - name: Patch build.gradle — force JS bundle in debug builds
-        working-directory: expo
-        run: |
-          echo "=== Before patch ==="
-          grep -n "debuggableVariants" android/app/build.gradle || echo "(not found — default is [\"debug\" which skips JS bundling)"
-          # Replace the commented-out debuggableVariants line with an active one
-          # This forces ALL variants (including debug) to bundle JS + assets
-          sed -i 's|// debuggableVariants = \["liteDebug", "prodDebug"\]|debuggableVariants = []|' android/app/build.gradle
-          echo "=== After patch ==="
-          grep -n "debuggableVariants" android/app/build.gradle
-          if ! grep -q 'debuggableVariants = \[\]' android/app/build.gradle; then
-            echo "=== Fallback: inject after react { ==="
-            sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
-            grep -n "debuggableVariants" android/app/build.gradle
-          fi
-
-      - name: Build Android APK (debug with JS bundle + assets)
+      # ============================================================
+      # Build step uses continue-on-error so that even if the build
+      # fails, the diagnostic step below can capture the error logs
+      # and create a GitHub issue with the actual error message.
+      # ============================================================
+      - name: Build Android APK
         id: build
         working-directory: expo/android
+        continue-on-error: true
         timeout-minutes: 30
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           set -o pipefail
-          echo "=== Building DEBUG APK with JS bundle + assets (debuggableVariants=[] in build.gradle) ==="
+          echo "=== Building APK with Gradle ==="
           echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME"
           chmod +x gradlew
@@ -152,25 +135,27 @@ jobs:
             echo '```' >> $GITHUB_STEP_SUMMARY
             tail -500 gradle-build.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
           fi
 
-      - name: Check build result
+      # ALWAYS run — captures error even when build step fails.
+      # Uses if: always() so it runs regardless of build step outcome.
+      - name: Create diagnostic issue on build failure
+        if: always() && steps.build.outcome != 'success'
         working-directory: expo/android
-        if: steps.build.outputs.build_status != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "::error::Gradle build failed. Creating diagnostic issue."
+          echo "::error::Gradle build failed. Creating diagnostic issue with error logs."
           {
             echo "## Android Emulator QA Build Diagnostics"
             echo ""
             echo "**Commit:** ${GITHUB_SHA}"
             echo "**Run:** ${GITHUB_RUN_ID}"
+            echo "**Build step outcome:** ${{ steps.build.outcome }}"
             echo ""
-            echo "### Gradle build output (last 400 lines)"
+            echo "### Gradle build output (last 800 lines)"
             echo '```'
-            tail -400 gradle-build.log 2>/dev/null || echo "not found"
+            tail -800 gradle-build.log 2>/dev/null || echo "gradle-build.log not found"
             echo '```'
           } > diagnostic-body.md
           gh label create "android-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
@@ -179,18 +164,14 @@ jobs:
             --body-file diagnostic-body.md \
             --label "android-qa-diagnostic" 2>&1 || \
           gh issue create --title "Android QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
-          exit 1
 
       - name: Find built APK
         id: apk
         working-directory: expo/android
+        if: steps.build.outcome == 'success'
         run: |
           echo "=== Searching for APK ==="
-          # Search debug APK (has JS bundle because debuggableVariants=[] forces bundling)
-          APK_PATH=$(find . -path "*/debug/*.apk" -type f 2>/dev/null | head -1)
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
-          fi
+          APK_PATH=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "::error::No APK found"
             find . -name "*.apk" 2>/dev/null
@@ -209,9 +190,9 @@ jobs:
           echo "APK size: $APK_SIZE bytes"
 
       # Upload the APK IMMEDIATELY after finding it, before emulator QA.
-      # This ensures the APK artifact is available even if emulator QA fails.
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
+        if: steps.build.outcome == 'success'
         with:
           name: ivx-android-apk-${{ github.sha }}
           path: ${{ steps.apk.outputs.path }}
@@ -219,16 +200,14 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # Boot Android Emulator + Install + Test — ALL inside the runner
-      # script block so the emulator stays alive for every step.
-      # reactivecircus/android-emulator-runner@v2 ONLY keeps the emulator
-      # booted during its `script` block. Moving steps outside kills adb.
-      # NOTE: We do NOT use continue-on-error here. If the emulator QA
-      # fails, that's a real failure we need to know about. The APK is
-      # already uploaded above so it survives regardless.
+      # Boot Android Emulator + Install + Test
+      # continue-on-error ensures the APK artifact is still available
+      # even if emulator QA fails.
       # ============================================================
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
+        continue-on-error: true
+        if: steps.build.outcome == 'success'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -291,7 +270,7 @@ jobs:
 
       # Create diagnostic issue if emulator QA failed
       - name: Emulator QA diagnostics
-        if: steps.emu.outcome != 'success'
+        if: always() && steps.emu.outcome != 'success' && steps.build.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -301,7 +280,7 @@ jobs:
             echo ""
             echo "**Commit:** ${GITHUB_SHA}"
             echo "**Run:** ${GITHUB_RUN_ID}"
-            echo "**APK:** Built successfully (step 8), found (step 10)"
+            echo "**APK:** Built successfully, found"
             echo "**APK Hash:** ${{ steps.apk.outputs.hash }}"
             echo "**APK Size:** ${{ steps.apk.outputs.size }} bytes"
             echo "**Emulator step outcome:** ${{ steps.emu.outcome }}"
@@ -315,8 +294,6 @@ jobs:
             echo '```'
             tail -50 expo/maestro-launch.log 2>/dev/null || echo "maestro log not found"
             echo '```'
-            echo ""
-            echo "> The APK was built successfully and is available as the \`ivx-android-apk-${GITHUB_SHA:0:12}\` artifact."
           } > diagnostic-body.md
           gh label create "android-emulator-diagnostic" --color "FBCA04" 2>/dev/null || true
           gh issue create \
