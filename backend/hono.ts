@@ -301,6 +301,19 @@ import {
   handleMemberAdminInvestors,
 } from './api/ivx-member-investor-system';
 import {
+  classificationOptions,
+  memberClassificationOptions,
+  handleClassificationDashboard,
+  handleGetMemberClassification,
+  handleClassifyMember,
+  handleReconcileAll,
+  handleManualOverride,
+  handleGetAuditTrail,
+  handleIAQuery,
+  handleGetFinancialSummary,
+  handleMemberSelfClassification,
+} from './api/ivx-member-classification';
+import {
   treasuryOptions,
   treasuryAdminOptions,
   handleTreasuryAccountCreate,
@@ -5010,6 +5023,24 @@ app.post('/api/members/investor-application/review', async (c) => handleInvestor
 app.post('/api/members/funnel/visitor', async (c) => handleFunnelVisitor(c.req.raw));
 app.get('/api/ivx/member-admin/dashboard', async (c) => handleMemberAdminDashboard(c.req.raw));
 app.get('/api/ivx/member-admin/investors', async (c) => handleMemberAdminInvestors(c.req.raw));
+
+// ---- IVX Member Classification System (2026-07-28) ----
+// Owner-only: classification engine, reconciliation, dashboard, audit
+app.options('/api/ivx/classification/dashboard', () => classificationOptions());
+app.options('/api/ivx/classification/reconcile', () => classificationOptions());
+app.options('/api/ivx/classification/override', () => classificationOptions());
+app.options('/api/ivx/classification/ia-query', () => classificationOptions());
+app.options('/api/members/classification', () => memberClassificationOptions());
+app.get('/api/ivx/classification/dashboard', async (c) => handleClassificationDashboard(c.req.raw));
+app.get('/api/ivx/classification/member/:memberId', async (c) => handleGetMemberClassification(c.req.raw, c.req.param('memberId')));
+app.post('/api/ivx/classification/classify/:memberId', async (c) => handleClassifyMember(c.req.raw, c.req.param('memberId')));
+app.post('/api/ivx/classification/reconcile', async (c) => handleReconcileAll(c.req.raw));
+app.post('/api/ivx/classification/override', async (c) => handleManualOverride(c.req.raw));
+app.get('/api/ivx/classification/audit/:memberId', async (c) => handleGetAuditTrail(c.req.raw, c.req.param('memberId')));
+app.post('/api/ivx/classification/ia-query', async (c) => handleIAQuery(c.req.raw));
+app.get('/api/ivx/classification/financial/:memberId', async (c) => handleGetFinancialSummary(c.req.raw, c.req.param('memberId')));
+// Member-facing: self classification (no financial details)
+app.get('/api/members/classification', async (c) => handleMemberSelfClassification(c.req.raw));
 
 // ---- IVX Enterprise Capital & Treasury ----
 // Member-facing: accounts + statements
