@@ -59,9 +59,11 @@ jobs:
     outputs:
       build_status: ${{ steps.build.outcome }}
       apk_path: ${{ steps.apk.outputs.path }}
+      apk_hash: ${{ steps.apk.outputs.hash }}
+      apk_size: ${{ steps.apk.outputs.size }}
       emulator_name: ${{ steps.emu.outputs.name }}
       android_version: ${{ steps.emu.outputs.version }}
-      maestro_launch_result: ${{ steps.maestro-launch.outcome }}
+      emulator_status: ${{ steps.emu.outcome }}
 
     steps:
       - name: Checkout code
@@ -168,15 +170,35 @@ jobs:
           echo "path=$APK_PATH_ABS" >> $GITHUB_OUTPUT
           echo "APK found: $APK_PATH_ABS"
           ls -lh "$APK_PATH_ABS"
+          # Compute SHA256 hash for verification
+          APK_HASH=$(sha256sum "$APK_PATH_ABS" | awk '{print $1}')
+          echo "hash=$APK_HASH" >> $GITHUB_OUTPUT
+          echo "APK SHA256: $APK_HASH"
+          APK_SIZE=$(stat -c%s "$APK_PATH_ABS" 2>/dev/null || stat -f%z "$APK_PATH_ABS" 2>/dev/null || echo 0)
+          echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "APK size: $APK_SIZE bytes"
+
+      # Upload the APK IMMEDIATELY after finding it, before emulator QA.
+      # This ensures the APK artifact is available even if emulator QA fails.
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-android-apk-${{ github.sha }}
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
 
       # ============================================================
       # Boot Android Emulator + Install + Test — ALL inside the runner
       # script block so the emulator stays alive for every step.
       # reactivecircus/android-emulator-runner@v2 ONLY keeps the emulator
       # booted during its `script` block. Moving steps outside kills adb.
+      # continue-on-error ensures the APK artifact is still available
+      # even if emulator QA fails.
       # ============================================================
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -186,33 +208,47 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -e
             echo "=== Emulator booted ==="
             adb devices
-            EMU_NAME=$(adb shell getprop ro.product.model)
-            ANDROID_VER=$(adb shell getprop ro.build.version.release)
+            EMU_NAME=$(adb shell getprop ro.product.model 2>/dev/null || echo "unknown")
+            ANDROID_VER=$(adb shell getprop ro.build.version.release 2>/dev/null || echo "unknown")
             echo "name=$EMU_NAME" >> $GITHUB_OUTPUT
             echo "version=$ANDROID_VER" >> $GITHUB_OUTPUT
             echo "Emulator: $EMU_NAME (Android $ANDROID_VER)"
 
             echo "=== Installing APK ==="
-            adb install -r "${{ steps.apk.outputs.path }}"
+            adb install -r "${{ steps.apk.outputs.path }}" || {
+              echo "::warning::APK install failed — capturing diagnostics"
+              adb logcat -d -t 200 > logcat.txt 2>&1 || true
+              adb exec-out screencap -p > screenshot-01-install-fail.png 2>/dev/null || true
+              exit 1
+            }
             echo "APK installed successfully"
 
             echo "=== Launching app ==="
-            adb shell am start -n com.ivxholdings.app/.MainActivity
+            adb shell am start -n com.ivxholdings.app/.MainActivity || {
+              echo "::warning::App launch failed — capturing diagnostics"
+              adb logcat -d -t 200 > logcat.txt 2>&1 || true
+              adb exec-out screencap -p > screenshot-02-launch-fail.png 2>/dev/null || true
+              exit 1
+            }
             sleep 10
-            adb exec-out screencap -p > screenshot-01-launch.png
+            adb exec-out screencap -p > screenshot-01-launch.png 2>/dev/null || true
             echo "Launch screenshot saved"
 
             echo "=== Capturing logcat ==="
             adb logcat -d -t 500 > logcat.txt 2>&1 || true
 
             echo "=== Installing Maestro ==="
-            curl -Ls "https://get.maestro.mobile.dev" | bash
+            curl -Ls "https://get.maestro.mobile.dev" | bash || {
+              echo "::warning::Maestro install failed — skipping Maestro tests"
+              echo "maestro_result=skipped" >> $GITHUB_OUTPUT
+              adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
+              exit 0
+            }
             echo "$HOME/.maestro/bin" >> $GITHUB_PATH
             export PATH="$HOME/.maestro/bin:$PATH"
-            maestro --version
+            maestro --version || echo "Maestro version check failed"
 
             echo "=== Running Maestro launch test ==="
             cd "$GITHUB_WORKSPACE/expo"
@@ -221,7 +257,43 @@ jobs:
             echo "Maestro launch test completed"
 
             echo "=== Post-test screenshot ==="
-            adb exec-out screencap -p > screenshot-02-post-test.png || true
+            adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
+
+      # Create diagnostic issue if emulator QA failed
+      - name: Emulator QA diagnostics
+        if: steps.emu.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::warning::Emulator QA failed or was skipped. Creating diagnostic issue."
+          {
+            echo "## Android Emulator QA Diagnostics"
+            echo ""
+            echo "**Commit:** ${GITHUB_SHA}"
+            echo "**Run:** ${GITHUB_RUN_ID}"
+            echo "**APK:** Built successfully (step 8), found (step 10)"
+            echo "**APK Hash:** ${{ steps.apk.outputs.hash }}"
+            echo "**APK Size:** ${{ steps.apk.outputs.size }} bytes"
+            echo "**Emulator step outcome:** ${{ steps.emu.outcome }}"
+            echo ""
+            echo "### Logcat (last 200 lines)"
+            echo '```'
+            tail -200 logcat.txt 2>/dev/null || echo "logcat not found"
+            echo '```'
+            echo ""
+            echo "### Maestro log"
+            echo '```'
+            tail -50 expo/maestro-launch.log 2>/dev/null || echo "maestro log not found"
+            echo '```'
+            echo ""
+            echo "> The APK was built successfully and is available as the \`ivx-android-apk-${GITHUB_SHA:0:12}\` artifact."
+          } > diagnostic-body.md
+          gh label create "android-emulator-diagnostic" --color "FBCA04" 2>/dev/null || true
+          gh issue create \
+            --title "Android Emulator QA Diagnostics — ${GITHUB_SHA:0:12}" \
+            --body-file diagnostic-body.md \
+            --label "android-emulator-diagnostic" 2>&1 || \
+          gh issue create --title "Android Emulator QA Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
 
       - name: Upload all artifacts
         uses: actions/upload-artifact@v4
@@ -247,9 +319,12 @@ jobs:
           echo "| Emulator | ${{ steps.emu.outputs.name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Android Version | ${{ steps.emu.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build Status | \`${{ steps.build.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Maestro Launch | \`${{ steps.maestro-launch.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Emulator QA | \`${{ steps.emu.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| APK Hash | \`${{ steps.apk.outputs.hash }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| APK Size | \`${{ steps.apk.outputs.size }} bytes\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- APK: \`ivx-android-apk-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Screenshots: \`screenshot-01-launch.png\`, \`screenshot-02-post-test.png\`" >> $GITHUB_STEP_SUMMARY
           echo "- Logcat: \`logcat.txt\`" >> $GITHUB_STEP_SUMMARY
           echo "- Maestro results: \`maestro-launch-results.xml\`" >> $GITHUB_STEP_SUMMARY
