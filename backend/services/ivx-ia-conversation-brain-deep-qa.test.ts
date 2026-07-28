@@ -1,1 +1,238 @@
-LyoqCiAqIERlZXAgUUEgdGVzdHMgZm9yIElWWCBJQSBDb252ZXJzYXRpb24gQnJhaW4g4oCUIHZlcmlmaWVzIGFsbCBmaXhlcwogKiBmcm9tIHRoZSBzZW5pb3ItZGV2ZWxvcGVyIGF1ZGl0ICgyMDI2LTA3LTI4KS4KICoKICogREVGLUlBLTAxOiB5ZXNfbm8gYW5kIGRlZmluaXRpb24gdHlwZXMgd2VyZSBkZWNsYXJlZCBidXQgbmV2ZXIgaW1wbGVtZW50ZWQuCiAqIERFRi1JQS0wMjogZGV0ZWN0TWF0aFF1ZXN0aW9uIGhhZCBhIHJlZHVuZGFudCBkb3VibGUgcmVnZXggdGVzdC4KICogREVGLUlBLTAzOiBObyBwZXJjZW50YWdlIGNhbGN1bGF0aW9uIHN1cHBvcnQgZm9yIGludmVzdG9yIHF1ZXN0aW9ucy4KICovCmltcG9ydCB7CiAgZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24sCiAgYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIsCiAgcmVzb2x2ZUlWWENvbnZlcnNhdGlvbkFuc3dlciwKICBJVlhfSUFfQ09OVkVSU0FUSU9OX01BUktFUiwKfSBmcm9tICcuL2l2eC1pYS1jb252ZXJzYXRpb24tYnJhaW4nOwoKZGVzY3JpYmUoJ0lWWCBJQSBDb252ZXJzYXRpb24gQnJhaW4g4oCUIERlZXAgUUEgKDIwMjYtMDctMjgpJywgKCkgPT4gewogIC8vIC0tLS0gREVGLUlBLTAyOiBSZWR1bmRhbnQgcmVnZXggcmVtb3ZlZCwgbWF0aCBzdGlsbCB3b3JrcyAtLS0tCiAgZGVzY3JpYmUoJ0RFRi1JQS0wMjogbWF0aCBkZXRlY3Rpb24gKHJlZHVuZGFudCByZWdleCByZW1vdmVkKScsICgpID0+IHsKICAgIHRlc3QoJ3dvcmQtZm9ybSBtdWx0aXBsaWNhdGlvbiBzdGlsbCBkZXRlY3RlZCcsICgpID0+IHsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCcxNyBtdWx0aXBsaWVkIGJ5IDIzJykpLnRvQmUoJ21hdGgnKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCc1IHBsdXMgMycpKS50b0JlKCdtYXRoJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignMTAwIG1pbnVzIDIwJykpLnRvQmUoJ21hdGgnKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCc1MCBkaXZpZGVkIGJ5IDInKSkudG9CZSgnbWF0aCcpOwogICAgfSk7CgogICAgdGVzdCgnc3ltYm9sLWZvcm0gbWF0aCBzdGlsbCBkZXRlY3RlZCcsICgpID0+IHsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCcxNSAqIDMnKSkudG9CZSgnbWF0aCcpOwogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJzEwICsgNScpKS50b0JlKCdtYXRoJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignMTAwIC0gMjAnKSkudG9CZSgnbWF0aCcpOwogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJzUwIC8gMicpKS50b0JlKCdtYXRoJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignMTUgeCAzJykpLnRvQmUoJ21hdGgnKTsKICAgIH0pOwoKICAgIHRlc3QoJ3NxdWFyZSByb290IGRldGVjdGVkJywgKCkgPT4gewogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJ3NxdWFyZSByb290IG9mIDE0NCcpKS50b0JlKCdtYXRoJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignc3FydCBvZiAyNTYnKSkudG9CZSgnbWF0aCcpOwogICAgfSk7CgogICAgdGVzdCgnbWF0aCBldmFsdWF0aW9uIHJldHVybnMgY29ycmVjdCB2YWx1ZXMnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignMTcgbXVsdGlwbGllZCBieSAyMycpKS50b0JlKCdUaGUgYW5zd2VyIGlzIDM5MS4nKTsKICAgICAgZXhwZWN0KGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCc1IHBsdXMgMycpKS50b0JlKCdUaGUgYW5zd2VyIGlzIDguJyk7CiAgICAgIGV4cGVjdChidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignc3F1YXJlIHJvb3Qgb2YgMTQ0JykpLnRvQmUoJ1RoZSBhbnN3ZXIgaXMgMTIuJyk7CiAgICB9KTsKCiAgICB0ZXN0KCdkaXZpc2lvbiBieSB6ZXJvIHJldHVybnMgbnVsbCAobm8gY3Jhc2gpJywgKCkgPT4gewogICAgICBleHBlY3QoYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJzUgZGl2aWRlZCBieSAwJykpLnRvQmVOdWxsKCk7CiAgICB9KTsKICB9KTsKCiAgLy8gLS0tLSBERUYtSUEtMDM6IFBlcmNlbnRhZ2UgY2FsY3VsYXRpb24gc3VwcG9ydCBhZGRlZCAtLS0tCiAgZGVzY3JpYmUoJ0RFRi1JQS0wMzogcGVyY2VudGFnZSBjYWxjdWxhdGlvbiBzdXBwb3J0JywgKCkgPT4gewogICAgdGVzdCgncGVyY2VudGFnZSBxdWVzdGlvbnMgZGV0ZWN0ZWQnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignd2hhdCBpcyAxNSUgb2YgNTAwMDAnKSkudG9CZSgncGVyY2VudGFnZScpOwogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJzE1IHBlcmNlbnQgb2YgODAwMDAnKSkudG9CZSgncGVyY2VudGFnZScpOwogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJzEwJSBvZiAxMDAwMDAwJykpLnRvQmUoJ3BlcmNlbnRhZ2UnKTsKICAgIH0pOwoKICAgIHRlc3QoJ3BlcmNlbnRhZ2UgZXZhbHVhdGlvbiByZXR1cm5zIGNvcnJlY3QgdmFsdWVzJywgKCkgPT4gewogICAgICBleHBlY3QoYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJ3doYXQgaXMgMTUlIG9mIDUwMDAwJykpLnRvQmUoJ1RoZSBhbnN3ZXIgaXMgNzUwMC4nKTsKICAgICAgZXhwZWN0KGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCcxMCUgb2YgMTAwMDAwMCcpKS50b0JlKCdUaGUgYW5zd2VyIGlzIDEwMDAwMC4nKTsKICAgICAgZXhwZWN0KGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCc4LjUgcGVyY2VudCBvZiAyMDAwMDAnKSkudG9CZSgnVGhlIGFuc3dlciBpcyAxNzAwMC4nKTsKICAgIH0pOwoKICAgIHRlc3QoJ3BlcmNlbnRhZ2Ugd2l0aCBkZWNpbWFsIHJlc3VsdCBmb3JtYXRzIGNvcnJlY3RseScsICgpID0+IHsKICAgICAgY29uc3QgcmVzdWx0ID0gYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJzcuNSUgb2YgMzAwMDAwJyk7CiAgICAgIGV4cGVjdChyZXN1bHQpLm5vdC50b0JlTnVsbCgpOwogICAgICBleHBlY3QocmVzdWx0KS50b0NvbnRhaW4oJzIyNTAwJyk7CiAgICB9KTsKCiAgICB0ZXN0KCdub24tcGVyY2VudGFnZSBxdWVzdGlvbnMgbm90IGZhbHNlbHkgZGV0ZWN0ZWQnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignd2hhdCBpcyB0aGUgcGVyY2VudGFnZSBvZiByZXR1cm5zJykpLm5vdC50b0JlKCdwZXJjZW50YWdlJyk7CiAgICB9KTsKICB9KTsKCiAgLy8gLS0tLSBERUYtSUEtMDE6IHllc19ubyBhbmQgZGVmaW5pdGlvbiB0eXBlcyBub3cgaW1wbGVtZW50ZWQgLS0tLQogIGRlc2NyaWJlKCdERUYtSUEtMDE6IHllc19ubyBxdWVzdGlvbnMgaW1wbGVtZW50ZWQnLCAoKSA9PiB7CiAgICB0ZXN0KCd5ZXMvbm8gcXVlc3Rpb25zIGRldGVjdGVkJywgKCkgPT4gewogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJ2lzIGl2eCBhIHJlaXQnKSkudG9CZSgneWVzX25vJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignY2FuIGkgaW52ZXN0IHRocm91Z2ggaXZ4JykpLnRvQmUoJ3llc19ubycpOwogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJ2RvZXMgaXZ4IG9mZmVyIHRva2VuaXphdGlvbicpKS50b0JlKCd5ZXNfbm8nKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCdhcmUgdGhlIGludmVzdG1lbnRzIHNhZmUnKSkudG9CZSgneWVzX25vJyk7CiAgICB9KTsKCiAgICB0ZXN0KCdJVlgtc3BlY2lmaWMgeWVzL25vIGFuc3dlcnMgcmV0dXJuZWQnLCAoKSA9PiB7CiAgICAgIGNvbnN0IHJlaXRBbnN3ZXIgPSBidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignaXMgaXZ4IGEgcmVpdCcpOwogICAgICBleHBlY3QocmVpdEFuc3dlcikubm90LnRvQmVOdWxsKCk7CiAgICAgIGV4cGVjdChyZWl0QW5zd2VyKS50b0NvbnRhaW4oJ05vJyk7CiAgICAgIGV4cGVjdChyZWl0QW5zd2VyKS50b0NvbnRhaW4oJ1JFSVQnKTsKCiAgICAgIGNvbnN0IGludmVzdEFuc3dlciA9IGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdjYW4gaSBpbnZlc3QgdGhyb3VnaCBpdngnKTsKICAgICAgZXhwZWN0KGludmVzdEFuc3dlcikubm90LnRvQmVOdWxsKCk7CiAgICAgIGV4cGVjdChpbnZlc3RBbnN3ZXIpLnRvQ29udGFpbignWWVzJyk7CiAgICAgIGV4cGVjdChpbnZlc3RBbnN3ZXIpLnRvQ29udGFpbignaW52ZXN0Jyk7CgogICAgICBjb25zdCB0b2tlbkFuc3dlciA9IGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdkb2VzIGl2eCBvZmZlciB0b2tlbml6YXRpb24nKTsKICAgICAgZXhwZWN0KHRva2VuQW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KHRva2VuQW5zd2VyKS50b0NvbnRhaW4oJ1llcycpOwogICAgfSk7CgogICAgdGVzdCgndW5rbm93biB5ZXMvbm8gcXVlc3Rpb24gcmV0dXJucyBudWxsIChmYWxscyB0aHJvdWdoIHRvIEFJKScsICgpID0+IHsKICAgICAgZXhwZWN0KGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdpcyB0aGUgc2t5IGJsdWUgdG9kYXknKSkudG9CZU51bGwoKTsKICAgIH0pOwogIH0pOwoKICBkZXNjcmliZSgnREVGLUlBLTAxOiBkZWZpbml0aW9uIHF1ZXN0aW9ucyBpbXBsZW1lbnRlZCcsICgpID0+IHsKICAgIHRlc3QoJ2RlZmluaXRpb24gcXVlc3Rpb25zIGRldGVjdGVkJywgKCkgPT4gewogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJ3doYXQgaXMgYSByZWl0JykpLnRvQmUoJ2RlZmluaXRpb24nKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCdkZWZpbmUgZHN0JykpLnRvQmUoJ2RlZmluaXRpb24nKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCd3aGF0IGRvZXMganYgbWVhbicpKS50b0JlKCdkZWZpbml0aW9uJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignZXhwbGFpbiBjYXAgcmF0ZScpKS50b0JlKCdkZWZpbml0aW9uJyk7CiAgICB9KTsKCiAgICB0ZXN0KCdSRUlUIGRlZmluaXRpb24gcmV0dXJuZWQnLCAoKSA9PiB7CiAgICAgIGNvbnN0IGFuc3dlciA9IGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCd3aGF0IGlzIGEgcmVpdCcpOwogICAgICBleHBlY3QoYW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KGFuc3dlcikudG9Db250YWluKCdSZWFsIEVzdGF0ZSBJbnZlc3RtZW50IFRydXN0Jyk7CiAgICB9KTsKCiAgICB0ZXN0KCdEU1QgZGVmaW5pdGlvbiByZXR1cm5lZCcsICgpID0+IHsKICAgICAgY29uc3QgYW5zd2VyID0gYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJ3doYXQgaXMgYSBkc3QnKTsKICAgICAgZXhwZWN0KGFuc3dlcikubm90LnRvQmVOdWxsKCk7CiAgICAgIGV4cGVjdChhbnN3ZXIpLnRvQ29udGFpbignRGVsYXdhcmUgU3RhdHV0b3J5IFRydXN0Jyk7CiAgICB9KTsKCiAgICB0ZXN0KCdKViBkZWZpbml0aW9uIHJldHVybmVkJywgKCkgPT4gewogICAgICBjb25zdCBhbnN3ZXIgPSBidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignd2hhdCBkb2VzIGp2IG1lYW4nKTsKICAgICAgZXhwZWN0KGFuc3dlcikubm90LnRvQmVOdWxsKCk7CiAgICAgIGV4cGVjdChhbnN3ZXIpLnRvQ29udGFpbignSm9pbnQgVmVudHVyZScpOwogICAgfSk7CgogICAgdGVzdCgnMTAzMSBleGNoYW5nZSBkZWZpbml0aW9uIHJldHVybmVkJywgKCkgPT4gewogICAgICBjb25zdCBhbnN3ZXIgPSBidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignd2hhdCBpcyBhIDEwMzEgZXhjaGFuZ2UnKTsKICAgICAgZXhwZWN0KGFuc3dlcikubm90LnRvQmVOdWxsKCk7CiAgICAgIGV4cGVjdChhbnN3ZXIpLnRvQ29udGFpbignMTAzMScpOwogICAgICBleHBlY3QoYW5zd2VyKS50b0NvbnRhaW4oJ3RheCcpOwogICAgfSk7CgogICAgdGVzdCgndG9rZW5pemF0aW9uIGRlZmluaXRpb24gcmV0dXJuZWQnLCAoKSA9PiB7CiAgICAgIGNvbnN0IGFuc3dlciA9IGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdleHBsYWluIHRva2VuaXphdGlvbicpOwogICAgICBleHBlY3QoYW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KGFuc3dlcikudG9Db250YWluKCdkaWdpdGFsIHRva2VucycpOwogICAgfSk7CgogICAgdGVzdCgnSVJSIGRlZmluaXRpb24gcmV0dXJuZWQnLCAoKSA9PiB7CiAgICAgIGNvbnN0IGFuc3dlciA9IGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCd3aGF0IGlzIGlycicpOwogICAgICBleHBlY3QoYW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KGFuc3dlcikudG9Db250YWluKCdJbnRlcm5hbCBSYXRlIG9mIFJldHVybicpOwogICAgfSk7CgogICAgdGVzdCgnd2F0ZXJmYWxsIGRlZmluaXRpb24gcmV0dXJuZWQnLCAoKSA9PiB7CiAgICAgIGNvbnN0IGFuc3dlciA9IGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCd3aGF0IGlzIGEgd2F0ZXJmYWxsIGRpc3RyaWJ1dGlvbicpOwogICAgICBleHBlY3QoYW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KGFuc3dlcikudG9Db250YWluKCd0aWVyZWQnKTsKICAgIH0pOwoKICAgIHRlc3QoJ3ByZWZlcnJlZCByZXR1cm4gZGVmaW5pdGlvbiByZXR1cm5lZCcsICgpID0+IHsKICAgICAgY29uc3QgYW5zd2VyID0gYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJ3doYXQgaXMgYSBwcmVmZXJyZWQgcmV0dXJuJyk7CiAgICAgIGV4cGVjdChhbnN3ZXIpLm5vdC50b0JlTnVsbCgpOwogICAgICBleHBlY3QoYW5zd2VyKS50b0NvbnRhaW4oJ21pbmltdW0gcmV0dXJuJyk7CiAgICB9KTsKCiAgICB0ZXN0KCdLLTEgZGVmaW5pdGlvbiByZXR1cm5lZCcsICgpID0+IHsKICAgICAgY29uc3QgYW5zd2VyID0gYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJ3doYXQgaXMgYSBrMScpOwogICAgICBleHBlY3QoYW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KGFuc3dlcikudG9Db250YWluKCdTY2hlZHVsZSBLLTEnKTsKICAgIH0pOwoKICAgIHRlc3QoJ2FjY3JlZGl0ZWQgaW52ZXN0b3IgZGVmaW5pdGlvbiByZXR1cm5lZCcsICgpID0+IHsKICAgICAgY29uc3QgYW5zd2VyID0gYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJ3doYXQgaXMgYW4gYWNjcmVkaXRlZCBpbnZlc3RvcicpOwogICAgICBleHBlY3QoYW5zd2VyKS5ub3QudG9CZU51bGwoKTsKICAgICAgZXhwZWN0KGFuc3dlcikudG9Db250YWluKCduZXQgd29ydGgnKTsKICAgIH0pOwoKICAgIHRlc3QoJ3Vua25vd24gZGVmaW5pdGlvbiByZXR1cm5zIG51bGwgKGZhbGxzIHRocm91Z2ggdG8gQUkpJywgKCkgPT4gewogICAgICBleHBlY3QoYnVpbGRJVlhDb252ZXJzYXRpb25BbnN3ZXIoJ3doYXQgaXMgYSBxdWFudHVtIGVudGFuZ2xlbWVudCcpKS50b0JlTnVsbCgpOwogICAgfSk7CiAgfSk7CgogIC8vIC0tLS0gRXhpc3RpbmcgZnVuY3Rpb25hbGl0eSBzdGlsbCB3b3JrcyAtLS0tCiAgZGVzY3JpYmUoJ3JlZ3Jlc3Npb246IGV4aXN0aW5nIGZ1bmN0aW9uYWxpdHkgaW50YWN0JywgKCkgPT4gewogICAgdGVzdCgnZ3JlZXRpbmdzIHN0aWxsIHdvcmsnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignaGVsbG8nKSkudG9CZSgnZ3JlZXRpbmcnKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCdoaSB0aGVyZScpKS50b0JlKCdncmVldGluZycpOwogICAgICBjb25zdCBhbnN3ZXIgPSBidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignaGVsbG8nKTsKICAgICAgZXhwZWN0KGFuc3dlcikubm90LnRvQmVOdWxsKCk7CiAgICAgIGV4cGVjdChhbnN3ZXIpLnRvQ29udGFpbignSVZYIElBJyk7CiAgICB9KTsKCiAgICB0ZXN0KCd0aGFua3Mgc3RpbGwgd29yaycsICgpID0+IHsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCd0aGFuayB5b3UnKSkudG9CZSgndGhhbmtzJyk7CiAgICAgIGV4cGVjdChidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcigndGhhbmtzJykpLm5vdC50b0JlTnVsbCgpOwogICAgfSk7CgogICAgdGVzdCgnY2FwYWJpbGl0aWVzIHN0aWxsIHdvcmsnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignd2hhdCBjYW4geW91IGRvJykpLnRvQmUoJ2NhcGFiaWxpdGllcycpOwogICAgICBjb25zdCBhbnN3ZXIgPSBidWlsZElWWENvbnZlcnNhdGlvbkFuc3dlcignd2hhdCBjYW4geW91IGRvJyk7CiAgICAgIGV4cGVjdChhbnN3ZXIpLm5vdC50b0JlTnVsbCgpOwogICAgICBleHBlY3QoYW5zd2VyKS50b0NvbnRhaW4oJ0lWWCBJQScpOwogICAgfSk7CgogICAgdGVzdCgnaGVscCBzdGlsbCB3b3JrcycsICgpID0+IHsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKCdoZWxwJykpLnRvQmUoJ2hlbHAnKTsKICAgICAgZXhwZWN0KGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdoZWxwJykpLm5vdC50b0JlTnVsbCgpOwogICAgfSk7CgogICAgdGVzdCgnbm9uLWNvbnZlcnNhdGlvbiByZXR1cm5zIG5vbmUnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbignc2hvdyBtZSB0aGUgaW52ZXN0b3IgZGFzaGJvYXJkJykpLnRvQmUoJ25vbmUnKTsKICAgICAgZXhwZWN0KGJ1aWxkSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdkZXBsb3kgdGhlIGxhdGVzdCBjb21taXQgdG8gcHJvZHVjdGlvbicpKS50b0JlTnVsbCgpOwogICAgfSk7CgogICAgdGVzdCgnbWFya2VyIGlzIGNvcnJlY3QnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChJVlhfSUFfQ09OVkVSU0FUSU9OX01BUktFUikudG9CZSgnaXZ4LWlhLWNvbnZlcnNhdGlvbi1icmFpbi0yMDI2LTA3LTA2Jyk7CiAgICB9KTsKCiAgICB0ZXN0KCdyZXNvbHZlSVZYQ29udmVyc2F0aW9uQW5zd2VyIGlzIHRoZSBwdWJsaWMgZW50cnkgcG9pbnQnLCAoKSA9PiB7CiAgICAgIGV4cGVjdChyZXNvbHZlSVZYQ29udmVyc2F0aW9uQW5zd2VyKCc1IHBsdXMgMycpKS50b0JlKCdUaGUgYW5zd2VyIGlzIDguJyk7CiAgICAgIGV4cGVjdChyZXNvbHZlSVZYQ29udmVyc2F0aW9uQW5zd2VyKCdzaG93IG1lIGRlYWxzJykpLnRvQmVOdWxsKCk7CiAgICB9KTsKICB9KTsKCiAgLy8gLS0tLSBFZGdlIGNhc2VzIC0tLS0KICBkZXNjcmliZSgnZWRnZSBjYXNlcycsICgpID0+IHsKICAgIHRlc3QoJ2VtcHR5IG1lc3NhZ2UgcmV0dXJucyBub25lJywgKCkgPT4gewogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24oJycpKS50b0JlKCdub25lJyk7CiAgICAgIGV4cGVjdChkZXRlY3RJVlhDb252ZXJzYXRpb25RdWVzdGlvbihudWxsIGFzIHVua25vd24gYXMgc3RyaW5nKSkudG9CZSgnbm9uZScpOwogICAgfSk7CgogICAgdGVzdCgndmVyeSBsb25nIHllcy9ubyBxdWVzdGlvbiBmYWxscyB0aHJvdWdoICg+MTIwIGNoYXJzKScsICgpID0+IHsKICAgICAgY29uc3QgbG9uZyA9ICdpcyAnICsgJ2EnLnJlcGVhdCgxMzApOwogICAgICBleHBlY3QoZGV0ZWN0SVZYQ29udmVyc2F0aW9uUXVlc3Rpb24obG9uZykpLm5vdC50b0JlKCd5ZXNfbm8nKTsKICAgIH0pOwoKICAgIHRlc3QoJ3ZlcnkgbG9uZyBkZWZpbml0aW9uIHF1ZXN0aW9uIGZhbGxzIHRocm91Z2ggKD4xNTAgY2hhcnMpJywgKCkgPT4gewogICAgICBjb25zdCBsb25nID0gJ3doYXQgaXMgJyArICdhJy5yZXBlYXQoMTUwKTsKICAgICAgZXhwZWN0KGRldGVjdElWWENvbnZlcnNhdGlvblF1ZXN0aW9uKGxvbmcpKS5ub3QudG9CZSgnZGVmaW5pdGlvbicpOwogICAgfSk7CiAgfSk7Cn0pOwo=
+/**
+ * Deep QA tests for IVX IA Conversation Brain — verifies all fixes
+ * from the senior-developer audit (2026-07-28).
+ *
+ * DEF-IA-01: yes_no and definition types were declared but never implemented.
+ * DEF-IA-02: detectMathQuestion had a redundant double regex test.
+ * DEF-IA-03: No percentage calculation support for investor questions.
+ */
+import {
+  detectIVXConversationQuestion,
+  buildIVXConversationAnswer,
+  resolveIVXConversationAnswer,
+  IVX_IA_CONVERSATION_MARKER,
+} from './ivx-ia-conversation-brain';
+
+describe('IVX IA Conversation Brain — Deep QA (2026-07-28)', () => {
+  // ---- DEF-IA-02: Redundant regex removed, math still works ----
+  describe('DEF-IA-02: math detection (redundant regex removed)', () => {
+    test('word-form multiplication still detected', () => {
+      expect(detectIVXConversationQuestion('17 multiplied by 23')).toBe('math');
+      expect(detectIVXConversationQuestion('5 plus 3')).toBe('math');
+      expect(detectIVXConversationQuestion('100 minus 20')).toBe('math');
+      expect(detectIVXConversationQuestion('50 divided by 2')).toBe('math');
+    });
+
+    test('symbol-form math still detected', () => {
+      expect(detectIVXConversationQuestion('15 * 3')).toBe('math');
+      expect(detectIVXConversationQuestion('10 + 5')).toBe('math');
+      expect(detectIVXConversationQuestion('100 - 20')).toBe('math');
+      expect(detectIVXConversationQuestion('50 / 2')).toBe('math');
+      expect(detectIVXConversationQuestion('15 x 3')).toBe('math');
+    });
+
+    test('square root detected', () => {
+      expect(detectIVXConversationQuestion('square root of 144')).toBe('math');
+      expect(detectIVXConversationQuestion('sqrt of 256')).toBe('math');
+    });
+
+    test('math evaluation returns correct values', () => {
+      expect(buildIVXConversationAnswer('17 multiplied by 23')).toBe('The answer is 391.');
+      expect(buildIVXConversationAnswer('5 plus 3')).toBe('The answer is 8.');
+      expect(buildIVXConversationAnswer('square root of 144')).toBe('The answer is 12.');
+    });
+
+    test('division by zero returns null (no crash)', () => {
+      expect(buildIVXConversationAnswer('5 divided by 0')).toBeNull();
+    });
+  });
+
+  // ---- DEF-IA-03: Percentage calculation support added ----
+  describe('DEF-IA-03: percentage calculation support', () => {
+    test('percentage questions detected', () => {
+      expect(detectIVXConversationQuestion('what is 15% of 50000')).toBe('percentage');
+      expect(detectIVXConversationQuestion('15 percent of 80000')).toBe('percentage');
+      expect(detectIVXConversationQuestion('10% of 1000000')).toBe('percentage');
+    });
+
+    test('percentage evaluation returns correct values', () => {
+      expect(buildIVXConversationAnswer('what is 15% of 50000')).toBe('The answer is 7500.');
+      expect(buildIVXConversationAnswer('10% of 1000000')).toBe('The answer is 100000.');
+      expect(buildIVXConversationAnswer('8.5 percent of 200000')).toBe('The answer is 17000.');
+    });
+
+    test('percentage with decimal result formats correctly', () => {
+      const result = buildIVXConversationAnswer('7.5% of 300000');
+      expect(result).not.toBeNull();
+      expect(result).toContain('22500');
+    });
+
+    test('non-percentage questions not falsely detected', () => {
+      expect(detectIVXConversationQuestion('what is the percentage of returns')).not.toBe('percentage');
+    });
+  });
+
+  // ---- DEF-IA-01: yes_no and definition types now implemented ----
+  describe('DEF-IA-01: yes_no questions implemented', () => {
+    test('yes/no questions detected', () => {
+      expect(detectIVXConversationQuestion('is ivx a reit')).toBe('yes_no');
+      expect(detectIVXConversationQuestion('can i invest through ivx')).toBe('yes_no');
+      expect(detectIVXConversationQuestion('does ivx offer tokenization')).toBe('yes_no');
+      expect(detectIVXConversationQuestion('are the investments safe')).toBe('yes_no');
+    });
+
+    test('IVX-specific yes/no answers returned', () => {
+      const reitAnswer = buildIVXConversationAnswer('is ivx a reit');
+      expect(reitAnswer).not.toBeNull();
+      expect(reitAnswer).toContain('No');
+      expect(reitAnswer).toContain('REIT');
+
+      const investAnswer = buildIVXConversationAnswer('can i invest through ivx');
+      expect(investAnswer).not.toBeNull();
+      expect(investAnswer).toContain('Yes');
+      expect(investAnswer).toContain('invest');
+
+      const tokenAnswer = buildIVXConversationAnswer('does ivx offer tokenization');
+      expect(tokenAnswer).not.toBeNull();
+      expect(tokenAnswer).toContain('Yes');
+    });
+
+    test('unknown yes/no question returns null (falls through to AI)', () => {
+      expect(buildIVXConversationAnswer('is the sky blue today')).toBeNull();
+    });
+  });
+
+  describe('DEF-IA-01: definition questions implemented', () => {
+    test('definition questions detected', () => {
+      expect(detectIVXConversationQuestion('what is a reit')).toBe('definition');
+      expect(detectIVXConversationQuestion('define dst')).toBe('definition');
+      expect(detectIVXConversationQuestion('what does jv mean')).toBe('definition');
+      expect(detectIVXConversationQuestion('explain cap rate')).toBe('definition');
+    });
+
+    test('REIT definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is a reit');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('Real Estate Investment Trust');
+    });
+
+    test('DST definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is a dst');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('Delaware Statutory Trust');
+    });
+
+    test('JV definition returned', () => {
+      const answer = buildIVXConversationAnswer('what does jv mean');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('Joint Venture');
+    });
+
+    test('1031 exchange definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is a 1031 exchange');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('1031');
+      expect(answer).toContain('tax');
+    });
+
+    test('tokenization definition returned', () => {
+      const answer = buildIVXConversationAnswer('explain tokenization');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('digital tokens');
+    });
+
+    test('IRR definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is irr');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('Internal Rate of Return');
+    });
+
+    test('waterfall definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is a waterfall distribution');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('tiered');
+    });
+
+    test('preferred return definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is a preferred return');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('minimum return');
+    });
+
+    test('K-1 definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is a k1');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('Schedule K-1');
+    });
+
+    test('accredited investor definition returned', () => {
+      const answer = buildIVXConversationAnswer('what is an accredited investor');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('net worth');
+    });
+
+    test('unknown definition returns null (falls through to AI)', () => {
+      expect(buildIVXConversationAnswer('what is a quantum entanglement')).toBeNull();
+    });
+  });
+
+  // ---- Existing functionality still works ----
+  describe('regression: existing functionality intact', () => {
+    test('greetings still work', () => {
+      expect(detectIVXConversationQuestion('hello')).toBe('greeting');
+      expect(detectIVXConversationQuestion('hi there')).toBe('greeting');
+      const answer = buildIVXConversationAnswer('hello');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('IVX IA');
+    });
+
+    test('thanks still work', () => {
+      expect(detectIVXConversationQuestion('thank you')).toBe('thanks');
+      expect(buildIVXConversationAnswer('thanks')).not.toBeNull();
+    });
+
+    test('capabilities still work', () => {
+      expect(detectIVXConversationQuestion('what can you do')).toBe('capabilities');
+      const answer = buildIVXConversationAnswer('what can you do');
+      expect(answer).not.toBeNull();
+      expect(answer).toContain('IVX IA');
+    });
+
+    test('help still works', () => {
+      expect(detectIVXConversationQuestion('help')).toBe('help');
+      expect(buildIVXConversationAnswer('help')).not.toBeNull();
+    });
+
+    test('non-conversation returns none', () => {
+      expect(detectIVXConversationQuestion('show me the investor dashboard')).toBe('none');
+      expect(buildIVXConversationAnswer('deploy the latest commit to production')).toBeNull();
+    });
+
+    test('marker is correct', () => {
+      expect(IVX_IA_CONVERSATION_MARKER).toBe('ivx-ia-conversation-brain-2026-07-06');
+    });
+
+    test('resolveIVXConversationAnswer is the public entry point', () => {
+      expect(resolveIVXConversationAnswer('5 plus 3')).toBe('The answer is 8.');
+      expect(resolveIVXConversationAnswer('show me deals')).toBeNull();
+    });
+  });
+
+  // ---- Edge cases ----
+  describe('edge cases', () => {
+    test('empty message returns none', () => {
+      expect(detectIVXConversationQuestion('')).toBe('none');
+      expect(detectIVXConversationQuestion(null as unknown as string)).toBe('none');
+    });
+
+    test('very long yes/no question falls through (>120 chars)', () => {
+      const long = 'is ' + 'a'.repeat(130);
+      expect(detectIVXConversationQuestion(long)).not.toBe('yes_no');
+    });
+
+    test('very long definition question falls through (>150 chars)', () => {
+      const long = 'what is ' + 'a'.repeat(150);
+      expect(detectIVXConversationQuestion(long)).not.toBe('definition');
+    });
+  });
+});
