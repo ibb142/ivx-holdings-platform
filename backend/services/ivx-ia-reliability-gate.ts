@@ -170,14 +170,17 @@ export const BANNED_GENERIC_PROMISES: readonly string[] = [
  * NOTE: These are only used when NO structured job record is provided. When a
  * structured job is present, status is determined exclusively from job.status.
  */
+// FIX 2026-07-28: Removed overly broad patterns (\bdone\b, \bcompleted\b,
+// \bfinished\b, \bfixed\b) that matched common English words in real estate and
+// investment answers (e.g. "fixed-rate mortgage", "completed transaction",
+// "finished goods", "done deal"). These now require developer-task context.
 const SUCCESS_STATE_PATTERNS: { pattern: RegExp; label: string }[] = [
   { pattern: /\btask\s+completed\b/i, label: 'Task completed' },
   { pattern: /\btask\s+done\b/i, label: 'Task done' },
-  { pattern: /\bdone\b/i, label: 'Done' },
-  { pattern: /\bcompleted\b/i, label: 'Completed' },
-  { pattern: /\bfinished\b/i, label: 'Finished' },
+  { pattern: /\b(?:the\s+)?(?:task|work|fix|patch|deploy|migration|update)\s+(?:is\s+)?(?:done|completed|finished|shipped)\b/i, label: 'Task/work done' },
   { pattern: /\bshipped\b/i, label: 'Shipped' },
-  { pattern: /\bfixed\b/i, label: 'Fixed' },
+  { pattern: /\b(?:bug|issue|error|problem|login|chat)\s+(?:is\s+)?fixed\b/i, label: 'Bug fixed' },
+  { pattern: /\bI\s+(?:have\s+)?fixed\b/i, label: 'I fixed' },
   { pattern: /\bverified\b/i, label: 'Verified' },
   { pattern: /\bdeployed\b/i, label: 'Deployed' },
   { pattern: /\bdeploy\s+(?:is\s+)?live\b/i, label: 'Deploy live' },
@@ -272,7 +275,11 @@ export function findMissingEvidence(
   // A "Verified" / "Deployed" / "Live in production" claim requires the full chain.
   const claimsVerified = /\bverified\b/i.test(text);
   const claimsDeployed = /\bdeployed\b/i.test(text) || /\blive\s+in\s+production\b/i.test(text);
-  const claimsDone = /\b(?:done|completed|finished|shipped|fixed)\b/i.test(text);
+  // FIX 2026-07-28: Use specific developer-task patterns instead of broad
+  // English words that appear in normal real estate/investment answers.
+  const claimsDone = /\b(?:task|work|fix|patch|deploy|migration|update)\s+(?:is\s+)?(?:done|completed|finished|shipped)\b/i.test(text)
+    || /\b(?:bug|issue|error|problem)\s+(?:is\s+)?fixed\b/i.test(text)
+    || /\bI\s+(?:have\s+)?(?:fixed|completed|finished|shipped)\b/i.test(text);
 
   if (claimsDone && !hasFiles) missing.push('Files changed');
   if (claimsDone && !hasTaskId) missing.push('Task ID');

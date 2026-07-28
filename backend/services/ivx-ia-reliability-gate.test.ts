@@ -407,12 +407,24 @@ describe('applyIVXIAReliabilityGate', () => {
   });
 
   it('gates a Done claim with no evidence', () => {
-    const result = applyIVXIAReliabilityGate({ message: 'fix it', answer: 'Done.' });
+    // FIX 2026-07-28: Bare "Done." no longer triggers the gate because
+    // "done" is a common English word. Use developer-task context instead.
+    const result = applyIVXIAReliabilityGate({ message: 'fix it', answer: 'The task is done.' });
     expect(result.gated).toBe(true);
     expect(result.state).toBe('BLOCKED');
     expect(result.answer).toContain('STATE: BLOCKED');
     expect(result.answer).toContain('MISSING EVIDENCE');
     expect(result.answer).toContain('UNVERIFIED');
+  });
+
+  it('does NOT gate common English words like "done" or "fixed" in normal answers', () => {
+    const result1 = applyIVXIAReliabilityGate({ message: 'What is a fixed-rate mortgage?', answer: 'A fixed-rate mortgage has an interest rate that stays the same.' });
+    expect(result1.gated).toBe(false);
+    expect(result1.state).toBe('READY');
+
+    const result2 = applyIVXIAReliabilityGate({ message: 'What is a completed transaction?', answer: 'A completed transaction is one where all steps are done.' });
+    expect(result2.gated).toBe(false);
+    expect(result2.state).toBe('READY');
   });
 
   it('gates a Verified claim missing the deploy chain', () => {
