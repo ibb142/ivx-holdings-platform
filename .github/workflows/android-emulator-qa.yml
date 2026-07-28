@@ -82,6 +82,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
       - name: Install dependencies
         working-directory: expo
         run: |
@@ -104,14 +109,18 @@ jobs:
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
 
-      - name: Build Android APK
+      - name: Build Android APK (Release — includes JS bundle + assets)
         id: build
         working-directory: expo/android
-        continue-on-error: true
         timeout-minutes: 30
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           set -o pipefail
           echo "=== Building RELEASE APK with Gradle (includes JS bundle + assets) ==="
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log
           GRADLE_EXIT=${PIPESTATUS[0]}
@@ -121,12 +130,13 @@ jobs:
             echo "build_status=success" >> $GITHUB_OUTPUT
           else
             echo "build_status=failed" >> $GITHUB_OUTPUT
-            echo "=== BUILD FAILED — last 200 lines ==="
-            tail -200 gradle-build.log
-            echo "### Build Failure — Last 200 Lines" >> $GITHUB_STEP_SUMMARY
+            echo "=== BUILD FAILED — last 500 lines ==="
+            tail -500 gradle-build.log
+            echo "### Build Failure — Last 500 Lines" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -200 gradle-build.log >> $GITHUB_STEP_SUMMARY
+            tail -500 gradle-build.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
 
       - name: Check build result
