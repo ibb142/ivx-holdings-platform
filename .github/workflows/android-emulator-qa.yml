@@ -92,7 +92,7 @@ jobs:
         run: |
           npm install --legacy-peer-deps
 
-      - name: Verify Expo CLI + committed android dir
+      - name: Verify Expo CLI
         working-directory: expo
         run: |
           echo "=== Node version ==="
@@ -101,9 +101,15 @@ jobs:
           npx expo --version
           echo "=== Expo package version ==="
           node -e "console.log('expo:', require('expo/package.json').version)"
-          echo "=== Android dir exists? ==="
-          ls -la android/app/build.gradle android/app/debug.keystore android/gradlew
-          echo "=== No expo prebuild — using committed android dir (matches ivx-ci.yml) ==="
+
+      - name: Expo prebuild (generates android dir + runs config plugins)
+        working-directory: expo
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+          echo "=== Verify withDebuggableVariants plugin ran ==="
+          grep -n "debuggableVariants" android/app/build.gradle || echo "WARNING: debuggableVariants not found!"
+        env:
+          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
 
       - name: Build Android APK (debug with JS bundle + assets)
         id: build
