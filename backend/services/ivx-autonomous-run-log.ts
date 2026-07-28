@@ -51,7 +51,16 @@ export type RunEngineKind =
 /** The business engine name (when the run was a capital sourcing engine). */
 export type RunEngineName = 'buyer' | 'investor' | 'jv' | 'tokenized_buyer' | 'outreach' | 'technology' | null;
 
-export type RunStatus = 'ok' | 'failed';
+/**
+ * Terminal status of a run — honest classification per owner directive.
+ *   - ok: engine ran successfully, work was done or confirmed
+ *   - completed_no_results: engine ran successfully but found zero new records
+ *     (NOT a failure — no matching SEC filings this cycle)
+ *   - timed_out: engine discovered/inserted real records but hit a Postgres
+ *     statement timeout on a late operation (partial success, NOT a hard failure)
+ *   - failed: genuine HTTP, processing, or unhandled error — no real work done
+ */
+export type RunStatus = 'ok' | 'completed_no_results' | 'timed_out' | 'failed';
 
 /**
  * The permanent per-run record — one row per autonomous execution.
@@ -249,6 +258,10 @@ export async function summarizeAutonomousRunLog(limit: number = 500): Promise<Ru
   for (const run of runs) {
     if (run.hasEvidence) runsWithEvidence += 1;
     if (run.status === 'failed') failed += 1;
+    // Note: 'timed_out' and 'completed_no_results' are NOT counted as failed.
+    // A timed_out run discovered/inserted real records before hitting a DB
+    // timeout — it is partial success, not failure. A completed_no_results
+    // run found zero new SEC filings — that is a normal empty cycle, not failure.
     const existing = byEngineMap.get(run.kind);
     if (existing) {
       existing.runCount += 1;
