@@ -683,15 +683,21 @@ export async function getLatestEngineeringReport(): Promise<Record<string, unkno
 
 let _engineeringTicker: ReturnType<typeof setInterval> | null = null;
 
-/** Starts the 2-hour report loop (idempotent; interval unref'd so it never blocks shutdown). */
+/** Starts the 2-hour report loop (idempotent; interval unref'd so it never blocks shutdown).
+ *  Fires immediately on boot so a fresh report exists right after restart (critical for
+ *  Render free tier which sleeps + cold-starts — otherwise the first report is delayed 2h). */
 export function startEngineeringReportTicker(intervalHours: number = 2): void {
   if (_engineeringTicker) return;
   const intervalMs = Math.max(0.25, intervalHours) * 60 * 60 * 1000;
+  // Generate immediately on boot so the owner has a fresh report after every restart.
+  void generateAndPostEngineeringReport().catch((err) => {
+    console.warn('[ivx-engineering-os] boot report failed:', err instanceof Error ? err.message : String(err));
+  });
   _engineeringTicker = setInterval(() => {
     void generateAndPostEngineeringReport().catch(() => {});
   }, intervalMs);
   _engineeringTicker.unref?.();
-  console.log(`[ivx-engineering-os] 2-hour report ticker started (every ${intervalHours}h)`);
+  console.log(`[ivx-engineering-os] 2-hour report ticker started (every ${intervalHours}h, boot report fired)`);
 }
 
 export function stopEngineeringReportTicker(): void {
