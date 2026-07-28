@@ -34,6 +34,12 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
   const compact = text.replace(/\s+/g, ' ').trim();
   if (!compact) return 'none';
 
+  // DEF-IA-05 fix: Explicit "yes or no" prefix must be checked BEFORE math.
+  // Otherwise "yes or no, can IVX IA work 24/7" is parsed as 24÷7=3.428571
+  // because the sanitizer keeps the '/' character and detectMathQuestion
+  // greedily matches "24/7" as a symbol-form division.
+  if (/^yes\s+or\s+no\b/.test(compact)) return 'yes_no';
+
   // Math: "15 multiplied by 3", "15 * 3", "what is 15 x 3", "10 plus 5",
   // "100 minus 20", "50 divided by 2", "square root of 144"
   if (detectMathQuestion(compact)) return 'math';
@@ -130,6 +136,11 @@ function answerYesNoQuestion(message: string): string | null {
   }
   if (/\b(is|are)\b.*\b(legit|safe|secure|regulated)\b/.test(text)) {
     return 'Yes, IVX Holdings operates with proper corporate structure and compliance. All investments are documented through formal JV agreements.';
+  }
+  // DEF-IA-05 fix: "can IVX IA work 24/7" — the '24/7' was stripped to '24 7'
+  // by the sanitizer; match on 'work' + '24 7' or '24 7' context.
+  if (/\bcan\b.*\b(work|operate|run|function)\b.*\b(24\s*7|around the clock|all day|nonstop|continuously)\b/.test(text)) {
+    return 'Yes, IVX IA can work 24/7. The AI brain is always available to answer questions, analyze deals, and assist investors — no business hours required.';
   }
   // Generic fallback — don't guess, route to AI
   return null;
