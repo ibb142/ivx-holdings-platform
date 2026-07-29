@@ -214,6 +214,16 @@ export type IVXWorkerJobInput = {
   factoryOperations?: IVXFactoryOperation[];
   /** Factory-mode approval phrase (must equal CONFIRM_IVX_FACTORY_MODE). */
   factoryApprovalPhrase?: string;
+  /** Conversation ID from IVX IA Chat — used by the recovery sweep to persist
+   *  the final evidence as an assistant message after the job completes. */
+  conversationId?: string | null;
+  /** Approval records created at enqueue time with IDs, scopes, and expiration.
+   *  Replaces inline boolean flags with trackable, single-use approval objects. */
+  approvalRecords?: {
+    patchApprovalId: string;
+    gitDeployApprovalId: string | null;
+    expiresAt: string;
+  } | null;
 };
 
 export type IVXWorkerJob = {
@@ -922,14 +932,21 @@ export async function expireStaleJobs(): Promise<string[]> {
 
   // RESILIENCE LAYER 3: recover jobs stuck at COMMITTING whose worker process
   // was killed after the GitHub commit landed but before the proof returned.
-  // This is the exact failure mode that orphaned probe `ivx-worker-53f4fbd6` at
-  // COMMITTING 65% with commitSha='' even though the real commit `8ead7d55c7c58f`
-  // was verified on the ivx-autonomous branch. The recovery sweep queries the
-  // branch HEAD and, if a commit exists whose message matches the autonomous
-  // coder's commit-message pattern + timestamp window, recovers the job to
-  // COMPLETED with the real SHA — never a false PASS (requires GitHub evidence).
   try {
     await recoverStuckCommittingJobs(queue as QueueDoc);
+  } catch {
+    // Recovery must never break the stale sweep.
+  }
+
+  // RESILIENCE LAYER 4: recover jobs stuck at VERIFYING whose worker process
+  // was killed by the Render deploy it triggered. The onCommitLanded callback
+  // already persisted the commit SHA to the job record before the deploy fired.
+  // On the next boot (or periodic sweep), this recovery checks whether
+  // production is now serving that commit and, if so, completes the job with
+  // full verified evidence — the exact fix for the ivx-worker-ffe60f09 job
+  // that was stuck at VERIFYING 90% forever.
+  try {
+    await recoverStuckVerifyingJobs(queue as QueueDoc);
   } catch {
     // Recovery must never break the stale sweep.
   }
@@ -1047,6 +1064,109 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
     }
     recovered = true;
     appendDurableEvent(QUEUE_FILE, { type: 'job_recovered', jobId: job.jobId, commitSha: branchHeadSha, reason: 'committing_crash_recovery' }).catch(() => {});
+  }
+
+  if (recovered) {
+    await saveQueue(queue);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESILIENCE LAYER 4: recover jobs stuck at VERIFYING whose worker was killed
+// by the Render deploy it triggered. The onCommitLanded callback already
+// persisted the commit SHA to the job's result before the deploy fired. On the
+// next boot (or periodic sweep), this recovery checks whether production is now
+// serving that commit and, if so, completes the job with full verified evidence.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** How long a job may sit at VERIFYING before the recovery sweep investigates.
+ *  Shorter than STALE_JOB_TIMEOUT_MS so we recover before the stale sweep marks
+ *  the job FAILED (which would lose the real commit evidence). */
+const VERIFYING_RECOVERY_THRESHOLD_MS = 90 * 1000; // 90s — deploy takes ~2-3 min
+
+/** Query the live production /health endpoint and check if the commit SHA
+ *  persisted on the job (via onCommitLanded) is now the live runtime commit. */
+async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
+  const now = Date.now();
+  const stuckJobs = queue.jobs.filter((j) =>
+    (j.status === 'verifying' || j.status === 'committing') &&
+    (j.stage === 'VERIFYING' || j.stage === 'COMMITTING') &&
+    j.startedAt &&
+    now - new Date(j.startedAt).getTime() > VERIFYING_RECOVERY_THRESHOLD_MS &&
+    j.result?.commitSha);
+  if (stuckJobs.length === 0) return;
+
+  // Fetch the live production /health commit once.
+  const baseUrl = (process.env.PRODUCTION_BASE_URL
+    ?? process.env.EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL
+    ?? process.env.EXPO_PUBLIC_IVX_API_BASE_URL
+    ?? process.env.EXPO_PUBLIC_API_BASE_URL
+    ?? 'https://api.ivxholding.com').replace(/\/+$/, '');
+  let liveCommit: string | null = null;
+  let liveHealthOk = false;
+  let liveHttpStatus: number | null = null;
+  try {
+    const res = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(10_000) });
+    liveHttpStatus = res.status;
+    liveHealthOk = res.ok;
+    if (res.ok) {
+      const data = await res.json().catch(() => ({})) as { commit?: string };
+      liveCommit = typeof data.commit === 'string' ? data.commit : null;
+    }
+  } catch {
+    return; // network error → skip this sweep cycle
+  }
+  if (!liveCommit) return;
+
+  let recovered = false;
+  for (const job of stuckJobs) {
+    const expectedSha = job.result!.commitSha!;
+    // Check if production is now serving the commit this job pushed.
+    if (liveCommit !== expectedSha) continue;
+
+    // Production is serving our commit → complete the job with verified evidence.
+    const result: IVXWorkerJobResult = {
+      ...(job.result!),
+      deployVerified: true,
+      deployRequested: job.input.approveGitDeploy,
+      liveCommit,
+      commitMatch: true,
+      healthOk: liveHealthOk,
+      healthStatus: liveHttpStatus,
+      endToEndProductionComplete: true,
+      ok: true,
+      finalStatus: 'COMPLETE',
+      error: null,
+      generatedAt: nowIso(),
+    };
+    const finalized = finalizeResultWithStateRecord(job, result);
+    job.status = 'completed';
+    job.stage = 'COMPLETED';
+    job.progressPercent = STAGE_PROGRESS['COMPLETED'];
+    job.stageDetail = `Recovered from VERIFYING crash: production /health confirms commit ${expectedSha.slice(0, 7)} is live. Job completed with verified evidence.`;
+    job.finishedAt = nowIso();
+    job.error = null;
+    job.result = finalized;
+    recovered = true;
+    console.log('[IVX-SeniorDevWorker] VERIFYING recovery: job completed', {
+      jobId: job.jobId,
+      commitSha: expectedSha,
+      liveCommit,
+      match: true,
+    });
+    appendDurableEvent(QUEUE_FILE, {
+      type: 'job_recovered',
+      jobId: job.jobId,
+      commitSha: expectedSha,
+      reason: 'verifying_crash_recovery',
+      liveCommit,
+    }).catch(() => {});
+    // Persist the recovered result to the durable ledger.
+    try {
+      await appendLedger(finalized);
+    } catch {
+      // Ledger write failure is non-fatal — the job result is still on the queue.
+    }
   }
 
   if (recovered) {
@@ -1975,6 +2095,52 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         if (controller.cancelled) return;
         const { stage, detail } = phaseToStage(phase);
         void updateJobStage(job.jobId, stage, detail);
+      },
+      // RESILIENCE: persist the commit SHA + branch to the job record the
+      // instant the GitHub commit lands — BEFORE the Render deploy triggers.
+      // If the worker process is killed by the deploy restart (Render auto-
+      // deploys on main-branch commit), the recovery sweep can still find the
+      // commit SHA on the job and resume verification after restart.
+      onCommitLanded: ({ commitSha, commitUrl, branch }) => {
+        void updateJob(job.jobId, {
+          stage: 'COMMITTING',
+          status: 'committing',
+          progressPercent: STAGE_PROGRESS['COMMITTING'],
+          stageDetail: `Commit created: ${commitSha}`,
+          result: {
+            jobId: job.jobId,
+            goal: job.input.goal.slice(0, 280),
+            ok: true,
+            endToEndProductionComplete: false,
+            changedFiles: [],
+            testsRun: true,
+            testsPassed: true,
+            typecheckRun: true,
+            typecheckPassed: true,
+            buildRun: false,
+            commitCreated: true,
+            commitSha,
+            commitUrl,
+            pushed: true,
+            branch,
+            deployId: null,
+            deployStatus: null,
+            deployVerified: false,
+            deployRequested: job.input.approveGitDeploy,
+            liveCommit: null,
+            commitMatch: false,
+            healthOk: false,
+            healthStatus: null,
+            versionEndpoint: null,
+            generatedFeatureSlug: null,
+            auditFiles: { json: '', jsonl: '' },
+            finalStatus: 'COMPLETE',
+            error: null,
+            durable: isDurableStoreConfigured(),
+            generatedAt: nowIso(),
+            taskType: classifyTaskType(job.input.goal),
+          },
+        });
       },
     });
 
