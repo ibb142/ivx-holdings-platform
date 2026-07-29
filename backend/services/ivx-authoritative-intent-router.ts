@@ -318,8 +318,9 @@ function isKnowledgeRequest(text: string): boolean {
   }
 
   // ── Code review knowledge patterns ──
-  // "Review this code/architecture" / "Audit this architecture" → knowledge
-  if (/\b(?:review|audit|analyze|analyse)\s+(?:this|that|the)\s+(?:code|architecture|function|component|file|snippet|design|system)\b/i.test(text)) {
+  // "Review this code/architecture/approach" / "Audit this architecture" → knowledge
+  // Allow optional adjective words between determiner and noun (e.g. "this authentication approach")
+  if (/\b(?:review|audit|analyze|analyse)\s+(?:this|that|the)\s+(?:\w+\s+)?(?:code|architecture|function|component|file|snippet|design|system|approach|pattern|strategy|implementation|module|service|endpoint|pipeline|workflow)\b/i.test(text)) {
     if (/\b(?:and|then)\s+(?:fix|patch|repair|deploy|commit|push|ship|implement|build|create|edit|modify|update|remove|delete)\b/i.test(text)) return false;
     return true;
   }
@@ -347,7 +348,7 @@ function isKnowledgeRequest(text: string): boolean {
   if (/\bsummarize\b/i.test(text)) return true;
 
   // "Review this code" / "Audit this architecture" → knowledge (not execution)
-  if (/\b(?:review|audit|analyze|analyse)\s+(?:this|that|the)\s+(?:code|architecture|function|component|file|snippet|design|system)\b/i.test(text)) {
+  if (/\b(?:review|audit|analyze|analyse)\s+(?:this|that|the)\s+(?:\w+\s+)?(?:code|architecture|function|component|file|snippet|design|system|approach|pattern|strategy|implementation|module|service|endpoint|pipeline|workflow)\b/i.test(text)) {
     // BUT "review and fix" or "audit and deploy" → execution
     if (/\b(?:and|then)\s+(?:fix|patch|repair|deploy|commit|push|ship|implement|build|create|edit|modify|update|remove|delete)\b/i.test(text)) {
       return false;
