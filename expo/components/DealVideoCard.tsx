@@ -27,8 +27,8 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { toggleProjectLike, trackProjectShare } from '@/lib/project-engagement';
-import { toggleVideoSave, reportVideo, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
+import { trackProjectShare } from '@/lib/project-engagement';
+import { toggleVideoLike, toggleVideoSave, reportVideo, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
 import type { FeedVideo } from '@/lib/video-feed';
 
 const MEDIA_HEIGHT = 230;
@@ -163,7 +163,7 @@ export default function DealVideoCard({ video }: { video: FeedVideo }) {
     setLiked(nextLiked);
     setLikeCount(prev => prev + (nextLiked ? 1 : -1));
     try {
-      const result = await toggleProjectLike(video.id, null);
+      const result = await toggleVideoLike(video.id, viewerId);
       setLiked(result.liked);
       setLikeCount(result.likeCount);
     } catch {

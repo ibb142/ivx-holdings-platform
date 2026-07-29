@@ -54,8 +54,8 @@ import Colors from '@/constants/colors';
 import SafeVideo from '@/components/SafeVideo';
 import ReelVideoPlayer from '@/components/ReelVideoPlayer';
 import { formatCount, compactCurrency } from '@/lib/reel-formatters';
-import { toggleProjectLike, trackProjectShare } from '@/lib/project-engagement';
-import { toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
+import { trackProjectShare } from '@/lib/project-engagement';
+import { toggleVideoLike, toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 
 // ─── Types ─────────────────────────────────────────────────────────────
