@@ -259,6 +259,32 @@ for (let i = 0; i < seniorKnowledgePrompts.length; i++) {
   assert(d.confidence >= 0.70, `${label} — confidence must be >= 0.70, got ${d.confidence}`);
 }
 
+// ─── App Generator routing (Phase 3) ─────────────────────────────────
+// App creation prompts must route to APP_GENERATOR, not CLARIFICATION.
+
+const appGeneratorPrompts = [
+  'Create a new app from scratch called investor-portal for Expo with authentication and a dashboard.',
+  'Scaffold a new module called notification-center with CRUD operations and notifications.',
+  'Build a new backend service called compliance-checker with an API endpoint for running compliance checks.',
+  'Create a new Expo app called deal-tracker with authentication.',
+  'Scaffold a new react native app called investor-portal.',
+  'Generate a new app called portfolio-manager for Expo.',
+  'Create a new module called audit-trail with CRUD operations.',
+  'Build a new service called data-pipeline with an API endpoint.',
+];
+
+for (let i = 0; i < appGeneratorPrompts.length; i++) {
+  const d = classifyOwner(appGeneratorPrompts[i]);
+  const label = `APP_GENERATOR ${i + 1}: "${appGeneratorPrompts[i].slice(0, 60)}"`;
+  assertRoute(d, 'APP_GENERATOR', label);
+  assert(d.selectedRoute !== 'DEVELOPER_WORKER', `${label} — must NOT route to DEVELOPER_WORKER`);
+  assert(d.selectedRoute !== 'CLARIFICATION', `${label} — must NOT route to CLARIFICATION`);
+  assert(d.confidence >= 0.70, `${label} — confidence must be >= 0.70, got ${d.confidence}`);
+  assert(d.intent === 'app_generator', `${label} — intent must be 'app_generator', got '${d.intent}'`);
+  assert(d.actionRequired === true, `${label} — actionRequired must be true`);
+  assert(d.toolsAllowed === true, `${label} — toolsAllowed must be true`);
+}
+
 // ─── Clarification test (Item 8) ─────────────────────────────────────
 
 const clarificationQuestion = buildClarificationQuestion('fix this and explain why');

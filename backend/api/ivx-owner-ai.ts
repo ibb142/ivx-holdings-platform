@@ -7482,7 +7482,11 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     }
 
     // ── APP GENERATOR ROUTE (Phase 3) ─────────────────────────────────
-    if (plannerDecision.route === 'app_generator') {
+    // Triggers on EITHER the legacy planner's app_generator route OR the
+    // authoritative intent router's APP_GENERATOR route. The authoritative
+    // router catches "create a new app from scratch called X" patterns that
+    // the legacy keyword planner misses.
+    if (plannerDecision.route === 'app_generator' || authoritativeDecision.selectedRoute === 'APP_GENERATOR') {
       let generatorTool = await getRegisteredGeneratorTool();
       if (!generatorTool) {
         try { await bootRegisterGenerator(); generatorTool = await getRegisteredGeneratorTool(); }

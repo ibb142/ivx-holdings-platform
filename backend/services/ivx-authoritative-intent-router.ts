@@ -32,6 +32,7 @@ export type IVXIntent =
   | 'data_query'
   | 'business_analysis'
   | 'conversation'
+  | 'app_generator'
   | 'manual_answer'
   | 'clarification_required';
 
@@ -44,6 +45,7 @@ export type IVXRoute =
   | 'DATA_QUERY'
   | 'BUSINESS_MODULE'
   | 'MANUAL_LLM_RESPONSE'
+  | 'APP_GENERATOR'
   | 'CLARIFICATION'
   | 'PUBLIC_LLM_RESPONSE';
 
@@ -256,6 +258,21 @@ const CONVERSATION_PATTERNS: RegExp[] = [
   /\bwhat\s+can\s+you\s+do\b/i,
   /\bhelp\b/i,
   /\byes\s+or\s+no\b/i,
+];
+
+// ─── App Generator Patterns ───────────────────────────────────────────
+
+const APP_GENERATOR_PATTERNS: RegExp[] = [
+  /\bcreate\s+(?:a\s+)?new\s+app\s+(?:from\s+scratch\s+)?(?:called|named)\b/i,
+  /\bscaffold\s+(?:a\s+)?(?:new\s+)?(?:app|module|service)\s+(?:called|named)\b/i,
+  /\bbuild\s+(?:a\s+)?new\s+(?:app|module|service|backend\s+service)\s+(?:called|named)\b/i,
+  /\bgenerate\s+(?:a\s+)?(?:new\s+)?(?:app|module|service)\s+(?:called|named)\b/i,
+  /\bcreate\s+(?:a\s+)?new\s+module\s+(?:called|named)\b/i,
+  /\bcreate\s+(?:a\s+)?new\s+backend\s+service\s+(?:called|named)\b/i,
+  /\bbuild\s+(?:a\s+)?new\s+service\s+(?:called|named)\b/i,
+  /\bcreate\s+(?:a\s+)?new\s+expo\s+app\s+(?:called|named)\b/i,
+  /\bcreate\s+(?:a\s+)?new\s+web\s+app\s+(?:called|named)\b/i,
+  /\bscaffold\s+(?:a\s+)?new\s+(?:expo|react\s+native|mobile)\s+app\b/i,
 ];
 
 // ─── Knowledge vs Execution Disambiguation ────────────────────────────
@@ -682,6 +699,26 @@ export function classifyIntent(input: RouterInput): IVXIntentDecision {
       destructiveAction: false,
       selectedRoute: route,
       reason: `Knowledge request (${intent}): routed to LLM for text answer. No task creation, no commit, no deploy, no CI trigger.`,
+      traceId,
+      safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
+      semanticStage: { matchedPatterns, rejectedPatterns },
+    });
+  }
+
+  // ── App Generator → APP_GENERATOR route ──
+  // Checked BEFORE execution and BEFORE knowledge requests because
+  // "create a new app called X" is a creation command, not a question.
+  // It must reach the app generator handler, not CLARIFICATION.
+  if (APP_GENERATOR_PATTERNS.some((p) => { if (p.test(text)) { matchedPatterns.push(`app_generator:${p.source}`); return true; } return false; })) {
+    return buildDecision({
+      intent: 'app_generator',
+      confidence: 0.95,
+      actionRequired: true,
+      toolsAllowed: true,
+      ownerAuthRequired: true,
+      destructiveAction: false,
+      selectedRoute: 'APP_GENERATOR',
+      reason: 'App creation request: routed to IVX app generator for blueprint generation. No deploy, no commit — owner approval required for scaffolding.',
       traceId,
       safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
       semanticStage: { matchedPatterns, rejectedPatterns },
