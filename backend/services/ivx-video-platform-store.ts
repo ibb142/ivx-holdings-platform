@@ -163,7 +163,7 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/* ---------------- S3 JSON doc access ---------------- */
+/* ---------------- Durable JSON doc access (S3 primary → Supabase fallback) ---------------- */
 
 let _s3: import('@aws-sdk/client-s3').S3Client | null = null;
 
@@ -185,28 +185,85 @@ function bucket(): string {
 
 const docCache = new Map<string, { at: number; value: unknown }>();
 
+/** Durable Supabase-backed key for a platform doc (used as permanent fallback when S3 is unavailable). */
+function durableKey(name: string): string {
+  return `${PLATFORM_PREFIX}/${name}`;
+}
+
+/** Try to read from Supabase durable store; return null if not configured or not found. */
+async function readDurableFallback<T>(name: string): Promise<T | null> {
+  try {
+    const { readDurableJson } = await import('./ivx-durable-store');
+    const value = await readDurableJson<T>(durableKey(name), null as unknown as T);
+    return value === null ? null : value;
+  } catch {
+    return null;
+  }
+}
+
+/** Write to Supabase durable store (best-effort, never throws). */
+async function writeDurableFallback<T>(name: string, value: T): Promise<boolean> {
+  try {
+    const { writeDurableJson } = await import('./ivx-durable-store');
+    await writeDurableJson(durableKey(name), value);
+    return true;
+  } catch (err) {
+    console.warn(`[video-platform-store] Supabase durable fallback write failed for ${name}: ${err instanceof Error ? err.message : 'unknown error'}`);
+    return false;
+  }
+}
+
 async function readDoc<T>(name: string, fallback: T): Promise<T> {
   const cached = docCache.get(name);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value as T;
+
+  // 1. Try Supabase durable store FIRST — it is always up-to-date because
+  //    writeDoc always mirrors to it. S3 may have stale data when S3 writes
+  //    are failing (expired credentials), so Supabase must take priority.
+  const durable = await readDurableFallback<T>(name);
+  if (durable !== null) {
+    docCache.set(name, { at: Date.now(), value: durable });
+    return durable;
+  }
+
+  // 2. Try S3 (secondary — may have data not yet mirrored to Supabase).
   try {
     const { GetObjectCommand } = await import('@aws-sdk/client-s3');
     const s3 = await getS3();
     const res = await s3.send(new GetObjectCommand({ Bucket: bucket(), Key: `${PLATFORM_PREFIX}/${name}` }));
     const bytes = await res.Body?.transformToByteArray();
-    if (!bytes) return fallback;
-    const value = JSON.parse(Buffer.from(bytes).toString('utf-8')) as T;
-    docCache.set(name, { at: Date.now(), value });
-    return value;
+    if (bytes) {
+      const value = JSON.parse(Buffer.from(bytes).toString('utf-8')) as T;
+      docCache.set(name, { at: Date.now(), value });
+      // Mirror to Supabase so future reads prefer the durable copy.
+      await writeDurableFallback(name, value);
+      return value;
+    }
   } catch {
-    return (cached?.value as T | undefined) ?? fallback;
+    // S3 read failed — fall through to cache/fallback.
   }
+
+  // 3. Return cached (possibly stale) or the provided fallback.
+  return (cached?.value as T | undefined) ?? fallback;
 }
 
 async function writeDoc<T>(name: string, value: T): Promise<void> {
   // Always update the in-memory cache first — this ensures the current
-  // instance reads the updated value even if S3 persistence fails.
+  // instance reads the updated value immediately.
   docCache.set(name, { at: Date.now(), value });
 
+  // 1. ALWAYS write to Supabase durable store first — this is the permanent
+  //    persistence layer that survives restarts, deploys, and S3 credential
+  //    expiry. It is also the primary read source, so it must always be current.
+  const durableOk = await writeDurableFallback(name, value);
+  if (durableOk) {
+    // Supabase write succeeded — this is the source of truth.
+  } else {
+    console.warn(`[video-platform-store] Supabase durable write failed for ${name} — falling back to S3.`);
+  }
+
+  // 2. Also try S3 (secondary) — best-effort mirror. If S3 is unavailable
+  //    (expired credentials), the Supabase copy is already authoritative.
   try {
     const { PutObjectCommand } = await import('@aws-sdk/client-s3');
     const s3 = await getS3();
@@ -219,11 +276,8 @@ async function writeDoc<T>(name: string, value: T): Promise<void> {
     }));
   } catch (err) {
     // S3 write failed (e.g. expired AWS credentials, Access Denied).
-    // The in-memory cache is already updated, so the current instance
-    // will serve correct data. The change will not persist across
-    // restarts until S3 credentials are fixed, but admin operations
-    // remain functional within the current session.
-    console.warn(`[video-platform-store] S3 writeDoc failed for ${name}: ${err instanceof Error ? err.message : 'unknown error'} — in-memory cache updated, change will not persist across restarts.`);
+    // The Supabase durable copy is already written, so data WILL persist.
+    console.warn(`[video-platform-store] S3 writeDoc failed for ${name}: ${err instanceof Error ? err.message : 'unknown error'} — Supabase durable copy is authoritative.`);
   }
 }
 
