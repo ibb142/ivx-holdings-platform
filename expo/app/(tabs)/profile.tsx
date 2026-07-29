@@ -532,6 +532,14 @@ export default function ProfileScreen() {
             <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('support')}</Text>
             <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
               <MenuItem
+                icon={<BookOpen size={isXs ? 18 : 20} color={Colors.gold} />}
+                title={'Knowledge Base'}
+                subtitle={'Arquitectura · Miembros · Inversión · QA · Seguridad'}
+                onPress={() => router.push('/knowledge-base' as any)}
+                isCompact={isCompact}
+                testID="kb-entry"
+              />
+              <MenuItem
                 icon={<BookOpen size={isXs ? 18 : 20} color={Colors.positive} />}
                 title={t('appGuide')}
                 subtitle={t('appGuideDesc')}
