@@ -334,7 +334,15 @@ export async function handleRunMigration(request: Request): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
 
-  const sb = getSB();
+  const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim();
+  if (!supabaseUrl || !serviceKey) {
+    return ownerOnlyJson({
+      ok: false,
+      error: 'Supabase not configured (missing URL or service role key)',
+    }, 500);
+  }
+
   const migrationSql = `-- Migration: member_classification_system
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='member_tier') THEN
@@ -420,18 +428,49 @@ CREATE TABLE IF NOT EXISTS public.classification_audit (
 CREATE INDEX IF NOT EXISTS idx_classification_audit_member_id ON public.classification_audit (member_id);
 `;
 
+  // Split migration into individual statements — ivx_exec_sql may not handle multi-statement DO blocks well.
+  // We send the entire migration as one SQL text since the RPC wraps it in a transaction.
+  const statements = splitMigrationStatements(migrationSql);
+  const errors: string[] = [];
+  let executed = 0;
+
   try {
-    const { error } = await sb.rpc('exec_sql', { sql_text: migrationSql });
-    if (error) {
-      // Try direct SQL via Supabase REST API if exec_sql RPC doesn't exist
+    for (let i = 0; i < statements.length; i++) {
+      const stmt = statements[i];
+      if (!stmt.trim()) continue;
+      const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_exec_sql`, {
+        method: 'POST',
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sql_text: stmt }),
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        errors.push(`Statement ${i + 1}/${statements.length}: ${text.slice(0, 200)}`);
+      } else {
+        executed++;
+      }
+    }
+
+    if (errors.length > 0) {
       return ownerOnlyJson({
         ok: false,
-        error: `Migration via exec_sql failed: ${error.message}`,
-        hint: 'Run the migration SQL directly in Supabase SQL Editor',
+        error: `Migration partially failed: ${errors.length} statement(s) failed`,
+        details: errors.slice(0, 5),
+        executed,
+        total: statements.length,
+        hint: 'Check error details. Some statements may fail idempotently (e.g. IF NOT EXISTS on already-existing objects).',
         migration_file: 'backend/supabase/migrations/20260728080000_member_classification_system.sql',
       }, 500);
     }
-    return ownerOnlyJson({ ok: true, message: 'Migration applied successfully' });
+    return ownerOnlyJson({
+      ok: true,
+      message: 'Migration applied successfully',
+      statements_executed: executed,
+    });
   } catch (err: any) {
     return ownerOnlyJson({
       ok: false,
@@ -440,4 +479,58 @@ CREATE INDEX IF NOT EXISTS idx_classification_audit_member_id ON public.classifi
       migration_file: 'backend/supabase/migrations/20260728080000_member_classification_system.sql',
     }, 500);
   }
+}
+
+/** Split a multi-statement SQL string into individual executable statements. */
+function splitMigrationStatements(sql: string): string[] {
+  // Split on semicolons that are not inside DO $$ ... $$ blocks or string literals
+  const statements: string[] = [];
+  let current = '';
+  let inDollarBlock = false;
+  let dollarTag = '';
+  let inString = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const nextTwo = sql.slice(i, i + 2);
+
+    if (!inDollarBlock && !inString && char === "'" && sql[i - 1] !== '\\') {
+      inString = true;
+      current += char;
+      continue;
+    }
+    if (inString && char === "'" && sql[i - 1] !== '\\') {
+      inString = false;
+      current += char;
+      continue;
+    }
+
+    if (!inString && nextTwo.startsWith('$$')) {
+      if (!inDollarBlock) {
+        inDollarBlock = true;
+        dollarTag = '$$';
+        current += '$$';
+        i++;
+        continue;
+      } else if (inDollarBlock && dollarTag === '$$') {
+        inDollarBlock = false;
+        dollarTag = '';
+        current += '$$';
+        i++;
+        continue;
+      }
+    }
+
+    if (!inDollarBlock && !inString && char === ';') {
+      current += ';';
+      if (current.trim()) statements.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) statements.push(current.trim());
+  return statements;
 }
