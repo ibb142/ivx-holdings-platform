@@ -1161,8 +1161,15 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
     }
 
     // Production is serving our commit → complete the job with verified evidence.
+    // Set a synthetic deployId when auto-deploy-on-commit was used (no Render
+    // REST deploy ID was returned, but the deploy clearly happened since the
+    // commit is live on production). The state machine guard requires a
+    // deployId for deploy-requested tasks — without it the guard would
+    // downgrade the result to FAILED even though the deploy is verified.
     const result: IVXWorkerJobResult = {
       ...(job.result!),
+      deployId: job.result!.deployId ?? 'auto_deploy_on_commit',
+      deployStatus: job.result!.deployStatus ?? 'live',
       deployVerified: true,
       deployRequested: job.input.approveGitDeploy,
       liveCommit,
