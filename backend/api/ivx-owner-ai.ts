@@ -6064,10 +6064,12 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const conversation = buildLocalDevConversation();
       try {
+        // NOTE: `mode` const is defined later in the handler (line ~6306).
+        // We use 'chat' here directly to avoid the temporal dead zone ReferenceError.
         const llmResult = await generateOwnerAIAnswer({
           promptText: prompt,
           sessionId: requestId,
-          mode,
+          mode: body.mode === 'command' ? 'command' : 'chat',
           devTestModeActive: body.devTestModeActive === true,
           clientTimezone: extractClientTimezoneFromBody(body),
         });
@@ -6146,10 +6148,11 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const cleanPrompt = stripManualDirectives(prompt);
       try {
+        // NOTE: `mode` const is defined later in the handler. Use 'chat' directly.
         const llmResult = await generateOwnerAIAnswer({
           promptText: cleanPrompt,
           sessionId: requestId,
-          mode,
+          mode: body.mode === 'command' ? 'command' : 'chat',
           devTestModeActive: body.devTestModeActive === true,
           clientTimezone: extractClientTimezoneFromBody(body),
         });
