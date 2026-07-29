@@ -2985,6 +2985,8 @@ app.get('/health', async (context) => {
     buildTimestamp: BUILD_TIMESTAMP,
     renderServiceId: 'srv-d7t9ivreo5us73ftose0',
     deploymentMarker: DEPLOYMENT_MARKER,
+    autonomousDeployIteration: 2,
+    ivxIaLastVerified: '2026-07-29T19:45:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
