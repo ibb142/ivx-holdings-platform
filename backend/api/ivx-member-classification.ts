@@ -300,18 +300,22 @@ export async function handleMemberSelfClassification(request: Request): Promise<
     .eq('auth_user_id', user.id)
     .single();
 
-  if (memberErr || !member) {
-    return json({ ok: false, error: 'Member record not found' }, 404);
-  }
+  // If the canonical member row doesn't exist yet (e.g. upsertCanonicalMember
+  // failed non-fatally during registration), return a default PENDING
+  // classification instead of 404 — the auth user is verified valid above.
+  const tier = member?.member_tier || 'PENDING';
+  const investorStatus = member?.investor_status || 'NOT_VERIFIED';
+  const reason = member?.classification_reason || null;
+  const updatedAt = member?.classification_updated_at || null;
 
   // Return ONLY tier + status (no financial details, no sensitive data)
   return json({
     ok: true,
     classification: {
-      member_tier: member.member_tier || 'PENDING',
-      investor_status: member.investor_status || 'NOT_VERIFIED',
-      classification_reason: member.classification_reason || null,
-      classification_updated_at: member.classification_updated_at || null,
+      member_tier: tier,
+      investor_status: investorStatus,
+      classification_reason: reason,
+      classification_updated_at: updatedAt,
     },
   });
 }
