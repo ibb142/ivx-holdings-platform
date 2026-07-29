@@ -234,6 +234,27 @@ for (let i = 0; i < executionNotKnowledge.length; i++) {
   assert(d.actionRequired === true, `${label} — actionRequired must be true`);
 }
 
+// ─── Senior-level knowledge regression (Rork AI vs IVX IA QA) ────────
+// These prompts must be answered directly by the LLM, not clarified.
+
+const seniorKnowledgePrompts = [
+  'A production API returns 502 errors intermittently after deploy. Give me a systematic debugging process with specific checks.',
+  'A React Native FlatList with 1,000 items is janky. List the real causes and concrete fixes, not generic advice.',
+  'When would you choose a monolithic backend over microservices? Give specific criteria, not slogans.',
+  "What does 'you build it, you run it' mean in practice for a senior engineer?",
+  'How do you safely refactor a 5,000-line module that has no tests?',
+  'What is the hardest part of maintaining a distributed system and how do you address it?',
+];
+
+for (let i = 0; i < seniorKnowledgePrompts.length; i++) {
+  const d = classifyOwner(seniorKnowledgePrompts[i]);
+  const label = `SENIOR_KNOWLEDGE ${i + 1}: "${seniorKnowledgePrompts[i].slice(0, 60)}"`;
+  assertRoute(d, 'LLM_TEXT_RESPONSE', label);
+  assertNoDeploy(d, label);
+  assert(d.selectedRoute !== 'CLARIFICATION', `${label} — must NOT route to CLARIFICATION`);
+  assert(d.confidence >= 0.70, `${label} — confidence must be >= 0.70, got ${d.confidence}`);
+}
+
 // ─── Clarification test (Item 8) ─────────────────────────────────────
 
 const clarificationQuestion = buildClarificationQuestion('fix this and explain why');
