@@ -6105,7 +6105,37 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       } catch (llmError) {
         console.error('[IVXOwnerAIBackend] LLM knowledge response failed:', llmError instanceof Error ? llmError.message : 'unknown');
-        // Fall through to existing handler — do NOT return a canned response
+        // CRITICAL FIX: Do NOT fall through to the old routing chain — it would
+        // misroute knowledge questions to the developer executor (the original bug).
+        // Return an honest error instead. Knowledge questions must NEVER trigger
+        // a deploy, commit, or task creation, even if the LLM fails.
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId: readTrimmedString(body.requestId) || createRequestId(),
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge-error',
+          answer: 'I could not reach the AI model to answer your question. This is a temporary infrastructure issue — please try again. No task was created, no deploy was triggered.',
+          model: 'ivx_authoritative_router_error',
+          status: 'ok',
+        }, {
+          source: 'local_app_brain',
+          provider: 'chatgpt',
+          endpoint: '/api/ivx/owner-ai/knowledge-error',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: authoritativeDecision.intent as OwnerRouterIntent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: authoritativeDecision.intent as OwnerRouterIntent,
+            selectedTool: null,
+            route: 'llm_text_response_error',
+            reason: `LLM call failed for knowledge question (${authoritativeDecision.intent}). No deploy, no commit, no task creation. Error: ${llmError instanceof Error ? llmError.message : 'unknown'}`,
+            manualMode: false,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       }
     }
 
@@ -6153,7 +6183,35 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       } catch (llmError) {
         console.error('[IVXOwnerAIBackend] Manual LLM response failed:', llmError instanceof Error ? llmError.message : 'unknown');
-        // Fall through to existing handler
+        // CRITICAL FIX: Do NOT fall through to the old routing chain. Return an
+        // honest error instead. Manual answer mode must NEVER trigger execution.
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId: readTrimmedString(body.requestId) || createRequestId(),
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-error',
+          answer: 'I could not reach the AI model to answer your question in manual mode. This is a temporary infrastructure issue — please try again. No tools were used, no execution was triggered.',
+          model: 'ivx_authoritative_router_error',
+          status: 'ok',
+        }, {
+          source: 'local_app_brain',
+          provider: 'chatgpt',
+          endpoint: '/api/ivx/owner-ai/manual-error',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: 'manual_answer' as OwnerRouterIntent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: 'manual_answer' as OwnerRouterIntent,
+            selectedTool: null,
+            route: 'manual_llm_response_error',
+            reason: `MANUAL ANSWER MODE — LLM call failed. No tools, no execution, no deploy. Error: ${llmError instanceof Error ? llmError.message : 'unknown'}`,
+            manualMode: true,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       }
     }
 
