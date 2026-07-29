@@ -128,34 +128,57 @@ CREATE TABLE IF NOT EXISTS public.member_financial_summary (
 );
 
 -- ---------------------------------------------------------------------------
--- 4. transactions table (canonical investment transaction ledger)
+-- 4. transactions table — ALTER existing table (production already has transactions with user_id)
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.transactions (
-  id text PRIMARY KEY DEFAULT ('txn_' || gen_random_uuid()::text),
-  member_id text NOT NULL,
-  offering_id text,
-  amount bigint NOT NULL DEFAULT 0,
-  currency text NOT NULL DEFAULT 'USD',
-  status text NOT NULL DEFAULT 'draft',
-  settled_at timestamptz,
-  refunded_amount bigint NOT NULL DEFAULT 0,
-  external_reference text,
-  source text NOT NULL DEFAULT 'system',
-  is_test boolean NOT NULL DEFAULT false,
-  idempotency_key text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+DO $$
+BEGIN
+  -- The transactions table already exists in production with user_id.
+  -- Add classification columns via ALTER TABLE.
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='member_id') THEN
+    ALTER TABLE public.transactions ADD COLUMN member_id text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='offering_id') THEN
+    ALTER TABLE public.transactions ADD COLUMN offering_id text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='currency') THEN
+    ALTER TABLE public.transactions ADD COLUMN currency text NOT NULL DEFAULT 'USD';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='settled_at') THEN
+    ALTER TABLE public.transactions ADD COLUMN settled_at timestamptz;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='refunded_amount') THEN
+    ALTER TABLE public.transactions ADD COLUMN refunded_amount bigint NOT NULL DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='external_reference') THEN
+    ALTER TABLE public.transactions ADD COLUMN external_reference text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='source') THEN
+    ALTER TABLE public.transactions ADD COLUMN source text NOT NULL DEFAULT 'system';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='is_test') THEN
+    ALTER TABLE public.transactions ADD COLUMN is_test boolean NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='idempotency_key') THEN
+    ALTER TABLE public.transactions ADD COLUMN idempotency_key text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='updated_at') THEN
+    ALTER TABLE public.transactions ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
+  END IF;
+END $$;
 
--- Indexes
+-- Backfill member_id from user_id via members.auth_user_id
+UPDATE public.transactions t
+  SET member_id = m.member_id
+  FROM public.members m
+  WHERE t.user_id = m.auth_user_id
+    AND t.member_id IS NULL;
+
+-- Indexes (member_id may be NULL for legacy rows — partial index)
 CREATE INDEX IF NOT EXISTS idx_transactions_member_id
-  ON public.transactions (member_id);
+  ON public.transactions (member_id)
+  WHERE member_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_transactions_status
   ON public.transactions (status);
-CREATE INDEX IF NOT EXISTS idx_transactions_offering_id
-  ON public.transactions (offering_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_settled_at
-  ON public.transactions (settled_at);
 
 -- Unique idempotency key (prevents duplicate webhooks)
 DO $$

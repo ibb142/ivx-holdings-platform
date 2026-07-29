@@ -393,22 +393,40 @@ CREATE TABLE IF NOT EXISTS public.member_financial_summary (
   last_completed_transaction_at timestamptz,
   calculated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS public.transactions (
-  id text PRIMARY KEY DEFAULT ('txn_' || gen_random_uuid()::text),
-  member_id text NOT NULL,
-  offering_id text,
-  amount bigint NOT NULL DEFAULT 0,
-  currency text NOT NULL DEFAULT 'USD',
-  status text NOT NULL DEFAULT 'draft',
-  settled_at timestamptz,
-  refunded_amount bigint NOT NULL DEFAULT 0,
-  external_reference text,
-  source text NOT NULL DEFAULT 'system',
-  is_test boolean NOT NULL DEFAULT false,
-  idempotency_key text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+-- The transactions table already exists in production with user_id.
+-- Add classification columns via ALTER TABLE instead of CREATE TABLE.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='member_id') THEN
+    ALTER TABLE public.transactions ADD COLUMN member_id text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='offering_id') THEN
+    ALTER TABLE public.transactions ADD COLUMN offering_id text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='currency') THEN
+    ALTER TABLE public.transactions ADD COLUMN currency text NOT NULL DEFAULT 'USD';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='settled_at') THEN
+    ALTER TABLE public.transactions ADD COLUMN settled_at timestamptz;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='refunded_amount') THEN
+    ALTER TABLE public.transactions ADD COLUMN refunded_amount bigint NOT NULL DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='external_reference') THEN
+    ALTER TABLE public.transactions ADD COLUMN external_reference text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='source') THEN
+    ALTER TABLE public.transactions ADD COLUMN source text NOT NULL DEFAULT 'system';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='is_test') THEN
+    ALTER TABLE public.transactions ADD COLUMN is_test boolean NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='idempotency_key') THEN
+    ALTER TABLE public.transactions ADD COLUMN idempotency_key text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='transactions' AND column_name='updated_at') THEN
+    ALTER TABLE public.transactions ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_transactions_member_id ON public.transactions (member_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON public.transactions (status);
 CREATE TABLE IF NOT EXISTS public.classification_audit (
