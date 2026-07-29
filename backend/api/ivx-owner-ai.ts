@@ -6062,18 +6062,18 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // to the LLM. No task creation, no commit, no deploy, no CI trigger.
     if (authoritativeDecision.selectedRoute === 'LLM_TEXT_RESPONSE') {
       const requestId = readTrimmedString(body.requestId) || createRequestId();
-      const conversation = buildLocalDevConversation();
       try {
-        // NOTE: `mode` const is defined later in the handler (line ~6306).
-        // We use 'chat' here directly to avoid the temporal dead zone ReferenceError.
-        const llmResult = await generateOwnerAIAnswer({
-          promptText: prompt,
-          sessionId: requestId,
-          mode: body.mode === 'command' ? 'command' : 'chat',
-          devTestModeActive: body.devTestModeActive === true,
-          clientTimezone: extractClientTimezoneFromBody(body),
+        // Direct LLM call — same pattern as public-chat-ai.ts.
+        // Avoids generateOwnerAIAnswer's complex dependencies that fail early in the handler.
+        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
+        const llmResult = await requestIVXAIText({
+          module: 'owner-room-knowledge',
+          requestId,
+          model: llmModel,
+          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. Answer the user\'s question directly and accurately. You are a senior developer with expertise in architecture, code review, deployment, and debugging. Answer in plain text — do not claim to have executed anything, do not create tasks, do not trigger deploys.',
+          prompt: prompt,
         });
-        const answer = assertVisibleOwnerAIAnswer(llmResult.answer);
+        const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         // Reject canned responses (Item 6)
         if (isCannedResponse(answer)) {
           console.error('[IVXOwnerAIBackend] CANNED_RESPONSE_REJECTED:', { traceId: authoritativeDecision.traceId, answerPreview: answer.slice(0, 200) });
@@ -6082,12 +6082,12 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           requestId,
           conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge',
           answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
-          model: llmResult.model,
+          model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
-          source: llmResult.source,
-          provider: llmResult.provider,
-          endpoint: llmResult.endpoint,
+          source: 'remote_api',
+          provider: llmResult.providerMetadata.provider,
+          endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/knowledge',
           deploymentMarker: DEPLOYMENT_MARKER,
           assistantMessageId: null,
           assistantPersisted: false,
@@ -6148,25 +6148,26 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const cleanPrompt = stripManualDirectives(prompt);
       try {
-        // NOTE: `mode` const is defined later in the handler. Use 'chat' directly.
-        const llmResult = await generateOwnerAIAnswer({
-          promptText: cleanPrompt,
-          sessionId: requestId,
-          mode: body.mode === 'command' ? 'command' : 'chat',
-          devTestModeActive: body.devTestModeActive === true,
-          clientTimezone: extractClientTimezoneFromBody(body),
+        // Direct LLM call — same pattern as public-chat-ai.ts.
+        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
+        const llmResult = await requestIVXAIText({
+          module: 'owner-room-manual',
+          requestId,
+          model: llmModel,
+          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. MANUAL ANSWER MODE — NO EXECUTION. Answer the user\'s question directly in plain text. Do not use tools, do not inspect Supabase, do not trigger deploys, do not create tasks. Just answer the question.',
+          prompt: cleanPrompt,
         });
-        const answer = assertVisibleOwnerAIAnswer(llmResult.answer);
+        const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId,
           conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-llm',
           answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
-          model: llmResult.model,
+          model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
-          source: llmResult.source,
-          provider: llmResult.provider,
-          endpoint: llmResult.endpoint,
+          source: 'remote_api',
+          provider: llmResult.providerMetadata.provider,
+          endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/manual-llm',
           deploymentMarker: DEPLOYMENT_MARKER,
           assistantMessageId: null,
           assistantPersisted: false,
