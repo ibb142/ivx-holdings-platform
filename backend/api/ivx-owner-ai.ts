@@ -6219,6 +6219,32 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }
     }
 
+    // ── App Generator (Phase 3) — authoritative router → generator ──
+    // When the authoritative intent router detects an app-creation request,
+    // route it to the app generator handler BEFORE CLARIFICATION can intercept.
+    if (authoritativeDecision.selectedRoute === 'APP_GENERATOR') {
+      let generatorTool = await getRegisteredGeneratorTool();
+      if (!generatorTool) {
+        try { await bootRegisterGenerator(); generatorTool = await getRegisteredGeneratorTool(); }
+        catch (e) { console.log('[IVXOwnerAIBackend] generator lazy reg failed:', e instanceof Error ? e.message : 'unknown'); }
+      }
+      const genResult = handleAppGeneratorChatRoute(prompt, Boolean(generatorTool));
+      const generatorAnswer = assertVisibleOwnerAIAnswer(genResult.answer);
+      const genRequestId = readTrimmedString(body.requestId) || createRequestId();
+      let genMsgId: string | null = null;
+      if (persistAssistantMessage) {
+        try {
+          const m = await insertMessage(ownerContext.client, tables, { conversationId: conversation.id, senderRole: 'assistant', senderUserId: tables.schema === 'generic' ? ownerContext.userId : null, senderLabel: IVX_OWNER_AI_PROFILE.name, body: generatorAnswer });
+          genMsgId = m.id;
+          await safeUpdateConversationSummary(ownerContext.client, tables, conversation.id, generatorAnswer);
+          await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+        } catch (e) { console.log('[IVXOwnerAIBackend] generator msg persist failed:', e instanceof Error ? e.message : 'unknown'); }
+      }
+      await safeUpsertAIRequest(ownerContext.client, tables, { requestId: genRequestId, conversationId: conversation.id, userId: ownerContext.userId, prompt, responseText: generatorAnswer, responseMessageId: genMsgId, status: 'completed', model: 'ivx_app_generator' });
+      logOwnerAuditRouting({ promptText: prompt, detectedIntent: 'development_action' as const, selectedRoute: 'ivx_app_generator', auditEndpointCalled: false, renderedFinalAnswer: generatorAnswer });
+      return ownerOnlyJson(buildOwnerAIResponsePayload({ requestId: genRequestId, conversationId: conversation.id, answer: generatorAnswer, model: 'ivx_app_generator', status: 'ok' }, { source: 'local_runtime', provider: 'ivx_self_developer_runtime', endpoint: '/api/ivx/app-generator/generate', deploymentMarker: DEPLOYMENT_MARKER, assistantMessageId: genMsgId, assistantPersisted: Boolean(genMsgId), selectedIntent: 'app_generator_execution' as const, selectedTool: 'ivx_self_developer_runtime', fallbackUsed: false, generatorRegistered: Boolean(generatorTool), blueprintGenerated: Boolean(genResult.blueprint), fileCount: genResult.blueprint?.fileCount ?? 0 } as Record<string, unknown>, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+    }
+
     // ── Clarification (Item 8) ──
     // Low confidence or ambiguous execution/knowledge → ask one question
     if (authoritativeDecision.selectedRoute === 'CLARIFICATION' && authoritativeDecision.intent === 'clarification_required') {
