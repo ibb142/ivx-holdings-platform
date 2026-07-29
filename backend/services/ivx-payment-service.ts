@@ -21,8 +21,9 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
+import { onTransactionSettled, onRefundProcessed } from './ivx-classification-triggers';
 
-const DEPLOYMENT_MARKER = 'ivx-payment-service-v1-2026-07-23';
+const DEPLOYMENT_MARKER = 'ivx-payment-service-v1-2026-07-28-classification';
 
 // ── Types ──
 
@@ -700,6 +701,17 @@ async function finalizeInvestment(paymentId: string, traceId: string): Promise<b
       completed_at: new Date().toISOString(),
     }).eq('id', paymentId);
 
+    // Trigger member reclassification after successful investment finalization
+    try {
+      const memberId = payment.user_id;
+      if (memberId) {
+        await onTransactionSettled(memberId, paymentId, Number(payment.amount_cents));
+        console.log(`[PaymentService] Classification trigger fired for member ${memberId} after settlement`);
+      }
+    } catch (classErr: any) {
+      console.error('[PaymentService] Classification trigger failed (non-fatal):', classErr.message);
+    }
+
     return true;
   } catch (err: any) {
     console.error('[PaymentService] Finalization failed:', err.message);
@@ -822,6 +834,17 @@ export async function refundPayment(
         }).eq('id', payment.deal_id);
       }
     }
+  }
+
+  // Trigger member reclassification after refund processing
+  try {
+    const memberId = payment.user_id;
+    if (memberId) {
+      await onRefundProcessed(memberId, paymentId, refundAmount);
+      console.log(`[PaymentService] Classification trigger fired for member ${memberId} after refund`);
+    }
+  } catch (classErr: any) {
+    console.error('[PaymentService] Refund classification trigger failed (non-fatal):', classErr.message);
   }
 
   return { ok: true, traceId };
