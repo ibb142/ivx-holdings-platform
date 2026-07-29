@@ -285,6 +285,34 @@ for (let i = 0; i < appGeneratorPrompts.length; i++) {
   assert(d.toolsAllowed === true, `${label} — toolsAllowed must be true`);
 }
 
+// ─── Execution routing regression (create/implement/build + deploy/commit) ──
+// These prompts must route to DEVELOPER_WORKER, NOT CLARIFICATION.
+// Bug found 2026-07-29: "create a new X and deploy" fell through to CLARIFICATION
+// because EXPLICIT_EXECUTION_TRIGGERS only matched "fix/patch/build THIS/THAT".
+
+const executionCreationPrompts = [
+  'Create a new API endpoint for investor analytics and deploy.',
+  'Implement a new search feature and deploy.',
+  'Create a new route for portfolio reports and commit.',
+  'Add a notification preference page and deploy.',
+  'Implement a new hook for data sync and commit.',
+  'Build a new service for report generation and deploy.',
+  'Create a new page for investor onboarding and deploy.',
+  'Create a new API endpoint for investor analytics.',
+];
+
+for (let i = 0; i < executionCreationPrompts.length; i++) {
+  const d = classifyOwner(executionCreationPrompts[i]);
+  const label = `EXEC_CREATION ${i + 1}: "${executionCreationPrompts[i].slice(0, 60)}"`;
+  assertRoute(d, 'DEVELOPER_WORKER', label);
+  assert(d.selectedRoute !== 'CLARIFICATION', `${label} — must NOT route to CLARIFICATION`);
+  assert(d.selectedRoute !== 'APP_GENERATOR', `${label} — must NOT route to APP_GENERATOR (not "called/named" pattern)`);
+  assert(d.selectedRoute !== 'LLM_TEXT_RESPONSE', `${label} — must NOT route to LLM_TEXT_RESPONSE`);
+  assert(d.actionRequired === true, `${label} — actionRequired must be true`);
+  assert(d.toolsAllowed === true, `${label} — toolsAllowed must be true`);
+  assert(d.confidence >= 0.70, `${label} — confidence must be >= 0.70, got ${d.confidence}`);
+}
+
 // ─── Clarification test (Item 8) ─────────────────────────────────────
 
 const clarificationQuestion = buildClarificationQuestion('fix this and explain why');

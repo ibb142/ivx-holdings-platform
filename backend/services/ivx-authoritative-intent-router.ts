@@ -139,6 +139,8 @@ const EXPLICIT_EXECUTION_TRIGGERS: RegExp[] = [
   /\brun\s+a\s+senior\s+developer\s+task\b/i,
   /\bfix\s+(?:this|that|the)\s+(?:bug|error|issue)\s+(?:and\s+)?(?:deploy|commit|push)\b/i,
   /\bimplement\s+(?:this|that|the)\s+(?:feature|fix)\s+(?:and\s+)?(?:deploy|commit)\b/i,
+  // Creation + deploy/commit patterns — "create a new X and deploy", "build a new service and commit"
+  /\b(?:create|build|implement|add|develop|write|scaffold)\b.{0,80}\b(?:and\s+)?(?:deploy|commit|push|ship)\b/i,
 ];
 
 // ─── Stage 2: Semantic Intent Classifier ──────────────────────────────
@@ -460,8 +462,9 @@ function isExplicitExecution(text: string): boolean {
     }
   }
 
-  // "Fix X and deploy" / "Patch X and commit" patterns
-  if (/\b(?:fix|patch|repair)\b.{0,80}\b(?:and\s+)?(?:deploy|commit|push|ship)\b/i.test(text)) {
+  // "Fix X and deploy" / "Patch X and commit" / "Create X and deploy" / "Build X and commit"
+  // Any creation/build/fix verb + deploy/commit/push/ship → execution
+  if (/\b(?:fix|patch|repair|create|build|implement|add|develop|write|scaffold|generate)\b.{0,80}\b(?:and\s+)?(?:deploy|commit|push|ship)\b/i.test(text)) {
     return true;
   }
 
@@ -470,8 +473,14 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  // "Add a X and commit it" / "Add X and commit" → execution
-  if (/\badd\b.{0,80}\b(?:and\s+)?commit\b/i.test(text)) {
+  // "Add a X and commit it" / "Add X and commit" / "Add X and deploy" → execution
+  if (/\badd\b.{0,80}\b(?:and\s+)?(?:commit|deploy|push|ship)\b/i.test(text)) {
+    return true;
+  }
+
+  // "Create a new X" / "Implement a new X" / "Build a new X" (without "and deploy")
+  // → still execution when the target is a code artifact (endpoint, route, page, module, service, etc.)
+  if (/\b(?:create|implement|build|develop|scaffold|write)\s+(?:a\s+)?(?:new\s+)?(?:api\s+)?(?:endpoint|route|page|module|service|component|screen|hook|feature|function|middleware|handler|dashboard|widget)\b/i.test(text)) {
     return true;
   }
 
