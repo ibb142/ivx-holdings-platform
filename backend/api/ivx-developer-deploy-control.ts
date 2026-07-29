@@ -1460,7 +1460,7 @@ async function runGithubUploadReleaseAsset(input: Record<string, unknown>): Prom
   }
   let hostname = '';
   try { hostname = new URL(sourceUrl).hostname.toLowerCase(); } catch { throw new Error('Invalid source URL.'); }
-  const hostAllowed = ARTIFACT_VERIFY_HOST_SUFFIXES.some((s) => hostname === s || hostname.endsWith(`.${s}`)) || hostname === 'tmpfiles.org';
+  const hostAllowed = ARTIFACT_VERIFY_HOST_SUFFIXES.some((s) => hostname === s || hostname.endsWith(`.${s}`)) || hostname === 'tmpfiles.org' || hostname === 'litter.catbox.moe' || hostname === 'catbox.moe';
   if (!hostAllowed) {
     throw new Error(`Host "${hostname}" is not in the asset upload allowlist.`);
   }
