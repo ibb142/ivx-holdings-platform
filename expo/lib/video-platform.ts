@@ -64,6 +64,24 @@ export async function toggleVideoSave(videoId: string, viewerId?: string | null)
   };
 }
 
+/**
+ * Toggle like on a video/reel via the backend API using guest_id.
+ * This replaces the broken `toggleProjectLike(id, null)` call path which
+ * silently did nothing because the Supabase client requires a real user_id.
+ * The backend `handleProjectLikeToggle` accepts `guest_id` in the body.
+ */
+export async function toggleVideoLike(videoId: string, viewerId?: string | null): Promise<{ liked: boolean; likeCount: number }> {
+  const viewer = viewerId || (await getViewerId());
+  const result = await platformPost(`/api/projects/${encodeURIComponent(videoId)}/like`, { guest_id: viewer });
+  if (!result.ok || !result.data) {
+    return { liked: false, likeCount: 0 };
+  }
+  return {
+    liked: !!result.data.liked,
+    likeCount: Number(result.data.like_count ?? 0),
+  };
+}
+
 export async function toggleVideoFollow(creatorId: string, viewerId?: string | null): Promise<{ following: boolean }> {
   const viewer = viewerId || (await getViewerId());
   const result = await platformPost('/api/ivx/video-platform/follow', { follower_id: viewer, creator_id: creatorId || 'ivx-owner' });

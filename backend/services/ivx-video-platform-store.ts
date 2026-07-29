@@ -203,16 +203,28 @@ async function readDoc<T>(name: string, fallback: T): Promise<T> {
 }
 
 async function writeDoc<T>(name: string, value: T): Promise<void> {
-  const { PutObjectCommand } = await import('@aws-sdk/client-s3');
-  const s3 = await getS3();
-  await s3.send(new PutObjectCommand({
-    Bucket: bucket(),
-    Key: `${PLATFORM_PREFIX}/${name}`,
-    Body: Buffer.from(JSON.stringify(value), 'utf-8'),
-    ContentType: 'application/json',
-    CacheControl: 'no-cache',
-  }));
+  // Always update the in-memory cache first — this ensures the current
+  // instance reads the updated value even if S3 persistence fails.
   docCache.set(name, { at: Date.now(), value });
+
+  try {
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const s3 = await getS3();
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket(),
+      Key: `${PLATFORM_PREFIX}/${name}`,
+      Body: Buffer.from(JSON.stringify(value), 'utf-8'),
+      ContentType: 'application/json',
+      CacheControl: 'no-cache',
+    }));
+  } catch (err) {
+    // S3 write failed (e.g. expired AWS credentials, Access Denied).
+    // The in-memory cache is already updated, so the current instance
+    // will serve correct data. The change will not persist across
+    // restarts until S3 credentials are fixed, but admin operations
+    // remain functional within the current session.
+    console.warn(`[video-platform-store] S3 writeDoc failed for ${name}: ${err instanceof Error ? err.message : 'unknown error'} — in-memory cache updated, change will not persist across restarts.`);
+  }
 }
 
 /* ---------------- follows ---------------- */

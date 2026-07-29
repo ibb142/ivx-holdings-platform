@@ -27,8 +27,8 @@ import CanonicalInvestmentReelCard, {
 import { fetchHomeFeed, type HomeFeedBlock, type HomeFeedDeal } from '@/lib/video-feed';
 import type { ParsedJVDeal } from '@/lib/parse-deal';
 import type { JVAgreement } from '@/types/jv';
-import { toggleProjectLike, trackProjectShare } from '@/lib/project-engagement';
-import { toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
+import { trackProjectShare } from '@/lib/project-engagement';
+import { toggleVideoLike, toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
 import { resolveDealPhotos } from '@/lib/parse-deal';
 
 /** Per-card error boundary so one bad card never crashes the home feed */
@@ -165,7 +165,8 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
 
   // InvestmentCard callbacks
   const handleCardLike = useCallback(async (data: InvestmentCardData) => {
-    void toggleProjectLike(data.dealId, null).catch(() => {});
+    const viewerId = await getViewerId().catch(() => null);
+    void toggleVideoLike(`deal-${data.dealId}`, viewerId).catch(() => {});
   }, []);
 
   const handleCardSave = useCallback(async (data: InvestmentCardData) => {
@@ -188,7 +189,8 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
   // ReelCard callbacks
   const handleReelLike = useCallback(async (data: CanonicalReelData) => {
     const id = data.dealId ?? data.reelId;
-    void toggleProjectLike(id, null).catch(() => {});
+    const viewerId = await getViewerId().catch(() => null);
+    void toggleVideoLike(id, viewerId).catch(() => {});
   }, []);
 
   const handleReelSave = useCallback(async (data: CanonicalReelData) => {
