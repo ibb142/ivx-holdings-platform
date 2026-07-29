@@ -111,10 +111,10 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
   const { width: screenWidth } = useWindowDimensions();
   const [muted, setMuted] = React.useState<boolean>(true);
   const padH = isXs ? 16 : 20;
-  // Instagram-style 9:16 vertical aspect ratio for reel cards in the home feed.
-  // Width = screenWidth - 2*padH, Height = width * 16/9, capped at screenHeight * 0.85.
-  const reelWidth = screenWidth - padH * 2;
-  const feedHeight = Math.min(Math.round(reelWidth * 16 / 9), Math.round(screenHeight * 0.85));
+  // Owner-approved Home preview card: compact, capped at 520px height.
+  // The full-screen 9:16 experience lives in the Reels module (videos.tsx),
+  // NOT on the Home dashboard.
+  const feedHeight = Math.min(screenWidth - padH * 2, 520);
 
   const homeFeedQuery = useQuery({
     queryKey: ['ivx-home-feed'],
