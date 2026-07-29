@@ -6265,7 +6265,10 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // to ...-2026-07-19 (today's date), commit to GitHub, deploy to Render, verify
     // /health" routes to the developer_executor worker queue instead of being
     // answered as a math/conversation question ("The answer is 2019.").
-    const conversationAnswer = isOwnerExecutionOrTaskBlock(prompt)
+    // CRITICAL: When the authoritative intent router selects DEVELOPER_WORKER,
+    // skip the conversation brain entirely — execution commands must reach the
+    // developer executor pipeline below, not be intercepted as conversation.
+    const conversationAnswer = (isOwnerExecutionOrTaskBlock(prompt) || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER')
       ? null
       : resolveIVXConversationAnswer(prompt);
     if (conversationAnswer) {
