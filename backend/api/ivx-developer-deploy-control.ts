@@ -93,6 +93,8 @@ type DeveloperDeployAction =
   | 'autonomous_feature_cycle'
   | 'github_commit_multi_file'
   | 'github_get_repo_head'
+  | 'github_create_release'
+  | 'github_upload_release_asset'
   | 'developer_deploy_status';
 
 type DeveloperDeployRequest = {
@@ -201,6 +203,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'autonomous_feature_cycle'
     || normalized === 'github_commit_multi_file'
     || normalized === 'github_get_repo_head'
+    || normalized === 'github_create_release'
+    || normalized === 'github_upload_release_asset'
     || normalized === 'developer_deploy_status'
  ) {
     return normalized;
@@ -242,6 +246,9 @@ function isReadOnlyAction(action: DeveloperDeployAction): boolean {
     || action === 'github_get_repo_head'
     || action === 'developer_deploy_status';
 }
+
+/** github_create_release and github_upload_release_asset are write actions
+ *  that use the backend's own GITHUB_TOKEN. They require GITHUB_CONFIRM_TEXT. */
 
 /** Actions that mutate production infrastructure but require AWS/CloudFront confirmation phrase. */
 const CLOUDFRONT_CONFIRM_TEXT = 'CONFIRM_IVX_CLOUDFRONT_INVALIDATE';
@@ -1386,6 +1393,131 @@ async function runGithubCreateRollbackTag(input: Record<string, unknown>): Promi
     branch,
     rollbackHint: `git reset --hard ${tag} OR redeploy this tag's commit ${sha.slice(0, 8)} to roll back.`,
     tagUrl: `${buildSafeGithubRepoUrl(repoInfo)}/releases/tag/${encodeURIComponent(tag)}`,
+  };
+}
+
+/** Owner-approved: creates a GitHub Release using the backend's own GITHUB_TOKEN.
+ *  Returns release ID, upload URL, and HTML URL for asset upload. */
+async function runGithubCreateRelease(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const tagName = readTrimmed(input.tagName) || readTrimmed(input.tag_name);
+  if (!tagName) {
+    throw new Error('tagName (or tag_name) is required for github_create_release.');
+  }
+  const targetCommitish = readTrimmed(input.targetCommitish) || readTrimmed(input.target_commitish) || 'main';
+  const name = readTrimmed(input.name) || tagName;
+  const body = readTrimmed(input.body) || '';
+  const isDraft = input.draft === true;
+  const isPrerelease = input.prerelease === true;
+  const baseUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/releases`;
+  const response = await fetchJson(baseUrl, {
+    method: 'POST',
+    headers: await githubHeaders(),
+    body: JSON.stringify({
+      tag_name: tagName,
+      target_commitish: targetCommitish,
+      name,
+      body,
+      draft: isDraft,
+      prerelease: isPrerelease,
+    }),
+  });
+  if (!response.ok) {
+    const errMsg = readRecord(response.data).message || 'Unknown error';
+    throw new Error(`GitHub release creation failed with HTTP ${response.status}: ${errMsg}`);
+  }
+  const releaseData = readRecord(response.data);
+  const uploadUrl = readTrimmed(releaseData.upload_url).split('{')[0];
+  return {
+    provider: 'github',
+    action: 'github_create_release',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    releaseId: typeof releaseData.id === 'number' ? releaseData.id : null,
+    tagName,
+    name,
+    draft: isDraft,
+    htmlUrl: readTrimmed(releaseData.html_url),
+    uploadUrl,
+    apiStatus: response.status,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Owner-approved: downloads an asset from a URL and uploads it to a GitHub Release.
+ *  Uses the backend's GITHUB_TOKEN for the upload. The source URL must be HTTPS
+ *  and on the artifact verification allowlist. */
+async function runGithubUploadReleaseAsset(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const releaseId = typeof input.releaseId === 'number' ? input.releaseId : parseInt(readTrimmed(input.releaseId), 10);
+  if (!releaseId || isNaN(releaseId)) {
+    throw new Error('A numeric releaseId is required for github_upload_release_asset.');
+  }
+  const sourceUrl = readTrimmed(input.sourceUrl) || readTrimmed(input.source_url);
+  if (!sourceUrl.startsWith('https://')) {
+    throw new Error('An https:// sourceUrl is required for the asset to upload.');
+  }
+  let hostname = '';
+  try { hostname = new URL(sourceUrl).hostname.toLowerCase(); } catch { throw new Error('Invalid source URL.'); }
+  const hostAllowed = ARTIFACT_VERIFY_HOST_SUFFIXES.some((s) => hostname === s || hostname.endsWith(`.${s}`)) || hostname === 'tmpfiles.org';
+  if (!hostAllowed) {
+    throw new Error(`Host "${hostname}" is not in the asset upload allowlist.`);
+  }
+  const assetName = readTrimmed(input.assetName) || readTrimmed(input.asset_name) || 'app-release.apk';
+  const assetLabel = readTrimmed(input.assetLabel) || readTrimmed(input.asset_label) || assetName;
+
+  // Download the asset from the source URL
+  const downloadResponse = await fetch(sourceUrl, { redirect: 'follow' });
+  if (!downloadResponse.ok || !downloadResponse.body) {
+    throw new Error(`Failed to download asset from source URL (HTTP ${downloadResponse.status}).`);
+  }
+  const assetBuffer = Buffer.from(await downloadResponse.arrayBuffer());
+  if (assetBuffer.length === 0) {
+    throw new Error('Downloaded asset is empty.');
+  }
+  if (assetBuffer.length > 2_000_000_000) {
+    throw new Error('Asset exceeds 2GB limit for GitHub Release uploads.');
+  }
+
+  // Upload to GitHub Release assets endpoint
+  const uploadUrl = `https://uploads.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/releases/${releaseId}/assets?name=${encodeURIComponent(assetName)}&label=${encodeURIComponent(assetLabel)}`;
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${await getGithubToken()}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Content-Length': String(assetBuffer.length),
+    },
+    body: assetBuffer,
+  });
+  if (!uploadResponse.ok) {
+    const errText = await uploadResponse.text().catch(() => '');
+    throw new Error(`GitHub asset upload failed with HTTP ${uploadResponse.status}: ${errText.slice(0, 300)}`);
+  }
+  const assetData = readRecord(await parseJsonResponse(uploadResponse));
+
+  // Compute SHA-256 of the uploaded asset for verification
+  const { createHash } = await import('node:crypto');
+  const sha256 = createHash('sha256').update(assetBuffer).digest('hex');
+
+  return {
+    provider: 'github',
+    action: 'github_upload_release_asset',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    releaseId,
+    assetId: typeof assetData.id === 'number' ? assetData.id : null,
+    assetName,
+    assetLabel,
+    assetSize: assetBuffer.length,
+    assetSha256: sha256,
+    assetDownloadUrl: readTrimmed(assetData.browser_download_url),
+    assetUrl: readTrimmed(assetData.url),
+    apiStatus: uploadResponse.status,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
   };
 }
 
@@ -3835,6 +3967,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'github_get_repo_head') {
     return await runGithubGetRepoHead(input);
+  }
+  if (action === 'github_create_release') {
+    return await runGithubCreateRelease(input);
+  }
+  if (action === 'github_upload_release_asset') {
+    return await runGithubUploadReleaseAsset(input);
   }
   if (action === 'developer_deploy_status') {
     return await runDeveloperDeployStatus(input);
