@@ -312,6 +312,7 @@ import {
   handleIAQuery,
   handleGetFinancialSummary,
   handleMemberSelfClassification,
+  handleRunMigration,
 } from './api/ivx-member-classification';
 import {
   treasuryOptions,
@@ -5038,6 +5039,8 @@ app.post('/api/ivx/classification/reconcile', async (c) => handleReconcileAll(c.
 app.post('/api/ivx/classification/override', async (c) => handleManualOverride(c.req.raw));
 app.get('/api/ivx/classification/audit/:memberId', async (c) => handleGetAuditTrail(c.req.raw, c.req.param('memberId')));
 app.post('/api/ivx/classification/ia-query', async (c) => handleIAQuery(c.req.raw));
+app.options('/api/ivx/classification/run-migration', () => classificationOptions());
+app.post('/api/ivx/classification/run-migration', async (c) => handleRunMigration(c.req.raw));
 app.get('/api/ivx/classification/financial/:memberId', async (c) => handleGetFinancialSummary(c.req.raw, c.req.param('memberId')));
 // Member-facing: self classification (no financial details)
 app.get('/api/members/classification', async (c) => handleMemberSelfClassification(c.req.raw));

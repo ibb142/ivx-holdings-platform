@@ -54,6 +54,8 @@ import { useTranslation, useI18n } from '@/lib/i18n-context';
 import { useAnalytics } from '@/lib/analytics-context';
 import { formatDollar } from '@/lib/formatters';
 import { renderSafeViewChildren } from '@/components/SafeViewChildren';
+import { MemberBadge } from '@/components/MemberBadge';
+import { getMyClassification, type MemberTier, type InvestorStatus } from '@/lib/classification-service';
 
 interface MenuItemProps {
   icon: React.ReactNode;
@@ -115,6 +117,18 @@ export default function ProfileScreen() {
     },
     staleTime: 1000 * 60 * 2,
     enabled: !!profileData,
+  });
+
+  const classificationQuery = useQuery({
+    queryKey: ['member-classification', 'profile'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+      const result = await getMyClassification(session.access_token);
+      return result.ok ? result.classification ?? null : null;
+    },
+    staleTime: 1000 * 60 * 5,
+    enabled: !!profileData && !currentUser.isOwnerOrAdmin,
   });
 
   const currentUser = useMemo(() => {
@@ -299,6 +313,16 @@ export default function ProfileScreen() {
                   <Text style={[styles.kycText, { color: getKYCStatusColor(), fontSize: isXs ? 11 : 12 }]}>
                     {getKYCStatusText()}
                   </Text>
+                </View>
+              )}
+              {!currentUser.isOwnerOrAdmin && classificationQuery.data && (
+                <View style={{ marginTop: 6 }}>
+                  <MemberBadge
+                    tier={classificationQuery.data.member_tier}
+                    investorStatus={classificationQuery.data.investor_status}
+                    size="small"
+                    showStatus
+                  />
                 </View>
               )}
             </View>

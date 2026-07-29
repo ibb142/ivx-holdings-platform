@@ -122,6 +122,7 @@ import { detectDeveloperModeRequest, buildDeveloperModeBlockedExplanation, detec
 import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from '../services/ivx-ia-identity-brain';
 import { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from '../services/ivx-ia-conversation-brain';
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock } from '../services/ivx-db-count';
+import { answerClassificationQuery, detectClassificationQuestion, CLASSIFICATION_MARKER as CLASSIFICATION_IA_MARKER, type IAClassificationQuery } from '../services/ivx-member-classification';
 
 import { classifyOwnerExecutionCommand, type IVXOwnerExecutionDecision } from '../services/ivx-owner-execution-mode';
 import {
@@ -5995,6 +5996,37 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         model: 'ivx_backend',
         provider: 'chatgpt',
         deploymentMarker: IVX_IA_IDENTITY_MARKER,
+        assistantMessageId: null,
+        assistantPersisted: false,
+        selectedTool: null,
+        toolInput: [],
+        toolOutput: [],
+        fallbackUsed: false,
+        toolOutputs: [],
+      }, 200);
+    }
+    // ── IVX IA Classification Brain ──────────────────────────────────────
+    // Classification questions ("Is this person a real investor?", "Is this person VIP?")
+    // are answered from authoritative transaction data, never from conversation text.
+    // This fast path calls answerClassificationQuery() with the member_id extracted
+    // from the prompt (if present) and returns the authoritative classification.
+    const classificationMatch = detectClassificationQuestion(prompt);
+    if (classificationMatch) {
+      const cq: IAClassificationQuery = {
+        question: prompt,
+        member_id: classificationMatch.memberId,
+        is_this_person_a_real_investor: classificationMatch.isRealInvestorQuestion,
+        is_this_person_vip: classificationMatch.isVipQuestion,
+      };
+      const cResult = await answerClassificationQuery(cq);
+      return ownerOnlyJson({
+        ok: true,
+        status: 'ok',
+        source: 'ivx-owner-ai-classification-brain',
+        answer: cResult.answer,
+        model: 'ivx_backend',
+        provider: 'ivx_classification_engine',
+        deploymentMarker: CLASSIFICATION_IA_MARKER,
         assistantMessageId: null,
         assistantPersisted: false,
         selectedTool: null,

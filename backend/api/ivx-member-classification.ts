@@ -326,3 +326,118 @@ export function memberClassificationOptions(): Response {
     },
   });
 }
+
+// ── POST /api/ivx/classification/run-migration ──
+// Owner-only: executes the classification system migration SQL against Supabase.
+
+export async function handleRunMigration(request: Request): Promise<Response> {
+  const denied = await requireOwner(request);
+  if (denied) return denied;
+
+  const sb = getSB();
+  const migrationSql = `-- Migration: member_classification_system
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='member_tier') THEN
+    ALTER TABLE public.members ADD COLUMN member_tier text DEFAULT 'PENDING';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='investor_status') THEN
+    ALTER TABLE public.members ADD COLUMN investor_status text DEFAULT 'NOT_VERIFIED';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='onboarding_phase') THEN
+    ALTER TABLE public.members ADD COLUMN onboarding_phase text DEFAULT 'registration';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='classification_updated_at') THEN
+    ALTER TABLE public.members ADD COLUMN classification_updated_at timestamptz;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='classification_reason') THEN
+    ALTER TABLE public.members ADD COLUMN classification_reason text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='members' AND column_name='classification_version') THEN
+    ALTER TABLE public.members ADD COLUMN classification_version text;
+  END IF;
+END $$;
+CREATE TABLE IF NOT EXISTS public.investor_profiles (
+  id text PRIMARY KEY DEFAULT ('invp_' || gen_random_uuid()::text),
+  member_id text NOT NULL,
+  kyc_status text NOT NULL DEFAULT 'not_started',
+  tax_status text NOT NULL DEFAULT 'not_started',
+  compliance_status text NOT NULL DEFAULT 'not_started',
+  investor_agreement_at timestamptz,
+  approved_at timestamptz,
+  restricted_at timestamptz,
+  restricted_reason text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_investor_profiles_member_id ON public.investor_profiles (member_id);
+CREATE TABLE IF NOT EXISTS public.member_financial_summary (
+  member_id text PRIMARY KEY,
+  completed_transactions integer NOT NULL DEFAULT 0,
+  lifetime_settled_investment bigint NOT NULL DEFAULT 0,
+  current_active_principal bigint NOT NULL DEFAULT 0,
+  committed_capital bigint NOT NULL DEFAULT 0,
+  pending_capital bigint NOT NULL DEFAULT 0,
+  refunded_principal bigint NOT NULL DEFAULT 0,
+  cancelled_capital bigint NOT NULL DEFAULT 0,
+  distributed_amount bigint NOT NULL DEFAULT 0,
+  qualifying_invested_capital bigint NOT NULL DEFAULT 0,
+  largest_completed_transaction bigint NOT NULL DEFAULT 0,
+  last_completed_transaction_at timestamptz,
+  calculated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id text PRIMARY KEY DEFAULT ('txn_' || gen_random_uuid()::text),
+  member_id text NOT NULL,
+  offering_id text,
+  amount bigint NOT NULL DEFAULT 0,
+  currency text NOT NULL DEFAULT 'USD',
+  status text NOT NULL DEFAULT 'draft',
+  settled_at timestamptz,
+  refunded_amount bigint NOT NULL DEFAULT 0,
+  external_reference text,
+  source text NOT NULL DEFAULT 'system',
+  is_test boolean NOT NULL DEFAULT false,
+  idempotency_key text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_transactions_member_id ON public.transactions (member_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON public.transactions (status);
+CREATE TABLE IF NOT EXISTS public.classification_audit (
+  id bigserial PRIMARY KEY,
+  member_id text NOT NULL,
+  previous_tier text,
+  new_tier text NOT NULL,
+  previous_investor_status text,
+  new_investor_status text,
+  reason text NOT NULL,
+  qualifying_total_before bigint,
+  qualifying_total_after bigint,
+  actor text NOT NULL DEFAULT 'automatic',
+  trace_id text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_classification_audit_member_id ON public.classification_audit (member_id);
+`;
+
+  try {
+    const { error } = await sb.rpc('exec_sql', { sql_text: migrationSql });
+    if (error) {
+      // Try direct SQL via Supabase REST API if exec_sql RPC doesn't exist
+      return ownerOnlyJson({
+        ok: false,
+        error: `Migration via exec_sql failed: ${error.message}`,
+        hint: 'Run the migration SQL directly in Supabase SQL Editor',
+        migration_file: 'backend/supabase/migrations/20260728080000_member_classification_system.sql',
+      }, 500);
+    }
+    return ownerOnlyJson({ ok: true, message: 'Migration applied successfully' });
+  } catch (err: any) {
+    return ownerOnlyJson({
+      ok: false,
+      error: err.message,
+      hint: 'Run the migration SQL directly in Supabase SQL Editor',
+      migration_file: 'backend/supabase/migrations/20260728080000_member_classification_system.sql',
+    }, 500);
+  }
+}

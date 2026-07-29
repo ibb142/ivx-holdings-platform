@@ -1051,3 +1051,68 @@ export async function answerClassificationQuery(
     restricted_info_hidden: true,
   };
 }
+
+// ── Classification Question Detector for IVX IA ──
+
+/**
+ * Detects classification-related questions in IVX IA prompts.
+ * Returns the extracted member_id (if present) and question type flags.
+ * This ensures IVX IA never infers investor/VIP status from conversation text —
+ * it always routes to authoritative transaction data.
+ */
+export function detectClassificationQuestion(prompt: string): {
+  memberId: string | undefined;
+  isRealInvestorQuestion: boolean;
+  isVipQuestion: boolean;
+} | null {
+  const lower = prompt.toLowerCase();
+
+  // Check for classification-related keywords
+  const isRealInvestorQuestion =
+    /is\s+(?:this\s+)?(?:person\s+|member\s+)?(?:a\s+)?real\s+investor/i.test(prompt)
+    || /(?:is\s+|verify\s+)(?:this\s+)?(?:person\s+|member\s+)?(?:an?\s+)?investor/i.test(prompt)
+    || /verify\s+investor\s+status/i.test(prompt)
+    || /check\s+investor\s+classification/i.test(prompt);
+
+  const isVipQuestion =
+    /is\s+(?:this\s+)?(?:person\s+|member\s+)?vip/i.test(prompt)
+    || /vip\s+(?:status|classification|tier)/i.test(prompt)
+    || /check\s+vip\s+status/i.test(prompt)
+    || /verify\s+vip/i.test(prompt);
+
+  const isGeneralClassification =
+    /classification\s+(?:status|tier|level|rule)/i.test(prompt)
+    || /member\s+(?:tier|classification)/i.test(prompt)
+    || /what\s+(?:is\s+|are\s+)?(?:the\s+)?classification\s+(?:rule|rules|levels|tiers)/i.test(prompt);
+
+  if (!isRealInvestorQuestion && !isVipQuestion && !isGeneralClassification) {
+    return null;
+  }
+
+  // Try to extract member_id from the prompt
+  let memberId: string | undefined;
+
+  // Match patterns like "member abc123", "member_id: abc123", "for member abc123"
+  const memberIdMatch = prompt.match(/(?:member[_\s-]?id[:\s]+|member\s+)([a-zA-Z0-9_-]{6,})/i);
+  if (memberIdMatch) {
+    memberId = memberIdMatch[1];
+  }
+
+  // Match UUID patterns
+  const uuidMatch = prompt.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (uuidMatch) {
+    memberId = uuidMatch[1];
+  }
+
+  // Match email patterns (used as member identifier in some contexts)
+  const emailMatch = prompt.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailMatch && !memberId) {
+    memberId = emailMatch[1];
+  }
+
+  return {
+    memberId,
+    isRealInvestorQuestion,
+    isVipQuestion,
+  };
+}
