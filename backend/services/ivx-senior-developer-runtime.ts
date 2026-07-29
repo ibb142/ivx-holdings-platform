@@ -639,6 +639,24 @@ function buildGoalDrivenPatchProposal(goal: string): { path: string; oldText: st
   if (!normalizedGoal) {
     return null;
   }
+
+  // Pattern: "add <field>: <value> to the (production) health response"
+  // Maps to a safe, anchored insertion in backend/hono.ts after the unique
+  // `status: 'healthy',` line. The field name is constrained to \w+ and the
+  // value to \w+ (alphanumeric). The path is hardcoded — never user-controlled.
+  // Safety: oldText is a unique anchor verified by the caller; newText is
+  // rejected if already present (idempotent).
+  const healthFieldMatch = normalizedGoal.match(/add\s+(\w+):\s*"?([\w.-]+)"?\s+to\s+(?:the\s+)?(?:production\s+)?health\s+response/i);
+  if (healthFieldMatch) {
+    const fieldName = healthFieldMatch[1];
+    const rawValue = healthFieldMatch[2];
+    const targetPath = 'backend/hono.ts';
+    const oldText = "    status: 'healthy',";
+    const newText = `    status: 'healthy',\n    ${fieldName}: '${rawValue}',`;
+    const summary = `Goal-driven edit: add ${fieldName}: '${rawValue}' to the /health response in ${targetPath} per owner goal.`;
+    return { path: targetPath, oldText, newText, summary };
+  }
+
   // Pattern: "... in <file> from '<old>' to '<new>' ..." (single or double quotes,
   // backticks accepted). The file path must be a repo-relative path under
   // backend/ or expo/ (enforced by assertSafePatchPath in the caller).
