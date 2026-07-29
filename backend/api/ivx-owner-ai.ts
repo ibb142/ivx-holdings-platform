@@ -84,6 +84,7 @@ import {
   type IVXOwnerRequestContext,
 } from './owner-only';
 import { runIVXSeniorDeveloperTask, IVX_SAFE_PATCH_CONFIRM_TEXT, IVX_GIT_DEPLOY_CONFIRM_TEXT, auditIVXProductionCredentialRuntime, type IVXSeniorDeveloperRunProof } from '../services/ivx-senior-developer-runtime';
+import { classifyIntent, stripManualDirectives, isManualAnswerMode, buildClarificationQuestion, isCannedResponse, stateForIntent, createObservabilityRecord, type IVXIntentDecision } from '../services/ivx-authoritative-intent-router';
 import { IVX_FACTORY_APPROVAL_PHRASE, type IVXFactoryOperation } from '../services/ivx-autonomous-coder-factory';
 import {
   generateApp as generateAppBlueprint,
@@ -6036,48 +6037,220 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         toolOutputs: [],
       }, 200);
     }
-    // Senior-developer mode STATUS questions (e.g. "Do you in a senior developer mode?")
-    // are answered positively and routed to the real senior-developer system. They are
-    // NOT blocked, so the owner can confirm the capability is live.
-    if (detectSeniorDeveloperModeStatusRequest(prompt)) {
-      return ownerOnlyJson({
-        ok: true,
-        status: 'ok',
-        source: 'ivx-owner-ai-senior-dev-mode',
-        answer: buildSeniorDeveloperModeStatusAnswer(),
-        model: 'ivx_backend',
-        provider: 'chatgpt',
-        deploymentMarker: DEPLOYMENT_MARKER,
-        assistantMessageId: null,
-        assistantPersisted: false,
-        selectedTool: null,
-        toolInput: [],
-        toolOutput: [],
-        fallbackUsed: false,
-        toolOutputs: [],
-      }, 200);
+    // ── Authoritative Intent Router (Item 1-8) ─────────────────────────────
+    // The SINGLE source of truth for message routing. Runs BEFORE the canned
+    // senior-developer responses, manual-answer handler, and legacy routing chain.
+    // Knowledge questions → LLM, manual answer → LLM (stripped), execution → worker,
+    // clarification → ask one question. No canned responses, no empty deploys.
+    const authoritativeDecision = classifyIntent({
+      message: prompt,
+      isOwner: true,
+      isPublicPath: false,
+      hasImageAttachments: extractImageAttachmentsFromBody(body).length > 0,
+    });
+    console.log('[IVXOwnerAIBackend] Authoritative intent router:', {
+      traceId: authoritativeDecision.traceId,
+      intent: authoritativeDecision.intent,
+      confidence: authoritativeDecision.confidence,
+      route: authoritativeDecision.selectedRoute,
+      reason: authoritativeDecision.reason,
+      manualOverride: authoritativeDecision.safetyStage.manualOverride,
+    });
+
+    // ── Knowledge requests → LLM directly (Item 2) ──
+    // Explanation, diagnostic, architecture, code review questions go straight
+    // to the LLM. No task creation, no commit, no deploy, no CI trigger.
+    if (authoritativeDecision.selectedRoute === 'LLM_TEXT_RESPONSE') {
+      const requestId = readTrimmedString(body.requestId) || createRequestId();
+      try {
+        // Direct LLM call — same pattern as public-chat-ai.ts.
+        // Avoids generateOwnerAIAnswer's complex dependencies that fail early in the handler.
+        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
+        const llmResult = await requestIVXAIText({
+          module: 'owner-room-knowledge',
+          requestId,
+          model: llmModel,
+          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. Answer the user\'s question directly and accurately. You are a senior developer with expertise in architecture, code review, deployment, and debugging. Answer in plain text — do not claim to have executed anything, do not create tasks, do not trigger deploys.',
+          prompt: prompt,
+        });
+        const answer = assertVisibleOwnerAIAnswer(llmResult.text);
+        // Reject canned responses (Item 6)
+        if (isCannedResponse(answer)) {
+          console.error('[IVXOwnerAIBackend] CANNED_RESPONSE_REJECTED:', { traceId: authoritativeDecision.traceId, answerPreview: answer.slice(0, 200) });
+        }
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId,
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge',
+          answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
+          model: llmResult.providerMetadata.model,
+          status: 'ok',
+        }, {
+          source: 'remote_api',
+          provider: llmResult.providerMetadata.provider,
+          endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/knowledge',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: authoritativeDecision.intent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: authoritativeDecision.intent as OwnerRouterIntent,
+            selectedTool: null,
+            route: 'llm_text_response',
+            reason: authoritativeDecision.reason,
+            manualMode: false,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+      } catch (llmError) {
+        console.error('[IVXOwnerAIBackend] LLM knowledge response failed:', llmError instanceof Error ? llmError.message : 'unknown');
+        // CRITICAL FIX: Do NOT fall through to the old routing chain — it would
+        // misroute knowledge questions to the developer executor (the original bug).
+        // Return an honest error instead. Knowledge questions must NEVER trigger
+        // a deploy, commit, or task creation, even if the LLM fails.
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId: readTrimmedString(body.requestId) || createRequestId(),
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge-error',
+          answer: 'I could not reach the AI model to answer your question. This is a temporary infrastructure issue — please try again. No task was created, no deploy was triggered.',
+          model: 'ivx_authoritative_router_error',
+          status: 'ok',
+        }, {
+          source: 'local_app_brain',
+          provider: 'chatgpt',
+          endpoint: '/api/ivx/owner-ai/knowledge-error',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: authoritativeDecision.intent as OwnerRouterIntent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: authoritativeDecision.intent as OwnerRouterIntent,
+            selectedTool: null,
+            route: 'llm_text_response_error',
+            reason: `LLM call failed for knowledge question (${authoritativeDecision.intent}). No deploy, no commit, no task creation. Error: ${llmError instanceof Error ? llmError.message : 'unknown'}`,
+            manualMode: false,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+      }
     }
-    // Senior-developer BRAIN request: the owner wants the AI to answer, audit, or reason
-    // like a real senior developer ("same brain as you", "act as senior developer",
-    // "audit and fix senior developer"). This is conversational/advisory, not execution,
-    // so it returns a direct, useful answer instead of a BLOCKED proof-ledger message.
-    if (detectSeniorDeveloperBrainRequest(prompt)) {
-      return ownerOnlyJson({
-        ok: true,
+
+    // ── Manual answer mode → LLM with stripped directives (Item 4) ──
+    // "no tools, explain X" must forward the clean question to the LLM,
+    // NOT return "Manual answer mode is active."
+    if (authoritativeDecision.selectedRoute === 'MANUAL_LLM_RESPONSE') {
+      const requestId = readTrimmedString(body.requestId) || createRequestId();
+      const cleanPrompt = stripManualDirectives(prompt);
+      try {
+        // Direct LLM call — same pattern as public-chat-ai.ts.
+        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
+        const llmResult = await requestIVXAIText({
+          module: 'owner-room-manual',
+          requestId,
+          model: llmModel,
+          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. MANUAL ANSWER MODE — NO EXECUTION. Answer the user\'s question directly in plain text. Do not use tools, do not inspect Supabase, do not trigger deploys, do not create tasks. Just answer the question.',
+          prompt: cleanPrompt,
+        });
+        const answer = assertVisibleOwnerAIAnswer(llmResult.text);
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId,
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-llm',
+          answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
+          model: llmResult.providerMetadata.model,
+          status: 'ok',
+        }, {
+          source: 'remote_api',
+          provider: llmResult.providerMetadata.provider,
+          endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/manual-llm',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: 'manual_answer' as OwnerRouterIntent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: 'manual_answer' as OwnerRouterIntent,
+            selectedTool: null,
+            route: 'manual_llm_response',
+            reason: `MANUAL ANSWER MODE — NO EXECUTION. Directives stripped, question forwarded to LLM. Original intent: ${authoritativeDecision.intent}.`,
+            manualMode: true,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+      } catch (llmError) {
+        console.error('[IVXOwnerAIBackend] Manual LLM response failed:', llmError instanceof Error ? llmError.message : 'unknown');
+        // CRITICAL FIX: Do NOT fall through to the old routing chain. Return an
+        // honest error instead. Manual answer mode must NEVER trigger execution.
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId: readTrimmedString(body.requestId) || createRequestId(),
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-error',
+          answer: 'I could not reach the AI model to answer your question in manual mode. This is a temporary infrastructure issue — please try again. No tools were used, no execution was triggered.',
+          model: 'ivx_authoritative_router_error',
+          status: 'ok',
+        }, {
+          source: 'local_app_brain',
+          provider: 'chatgpt',
+          endpoint: '/api/ivx/owner-ai/manual-error',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: 'manual_answer' as OwnerRouterIntent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: 'manual_answer' as OwnerRouterIntent,
+            selectedTool: null,
+            route: 'manual_llm_response_error',
+            reason: `MANUAL ANSWER MODE — LLM call failed. No tools, no execution, no deploy. Error: ${llmError instanceof Error ? llmError.message : 'unknown'}`,
+            manualMode: true,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+      }
+    }
+
+    // ── Clarification (Item 8) ──
+    // Low confidence or ambiguous execution/knowledge → ask one question
+    if (authoritativeDecision.selectedRoute === 'CLARIFICATION' && authoritativeDecision.intent === 'clarification_required') {
+      const requestId = readTrimmedString(body.requestId) || createRequestId();
+      const clarificationQuestion = buildClarificationQuestion(prompt);
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-clarification',
+        answer: clarificationQuestion,
+        model: 'ivx_authoritative_router',
         status: 'ok',
-        source: 'ivx-owner-ai-senior-dev-brain',
-        answer: buildSeniorDeveloperBrainAnswer(),
-        model: 'ivx_backend',
+      }, {
+        source: 'local_app_brain',
         provider: 'chatgpt',
+        endpoint: '/api/ivx/owner-ai/clarification',
         deploymentMarker: DEPLOYMENT_MARKER,
         assistantMessageId: null,
         assistantPersisted: false,
+        selectedIntent: 'clarification_required' as OwnerRouterIntent,
         selectedTool: null,
+        routerDebug: buildRouterDebug({
+          selectedIntent: 'clarification_required' as OwnerRouterIntent,
+          selectedTool: null,
+          route: 'clarification',
+          reason: authoritativeDecision.reason,
+          manualMode: false,
+        }),
         toolInput: [],
         toolOutput: [],
         fallbackUsed: false,
         toolOutputs: [],
-      }, 200);
+      }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
     }
     // ── IVX IA Conversation Brain ──────────────────────────────────────────
     // General conversation questions (math, greetings, help, capabilities, thanks)
@@ -6444,7 +6617,11 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // Guard: a long structured owner command / task block must never be hijacked by
     // the manual-answer / infrastructure-runtime clarifiers (which can match a single
     // keyword like "backend"/"runtime"/"production" inside a much larger instruction).
-    const manualAnswerIntent = isExecutionOrTaskBlock ? null : resolveManualAnswerIntent(prompt);
+    // Item 4 fix: skip the old manual answer handler when the authoritative router
+    // already detected manual mode. The authoritative router either returned an LLM
+    // answer (and we never reach here) or the LLM call failed and we fell through.
+    // In both cases, the old canned "Manual answer mode is active" response must NOT fire.
+    const manualAnswerIntent = (isExecutionOrTaskBlock || authoritativeDecision.safetyStage.manualOverride) ? null : resolveManualAnswerIntent(prompt);
     if (manualAnswerIntent) {
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const answer = assertVisibleOwnerAIAnswer(formatManualOwnerAnswer(prompt, manualAnswerIntent));

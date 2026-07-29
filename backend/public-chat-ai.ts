@@ -30,6 +30,7 @@ import { applyReportEvidenceGate } from './services/ivx-report-evidence-gate';
 import { conversationHasRealDeliverable } from './services/ivx-deliverable-store';
 import { scanForUnbackedQueryNarrative, buildNoLiveQueryMessage } from './services/ivx-evidence-gate';
 import { branchLabel, routeIVXChatIntent, type IVXChatBranch } from './services/ivx-chat-intent-router';
+import { classifyIntent, stripManualDirectives, isCannedResponse, buildClarificationQuestion, type IVXIntentDecision } from './services/ivx-authoritative-intent-router';
 import { runIVXUnifiedGatePipeline, describeIVXGatePipelineRun, IVX_UNIFIED_GATE_PIPELINE_MARKER } from './services/ivx-unified-ai-gate-pipeline';
 // Re-exported for backward compatibility — existing tests / callers import these
 // directly. The unified pipeline is the single source of truth at runtime.
@@ -349,30 +350,66 @@ export async function generatePublicChatAnswer(input: {
     };
   }
 
-  // ── Unified 5-branch Intent Router ───────────────────────────────────────
-  // The public chat path previously had NO intent routing — every message went
-  // straight to a generic LLM call. Now we classify the message into exactly
-  // one of the five branches (general_ai, developer_executor, owner_actions,
-  // autonomous_jobs, business_modules) so developer/owner/autonomous requests
-  // are blocked honestly (public chat has no owner session) instead of being
-  // answered with a fake execution narrative.
+  // ── Authoritative Intent Router (Item 5) ──────────────────────────────
+  // The SINGLE source of truth for public chat routing. Safe technical and
+  // educational questions are allowed without owner auth. Code changes,
+  // deployments, private data, owner controls, and destructive actions are
+  // blocked. This replaces the old 5-branch router which was blocking safe
+  // code-review and architecture questions with OWNER_SESSION_MISSING.
+  const authoritativeDecision = classifyIntent({
+    message: input.message,
+    isOwner: ownerSessionPresent,
+    isPublicPath: true,
+    hasImageAttachments: images.length > 0,
+  });
+  console.log('[PublicChatAI] Authoritative intent router:', {
+    sessionId: input.sessionId,
+    traceId: authoritativeDecision.traceId,
+    intent: authoritativeDecision.intent,
+    confidence: authoritativeDecision.confidence,
+    route: authoritativeDecision.selectedRoute,
+    reason: authoritativeDecision.reason,
+    publicBoundary: authoritativeDecision.safetyStage.publicBoundary,
+  });
+
+  // Public chat: block execution, deployment, destructive actions, owner controls
+  if (authoritativeDecision.selectedRoute === 'CLARIFICATION' && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked') {
+    return {
+      answer: `This request requires owner authentication. Safe technical questions, code reviews, architecture designs, and product information are available without login. Try rephrasing your question if you want an explanation rather than an execution.`,
+      model: 'ivx-authoritative-router',
+      source: 'fallback' as PublicChatSource,
+      endpoint: null,
+      imageCount: images.length,
+    };
+  }
+
+  // Public chat: safe knowledge questions go straight to LLM (no owner auth needed)
+  if (authoritativeDecision.selectedRoute === 'PUBLIC_LLM_RESPONSE') {
+    // Fall through to the LLM call below — the authoritative router
+    // has confirmed this is a safe question (explanation, architecture,
+    // code review, conversation, business analysis)
+    console.log('[PublicChatAI] Safe public question allowed:', {
+      sessionId: input.sessionId,
+      intent: authoritativeDecision.intent,
+      confidence: authoritativeDecision.confidence,
+    });
+  }
+
+  // Keep the old router for backward compatibility logging only
   const routeDecision = routeIVXChatIntent(input.message, images.length > 0);
-  console.log('[PublicChatAI] Unified intent router decision:', {
+  console.log('[PublicChatAI] Legacy intent router (audit only):', {
     sessionId: input.sessionId,
     branch: routeDecision.branch,
     intent: routeDecision.intent,
     requiresOwnerSession: routeDecision.requiresOwnerSession,
-    mayExecuteSideEffects: routeDecision.mayExecuteSideEffects,
-    hint: routeDecision.hint,
-    reason: routeDecision.reason,
     branchLabel: branchLabel(routeDecision.branch as IVXChatBranch),
+    authoritativeOverride: authoritativeDecision.selectedRoute,
   });
 
   // Public chat is unauthenticated. Branches that require an owner session
-  // cannot execute here — run the unified gate pipeline on an empty answer so
-  // the owner gets the identical deterministic BLOCKED routing message that
-  // every other IVX IA path produces (single personality, single gate order).
-  if (routeDecision.requiresOwnerSession && !ownerSessionPresent) {
+  // cannot execute here — BUT only if the authoritative router agrees.
+  // The authoritative router allows safe knowledge questions through.
+  if (routeDecision.requiresOwnerSession && !ownerSessionPresent && authoritativeDecision.selectedRoute !== 'PUBLIC_LLM_RESPONSE') {
     const blockedPipeline = runIVXUnifiedGatePipeline({
       message: input.message,
       answer: '',
@@ -381,7 +418,7 @@ export async function generatePublicChatAnswer(input: {
     });
     const blockedAnswer = blockedPipeline.answer && blockedPipeline.answer.trim().length > 0
       ? blockedPipeline.answer
-      : `STATE: BLOCKED — OWNER_SESSION_MISSING. This request requires a verified owner session. Open Owner Login / Senior Developer Workspace to execute this action. (Branch: ${branchLabel(routeDecision.branch as IVXChatBranch)}, Intent: ${routeDecision.intent})`;
+      : `This request requires owner authentication. Safe technical questions, code reviews, and architecture designs are available without login.`;
     console.log('[PublicChatAI] Branch blocked (owner session required, public chat):', {
       sessionId: input.sessionId,
       branch: routeDecision.branch,
@@ -392,7 +429,7 @@ export async function generatePublicChatAnswer(input: {
     return {
       answer: blockedAnswer,
       model: 'ivx-chat-intent-router',
-      source: 'fallback',
+      source: 'fallback' as PublicChatSource,
       endpoint: null,
       imageCount: images.length,
     };
