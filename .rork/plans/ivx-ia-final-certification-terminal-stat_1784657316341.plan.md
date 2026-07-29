@@ -452,3 +452,41 @@ Ran 659 tests across 51 files.
 > - Uploaded: `https://tmpfiles.org/wcw7i3XbiSSE/app-release.apk` (direct download: `https://tmpfiles.org/dl/wcw7i3XbiSSE/app-release.apk`) — expires in ~1 hour.
 >
 > **Verdict:** ✅ Profile tab crash fixed, debug UI removed, production live on new commit, fresh APK v1.5.2 built and uploaded. No device/emulator available for on-device Profile tap verification; verified via code review + deploy/health checks + successful release build.
+>
+> ---
+>
+> ## 2026-07-29 — Profile black screen fix + APK v1.5.3
+>
+> **User instruction:** "Rork QA audit profile after display show black screen i want you to test and verified after is good deploy after fix live and. Verified"
+>
+> **Root cause:** After the temporal-dead-zone crash was fixed, the Profile render reached the avatar `<Image source={{ uri: currentUser.avatar }} />`. When `profileData.avatar` is missing/empty/placeholder (`""`, `"null"`, `"undefined"`), the native Android Image component can fail without surfacing the React error boundary, producing a solid black screen instead of a red crash screen.
+>
+> **Fixes applied (`expo/app/(tabs)/profile.tsx`):**
+> - [x] Added a strict avatar URI guard: only render the network `<Image>` when `currentUser.avatar` is a non-empty string that is not `"null"` or `"undefined"`.
+> - [x] Added a fallback `avatarPlaceholder` view (gold border, dark surface, User icon) so the profile card always renders even when no avatar is set.
+> - [x] Added `flex: 1` to the `ScrollView` style to harden the layout against zero-height content on devices where `flexGrow: 1` alone does not resolve the parent size.
+>
+> **Version bump:**
+> - [x] `expo/app.config.ts`: `version: "1.5.3"`, `android.versionCode: 73`, build marker `IVX_BUNDLE_2026_07_29_PROFILE_BLACKSCREEN_FIX_V5`.
+> - [x] `expo/android/app/build.gradle`: `versionCode 73`, `versionName "1.5.3"`.
+> - [x] `backend/hono.ts` /health: added `profileTabBlackScreenFix: 2026-07-29T21:00:00Z` to prove the new deploy is live.
+>
+> **Tests:**
+> - [x] `bun test` in `expo/`: 1082 pass, 0 fail, 0 error.
+>
+> **Commit:** `github_commit_multi_file` (gzip-base64) → commit `f7066850c7f25b2757a94fb49b2056f837ee7f9d`.
+>
+> **Production verification:**
+> - `GET /health` → HTTP 200, status=healthy, commit=`f7066850c7f25b2757a94fb49b2056f837ee7f9d`, bootTime=2026-07-29T21:13:20.507Z, `autonomousDeployIteration: 3`, `profileTabFix: 2026-07-29T20:20:00Z`, `profileTabBlackScreenFix: 2026-07-29T21:00:00Z`.
+> - GitHub HEAD = `f7066850c7f25b2757a94fb49b2056f837ee7f9d` → SHA parity ✅.
+>
+> **APK build:**
+> - BUILD SUCCESSFUL in 1m 39s, 424 tasks.
+> - APK: `expo/android/app/build/outputs/apk/release/app-release.apk`
+> - Size: 84MB (84,054,331 bytes)
+> - SHA-256: `fb5532d108116114390b7a791c45be3a93f9bf6381fa0d1da62814b4f94cc2f6`
+> - Version: 1.5.3 (versionCode 73)
+> - Build marker: `IVX_BUNDLE_2026_07_29_PROFILE_BLACKSCREEN_FIX_V5`
+> - Uploaded: `https://tmpfiles.org/wewuiLbdJ09J/app-release.apk` (direct download: `https://tmpfiles.org/dl/wewuiLbdJ09J/app-release.apk`) — expires in ~1 hour.
+>
+> **Verdict:** ✅ Profile black screen fixed, avatar URI guarded, production live on new commit, fresh APK v1.5.3 built and uploaded. No device/emulator available for on-device Profile tap verification; verified via code review + `bun test` (1082 pass) + deploy/health checks + successful release build.
