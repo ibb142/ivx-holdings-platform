@@ -1,4 +1,5 @@
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
@@ -103,6 +104,7 @@ import {
   type IVXWorkerJob,
   type IVXWorkerJobInput,
 } from '../services/ivx-senior-developer-worker';
+import { recordApproval, type IVXSeniorDevApprovalAction } from '../services/ivx-senior-dev-proof';
 import {
   runSeniorDeveloperAutonomousMode,
   renderFinalAutonomousReport,
@@ -8252,7 +8254,38 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           secretValuesReturned: false as const,
         },
         ownerId: workerOwnerId,
+        conversationId: conversation.id,
+        approvalRecords: {
+          patchApprovalId: `approval-${randomUUID()}`,
+          gitDeployApprovalId: deployRequested ? `approval-${randomUUID()}` : null,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        },
       };
+
+      // Create durable approval records with IDs, scopes, and expiration.
+      const autonomousApprovalExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      try {
+        await recordApproval({
+          taskId: `autonomous-${requestId}`,
+          ownerId: workerOwnerId,
+          action: 'GITHUB_WRITE' as IVXSeniorDevApprovalAction,
+          phrase: IVX_SAFE_PATCH_CONFIRM_TEXT,
+          scope: 'patch_apply',
+          expiresAt: autonomousApprovalExpiresAt,
+        });
+        if (deployRequested) {
+          await recordApproval({
+            taskId: `autonomous-${requestId}`,
+            ownerId: workerOwnerId,
+            action: 'RENDER_DEPLOY' as IVXSeniorDevApprovalAction,
+            phrase: IVX_GIT_DEPLOY_CONFIRM_TEXT,
+            scope: 'git_deploy',
+            expiresAt: autonomousApprovalExpiresAt,
+          });
+        }
+      } catch {
+        // Approval recording is non-fatal — the inline flags still enforce the gate.
+      }
 
       const { job: enqueuedAutonomousJob, attached: autonomousAttached, activeJobId: autonomousActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(autonomousWorkerInput);
       const autonomousTaskId = enqueuedAutonomousJob.jobId;
@@ -8415,7 +8448,38 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           secretValuesReturned: false as const,
         },
         ownerId: workerOwnerId,
+        conversationId: conversation.id,
+        approvalRecords: {
+          patchApprovalId: `approval-${randomUUID()}`,
+          gitDeployApprovalId: autoExecuteEndToEnd ? `approval-${randomUUID()}` : null,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        },
       };
+
+      // Create durable approval records with IDs, scopes, and expiration.
+      const devApprovalExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      try {
+        await recordApproval({
+          taskId: `dev-${requestId}`,
+          ownerId: workerOwnerId,
+          action: 'GITHUB_WRITE' as IVXSeniorDevApprovalAction,
+          phrase: IVX_SAFE_PATCH_CONFIRM_TEXT,
+          scope: 'patch_apply',
+          expiresAt: devApprovalExpiresAt,
+        });
+        if (autoExecuteEndToEnd) {
+          await recordApproval({
+            taskId: `dev-${requestId}`,
+            ownerId: workerOwnerId,
+            action: 'RENDER_DEPLOY' as IVXSeniorDevApprovalAction,
+            phrase: IVX_GIT_DEPLOY_CONFIRM_TEXT,
+            scope: 'git_deploy',
+            expiresAt: devApprovalExpiresAt,
+          });
+        }
+      } catch {
+        // Approval recording is non-fatal — the inline flags still enforce the gate.
+      }
 
       const { job: enqueuedJob, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
       const taskId = enqueuedJob.jobId;

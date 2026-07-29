@@ -376,6 +376,12 @@ export type IVXSeniorDeveloperRunInput = {
    * progress percentage.
    */
   onPhase?: (phase: IVXSeniorDeveloperPhase, detail: string) => void;
+  /**
+   * Called the instant a GitHub commit lands but BEFORE the Render deploy is
+   * triggered. This lets the worker persist the commit SHA to the job record
+   * so recovery can resume verification after the deploy restarts the container.
+   */
+  onCommitLanded?: (commit: { commitSha: string; commitUrl: string | null; branch: string }) => void;
 };
 
 const IGNORED_DIRECTORIES = ['.git', '.rork', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
@@ -1911,6 +1917,8 @@ async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, project
   // We redeploy the current GitHub branch HEAD without creating a new commit.
   if (deployOnly) {
     const headSha = await getGithubBranchHead(githubAccessCheck.branch);
+    // Persist the head SHA BEFORE triggering the deploy-only redeploy.
+    input.onCommitLanded?.({ commitSha: headSha, commitUrl: null, branch: githubAccessCheck.branch });
     const deploy = await triggerRenderDeploy(headSha);
     const deployReason = deploy.autoDeployFallback
       ? 'Deploy-only: no code change was required; production redeployed via render.yaml autoDeployTrigger:commit because the Render REST trigger was unavailable.'
@@ -1948,6 +1956,11 @@ async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, project
       render: { deployAttempted: false, error: 'Render deploy skipped because the GitHub commit failed.' },
     });
   }
+
+  // Persist the commit SHA BEFORE triggering the deploy. The Render deploy will
+  // restart this container, killing the worker process. The recovery sweep uses
+  // the persisted commit SHA to resume verification after restart.
+  input.onCommitLanded?.({ commitSha: commit.commitSha, commitUrl: commit.commitUrl, branch: commit.branch });
 
   let deploy: { deployId: string | null; deployStatus: string | null; deployUrl: string | null; autoDeployFallback: boolean; apiError: string | null; deduplicated: boolean };
   try {
