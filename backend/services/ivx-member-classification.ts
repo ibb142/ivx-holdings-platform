@@ -529,14 +529,36 @@ export async function classifyMember(memberId: string): Promise<ClassificationRe
     : null;
 
   // 4. Load all non-test transactions
-  const { data: txns } = await sb.from('transactions')
-    .select('id, member_id, amount, status, refunded_amount, settled_at, is_test, external_reference, source')
+  // Query by member_id (new schema) OR user_id (legacy schema where member_id is NULL).
+  // The auth_user_id from the members table maps to user_id in the transactions table.
+  const authUserId = member.auth_user_id as string | null;
+  let txns: Record<string, unknown>[] | null = null;
+
+  // Try member_id first (post-migration rows)
+  const { data: txnsByMemberId } = await sb.from('transactions')
+    .select('id, member_id, user_id, amount, status, refunded_amount, settled_at, is_test, external_reference, source')
     .eq('member_id', memberId)
     .eq('is_test', false);
+  txns = (txnsByMemberId as Record<string, unknown>[]) || [];
+
+  // Also query by user_id (legacy rows where member_id hasn't been backfilled yet)
+  if (authUserId) {
+    const { data: txnsByUserId } = await sb.from('transactions')
+      .select('id, member_id, user_id, amount, status, refunded_amount, settled_at, is_test, external_reference, source')
+      .eq('user_id', authUserId)
+      .eq('is_test', false);
+    // Merge, dedup by transaction id
+    const seen = new Set(txns.map((t) => t.id as string));
+    for (const t of (txnsByUserId as Record<string, unknown>[]) || []) {
+      if (!seen.has(t.id as string)) {
+        txns.push(t);
+      }
+    }
+  }
 
   const transactions: TransactionRecord[] = (txns || []).map((t: Record<string, unknown>) => ({
     id: t.id as string,
-    member_id: t.member_id as string,
+    member_id: (t.member_id as string) || memberId,
     amount: Number(t.amount) || 0,
     status: t.status as string,
     refunded_amount: Number(t.refunded_amount) || 0,

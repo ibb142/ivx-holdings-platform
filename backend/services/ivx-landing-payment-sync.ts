@@ -197,6 +197,7 @@ export async function createLandingPaymentTransaction(
     const { error: txError } = await supabase.from('transactions').insert({
       id: transactionId,
       user_id: userId,
+      member_id: userId, // Set member_id for classification engine (same as user_id until members table lookup)
       type: 'buy',
       amount: input.amount,
       status: 'pending',
