@@ -144,6 +144,8 @@ const EXPLICIT_EXECUTION_TRIGGERS: RegExp[] = [
 const EXPLANATION_PATTERNS: RegExp[] = [
   /^(?:please\s+)?explain\b/i,
   /\bwhat\s+is\b/i,
+  /\bwhat\s+does\s+.*\s+mean\s+in\s+practice\b/i,
+  /\bwhen\s+(?:would|should)\s+(?:you|we|i)\s+choose\b/i,
   /\bwhy\s+(?:is|does|do|are|can|should)\b/i,
   /\bhow\s+(?:does|do|is|are|can|should)\s+(?:this|that|it|the)\s+work\b/i,
   /\bis\s+this\s+correct\b/i,
@@ -156,6 +158,8 @@ const EXPLANATION_PATTERNS: RegExp[] = [
 
 const DIAGNOSTIC_PATTERNS: RegExp[] = [
   /\bdiagnose\s+(?:why|the|what)\b/i,
+  /\bdebugging\s+(?:process|approach|methodology|steps)\b/i,
+  /\b(?:systematic|step-by-step|methodical)\s+(?:debugging|troubleshooting|investigation|process|approach)\b/i,
   /\baudit\s+why\b/i,
   /\bfind\s+the\s+(?:likely\s+)?cause\b/i,
   /\banalyze\s+why\b/i,
@@ -270,6 +274,12 @@ const CONVERSATION_PATTERNS: RegExp[] = [
 function isKnowledgeRequest(text: string): boolean {
   // Leading explanation verbs take priority over everything
   const head = text.slice(0, 200);
+
+  // Explicit execution conjunction overrides any knowledge pattern.
+  // e.g. "Review this code and deploy it", "Fix the bug and commit it" → execution.
+  if (/\b(?:and|then)\s+(?:fix|patch|repair|deploy|commit|push|ship|implement|build|create|edit|modify|update|remove|delete|write|refactor)\b/i.test(text)) {
+    return false;
+  }
 
   // "Explain X" / "What is X" / "Why is X" → always knowledge
   if (/^(?:please\s+)?(?:explain|what\s+is|what\s+are|why\s+is|why\s+does|how\s+does|how\s+do|describe|define|summarize|compare|what\s+are\s+the\s+trade)/i.test(head)) {
@@ -392,6 +402,24 @@ function isKnowledgeRequest(text: string): boolean {
   if (/\bis\s+this\s+(?:correct|safe|secure|right|wrong|good|bad)\b/i.test(text)) {
     return true;
   }
+
+  // "What does X mean in practice" → explanation knowledge (e.g. "you build it, you run it")
+  if (/\bwhat\s+does\s+.*\s+mean\s+in\s+practice\b/i.test(text)) return true;
+
+  // "When would you choose X over Y" / "When should we choose" → evaluation knowledge
+  if (/\bwhen\s+(?:would|should)\s+(?:you|we|i)\s+choose\b/i.test(text)) return true;
+  if (/\bchoose\s+(?:a|an\s+)?\w+\s+over\s+\w+/i.test(text)) return true;
+
+  // "Systematic debugging process" / "methodical troubleshooting" → diagnostic knowledge
+  if (/\b(?:systematic|step-by-step|methodical)\s+(?:debugging|troubleshooting|investigation|process|approach|methodology)\b/i.test(text)) return true;
+  if (/\bdebugging\s+(?:process|approach|methodology|steps)\b/i.test(text)) return true;
+
+  // "Janky" / performance-problem explanations with concrete causes/fixes
+  if (/\b(?:janky|laggy|stutter|unresponsive|slow)\b/i.test(text) && /\b(?:explain|why|causes|fixes|optimize|performance|real|concrete|specific)\b/i.test(text)) {
+    return true;
+  }
+  if (/\b(?:real|actual|concrete|specific)\s+(?:causes?|fixes|solutions?)\b/i.test(text)) return true;
+  if (/\b(?:list|give)\s+(?:the|me)\s+(?:real|actual|concrete|specific)?\s*(?:causes?|fixes|solutions?)\b/i.test(text)) return true;
 
   return false;
 }
