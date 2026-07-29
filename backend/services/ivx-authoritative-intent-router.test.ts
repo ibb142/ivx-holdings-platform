@@ -244,6 +244,10 @@ const seniorKnowledgePrompts = [
   "What does 'you build it, you run it' mean in practice for a senior engineer?",
   'How do you safely refactor a 5,000-line module that has no tests?',
   'What is the hardest part of maintaining a distributed system and how do you address it?',
+  "Review this authentication approach: using JWTs with 24-hour expiry stored in localStorage. What are the security risks?",
+  'Explain the CAP theorem and when you would sacrifice consistency for availability.',
+  'Design a rate limiter that handles 10,000 requests per second across multiple server instances.',
+  'What are the most common performance bottlenecks in a React Native app and how do you diagnose them?',
 ];
 
 for (let i = 0; i < seniorKnowledgePrompts.length; i++) {
