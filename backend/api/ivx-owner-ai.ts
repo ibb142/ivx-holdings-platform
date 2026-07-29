@@ -8344,12 +8344,13 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, body.devTestModeActive === true), autonomousHttpStatus);
     }
 
-    if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor') {
-      // When the unified router selected developer_executor but the legacy
-      // planner did not, log the routing reconciliation so the audit trail is
-      // explicit about which classifier fired the execution branch.
-      if (plannerDecision.route !== 'self_developer' && unifiedRoute.branch === 'developer_executor') {
-        console.log('[IVXOwnerAIBackend] chat→worker: unified router fired developer_executor (legacy planner route=' + plannerDecision.route + ', intent=' + unifiedRoute.intent + ')');
+    if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor' || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER') {
+      // When the authoritative intent router or unified router selected
+      // developer_executor but the legacy planner did not, log the routing
+      // reconciliation so the audit trail is explicit about which classifier
+      // fired the execution branch.
+      if (plannerDecision.route !== 'self_developer' && (unifiedRoute.branch === 'developer_executor' || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER')) {
+        console.log('[IVXOwnerAIBackend] chat→worker: authoritative/unified router fired developer_executor (legacy planner route=' + plannerDecision.route + ', authoritativeRoute=' + authoritativeDecision.selectedRoute + ', unifiedIntent=' + unifiedRoute.intent + ')');
       }
       // Owner Execution Mode: non-destructive owner commands execute end-to-end
       // (patch → test → commit → deploy → verify) without an approval prompt.
