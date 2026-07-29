@@ -217,7 +217,16 @@ async function readDoc<T>(name: string, fallback: T): Promise<T> {
   const cached = docCache.get(name);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value as T;
 
-  // 1. Try S3 (primary).
+  // 1. Try Supabase durable store FIRST — it is always up-to-date because
+  //    writeDoc always mirrors to it. S3 may have stale data when S3 writes
+  //    are failing (expired credentials), so Supabase must take priority.
+  const durable = await readDurableFallback<T>(name);
+  if (durable !== null) {
+    docCache.set(name, { at: Date.now(), value: durable });
+    return durable;
+  }
+
+  // 2. Try S3 (secondary — may have data not yet mirrored to Supabase).
   try {
     const { GetObjectCommand } = await import('@aws-sdk/client-s3');
     const s3 = await getS3();
@@ -226,17 +235,12 @@ async function readDoc<T>(name: string, fallback: T): Promise<T> {
     if (bytes) {
       const value = JSON.parse(Buffer.from(bytes).toString('utf-8')) as T;
       docCache.set(name, { at: Date.now(), value });
+      // Mirror to Supabase so future reads prefer the durable copy.
+      await writeDurableFallback(name, value);
       return value;
     }
   } catch {
-    // S3 read failed — fall through to Supabase.
-  }
-
-  // 2. Try Supabase durable store (permanent fallback that survives restarts).
-  const durable = await readDurableFallback<T>(name);
-  if (durable !== null) {
-    docCache.set(name, { at: Date.now(), value: durable });
-    return durable;
+    // S3 read failed — fall through to cache/fallback.
   }
 
   // 3. Return cached (possibly stale) or the provided fallback.
@@ -248,8 +252,18 @@ async function writeDoc<T>(name: string, value: T): Promise<void> {
   // instance reads the updated value immediately.
   docCache.set(name, { at: Date.now(), value });
 
-  // 1. Try S3 (primary) — if it works, we're done.
-  let s3Ok = false;
+  // 1. ALWAYS write to Supabase durable store first — this is the permanent
+  //    persistence layer that survives restarts, deploys, and S3 credential
+  //    expiry. It is also the primary read source, so it must always be current.
+  const durableOk = await writeDurableFallback(name, value);
+  if (durableOk) {
+    // Supabase write succeeded — this is the source of truth.
+  } else {
+    console.warn(`[video-platform-store] Supabase durable write failed for ${name} — falling back to S3.`);
+  }
+
+  // 2. Also try S3 (secondary) — best-effort mirror. If S3 is unavailable
+  //    (expired credentials), the Supabase copy is already authoritative.
   try {
     const { PutObjectCommand } = await import('@aws-sdk/client-s3');
     const s3 = await getS3();
@@ -260,22 +274,10 @@ async function writeDoc<T>(name: string, value: T): Promise<void> {
       ContentType: 'application/json',
       CacheControl: 'no-cache',
     }));
-    s3Ok = true;
   } catch (err) {
-    console.warn(`[video-platform-store] S3 writeDoc failed for ${name}: ${err instanceof Error ? err.message : 'unknown error'} — falling back to Supabase durable store.`);
-  }
-
-  // 2. Always also write to Supabase durable store — this is the permanent
-  //    persistence layer that survives restarts, deploys, and S3 credential
-  //    expiry. Even if S3 succeeds, mirroring to Supabase ensures we have a
-  //    durable copy for reads when S3 is unavailable.
-  if (!s3Ok) {
-    const durableOk = await writeDurableFallback(name, value);
-    if (durableOk) {
-      console.log(`[video-platform-store] writeDoc for ${name} persisted to Supabase durable store (S3 unavailable).`);
-    } else {
-      console.warn(`[video-platform-store] writeDoc for ${name}: BOTH S3 and Supabase durable store failed — change is in-memory only and will NOT persist across restarts.`);
-    }
+    // S3 write failed (e.g. expired AWS credentials, Access Denied).
+    // The Supabase durable copy is already written, so data WILL persist.
+    console.warn(`[video-platform-store] S3 writeDoc failed for ${name}: ${err instanceof Error ? err.message : 'unknown error'} — Supabase durable copy is authoritative.`);
   }
 }
 
