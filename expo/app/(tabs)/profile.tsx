@@ -42,6 +42,7 @@ import {
   Rocket,
   BarChart3,
   CreditCard,
+  Cpu,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
@@ -531,6 +532,14 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('support')}</Text>
             <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
+              <MenuItem
+                icon={<Cpu size={isXs ? 18 : 20} color={Colors.info} />}
+                title={'IVX Agent Hub'}
+                subtitle={'10 domain agents · Member, Investor, Buyer, JV, Reels...'}
+                onPress={() => router.push('/agent-hub' as any)}
+                isCompact={isCompact}
+                testID="agent-hub-entry"
+              />
               <MenuItem
                 icon={<BookOpen size={isXs ? 18 : 20} color={Colors.gold} />}
                 title={'Knowledge Base'}
