@@ -2920,6 +2920,7 @@ app.get('/health', async (context) => {
   return context.json({
     ok: true,
     status: 'healthy',
+    autonomousDeployVersion: '1',
     autonomousProofVersion: '1',
     autonomousQaVersion: '1',
     aiStartupValidation: {
