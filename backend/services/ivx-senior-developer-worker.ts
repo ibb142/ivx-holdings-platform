@@ -1088,12 +1088,21 @@ const VERIFYING_RECOVERY_THRESHOLD_MS = 90 * 1000; // 90s — deploy takes ~2-3 
  *  persisted on the job (via onCommitLanded) is now the live runtime commit. */
 async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
   const now = Date.now();
+  // Recover jobs stuck at VERIFYING/COMMITTING (worker killed by its own deploy)
+  // AND FAILED jobs that have a real commitSha but commitMatch=false (the
+  // verifyLiveCommitMatch poll ran too quickly before the Render deploy completed).
   const stuckJobs = queue.jobs.filter((j) =>
-    (j.status === 'verifying' || j.status === 'committing') &&
-    (j.stage === 'VERIFYING' || j.stage === 'COMMITTING') &&
+    j.result?.commitSha &&
     j.startedAt &&
     now - new Date(j.startedAt).getTime() > VERIFYING_RECOVERY_THRESHOLD_MS &&
-    j.result?.commitSha);
+    (
+      // Stuck at VERIFYING/COMMITTING (worker process killed by deploy restart)
+      ((j.status === 'verifying' || j.status === 'committing') &&
+       (j.stage === 'VERIFYING' || j.stage === 'COMMITTING'))
+      ||
+      // FAILED with real commit but commitMatch=false (verify polled too fast)
+      (j.status === 'failed' && j.result?.commitMatch === false)
+    ));
   if (stuckJobs.length === 0) return;
 
   // Fetch the live production /health commit once.
@@ -1118,11 +1127,38 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
   }
   if (!liveCommit) return;
 
+  // Prepare GitHub compare API credentials for ancestor check.
+  const ghToken = ledgerGithubToken();
+  const repoUrl = typeof process.env.GITHUB_REPO_URL === 'string' ? process.env.GITHUB_REPO_URL.trim() : '';
+  const repoMatch = repoUrl.match(/github\.com[:/]([^/\s]+)\/([^/.\s]+)(?:\.git)?/i);
+  const ghOwner = repoMatch?.[1] ?? null;
+  const ghRepo = repoMatch?.[2] ?? null;
+
   let recovered = false;
   for (const job of stuckJobs) {
     const expectedSha = job.result!.commitSha!;
     // Check if production is now serving the commit this job pushed.
-    if (liveCommit !== expectedSha) continue;
+    // If not, check if the job's commit is an ANCESTOR of the live commit
+    // (a subsequent fix deploy may have been pushed on top of the job's commit).
+    if (liveCommit === expectedSha) {
+      // Exact match — production is serving our commit.
+    } else if (ghToken && ghOwner && ghRepo) {
+      // Check ancestry via GitHub compare API: is expectedSha an ancestor of liveCommit?
+      try {
+        const compareRes = await fetch(
+          `https://api.github.com/repos/${ghOwner}/${ghRepo}/compare/${expectedSha}...${liveCommit}`,
+          { headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10_000) },
+        );
+        if (!compareRes.ok) continue;
+        const compareData = await compareRes.json() as { status?: string };
+        // 'ahead' means liveCommit is ahead of expectedSha (expectedSha is an ancestor)
+        if (compareData.status !== 'ahead') continue;
+      } catch {
+        continue; // network error → skip this job
+      }
+    } else {
+      continue; // no GitHub credentials → can't verify ancestry
+    }
 
     // Production is serving our commit → complete the job with verified evidence.
     const result: IVXWorkerJobResult = {
