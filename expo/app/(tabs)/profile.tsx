@@ -167,6 +167,11 @@ export default function ProfileScreen() {
     ? 'Signed in — open owner console'
     : 'Direct approved-owner sign in';
 
+  // Avatar guard: empty/placeholder URIs can crash the native Image component on some
+  // Android devices, which manifests as a black screen instead of a red error boundary.
+  const avatarUri = typeof currentUser.avatar === 'string' ? currentUser.avatar.trim() : '';
+  const avatarUriValid = avatarUri.length > 0 && avatarUri !== 'null' && avatarUri !== 'undefined';
+
   const openOwnerLogin = (source: string) => {
     if (isOwnerSession) {
       console.log(`[Profile] Owner Console (${source}) tapped -> /admin/ivx-developer-workspace`);
@@ -239,10 +244,22 @@ export default function ProfileScreen() {
           contentContainerStyle={styles.scrollContent}
         >
           <View style={[styles.profileCard, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 16 : 20 }]}>
-            <Image
-              source={{ uri: currentUser.avatar }}
-              style={[styles.avatar, { width: isXs ? 60 : 72, height: isXs ? 60 : 72, borderRadius: isXs ? 30 : 36 }]}
-            />
+            {avatarUriValid ? (
+              <Image
+                source={{ uri: avatarUri }}
+                style={[styles.avatar, { width: isXs ? 60 : 72, height: isXs ? 60 : 72, borderRadius: isXs ? 30 : 36 }]}
+                accessibilityLabel="Profile avatar"
+              />
+            ) : (
+              <View
+                style={[
+                  styles.avatarPlaceholder,
+                  { width: isXs ? 60 : 72, height: isXs ? 60 : 72, borderRadius: isXs ? 30 : 36 },
+                ]}
+              >
+                <User size={isXs ? 28 : 34} color={Colors.primary} />
+              </View>
+            )}
             <View style={styles.profileInfo}>
               <View style={styles.nameRow}>
                 <Text style={[styles.userName, { fontSize: isXs ? 17 : 20 }]}>
@@ -682,6 +699,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.primary,
   },
+  avatarPlaceholder: {
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   profileInfo: {
     flex: 1,
   },
@@ -974,6 +998,7 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
   },
   scrollView: {
+    flex: 1,
     backgroundColor: Colors.background,
   },
   scrollContent: {
