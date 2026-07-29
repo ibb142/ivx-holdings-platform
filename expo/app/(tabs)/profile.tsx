@@ -103,10 +103,13 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const { logout, profileData } = useAuth();
-  /* Auth state is intentionally NOT used to gate Owner Login — it is read only for the diagnostic panel below. */
   const { t } = useTranslation();
   const { currentLanguage } = useI18n();
   const { trackAction } = useAnalytics();
+
+  const screenSize = getResponsiveSize(width);
+  const isCompact = isCompactScreen(screenSize);
+  const isXs = isExtraSmallScreen(screenSize);
 
   const balanceQuery = useQuery({
     queryKey: ['wallet-balance', 'profile'],
@@ -118,18 +121,6 @@ export default function ProfileScreen() {
     },
     staleTime: 1000 * 60 * 2,
     enabled: !!profileData,
-  });
-
-  const classificationQuery = useQuery({
-    queryKey: ['member-classification', 'profile'],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return null;
-      const result = await getMyClassification(session.access_token);
-      return result.ok ? result.classification ?? null : null;
-    },
-    staleTime: 1000 * 60 * 5,
-    enabled: !!profileData && !currentUser.isOwnerOrAdmin,
   });
 
   const currentUser = useMemo(() => {
@@ -153,13 +144,21 @@ export default function ProfileScreen() {
     };
   }, [profileData, balanceQuery.data]);
 
-  const screenSize = getResponsiveSize(width);
-  const isCompact = isCompactScreen(screenSize);
-  const isXs = isExtraSmallScreen(screenSize);
+  const classificationQuery = useQuery({
+    queryKey: ['member-classification', 'profile'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+      const result = await getMyClassification(session.access_token);
+      return result.ok ? result.classification ?? null : null;
+    },
+    staleTime: 1000 * 60 * 5,
+    enabled: !!profileData && !currentUser.isOwnerOrAdmin,
+  });
 
   // Treat the signed-in person as an owner session when their role is owner/admin
   // or their email matches the approved owner email. When true, the yellow card
-  // stops prompting for a fresh login and opens the owner console instead.
+  // opens the owner console instead of prompting for a fresh login.
   const ownerEmail = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().toLowerCase();
   const isOwnerSession = currentUser.isOwnerOrAdmin
     || (!!currentUser.email && currentUser.email.trim().toLowerCase() === ownerEmail);
@@ -178,32 +177,11 @@ export default function ProfileScreen() {
     router.push({ pathname: '/login', params: { ownerMode: '1' } } as any);
   };
 
-  // ── OWNER LOGIN DEVICE FIX v5 ─ diagnostic build stamp ───────────────────
-  // This marker proves which bundle a device is actually running. If a device
-  // does NOT show "v5" it is running an OLD/cached bundle, not this code.
-  const OWNER_LOGIN_BUILD = 'OWNER LOGIN DEVICE FIX v5';
-  const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
-  const { height: winHeight } = useWindowDimensions();
-  const isPad = Platform.OS === 'ios' && (Platform as unknown as { isPad?: boolean }).isPad === true;
-  const diag: { key: string; val: string }[] = [
-    { key: 'SHOW_OWNER_LOGIN', val: 'true' },
-    { key: 'platform', val: Platform.OS },
-    { key: 'isAndroid', val: String(Platform.OS === 'android') },
-    { key: 'isIOS', val: String(Platform.OS === 'ios') },
-    { key: 'isPad/tablet', val: String(isPad) },
-    { key: 'screenWidth', val: String(Math.round(width)) },
-    { key: 'screenHeight', val: String(Math.round(winHeight)) },
-    { key: 'authLoaded', val: String(profileData !== undefined) },
-    { key: 'sessionPresent', val: String(!!profileData) },
-    { key: 'bundleStamp', val: extra.buildMarker ?? 'n/a' },
-    { key: 'appVersion', val: Constants.expoConfig?.version ?? 'n/a' },
-  ];
+  const appVersion = Constants.expoConfig?.version ?? '?';
 
-  // Non-sensitive diagnostic: confirms the Administration section (incl. Owner Login)
-  // mounted on this device. No emails, passwords, or tokens are ever logged here.
   useEffect(() => {
-    console.log('[Profile] Administration rendered — owner-login-button=true admin-panel-button=true');
-  }, []);
+    console.log('[Profile] Profile screen rendered', { version: appVersion, role: currentUser.role });
+  }, [appVersion, currentUser.role]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -260,39 +238,6 @@ export default function ProfileScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
         >
-          <View style={[styles.emergencyBanner, { marginHorizontal: isXs ? 16 : 20 }]} testID="owner-login-build-stamp-top">
-            <Text style={styles.emergencyBannerText}>{OWNER_LOGIN_BUILD}</Text>
-            <Text style={styles.emergencyBannerSub}>{Platform.OS} · {Math.round(width)}×{Math.round(winHeight)} · v{Constants.expoConfig?.version ?? '?'}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.ownerLoginButton, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 14 : 16, marginBottom: 12 }]}
-            onPress={() => openOwnerLogin('top')}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Owner Login"
-            testID="owner-login-button-top"
-          >
-            <View style={[styles.ownerLoginIcon, { width: isCompact ? 38 : 44, height: isCompact ? 38 : 44 }]}>
-              <Shield size={isXs ? 20 : 24} color={Colors.background} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.ownerLoginTitle, { fontSize: isXs ? 15 : 17 }]}>{ownerCardTitle}</Text>
-              <Text style={[styles.ownerLoginSubtitle, { fontSize: isXs ? 11 : 12 }]}>{ownerCardSubtitle}</Text>
-            </View>
-            <ChevronRight size={isCompact ? 20 : 22} color={Colors.background} />
-          </TouchableOpacity>
-
-          <View style={[styles.diagPanel, { marginHorizontal: isXs ? 16 : 20 }]} testID="owner-login-diagnostic-panel">
-            <Text style={styles.diagTitle}>OWNER LOGIN DIAGNOSTIC</Text>
-            {diag.map((d) => (
-              <View key={d.key} style={styles.diagRow}>
-                <Text style={styles.diagKey}>{d.key}</Text>
-                <Text style={styles.diagVal}>{d.val}</Text>
-              </View>
-            ))}
-          </View>
-
           <View style={[styles.profileCard, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 16 : 20 }]}>
             <Image
               source={{ uri: currentUser.avatar }}
@@ -693,12 +638,7 @@ export default function ProfileScreen() {
             <ChevronRight size={isCompact ? 20 : 22} color={Colors.background} />
           </TouchableOpacity>
 
-          <View style={[styles.emergencyBanner, { marginHorizontal: isXs ? 16 : 20 }]} testID="owner-login-build-stamp-bottom">
-            <Text style={styles.emergencyBannerText}>{OWNER_LOGIN_BUILD}</Text>
-            <Text style={styles.emergencyBannerSub}>bottom marker · {Platform.OS}</Text>
-          </View>
-
-          <Text style={styles.versionText}>{t('versionLabel')} 1.2.1</Text>
+          <Text style={styles.versionText}>{t('versionLabel')} {appVersion}</Text>
 
           <View style={styles.bottomPadding} />
         </ScrollView>

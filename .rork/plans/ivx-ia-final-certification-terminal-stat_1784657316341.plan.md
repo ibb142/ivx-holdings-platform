@@ -410,3 +410,45 @@ Ran 659 tests across 51 files.
 > - Uploaded: `https://tmpfiles.org/w9wVioXM5IVV/app-release.apk` (direct download: `https://tmpfiles.org/dl/w9wVioXM5IVV/app-release.apk`) — expires in ~1 hour.
 >
 > **Verdict:** ✅ Deploy catch-up complete, production live on latest commit, fresh APK v1.5.1 with autonomous/IVX IA V3 built and uploaded.
+>
+> ---
+>
+> ## 2026-07-29 — Profile tab crash fix + APK v1.5.2
+>
+> **User instruction:** Continue the audit/fix/deploy cycle for the Profile tab and provide a fresh APK with proof.
+>
+> **Audit findings (Profile tab):**
+> - **BUG 1 (CRASH):** `classificationQuery` `enabled` property referenced `currentUser.isOwnerOrAdmin` before `currentUser` was declared (temporal dead zone), causing a ReferenceError on every Profile render.
+> - **BUG 2:** Debug build stamp banners (`OWNER_LOGIN_BUILD`) were rendered at the top and bottom of the Profile screen in production.
+> - **BUG 3:** A full diagnostic panel (platform, screen dimensions, auth state, bundle stamp) was visible in the production UI.
+> - **BUG 4:** The version text at the bottom was hardcoded as `1.2.1` instead of the actual app version.
+>
+> **Fixes applied (`expo/app/(tabs)/profile.tsx`):**
+> - [x] Reordered hooks: `balanceQuery` → `currentUser` (useMemo) → `classificationQuery`, so `currentUser.isOwnerOrAdmin` is defined when read.
+> - [x] Removed both emergency debug banners (top + bottom).
+> - [x] Removed the diagnostic panel and the `diag` array/constant.
+> - [x] Removed the `OWNER_LOGIN_BUILD` constant and the outdated comment about gating owner login.
+> - [x] Replaced hardcoded `1.2.1` version text with dynamic `appVersion` from `Constants.expoConfig?.version`.
+> - [x] Added a clean `useEffect` log: `[Profile] Profile screen rendered` with version and role.
+>
+> **Version bump:**
+> - [x] `expo/app.config.ts`: `version: "1.5.2"`, `android.versionCode: 72`, build marker `IVX_BUNDLE_2026_07_29_PROFILE_FIX_V4`.
+> - [x] `expo/android/app/build.gradle`: `versionCode 72`, `versionName "1.5.2"`.
+> - [x] `backend/hono.ts` /health: bumped `autonomousDeployIteration: 3` and added `profileTabFix: 2026-07-29T20:20:00Z` to prove the new deploy is live.
+>
+> **Commit:** `github_commit_multi_file` (gzip-base64) → commit `602173e2c3c2417c010152d24f0b3d43f90856a0`.
+>
+> **Production verification:**
+> - `GET /health` → HTTP 200, status=healthy, commit=`602173e2c3c2417c010152d24f0b3d43f90856a0`, bootTime=2026-07-29T20:17:00.500Z, `autonomousDeployIteration: 3`, `profileTabFix: 2026-07-29T20:20:00Z`.
+> - GitHub HEAD = `602173e2c3c2417c010152d24f0b3d43f90856a0` → SHA parity ✅.
+>
+> **APK build:**
+> - BUILD SUCCESSFUL in 1m 35s, 424 tasks.
+> - APK: `expo/android/app/build/outputs/apk/release/app-release.apk`
+> - Size: 84MB
+> - SHA-256: `c651cc1f82618cf3a8a339061c538e707254a2836fc152436508ce13bc0ba61b`
+> - Version: 1.5.2 (versionCode 72)
+> - Build marker: `IVX_BUNDLE_2026_07_29_PROFILE_FIX_V4`
+> - Uploaded: `https://tmpfiles.org/wcw7i3XbiSSE/app-release.apk` (direct download: `https://tmpfiles.org/dl/wcw7i3XbiSSE/app-release.apk`) — expires in ~1 hour.
+>
+> **Verdict:** ✅ Profile tab crash fixed, debug UI removed, production live on new commit, fresh APK v1.5.2 built and uploaded. No device/emulator available for on-device Profile tap verification; verified via code review + deploy/health checks + successful release build.
