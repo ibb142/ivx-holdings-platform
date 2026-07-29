@@ -720,23 +720,36 @@ export async function requestMemberPasswordReset(email: string): Promise<MemberR
     return { success: true, message: 'Reset token issued. Deliver it to the member via a verified channel.', resetToken: token, channel: 'fallback_store', deploymentMarker: DEPLOYMENT_MARKER };
   }
 
-  // 2. Supabase Auth member — trigger email reset.
+  // 2. Supabase Auth member — trigger email reset via anon-key client
+  //    (the admin client has project-level rate limits that block legitimate resets).
   try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail);
-    if (error) {
-      // Avoid user enumeration: still return success for unknown emails.
-      if (error.message.toLowerCase().includes('rate limit')) {
-        return { success: false, message: 'Too many reset requests. Please wait a minute and try again.', deploymentMarker: DEPLOYMENT_MARKER };
-      }
-      // Most other errors are not user-facing.
-      console.error('[MemberDB] Supabase reset error:', error.message);
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+    if (!supabaseUrl || !anonKey) {
+      console.error('[MemberDB] Cannot reset password — anon key not configured');
+      return { success: true, message: 'If an account exists for that email, a reset link has been sent.', channel: 'supabase_email', deploymentMarker: DEPLOYMENT_MARKER };
     }
+    const anonClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error } = await anonClient.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${supabaseUrl}/auth/v1/callback`,
+    });
+    if (error) {
+      // Avoid user enumeration: return success for rate limits AND unknown emails.
+      if (error.message.toLowerCase().includes('rate limit')) {
+        console.warn('[MemberDB] Supabase reset rate-limited for:', normalizedEmail);
+      } else {
+        console.error('[MemberDB] Supabase reset error:', error.message);
+      }
+    }
+    // Always return success to prevent email enumeration.
     return { success: true, message: 'If an account exists for that email, a reset link has been sent.', channel: 'supabase_email', deploymentMarker: DEPLOYMENT_MARKER };
   } catch (err) {
+    // Even on exception, return success to prevent email enumeration.
     const message = err instanceof Error ? err.message : 'Reset request failed.';
     console.error('[MemberDB] Reset exception:', message);
-    return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };
+    return { success: true, message: 'If an account exists for that email, a reset link has been sent.', channel: 'supabase_email', deploymentMarker: DEPLOYMENT_MARKER };
   }
 }
 
