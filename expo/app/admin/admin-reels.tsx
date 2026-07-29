@@ -27,7 +27,6 @@ import { Stack } from 'expo-router';
 import {
   ArrowLeft,
   Plus,
-  Film,
   Eye,
   EyeOff,
   Star,
@@ -36,7 +35,9 @@ import {
   TrendingUp,
   CheckCircle,
   XCircle,
+  RefreshCw,
 } from 'lucide-react-native';
+import { Image } from 'expo-image';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -172,9 +173,12 @@ export default function AdminReelsScreen() {
     <View style={styles.videoCard}>
       <View style={styles.videoThumb}>
         {video.poster_url || video.thumbnail_url ? (
-          <View style={styles.thumbPlaceholder}>
-            <Film size={24} color={Colors.textTertiary} />
-          </View>
+          <Image
+            source={{ uri: video.poster_url || video.thumbnail_url || '' }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={150}
+          />
         ) : (
           <View style={styles.thumbPlaceholder}>
             <Clapperboard size={24} color={Colors.textTertiary} />
@@ -270,6 +274,12 @@ export default function AdminReelsScreen() {
             />
           }
         >
+          {/* Sync Status — admin changes sync to app + landing page */}
+          <View style={styles.syncBanner}>
+            <RefreshCw size={14} color={Colors.success} />
+            <Text style={styles.syncBannerText}>Changes sync instantly to app & landing page</Text>
+          </View>
+
           {/* Stats Header */}
           <View style={styles.statsHeader}>
             <View style={styles.statItem}>
@@ -518,6 +528,19 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     marginTop: 2,
   },
+  syncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  syncBannerText: {
+    color: Colors.success,
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
   filterBar: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -558,16 +581,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 12,
   },
+  // Instagram-style 9:16 vertical thumbnail (40.5 × 72)
   videoThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
+    width: 54,
+    height: 96,
+    borderRadius: 8,
     backgroundColor: '#1a1a1a',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    overflow: 'hidden',
   },
   thumbPlaceholder: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
