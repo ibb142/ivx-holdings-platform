@@ -525,14 +525,65 @@ export interface MemberLoginResult {
   message: string;
   userId?: string;
   email?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: number;
   requiresVerification?: boolean;
   deploymentMarker: string;
 }
 
-/** Verify a member's email + password.
+/** Create a Supabase client using the anon key (required for signInWithPassword to return a real session). */
+function getSupabaseAnonClient(): SupabaseClient {
+  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+  if (!url || !anonKey) {
+    throw new Error('Supabase URL or anon key is not configured on the backend.');
+  }
+  return createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Mint a Supabase session for a fallback-store member via admin magic-link (password untouched). */
+async function mintSessionForFallbackMember(
+  adminClient: SupabaseClient,
+  email: string,
+): Promise<{ accessToken: string; refreshToken: string; expiresAt: number } | null> {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+  if (!supabaseUrl || !anonKey) return null;
+  try {
+    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+    });
+    if (linkError || !linkData?.properties) return null;
+    const tokenHash = (linkData.properties as { hashed_token?: string }).hashed_token;
+    if (!tokenHash) return null;
+    const anonClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: otpData, error: otpError } = await anonClient.auth.verifyOtp({
+      type: 'magiclink',
+      token_hash: tokenHash,
+    });
+    if (otpError || !otpData?.session) return null;
+    const s = otpData.session;
+    if (!s.access_token || !s.refresh_token) return null;
+    return {
+      accessToken: s.access_token,
+      refreshToken: s.refresh_token,
+      expiresAt: typeof s.expires_at === 'number' ? s.expires_at : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Verify a member's email + password and return a real Supabase session.
  *  - First checks the durable fallback store (scrypt-hashed passwords).
  *  - Falls back to Supabase Auth signInWithPassword when no fallback record exists.
- *  Records last_login_at on success. Never returns the password or session token. */
+ *  Records last_login_at on success. Returns accessToken + refreshToken for client session. */
 export async function loginMember(email: string, password: string): Promise<MemberLoginResult> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) {
@@ -552,13 +603,28 @@ export async function loginMember(email: string, password: string): Promise<Memb
         created_at: new Date().toISOString(),
       });
     } catch { /* non-critical */ }
-    return { success: true, message: 'Login successful.', userId: fallbackUserId, email: normalizedEmail, deploymentMarker: DEPLOYMENT_MARKER };
+    // Mint a real Supabase session for this fallback member via magic-link.
+    let session: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;
+    try {
+      const admin = getSupabaseAdmin();
+      session = await mintSessionForFallbackMember(admin, normalizedEmail);
+    } catch { /* non-fatal — still return userId */ }
+    return {
+      success: true,
+      message: 'Login successful.',
+      userId: fallbackUserId,
+      email: normalizedEmail,
+      accessToken: session?.accessToken,
+      refreshToken: session?.refreshToken,
+      expiresAt: session?.expiresAt,
+      deploymentMarker: DEPLOYMENT_MARKER,
+    };
   }
 
-  // 2. Supabase Auth path.
+  // 2. Supabase Auth path — use the ANON key client so signInWithPassword returns a real session.
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const anonClient = getSupabaseAnonClient();
+    const { data, error } = await anonClient.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
@@ -579,17 +645,30 @@ export async function loginMember(email: string, password: string): Promise<Memb
     if (!userId) {
       return { success: false, message: 'Login succeeded but no user id returned.', deploymentMarker: DEPLOYMENT_MARKER };
     }
+    const accessToken = data.session?.access_token || '';
+    const refreshToken = data.session?.refresh_token || '';
+    const expiresAt = typeof data.session?.expires_at === 'number' ? data.session.expires_at : 0;
     await updateMemberLastLogin(userId);
     // Best-effort audit log (does not block login).
     try {
-      await supabase.from('audit_logs').insert({
+      const admin = getSupabaseAdmin();
+      await admin.from('audit_logs').insert({
         user_id: userId,
         action: 'member_login',
         details: JSON.stringify({ source: 'supabase_auth', email: normalizedEmail }),
         created_at: new Date().toISOString(),
       });
     } catch { /* non-critical */ }
-    return { success: true, message: 'Login successful.', userId, email: normalizedEmail, deploymentMarker: DEPLOYMENT_MARKER };
+    return {
+      success: true,
+      message: 'Login successful.',
+      userId,
+      email: normalizedEmail,
+      accessToken,
+      refreshToken,
+      expiresAt,
+      deploymentMarker: DEPLOYMENT_MARKER,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed due to an internal error.';
     console.error('[MemberDB] Login exception:', message);
@@ -641,23 +720,36 @@ export async function requestMemberPasswordReset(email: string): Promise<MemberR
     return { success: true, message: 'Reset token issued. Deliver it to the member via a verified channel.', resetToken: token, channel: 'fallback_store', deploymentMarker: DEPLOYMENT_MARKER };
   }
 
-  // 2. Supabase Auth member — trigger email reset.
+  // 2. Supabase Auth member — trigger email reset via anon-key client
+  //    (the admin client has project-level rate limits that block legitimate resets).
   try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail);
-    if (error) {
-      // Avoid user enumeration: still return success for unknown emails.
-      if (error.message.toLowerCase().includes('rate limit')) {
-        return { success: false, message: 'Too many reset requests. Please wait a minute and try again.', deploymentMarker: DEPLOYMENT_MARKER };
-      }
-      // Most other errors are not user-facing.
-      console.error('[MemberDB] Supabase reset error:', error.message);
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+    if (!supabaseUrl || !anonKey) {
+      console.error('[MemberDB] Cannot reset password — anon key not configured');
+      return { success: true, message: 'If an account exists for that email, a reset link has been sent.', channel: 'supabase_email', deploymentMarker: DEPLOYMENT_MARKER };
     }
+    const anonClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error } = await anonClient.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${supabaseUrl}/auth/v1/callback`,
+    });
+    if (error) {
+      // Avoid user enumeration: return success for rate limits AND unknown emails.
+      if (error.message.toLowerCase().includes('rate limit')) {
+        console.warn('[MemberDB] Supabase reset rate-limited for:', normalizedEmail);
+      } else {
+        console.error('[MemberDB] Supabase reset error:', error.message);
+      }
+    }
+    // Always return success to prevent email enumeration.
     return { success: true, message: 'If an account exists for that email, a reset link has been sent.', channel: 'supabase_email', deploymentMarker: DEPLOYMENT_MARKER };
   } catch (err) {
+    // Even on exception, return success to prevent email enumeration.
     const message = err instanceof Error ? err.message : 'Reset request failed.';
     console.error('[MemberDB] Reset exception:', message);
-    return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };
+    return { success: true, message: 'If an account exists for that email, a reset link has been sent.', channel: 'supabase_email', deploymentMarker: DEPLOYMENT_MARKER };
   }
 }
 
