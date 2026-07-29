@@ -56,6 +56,7 @@ import ReelVideoPlayer from '@/components/ReelVideoPlayer';
 import { formatCount, compactCurrency } from '@/lib/reel-formatters';
 import { toggleProjectLike, trackProjectShare } from '@/lib/project-engagement';
 import { toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -207,6 +208,7 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
 }: CanonicalInvestmentReelCardProps) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
   const [paused, setPaused] = useState<boolean>(false);
   const [showHeart, setShowHeart] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
@@ -290,8 +292,10 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
     const now = Date.now();
     if (now - lastTapRef.current < 320) {
       lastTapRef.current = 0;
-      setShowHeart(true);
-      setTimeout(() => setShowHeart(false), 800);
+      if (!reducedMotion) {
+        setShowHeart(true);
+        setTimeout(() => setShowHeart(false), 800);
+      }
       handleDoubleTapLike();
     } else {
       lastTapRef.current = now;
@@ -299,54 +303,68 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
         if (lastTapRef.current === now) {
           setPaused((p) => !p);
         }
-      }, 330);
+      }, reducedMotion ? 0 : 330);
     }
-  }, []);
+  }, [reducedMotion]);
 
   const handleDoubleTapLike = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     if (!liked) {
       setLiked(true);
       setLikeCount((prev) => prev + 1);
     }
     onLike(data);
-  }, [liked, onLike, data]);
+  }, [liked, onLike, data, reducedMotion]);
 
   const handleLikePress = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     const nextLiked = !liked;
     setLiked(nextLiked);
     setLikeCount((prev) => prev + (nextLiked ? 1 : -1));
     onLike(data);
-  }, [liked, onLike, data]);
+  }, [liked, onLike, data, reducedMotion]);
 
   const handleSavePress = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     const nextSaved = !saved;
     setSaved(nextSaved);
     setSaveCount((prev) => prev + (nextSaved ? 1 : -1));
     onSave(data);
-  }, [saved, onSave, data]);
+  }, [saved, onSave, data, reducedMotion]);
 
   const handleSharePress = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     onShare(data);
-  }, [onShare, data]);
+  }, [onShare, data, reducedMotion]);
 
   const handleCommentPress = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     onComment(data);
-  }, [onComment, data]);
+  }, [onComment, data, reducedMotion]);
 
   const handleViewDeal = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     onOpenDeal(data);
-  }, [onOpenDeal, data]);
+  }, [onOpenDeal, data, reducedMotion]);
 
   const handleInvestNow = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (!reducedMotion) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }
     onInvest(data);
-  }, [onInvest, data]);
+  }, [onInvest, data, reducedMotion]);
 
   // Rail position: account for safe area in reel mode, fixed offset in feed mode
   const railBottom = isReel ? insets.bottom + 96 : 96;
@@ -429,6 +447,9 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
       ref={viewRef}
       style={[styles.container, { height: cardHeight }]}
       testID={`${testIDPrefix}-${data.reelId}`}
+      accessibilityRole="image"
+      accessibilityLabel={`${data.title}${data.location ? ', located in ' + data.location : ''}${data.roi != null && data.roi > 0 ? ', target ROI ' + data.roi + '%' : ''}${data.minimumInvestment != null && data.minimumInvestment > 0 ? ', minimum investment ' + compactCurrency(data.minimumInvestment) : ''}`}
+      accessibilityHint="Double-tap to play or pause video. Swipe right for like, comment, save, and share actions."
     >
       {/* Full-bleed media */}
       <TouchableOpacity
@@ -436,6 +457,9 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
         activeOpacity={1}
         onPress={handleTap}
         testID={`${testIDPrefix}-touch-${data.reelId}`}
+        accessibilityRole="button"
+        accessibilityLabel={paused ? 'Play video' : 'Pause video'}
+        accessibilityHint="Double-tap to like, single tap to play or pause"
       >
         {renderMedia()}
       </TouchableOpacity>
@@ -456,8 +480,8 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
         </View>
       )}
 
-      {/* Double-tap heart burst */}
-      {showHeart && (
+      {/* Double-tap heart burst (skipped when reduce-motion is enabled) */}
+      {showHeart && !reducedMotion && (
         <View pointerEvents="none" style={styles.burstHeart}>
           <Heart size={96} color={Colors.error} fill={Colors.error} />
         </View>
@@ -470,6 +494,10 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           onPress={handleLikePress}
           testID={`${testIDPrefix}-like-${data.reelId}`}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Like ${data.title}`}
+          accessibilityHint="Double-tap the video to like, or tap here to toggle like"
+          accessibilityState={{ checked: liked }}
         >
           <View style={styles.railIconCircle}>
             <Heart
@@ -486,6 +514,9 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           onPress={handleCommentPress}
           testID={`${testIDPrefix}-comment-${data.reelId}`}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Comment on ${data.title}`}
+          accessibilityHint="Opens comments for this property"
         >
           <View style={styles.railIconCircle}>
             <MessageCircle size={isReel ? 28 : 24} color="#fff" strokeWidth={1.5} />
@@ -498,6 +529,10 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           onPress={handleSavePress}
           testID={`${testIDPrefix}-save-${data.reelId}`}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Save ${data.title}`}
+          accessibilityHint="Save this property to your saved items"
+          accessibilityState={{ checked: saved }}
         >
           <View style={styles.railIconCircle}>
             <Bookmark
@@ -514,6 +549,9 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
           onPress={handleSharePress}
           testID={`${testIDPrefix}-share-${data.reelId}`}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Share ${data.title}`}
+          accessibilityHint="Opens the share sheet to share this property"
         >
           <View style={styles.railIconCircle}>
             <Share2 size={isReel ? 28 : 24} color="#fff" strokeWidth={1.5} />
@@ -527,6 +565,10 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
             onPress={onToggleMute}
             testID={`${testIDPrefix}-mute-${data.reelId}`}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={isMuted ? 'Unmute video' : 'Mute video'}
+            accessibilityHint="Toggles audio playback for this video"
+            accessibilityState={{ checked: !isMuted }}
           >
             <View style={styles.railIconCircle}>
               {isMuted ? <VolumeX size={24} color="#fff" strokeWidth={1.5} /> : <Volume2 size={24} color="#fff" strokeWidth={1.5} />}
@@ -608,6 +650,9 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
               onPress={handleViewDeal}
               activeOpacity={0.85}
               testID={`${testIDPrefix}-view-deal-${data.reelId}`}
+              accessibilityRole="button"
+              accessibilityLabel={`View deal details for ${data.title}`}
+              accessibilityHint="Opens the full investment deal page"
             >
               <Text style={styles.viewDealText}>View Deal</Text>
             </TouchableOpacity>
@@ -618,6 +663,9 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
               onPress={handleInvestNow}
               activeOpacity={0.85}
               testID={`${testIDPrefix}-invest-${data.reelId}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Invest in ${data.title}`}
+              accessibilityHint="Opens the investment flow to commit capital"
             >
               <Text style={styles.investNowText}>Invest Now</Text>
             </TouchableOpacity>
