@@ -18,7 +18,7 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.5.5",
+  version: "1.5.6",
   runtimeVersion: {
     policy: 'appVersion',
   },
@@ -60,7 +60,7 @@ const config: ExpoConfig = {
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 75,
+    versionCode: 76,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {
