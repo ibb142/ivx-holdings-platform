@@ -149,14 +149,6 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-async function runAllEngines(): Promise<void> {
-  const engines = ['buyer', 'investor', 'jv', 'tokenized_buyer', 'outreach', 'technology'];
-  for (const engine of engines) {
-    console.log(`Running ${engine} engine`);
-    // TODO: Implement actual engine running logic and persistence here
-  }
-}
-
 // Provider auto-detection: the key prefix determines the correct endpoint.
 //   vck_  → Vercel AI Gateway (https://ai-gateway.vercel.sh/v1)
 //   sk-   → OpenAI direct API (https://api.openai.com/v1)
@@ -176,7 +168,16 @@ function isOpenAIDirectKey(key: string): boolean {
 }
 
 function getIVXAIGatewayApiKey(): string {
-  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('No API key available.');
+  return apiKey;
+  // 2026-07-26 fix: AI_GATEWAY_API_KEY takes priority over OPENAI_API_KEY.
+  // The owner updates AI_GATEWAY_API_KEY on Render when rotating Vercel keys.
+  // If OPENAI_API_KEY (a generic alias) is preferred, a stale key can shadow
+  // the fresh AI_GATEWAY_API_KEY and the runtime silently uses the old key.
+  // Preferring the explicit gateway var ensures owner key rotations take effect
+  // immediately without requiring OPENAI_API_KEY to also be updated.
+  return readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
 }
 
 /**
