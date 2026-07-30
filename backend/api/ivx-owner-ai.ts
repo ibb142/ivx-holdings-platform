@@ -155,7 +155,7 @@ import {
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
-import { buildSeniorEngineerSystemPrompt } from '../services/ivx-senior-engineer-persona';
+import { buildSeniorEngineerSystemPrompt, buildCompactContextPrefix } from '../services/ivx-senior-engineer-persona';
 import { getLiveContextBlock } from '../services/ivx-live-context-injector';
 import { recordExecutionTrace } from '../services/ivx-execution-trace-store';
 import {
@@ -4661,6 +4661,13 @@ async function generateOwnerAIAnswer(input: {
       liveCtx = '[IVX LIVE PRODUCTION CONTEXT]\n  Live context unavailable — proceeding without production awareness.\n[/IVX LIVE PRODUCTION CONTEXT]';
     }
     systemPrompt = buildSeniorEngineerSystemPrompt(liveCtx);
+    // V3: Also inject compact context prefix into the user's promptText.
+    // This places live production data RIGHT BEFORE the user's question —
+    // the strongest attention signal. The model cannot miss it.
+    const compactCtx = buildCompactContextPrefix(liveCtx);
+    if (compactCtx && !input.healthProbe) {
+      promptText = `${compactCtx}\n\n${promptText}`;
+    }
   }
   if (tz && !input.healthProbe) {
     try {
