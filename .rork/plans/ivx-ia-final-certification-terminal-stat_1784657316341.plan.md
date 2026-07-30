@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-30T21:15:00.000Z
+updatedAt: 2026-07-30T21:55:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -581,3 +581,37 @@ Ran 659 tests across 51 files.
 > - Verified link: `curl -I -L` returns `content-type: application/vnd.android.package-archive`.
 >
 > **Verdict:** ✅ IVX IA persona upgraded to Senior Software Engineer V4. Production is live on the new commit. Android APK v1.6.0 is built and uploaded. iOS remains deferred to a later version.
+>
+> ---
+>
+> ## 2026-07-30 — Full owner-authorized access end-to-end + APK v1.6.1 (V5)
+>
+> **Owner directive (from attached screenshot):** "Yo quiero que temgas todos los hacesos Dime que yo te doy" — owner explicitly grants IVX IA full access to IVX Holdings without limits, end-to-end.
+>
+> **Implementation:**
+> - [x] `backend/services/ivx-senior-engineer-persona.ts` — V5 rewrite: removed the read-only default. Added the "Full Owner-Authorized Access" directive. IVX IA now operates with full engineering authority across the IVX Holdings platform. Added explicit handling for owner directives like "fix it now / hazlo ahora / deploy it" as authorization to execute immediately. Destructive/irreversible operations still require explicit confirmation.
+> - [x] `backend/api/ivx-owner-ai.ts` — bumped `DEPLOYMENT_MARKER` to `ivx-owner-ai-senior-engineer-v5-2026-07-30-full-access` so every owner-ai response carries the V5 marker.
+> - [x] `backend/hono.ts` /health: added `seniorEngineerPersonaV5: 2026-07-30T21:50:00Z` and `fullOwnerAccessGranted: 2026-07-30T21:50:00Z` to prove the new deploy is live.
+>
+> **Version bump for latest APK:**
+> - [x] `expo/app.config.ts`: `version: "1.6.1"`, `android.versionCode: 81`, build marker `IVX_BUNDLE_2026_07_30_V161_FULL_OWNER_ACCESS_V5`.
+> - [x] `expo/android/app/build.gradle`: `versionCode 81`, `versionName "1.6.1"`.
+>
+> **Commit:** `github_commit_multi_file` (gzip-base64) → commit `8a0b9d791031f7ce10c8b3598606a5337f8ea330`.
+>
+> **Production verification:**
+> - `GET /health` → HTTP 200, status=healthy, commit=`8a0b9d791031f7ce10c8b3598606a5337f8ea330`, bootTime=2026-07-30T21:49:22.651Z, `seniorEngineerPersonaV5: 2026-07-30T21:50:00Z`, `fullOwnerAccessGranted: 2026-07-30T21:50:00Z`.
+> - GitHub HEAD = `8a0b9d791031f7ce10c8b3598606a5337f8ea330` → SHA parity ✅.
+> - Render deploy: `srv-d7t9ivreo5us73ftose0`, status=accepted.
+>
+> **APK build:**
+> - BUILD SUCCESSFUL in 1m 37s, 424 tasks.
+> - APK: `expo/android/app/build/outputs/apk/release/app-release.apk`
+> - Size: 84MB (84,050,439 bytes)
+> - SHA-256: `966ff8eee4bdbdc8e4edf9b47b88bf2cf5458a28ee076cf482c398c76da44eba`
+> - Version: 1.6.1 (versionCode 81)
+> - Build marker: `IVX_BUNDLE_2026_07_30_V161_FULL_OWNER_ACCESS_V5`
+> - Upload: `https://tmpfiles.org/wLwDiH2wAAxV/app-release.apk` (direct download: `https://tmpfiles.org/dl/1785448649.626c64381ec9af7d/wLwDiH2wAAxV/app-release.apk`) — expires in ~24 hours.
+> - Verified link: `curl -I -L` returns `content-type: application/vnd.android.package-archive` and `content-length: 84050439`.
+>
+> **Verdict:** ✅ Full owner-authorized access granted to IVX IA. Production is live on the new commit. Android APK v1.6.1 is built and uploaded. iOS remains deferred to a later version.
