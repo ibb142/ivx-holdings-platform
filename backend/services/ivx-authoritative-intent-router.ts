@@ -283,11 +283,49 @@ const BUSINESS_ANALYSIS_PATTERNS: RegExp[] = [
 ];
 
 const CONVERSATION_PATTERNS: RegExp[] = [
-  /^(?:hi|hello|hey|hola)\b/i,
-  /^(?:thank|thanks|gracias)\b/i,
+  // Greetings
+  /^(?:hi|hello|hey|hola|buenos|buenas)\b/i,
+  /^(?:thank|thanks|gracias|thank you)\b/i,
+  // Direct questions about the AI itself — must never hit clarification
+  /\bare\s+you\b/i,
+  /\bdo\s+you\s+(?:are|have|know|can|think|believe|feel|understand)\b/i,
+  /\bwho\s+are\s+you\b/i,
+  /\bwhat\s+are\s+you\b/i,
+  /\bhow\s+can\s+you\s+prove\b/i,
+  /\bhow\s+do\s+you\s+prove\b/i,
   /\bwhat\s+can\s+you\s+do\b/i,
+  /\bwhat\s+do\s+you\s+do\b/i,
+  /\btell\s+me\s+about\s+you\b/i,
+  // Conversational follow-ups
+  /\btell\s+me\s+more\b/i,
+  /\bcontinue\b/i,
+  /\bgo\s+on\b/i,
+  /\bkeep\s+going\b/i,
+  /\bwhat\s+next\b/i,
+  /\bwhat'?s\s+next\b/i,
+  /\bwhat\s+is\s+the\s+next\s+step\b/i,
+  /\bwhat\s+do\s+you\s+recommend\b/i,
+  /\bare\s+you\s+sure\b/i,
+  /\bis\s+this\s+good\b/i,
+  /\bis\s+this\s+right\b/i,
+  /\bwhat\s+is\s+broken\b/i,
+  /\bwhy\s+did\s+you\s+(?:answer|say|do|choose)\b/i,
+  /\bcan\s+you\s+remember\s+(?:this|that)\b/i,
+  /\bexplain\s+that\b/i,
+  /\bexplain\s+it\s+simply\b/i,
+  /\bexplain\s+simply\b/i,
+  // General conversation
   /\bhelp\b/i,
   /\byes\s+or\s+no\b/i,
+  /\bwhat\s+were\s+we\s+discussing\b/i,
+  /\bwhat\s+did\s+we\s+(?:talk|discuss)\s+about\b/i,
+  // Spanish conversation
+  /\bqui[eé]n\s+eres\s+t[uú]\b/i,
+  /\bqu[eé]\s+puedes\s+hacer\b/i,
+  /\bdime\s+m[aá]s\b/i,
+  /\bcontin[uú]a\b/i,
+  /\bsigue\b/i,
+  /\bpuedes\s+recordar\b/i,
 ];
 
 // Memory read patterns: the owner asks IVX IA to recall what it remembers.
@@ -1085,11 +1123,16 @@ export function classifyIntent(input: RouterInput): IVXIntentDecision {
     });
   }
 
-  // ── Fallback: low confidence → clarification (Item 8) ──
-  // If no pattern matched with high confidence, ask for clarification
+  // ── Fallback: low confidence → LLM (not clarification) ──
+  // The owner's directive is clear: natural conversation must route to the LLM,
+  // never to a canned clarification menu. Clarification should only be used when
+  // required information is genuinely missing or destructive interpretations are
+  // equally possible. A clear question like "Are you a senior developer?" must
+  // receive a direct contextual answer from the LLM.
   if (confidence < 0.70) {
-    intent = 'clarification_required';
-    confidence = 0.40;
+    intent = 'conversation';
+    confidence = 0.65;
+    const route: IVXRoute = input.isPublicPath ? 'PUBLIC_LLM_RESPONSE' : 'LLM_TEXT_RESPONSE';
     return buildDecision({
       intent,
       confidence,
@@ -1097,8 +1140,8 @@ export function classifyIntent(input: RouterInput): IVXIntentDecision {
       toolsAllowed: false,
       ownerAuthRequired: false,
       destructiveAction: false,
-      selectedRoute: 'CLARIFICATION',
-      reason: 'Low confidence classification: asking clarification before routing. No deploy, no task creation, no invented action.',
+      selectedRoute: route,
+      reason: 'Default to LLM: no specific pattern matched, but clear conversation should receive a direct answer, not a clarification menu.',
       traceId,
       safetyStage: { manualOverride: false, executionVerb, destructiveDetected, productionScope, publicBoundary, authDecision },
       semanticStage: { matchedPatterns, rejectedPatterns },
