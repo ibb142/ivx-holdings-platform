@@ -1451,6 +1451,7 @@ setProductionState({
     liveContextV3: '2026-07-30T13:05:00Z',
     contextAttentionFix: '2026-07-30T13:10:00Z',
     apkReleaseV159: '2026-07-30T14:55:00Z',
+    seniorEngineerPersonaV4: '2026-07-30T21:05:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3027,6 +3028,7 @@ app.get('/health', async (context) => {
     liveContextV3: '2026-07-30T13:05:00Z',
     contextAttentionFix: '2026-07-30T13:10:00Z',
     apkReleaseV159: '2026-07-30T14:55:00Z',
+    seniorEngineerPersonaV4: '2026-07-30T21:05:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,

@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-28T18:20:00.000Z
+updatedAt: 2026-07-30T21:15:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -548,3 +548,36 @@ Ran 659 tests across 51 files.
 > - Verified link: `curl -I -L` returns HTTP 302 → `https://tmpfiles.org/wiwIixCvQ02N/app-release.apk`.
 >
 > **Verdict:** ✅ IVX IA is now a true Senior Software Engineer interface. The 3 Phase 8 failures are fixed and verified live on production. Latest APK v1.5.9 is rebuilt, re-uploaded, and tied to the live production commit. iOS remains deferred to a later version (no macOS/Xcode in the Linux sandbox).
+>
+> ---
+>
+> ## 2026-07-30 — Senior Software Engineer persona V4 + APK v1.6.0 (judgment-first, tool-second)
+>
+> **Owner directive:** "FINAL OWNER DIRECTIVE — UPGRADE IVX IA FROM TOOL-AWARE TO SENIOR SOFTWARE ENGINEER. The current response is technically correct but it behaves like a tool inspector instead of a Senior Software Engineer. IVX IA must think like a Lead Software Engineer. The owner should feel like they are talking to the technical leader of the platform, not a list of APIs and tools."
+>
+> **Implementation:**
+> - [x] `backend/services/ivx-senior-engineer-persona.ts` — V4 rewrite: added the "Senior Engineer Persona — Never Lead With Tools" directive. IVX IA must answer capability-first, reasoning-second, tool-list-only-when-requested. Added the exact target response pattern for "What can you access?" / "What tools do you have?", the 6-step senior-engineer response order (intent, capability, problem-solving, security limits, recommendation, autonomous task), and context-aware examples for Supabase, fixes, root-cause analysis, and tool questions.
+> - [x] `backend/api/ivx-owner-ai.ts` — bumped `DEPLOYMENT_MARKER` to `ivx-owner-ai-senior-engineer-v4-2026-07-30` so every owner-ai response carries the V4 marker.
+> - [x] `backend/hono.ts` /health: added `seniorEngineerPersonaV4: 2026-07-30T21:05:00Z` to prove the new deploy is live.
+>
+> **Version bump for latest APK:**
+> - [x] `expo/app.config.ts`: `version: "1.6.0"`, `android.versionCode: 80`, build marker `IVX_BUNDLE_2026_07_30_V16_SENIOR_ENGINEER_V4`.
+> - [x] `expo/android/app/build.gradle`: `versionCode 80`, `versionName "1.6.0"`.
+>
+> **Commit:** `github_commit_multi_file` (gzip-base64) → commit `646813e1ebcd2e96580ab85a9fbd0a2b9b60e41f`.
+>
+> **Production verification:**
+> - `GET /health` → HTTP 200, status=healthy, commit=`646813e1ebcd2e96580ab85a9fbd0a2b9b60e41f`, bootTime=2026-07-30T21:08:11.630Z, `seniorEngineerPersonaV4: 2026-07-30T21:05:00Z`.
+> - GitHub HEAD = `646813e1ebcd2e96580ab85a9fbd0a2b9b60e41f` → SHA parity ✅.
+>
+> **APK build:**
+> - BUILD SUCCESSFUL in ~4m 50s, 424 tasks.
+> - APK: `expo/android/app/build/outputs/apk/release/app-release.apk`
+> - Size: 84MB (84,050,439 bytes)
+> - SHA-256: `a52bdf49fcfc392bd7209ebd1150dc8dc9bae51da199250c09bce584258cd421`
+> - Version: 1.6.0 (versionCode 80)
+> - Build marker: `IVX_BUNDLE_2026_07_30_V16_SENIOR_ENGINEER_V4`
+> - Upload: `https://tmpfiles.org/wVwCiArhXUxH/app-release.apk` (direct download: `https://tmpfiles.org/dl/1785446214.9d36f6aceba0a0e7/wVwCiArhXUxH/app-release.apk`) — expires in ~24 hours.
+> - Verified link: `curl -I -L` returns `content-type: application/vnd.android.package-archive`.
+>
+> **Verdict:** ✅ IVX IA persona upgraded to Senior Software Engineer V4. Production is live on the new commit. Android APK v1.6.0 is built and uploaded. iOS remains deferred to a later version.
