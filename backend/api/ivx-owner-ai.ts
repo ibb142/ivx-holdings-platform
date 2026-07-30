@@ -6334,7 +6334,10 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // Developer-mode EXECUTION request: only explicit immediate execution commands are
     // blocked here (e.g. "deploy now"). General audit/fix/chat is handled by the
     // senior-developer brain path above.
-    if (detectDeveloperModeRequest(prompt)) {
+    // CRITICAL: When the authoritative intent router has already classified this as
+    // DEVELOPER_WORKER, skip this block — the command must reach the developer
+    // executor pipeline below, not be blocked by the legacy dev-mode gate.
+    if (authoritativeDecision.selectedRoute !== 'DEVELOPER_WORKER' && detectDeveloperModeRequest(prompt)) {
       return ownerOnlyJson({
         ok: false,
         status: 'blocked',

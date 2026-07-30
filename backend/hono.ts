@@ -2995,6 +2995,7 @@ app.get('/health', async (context) => {
     intentRouterV3Fix: '2026-07-30T04:10:00Z',
     intentRouterV4Fix: '2026-07-30T04:30:00Z',
     intentRouterV5Fix: '2026-07-30T04:50:00Z',
+    intentRouterV6Fix: '2026-07-30T05:30:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
