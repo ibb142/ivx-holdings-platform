@@ -179,7 +179,9 @@ const CALCULATION_PATTERNS: RegExp[] = [
   /\b(?:calculate|compute|solve|derive|evaluate|determine)\b/i,
   /\bwhat\s+is\s+.*\s+(?:irr|npv|roi|cap\s+rate|noi|cash[-\s]?on[-\s]?cash|yield|return\s+on)\b/i,
   /\bif\s+.*\b(?:what|calculate|how\s+much|how\s+many)\b/i,
-  /\bhow\s+much\s+(?:is|would|does|should|will|can)\b/i,
+  /\bhow\s+much\s+(?:is|would|does|should|will|can|profit|loss|gain|was|were|did|do)\b/i,
+  /\bhow\s+much\s+profit\b/i,
+  /\bhow\s+much\s+(?:did|do|does)\s+i\s+(?:make|earn|profit|lose|gain)\b/i,
   /\bwhat\s+is\s+the\s+.*\s+(?:value|cost|price|rate|return|split|share|net)\b/i,
   // Financial scenario with numbers + terms like "JV split", "closing costs", "cap rate"
   /\b(?:jv\s+split|closing\s+costs?|cap\s+rate|noi|cash[-\s]?on[-\s]?cash|irr|npv|roi|yield)\b.*\b(?:\d|percent|%)\b/i,
@@ -298,6 +300,10 @@ const MEMORY_READ_PATTERNS: RegExp[] = [
   /\bshow\s+(?:my\s+)?(?:memory|profile)\b/i,
   /\bwhat\s+do\s+you\s+know\s+about\s+me\b/i,
   /\bwhat\s+is\s+my\s+(?:company|preferred|role|email|language)\b/i,
+  // Generic catch-all: "what is my X" / "what is my X address" / "what is my X number"
+  /\bwhat\s+is\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bwhat'?s\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bdo\s+you\s+know\s+my\s+\w+/i,
 ];
 
 // Memory delete/forget patterns: owner tells IVX IA to forget identity data.
@@ -309,6 +315,13 @@ const MEMORY_DELETE_PATTERNS: RegExp[] = [
   /\berase\s+(?:what\s+you\s+)?remember\b/i,
   /\bclear\s+(?:my\s+)?(?:memory|profile)\b/i,
   /\breset\s+my\s+(?:profile|memory)\b/i,
+  // Generic catch-all patterns for any field name
+  /\bforget\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bdelete\s+my\s+\w+(?:\s+\w+)?(?:\s+from\s+(?:memory|your\s+memory))?\b/i,
+  /\bclear\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bremove\s+my\s+\w+(?:\s+\w+)?(?:\s+from\s+(?:your\s+)?memory)?\b/i,
+  /\breset\s+(?:all\s+)?my\s+\w+(?:\s+\w+)?\b/i,
+  /\bwipe\s+(?:my\s+)?(?:memory|profile|data)\b/i,
 ];
 
 // Memory write patterns: the owner tells IVX IA to remember identity data.
@@ -335,6 +348,19 @@ const MEMORY_WRITE_PATTERNS: RegExp[] = [
   /\bi\s+prefer\s+to\s+be\s+called\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
   // "my preferred language is X, remember this" — adjective between "my" and field
   /\bmy\s+preferred\s+(?:language|name|company|role|email)\s+is\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  // ── V7 generic catch-all patterns for ANY field name ──
+  // "remember that my X is Y" / "save that my X is Y"
+  /\b(?:remember|save)\s+(?:that\s+)?my\s+\w+(?:\s+\w+)?\s+is\s+(.+)$/i,
+  // "remember my X is Y" (no "that")
+  /\bremember\s+my\s+\w+(?:\s+\w+)?\s+is\s+(.+)$/i,
+  // "save my X as Y" / "store my X as Y" — any field, not just name
+  /\b(?:save|store)\s+my\s+\w+(?:\s+\w+)?\s+as\s+(.+)$/i,
+  // "remember that I prefer X" / "remember that I like X" — preference save
+  /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:prefer|like|use|speak|focus\s+on)\s+(.+)$/i,
+  // "my X is Y" standalone (no remember/save prefix) — catches "my birthday is March 15"
+  /\bmy\s+(?:birthday|timezone|phone|address|company\s+name|investment\s+focus|preferred\s+language)\s+is\s+(.+)$/i,
+  // "my X is Y" generic standalone for any 1-2 word field
+  /\bmy\s+\w+\s+is\s+(.+)$/i,
 ];
 
 // ─── App Generator Patterns ───────────────────────────────────────────
@@ -587,11 +613,21 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  if (/\brun\s+(?:the\s+)?(?:complete\s+|full\s+)?(?:test\s+suite|validation|tests?|checks?)\b/i.test(text)) {
+  if (/\brun\s+(?:the\s+)?(?:complete\s+|full\s+)?(?:test\s+suite|validation|tests?|checks?|qa\s+tests?)\b/i.test(text)) {
     // "How to run tests" is knowledge, not execution
     if (/\bhow\s+to\b/i.test(text)) {
       return false;
     }
+    return true;
+  }
+
+  // "scan for dead code" / "scan the codebase" / "scan for unused" → execution
+  if (/\bscan\s+(?:for|the)\s+(?:dead\s+code|unused|duplicate)\b/i.test(text)) {
+    return true;
+  }
+  // "run QA" / "run the QA" → execution
+  if (/\brun\s+(?:the\s+)?qa\b/i.test(text)) {
+    if (/\bhow\s+to\b/i.test(text)) return false;
     return true;
   }
 

@@ -43,6 +43,10 @@ const SHOW_MEMORY_PATTERNS: readonly RegExp[] = [
   /\bwhat\s+do\s+you\s+remember\b/i,
   /\bshow\s+(?:my\s+)?(?:memory|profile)\b/i,
   /\bwhat\s+do\s+you\s+know\s+about\s+me\b/i,
+  // V8: generic catch-all for any field name
+  /\bwhat\s+is\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bwhat'?s\s+my\s+\w+/i,
+  /\bdo\s+you\s+know\s+my\s+\w+/i,
 ];
 
 // Memory write patterns: the owner tells IVX IA to remember identity data.
@@ -53,7 +57,7 @@ const REMEMBER_NAME_PATTERNS: readonly RegExp[] = [
   /\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
   /\b(?:save|remember|store)\s+my\s+name\s+as\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?this\s+user\s+(?:is|name\s+is|is\s+called)\s+(.+)$/i,
-  /\b(?:remember|save)\s+(?:that\s+)?i\s*['’]?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?i\s*['']?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
   /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?my\s+(?:company|role|email|language)\s+is\s+(.+)$/i,
   /\bmy\s+(?:company|role|email|language)\s+is\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
@@ -61,6 +65,19 @@ const REMEMBER_NAME_PATTERNS: readonly RegExp[] = [
   /\bi\s+prefer\s+to\s+be\s+called\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
   /\bi\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
   /\bmy\s+(?:company|role|email|language)\s+is\s+.{2,60}?\b(?:and\s+)?(?:i\s+prefer\s+to\s+be\s+called|call\s+me|my\s+name\s+is)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  // ── V8: generic catch-all patterns for ANY field name ──
+  // "remember that my X is Y" / "save that my X is Y" — any field, not just company/role/email/language
+  /\b(?:remember|save)\s+(?:that\s+)?my\s+\w+(?:\s+\w+)?\s+is\s+(.+)$/i,
+  // "remember my X is Y" (no "that")
+  /\bremember\s+my\s+\w+(?:\s+\w+)?\s+is\s+(.+)$/i,
+  // "save my X as Y" / "store my X as Y" — any field, not just name
+  /\b(?:save|store)\s+my\s+\w+(?:\s+\w+)?\s+as\s+(.+)$/i,
+  // "remember that I prefer/like/use/focus on X" — preference save
+  /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:prefer|like|use|speak|focus\s+on)\s+(.+)$/i,
+  // "my X is Y" standalone (no remember/save prefix) — catches "my birthday is March 15", "my phone number is 555-1234"
+  /\bmy\s+(?:birthday|timezone|phone(?:\s+number)?|address|company\s+name|investment\s+focus|preferred\s+language)\s+is\s+(.+)$/i,
+  // "my X is Y" generic standalone for any 1-2 word field name
+  /\bmy\s+\w+\s+is\s+(.+)$/i,
 ];
 
 const CHANGE_NAME_PATTERNS: readonly RegExp[] = [
@@ -71,13 +88,21 @@ const CHANGE_NAME_PATTERNS: readonly RegExp[] = [
 const FORGET_NAME_PATTERNS: readonly RegExp[] = [
   /\bforget\s+(?:this|my)\s+name\b/i,
   /\bforget\s+who\s+i\s+am\b/i,
+  // V8: generic catch-all for any field name
+  /\bforget\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bdelete\s+my\s+\w+(?:\s+\w+)?(?:\s+from\s+(?:memory|your\s+memory))?\b/i,
+  /\bclear\s+my\s+\w+(?:\s+\w+)?\b/i,
+  /\bremove\s+my\s+\w+(?:\s+\w+)?(?:\s+from\s+(?:your\s+)?memory)?\b/i,
+  /\breset\s+(?:all\s+)?my\s+\w+(?:\s+\w+)?\b/i,
+  /\bwipe\s+(?:my\s+)?(?:memory|profile|data)\b/i,
 ];
 
 /** Return true if the prompt is clearly a save/remember request about identity. */
 function isMemorySaveRequest(text: string): boolean {
   const lower = text.toLowerCase();
+  // V8: broadened to catch any "my X is Y" or "save/remember/store my X" pattern
   return /\b(?:remember|remembering|save|saving|store|storing)\s+/.test(lower)
-    && /\b(?:my\s+name|i\s*['’]?m|i\s+am|who\s+i\s+am|my\s+(?:company|role|email|language))\b/.test(lower);
+    && /\b(?:my\s+\w+|i\s*['']?m|i\s+am|who\s+i\s+am)\b/.test(lower);
 }
 
 /** Truncate an extracted value at any trailing save/remember/request phrase.
@@ -120,12 +145,17 @@ function extractIdentityValue(text: string): string | null {
     const match = text.match(/\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
     if (match && match[1]) raw = match[1];
   }
-  if (!raw && (lower.includes('i am') || lower.includes('i\'m') || lower.includes('i’m'))) {
-    const match = text.match(/\bi\s*['’]?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
+  if (!raw && (lower.includes('i am') || lower.includes('i\'m') || lower.includes('\u2019m') || /\bi\s*['\u2019]?m\s/i.test(lower))) {
+    const match = text.match(/\bi\s*['\u2019]?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
     if (match && match[1]) raw = match[1];
   }
   if (!raw && (lower.includes('work at') || /\b(?:owner|ceo|founder)\s+of\b/.test(lower))) {
     const match = text.match(/\b(?:work\s+at|(?:owner|ceo|founder)\s+of)\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
+    if (match && match[1]) raw = match[1];
+  }
+  // V8: generic fallback — "my X is Y" → extract Y
+  if (!raw) {
+    const match = text.match(/\bmy\s+\w+(?:\s+\w+)?\s+is\s+(.+)$/i);
     if (match && match[1]) raw = match[1];
   }
   if (!raw) return null;
@@ -135,7 +165,7 @@ function extractIdentityValue(text: string): string | null {
 function cleanName(raw: string): string {
   return raw
     .trim()
-    .replace(/^["“']+|["”'.!?]+$/g, '')
+    .replace(/^[""']+|[""'.!?]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120);
