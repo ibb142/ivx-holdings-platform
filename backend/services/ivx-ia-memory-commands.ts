@@ -74,23 +74,43 @@ function isMemorySaveRequest(text: string): boolean {
     && /\b(?:my\s+name|i\s*['’]?m|i\s+am|who\s+i\s+am|my\s+(?:company|role|email|language))\b/.test(lower);
 }
 
-/** Truncate an extracted value at any trailing save/remember/request phrase. */
+/** Truncate an extracted value at any trailing save/remember/request phrase.
+ *  Also strips leading punctuation (period, comma) left behind when the phrase
+ *  follows a sentence boundary — e.g. "Ivan. Please save and remember" → "Ivan". */
 function truncateAtSavePhrase(value: string): string {
-  const stopWords = ['can you save', 'save this', 'remember this', 'store this', 'save it', 'remember it', 'store it', 'save now', 'remember now', 'store now'];
+  const stopWords = [
+    'can you save', 'save this', 'remember this', 'store this',
+    'save it', 'remember it', 'store it', 'save now', 'remember now', 'store now',
+    'please save', 'please remember', 'please store',
+    'save and remember', 'remember and save', 'save and store',
+    'please save and remember', 'please remember and save',
+    'and remember this', 'and save this', 'and store this',
+    'and remember it', 'and save it', 'and store it',
+    'remember this', 'save this', 'store this',
+  ];
   const lower = value.toLowerCase();
   let cutAt = value.length;
   for (const phrase of stopWords) {
     const idx = lower.indexOf(phrase);
     if (idx >= 0 && idx < cutAt) cutAt = idx;
   }
-  return value.slice(0, cutAt).trim();
+  let result = value.slice(0, cutAt).trim();
+  // Strip trailing punctuation left behind after truncation
+  result = result.replace(/[.,;:!?]+$/g, '').trim();
+  return result;
 }
 
-/** Extend the generic name extraction with a fallback for "save this now" + identity phrases. */
+/** Extend the generic name extraction with a fallback for "save this now" + identity phrases.
+ *  Handles compound identity like "my company is X and I prefer to be called Y, remember this". */
 function extractIdentityValue(text: string): string | null {
   const lower = text.toLowerCase();
   let raw: string | null = null;
-  if (lower.includes('my name is')) {
+  // Compound: "my company is X and I prefer to be called Y" → extract Y (the name)
+  if (lower.includes('prefer to be called') || lower.includes('call me')) {
+    const match = text.match(/\b(?:prefer\s+to\s+be\s+called|call\s+me)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i);
+    if (match && match[1]) raw = match[1];
+  }
+  if (!raw && lower.includes('my name is')) {
     const match = text.match(/\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
     if (match && match[1]) raw = match[1];
   }

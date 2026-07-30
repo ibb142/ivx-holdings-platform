@@ -152,6 +152,8 @@ const EXPLICIT_EXECUTION_TRIGGERS: RegExp[] = [
 const EXPLANATION_PATTERNS: RegExp[] = [
   /^(?:please\s+)?explain\b/i,
   /\bwhat\s+is\b/i,
+  /\bwhat\s+does\b/i,
+  /\bwhat\s+are\b/i,
   /\bwhat\s+does\s+.*\s+mean\s+in\s+practice\b/i,
   /\bwhen\s+(?:would|should)\s+(?:you|we|i)\s+choose\b/i,
   /\bwhy\s+(?:is|does|do|are|can|should)\b/i,
@@ -162,6 +164,24 @@ const EXPLANATION_PATTERNS: RegExp[] = [
   /\bcompare\b/i,
   /\bwhat\s+are\s+the\s+trade[-\s]?offs?\b/i,
   /\bdiagnose\s+conceptually\b/i,
+  /\bwhat\s+is\s+the\s+(?:difference|time\s+complexity|space\s+complexity|big\s+o)\b/i,
+  /\bwhat\s+is\s+the\s+(?:internal|capitalization|net\s+operating)\b/i,
+];
+
+// Calculation/quantitative patterns: math, finance, algorithms → LLM.
+// These must be checked BEFORE the clarification fallback so "Calculate the IRR..."
+// is never misclassified as ambiguous. Patterns match ANYWHERE in the text
+// (not just at start) because calculation requests often appear after context
+// like "A buyer offers 1.2M... Calculate the investor net...".
+const CALCULATION_PATTERNS: RegExp[] = [
+  /\b(?:calculate|compute|solve|derive|evaluate|determine)\b/i,
+  /\bwhat\s+is\s+.*\s+(?:irr|npv|roi|cap\s+rate|noi|cash[-\s]?on[-\s]?cash|yield|return\s+on)\b/i,
+  /\bif\s+.*\b(?:what|calculate|how\s+much|how\s+many)\b/i,
+  /\bhow\s+much\s+(?:is|would|does|should|will|can)\b/i,
+  /\bwhat\s+is\s+the\s+.*\s+(?:value|cost|price|rate|return|split|share|net)\b/i,
+  // Financial scenario with numbers + terms like "JV split", "closing costs", "cap rate"
+  /\b(?:jv\s+split|closing\s+costs?|cap\s+rate|noi|cash[-\s]?on[-\s]?cash|irr|npv|roi|yield)\b.*\b(?:\d|percent|%)\b/i,
+  /\b\d+\s*(?:m|k|million|thousand)\b.*\b(?:offer|value|price|cost|split|investor|buyer)\b/i,
 ];
 
 const DIAGNOSTIC_PATTERNS: RegExp[] = [
@@ -280,6 +300,8 @@ const MEMORY_READ_PATTERNS: RegExp[] = [
 // Memory write patterns: the owner tells IVX IA to remember identity data.
 // These run BEFORE the generic knowledge/execution classifier so "save my name"
 // is not misread as a deploy or clarification request.
+// Compound patterns catch multi-clause identity like "my company is X and I prefer
+// to be called Y, remember this" which would otherwise fall to clarification.
 const MEMORY_WRITE_PATTERNS: RegExp[] = [
   /\b(?:remember|save)\s+(?:that\s+)?my\s+name\s+is\s+(.+)$/i,
   /\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
@@ -288,6 +310,14 @@ const MEMORY_WRITE_PATTERNS: RegExp[] = [
   /\bcall\s+me\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?my\s+(?:company|role|email|language)\s+is\s+(.+)$/i,
+  // Compound: "my company is X and I prefer to be called Y, remember this"
+  /\bmy\s+(?:company|role|email|language)\s+is\s+.{2,60}?\b(?:and\s+)?(?:i\s+prefer\s+to\s+be\s+called|call\s+me|my\s+name\s+is)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  // Standalone: "my company is X, remember this" (no remember/save prefix)
+  /\bmy\s+(?:company|role|email|language)\s+is\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  // "I work at X, remember this" (no remember/save prefix)
+  /\bi\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  // "I prefer to be called X, remember this"
+  /\bi\s+prefer\s+to\s+be\s+called\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
 ];
 
 // ─── App Generator Patterns ───────────────────────────────────────────
@@ -328,8 +358,8 @@ function isKnowledgeRequest(text: string): boolean {
     return false;
   }
 
-  // "Explain X" / "What is X" / "Why is X" → always knowledge
-  if (/^(?:please\s+)?(?:explain|what\s+is|what\s+are|why\s+is|why\s+does|how\s+does|how\s+do|describe|define|summarize|compare|what\s+are\s+the\s+trade)/i.test(head)) {
+  // "Explain X" / "What is X" / "Why is X" / "What does X do" → always knowledge
+  if (/^(?:please\s+)?(?:explain|what\s+is|what\s+are|what\s+does|why\s+is|why\s+does|how\s+does|how\s+do|describe|define|summarize|compare|what\s+are\s+the\s+trade|calculate|compute|solve)/i.test(head)) {
     return true;
   }
   // "Explain" anywhere in the text (not just at start) is knowledge
@@ -746,6 +776,24 @@ export function classifyIntent(input: RouterInput): IVXIntentDecision {
       reason: 'Status query: routed to status/health check tools. Read-only, no side effects.',
       traceId,
       safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope, publicBoundary, authDecision },
+      semanticStage: { matchedPatterns, rejectedPatterns },
+    });
+  }
+
+  // ── Calculation requests → LLM (checked BEFORE knowledge for priority) ──
+  // Math, finance, and quantitative questions must reach the LLM, not clarification.
+  if (CALCULATION_PATTERNS.some((p) => { if (p.test(text)) { matchedPatterns.push(`calculation:${p.source}`); return true; } return false; })) {
+    return buildDecision({
+      intent: 'explanation',
+      confidence: 0.90,
+      actionRequired: false,
+      toolsAllowed: false,
+      ownerAuthRequired: false,
+      destructiveAction: false,
+      selectedRoute: input.isPublicPath ? 'PUBLIC_LLM_RESPONSE' : 'LLM_TEXT_RESPONSE',
+      reason: 'Calculation/quantitative request: routed to LLM for computation and explanation. No task creation, no commit, no deploy.',
+      traceId,
+      safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
       semanticStage: { matchedPatterns, rejectedPatterns },
     });
   }
