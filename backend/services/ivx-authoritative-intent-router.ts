@@ -32,6 +32,8 @@ export type IVXIntent =
   | 'data_query'
   | 'business_analysis'
   | 'conversation'
+  | 'memory_write'
+  | 'memory_read'
   | 'app_generator'
   | 'manual_answer'
   | 'clarification_required';
@@ -46,6 +48,8 @@ export type IVXRoute =
   | 'BUSINESS_MODULE'
   | 'MANUAL_LLM_RESPONSE'
   | 'APP_GENERATOR'
+  | 'MEMORY_READ'
+  | 'MEMORY_WRITE'
   | 'CLARIFICATION'
   | 'PUBLIC_LLM_RESPONSE';
 
@@ -260,6 +264,30 @@ const CONVERSATION_PATTERNS: RegExp[] = [
   /\bwhat\s+can\s+you\s+do\b/i,
   /\bhelp\b/i,
   /\byes\s+or\s+no\b/i,
+];
+
+// Memory read patterns: the owner asks IVX IA to recall what it remembers.
+const MEMORY_READ_PATTERNS: RegExp[] = [
+  /\bwhat\s+is\s+my\s+name\b/i,
+  /\bwho\s+am\s+i\b/i,
+  /\bdo\s+you\s+(?:know|remember)\s+me\b/i,
+  /\bshow\s+(?:me\s+)?what\s+you\s+remember\b/i,
+  /\bwhat\s+do\s+you\s+remember\b/i,
+  /\bshow\s+(?:my\s+)?(?:memory|profile)\b/i,
+  /\bwhat\s+do\s+you\s+know\s+about\s+me\b/i,
+];
+
+// Memory write patterns: the owner tells IVX IA to remember identity data.
+// These run BEFORE the generic knowledge/execution classifier so "save my name"
+// is not misread as a deploy or clarification request.
+const MEMORY_WRITE_PATTERNS: RegExp[] = [
+  /\b(?:remember|save)\s+(?:that\s+)?my\s+name\s+is\s+(.+)$/i,
+  /\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?i\s*['’]?m\s+(.+)$/i,
+  /\b(?:change|update)\s+my\s+name\s+to\s+(.+)$/i,
+  /\bcall\s+me\s+(.+)$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+)$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?my\s+(?:company|role|email|language)\s+is\s+(.+)$/i,
 ];
 
 // ─── App Generator Patterns ───────────────────────────────────────────
@@ -656,6 +684,51 @@ export function classifyIntent(input: RouterInput): IVXIntentDecision {
       safetyStage: { manualOverride: false, executionVerb, destructiveDetected, productionScope, publicBoundary, authDecision },
       semanticStage: { matchedPatterns: ['public_blocked'], rejectedPatterns },
     });
+  }
+
+  // ── Memory commands — checked BEFORE knowledge/execution so "save my name" / "what is my name" are never misclassified as clarification or deploy. ──
+  if (!input.isPublicPath) {
+    const memoryWriteMatch = MEMORY_WRITE_PATTERNS.find((p) => {
+      const hit = p.test(text);
+      if (hit) matchedPatterns.push(`memory_write:${p.source}`);
+      return hit;
+    });
+    if (memoryWriteMatch) {
+      return buildDecision({
+        intent: 'memory_write',
+        confidence: 0.97,
+        actionRequired: true,
+        toolsAllowed: false,
+        ownerAuthRequired: !input.isOwner,
+        destructiveAction: false,
+        selectedRoute: 'MEMORY_WRITE',
+        reason: 'Memory write: owner is explicitly saving identity/profile information to the durable memory store.',
+        traceId,
+        safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
+        semanticStage: { matchedPatterns, rejectedPatterns },
+      });
+    }
+
+    const memoryReadMatch = MEMORY_READ_PATTERNS.find((p) => {
+      const hit = p.test(text);
+      if (hit) matchedPatterns.push(`memory_read:${p.source}`);
+      return hit;
+    });
+    if (memoryReadMatch) {
+      return buildDecision({
+        intent: 'memory_read',
+        confidence: 0.96,
+        actionRequired: false,
+        toolsAllowed: false,
+        ownerAuthRequired: !input.isOwner,
+        destructiveAction: false,
+        selectedRoute: 'MEMORY_READ',
+        reason: 'Memory read: owner is asking IVX IA to recall the remembered profile from the durable memory store.',
+        traceId,
+        safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
+        semanticStage: { matchedPatterns, rejectedPatterns },
+      });
+    }
   }
 
   // ── Status queries → STATUS_QUERY (checked BEFORE knowledge) ──
