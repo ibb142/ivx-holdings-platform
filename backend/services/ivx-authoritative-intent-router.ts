@@ -543,8 +543,13 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  // "Patch the X bug" / "Fix the X bug" (without "and deploy") → still execution
-  if (/\b(?:patch|fix)\s+(?:the\s+)?(?:[a-z][-\s]*bug|duplicate[-\s]*message|issue|error|problem)\b/i.test(text)) {
+  // "Patch the X bug" / "Fix the X bug" / "Fix this bug now" (without "and deploy") → still execution
+  // Broadened from [a-z][-\s]*bug to \w+[-\s]*bug so "this bug", "that bug", "the bug" all match.
+  if (/\b(?:patch|fix)\s+(?:the\s+|this\s+|that\s+)?(?:\w+[-\s]*bug|duplicate[-\s]*message|issue|error|problem)\b/i.test(text)) {
+    return true;
+  }
+  // Standalone "fix this bug now" / "fix the bug" / "fix it now" → execution
+  if (/\b(?:fix|patch)\s+(?:this|that|the|it)\b/i.test(text)) {
     return true;
   }
 
@@ -559,20 +564,29 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  // "Deploy the approved SHA" / "Deploy X to production" → execution
+  // "Deploy the approved SHA" / "Deploy X to production" / "Deploy this now" → execution
   if (/\bdeploy\s+(?:the\s+)?(?:approved\s+)?(?:sha|code|build|version|commit|changes?|this|that|it|now|live)\b/i.test(text)) {
     return true;
   }
   if (/\bdeploy\s+.{0,40}\bto\s+(?:prod|production|live)\b/i.test(text)) {
     return true;
   }
-
+  // "Trigger a deploy" / "Trigger deploy now" → execution
+  if (/\btrigger\s+(?:a\s+)?deploy\b/i.test(text)) {
+    return true;
+  }
+  // "Commit and push" / "Commit this" / "Push to github" → execution (standalone, no "fix X and deploy" needed)
+  if (/\bcommit\s+(?:and\s+)?(?:push|to\s+github|this|that|it|now)\b/i.test(text)) {
+    return true;
+  }
+  if (/\bpush\s+(?:this|that|it|now|to\s+github)\b/i.test(text)) {
+    return true;
+  }
   // "Run a senior developer task: <goal>"
   if (/\brun\s+a\s+senior\s+developer\s+task\b/i.test(text)) {
     return true;
   }
 
-  // "Run the test suite" / "Run validation" / "Run the complete test suite"
   if (/\brun\s+(?:the\s+)?(?:complete\s+|full\s+)?(?:test\s+suite|validation|tests?|checks?)\b/i.test(text)) {
     // "How to run tests" is knowledge, not execution
     if (/\bhow\s+to\b/i.test(text)) {
