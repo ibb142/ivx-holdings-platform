@@ -6221,6 +6221,46 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }
     }
 
+    // ── Memory commands (must run before clarification/conversation) ──
+    // When the authoritative router classifies a memory write/read, execute it
+    // deterministically and persist the turn. This prevents "what is my name" / "save my name"
+    // from falling through to a clarification question or being ignored.
+    const memoryUserId = 'owner';
+    if (authoritativeDecision.selectedRoute === 'MEMORY_WRITE' || authoritativeDecision.selectedRoute === 'MEMORY_READ') {
+      const requestId = readTrimmedString(body.requestId) || createRequestId();
+      const memoryCommand = parseMemoryCommand(prompt);
+      if (memoryCommand) {
+        const result = await executeMemoryCommand(memoryUserId, memoryCommand);
+        console.log('[IVXOwnerAIBackend] IVX IA memory command executed (authoritative route):', { requestId, command: result.command, route: authoritativeDecision.selectedRoute });
+        return ownerOnlyJson(buildOwnerAIResponsePayload({
+          requestId,
+          conversationId: readTrimmedString(body.conversationId) || 'ivx-ia-memory-command',
+          answer: assertVisibleOwnerAIAnswer(result.answer),
+          model: 'ivx_ia_brain_memory',
+          status: 'ok',
+        }, {
+          source: 'local_app_brain',
+          endpoint: '/api/ivx/owner-ai/memory-command',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          assistantMessageId: null,
+          assistantPersisted: false,
+          selectedIntent: `memory_${result.command}` as OwnerRouterIntent,
+          selectedTool: null,
+          routerDebug: buildRouterDebug({
+            selectedIntent: `memory_${result.command}`,
+            selectedTool: null,
+            route: authoritativeDecision.selectedRoute.toLowerCase(),
+            reason: `Authoritative router selected ${authoritativeDecision.selectedRoute} for memory command.`,
+            manualMode: false,
+          }),
+          toolInput: [],
+          toolOutput: [],
+          fallbackUsed: false,
+          toolOutputs: [],
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+      }
+    }
+
     // ── Clarification (Item 8) ──
     // Low confidence or ambiguous execution/knowledge → ask one question
     if (authoritativeDecision.selectedRoute === 'CLARIFICATION' && authoritativeDecision.intent === 'clarification_required') {

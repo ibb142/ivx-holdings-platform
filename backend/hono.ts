@@ -2990,6 +2990,7 @@ app.get('/health', async (context) => {
     profileTabFix: '2026-07-29T20:20:00Z',
     profileTabBlackScreenFix: '2026-07-29T21:00:00Z',
     profileDeadCodeCleanup: '2026-07-30T00:45:00Z',
+    memoryIntentRouterFix: '2026-07-30T02:30:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,

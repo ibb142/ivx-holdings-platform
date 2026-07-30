@@ -34,16 +34,31 @@ export type MemoryCommand = {
   value: string;
 };
 
+// Memory read patterns: the owner asks IVX IA to recall what it remembers.
+const SHOW_MEMORY_PATTERNS: readonly RegExp[] = [
+  /\bwhat\s+is\s+my\s+name\b/i,
+  /\bwho\s+am\s+i\b/i,
+  /\bdo\s+you\s+(?:know|remember)\s+me\b/i,
+  /\bshow\s+(?:me\s+)?what\s+you\s+remember\b/i,
+  /\bwhat\s+do\s+you\s+remember\b/i,
+  /\bshow\s+(?:my\s+)?(?:memory|profile)\b/i,
+  /\bwhat\s+do\s+you\s+know\s+about\s+me\b/i,
+];
+
+// Memory write patterns: the owner tells IVX IA to remember identity data.
+// These patterns are intentionally broad so common phrasing like "my name is X"
+// or "save this now" are captured and not misclassified as clarification.
 const REMEMBER_NAME_PATTERNS: readonly RegExp[] = [
-  /\bremember\s+(?:that\s+)?my\s+name\s+is\s+(.+)$/i,
-  /\bremember\s+(?:that\s+)?this\s+user\s+(?:is|name\s+is|is\s+called)\s+(.+)$/i,
-  /\bmy\s+name\s+is\s+(.+)$/i,
-  /\bremember\s+(?:that\s+)?i\s*['’]?m\s+(.+)$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?my\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
+  /\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?this\s+user\s+(?:is|name\s+is|is\s+called)\s+(.+)$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?i\s*['’]?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+)$/i,
+  /\b(?:remember|save)\s+(?:that\s+)?my\s+(?:company|role|email|language)\s+is\s+(.+)$/i,
 ];
 
 const CHANGE_NAME_PATTERNS: readonly RegExp[] = [
-  /\bchange\s+my\s+name\s+to\s+(.+)$/i,
-  /\bupdate\s+my\s+name\s+to\s+(.+)$/i,
+  /\b(?:change|update)\s+my\s+name\s+to\s+(.+)$/i,
   /\bcall\s+me\s+(.+)$/i,
 ];
 
@@ -52,11 +67,44 @@ const FORGET_NAME_PATTERNS: readonly RegExp[] = [
   /\bforget\s+who\s+i\s+am\b/i,
 ];
 
-const SHOW_MEMORY_PATTERNS: readonly RegExp[] = [
-  /\bshow\s+(?:me\s+)?what\s+you\s+remember\b/i,
-  /\bwhat\s+do\s+you\s+remember\b/i,
-  /\bshow\s+(?:my\s+)?(?:memory|profile)\b/i,
-];
+/** Return true if the prompt is clearly a save/remember request about identity. */
+function isMemorySaveRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return /\b(?:remember|remembering|save|saving|store|storing)\s+/.test(lower)
+    && /\b(?:my\s+name|i\s*['’]?m|i\s+am|who\s+i\s+am|my\s+(?:company|role|email|language))\b/.test(lower);
+}
+
+/** Truncate an extracted value at any trailing save/remember/request phrase. */
+function truncateAtSavePhrase(value: string): string {
+  const stopWords = ['can you save', 'save this', 'remember this', 'store this', 'save it', 'remember it', 'store it', 'save now', 'remember now', 'store now'];
+  const lower = value.toLowerCase();
+  let cutAt = value.length;
+  for (const phrase of stopWords) {
+    const idx = lower.indexOf(phrase);
+    if (idx >= 0 && idx < cutAt) cutAt = idx;
+  }
+  return value.slice(0, cutAt).trim();
+}
+
+/** Extend the generic name extraction with a fallback for "save this now" + identity phrases. */
+function extractIdentityValue(text: string): string | null {
+  const lower = text.toLowerCase();
+  let raw: string | null = null;
+  if (lower.includes('my name is')) {
+    const match = text.match(/\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
+    if (match && match[1]) raw = match[1];
+  }
+  if (!raw && (lower.includes('i am') || lower.includes('i\'m') || lower.includes('i’m'))) {
+    const match = text.match(/\bi\s*['’]?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
+    if (match && match[1]) raw = match[1];
+  }
+  if (!raw && (lower.includes('work at') || /\b(?:owner|ceo|founder)\s+of\b/.test(lower))) {
+    const match = text.match(/\b(?:work\s+at|(?:owner|ceo|founder)\s+of)\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i);
+    if (match && match[1]) raw = match[1];
+  }
+  if (!raw) return null;
+  return cleanName(truncateAtSavePhrase(raw));
+}
 
 function cleanName(raw: string): string {
   return raw
@@ -70,6 +118,9 @@ function cleanName(raw: string): string {
 /**
  * Detect a memory command in the user's prompt. Returns null when the prompt is
  * not a memory command (so the normal AI flow continues untouched).
+ *
+ * This runs BEFORE the generic execution/knowledge classifier so memory phrases
+ * ("save my name", "what is my name") are never misrouted to clarification.
  */
 export function parseMemoryCommand(prompt: string): MemoryCommand | null {
   const text = prompt.trim();
@@ -84,17 +135,26 @@ export function parseMemoryCommand(prompt: string): MemoryCommand | null {
   for (const re of CHANGE_NAME_PATTERNS) {
     const match = text.match(re);
     if (match && match[1]) {
-      const value = cleanName(match[1]);
+      const value = cleanName(truncateAtSavePhrase(match[1]));
       if (value) return { kind: 'change_name', value };
     }
   }
   for (const re of REMEMBER_NAME_PATTERNS) {
     const match = text.match(re);
     if (match && match[1]) {
-      const value = cleanName(match[1]);
+      const value = cleanName(truncateAtSavePhrase(match[1]));
       if (value) return { kind: 'remember_name', value };
     }
   }
+
+  // Fallback: broad "save/remember this now" + identity phrase detector.
+  // Catches phrasing like "I will tell you ... save this now" which is a clear
+  // memory write intent even when the exact regexes above miss it.
+  if (isMemorySaveRequest(text)) {
+    const value = extractIdentityValue(text);
+    if (value) return { kind: 'remember_name', value };
+  }
+
   return null;
 }
 
