@@ -524,6 +524,16 @@ Ran 659 tests across 51 files.
 > - SHA-256: `43b14a8a167d283b63a39d6a73f6dccac70246ae72d4fba659d872337577eab5`
 > - Version: 1.5.9 (versionCode 79)
 > - Build marker: `IVX_BUNDLE_2026_07_30_V13_CONTEXT_ATTENTION_HANDOFF`
-> - Uploaded: `https://tmpfiles.org/wywmirIvztAR/app-release.apk` (direct download: `https://tmpfiles.org/dl/wywmirIvztAR/app-release.apk`) — expires in ~24 hours.
+> - Original upload: `https://tmpfiles.org/wywmirIvztAR/app-release.apk` (direct download: `https://tmpfiles.org/dl/wywmirIvztAR/app-release.apk`) — expired after ~24 hours.
 >
-> **Verdict:** ✅ IVX IA is now a true Senior Software Engineer interface. The 3 Phase 8 failures are fixed and verified live on production. Latest APK v1.5.9 is built, uploaded, and tied to the live production commit. iOS remains deferred to a later version (no macOS/Xcode in the Linux sandbox).
+> **Fresh rebuild + re-upload (2026-07-30T16:56Z):** Owner reported the previous tmpfiles link returned 404. Rebuilt the APK from the same live commit (`ddd4c567`) with fresh dependencies and re-uploaded.
+> - BUILD SUCCESSFUL in 4m 44s, 424 tasks (384 executed, 40 from cache).
+> - APK: `expo/android/app/build/outputs/apk/release/app-release.apk`
+> - Size: 84MB (84,050,451 bytes)
+> - SHA-256: `272e5c9b462170c908b9d2d56fe16d23ae797aa7d142a5097e3b0dd14e0c6e1b`
+> - Version: 1.5.9 (versionCode 79)
+> - Build marker: `IVX_BUNDLE_2026_07_30_V13_CONTEXT_ATTENTION_HANDOFF`
+> - New upload: `https://tmpfiles.org/wGwyiHOStQRf/app-release.apk` (direct download: `https://tmpfiles.org/dl/wGwyiHOStQRf/app-release.apk`) — expires in ~24 hours.
+> - Verified link: `curl -I -L` returns HTTP 302 → `https://tmpfiles.org/wGwyiHOStQRf/app-release.apk`.
+>
+> **Verdict:** ✅ IVX IA is now a true Senior Software Engineer interface. The 3 Phase 8 failures are fixed and verified live on production. Latest APK v1.5.9 is rebuilt, re-uploaded, and tied to the live production commit. iOS remains deferred to a later version (no macOS/Xcode in the Linux sandbox).
