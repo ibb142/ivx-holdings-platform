@@ -1,4 +1,3 @@
-import { IVX_OWNER_AI_PROFILE } from '../expo/constants/ivx-owner-ai';
 import { getIVXAIEndpoint, isIVXAIConfigured, requestIVXAIText, resolveIVXAIModel, type IVXAIProviderMetadata } from './ivx-ai-runtime';
 import { buildBusinessContextBlock, loadBusinessContext } from './services/ivx-business-context';
 import { buildDealIntelligenceBlock } from './services/ivx-deal-intelligence';
