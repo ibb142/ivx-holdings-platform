@@ -125,6 +125,20 @@ import { detectDeveloperModeRequest, buildDeveloperModeBlockedExplanation, detec
 import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from '../services/ivx-ia-identity-brain';
 import { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from '../services/ivx-ia-conversation-brain';
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock } from '../services/ivx-db-count';
+import {
+  addPendingAction,
+  buildWhereWeWereSummary,
+  classifyOwnerActionTypeWithContext,
+  detectOwnerApproval,
+  executeReadOnlyAction,
+  getActiveAction,
+  getOwnerConversationState,
+  isReadOnlyActionType,
+  resolveActiveAction,
+  setOwnerConversationState,
+  updateAction,
+  type OwnerActionType,
+} from '../services/ivx-owner-conversation-state';
 import { answerClassificationQuery, detectClassificationQuestion, CLASSIFICATION_MARKER as CLASSIFICATION_IA_MARKER, type IAClassificationQuery } from '../services/ivx-member-classification';
 
 import { classifyOwnerExecutionCommand, type IVXOwnerExecutionDecision } from '../services/ivx-owner-execution-mode';
@@ -197,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v5-2026-07-30-full-access';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-2-2026-07-30-conversation-context-fix';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -266,7 +280,7 @@ type IVXAIRequestRow = {
 
 type SupabaseInspectionIntent = 'tables' | 'schema' | 'columns' | 'rls' | 'capability';
 type SupabaseOwnerActionIntent = 'insert' | 'update' | 'delete' | 'owner_approved_action' | 'capability';
-type OwnerRouterIntent = 'manual_answer' | 'infrastructure_runtime' | 'supabase_schema' | 'aws' | 'block22_worker_diagnosis' | 'owner_backend_command' | 'ai_brain_tool' | 'owner_system_tool' | 'supabase_owner_action' | 'development_action' | 'development_audit' | 'owner_room_data' | 'live_grounding' | 'location_clarification' | 'limits' | 'audit_report' | 'generic_ai_chat' | 'exact_echo';
+type OwnerRouterIntent = 'manual_answer' | 'infrastructure_runtime' | 'supabase_schema' | 'aws' | 'block22_worker_diagnosis' | 'owner_backend_command' | 'ai_brain_tool' | 'owner_system_tool' | 'supabase_owner_action' | 'development_action' | 'development_audit' | 'owner_room_data' | 'live_grounding' | 'location_clarification' | 'limits' | 'audit_report' | 'generic_ai_chat' | 'exact_echo' | 'owner_conversation_state_machine' | 'memory_change_name' | 'memory_forget_name' | 'memory_remember_name' | 'memory_show_memory';
 type OwnerSystemToolName = 'get_current_time' | 'read_database_schema' | 'query_database' | 'read_logs' | 'search_code' | 'inspect_supabase_schema' | 'inspect_rls_policies' | 'run_select_query' | 'run_write_query' | 'list_storage_buckets' | 'inspect_edge_functions' | 'inspect_auth_users' | 'execute_rpc' | 'apply_migration' | 'generate_3d_model';
 type OwnerToolOutput = {
   tool: OwnerSystemToolName;
@@ -5986,7 +6000,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       headers: request.headers,
     });
     // Auth check FIRST — never reveal validation errors to unauthenticated callers.
-    await assertIVXOwnerOnly(authRequest);
+    const ownerContext = await assertIVXOwnerOnly(authRequest);
     // Block 22R fix: read the body once, defensively. Empty/invalid bodies
     // (e.g. unauthenticated probes, double-consumed streams from upstream
     // middleware) previously surfaced as `Invalid state: ReadableStream is
@@ -6003,6 +6017,17 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       return ownerOnlyJson({ error: 'Request body unreadable.' }, 400);
     }
     const prompt = readTrimmedString(body.message);
+    const mode = body.mode === 'command' ? 'command' : 'chat';
+    // Persistence is ON by default for the owner conversation. The owner chat is a
+    // durable thread that must survive refresh/app-reopen/Render-restart, so the
+    // assistant reply (and the owner prompt) are always saved unless a caller
+    // EXPLICITLY opts out with `false` (e.g. the ephemeral investor-support widget).
+    // Previously these defaulted to `false`, so any request that omitted the flag
+    // (curl probes, watchdog, diagnostics) returned assistantPersisted:false /
+    // assistantMessageId:null and the reply was silently dropped.
+    const persistUserMessage = body.persistUserMessage !== false;
+    const persistAssistantMessage = body.persistAssistantMessage !== false;
+    const model = getOwnerAIModel();
     // ── IVX IA Identity Brain ───────────────────────────────────────────────
     // Direct, deterministic answers for identity / ownership / IVXHOLDINGS project
     // questions: "what is your name" → IVX IA; "who created you / who is your owner"
@@ -6077,6 +6102,168 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       reason: authoritativeDecision.reason,
       manualOverride: authoritativeDecision.safetyStage.manualOverride,
     });
+
+    const tables = await resolveOwnerTables(ownerContext.client);
+    const senderLabel = readTrimmedString(body.senderLabel) || ownerContext.email || 'IVX Owner';
+    const conversation = await ensureOwnerConversation(ownerContext.client, tables);
+    const requestId = readTrimmedString(body.requestId) || createRequestId();
+
+    // ── Conversation State Machine (owner mandate 2026-07-30) ───────────────
+    // Persist the active request across turns, recognize approval/denial phrases,
+    // and execute read-only database questions directly instead of routing them
+    // to the LLM where context is lost.
+    const ownerState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+    const detectedLang = /\b(cuántas?|cuántos?|propiedades|propiedad|activas?|activos?|muestrame|muéstrame|dónde|donde|qué|que|estás?|estas?|últimas?|últimos?|hace|haces)\b/i.test(prompt) || /\b(español|spanish)\b/i.test(prompt) ? 'es' : 'en';
+    await setOwnerConversationState({ ...ownerState, languagePreference: detectedLang });
+
+    const approvalSignal = detectOwnerApproval(prompt);
+    const activeAction = await getActiveAction(conversation.id, ownerContext.userId);
+    const stateRouterDebug = buildRouterDebug({
+      selectedIntent: 'owner_conversation_state_machine' as OwnerRouterIntent,
+      selectedTool: null,
+      route: 'conversation_state_machine',
+      reason: 'owner-mandate-2026-07-30-preserve-context-and-direct-readonly-execution',
+      manualMode: false,
+    });
+
+    async function persistAssistant(answer: string, model: string): Promise<string | null> {
+      if (!persistAssistantMessage) return null;
+      try {
+        const assistantMessage = await insertMessage(ownerContext.client, tables, {
+          conversationId: conversation.id,
+          senderRole: 'assistant',
+          senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+          senderLabel: IVX_OWNER_AI_PROFILE.name,
+          body: answer,
+        });
+        await safeUpdateConversationSummary(ownerContext.client, tables, conversation.id, answer);
+        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+        return assistantMessage.id;
+      } catch (error) {
+        console.log('[IVXOwnerAIBackend] Conversation-state assistant persistence failed:', error instanceof Error ? error.message : 'unknown');
+        return null;
+      }
+    }
+
+    async function returnStateAnswer(answer: string, evidence: Record<string, unknown>, status: 'ok' | 'error' = 'ok'): Promise<Response> {
+      const assistantMessageId = await persistAssistant(answer, 'ivx_conversation_state_machine');
+      await safeUpsertAIRequest(ownerContext.client, tables, {
+        requestId,
+        conversationId: conversation.id,
+        userId: ownerContext.userId,
+        prompt,
+        responseText: answer,
+        responseMessageId: assistantMessageId,
+        status: status === 'ok' ? 'completed' : 'failed',
+        model: 'ivx_conversation_state_machine',
+      });
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: conversation.id,
+        answer,
+        model: 'ivx_conversation_state_machine',
+        status: 'ok',
+      }, {
+        source: 'local_runtime',
+        provider: 'ivx_readonly_inspection_runtime',
+        endpoint: '/api/ivx/owner-ai/conversation-state',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        assistantMessageId,
+        assistantPersisted: Boolean(assistantMessageId),
+        selectedIntent: 'owner_conversation_state_machine' as OwnerRouterIntent,
+        selectedTool: 'conversation_state_machine',
+        routerDebug: stateRouterDebug,
+        toolInput: [],
+        toolOutput: [evidence],
+        fallbackUsed: false,
+        toolOutputs: [{
+          tool: 'conversation_state_machine',
+          ok: status === 'ok',
+          input: { prompt },
+          output: evidence,
+          timestamp: nowIso(),
+        }],
+      }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+    }
+
+    // 1. Approval / denial resolution for a pending action.
+    if (approvalSignal !== 'neutral' && activeAction) {
+      const resolvedStatus = approvalSignal === 'approve' ? 'granted' : 'denied';
+      const resolved = await resolveActiveAction(conversation.id, ownerContext.userId, resolvedStatus);
+      if (resolved) {
+        if (resolvedStatus === 'denied') {
+          await updateAction(conversation.id, ownerContext.userId, resolved.actionId, {
+            executionState: 'CANCELLED',
+            lastResultSummary: 'Owner denied.',
+            updatedAt: nowIso(),
+          });
+          await setOwnerConversationState({ ...ownerState, activeActionId: null, unresolvedQuestion: null });
+          const deniedAnswer = detectedLang === 'es' ? 'Acción cancelada.' : 'Action cancelled.';
+          return returnStateAnswer(deniedAnswer, { actionId: resolved.actionId, authorizationStatus: 'denied' });
+        }
+        if (isReadOnlyActionType(resolved.actionType)) {
+          const result = await executeReadOnlyAction(resolved);
+          await updateAction(conversation.id, ownerContext.userId, resolved.actionId, {
+            executionState: result.ok ? 'COMPLETED' : 'FAILED',
+            lastResultSummary: result.answer,
+            lastError: result.error ?? null,
+            traceId: requestId,
+            updatedAt: nowIso(),
+          });
+          await setOwnerConversationState({ ...ownerState, readOnlyAuthorized: true, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
+          return returnStateAnswer(result.answer, { actionId: resolved.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
+        }
+      }
+    }
+
+    // 2. Direct execution for read-only questions (property counts, active counts, latest lists).
+    const previousAction = activeAction ?? (ownerState.lastCompletedActionId ? ownerState.actions.find((a) => a.actionId === ownerState.lastCompletedActionId) ?? null : null);
+    const classified = classifyOwnerActionTypeWithContext(prompt, previousAction);
+    if (isReadOnlyActionType(classified.actionType) && classified.resource === 'properties') {
+      const hasConversationAuthorization = ownerState.readOnlyAuthorized === true;
+      if (!hasConversationAuthorization) {
+        const action = await addPendingAction(conversation.id, ownerContext.userId, {
+          originalQuestion: prompt,
+          actionType: classified.actionType,
+          resource: classified.resource,
+          operation: classified.operation,
+          authorizationRequired: true,
+          languagePreference: detectedLang,
+          metadata: classified.metadata,
+        });
+        await setOwnerConversationState({ ...ownerState, activeActionId: action.actionId, unresolvedQuestion: prompt });
+        const approvalQuestion = detectedLang === 'es'
+          ? 'Puedo consultar eso directamente en la base de datos. ¿Me autorizas a ejecutar esta consulta de solo lectura?'
+          : 'I can query that directly from the database. Do you authorize me to run this read-only query?';
+        return returnStateAnswer(approvalQuestion, { actionId: action.actionId, pending: true, authorizationRequired: true });
+      }
+      const action = await addPendingAction(conversation.id, ownerContext.userId, {
+        originalQuestion: prompt,
+        actionType: classified.actionType,
+        resource: classified.resource,
+        operation: classified.operation,
+        authorizationRequired: false,
+        languagePreference: detectedLang,
+        metadata: classified.metadata,
+      });
+      const result = await executeReadOnlyAction(action);
+      await updateAction(conversation.id, ownerContext.userId, action.actionId, {
+        executionState: result.ok ? 'COMPLETED' : 'FAILED',
+        lastResultSummary: result.answer,
+        lastError: result.error ?? null,
+        traceId: requestId,
+        updatedAt: nowIso(),
+      });
+      await setOwnerConversationState({ ...ownerState, activeActionId: null, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
+      return returnStateAnswer(result.answer, { actionId: action.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
+    }
+
+    // 3. Context-memory status / "where were we" / "what were you doing".
+    if (classified.actionType === 'task_status') {
+      const freshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+      const summary = buildWhereWeWereSummary(freshState);
+      return returnStateAnswer(summary, { state: freshState, activeActionId: freshState.activeActionId });
+    }
 
     // ── Knowledge requests → LLM directly (Item 2) ──
     // Explanation, diagnostic, architecture, code review questions go straight
@@ -6394,18 +6581,6 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         toolOutputs: [],
       }, 200);
     }
-    const mode = body.mode === 'command' ? 'command' : 'chat';
-    // Persistence is ON by default for the owner conversation. The owner chat is a
-    // durable thread that must survive refresh/app-reopen/Render-restart, so the
-    // assistant reply (and the owner prompt) are always saved unless a caller
-    // EXPLICITLY opts out with `false` (e.g. the ephemeral investor-support widget).
-    // Previously these defaulted to `false`, so any request that omitted the flag
-    // (curl probes, watchdog, diagnostics) returned assistantPersisted:false /
-    // assistantMessageId:null and the reply was silently dropped.
-    const persistUserMessage = body.persistUserMessage !== false;
-    const persistAssistantMessage = body.persistAssistantMessage !== false;
-    const model = getOwnerAIModel();
-
     if (!prompt) {
       return ownerOnlyJson({ error: 'Message is required.' }, 400);
     }
@@ -6992,7 +7167,6 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }
     }
 
-    const ownerContext = await assertIVXOwnerOnly(authRequest);
     console.log('[IVXOwnerAIBackend] Owner AI incoming message:', {
       requestUrl: request.url,
       incomingMessage: prompt,
@@ -7014,10 +7188,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       selectedRoute: initialAIBrainRoutes.length > 0 ? 'ai_brain_tool_executor' : initialSupabaseOwnerActionIntent ? 'supabase_owner_action_tool' : initialSupabaseIntent ? 'supabase_inspection_tool' : initialDevelopmentActionIntent === 'public_deploy' ? 'ivx_public_deploy_action' : initialDevelopmentActionIntent ? 'ivx_development_action' : initialAuditIntent ? 'owner_audit_report' : 'generic_ai_chat',
       auditEndpointCalled: false,
     });
-    const tables = await resolveOwnerTables(ownerContext.client);
-    const senderLabel = readTrimmedString(body.senderLabel) || ownerContext.email || 'IVX Owner';
-    const conversation = await ensureOwnerConversation(ownerContext.client, tables);
-    const requestId = readTrimmedString(body.requestId) || createRequestId();
+
 
     const ownerBackendCommand = preAuthCommand;
     if (ownerBackendCommand) {

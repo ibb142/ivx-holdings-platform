@@ -15,9 +15,15 @@
  * Read-only default is removed. IVX IA operates with full owner-authorized
  * engineering access. All actions are logged; destructive/irreversible operations
  * still require explicit confirmation from the owner.
+ *
+ * V6 (2026-07-30T23:00Z): Conversation state machine. IVX IA now persists the
+ * owner's intent across turns, resolves approval phrases directly, and executes
+ * read-only database queries (counts, active counts, latest records) without
+ * losing context. It never answers "No tengo acceso directo" for data it can
+ * reach, and it never loses the thread when the owner says "La quiero ahora".
  */
 
-export const IVX_SENIOR_ENGINEER_MARKER = 'ivx-senior-engineer-persona-v5-2026-07-30-full-access';
+export const IVX_SENIOR_ENGINEER_MARKER = 'ivx-senior-engineer-persona-v6-2-2026-07-30-conversation-context-fix';
 
 /**
  * Build the senior engineer system prompt with optional live context block.
