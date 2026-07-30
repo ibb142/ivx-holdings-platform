@@ -536,4 +536,15 @@ Ran 659 tests across 51 files.
 > - New upload: `https://tmpfiles.org/wGwyiHOStQRf/app-release.apk` (direct download: `https://tmpfiles.org/dl/wGwyiHOStQRf/app-release.apk`) — expires in ~24 hours.
 > - Verified link: `curl -I -L` returns HTTP 302 → `https://tmpfiles.org/wGwyiHOStQRf/app-release.apk`.
 >
+> **Fresh rebuild + re-upload #3 (2026-07-30T20:12Z):** Owner reported the previous tmpfiles link returned 404 again. Sandbox had deleted the APK artifact and `node_modules` since the last session. Rebuilt from the same live commit (`ddd4c567`) after re-running `bun install`.
+> - `bun install`: 1332 packages installed successfully.
+> - BUILD SUCCESSFUL in 4m 53s, 424 tasks (386 executed, 38 from cache).
+> - APK: `expo/android/app/build/outputs/apk/release/app-release.apk`
+> - Size: 84MB (84,050,451 bytes)
+> - SHA-256: `aa4f024a8d649fb1bb236f37bf22d1cb9ac0ac504f19269b5b9adb07983f9f6d`
+> - Version: 1.5.9 (versionCode 79)
+> - Build marker: `IVX_BUNDLE_2026_07_30_V13_CONTEXT_ATTENTION_HANDOFF`
+> - New upload: `https://tmpfiles.org/wiwIixCvQ02N/app-release.apk` (direct download: `https://tmpfiles.org/dl/wiwIixCvQ02N/app-release.apk`) — expires in ~24 hours.
+> - Verified link: `curl -I -L` returns HTTP 302 → `https://tmpfiles.org/wiwIixCvQ02N/app-release.apk`.
+>
 > **Verdict:** ✅ IVX IA is now a true Senior Software Engineer interface. The 3 Phase 8 failures are fixed and verified live on production. Latest APK v1.5.9 is rebuilt, re-uploaded, and tied to the live production commit. iOS remains deferred to a later version (no macOS/Xcode in the Linux sandbox).
