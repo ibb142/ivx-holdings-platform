@@ -322,6 +322,7 @@ const MEMORY_WRITE_PATTERNS: RegExp[] = [
   /\b(?:remember|save)\s+(?:that\s+)?i\s*['’]?m\s+(.+)$/i,
   /\b(?:change|update)\s+my\s+name\s+to\s+(.+)$/i,
   /\bcall\s+me\s+(.+)$/i,
+  /\b(?:save|remember|store)\s+my\s+name\s+as\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?my\s+(?:company|role|email|language)\s+is\s+(.+)$/i,
   // Compound: "my company is X and I prefer to be called Y, remember this"
