@@ -1447,8 +1447,9 @@ setProductionState({
   schedulerRunning: true,
   processStartedAt: SERVER_BOOT_TIME,
   healthMarkers: {
-    seniorEngineerPersona: '2026-07-30T12:30:00Z',
-    liveContextV2: '2026-07-30T12:45:00Z',
+    seniorEngineerPersona: '2026-07-30T13:00:00Z',
+    liveContextV3: '2026-07-30T13:05:00Z',
+    contextAttentionFix: '2026-07-30T13:10:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3021,8 +3022,9 @@ app.get('/health', async (context) => {
     conversationRouterV11Fix: '2026-07-30T10:30:00Z',
     apkReleaseV157: '2026-07-30T11:15:00Z',
     regressionRoutingFix: '2026-07-30T11:35:00Z',
-    seniorEngineerPersona: '2026-07-30T12:30:00Z',
-    liveContextV2: '2026-07-30T12:45:00Z',
+    seniorEngineerPersona: '2026-07-30T13:00:00Z',
+    liveContextV3: '2026-07-30T13:05:00Z',
+    contextAttentionFix: '2026-07-30T13:10:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,

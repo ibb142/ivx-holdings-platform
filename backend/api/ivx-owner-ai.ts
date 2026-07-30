@@ -155,7 +155,7 @@ import {
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
-import { buildSeniorEngineerSystemPrompt } from '../services/ivx-senior-engineer-persona';
+import { buildSeniorEngineerSystemPrompt, buildCompactContextPrefix } from '../services/ivx-senior-engineer-persona';
 import { getLiveContextBlock } from '../services/ivx-live-context-injector';
 import { recordExecutionTrace } from '../services/ivx-execution-trace-store';
 import {
@@ -4644,6 +4644,8 @@ async function generateOwnerAIAnswer(input: {
     ? input.clientTimezone.trim()
     : null;
   let systemPrompt: string;
+  // V3: Stash compact context here, apply after promptText is declared below.
+  let pendingCompactCtx = '';
   if (input.healthProbe) {
     systemPrompt = [
       `You are ${IVX_OWNER_AI_PROFILE.name} health verification.`,
@@ -4661,6 +4663,12 @@ async function generateOwnerAIAnswer(input: {
       liveCtx = '[IVX LIVE PRODUCTION CONTEXT]\n  Live context unavailable — proceeding without production awareness.\n[/IVX LIVE PRODUCTION CONTEXT]';
     }
     systemPrompt = buildSeniorEngineerSystemPrompt(liveCtx);
+    // V3: Save compact context for injection AFTER promptText is declared.
+    // promptText is declared later in this function, so we stash the compact
+    // context in a local variable and apply it once promptText exists.
+    if (!input.healthProbe) {
+      pendingCompactCtx = buildCompactContextPrefix(liveCtx);
+    }
   }
   if (tz && !input.healthProbe) {
     try {
@@ -4682,6 +4690,12 @@ async function generateOwnerAIAnswer(input: {
   // for scanned PDFs) and analyze attached videos, then ground the answer on the
   // real extracted content. Never blocks the reply if extraction fails.
   let promptText = input.promptText;
+  // V3: Inject compact context prefix right after promptText is declared.
+  // This places live production data RIGHT BEFORE the user's question —
+  // the strongest attention signal. The model cannot miss it.
+  if (pendingCompactCtx && !input.healthProbe) {
+    promptText = `${pendingCompactCtx}\n\n${promptText}`;
+  }
   if (!input.healthProbe && documents.length > 0) {
     systemPrompt = `${systemPrompt}\n\n${buildDocumentAnalysisInstructionBlock(documents)}`;
     try {
@@ -6070,15 +6084,25 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     if (authoritativeDecision.selectedRoute === 'LLM_TEXT_RESPONSE') {
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       try {
-        // Direct LLM call — same pattern as public-chat-ai.ts.
-        // Avoids generateOwnerAIAnswer's complex dependencies that fail early in the handler.
+        // V3 fix: Use the senior engineer system prompt with live context —
+        // same as generateOwnerAIResponse. This ensures production awareness
+        // questions (SHA, health, priority) get the live context block.
+        let knowledgeLiveCtx = '';
+        try {
+          knowledgeLiveCtx = await getLiveContextBlock();
+        } catch {
+          knowledgeLiveCtx = '';
+        }
+        const knowledgeSystemPrompt = buildSeniorEngineerSystemPrompt(knowledgeLiveCtx);
+        const knowledgeCompactCtx = buildCompactContextPrefix(knowledgeLiveCtx);
+        const knowledgePrompt = knowledgeCompactCtx ? `${knowledgeCompactCtx}\n\n${prompt}` : prompt;
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
         const llmResult = await requestIVXAIText({
           module: 'owner-room-knowledge',
           requestId,
           model: llmModel,
-          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. Answer the user\'s question directly and accurately. You are a senior developer with expertise in architecture, code review, deployment, and debugging. Answer in plain text — do not claim to have executed anything, do not create tasks, do not trigger deploys.',
-          prompt: prompt,
+          system: knowledgeSystemPrompt,
+          prompt: knowledgePrompt,
         });
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         // Reject canned responses (Item 6)
@@ -6155,14 +6179,24 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const cleanPrompt = stripManualDirectives(prompt);
       try {
-        // Direct LLM call — same pattern as public-chat-ai.ts.
+        // V3 fix: Use the senior engineer system prompt with live context —
+        // same as generateOwnerAIResponse and LLM_TEXT_RESPONSE paths.
+        let manualLiveCtx = '';
+        try {
+          manualLiveCtx = await getLiveContextBlock();
+        } catch {
+          manualLiveCtx = '';
+        }
+        const manualSystemPrompt = buildSeniorEngineerSystemPrompt(manualLiveCtx);
+        const manualCompactCtx = buildCompactContextPrefix(manualLiveCtx);
+        const manualPrompt = manualCompactCtx ? `${manualCompactCtx}\n\n${cleanPrompt}` : cleanPrompt;
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
         const llmResult = await requestIVXAIText({
           module: 'owner-room-manual',
           requestId,
           model: llmModel,
-          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. MANUAL ANSWER MODE — NO EXECUTION. Answer the user\'s question directly in plain text. Do not use tools, do not inspect Supabase, do not trigger deploys, do not create tasks. Just answer the question.',
-          prompt: cleanPrompt,
+          system: manualSystemPrompt,
+          prompt: manualPrompt,
         });
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
