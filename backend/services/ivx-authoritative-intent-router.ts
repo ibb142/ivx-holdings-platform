@@ -584,9 +584,9 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  // "Create a new X" / "Implement a new X" / "Build a new X" (without "and deploy")
+  // "Create a new X" / "Implement a new X" / "Build a new X" / "Add a new X" (without "and deploy")
   // → still execution when the target is a code artifact (endpoint, route, page, module, service, etc.)
-  if (/\b(?:create|implement|build|develop|scaffold|write)\s+(?:a\s+)?(?:new\s+)?(?:api\s+)?(?:endpoint|route|page|module|service|component|screen|hook|feature|function|middleware|handler|dashboard|widget)\b/i.test(text)) {
+  if (/\b(?:create|implement|build|develop|scaffold|write|add)\s+(?:a\s+)?(?:new\s+)?(?:api\s+)?(?:endpoint|route|page|module|service|component|screen|hook|feature|function|middleware|handler|dashboard|widget)\b/i.test(text)) {
     return true;
   }
 
