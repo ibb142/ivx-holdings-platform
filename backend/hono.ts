@@ -3002,6 +3002,7 @@ app.get('/health', async (context) => {
     intentRouterV10Fix: '2026-07-30T06:30:00Z',
     conversationRouterV11Fix: '2026-07-30T10:30:00Z',
     apkReleaseV157: '2026-07-30T11:15:00Z',
+    regressionRoutingFix: '2026-07-30T11:35:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,

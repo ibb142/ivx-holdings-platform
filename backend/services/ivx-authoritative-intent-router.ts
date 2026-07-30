@@ -651,11 +651,17 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  if (/\brun\s+(?:the\s+)?(?:complete\s+|full\s+)?(?:test\s+suite|validation|tests?|checks?|qa\s+tests?)\b/i.test(text)) {
+  if (/\brun\s+(?:the\s+)?(?:complete\s+|full\s+)?(?:test\s+suite|validation|tests?|checks?|qa\s+tests?|regression\s+tests?)\b/i.test(text)) {
     // "How to run tests" is knowledge, not execution
     if (/\bhow\s+to\b/i.test(text)) {
       return false;
     }
+    return true;
+  }
+
+  // "run regression tests" / "run a regression test" / "run regression on all endpoints" → execution
+  if (/\brun\s+(?:a\s+)?(?:the\s+)?regression\b/i.test(text)) {
+    if (/\bhow\s+to\b/i.test(text)) return false;
     return true;
   }
 
