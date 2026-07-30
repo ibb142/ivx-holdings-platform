@@ -3,9 +3,10 @@
  *
  * Owner mandate 2026-07-30: IVX IA must always know the current production
  * state, autonomous jobs, deployment SHA, health, and pending approvals.
- * This module fetches live data from the production API and assembles a
- * context block injected into every owner-AI prompt so the model can answer
- * production-awareness questions without guessing.
+ *
+ * V2 fix: Uses in-process production state (ivx-production-state.ts) instead
+ * of HTTP fetches to localhost. The HTTP approach failed on Render because
+ * the server can't call its own endpoints reliably during request processing.
  *
  * Phases covered:
  *   Phase 4 — Context Memory: current project, deployment, production state
@@ -13,151 +14,25 @@
  *   Phase 6 — Production Awareness: SHA, health, jobs, deployments
  */
 
-export const IVX_LIVE_CONTEXT_MARKER = 'ivx-live-context-injector-2026-07-30';
+import { getProductionState, type ProductionState } from './ivx-production-state';
 
-export type IVXLiveContextData = {
-  health: {
-    status: string;
-    commit: string;
-    bootTime: string;
-    environment: string;
-    serviceName: string;
-  } | null;
-  autonomousQA: {
-    ok: boolean;
-    schedulerRunning: boolean;
-    processStartedAt: string;
-    cadence: { healthMinutes: number; authMinutes: number; matrixHours: number } | null;
-  } | null;
-  autonomousRuns: {
-    ok: boolean;
-    count: number;
-    recentRuns: { runId: string; kind: string; status: string; engine: string }[];
-  } | null;
-  executiveLayer: {
-    ok: boolean;
-    summary: string;
-  } | null;
-  timestamp: string;
-  error: string | null;
-};
-
-type AutonomousRunRecord = {
-  runId?: string;
-  kind?: string;
-  status?: string;
-  engine?: string;
-};
-
-type HealthResponse = {
-  status?: string;
-  commit?: string;
-  bootTime?: string;
-  environment?: string;
-  serviceName?: string;
-};
-
-type AutonomousQAResponse = {
-  ok?: boolean;
-  schedulerRunning?: boolean;
-  processStartedAt?: string;
-  cadence?: { healthMinutes: number; authMinutes: number; matrixHours: number };
-};
-
-type AutonomousRunsResponse = {
-  ok?: boolean;
-  count?: number;
-  runs?: AutonomousRunRecord[];
-  records?: AutonomousRunRecord[];
-};
-
-type ExecutiveLayerResponse = {
-  ok?: boolean;
-  summary?: string;
-};
+export const IVX_LIVE_CONTEXT_MARKER = 'ivx-live-context-injector-v2-2026-07-30';
 
 /**
- * Fetch JSON from a URL with a timeout. Returns null on any error.
+ * Build the [IVX LIVE PRODUCTION CONTEXT] block from in-process state.
+ * This is synchronous — no HTTP calls, no async, no network dependency.
  */
-async function fetchJson<T>(url: string, timeoutMs = 8000, headers?: Record<string, string>): Promise<T | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: headers ?? {},
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Fetch all live production context data in parallel.
- * This runs server-side on the Render backend — it calls its own endpoints.
- */
-export async function fetchLiveContext(baseOrigin?: string): Promise<IVXLiveContextData> {
-  const base = baseOrigin ?? `http://localhost:${process.env.PORT ?? '3000'}`;
+export function buildLiveContextBlock(): string {
+  const state = getProductionState();
   const timestamp = new Date().toISOString();
 
-  const [health, qa, runs, exec] = await Promise.all([
-    fetchJson<HealthResponse>(`${base}/health`, 5000),
-    fetchJson<AutonomousQAResponse>(`${base}/api/ivx/autonomous/qa`, 5000),
-    fetchJson<AutonomousRunsResponse>(`${base}/api/ivx/autonomous/runs`, 5000),
-    fetchJson<ExecutiveLayerResponse>(`${base}/api/ivx/executive-layer`, 5000),
-  ]);
-
-  const hasAny = health || qa || runs || exec;
-
-  return {
-    health: health ? {
-      status: health.status ?? 'unknown',
-      commit: health.commit ?? 'unknown',
-      bootTime: health.bootTime ?? 'unknown',
-      environment: health.environment ?? 'unknown',
-      serviceName: health.serviceName ?? 'unknown',
-    } : null,
-    autonomousQA: qa ? {
-      ok: qa.ok ?? false,
-      schedulerRunning: qa.schedulerRunning ?? false,
-      processStartedAt: qa.processStartedAt ?? 'unknown',
-      cadence: qa.cadence ?? null,
-    } : null,
-    autonomousRuns: runs ? {
-      ok: runs.ok ?? false,
-      count: runs.count ?? 0,
-      recentRuns: (runs.runs ?? runs.records ?? []).slice(0, 5).map((r) => ({
-        runId: r.runId ?? 'unknown',
-        kind: r.kind ?? 'unknown',
-        status: r.status ?? 'unknown',
-        engine: r.engine ?? 'unknown',
-      })),
-    } : null,
-    executiveLayer: exec ? {
-      ok: exec.ok ?? false,
-      summary: exec.summary ?? 'no summary',
-    } : null,
-    timestamp,
-    error: hasAny ? null : 'Could not fetch live production context — all endpoints returned null.',
-  };
-}
-
-/**
- * Build the [IVX LIVE PRODUCTION CONTEXT] block injected into every prompt.
- * This gives the model real-time awareness of production state, autonomous
- * jobs, deployment SHA, and system health so it can answer questions like:
- *   "What is the current SHA?"
- *   "What are the workers doing?"
- *   "What changed today?"
- *   "Is production healthy?"
- *   "What is the highest priority?"
- */
-export function buildLiveContextBlock(data: IVXLiveContextData): string {
-  if (data.error) {
-    return `[IVX LIVE PRODUCTION CONTEXT]\n  Note: ${data.error}\n  Timestamp: ${data.timestamp}\n[/IVX LIVE PRODUCTION CONTEXT]`;
+  if (!state) {
+    return [
+      '[IVX LIVE PRODUCTION CONTEXT]',
+      `  Note: Production state not yet initialized.`,
+      `  Timestamp: ${timestamp}`,
+      '[/IVX LIVE PRODUCTION CONTEXT]',
+    ].join('\n');
   }
 
   const lines: string[] = [
@@ -165,55 +40,38 @@ export function buildLiveContextBlock(data: IVXLiveContextData): string {
   ];
 
   // Production health
-  if (data.health) {
-    lines.push(`  Production Health:`);
-    lines.push(`    Status: ${data.health.status}`);
-    lines.push(`    Commit SHA: ${data.health.commit.slice(0, 12)}`);
-    lines.push(`    Boot Time: ${data.health.bootTime}`);
-    lines.push(`    Environment: ${data.health.environment}`);
-    lines.push(`    Service: ${data.health.serviceName}`);
-  }
+  lines.push(`  Production Health:`);
+  lines.push(`    Status: ${state.status}`);
+  lines.push(`    Commit SHA: ${state.commit.slice(0, 12)}`);
+  lines.push(`    Full SHA: ${state.commit}`);
+  lines.push(`    Boot Time: ${state.bootTime}`);
+  lines.push(`    Environment: ${state.environment}`);
+  lines.push(`    Service: ${state.serviceName}`);
 
   // Autonomous QA scheduler
-  if (data.autonomousQA) {
-    lines.push(`  Autonomous QA Scheduler:`);
-    lines.push(`    Running: ${data.autonomousQA.schedulerRunning}`);
-    lines.push(`    Process Started: ${data.autonomousQA.processStartedAt}`);
-    if (data.autonomousQA.cadence) {
-      lines.push(`    Cadence: health every ${data.autonomousQA.cadence.healthMinutes}min, auth every ${data.autonomousQA.cadence.authMinutes}min, matrix every ${data.autonomousQA.cadence.matrixHours}h`);
+  lines.push(`  Autonomous QA Scheduler:`);
+  lines.push(`    Running: ${state.schedulerRunning}`);
+  lines.push(`    Process Started: ${state.processStartedAt}`);
+
+  // Health markers (deploy proof)
+  if (state.healthMarkers && Object.keys(state.healthMarkers).length > 0) {
+    lines.push(`  Deploy Markers (proof of what's live):`);
+    for (const [key, value] of Object.entries(state.healthMarkers)) {
+      lines.push(`    ${key}: ${value}`);
     }
   }
 
-  // Autonomous runs
-  if (data.autonomousRuns) {
-    lines.push(`  Autonomous Runs:`);
-    lines.push(`    Total recent runs: ${data.autonomousRuns.count}`);
-    if (data.autonomousRuns.recentRuns.length > 0) {
-      lines.push(`    Recent jobs:`);
-      for (const run of data.autonomousRuns.recentRuns) {
-        lines.push(`      - ${run.runId.slice(0, 20)}: ${run.kind} / ${run.status} (engine: ${run.engine})`);
-      }
-    } else {
-      lines.push(`    Recent jobs: none in recent window`);
-    }
-  }
-
-  // Executive layer
-  if (data.executiveLayer) {
-    lines.push(`  Executive Layer: ${data.executiveLayer.ok ? 'OK' : 'unavailable'}`);
-  }
-
-  lines.push(`  Context fetched at: ${data.timestamp}`);
+  lines.push(`  Context fetched at: ${timestamp}`);
   lines.push('[/IVX LIVE PRODUCTION CONTEXT]');
 
   return lines.join('\n');
 }
 
 /**
- * Full live context fetch + render in one call.
- * Returns the context block string ready to inject into a prompt.
+ * Async wrapper for compatibility with the existing call site in ivx-owner-ai.ts.
+ * Returns the same result as buildLiveContextBlock() — kept async so the
+ * caller doesn't need to change its await pattern.
  */
-export async function getLiveContextBlock(baseOrigin?: string): Promise<string> {
-  const data = await fetchLiveContext(baseOrigin);
-  return buildLiveContextBlock(data);
+export async function getLiveContextBlock(): Promise<string> {
+  return buildLiveContextBlock();
 }

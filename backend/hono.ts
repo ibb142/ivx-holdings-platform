@@ -1325,6 +1325,7 @@ import {
   handleVideoPipelineGet,
   handleVideoPipelineRetry,
 } from './api/ivx-video-pipeline';
+import { setProductionState } from './services/ivx-production-state';
 import {
   videoPlatformOptions,
   handlePlatformFeed,
@@ -1433,6 +1434,23 @@ const BACKEND_VERSION = 'ivx-owner-ai-backend-v2026.07.26';
 /** Build timestamp label surfaced on /health for production identity (Gate 1). */
 const BUILD_TIMESTAMP = '2026-07-26T20:10:00.000Z';
 const OWNER_SIGNUP_AUDIT_SOURCE_PROOF = 'owner-password-owner-vars-route-registered-2026-05-09t1115z';
+
+// Initialize in-process production state for live context injection.
+// This lets IVX IA answer production-awareness questions (SHA, health, workers)
+// without making HTTP calls to itself — the state is read in-process.
+setProductionState({
+  commit: LIVE_COMMIT_SHA,
+  bootTime: SERVER_BOOT_TIME,
+  environment: RUNTIME_ENVIRONMENT,
+  serviceName: 'ivx-holdings-platform',
+  status: 'healthy',
+  schedulerRunning: true,
+  processStartedAt: SERVER_BOOT_TIME,
+  healthMarkers: {
+    seniorEngineerPersona: '2026-07-30T12:30:00Z',
+    liveContextV2: '2026-07-30T12:45:00Z',
+  },
+});
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WEB_DIST_ROOT = path.join(SERVER_ROOT, 'expo', 'dist');
 const CHAT_DATABASE_PATH = (process.env.CHAT_DATABASE_PATH?.trim() || path.join(SERVER_ROOT, 'data', 'chat-room.sqlite'));
@@ -3004,6 +3022,7 @@ app.get('/health', async (context) => {
     apkReleaseV157: '2026-07-30T11:15:00Z',
     regressionRoutingFix: '2026-07-30T11:35:00Z',
     seniorEngineerPersona: '2026-07-30T12:30:00Z',
+    liveContextV2: '2026-07-30T12:45:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
