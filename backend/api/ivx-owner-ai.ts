@@ -6476,7 +6476,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // owner identity (Ivan Perez / IVX Holding) and "remember/forget/show" commands
     // are deterministic and never rerouted. Memory is single-owner here (userId
     // 'owner' default, seeded from the durable Supabase store).
-    const memoryUserId = 'owner';
+    // memoryUserId already declared above for the authoritative memory route.
 
     // New-conversation greeting: client sends '__GREETING__' (or 'hi'/'hello'/'start')
     // to open a fresh thread; IVX IA greets using the stored profile and records the
