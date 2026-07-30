@@ -6226,7 +6226,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // deterministically and persist the turn. This prevents "what is my name" / "save my name"
     // from falling through to a clarification question or being ignored.
     const memoryUserId = 'owner';
-    if (authoritativeDecision.selectedRoute === 'MEMORY_WRITE' || authoritativeDecision.selectedRoute === 'MEMORY_READ') {
+    if (authoritativeDecision.selectedRoute === 'MEMORY_WRITE' || authoritativeDecision.selectedRoute === 'MEMORY_READ' || authoritativeDecision.selectedRoute === 'MEMORY_DELETE') {
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const memoryCommand = parseMemoryCommand(prompt);
       if (memoryCommand) {

@@ -34,6 +34,7 @@ export type IVXIntent =
   | 'conversation'
   | 'memory_write'
   | 'memory_read'
+  | 'memory_delete'
   | 'app_generator'
   | 'manual_answer'
   | 'clarification_required';
@@ -50,6 +51,7 @@ export type IVXRoute =
   | 'APP_GENERATOR'
   | 'MEMORY_READ'
   | 'MEMORY_WRITE'
+  | 'MEMORY_DELETE'
   | 'CLARIFICATION'
   | 'PUBLIC_LLM_RESPONSE';
 
@@ -295,6 +297,18 @@ const MEMORY_READ_PATTERNS: RegExp[] = [
   /\bwhat\s+do\s+you\s+remember\b/i,
   /\bshow\s+(?:my\s+)?(?:memory|profile)\b/i,
   /\bwhat\s+do\s+you\s+know\s+about\s+me\b/i,
+  /\bwhat\s+is\s+my\s+(?:company|preferred|role|email|language)\b/i,
+];
+
+// Memory delete/forget patterns: owner tells IVX IA to forget identity data.
+const MEMORY_DELETE_PATTERNS: RegExp[] = [
+  /\bforget\s+(?:this|my)\s+name\b/i,
+  /\bforget\s+who\s+i\s+am\b/i,
+  /\bforget\s+my\s+(?:company|role|email|language|profile)\b/i,
+  /\bdelete\s+my\s+(?:name|profile|memory)\b/i,
+  /\berase\s+(?:what\s+you\s+)?remember\b/i,
+  /\bclear\s+(?:my\s+)?(?:memory|profile)\b/i,
+  /\breset\s+my\s+(?:profile|memory)\b/i,
 ];
 
 // Memory write patterns: the owner tells IVX IA to remember identity data.
@@ -318,6 +332,8 @@ const MEMORY_WRITE_PATTERNS: RegExp[] = [
   /\bi\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
   // "I prefer to be called X, remember this"
   /\bi\s+prefer\s+to\s+be\s+called\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  // "my preferred language is X, remember this" — adjective between "my" and field
+  /\bmy\s+preferred\s+(?:language|name|company|role|email)\s+is\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
 ];
 
 // ─── App Generator Patterns ───────────────────────────────────────────
@@ -754,6 +770,27 @@ export function classifyIntent(input: RouterInput): IVXIntentDecision {
         destructiveAction: false,
         selectedRoute: 'MEMORY_READ',
         reason: 'Memory read: owner is asking IVX IA to recall the remembered profile from the durable memory store.',
+        traceId,
+        safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
+        semanticStage: { matchedPatterns, rejectedPatterns },
+      });
+    }
+
+    const memoryDeleteMatch = MEMORY_DELETE_PATTERNS.find((p) => {
+      const hit = p.test(text);
+      if (hit) matchedPatterns.push(`memory_delete:${p.source}`);
+      return hit;
+    });
+    if (memoryDeleteMatch) {
+      return buildDecision({
+        intent: 'memory_delete',
+        confidence: 0.95,
+        actionRequired: true,
+        toolsAllowed: false,
+        ownerAuthRequired: !input.isOwner,
+        destructiveAction: false,
+        selectedRoute: 'MEMORY_DELETE',
+        reason: 'Memory delete: owner is asking IVX IA to forget/erase identity data from the durable memory store.',
         traceId,
         safetyStage: { manualOverride: false, executionVerb: false, destructiveDetected: false, productionScope: false, publicBoundary, authDecision },
         semanticStage: { matchedPatterns, rejectedPatterns },
