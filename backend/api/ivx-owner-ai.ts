@@ -155,6 +155,8 @@ import {
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
+import { buildSeniorEngineerSystemPrompt } from '../services/ivx-senior-engineer-persona';
+import { getLiveContextBlock } from '../services/ivx-live-context-injector';
 import { recordExecutionTrace } from '../services/ivx-execution-trace-store';
 import {
   buildDocumentAnalysisInstructionBlock,
@@ -4641,28 +4643,31 @@ async function generateOwnerAIAnswer(input: {
   const tz = typeof input.clientTimezone === 'string' && input.clientTimezone.trim().length > 0
     ? input.clientTimezone.trim()
     : null;
-  const baseSystem = input.healthProbe
-    ? [
+  let systemPrompt: string;
+  if (input.healthProbe) {
+    systemPrompt = [
       `You are ${IVX_OWNER_AI_PROFILE.name} health verification.`,
       'Reply with READY only.',
       `Session: ${input.sessionId}`,
-    ].join('\n\n')
-    : buildOwnerAISystemPrompt({ mode: input.mode ?? 'chat', devTestModeActive: input.devTestModeActive === true });
-  let systemPrompt = baseSystem;
-  // Phase 9: append the canonical senior-developer system prompt with the 18-step
-  // loop, DEPLOYED-vs-VERIFIED distinction, and forbidden vague language rules.
-  // This is the permanent rules block the owner mandated for every owner-AI run.
-  if (!input.healthProbe) {
-    systemPrompt = `${systemPrompt}
-
-${buildSeniorDeveloperSystemPrompt()}`;
+    ].join('\n\n');
+  } else {
+    // Owner mandate 2026-07-30: IVX IA is now a true Senior Software Engineer.
+    // The new persona replaces the old two-prompt approach with a single
+    // comprehensive system prompt that includes live production context.
+    let liveCtx = '';
+    try {
+      liveCtx = await getLiveContextBlock();
+    } catch {
+      liveCtx = '[IVX LIVE PRODUCTION CONTEXT]\n  Live context unavailable — proceeding without production awareness.\n[/IVX LIVE PRODUCTION CONTEXT]';
+    }
+    systemPrompt = buildSeniorEngineerSystemPrompt(liveCtx);
   }
   if (tz && !input.healthProbe) {
     try {
       const nowLocal = new Intl.DateTimeFormat('en-US', { timeZone: tz, dateStyle: 'full', timeStyle: 'long' }).format(new Date());
-      systemPrompt = `${baseSystem}\n\nOwner local time context: timezone=${tz}, currentLocalTime="${nowLocal}". Always answer time/date questions in this timezone unless the owner asks for another one.`;
+      systemPrompt = `${systemPrompt}\n\nOwner local time context: timezone=${tz}, currentLocalTime="${nowLocal}". Always answer time/date questions in this timezone unless the owner asks for another one.`;
     } catch {
-      systemPrompt = `${baseSystem}\n\nOwner local timezone: ${tz}.`;
+      systemPrompt = `${systemPrompt}\n\nOwner local timezone: ${tz}.`;
     }
   }
   const maxOutputTokens = input.healthProbe
