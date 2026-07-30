@@ -1,4 +1,4 @@
-import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
+import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 
 type AgentJobStatus = 'queued' | 'running' | 'validating' | 'waiting_approval' | 'completed' | 'failed' | 'canceled';

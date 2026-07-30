@@ -230,7 +230,7 @@ const CODE_CHANGE_PATTERNS: RegExp[] = [
   /\bupdate\s+(?:the\s+)?(?:code|file|route|endpoint)\b/i,
   /\bcreate\s+(?:a\s+)?(?:new\s+)?(?:module|file|component|screen|function)\b/i,
   /\bimplement\s+(?:this|that|the)\s+(?:feature|fix|module|component|screen)\b/i,
-  /\badd\s+(?:a\s+)?(?:retry|new|feature)\s+(?:button|component|module|screen|endpoint)\b/i,
+  /\badd\s+(?:a\s+)?(?:retry|new|feature)\s+(?:button|component|module|screen|endpoint|route|page|service|hook|middleware|handler)\b/i,
   /\bwrite\s+(?:the\s+)?(?:code|tests?|fix|patch|implementation)\b/i,
   /\brefactor\s+(?:this|that|the)\b/i,
 ];
@@ -584,9 +584,9 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  // "Create a new X" / "Implement a new X" / "Build a new X" (without "and deploy")
+  // "Create a new X" / "Implement a new X" / "Build a new X" / "Add a new X" (without "and deploy")
   // → still execution when the target is a code artifact (endpoint, route, page, module, service, etc.)
-  if (/\b(?:create|implement|build|develop|scaffold|write)\s+(?:a\s+)?(?:new\s+)?(?:api\s+)?(?:endpoint|route|page|module|service|component|screen|hook|feature|function|middleware|handler|dashboard|widget)\b/i.test(text)) {
+  if (/\b(?:create|implement|build|develop|scaffold|write|add)\s+(?:a\s+)?(?:new\s+)?(?:api\s+)?(?:endpoint|route|page|module|service|component|screen|hook|feature|function|middleware|handler|dashboard|widget)\b/i.test(text)) {
     return true;
   }
 
@@ -621,8 +621,12 @@ function isExplicitExecution(text: string): boolean {
     return true;
   }
 
-  // "scan for dead code" / "scan the codebase" / "scan for unused" → execution
-  if (/\bscan\s+(?:for|the)\s+(?:dead\s+code|unused|duplicate)\b/i.test(text)) {
+  // "scan for dead code" / "scan the codebase" / "scan for unused" / "scan the codebase for unused files" → execution
+  if (/\bscan\s+(?:for|the)\s+(?:dead\s+code|unused|duplicate|codebase)\b/i.test(text)) {
+    return true;
+  }
+  // "scan the codebase for X" → execution (broader catch-all)
+  if (/\bscan\s+the\s+codebase\b/i.test(text)) {
     return true;
   }
   // "run QA" / "run the QA" → execution
