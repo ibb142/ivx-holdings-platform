@@ -51,10 +51,16 @@ const SHOW_MEMORY_PATTERNS: readonly RegExp[] = [
 const REMEMBER_NAME_PATTERNS: readonly RegExp[] = [
   /\b(?:remember|save)\s+(?:that\s+)?my\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
   /\bmy\s+name\s+is\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
+  /\b(?:save|remember|store)\s+my\s+name\s+as\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?this\s+user\s+(?:is|name\s+is|is\s+called)\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?i\s*['’]?m\s+(.+?)(?:\s+(?:and\s+)?(?:save|remember|store)\s+it)?$/i,
   /\b(?:remember|save)\s+(?:that\s+)?i\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+)$/i,
   /\b(?:remember|save)\s+(?:that\s+)?my\s+(?:company|role|email|language)\s+is\s+(.+)$/i,
+  /\bmy\s+(?:company|role|email|language)\s+is\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  /\bmy\s+preferred\s+(?:language|name|company|role|email)\s+is\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  /\bi\s+prefer\s+to\s+be\s+called\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  /\bi\s+(?:work\s+at|am\s+(?:the\s+)?(?:owner|ceo|founder)\s+of)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
+  /\bmy\s+(?:company|role|email|language)\s+is\s+.{2,60}?\b(?:and\s+)?(?:i\s+prefer\s+to\s+be\s+called|call\s+me|my\s+name\s+is)\s+(.+?)(?:\s*,?\s*(?:please\s+)?(?:save|remember|store)\s+(?:this|it|that))?\.?$/i,
 ];
 
 const CHANGE_NAME_PATTERNS: readonly RegExp[] = [
