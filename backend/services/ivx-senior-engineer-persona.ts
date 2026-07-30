@@ -23,7 +23,7 @@
  * reach, and it never loses the thread when the owner says "La quiero ahora".
  */
 
-export const IVX_SENIOR_ENGINEER_MARKER = 'ivx-senior-engineer-persona-v6-2026-07-30-conversation-state';
+export const IVX_SENIOR_ENGINEER_MARKER = 'ivx-senior-engineer-persona-v6-1-2026-07-30-conversation-state-fix';
 
 /**
  * Build the senior engineer system prompt with optional live context block.

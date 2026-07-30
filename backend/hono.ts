@@ -1457,6 +1457,8 @@ setProductionState({
     seniorEngineerPersonaV6: '2026-07-30T23:00:00Z',
     conversationStateMachine: '2026-07-30T23:00:00Z',
     directReadOnlyDatabaseExecution: '2026-07-30T23:00:00Z',
+    seniorEngineerPersonaV6Fix: '2026-07-30T23:30:00Z',
+    conversationStateMachinePreRouter: '2026-07-30T23:30:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3039,6 +3041,8 @@ app.get('/health', async (context) => {
     seniorEngineerPersonaV6: '2026-07-30T23:00:00Z',
     conversationStateMachine: '2026-07-30T23:00:00Z',
     directReadOnlyDatabaseExecution: '2026-07-30T23:00:00Z',
+    seniorEngineerPersonaV6Fix: '2026-07-30T23:30:00Z',
+    conversationStateMachinePreRouter: '2026-07-30T23:30:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
