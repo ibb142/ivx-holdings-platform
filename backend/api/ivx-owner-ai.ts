@@ -6077,15 +6077,25 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     if (authoritativeDecision.selectedRoute === 'LLM_TEXT_RESPONSE') {
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       try {
-        // Direct LLM call — same pattern as public-chat-ai.ts.
-        // Avoids generateOwnerAIAnswer's complex dependencies that fail early in the handler.
+        // V3 fix: Use the senior engineer system prompt with live context —
+        // same as generateOwnerAIResponse. This ensures production awareness
+        // questions (SHA, health, priority) get the live context block.
+        let knowledgeLiveCtx = '';
+        try {
+          knowledgeLiveCtx = await getLiveContextBlock();
+        } catch {
+          knowledgeLiveCtx = '';
+        }
+        const knowledgeSystemPrompt = buildSeniorEngineerSystemPrompt(knowledgeLiveCtx);
+        const knowledgeCompactCtx = buildCompactContextPrefix(knowledgeLiveCtx);
+        const knowledgePrompt = knowledgeCompactCtx ? `${knowledgeCompactCtx}\n\n${prompt}` : prompt;
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
         const llmResult = await requestIVXAIText({
           module: 'owner-room-knowledge',
           requestId,
           model: llmModel,
-          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. Answer the user\'s question directly and accurately. You are a senior developer with expertise in architecture, code review, deployment, and debugging. Answer in plain text — do not claim to have executed anything, do not create tasks, do not trigger deploys.',
-          prompt: prompt,
+          system: knowledgeSystemPrompt,
+          prompt: knowledgePrompt,
         });
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         // Reject canned responses (Item 6)
@@ -6162,14 +6172,24 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const cleanPrompt = stripManualDirectives(prompt);
       try {
-        // Direct LLM call — same pattern as public-chat-ai.ts.
+        // V3 fix: Use the senior engineer system prompt with live context —
+        // same as generateOwnerAIResponse and LLM_TEXT_RESPONSE paths.
+        let manualLiveCtx = '';
+        try {
+          manualLiveCtx = await getLiveContextBlock();
+        } catch {
+          manualLiveCtx = '';
+        }
+        const manualSystemPrompt = buildSeniorEngineerSystemPrompt(manualLiveCtx);
+        const manualCompactCtx = buildCompactContextPrefix(manualLiveCtx);
+        const manualPrompt = manualCompactCtx ? `${manualCompactCtx}\n\n${cleanPrompt}` : cleanPrompt;
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
         const llmResult = await requestIVXAIText({
           module: 'owner-room-manual',
           requestId,
           model: llmModel,
-          system: 'You are IVX IA, the AI brain for IVXHOLDINGS. MANUAL ANSWER MODE — NO EXECUTION. Answer the user\'s question directly in plain text. Do not use tools, do not inspect Supabase, do not trigger deploys, do not create tasks. Just answer the question.',
-          prompt: cleanPrompt,
+          system: manualSystemPrompt,
+          prompt: manualPrompt,
         });
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
