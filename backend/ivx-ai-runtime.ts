@@ -171,6 +171,8 @@ function getIVXAIGatewayApiKey(): string {
   const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('No API key available.');
   return apiKey;
+  if (!apiKey) throw new Error('No API key available.');
+  return apiKey;
   // 2026-07-26 fix: AI_GATEWAY_API_KEY takes priority over OPENAI_API_KEY.
   // The owner updates AI_GATEWAY_API_KEY on Render when rotating Vercel keys.
   // If OPENAI_API_KEY (a generic alias) is preferred, a stale key can shadow
