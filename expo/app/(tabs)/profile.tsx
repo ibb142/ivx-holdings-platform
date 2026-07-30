@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Image,
   Alert,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -757,45 +756,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
   },
-  ownerLoginHighlight: {
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.primary,
-    backgroundColor: Colors.surfaceLight,
-  },
   ownerLoginButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-  },
-  emergencyBanner: {
-    backgroundColor: '#D32029',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  emergencyBannerText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800' as const,
-    letterSpacing: 0.4,
-  },
-  emergencyBannerSub: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    opacity: 0.9,
-    marginTop: 2,
-  },
-  ownerLoginTopBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    marginTop: 12,
-    marginBottom: 4,
   },
   ownerLoginIcon: {
     borderRadius: 11,
@@ -811,23 +777,6 @@ const styles = StyleSheet.create({
     color: Colors.background,
     opacity: 0.85,
     marginTop: 2,
-  },
-  adminSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  adminBuildStamp: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
-  },
-  adminBuildStampText: {
-    fontSize: 10,
-    fontWeight: '700' as const,
-    color: Colors.background,
-    letterSpacing: 0.5,
   },
   menuItem: {
     flexDirection: 'row',
@@ -890,13 +839,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
-  buildStampText: {
-    color: Colors.primary,
-    fontSize: 10,
-    textAlign: 'center',
-    marginBottom: 16,
-    letterSpacing: 0.3,
-  },
   companySection: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
@@ -946,56 +888,6 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 120,
-  },
-  buildStampTop: {
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  buildStampTopText: {
-    color: Colors.background,
-    fontSize: 12,
-    fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
-  buildStampTopSub: {
-    color: Colors.background,
-    fontSize: 10,
-    opacity: 0.85,
-    marginTop: 2,
-  },
-  diagPanel: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-    padding: 12,
-    marginBottom: 12,
-  },
-  diagTitle: {
-    color: Colors.textTertiary,
-    fontSize: 11,
-    fontWeight: '700' as const,
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  diagRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 2,
-  },
-  diagKey: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-  },
-  diagVal: {
-    color: Colors.text,
-    fontSize: 11,
-    fontWeight: '700' as const,
   },
   scrollView: {
     flex: 1,
