@@ -4644,6 +4644,8 @@ async function generateOwnerAIAnswer(input: {
     ? input.clientTimezone.trim()
     : null;
   let systemPrompt: string;
+  // V3: Stash compact context here, apply after promptText is declared below.
+  let pendingCompactCtx = '';
   if (input.healthProbe) {
     systemPrompt = [
       `You are ${IVX_OWNER_AI_PROFILE.name} health verification.`,
@@ -4661,12 +4663,11 @@ async function generateOwnerAIAnswer(input: {
       liveCtx = '[IVX LIVE PRODUCTION CONTEXT]\n  Live context unavailable — proceeding without production awareness.\n[/IVX LIVE PRODUCTION CONTEXT]';
     }
     systemPrompt = buildSeniorEngineerSystemPrompt(liveCtx);
-    // V3: Also inject compact context prefix into the user's promptText.
-    // This places live production data RIGHT BEFORE the user's question —
-    // the strongest attention signal. The model cannot miss it.
-    const compactCtx = buildCompactContextPrefix(liveCtx);
-    if (compactCtx && !input.healthProbe) {
-      promptText = `${compactCtx}\n\n${promptText}`;
+    // V3: Save compact context for injection AFTER promptText is declared.
+    // promptText is declared later in this function, so we stash the compact
+    // context in a local variable and apply it once promptText exists.
+    if (!input.healthProbe) {
+      pendingCompactCtx = buildCompactContextPrefix(liveCtx);
     }
   }
   if (tz && !input.healthProbe) {
@@ -4689,6 +4690,12 @@ async function generateOwnerAIAnswer(input: {
   // for scanned PDFs) and analyze attached videos, then ground the answer on the
   // real extracted content. Never blocks the reply if extraction fails.
   let promptText = input.promptText;
+  // V3: Inject compact context prefix right after promptText is declared.
+  // This places live production data RIGHT BEFORE the user's question —
+  // the strongest attention signal. The model cannot miss it.
+  if (pendingCompactCtx && !input.healthProbe) {
+    promptText = `${pendingCompactCtx}\n\n${promptText}`;
+  }
   if (!input.healthProbe && documents.length > 0) {
     systemPrompt = `${systemPrompt}\n\n${buildDocumentAnalysisInstructionBlock(documents)}`;
     try {
