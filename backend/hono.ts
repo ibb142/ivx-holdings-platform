@@ -1472,6 +1472,9 @@ setProductionState({
     conversationStateMachineV6_8: '2026-07-31T03:30:00Z',
     approvalReExecFix: '2026-07-31T03:30:00Z',
     taskStatusNarrowing: '2026-07-31T03:30:00Z',
+    conversationStateMachineV6_9: '2026-07-31T11:10:00Z',
+    conversationalNarrativeUpgrade: '2026-07-31T11:10:00Z',
+    antiHallucinationGuard: '2026-07-31T11:10:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
