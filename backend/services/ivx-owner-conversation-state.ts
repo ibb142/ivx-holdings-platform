@@ -29,7 +29,7 @@ import {
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
 import { createRequestId } from './ivx-request-id';
 
-export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-6-2026-07-31-intent-routing-fix';
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-8-2026-07-31-approval-reexec-task-status-narrowing';
 
 const ROOT = auditDir('owner-conversation-state');
 const STATE = path.join(ROOT, 'states.json');
@@ -361,7 +361,10 @@ export function classifyOwnerActionType(message: string): { actionType: OwnerAct
   }
 
   // Task control / status / cancel.
-  if (/(estado|status|where are we|where were we|dónde nos quedamos|donde nos quedamos|qué estabas haciendo|que estabas haciendo|what were you doing|dónde quedamos|donde quedamos)/i.test(normalized)) {
+  // V6.8 FIX: Only match context-recall phrases ("where were we", "dónde nos quedamos", etc).
+  // Do NOT match bare "status" or "estado" — those are too broad and capture engineering
+  // questions like "What is the status of the task?" which should go to the LLM.
+  if (/(where are we|where were we|dónde nos quedamos|donde nos quedamos|qué estabas haciendo|que estabas haciendo|what were you doing|dónde quedamos|donde quedamos|dónde estábamos|donde estabamos|where did we leave)/i.test(normalized)) {
     return { actionType: 'task_status', resource: null, operation: 'status', metadata: {} };
   }
   if (/\b(cancel|cancela|cancelar|stop|detente)\b/i.test(normalized)) {

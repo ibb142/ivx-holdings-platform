@@ -211,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-6-2026-07-31-intent-routing-fix';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-8-2026-07-31-approval-reexec-task-status-narrowing';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -6216,6 +6216,41 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           const approvalFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
           await setOwnerConversationState({ ...approvalFreshState, readOnlyAuthorized: true, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
           return returnStateAnswer(result.answer, { actionId: resolved.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
+        }
+      }
+    }
+
+    // V6.8 FIX: If approval is detected but there's no active pending action,
+    // and the owner has prior read-only authorization, re-execute the last
+    // completed read-only action to provide fresh data. This handles the case
+    // where readOnlyAuthorized was already true (from prior runs) so Step 1
+    // executed directly without creating a pending action, but the owner still
+    // says "yes, I authorize you" — they expect to see the data again.
+    if (approvalSignal === 'approve' && !activeAction) {
+      const approvalNoPendingState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+      if (approvalNoPendingState.readOnlyAuthorized === true && approvalNoPendingState.lastCompletedActionId) {
+        const lastAction = approvalNoPendingState.actions.find((a) => a.actionId === approvalNoPendingState.lastCompletedActionId) ?? null;
+        if (lastAction && isReadOnlyActionType(lastAction.actionType)) {
+          const result = await executeReadOnlyAction(lastAction);
+          const reExecAction = await addPendingAction(conversation.id, ownerContext.userId, {
+            originalQuestion: lastAction.originalQuestion,
+            actionType: lastAction.actionType,
+            resource: lastAction.resource,
+            operation: lastAction.operation,
+            authorizationRequired: false,
+            languagePreference: detectedLang,
+            metadata: lastAction.metadata,
+          });
+          await updateAction(conversation.id, ownerContext.userId, reExecAction.actionId, {
+            executionState: result.ok ? 'COMPLETED' : 'FAILED',
+            lastResultSummary: result.answer,
+            lastError: result.error ?? null,
+            traceId: requestId,
+            updatedAt: nowIso(),
+          });
+          const reExecFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+          await setOwnerConversationState({ ...reExecFreshState, activeActionId: null, lastCompletedActionId: reExecAction.actionId, unresolvedQuestion: null });
+          return returnStateAnswer(result.answer, { actionId: reExecAction.actionId, evidence: result.evidence, reExecuted: true }, result.ok ? 'ok' : 'error');
         }
       }
     }
