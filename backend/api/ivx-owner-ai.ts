@@ -7880,13 +7880,13 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           validationMode: 'focused',
         });
         console.log('[IVXOwnerAIBackend] V8.0 autonomous execution proof:', {
-          jobId: autonomousProof.jobId,
-          ok: autonomousProof.ok,
-          endToEndProductionComplete: autonomousProof.endToEndProductionComplete,
-          changedFiles: autonomousProof.changedFiles,
-          commitSha: autonomousProof.gitDeployOperator.github.commitSha,
-          deployId: autonomousProof.gitDeployOperator.render.deployId,
-          liveCommitMatch: autonomousProof.liveCommitVerification.match,
+          jobId: autonomousProof?.jobId,
+          ok: autonomousProof?.ok,
+          endToEndProductionComplete: autonomousProof?.endToEndProductionComplete,
+          changedFiles: autonomousProof?.changedFiles ?? [],
+          commitSha: autonomousProof?.gitDeployOperator?.github?.commitSha ?? null,
+          deployId: autonomousProof?.gitDeployOperator?.render?.deployId ?? null,
+          liveCommitMatch: autonomousProof?.liveCommitVerification?.match ?? false,
         });
       } catch (error) {
         console.log('[IVXOwnerAIBackend] V8.0 autonomous execution failed:', error instanceof Error ? error.message : 'unknown');
@@ -7904,9 +7904,17 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       } catch (error) {
         console.log('[IVXOwnerAIBackend] daily-improvement autonomous sync failed (non-blocking):', error instanceof Error ? error.message : 'unknown');
       }
-      // Build the evidence block from the REAL execution proof
-      const executionBlock = autonomousProof
-        ? `\n\n--- AUTONOMOUS EXECUTION PROOF (V8.0) ---\nTASK_ID: ${autonomousProof.jobId}\nSTATE: ${autonomousProof.ok ? 'VERIFIED' : 'BLOCKED'}\nFILES_CHANGED: ${autonomousProof.changedFiles.length > 0 ? autonomousProof.changedFiles.join(', ') : 'none'}\nTESTS: ${autonomousProof.validations.length > 0 ? autonomousProof.validations.map((v) => `${v.command}=${v.ok ? 'PASS' : 'FAIL'}`).join('; ') : 'not run'}\nGITHUB_SHA: ${autonomousProof.gitDeployOperator.github.commitSha ?? 'none'}\nRENDER_DEPLOY_ID: ${autonomousProof.gitDeployOperator.render.deployId ?? 'none'}\nLIVE_VERIFY: ${autonomousProof.liveCommitVerification.match ? 'commit parity VERIFIED' : 'commit parity PENDING (deploy may still be building)'}\nBLOCKERS: ${autonomousProof.blockers.length > 0 ? autonomousProof.blockers.join('; ') : 'none'}\nEND_TO_END_COMPLETE: ${autonomousProof.endToEndProductionComplete}\n--- END PROOF ---`
+      // Build the evidence block from the REAL execution proof (null-safe)
+      const _proof = autonomousProof;
+      const _files = _proof?.changedFiles ?? [];
+      const _vals = _proof?.validations ?? [];
+      const _blockers = _proof?.blockers ?? [];
+      const _commitSha = _proof?.gitDeployOperator?.github?.commitSha ?? null;
+      const _deployId = _proof?.gitDeployOperator?.render?.deployId ?? null;
+      const _liveMatch = _proof?.liveCommitVerification?.match ?? false;
+      const _e2e = _proof?.endToEndProductionComplete ?? false;
+      const executionBlock = _proof
+        ? `\n\n--- AUTONOMOUS EXECUTION PROOF (V8.0) ---\nTASK_ID: ${_proof.jobId}\nSTATE: ${_proof.ok ? 'VERIFIED' : 'BLOCKED'}\nFILES_CHANGED: ${_files.length > 0 ? _files.join(', ') : 'none'}\nTESTS: ${_vals.length > 0 ? _vals.map((v) => `${v.command}=${v.ok ? 'PASS' : 'FAIL'}`).join('; ') : 'not run'}\nGITHUB_SHA: ${_commitSha ?? 'none'}\nRENDER_DEPLOY_ID: ${_deployId ?? 'none'}\nLIVE_VERIFY: ${_liveMatch ? 'commit parity VERIFIED' : 'commit parity PENDING (deploy may still be building)'}\nBLOCKERS: ${_blockers.length > 0 ? _blockers.join('; ') : 'none'}\nEND_TO_END_COMPLETE: ${_e2e}\n--- END PROOF ---`
         : '';
       const dailyAutonomousBlock = dailyAutonomousReport
         ? `\n\n${renderFinalAutonomousReport(dailyAutonomousReport)}`
