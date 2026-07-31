@@ -3087,6 +3087,7 @@ app.get('/health', async (context) => {
     deployCodeExecutionV610: '2026-07-31T14:00:00Z',
     liveTypingIndicator: '2026-07-31T14:00:00Z',
     approvalResumeFixV611: '2026-07-31T15:10:00Z',
+    honestIdentityAndLiveTypingV612: '2026-07-31T16:00:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
