@@ -2335,6 +2335,29 @@ export function startStaleJobSweep(): void {
 startStaleJobSweep();
 
 // ─────────────────────────────────────────────────────────────────────────────
+// V6.15: PERIODIC QUEUE DRAIN TIMER
+// ─────────────────────────────────────────────────────────────────────────────
+// Root cause: jobs sit at QUEUED (0%) until manually resumed via /resume.
+// The initial `void drainSeniorDeveloperQueue()` on enqueue fires once but if
+// the drain is already in progress (draining=true) or the job is enqueued after
+// the drain loop has exited, no timer picks it up. This periodic drain fires
+// every 15 seconds, ensuring queued jobs are always picked up within 15s
+// without manual intervention.
+let queueDrainTimer: ReturnType<typeof setInterval> | null = null;
+const QUEUE_DRAIN_INTERVAL_MS = 15_000;
+
+export function startQueueDrainTimer(): void {
+  if (queueDrainTimer) return;
+  queueDrainTimer = setInterval(() => {
+    void drainSeniorDeveloperQueue().catch(() => {});
+  }, QUEUE_DRAIN_INTERVAL_MS);
+  queueDrainTimer.unref?.();
+}
+
+// Start the periodic drain automatically on module load.
+startQueueDrainTimer();
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STATUS SURFACE
 // ─────────────────────────────────────────────────────────────────────────────
 
