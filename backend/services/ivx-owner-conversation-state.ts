@@ -80,6 +80,7 @@ export type OwnerConversationState = {
   lastCompletedActionId: string | null;
   unresolvedQuestion: string | null;
   lastVerifiedProductionState: Record<string, unknown> | null;
+  readOnlyAuthorized: boolean;
 };
 
 function nowIso(): string {
@@ -140,6 +141,7 @@ function defaultState(conversationId: string, ownerId: string): OwnerConversatio
     lastCompletedActionId: null,
     unresolvedQuestion: null,
     lastVerifiedProductionState: null,
+    readOnlyAuthorized: false,
   };
 }
 
@@ -282,17 +284,16 @@ export async function resolveActiveAction(
 
 const APPROVAL_PHRASES = [
   'proceed', 'procede', 'hazlo', 'hazlo ahora', 'autorizado', 'te autorizo',
+  'la quiero', 'lo quiero', 'la quiero ahora', 'lo quiero ahora',
   'sí', 'si', 'yes', 'go ahead', 'do it now', 'do it', 'ejecutalo', 'ejecútalo',
   'continua', 'continúa', 'aprobado', 'i approve', 'you have permission',
   'adelante', 'vamos', 'confirma', 'confirmado', 'dale', 'ok', 'okay',
   'está bien', 'esta bien', 'por supuesto', 'claro', 'hazlo por favor',
-  'procede por favor', 'execute', 'run it', 'run', 'check now', 'check',
-  'revisa', 'revisa ahora', 'dime', 'cuéntame', 'cuentame', 'tell me',
-  'show me', 'muéstrame', 'muestrame',
+  'procede por favor', 'execute', 'run it', 'check now',
 ];
 
 const DENIAL_PHRASES = [
-  'no', 'cancel', 'cancela', 'cancelar', 'stop', 'detente', 'no lo hagas',
+  'cancel', 'cancela', 'cancelar', 'stop', 'detente', 'no lo hagas',
   'no procedas', 'no procede', 'denied', 'denegado', 'rechazado', 'rechaza',
   'olvídalo', 'olvidalo', 'nvm', 'never mind', 'forget it',
 ];
@@ -300,13 +301,24 @@ const DENIAL_PHRASES = [
 export function detectOwnerApproval(message: string): 'approve' | 'deny' | 'neutral' {
   const normalized = asTrimmedString(message).toLowerCase().replace(/[^a-z0-9áéíóúñü\s]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!normalized) return 'neutral';
+  const tokens = normalized.split(' ');
+
+  function matchesPhrase(phrase: string): boolean {
+    const p = phrase.toLowerCase();
+    if (p.includes(' ')) {
+      // Multi-word: bounded by spaces or string edges
+      return normalized === p || normalized.startsWith(p + ' ') || normalized.endsWith(' ' + p) || normalized.includes(' ' + p + ' ');
+    }
+    // Single-word: exact token match (prevents 'si' matching 'sistema', 'no' matching 'normal')
+    return tokens.includes(p);
+  }
 
   // Check denial first so "no, proceed" is not treated as approval.
   for (const phrase of DENIAL_PHRASES) {
-    if (normalized.includes(phrase.toLowerCase())) return 'deny';
+    if (matchesPhrase(phrase)) return 'deny';
   }
   for (const phrase of APPROVAL_PHRASES) {
-    if (normalized.includes(phrase.toLowerCase())) return 'approve';
+    if (matchesPhrase(phrase)) return 'approve';
   }
   return 'neutral';
 }
@@ -349,7 +361,7 @@ export function classifyOwnerActionType(message: string): { actionType: OwnerAct
   }
 
   // Task control / status / cancel.
-  if (/\b(estado|status|where are we|where were we|dónde nos quedamos|donde nos quedamos|qué estabas haciendo|que estabas haciendo|what were you doing)\b/i.test(normalized)) {
+  if (/(estado|status|where are we|where were we|dónde nos quedamos|donde nos quedamos|qué estabas haciendo|que estabas haciendo|what were you doing|dónde quedamos|donde quedamos)/i.test(normalized)) {
     return { actionType: 'task_status', resource: null, operation: 'status', metadata: {} };
   }
   if (/\b(cancel|cancela|cancelar|stop|detente)\b/i.test(normalized)) {
@@ -378,8 +390,30 @@ export function classifyOwnerActionType(message: string): { actionType: OwnerAct
   return { actionType: 'unknown', resource: null, operation: null, metadata: {} };
 }
 
+
+export function classifyOwnerActionTypeWithContext(
+  message: string,
+  previousAction: PendingOwnerAction | null,
+): { actionType: OwnerActionType; resource: string | null; operation: string | null; metadata: Record<string, unknown> } {
+  const classified = classifyOwnerActionType(message);
+  if (classified.resource === 'properties' || classified.resource === 'deals' || classified.actionType === 'database_read' || classified.actionType === 'database_read_active' || classified.actionType === 'database_list_latest') {
+    return classified;
+  }
+  if ((classified.actionType === 'information' || classified.actionType === 'unknown') && previousAction && (previousAction.resource === 'properties' || previousAction.resource === 'deals')) {
+    const normalized = asTrimmedString(message).toLowerCase();
+    const wantsActive = /\b(activas?|activos?|active|activo|en\s*venta|for\s+sale|available|disponible|disponibles|live|published)\b/i.test(normalized);
+    const wantsLatest = /\b(últimas?|ultimas?|últimos?|ultimos?|latest|recent|recientes|last\s+five|last\s+5|últimas\s+cinco|ultimas\s+cinco|muéstrame|muestrame|show\s+me|list)\b/i.test(normalized);
+    const listLimitMatch = normalized.match(/\b(\d+)\b/);
+    const listLimit = listLimitMatch ? Math.min(Math.max(Number(listLimitMatch[1]), 1), 100) : 5;
+    if (wantsActive) return { actionType: 'database_read_active', resource: 'properties', operation: 'count_active', metadata: {} };
+    if (wantsLatest) return { actionType: 'database_list_latest', resource: 'properties', operation: 'select_latest', metadata: { limit: listLimit } };
+    return { actionType: 'database_read', resource: 'properties', operation: 'count', metadata: {} };
+  }
+  return classified;
+}
+
 export function isReadOnlyActionType(actionType: OwnerActionType): boolean {
-  return actionType === 'database_read' || actionType === 'database_read_active' || actionType === 'database_list_latest' || actionType === 'information' || actionType === 'explanation' || actionType === 'task_status';
+  return actionType === 'database_read' || actionType === 'database_read_active' || actionType === 'database_list_latest' || actionType === 'explanation' || actionType === 'task_status';
 }
 
 export async function executeReadOnlyAction(

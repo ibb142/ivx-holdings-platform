@@ -128,7 +128,7 @@ import { detectCountIntent, runDbCounts, buildCountGroundingBlock } from '../ser
 import {
   addPendingAction,
   buildWhereWeWereSummary,
-  classifyOwnerActionType,
+  classifyOwnerActionTypeWithContext,
   detectOwnerApproval,
   executeReadOnlyAction,
   getActiveAction,
@@ -211,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-1-2026-07-30-conversation-state-fix';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-2-2026-07-30-conversation-context-fix';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -6210,15 +6210,33 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
             traceId: requestId,
             updatedAt: nowIso(),
           });
-          await setOwnerConversationState({ ...ownerState, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
+          await setOwnerConversationState({ ...ownerState, readOnlyAuthorized: true, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
           return returnStateAnswer(result.answer, { actionId: resolved.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
         }
       }
     }
 
     // 2. Direct execution for read-only questions (property counts, active counts, latest lists).
-    const classified = classifyOwnerActionType(prompt);
-    if (isReadOnlyActionType(classified.actionType)) {
+    const previousAction = activeAction ?? (ownerState.lastCompletedActionId ? ownerState.actions.find((a) => a.actionId === ownerState.lastCompletedActionId) ?? null : null);
+    const classified = classifyOwnerActionTypeWithContext(prompt, previousAction);
+    if (isReadOnlyActionType(classified.actionType) && classified.resource === 'properties') {
+      const hasConversationAuthorization = ownerState.readOnlyAuthorized === true;
+      if (!hasConversationAuthorization) {
+        const action = await addPendingAction(conversation.id, ownerContext.userId, {
+          originalQuestion: prompt,
+          actionType: classified.actionType,
+          resource: classified.resource,
+          operation: classified.operation,
+          authorizationRequired: true,
+          languagePreference: detectedLang,
+          metadata: classified.metadata,
+        });
+        await setOwnerConversationState({ ...ownerState, activeActionId: action.actionId, unresolvedQuestion: prompt });
+        const approvalQuestion = detectedLang === 'es'
+          ? 'Puedo consultar eso directamente en la base de datos. ¿Me autorizas a ejecutar esta consulta de solo lectura?'
+          : 'I can query that directly from the database. Do you authorize me to run this read-only query?';
+        return returnStateAnswer(approvalQuestion, { actionId: action.actionId, pending: true, authorizationRequired: true });
+      }
       const action = await addPendingAction(conversation.id, ownerContext.userId, {
         originalQuestion: prompt,
         actionType: classified.actionType,
