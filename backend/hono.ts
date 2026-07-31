@@ -1483,6 +1483,7 @@ setProductionState({
     selfImprovementPipelineV8: '2026-07-31T13:00:00Z',
     deployCodeExecutionV610: '2026-07-31T14:00:00Z',
     liveTypingIndicator: '2026-07-31T14:00:00Z',
+    approvalResumeFixV611: '2026-07-31T15:10:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3084,6 +3085,7 @@ app.get('/health', async (context) => {
     selfImprovementPipelineV8: '2026-07-31T13:00:00Z',
     deployCodeExecutionV610: '2026-07-31T14:00:00Z',
     liveTypingIndicator: '2026-07-31T14:00:00Z',
+    approvalResumeFixV611: '2026-07-31T15:10:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
