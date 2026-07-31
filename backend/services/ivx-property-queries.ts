@@ -45,7 +45,7 @@ function resolveConfig(): { url: string; key: string; missing: string[]; client:
   return { url, key, missing, client };
 }
 
-const PROPERTY_TABLES = ['properties', 'deals', 'jv_deals', 'projects', 'listings'];
+const PROPERTY_TABLES = ['jv_deals', 'properties', 'deals', 'projects', 'listings'];
 
 const ACTIVE_COLUMN_CANDIDATES = ['status', 'active', 'is_active', 'is_active_listing', 'published', 'is_published', 'state', 'listing_status'];
 const ACTIVE_VALUES = ['active', 'published', 'available', 'for_sale', 'for rent', 'for_rent', 'live', 'listed', 'true', '1', 'yes'];

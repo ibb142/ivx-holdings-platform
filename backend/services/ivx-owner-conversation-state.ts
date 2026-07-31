@@ -284,17 +284,16 @@ export async function resolveActiveAction(
 
 const APPROVAL_PHRASES = [
   'proceed', 'procede', 'hazlo', 'hazlo ahora', 'autorizado', 'te autorizo',
+  'la quiero', 'lo quiero', 'la quiero ahora', 'lo quiero ahora',
   'sí', 'si', 'yes', 'go ahead', 'do it now', 'do it', 'ejecutalo', 'ejecútalo',
   'continua', 'continúa', 'aprobado', 'i approve', 'you have permission',
   'adelante', 'vamos', 'confirma', 'confirmado', 'dale', 'ok', 'okay',
   'está bien', 'esta bien', 'por supuesto', 'claro', 'hazlo por favor',
-  'procede por favor', 'execute', 'run it', 'run', 'check now', 'check',
-  'revisa', 'revisa ahora', 'dime', 'cuéntame', 'cuentame', 'tell me',
-  'show me', 'muéstrame', 'muestrame',
+  'procede por favor', 'execute', 'run it', 'check now',
 ];
 
 const DENIAL_PHRASES = [
-  'no', 'cancel', 'cancela', 'cancelar', 'stop', 'detente', 'no lo hagas',
+  'cancel', 'cancela', 'cancelar', 'stop', 'detente', 'no lo hagas',
   'no procedas', 'no procede', 'denied', 'denegado', 'rechazado', 'rechaza',
   'olvídalo', 'olvidalo', 'nvm', 'never mind', 'forget it',
 ];
@@ -302,13 +301,24 @@ const DENIAL_PHRASES = [
 export function detectOwnerApproval(message: string): 'approve' | 'deny' | 'neutral' {
   const normalized = asTrimmedString(message).toLowerCase().replace(/[^a-z0-9áéíóúñü\s]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!normalized) return 'neutral';
+  const tokens = normalized.split(' ');
+
+  function matchesPhrase(phrase: string): boolean {
+    const p = phrase.toLowerCase();
+    if (p.includes(' ')) {
+      // Multi-word: bounded by spaces or string edges
+      return normalized === p || normalized.startsWith(p + ' ') || normalized.endsWith(' ' + p) || normalized.includes(' ' + p + ' ');
+    }
+    // Single-word: exact token match (prevents 'si' matching 'sistema', 'no' matching 'normal')
+    return tokens.includes(p);
+  }
 
   // Check denial first so "no, proceed" is not treated as approval.
   for (const phrase of DENIAL_PHRASES) {
-    if (normalized.includes(phrase.toLowerCase())) return 'deny';
+    if (matchesPhrase(phrase)) return 'deny';
   }
   for (const phrase of APPROVAL_PHRASES) {
-    if (normalized.includes(phrase.toLowerCase())) return 'approve';
+    if (matchesPhrase(phrase)) return 'approve';
   }
   return 'neutral';
 }
@@ -492,7 +502,10 @@ export async function executeReadOnlyAction(
 }
 
 export function buildWhereWeWereSummary(state: OwnerConversationState): string {
-  const action = state.actions.find((a) => a.actionId === state.activeActionId) ?? state.actions.find((a) => a.actionId === state.lastCompletedActionId);
+  // Use the most recent action in the actions array (last element = most recent).
+  // This is more reliable than activeActionId/lastCompletedActionId which may
+  // point to stale actions from prior conversation turns.
+  const action = state.actions.length > 0 ? state.actions[state.actions.length - 1] : null;
   if (!action) return 'No tengo una acción activa o reciente recordada en esta conversación.';
   const isSpanish = action.languagePreference === 'es' || /\b(cuántas|propiedades|activas|muestrame|dónde|qué)\b/i.test(action.originalQuestion);
   const stateText = action.executionState === 'COMPLETED' ? (isSpanish ? 'completada' : 'completed') : (isSpanish ? 'pendiente' : 'pending');

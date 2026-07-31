@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-07-30T21:55:00.000Z
+updatedAt: 2026-07-31T00:27:00.000Z
 ---
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
@@ -615,3 +615,46 @@ Ran 659 tests across 51 files.
 > - Verified link: `curl -I -L` returns `content-type: application/vnd.android.package-archive` and `content-length: 84050439`.
 >
 > **Verdict:** ✅ Full owner-authorized access granted to IVX IA. Production is live on the new commit. Android APK v1.6.1 is built and uploaded. iOS remains deferred to a later version.
+  
+  ---
+  
+  ## 2026-07-30/31 — IVX IA Conversation State Machine V6.4 + Stale-State Fix + Acceptance Test ALL 5 TURNS PASS
+  
+  **Owner mandate (2026-07-30T23:00Z):** IVX IA must preserve conversation context across turns — the owner's read-only questions were losing context between messages, causing follow-up questions like "¿Cuántas están activas?" and "Muéstrame las últimas cinco" to go to the LLM (chatgpt) instead of being answered directly from the Supabase database.
+  
+  **Three critical bugs found and fixed across 4 deploy iterations (V6.1 → V6.4):**
+  
+  ### V6.2 (commit `0628de8e`) — Conversation state machine + approval phrase fix
+  - Added conversation state machine in `backend/api/ivx-owner-ai.ts` that runs BEFORE the intent router, preserving pending actions across turns and executing read-only database queries directly.
+  - Added `classifyOwnerActionTypeWithContext()` in `backend/services/ivx-owner-conversation-state.ts` to classify property questions using prior conversation context.
+  - Added `executeReadOnlyAction()` to run `database_read`, `database_read_active`, `database_list_latest` actions directly against Supabase without LLM routing.
+  - Fixed approval phrase detection: removed information-request words ("show me", "muéstrame", "check", "dime", "tell me", "run") from APPROVAL_PHRASES that caused false approvals. Added "la quiero" / "la quiero ahora" / "lo quiero" to match the owner's exact test phrase. Removed bare "no" from DENIAL_PHRASES that caused false denies on Spanish questions containing "no". Switched to token-based exact matching for single-word phrases to prevent substring false matches.
+  
+  ### V6.3 (commit `0ff2a80d`) — Critical stale-state fix (THE BREAKTHROUGH)
+  - **Root cause found:** After `addPendingAction()` saved a new pending action to the conversation state (internally), line 6234 immediately overwrote the state with a STALE `ownerState` snapshot (from line 6115) that had `actions: []`. This destroyed the pending action immediately after creating it, so Turn 2 found no active action and fell through to the LLM. The same bug affected the denial path (line 6200), approval execution path (line 6213), and direct execution path (line 6257).
+  - **Fix:** Replaced all 4 stale-state overwrites with fresh state reads: `getOwnerConversationState()` is now called right before each `setOwnerConversationState()` to get the current state with the latest actions array, instead of using the stale snapshot from the top of the function.
+  - **Result:** Turn 2 ("La quiero ahora y yo te autorizo.") now correctly resolves the pending action and returns "3 propiedades" from jv_deals. Turns 3-4 (context follow-ups) now execute directly against Supabase with `readOnlyAuthorized: true`.
+  
+  ### V6.4 (commit `f69278dd`) — Table priority + memory recall fix
+  - **Table priority:** `PROPERTY_TABLES` array in `backend/services/ivx-property-queries.ts` reordered from `['properties', 'deals', 'jv_deals', ...]` to `['jv_deals', 'properties', 'deals', ...]`. This ensures all property queries use the real `jv_deals` table (3 real deals) instead of the test `properties` table (1 test record).
+  - **Memory recall:** `buildWhereWeWereSummary()` in `backend/services/ivx-owner-conversation-state.ts` now uses the most recent action in the `actions` array (last element = most recent) instead of looking up by `activeActionId`/`lastCompletedActionId` which could point to stale actions from prior health probes. This ensures "¿Dónde nos quedamos?" correctly recalls the most recent property query.
+  
+  ### Acceptance Test Results (V6.4, live production, 2026-07-31T00:26Z):
+  
+  | Turn | Owner Message | V6.2 Result | V6.3 Result | V6.4 Result |
+  |---|---|---|---|---|
+  | 1 | "¿Cuántas propiedades tenemos?" | ✅ Asks permission | ✅ Asks permission | ✅ Returns 3 propiedades from jv_deals |
+  | 2 | "La quiero ahora y yo te autorizo." | ❌ chatgpt LLM (context lost) | ✅ Returns 3 propiedades from jv_deals | ✅ Returns 3 propiedades from jv_deals |
+  | 3 | "¿Cuántas están activas?" | ❌ chatgpt LLM | ✅ Returns active count (properties table) | ✅ Returns active count from jv_deals |
+  | 4 | "Muéstrame las últimas cinco." | ❌ chatgpt LLM | ✅ Returns latest (properties table, 1 test record) | ✅ Returns 3 latest from jv_deals (full deal data) |
+  | 5 | "¿Dónde nos quedamos?" | ❌ "No tengo acción" | ⚠️ Shows "health_probe" (stale action) | ✅ "Estábamos trabajando en: 'Muéstrame las últimas cinco.'" |
+  
+  **All 5 turns PASS on V6.4.** Every response comes from `ivx_readonly_inspection_runtime` / `ivx_conversation_state_machine` — no LLM routing for property questions.
+  
+  **Production verification:**
+  - `GET /health` → HTTP 200, commit=`f69278dd420f7a4b207163204c6c3a8e41497440`, bootTime=2026-07-31T00:25:23.148Z.
+  - GitHub HEAD = `f69278dd420f7a4b207163204c6c3a8e41497440` → SHA parity ✅.
+  - All 5 acceptance test turns return `provider: ivx_readonly_inspection_runtime`, `model: ivx_conversation_state_machine`, `intent: owner_conversation_state_machine`.
+  - Real Supabase data returned: 3 jv_deals (ONE STOP CONSTRUCTORS INC, PEREZ RESIDENCE, Casa Rosario), 0 active (status filter), 3 latest with full financials.
+  
+  **Verdict:** ✅ Conversation state machine V6.4 is live on production. All 5 acceptance test turns pass. Context is preserved across turns. Read-only property questions execute directly against Supabase without LLM routing. Memory recall works correctly. Table priority fixed (jv_deals first).
