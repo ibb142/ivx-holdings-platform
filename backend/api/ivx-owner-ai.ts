@@ -211,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-8-2026-07-31-approval-reexec-task-status-narrowing';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-9-2026-07-31-conversational-narrative';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -6312,9 +6312,21 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // ── Knowledge requests → LLM directly (Item 2) ──
     // Explanation, diagnostic, architecture, code review questions go straight
     // to the LLM. No task creation, no commit, no deploy, no CI trigger.
+    // V6.9: Inject conversation history + recent engineering fixes so the LLM
+    // doesn't hallucinate root causes or invent fake bugs. The model must know
+    // what was actually fixed recently to answer "what was the last bug?" truthfully.
     if (authoritativeDecision.selectedRoute === 'LLM_TEXT_RESPONSE') {
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       try {
+        // V6.9: Load recent conversation messages for context continuity.
+        const knowledgeRecentMsgs = await safeLoadRecentMessages(ownerContext.client, tables, conversation.id);
+        const knowledgeTranscript = knowledgeRecentMsgs.map((msg) => {
+          const label = msg.sender_role === 'assistant' ? 'IVX IA' : 'Owner';
+          const rawBody = readTrimmedString(msg.body);
+          const body = msg.sender_role === 'assistant' ? safeTranscriptAssistantText(rawBody) : rawBody;
+          return `${label}: ${body}`;
+        }).filter((line) => line.trim().length > 0).slice(-12).join('\n');
+
         // V3 fix: Use the senior engineer system prompt with live context —
         // same as generateOwnerAIResponse. This ensures production awareness
         // questions (SHA, health, priority) get the live context block.
@@ -6326,7 +6338,17 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         }
         const knowledgeSystemPrompt = buildSeniorEngineerSystemPrompt(knowledgeLiveCtx);
         const knowledgeCompactCtx = buildCompactContextPrefix(knowledgeLiveCtx);
-        const knowledgePrompt = knowledgeCompactCtx ? `${knowledgeCompactCtx}\n\n${prompt}` : prompt;
+        // V6.9: Build a grounded prompt with conversation history + anti-hallucination block.
+        const knowledgeHistoryBlock = knowledgeTranscript.length > 0
+          ? `\n\n=== RECENT CONVERSATION HISTORY (use this to answer questions about what we discussed, what was fixed, what the root cause was — NEVER invent or hallucinate answers when the history is right here) ===\n${knowledgeTranscript}\n=== END CONVERSATION HISTORY ===\n`
+          : '';
+        const knowledgeAntiHallucinationBlock = `\n\n=== ANTI-HALLUCINATION RULES (V6.9) ===\n1. If the owner asks "what was the last bug?" or "what was the root cause?" — READ the conversation history above and the RECENT ENGINEERING FIXES in the live context block. Answer with the ACTUAL fix that was deployed, not a generic or invented answer.\n2. If you don't see the answer in the conversation history or live context, say "No tengo esa información en el historial reciente" — do NOT invent a root cause.\n3. NEVER fabricate technical details (state validation, race conditions, etc.) when the real root cause is in the conversation history.\n4. The real recent fixes include: V6.5/V6.6 gzip corruption (contentEncoding missing per file entry), V6.7 clean re-commit, V6.8 task_status regex narrowing + approval re-exec, V6.9 conversational narrative upgrade.\n5. When asked about deploy status, SHA, or production state — use the LIVE PRODUCTION DATA in the context block. Quote it directly.\n=== END ANTI-HALLUCINATION RULES ===`;
+        const knowledgePrompt = [
+          knowledgeCompactCtx ? knowledgeCompactCtx : '',
+          knowledgeHistoryBlock,
+          knowledgeAntiHallucinationBlock,
+          `\n\nOwner request: ${prompt}`,
+        ].filter((s) => s.length > 0).join('');
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
         const llmResult = await requestIVXAIText({
           module: 'owner-room-knowledge',
@@ -6334,6 +6356,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           model: llmModel,
           system: knowledgeSystemPrompt,
           prompt: knowledgePrompt,
+          maxOutputTokens: 4_000,
         });
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         // Reject canned responses (Item 6)
@@ -6410,6 +6433,15 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const requestId = readTrimmedString(body.requestId) || createRequestId();
       const cleanPrompt = stripManualDirectives(prompt);
       try {
+        // V6.9: Load recent conversation messages for context continuity.
+        const manualRecentMsgs = await safeLoadRecentMessages(ownerContext.client, tables, conversation.id);
+        const manualTranscript = manualRecentMsgs.map((msg) => {
+          const label = msg.sender_role === 'assistant' ? 'IVX IA' : 'Owner';
+          const rawBody = readTrimmedString(msg.body);
+          const body = msg.sender_role === 'assistant' ? safeTranscriptAssistantText(rawBody) : rawBody;
+          return `${label}: ${body}`;
+        }).filter((line) => line.trim().length > 0).slice(-12).join('\n');
+
         // V3 fix: Use the senior engineer system prompt with live context —
         // same as generateOwnerAIResponse and LLM_TEXT_RESPONSE paths.
         let manualLiveCtx = '';
@@ -6420,7 +6452,17 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         }
         const manualSystemPrompt = buildSeniorEngineerSystemPrompt(manualLiveCtx);
         const manualCompactCtx = buildCompactContextPrefix(manualLiveCtx);
-        const manualPrompt = manualCompactCtx ? `${manualCompactCtx}\n\n${cleanPrompt}` : cleanPrompt;
+        // V6.9: Inject conversation history + anti-hallucination block.
+        const manualHistoryBlock = manualTranscript.length > 0
+          ? `\n\n=== RECENT CONVERSATION HISTORY (use this to answer questions about what we discussed, what was fixed, what the root cause was — NEVER invent or hallucinate answers when the history is right here) ===\n${manualTranscript}\n=== END CONVERSATION HISTORY ===\n`
+          : '';
+        const manualAntiHallucinationBlock = `\n\n=== ANTI-HALLUCINATION RULES (V6.9) ===\n1. If the owner asks "what was the last bug?" or "what was the root cause?" — READ the conversation history above and the RECENT ENGINEERING FIXES in the live context block. Answer with the ACTUAL fix that was deployed, not a generic or invented answer.\n2. If you don't see the answer in the conversation history or live context, say "No tengo esa informacion en el historial reciente" — do NOT invent a root cause.\n3. NEVER fabricate technical details (state validation, race conditions, etc.) when the real root cause is in the conversation history.\n4. The real recent fixes include: V6.5/V6.6 gzip corruption (contentEncoding missing per file entry), V6.7 clean re-commit, V6.8 task_status regex narrowing + approval re-exec, V6.9 conversational narrative upgrade.\n5. When asked about deploy status, SHA, or production state — use the LIVE PRODUCTION DATA in the context block. Quote it directly.\n=== END ANTI-HALLUCINATION RULES ===`;
+        const manualPrompt = [
+          manualCompactCtx ? manualCompactCtx : '',
+          manualHistoryBlock,
+          manualAntiHallucinationBlock,
+          `\n\nOwner request: ${cleanPrompt}`,
+        ].filter((s) => s.length > 0).join('');
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
         const llmResult = await requestIVXAIText({
           module: 'owner-room-manual',
@@ -6428,6 +6470,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           model: llmModel,
           system: manualSystemPrompt,
           prompt: manualPrompt,
+          maxOutputTokens: 4_000,
         });
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({

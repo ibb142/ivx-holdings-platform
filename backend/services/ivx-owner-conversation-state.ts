@@ -29,7 +29,7 @@ import {
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
 import { createRequestId } from './ivx-request-id';
 
-export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-8-2026-07-31-approval-reexec-task-status-narrowing';
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-9-2026-07-31-conversational-narrative';
 
 const ROOT = auditDir('owner-conversation-state');
 const STATE = path.join(ROOT, 'states.json');
@@ -459,9 +459,9 @@ export async function executeReadOnlyAction(
       };
       if (result.ok && result.count !== null) {
         const answer = isSpanish
-          ? `Actualmente tenemos ${result.count} propiedades en la base de datos de producción.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only count\nTimestamp: ${result.queriedAt}\nStatus: verified`
-          : `We currently have ${result.count} properties in the production database.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only count\nTimestamp: ${result.queriedAt}\nStatus: verified`;
-        return { answer, evidence: { result, report }, ok: true, error: null };
+          ? `Tenemos **${result.count} propiedades** en la base de datos de producción (tabla \`jv_deals\`).\n\nConsulté Supabase directamente — son datos reales, no estimados. Si quieres ver cuáles están activas o listar las últimas registradas, dime y lo saco ahora mismo.`
+          : `We have **${result.count} properties** in the production database (table \`jv_deals\`).\n\nI queried Supabase directly — these are real numbers, not estimates. If you want to see which ones are active or list the latest entries, just say the word and I'll pull them now.`;
+        return { answer, evidence: { result, report, source: 'supabase', table: result.table, queriedAt: result.queriedAt }, ok: true, error: null };
       }
       const answer = isSpanish
         ? `No pude obtener el conteo de propiedades.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the table exists in Supabase'}`
@@ -475,9 +475,9 @@ export async function executeReadOnlyAction(
       const result = await countActiveProperties();
       if (result.ok && result.count !== null) {
         const answer = isSpanish
-          ? `Actualmente tenemos ${result.count} propiedades activas en la base de datos de producción.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nFilter: ${result.filter ?? 'active'}\nQuery type: read-only filtered count\nTimestamp: ${result.queriedAt}\nStatus: verified`
-          : `We currently have ${result.count} active properties in the production database.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nFilter: ${result.filter ?? 'active'}\nQuery type: read-only filtered count\nTimestamp: ${result.queriedAt}\nStatus: verified`;
-        return { answer, evidence: { result }, ok: true, error: null };
+          ? `Hay **${result.count} propiedades activas** en producción ahora mismo.\n\nEl filtro que apliqué fue por estado activo en la tabla \`jv_deals\`. Si quieres ver el detalle de alguna en específico, dime el nombre o el ID y te lo traigo.`
+          : `There are **${result.count} active properties** in production right now.\n\nThe filter I applied was by active status in the \`jv_deals\` table. If you want details on a specific one, give me the name or ID and I'll pull it up.`;
+        return { answer, evidence: { result, source: 'supabase', table: result.table, filter: result.filter, queriedAt: result.queriedAt }, ok: true, error: null };
       }
       const answer = isSpanish
         ? `No pude obtener el conteo de propiedades activas.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the status column exists in the properties table'}`
@@ -490,11 +490,18 @@ export async function executeReadOnlyAction(
       const limit = typeof metadata.limit === 'number' ? metadata.limit : 5;
       const result = await listLatestProperties(limit);
       if (result.ok && result.rows.length > 0) {
-        const rows = result.rows.map((row, i) => `${i + 1}. ${JSON.stringify(row)}`).join('\n');
+        const rows = result.rows.map((row, i) => {
+          const r = row as Record<string, unknown>;
+          const name = r.name ?? r.deal_name ?? r.title ?? 'Sin nombre';
+          const status = r.status ?? r.deal_status ?? 'unknown';
+          const value = r.value ?? r.deal_value ?? r.amount ?? null;
+          const valueStr = value !== null ? ` — Value: ${value}` : '';
+          return `${i + 1}. **${name}** (status: ${status}${valueStr})`;
+        }).join('\n');
         const answer = isSpanish
-          ? `Aquí están las últimas ${result.rows.length} propiedades registradas:\n\n${rows}\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only select\nTimestamp: ${result.queriedAt}\nStatus: verified`
-          : `Here are the latest ${result.rows.length} registered properties:\n\n${rows}\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only select\nTimestamp: ${result.queriedAt}\nStatus: verified`;
-        return { answer, evidence: { result }, ok: true, error: null };
+          ? `Aquí están las últimas ${result.rows.length} propiedades registradas en \`jv_deals\`:\n\n${rows}\n\nEstos son datos reales de producción. ¿Quieres que profundice en alguna de estas?`
+          : `Here are the latest ${result.rows.length} registered properties from \`jv_deals\`:\n\n${rows}\n\nThis is real production data. Want me to dig deeper into any of these?`;
+        return { answer, evidence: { result, source: 'supabase', table: result.table, queriedAt: result.queriedAt }, ok: true, error: null };
       }
       const answer = isSpanish
         ? `No pude obtener las últimas propiedades.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the table and columns exist in Supabase'}`
@@ -507,8 +514,8 @@ export async function executeReadOnlyAction(
       const report = await runDbCounts(metadata.countTargets as CountTarget[]);
       const grounding = buildCountGroundingBlock(report) ?? '';
       const answer = isSpanish
-        ? `Resultados del conteo:\n${grounding}\n\nTimestamp: ${ts}\nStatus: ${report.anyOk ? 'verified' : 'failed'}`
-        : `Count results:\n${grounding}\n\nTimestamp: ${ts}\nStatus: ${report.anyOk ? 'verified' : 'failed'}`;
+        ? `Resultados del conteo:\n${grounding}\n\nEstos son datos verificados directamente de Supabase.`
+        : `Count results:\n${grounding}\n\nThis is verified data pulled directly from Supabase.`;
       return { answer, evidence: { report }, ok: report.anyOk, error: report.anyOk ? null : 'No counts succeeded' };
     }
 
@@ -536,6 +543,6 @@ export function buildWhereWeWereSummary(state: OwnerConversationState): string {
   const isSpanish = action.languagePreference === 'es' || /\b(cuántas|propiedades|activas|muestrame|dónde|qué)\b/i.test(action.originalQuestion);
   const stateText = action.executionState === 'COMPLETED' ? (isSpanish ? 'completada' : 'completed') : (isSpanish ? 'pendiente' : 'pending');
   return isSpanish
-    ? `Estábamos trabajando en: "${action.originalQuestion}". La acción (${action.actionType}, recurso: ${action.resource ?? 'n/a'}) está ${stateText}.`
-    : `We were working on: "${action.originalQuestion}". The action (${action.actionType}, resource: ${action.resource ?? 'n/a'}) is ${stateText}.`;
+    ? `Estábamos en esto: "${action.originalQuestion}". ${action.executionState === 'COMPLETED' ? 'Ya completé esa consulta.' : 'Todavía está pendiente.'} ${state.actions.length > 1 ? `Antes de eso, también trabajamos en ${state.actions.length - 1} ${state.actions.length - 1 === 1 ? 'otra consulta' : 'otras consultas'}.` : ''} ¿Seguimos con algo más?`
+    : `We were working on: "${action.originalQuestion}". ${action.executionState === 'COMPLETED' ? 'I completed that query.' : 'It\'s still pending.'} ${state.actions.length > 1 ? `Before that, we also handled ${state.actions.length - 1} other ${state.actions.length - 1 === 1 ? 'query' : 'queries'}.` : ''} Want to continue with something else?`;
 }

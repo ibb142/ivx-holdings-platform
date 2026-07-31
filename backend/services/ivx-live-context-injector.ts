@@ -61,6 +61,13 @@ export function buildLiveContextBlock(): string {
     }
   }
 
+  // V6.9: Recent Engineering Fixes — prevents LLM hallucination about root causes
+  lines.push(`  Recent Engineering Fixes (REAL — use these when asked about bugs/root causes):`);
+  lines.push(`    V6.5/V6.6: gzip corruption — contentEncoding field missing on each file entry in github_commit_multi_file. Render received raw gzip bytes as UTF-8, build failed in 23-52s.`);
+  lines.push(`    V6.7: Clean re-commit with proper per-file contentEncoding. Deployed successfully.`);
+  lines.push(`    V6.8: task_status regex was too broad (matched bare status/estado), causing engineering questions to be misrouted as context-recall. Also: approval with no pending action now re-executes last completed read-only action.`);
+  lines.push(`    V6.9: Conversational narrative upgrade — DB responses were robotic (Source: Supabase / Table: jv_deals / Status: verified), LLM responses hallucinated root causes, LLM had no conversation history so it invented fake bugs. Fixed by rewriting DB responses to be conversational, injecting conversation history + anti-hallucination block into all LLM paths, and adding recent engineering fixes to live context.`);
+
   lines.push(`  Context fetched at: ${timestamp}`);
   lines.push('[/IVX LIVE PRODUCTION CONTEXT]');
 
