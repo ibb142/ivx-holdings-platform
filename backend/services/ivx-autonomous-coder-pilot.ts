@@ -1,3 +1,4 @@
+// V6.15 autonomous worker fix is live
 /**
  * IVX Autonomous Coder — PILOT SENTINEL.
  *
@@ -18,8 +19,7 @@
 // IVX convergence proof 2026-07-21
 // IVX convergence proof 2026-07-21
 // IVX convergence proof 2026-07-21 final
-// IVX convergence proof 2026-07-21 final
-export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-3';
+export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-1';
 export const PILOT_LABEL_TARGET = 'AUTONOMOUS-CODER-PILOT-2';
 
 export type PilotSentinel = {
