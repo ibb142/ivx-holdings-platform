@@ -130,6 +130,7 @@ import {
   buildWhereWeWereSummary,
   classifyOwnerActionTypeWithContext,
   detectExplicitDeployAuthorization,
+  detectIdentityOrCapabilityQuestion,
   detectOwnerApproval,
   executeReadOnlyAction,
   getActiveAction,
@@ -6085,6 +6086,29 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         toolOutputs: [],
       }, 200);
     }
+
+    // V6.12 HONEST IDENTITY GUARD: answer identity/capability questions directly.
+    // A real senior developer answers a yes/no question directly instead of starting a worker.
+    const identityQuestion = detectIdentityOrCapabilityQuestion(prompt);
+    if (identityQuestion) {
+      return ownerOnlyJson({
+        ok: true,
+        status: 'ok',
+        source: 'ivx-owner-ai-direct-answer',
+        answer: identityQuestion.answer,
+        model: 'ivx_backend',
+        provider: 'ivx_direct_answer',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        assistantMessageId: null,
+        assistantPersisted: false,
+        selectedTool: null,
+        toolInput: [],
+        toolOutput: [],
+        fallbackUsed: false,
+        toolOutputs: [],
+      }, 200);
+    }
+
     // ── Authoritative Intent Router (Item 1-8) ─────────────────────────────
     // The SINGLE source of truth for message routing. Runs BEFORE the canned
     // senior-developer responses, manual-answer handler, and legacy routing chain.

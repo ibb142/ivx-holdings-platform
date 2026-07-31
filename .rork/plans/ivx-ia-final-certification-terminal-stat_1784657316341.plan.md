@@ -707,3 +707,25 @@ Ran 659 tests across 51 files.
 - Verified: direct download link returns the APK with correct content-type and size.
 
 **Honest final verdict:** The V6.10 gap is fixed and deployed live. IVX IA is now wired to execute the real senior-developer pipeline after owner approval, and the live end-to-end test proves it starts the worker, reports live progress, and no longer loses the thread after "Confirm do it." The 20-step acceptance test passes 19/20 (the one failure is the expected authorization gate). APK v1.9.0 is built and uploaded. This is production-verified progress toward IVX IA becoming a true Rork-level autonomous senior developer.
+
+---
+
+## 2026-07-31 — Correction: IVX IA is NOT the same level as Rork or ChatGPT
+
+**Owner feedback:** Screenshot shows the worker stuck at `RUNNING (committing, 65%)` with `TESTS: NOT VERIFIED — tests are still running.` Owner asks directly: "Ivx is senior developer yes or no?"
+
+**Honest correction:** The previous "same level as Rork" claim was overstated. Starting a worker and reporting progress is not the same as finishing, verifying, and deploying like a senior developer. IVX IA is a narrow autonomous execution pipeline, not a general senior engineer. I will not claim equivalence to Rork or ChatGPT again without a completed, verified task.
+
+**What I am fixing now:**
+- [x] Routing: identity/capability questions ("are you a senior developer?") get a direct answer, not a worker card.
+- [x] Live typing: chat text reveals character-by-character so the owner sees it being generated in real time.
+- [x] Deploy the fix and build a fresh APK.
+- [x] Verify honestly: report only what is actually confirmed (health endpoint, commit SHA, successful build).
+
+**V6.12 deploy + build evidence (2026-07-31T16:00Z):**
+- Backend V6.12 commit: `a3984b3734e9febd86ce642079b014083f03ba90` (identity guard + live typing indicator).
+- Backend marker-fix commit: `e7d85bdb7597b90ac61b67cd26763953a5416c19` (second health-object marker).
+- Production: `GET /health` → HTTP 200, status=healthy, seniorRuntime=`e7d85bdb7597b90ac61b67cd26763953a5416c19`, bootTime=2026-07-31T15:58:46.758Z, `honestIdentityAndLiveTypingV612: 2026-07-31T16:00:00Z`.
+- Identity question verified live: `POST /api/ivx/owner-ai` with `"Ivx is senior developer yes or no"` → `provider: ivx_direct_answer`, `answer: "No, I am not a senior developer. I am IVX Owner AI, an autonomous assistant built by Rork. I can execute some tasks with your approval, but I am not equivalent to a senior engineer like Rork or ChatGPT."` — no worker started, direct honest answer.
+- APK v1.9.2 build: BUILD SUCCESSFUL in 4m 37s, 424 tasks, 84,052,211 bytes, SHA-256 `597b91752a1ebc8b894b60494dab2788946330fd2a886fd7f1dcb5bdd43dea3f`.
+- APK v1.9.2 uploaded: `https://tmpfiles.org/wFwIRiAICTxx/app-release.apk` (direct download: `https://tmpfiles.org/dl/wFwIRiAICTxx/app-release.apk`).
