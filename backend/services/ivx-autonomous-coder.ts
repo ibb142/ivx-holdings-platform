@@ -68,7 +68,7 @@ const STAGE_TIMEOUTS_MS: Record<string, number> = {
 /** Max wall-clock runtime for the WHOLE job (ms). Independent of per-iteration
  * and per-stage limits — a global kill switch so a runaway job can never run
  * unbounded. Default 8 minutes; override via input.maxRuntimeMs. */
-const DEFAULT_MAX_RUNTIME_MS = 8 * 60_000;
+const DEFAULT_MAX_RUNTIME_MS = 15 * 60_000; // V6.15: 8→15 min — 4 iterations with baseline+post-patch typecheck need more room
 /** Max LLM calls per job (across all iterations + attempts). Independent of
  * MAX_ITERATIONS — a cost cap so the engine can never burn unbounded tokens. */
 const DEFAULT_MAX_LLM_CALLS = MAX_ITERATIONS * MAX_LLM_ATTEMPTS;
@@ -317,6 +317,15 @@ function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, i
 function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 3)}...`;
+}
+
+/** Count TypeScript error lines (error TSxxxx) in a tsc output string.
+ * Used by the V6.15 baseline typecheck to compare pre-existing errors
+ * before the patch with post-patch errors — only fail when the patch
+ * INTRODUCES new errors, not when pre-existing ones remain. */
+function countTsErrors(output: string): number {
+  const matches = output.match(/error TS\d+/g);
+  return matches ? matches.length : 0;
 }
 
 const DEFAULT_PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -1536,6 +1545,40 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     finalPatch = parsed.operations;
     anyPatchGenerated = true;
 
+    // V6.15 FIX: Baseline typecheck — capture pre-existing TS errors BEFORE
+    // applying the patch. Files like hono.ts have pre-existing TS errors
+    // (duplicate handleGetAuditTrail, createServiceClient not found, etc.).
+    // The scoped typecheck after the patch fails on those pre-existing errors,
+    // causing every LLM patch touching those files to BLOCK even when the
+    // patch itself is clean. By capturing the baseline error count before the
+    // patch and comparing after, we only fail when the patch INTRODUCES new
+    // errors.
+    const baselineFilePaths = parsed.operations.map((op) => op.path);
+    const baselineFileArgs = baselineFilePaths.join(' ');
+    let baselineTsErrorCount = 0;
+    if (baselineFileArgs && !input.testRunner) {
+      const localTscBase = path.join(projectRoot, 'node_modules', '.bin', 'tsc');
+      const bunResBase = resolveRuntimeCommand('bun');
+      const bunAvailBase = !bunResBase.usedFallback && bunResBase.resolvedPath !== null;
+      let baselineTscCmd: string;
+      if (bunAvailBase) {
+        baselineTscCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${baselineFileArgs}`;
+      } else {
+        try {
+          await stat(localTscBase);
+          baselineTscCmd = `node ${localTscBase} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${baselineFileArgs}`;
+        } catch {
+          baselineTscCmd = `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${baselineFileArgs}`;
+        }
+      }
+      try {
+        const baseResult = await runCommand(projectRoot, baselineTscCmd);
+        baselineTsErrorCount = countTsErrors((baseResult.stderrTail || '') + (baseResult.stdoutTail || ''));
+      } catch {
+        baselineTsErrorCount = 0;
+      }
+    }
+
     // ── APPLY PATCH ──────────────────────────────────────────────────────
     onPhase?.('patching', `Iteration ${iterationCount}: applying ${parsed.operations.length} patch operation(s).`);
     markStageStart('patching');
@@ -1644,7 +1687,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       ? await input.testRunner(projectRoot, typecheckCmd)
       : await runCommand(projectRoot, typecheckCmd);
     commandsRun.push(typecheckResult);
-    typecheckPassed = typecheckResult.ok;
+    // V6.15: Only fail typecheck if the patch INTRODUCED new errors.
+    // Pre-existing errors (captured in baselineTsErrorCount) are not caused
+    // by the patch and must not block a clean patch from committing.
+    const postPatchTsErrors = countTsErrors((typecheckResult.stderrTail || '') + (typecheckResult.stdoutTail || ''));
+    typecheckPassed = typecheckResult.ok || (postPatchTsErrors <= baselineTsErrorCount);
     buildRun = true;
 
     // ── DETERMINISTIC CONTENT-CHANGE CHECK ──────────────────────────────
