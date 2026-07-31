@@ -1,1 +1,538 @@
-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
+/**
+ * IVX Owner Conversation State — durable pending-action memory for owner-ai chat.
+ *
+ * Purpose: fix the conversation state-loss bug where the owner asks a question
+ * ("How many properties do we have?"), the AI asks for permission, the owner
+ * approves, and then the AI loses the original request and produces a generic
+ * deployment plan.
+ *
+ * This service stores a structured pending-action record per conversation and
+ * per owner. It is read/written on every owner-ai turn so follow-ups resolve
+ * the original intent instead of being reinterpreted.
+ *
+ * Persistence: uses the same durable-store abstraction as ivx-ia-memory-store
+ * (Supabase-backed when configured, otherwise local JSON). Survives Render
+ * restarts and app reloads.
+ *
+ * Security: NEVER stores secrets, raw SQL, or credentials. Only stores the
+ * owner-visible intent, target table/resource, and last-known status.
+ */
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { auditDir } from './ivx-data-root';
+import {
+  isDurableStoreConfigured,
+  readDurableJson,
+  writeDurableJson,
+  appendDurableEvent,
+} from './ivx-durable-store';
+import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
+import { createRequestId } from './ivx-request-id';
+
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-6-2026-07-31-intent-routing-fix';
+
+const ROOT = auditDir('owner-conversation-state');
+const STATE = path.join(ROOT, 'states.json');
+
+type ExecutionState = 'PENDING_APPROVAL' | 'EXECUTING' | 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'CANCELLED';
+
+export type OwnerActionType =
+  | 'database_read'
+  | 'database_read_active'
+  | 'database_list_latest'
+  | 'database_write'
+  | 'code_change'
+  | 'deployment'
+  | 'explanation'
+  | 'information'
+  | 'task_status'
+  | 'task_cancel'
+  | 'unknown';
+
+export type PendingOwnerAction = {
+  actionId: string;
+  conversationId: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  executionState: ExecutionState;
+  originalQuestion: string;
+  actionType: OwnerActionType;
+  resource: string | null;
+  operation: string | null;
+  authorizationRequired: boolean;
+  authorizationStatus: 'pending' | 'granted' | 'denied' | 'not_required';
+  languagePreference: string | null;
+  lastResultSummary: string | null;
+  lastError: string | null;
+  traceId: string | null;
+  // Generic metadata (e.g. requested limit for list queries, filter for active queries).
+  metadata: Record<string, unknown>;
+};
+
+export type OwnerConversationState = {
+  conversationId: string;
+  ownerId: string;
+  updatedAt: string;
+  languagePreference: string | null;
+  activeActionId: string | null;
+  actions: PendingOwnerAction[];
+  lastCompletedActionId: string | null;
+  unresolvedQuestion: string | null;
+  lastVerifiedProductionState: Record<string, unknown> | null;
+  readOnlyAuthorized: boolean;
+};
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+async function readStates(): Promise<OwnerConversationState[]> {
+  if (isDurableStoreConfigured()) {
+    return readDurableJson<OwnerConversationState[]>(STATE, []);
+  }
+  try {
+    const raw = await readFile(STATE, 'utf8');
+    return JSON.parse(raw) as OwnerConversationState[];
+  } catch {
+    return [];
+  }
+}
+
+async function writeStates(value: OwnerConversationState[]): Promise<void> {
+  if (isDurableStoreConfigured()) {
+    await writeDurableJson(STATE, value);
+    return;
+  }
+  await mkdir(ROOT, { recursive: true });
+  await writeFile(STATE, JSON.stringify(value, null, 2), 'utf8');
+}
+
+async function appendStateEvent(event: Record<string, unknown>): Promise<void> {
+  const eventFile = path.join(ROOT, 'events.jsonl');
+  if (isDurableStoreConfigured()) {
+    try {
+      await appendDurableEvent(eventFile, event);
+    } catch {
+      // Forensic log is best-effort.
+    }
+    return;
+  }
+  try {
+    await mkdir(ROOT, { recursive: true });
+    await writeFile(eventFile, `${JSON.stringify(event)}\n`, { flag: 'a' });
+  } catch {
+    // Best-effort.
+  }
+}
+
+function defaultState(conversationId: string, ownerId: string): OwnerConversationState {
+  return {
+    conversationId,
+    ownerId,
+    updatedAt: nowIso(),
+    languagePreference: null,
+    activeActionId: null,
+    actions: [],
+    lastCompletedActionId: null,
+    unresolvedQuestion: null,
+    lastVerifiedProductionState: null,
+    readOnlyAuthorized: false,
+  };
+}
+
+export async function getOwnerConversationState(
+  conversationId: string,
+  ownerId: string,
+): Promise<OwnerConversationState> {
+  const states = await readStates();
+  const existing = states.find((s) => s.conversationId === conversationId && s.ownerId === ownerId);
+  if (existing) return existing;
+  return defaultState(conversationId, ownerId);
+}
+
+export async function setOwnerConversationState(
+  state: OwnerConversationState,
+): Promise<OwnerConversationState> {
+  const states = await readStates();
+  const index = states.findIndex(
+    (s) => s.conversationId === state.conversationId && s.ownerId === state.ownerId,
+  );
+  const next = { ...state, updatedAt: nowIso() };
+  if (index >= 0) {
+    states[index] = next;
+  } else {
+    states.push(next);
+  }
+  await writeStates(states);
+  await appendStateEvent({ type: 'upsert', conversationId: state.conversationId, ownerId: state.ownerId, at: next.updatedAt });
+  return next;
+}
+
+export async function clearActiveAction(
+  conversationId: string,
+  ownerId: string,
+): Promise<OwnerConversationState> {
+  const state = await getOwnerConversationState(conversationId, ownerId);
+  const next = { ...state, activeActionId: null, updatedAt: nowIso() };
+  return setOwnerConversationState(next);
+}
+
+export async function addPendingAction(
+  conversationId: string,
+  ownerId: string,
+  input: {
+    originalQuestion: string;
+    actionType: OwnerActionType;
+    resource: string | null;
+    operation: string | null;
+    authorizationRequired: boolean;
+    languagePreference?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<PendingOwnerAction> {
+  const state = await getOwnerConversationState(conversationId, ownerId);
+  const action: PendingOwnerAction = {
+    actionId: `act-${createRequestId()}`,
+    conversationId,
+    ownerId,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    executionState: 'PENDING_APPROVAL',
+    originalQuestion: input.originalQuestion,
+    actionType: input.actionType,
+    resource: input.resource,
+    operation: input.operation,
+    authorizationRequired: input.authorizationRequired,
+    authorizationStatus: input.authorizationRequired ? 'pending' : 'not_required',
+    languagePreference: input.languagePreference ?? state.languagePreference,
+    lastResultSummary: null,
+    lastError: null,
+    traceId: null,
+    metadata: input.metadata ?? {},
+  };
+  const actions = [...state.actions, action];
+  // Keep only the most recent 20 actions per conversation to bound size.
+  const trimmed = actions.slice(-20);
+  await setOwnerConversationState({
+    ...state,
+    actions: trimmed,
+    activeActionId: action.actionId,
+    unresolvedQuestion: input.originalQuestion,
+  });
+  await appendStateEvent({
+    type: 'pending_action_added',
+    conversationId,
+    ownerId,
+    actionId: action.actionId,
+    actionType: action.actionType,
+    resource: action.resource,
+    at: action.createdAt,
+  });
+  return action;
+}
+
+export async function updateAction(
+  conversationId: string,
+  ownerId: string,
+  actionId: string,
+  patch: Partial<PendingOwnerAction>,
+): Promise<PendingOwnerAction | null> {
+  const state = await getOwnerConversationState(conversationId, ownerId);
+  const actionIndex = state.actions.findIndex((a) => a.actionId === actionId);
+  if (actionIndex < 0) return null;
+  const actions = [...state.actions];
+  const updated: PendingOwnerAction = { ...actions[actionIndex]!, ...patch, updatedAt: nowIso() };
+  actions[actionIndex] = updated;
+  await setOwnerConversationState({ ...state, actions });
+  return updated;
+}
+
+export async function getActiveAction(
+  conversationId: string,
+  ownerId: string,
+): Promise<PendingOwnerAction | null> {
+  const state = await getOwnerConversationState(conversationId, ownerId);
+  if (!state.activeActionId) return null;
+  return state.actions.find((a) => a.actionId === state.activeActionId) ?? null;
+}
+
+export async function resolveActiveAction(
+  conversationId: string,
+  ownerId: string,
+  status: 'granted' | 'denied',
+): Promise<PendingOwnerAction | null> {
+  const state = await getOwnerConversationState(conversationId, ownerId);
+  if (!state.activeActionId) return null;
+  const actionIndex = state.actions.findIndex((a) => a.actionId === state.activeActionId);
+  if (actionIndex < 0) return null;
+  const actions = [...state.actions];
+  const updated: PendingOwnerAction = {
+    ...actions[actionIndex]!,
+    authorizationStatus: status,
+    executionState: status === 'granted' ? 'EXECUTING' : 'CANCELLED',
+    updatedAt: nowIso(),
+  };
+  actions[actionIndex] = updated;
+  await setOwnerConversationState({ ...state, actions });
+  return updated;
+}
+
+const APPROVAL_PHRASES = [
+  'proceed', 'procede', 'hazlo', 'hazlo ahora', 'autorizado', 'te autorizo',
+  'la quiero', 'lo quiero', 'la quiero ahora', 'lo quiero ahora',
+  'sí', 'si', 'yes', 'go ahead', 'do it now', 'do it', 'ejecutalo', 'ejecútalo',
+  'continua', 'continúa', 'aprobado', 'i approve', 'you have permission',
+  'adelante', 'vamos', 'confirma', 'confirmado', 'dale', 'ok', 'okay',
+  'está bien', 'esta bien', 'por supuesto', 'claro', 'hazlo por favor',
+  'procede por favor', 'execute', 'run it', 'check now',
+];
+
+const DENIAL_PHRASES = [
+  'cancel', 'cancela', 'cancelar', 'stop', 'detente', 'no lo hagas',
+  'no procedas', 'no procede', 'denied', 'denegado', 'rechazado', 'rechaza',
+  'olvídalo', 'olvidalo', 'nvm', 'never mind', 'forget it',
+];
+
+export function detectOwnerApproval(message: string): 'approve' | 'deny' | 'neutral' {
+  const normalized = asTrimmedString(message).toLowerCase().replace(/[^a-z0-9áéíóúñü\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return 'neutral';
+  const tokens = normalized.split(' ');
+
+  function matchesPhrase(phrase: string): boolean {
+    const p = phrase.toLowerCase();
+    if (p.includes(' ')) {
+      // Multi-word: bounded by spaces or string edges
+      return normalized === p || normalized.startsWith(p + ' ') || normalized.endsWith(' ' + p) || normalized.includes(' ' + p + ' ');
+    }
+    // Single-word: exact token match (prevents 'si' matching 'sistema', 'no' matching 'normal')
+    return tokens.includes(p);
+  }
+
+  // Check denial first so "no, proceed" is not treated as approval.
+  for (const phrase of DENIAL_PHRASES) {
+    if (matchesPhrase(phrase)) return 'deny';
+  }
+  for (const phrase of APPROVAL_PHRASES) {
+    if (matchesPhrase(phrase)) return 'approve';
+  }
+  return 'neutral';
+}
+
+export function isApprovalQuestion(message: string): boolean {
+  const normalized = asTrimmedString(message).toLowerCase();
+  return /\b(puedes?|puedo|can you|podrías?|podrias?|would you|could you)\b.{0,40}\b(revisar|consultar|ver|check|inspect|query|look at|look up|buscar|contar|count)\b/i.test(normalized)
+    || /\b(te parece|está bien|esta bien|ok\?|okay\?|yes\?|sí\?)\b/i.test(normalized);
+}
+
+export function isInformationRequest(message: string): boolean {
+  const normalized = asTrimmedString(message).toLowerCase();
+  return /\b(how many|cuántas?|cuantas?|cuántos?|cuantos?|number of|how much|what is|what's|cuál es|cual es|how many|are there|hay|tell me|dime|show me|muéstrame|muestrame|list|latest|últimas?|ultimas?|últimos?|ultimos?|recent|recientes|status of|estado de)\b/i.test(normalized);
+}
+
+export function classifyOwnerActionType(message: string): { actionType: OwnerActionType; resource: string | null; operation: string | null; metadata: Record<string, unknown> } {
+  const normalized = asTrimmedString(message).toLowerCase();
+  const countTargets = detectCountIntent(message);
+
+  // Property / real-estate questions.
+  const isPropertyQuestion = /\b(propiedad|propiedades|property|properties|casa|casas|deal|deals|project|projects|jv\s*deal|inmueble|inmuebles)\b/i.test(normalized);
+  const wantsActive = /\b(activas?|activos?|active|activo|en\s*venta|for\s+sale|available|disponible|disponibles|live|published)\b/i.test(normalized);
+  const wantsLatest = /\b(últimas?|ultimas?|últimos?|ultimos?|latest|recent|recientes|last\s+five|last\s+5|últimas\s+cinco|ultimas\s+cinco|muéstrame|muestrame|show\s+me|list)\b/i.test(normalized);
+  const listLimitMatch = normalized.match(/\b(\d+)\b/);
+  const listLimit = listLimitMatch ? Math.min(Math.max(Number(listLimitMatch[1]), 1), 100) : 5;
+
+  if (isPropertyQuestion) {
+    if (wantsLatest) {
+      return { actionType: 'database_list_latest', resource: 'properties', operation: 'select_latest', metadata: { limit: listLimit } };
+    }
+    if (wantsActive) {
+      return { actionType: 'database_read_active', resource: 'properties', operation: 'count_active', metadata: {} };
+    }
+    return { actionType: 'database_read', resource: 'properties', operation: 'count', metadata: {} };
+  }
+
+  // Generic count intents mapped to other targets.
+  if (countTargets.length > 0) {
+    return { actionType: 'database_read', resource: countTargets[0]!, operation: 'count', metadata: { countTargets } };
+  }
+
+  // Task control / status / cancel.
+  if (/(estado|status|where are we|where were we|dónde nos quedamos|donde nos quedamos|qué estabas haciendo|que estabas haciendo|what were you doing|dónde quedamos|donde quedamos)/i.test(normalized)) {
+    return { actionType: 'task_status', resource: null, operation: 'status', metadata: {} };
+  }
+  if (/\b(cancel|cancela|cancelar|stop|detente)\b/i.test(normalized)) {
+    return { actionType: 'task_cancel', resource: null, operation: 'cancel', metadata: {} };
+  }
+  if (/\b(continue|continuar|continúa|continua|resume|reanudar|go on)\b/i.test(normalized)) {
+    return { actionType: 'task_status', resource: null, operation: 'resume', metadata: {} };
+  }
+
+  // Code change / deployment.
+  if (/\b(fix|arregla|repara|soluciona|corrige|add|agrega|añade|create|crea|deploy|despliega|deployar|update|actualiza|change|cambia|modify|modifica)\b/i.test(normalized)) {
+    if (/\b(deploy|despliega|deployar|deployar|production|producción|produccion|live)\b/i.test(normalized)) {
+      return { actionType: 'deployment', resource: null, operation: 'deploy', metadata: {} };
+    }
+    return { actionType: 'code_change', resource: null, operation: 'fix', metadata: {} };
+  }
+
+  if (isInformationRequest(message)) {
+    return { actionType: 'information', resource: null, operation: 'answer', metadata: {} };
+  }
+
+  if (/\b(explica|explicar|explain|why|por qué|porque|porqué|how does|how do|cómo|como|architecture|arquitectura)\b/i.test(normalized)) {
+    return { actionType: 'explanation', resource: null, operation: 'explain', metadata: {} };
+  }
+
+  return { actionType: 'unknown', resource: null, operation: null, metadata: {} };
+}
+
+
+export function classifyOwnerActionTypeWithContext(
+  message: string,
+  previousAction: PendingOwnerAction | null,
+): { actionType: OwnerActionType; resource: string | null; operation: string | null; metadata: Record<string, unknown> } {
+  const classified = classifyOwnerActionType(message);
+  // If the message itself is clearly a property/deal query, use that classification directly.
+  if (classified.resource === 'properties' || classified.resource === 'deals' || classified.actionType === 'database_read' || classified.actionType === 'database_read_active' || classified.actionType === 'database_list_latest') {
+    return classified;
+  }
+  // V6.6 FIX: Only reclassify as a property query if the message actually contains
+  // property-related keywords AND count/list/active keywords. This prevents engineering
+  // questions ("What is the root cause?", "What is the commit SHA?") from being
+  // misrouted to the database just because the previous action was a property query.
+  if ((classified.actionType === 'information' || classified.actionType === 'unknown') && previousAction && (previousAction.resource === 'properties' || previousAction.resource === 'deals')) {
+    const normalized = asTrimmedString(message).toLowerCase();
+    // The message must mention properties/deals/casas/etc to be reclassified.
+    const mentionsProperty = /\b(propiedad|propiedades|property|properties|casa|casas|deal|deals|jv\s*deal|inmueble|inmuebles)\b/i.test(normalized);
+    // Or it must contain active/latest/count keywords with an implicit property context
+    // (e.g. "¿cuántas están activas?" after a property query).
+    const wantsActive = /\b(activas?|activos?|active|activo|en\s*venta|for\s+sale|available|disponible|disponibles|live|published)\b/i.test(normalized);
+    const wantsLatest = /\b(últimas?|ultimas?|últimos?|ultimos?|latest|recent|recientes|last\s+five|last\s+5|últimas\s+cinco|ultimas\s+cinco|muéstrame|muestrame|show\s+me|list)\b/i.test(normalized);
+    const wantsCount = /\b(cuántas?|cuántos?|cuantas?|cuantos?|how\s+many|count|number\s+of|total)\b/i.test(normalized);
+    // Only reclassify if the message is clearly about properties/deals.
+    // Engineering questions (root cause, commit SHA, deployment, architecture, etc.)
+    // must NOT be reclassified as property queries.
+    const isEngineeringQuestion = /\b(root\s*cause|commit|sha|deploy|deployment|render|github|bug|fix|arregl|repar|solucion|code|codigo|architecture|arquitectura|worker|task|tarea|priority|prioridad|evidence|evidencia|status|health|salud|worker|log|error|test|prueba)\b/i.test(normalized);
+    if (isEngineeringQuestion) {
+      // Don't reclassify — let the original classification stand (information/unknown → LLM).
+      return classified;
+    }
+    if (mentionsProperty || wantsActive || wantsLatest || wantsCount) {
+      const listLimitMatch = normalized.match(/\b(\d+)\b/);
+      const listLimit = listLimitMatch ? Math.min(Math.max(Number(listLimitMatch[1]), 1), 100) : 5;
+      if (wantsActive) return { actionType: 'database_read_active', resource: 'properties', operation: 'count_active', metadata: {} };
+      if (wantsLatest) return { actionType: 'database_list_latest', resource: 'properties', operation: 'select_latest', metadata: { limit: listLimit } };
+      return { actionType: 'database_read', resource: 'properties', operation: 'count', metadata: {} };
+    }
+    // Fallback: if the message is information/unknown and doesn't mention properties,
+    // don't reclassify — let it go to the LLM for a proper answer.
+    return classified;
+  }
+  return classified;
+}
+
+export function isReadOnlyActionType(actionType: OwnerActionType): boolean {
+  return actionType === 'database_read' || actionType === 'database_read_active' || actionType === 'database_list_latest' || actionType === 'explanation' || actionType === 'task_status';
+}
+
+export async function executeReadOnlyAction(
+  action: PendingOwnerAction,
+): Promise<{ answer: string; evidence: Record<string, unknown>; ok: boolean; error: string | null }> {
+  const { actionType, resource, originalQuestion, metadata } = action;
+  const ts = nowIso();
+  const lang = action.languagePreference ?? 'en';
+  const isSpanish = /es/i.test(lang) || /\b(cuántas|cuantas|propiedades|activas|muestrame|muéstrame|dónde|donde|qué|que)\b/i.test(originalQuestion);
+
+  try {
+    if (actionType === 'database_read' && resource === 'properties') {
+      const countTargets = (metadata.countTargets as CountTarget[] | undefined) ?? ['jv_deals'];
+      const report = await runDbCounts(countTargets);
+      const result = report.results[0] ?? {
+        ok: false, count: null, table: null, reason: 'not_configured', detail: 'No result', queriedAt: ts, executed: false, target: 'jv_deals', httpStatus: null,
+      };
+      if (result.ok && result.count !== null) {
+        const answer = isSpanish
+          ? `Actualmente tenemos ${result.count} propiedades en la base de datos de producción.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only count\nTimestamp: ${result.queriedAt}\nStatus: verified`
+          : `We currently have ${result.count} properties in the production database.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only count\nTimestamp: ${result.queriedAt}\nStatus: verified`;
+        return { answer, evidence: { result, report }, ok: true, error: null };
+      }
+      const answer = isSpanish
+        ? `No pude obtener el conteo de propiedades.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the table exists in Supabase'}`
+        : `I could not retrieve the property count.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the table exists in Supabase'}`;
+      return { answer, evidence: { result, report }, ok: false, error: result.detail };
+    }
+
+    if (actionType === 'database_read_active' && resource === 'properties') {
+      // Try to count active properties by guessing the status column.
+      const { countActiveProperties } = await import('./ivx-property-queries');
+      const result = await countActiveProperties();
+      if (result.ok && result.count !== null) {
+        const answer = isSpanish
+          ? `Actualmente tenemos ${result.count} propiedades activas en la base de datos de producción.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nFilter: ${result.filter ?? 'active'}\nQuery type: read-only filtered count\nTimestamp: ${result.queriedAt}\nStatus: verified`
+          : `We currently have ${result.count} active properties in the production database.\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nFilter: ${result.filter ?? 'active'}\nQuery type: read-only filtered count\nTimestamp: ${result.queriedAt}\nStatus: verified`;
+        return { answer, evidence: { result }, ok: true, error: null };
+      }
+      const answer = isSpanish
+        ? `No pude obtener el conteo de propiedades activas.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the status column exists in the properties table'}`
+        : `I could not retrieve the active property count.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the status column exists in the properties table'}`;
+      return { answer, evidence: { result }, ok: false, error: result.detail };
+    }
+
+    if (actionType === 'database_list_latest' && resource === 'properties') {
+      const { listLatestProperties } = await import('./ivx-property-queries');
+      const limit = typeof metadata.limit === 'number' ? metadata.limit : 5;
+      const result = await listLatestProperties(limit);
+      if (result.ok && result.rows.length > 0) {
+        const rows = result.rows.map((row, i) => `${i + 1}. ${JSON.stringify(row)}`).join('\n');
+        const answer = isSpanish
+          ? `Aquí están las últimas ${result.rows.length} propiedades registradas:\n\n${rows}\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only select\nTimestamp: ${result.queriedAt}\nStatus: verified`
+          : `Here are the latest ${result.rows.length} registered properties:\n\n${rows}\n\nSource: Supabase\nTable: ${result.table ?? 'unknown'}\nQuery type: read-only select\nTimestamp: ${result.queriedAt}\nStatus: verified`;
+        return { answer, evidence: { result }, ok: true, error: null };
+      }
+      const answer = isSpanish
+        ? `No pude obtener las últimas propiedades.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the table and columns exist in Supabase'}`
+        : `I could not retrieve the latest properties.\n\nError: ${result.detail}\nTrace ID: ${action.actionId}\nRequired action: ${result.reason === 'not_configured' ? 'Configure Supabase service role key' : 'Verify the table and columns exist in Supabase'}`;
+      return { answer, evidence: { result }, ok: false, error: result.detail };
+    }
+
+    // Generic count fallback (non-property targets).
+    if (actionType === 'database_read' && Array.isArray(metadata.countTargets)) {
+      const report = await runDbCounts(metadata.countTargets as CountTarget[]);
+      const grounding = buildCountGroundingBlock(report) ?? '';
+      const answer = isSpanish
+        ? `Resultados del conteo:\n${grounding}\n\nTimestamp: ${ts}\nStatus: ${report.anyOk ? 'verified' : 'failed'}`
+        : `Count results:\n${grounding}\n\nTimestamp: ${ts}\nStatus: ${report.anyOk ? 'verified' : 'failed'}`;
+      return { answer, evidence: { report }, ok: report.anyOk, error: report.anyOk ? null : 'No counts succeeded' };
+    }
+
+    return {
+      answer: isSpanish ? 'No puedo ejecutar esa acción directamente. Por favor, reformula tu pregunta.' : 'I cannot execute that action directly. Please rephrase your question.',
+      evidence: {},
+      ok: false,
+      error: 'Unsupported read-only action',
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown error';
+    const answer = isSpanish
+      ? `Falló la ejecución de la acción.\n\nError: ${detail}\nTrace ID: ${action.actionId}\nRequired action: Revisa los logs del backend.`
+      : `Action execution failed.\n\nError: ${detail}\nTrace ID: ${action.actionId}\nRequired action: Check backend logs.`;
+    return { answer, evidence: {}, ok: false, error: detail };
+  }
+}
+
+export function buildWhereWeWereSummary(state: OwnerConversationState): string {
+  // Use the most recent action in the actions array (last element = most recent).
+  // This is more reliable than activeActionId/lastCompletedActionId which may
+  // point to stale actions from prior conversation turns.
+  const action = state.actions.length > 0 ? state.actions[state.actions.length - 1] : null;
+  if (!action) return 'No tengo una acción activa o reciente recordada en esta conversación.';
+  const isSpanish = action.languagePreference === 'es' || /\b(cuántas|propiedades|activas|muestrame|dónde|qué)\b/i.test(action.originalQuestion);
+  const stateText = action.executionState === 'COMPLETED' ? (isSpanish ? 'completada' : 'completed') : (isSpanish ? 'pendiente' : 'pending');
+  return isSpanish
+    ? `Estábamos trabajando en: "${action.originalQuestion}". La acción (${action.actionType}, recurso: ${action.resource ?? 'n/a'}) está ${stateText}.`
+    : `We were working on: "${action.originalQuestion}". The action (${action.actionType}, resource: ${action.resource ?? 'n/a'}) is ${stateText}.`;
+}
