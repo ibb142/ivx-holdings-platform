@@ -29,7 +29,7 @@ import {
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
 import { createRequestId } from './ivx-request-id';
 
-export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-9-2026-07-31-conversational-narrative';
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v7-0-2026-07-31-rork-level-narrative';
 
 const ROOT = auditDir('owner-conversation-state');
 const STATE = path.join(ROOT, 'states.json');
@@ -459,8 +459,8 @@ export async function executeReadOnlyAction(
       };
       if (result.ok && result.count !== null) {
         const answer = isSpanish
-          ? `Tenemos **${result.count} propiedades** en la base de datos de producción (tabla \`jv_deals\`).\n\nConsulté Supabase directamente — son datos reales, no estimados. Si quieres ver cuáles están activas o listar las últimas registradas, dime y lo saco ahora mismo.`
-          : `We have **${result.count} properties** in the production database (table \`jv_deals\`).\n\nI queried Supabase directly — these are real numbers, not estimates. If you want to see which ones are active or list the latest entries, just say the word and I'll pull them now.`;
+          ? `Tenemos **${result.count} propiedades** en producción ahora mismo — están en la tabla \`jv_deals\` en Supabase.\n\nEstos no son números de cache ni estimados; los acabo de consultar directamente. Si quieres que te liste cuáles son o veas cuáles están activas, dímelo y lo saco al instante.`
+          : `We've got **${result.count} properties** in production right now — sitting in the \`jv_deals\` table in Supabase.\n\nThese aren't cached numbers or estimates — I just pulled them directly. Want me to list them out or filter by active status? I can grab that in a second.`;
         return { answer, evidence: { result, report, source: 'supabase', table: result.table, queriedAt: result.queriedAt }, ok: true, error: null };
       }
       const answer = isSpanish
@@ -475,8 +475,8 @@ export async function executeReadOnlyAction(
       const result = await countActiveProperties();
       if (result.ok && result.count !== null) {
         const answer = isSpanish
-          ? `Hay **${result.count} propiedades activas** en producción ahora mismo.\n\nEl filtro que apliqué fue por estado activo en la tabla \`jv_deals\`. Si quieres ver el detalle de alguna en específico, dime el nombre o el ID y te lo traigo.`
-          : `There are **${result.count} active properties** in production right now.\n\nThe filter I applied was by active status in the \`jv_deals\` table. If you want details on a specific one, give me the name or ID and I'll pull it up.`;
+          ? `**${result.count} propiedades activas** en producción.\n\nFiltré por estado activo en \`jv_deals\` — son datos en tiempo real de Supabase, no una foto vieja. Si quieres que profundice en alguna en particular, dame el nombre o el ID y te traigo el detalle completo.`
+          : `**${result.count} active properties** in production right now.\n\nI filtered by active status in \`jv_deals\` — this is real-time data from Supabase, not a snapshot. If you want me to dig into a specific one, just give me the name or ID and I'll pull the full details.`;
         return { answer, evidence: { result, source: 'supabase', table: result.table, filter: result.filter, queriedAt: result.queriedAt }, ok: true, error: null };
       }
       const answer = isSpanish
@@ -499,8 +499,8 @@ export async function executeReadOnlyAction(
           return `${i + 1}. **${name}** (status: ${status}${valueStr})`;
         }).join('\n');
         const answer = isSpanish
-          ? `Aquí están las últimas ${result.rows.length} propiedades registradas en \`jv_deals\`:\n\n${rows}\n\nEstos son datos reales de producción. ¿Quieres que profundice en alguna de estas?`
-          : `Here are the latest ${result.rows.length} registered properties from \`jv_deals\`:\n\n${rows}\n\nThis is real production data. Want me to dig deeper into any of these?`;
+          ? `Aquí están las últimas ${result.rows.length} propiedades de \`jv_deals\`:\n\n${rows}\n\nDatos en tiempo real de Supabase. Si quieres que abra alguna de estas y te muestre el detalle completo — financieros, estructura del trato, lo que sea — solo dime cuál.`
+          : `Here are the latest ${result.rows.length} from \`jv_deals\`:\n\n${rows}\n\nReal-time data from Supabase. If you want me to open any of these and show you the full details — financials, deal structure, whatever you need — just say which one.`;
         return { answer, evidence: { result, source: 'supabase', table: result.table, queriedAt: result.queriedAt }, ok: true, error: null };
       }
       const answer = isSpanish
@@ -520,7 +520,7 @@ export async function executeReadOnlyAction(
     }
 
     return {
-      answer: isSpanish ? 'No puedo ejecutar esa acción directamente. Por favor, reformula tu pregunta.' : 'I cannot execute that action directly. Please rephrase your question.',
+      answer: isSpanish ? 'No puedo ejecutar esa acción directamente — reformula tu pregunta y te ayudo.' : 'I can\'t execute that action directly — rephrase your question and I\'ll help you out.',
       evidence: {},
       ok: false,
       error: 'Unsupported read-only action',
@@ -542,7 +542,11 @@ export function buildWhereWeWereSummary(state: OwnerConversationState): string {
   if (!action) return 'No tengo una acción activa o reciente recordada en esta conversación.';
   const isSpanish = action.languagePreference === 'es' || /\b(cuántas|propiedades|activas|muestrame|dónde|qué)\b/i.test(action.originalQuestion);
   const stateText = action.executionState === 'COMPLETED' ? (isSpanish ? 'completada' : 'completed') : (isSpanish ? 'pendiente' : 'pending');
+  const canReExecute = action.executionState === 'COMPLETED' && isReadOnlyActionType(action.actionType);
+  const reExecHint = canReExecute
+    ? (isSpanish ? ' Si quieres que corra esa consulta otra vez para tener datos frescos, dime «muéstrame» o «otra vez».' : ' If you want me to re-run that query for fresh data, just say "show me" or "again".')
+    : '';
   return isSpanish
-    ? `Estábamos en esto: "${action.originalQuestion}". ${action.executionState === 'COMPLETED' ? 'Ya completé esa consulta.' : 'Todavía está pendiente.'} ${state.actions.length > 1 ? `Antes de eso, también trabajamos en ${state.actions.length - 1} ${state.actions.length - 1 === 1 ? 'otra consulta' : 'otras consultas'}.` : ''} ¿Seguimos con algo más?`
-    : `We were working on: "${action.originalQuestion}". ${action.executionState === 'COMPLETED' ? 'I completed that query.' : 'It\'s still pending.'} ${state.actions.length > 1 ? `Before that, we also handled ${state.actions.length - 1} other ${state.actions.length - 1 === 1 ? 'query' : 'queries'}.` : ''} Want to continue with something else?`;
+    ? `Estábamos en esto: "${action.originalQuestion}". ${action.executionState === 'COMPLETED' ? 'Ya completé esa consulta.' : 'Todavía está pendiente.'} ${state.actions.length > 1 ? `Antes de eso, también trabajamos en ${state.actions.length - 1} ${state.actions.length - 1 === 1 ? 'otra consulta' : 'otras consultas'}.` : ''}${reExecHint} ¿Seguimos con algo más?`
+    : `We were working on: "${action.originalQuestion}". ${action.executionState === 'COMPLETED' ? 'I completed that query.' : 'It\'s still pending.'} ${state.actions.length > 1 ? `Before that, we also handled ${state.actions.length - 1} other ${state.actions.length - 1 === 1 ? 'query' : 'queries'}.` : ''}${reExecHint} Want to continue with something else?`;
 }
