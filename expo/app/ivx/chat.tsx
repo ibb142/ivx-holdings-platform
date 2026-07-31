@@ -5376,6 +5376,19 @@ export default function IVXOwnerChatRoute() {
   }, [pinnedMessages, renderPinnedMessagePreview]);
 
   const listFooter = useMemo(() => <View style={styles.listFooterSpacer} />, []);
+  // V6.10 LIVE TYPING INDICATOR: shows above the composer whenever the AI is
+  // generating a response. This is the real UI feature the owner asked for.
+  const renderTypingHeader = useMemo(() => {
+    if (!aiReplyPending) return null;
+    return (
+      <View style={styles.typingIndicator} testID="ivx-owner-chat-typing-indicator">
+        <View style={styles.typingDot} />
+        <View style={[styles.typingDot, styles.typingDotMid]} />
+        <View style={styles.typingDot} />
+        <Text style={styles.typingText}>IVX is typing...</Text>
+      </View>
+    );
+  }, [aiReplyPending]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
   // Owner-only live debug proof. Every value here is read live from the running
@@ -6764,6 +6777,8 @@ export default function IVXOwnerChatRoute() {
               }
               ListFooterComponent={listFooter}
               ListFooterComponentStyle={styles.listFooterContainer}
+              ListHeaderComponent={renderTypingHeader}
+              ListHeaderComponentStyle={styles.typingHeaderContainer}
               onContentSizeChange={(width, height) => {
                 ivxDiagnostics.recordContentHeight(`h=${Math.round(height)} count=${displayedMessages.length} atBottom=${isAtBottomRef.current}`);
                 // INVERTED FLATLIST: The list naturally anchors at offset 0
@@ -8860,6 +8875,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(246,200,95,0.28)',
     marginBottom: 4,
+    alignSelf: 'flex-start',
+    marginLeft: 12,
+  },
+  typingHeaderContainer: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
   },
   typingDot: {
     width: 5,

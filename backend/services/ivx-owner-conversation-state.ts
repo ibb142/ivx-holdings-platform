@@ -442,6 +442,16 @@ export function isReadOnlyActionType(actionType: OwnerActionType): boolean {
   return actionType === 'database_read' || actionType === 'database_read_active' || actionType === 'database_list_latest' || actionType === 'explanation' || actionType === 'task_status';
 }
 
+export function isOwnerExecutionActionType(actionType: OwnerActionType): boolean {
+  return actionType === 'deployment' || actionType === 'code_change';
+}
+
+export function detectExplicitDeployAuthorization(message: string): boolean {
+  const normalized = asTrimmedString(message).toLowerCase();
+  return /\b(deploy\s+live|deploy\s+now|deploy\s+to\s+production|hazlo\s+ahora|do\s+it\s+now|execute\s+now|run\s+now|ship\s+it|push\s+live|go\s+live|despliega\s+ya|despliega\s+ahora|publica\s+ya|verify\s+and\s+deploy|deploy\s+and\s+verify|deploy\s+live\s+provide\s+verified)\b/i.test(normalized)
+    || /\b(confirm\s+do\s+it|confirm\s+deploy|confirm\s+and\s+deploy|autorizo\s+el\s+deploy|autorizado\s+para\s+deployar|approved\s+for\s+deploy)\b/i.test(normalized);
+}
+
 export async function executeReadOnlyAction(
   action: PendingOwnerAction,
 ): Promise<{ answer: string; evidence: Record<string, unknown>; ok: boolean; error: string | null }> {
