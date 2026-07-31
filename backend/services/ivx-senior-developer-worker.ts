@@ -1070,11 +1070,12 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
     }
     recovered = true;
     appendDurableEvent(QUEUE_FILE, { type: 'job_recovered', jobId: job.jobId, commitSha: branchHeadSha, reason: 'committing_crash_recovery' }).catch(() => {});
-  }
+    }
 
-  if (recovered) {
-    await saveQueue(queue);
-  }
+    if (recovered) {
+      await saveQueue(queue);
+    }
+  } // end for (branch of branchesToCheck)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
