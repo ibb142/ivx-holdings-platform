@@ -211,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-4-2026-07-31-table-priority-memory-fix';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-6-2026-07-31-intent-routing-fix';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -6108,13 +6108,15 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     const conversation = await ensureOwnerConversation(ownerContext.client, tables);
     const requestId = readTrimmedString(body.requestId) || createRequestId();
 
-    // ── Conversation State Machine (owner mandate 2026-07-30) ───────────────
+    // ── Conversation State Machine (owner mandate 2026-07-30, V6.5 stale-free) ──
     // Persist the active request across turns, recognize approval/denial phrases,
     // and execute read-only database questions directly instead of routing them
     // to the LLM where context is lost.
-    const ownerState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+    // V6.5: NEVER use a stale snapshot — always read fresh state before writing.
     const detectedLang = /\b(cuántas?|cuántos?|propiedades|propiedad|activas?|activos?|muestrame|muéstrame|dónde|donde|qué|que|estás?|estas?|últimas?|últimos?|hace|haces)\b/i.test(prompt) || /\b(español|spanish)\b/i.test(prompt) ? 'es' : 'en';
-    await setOwnerConversationState({ ...ownerState, languagePreference: detectedLang });
+    // V6.5 FIX: Read fresh state for language update — never use a stale snapshot.
+    const langFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+    await setOwnerConversationState({ ...langFreshState, languagePreference: detectedLang });
 
     const approvalSignal = detectOwnerApproval(prompt);
     const activeAction = await getActiveAction(conversation.id, ownerContext.userId);
@@ -6219,10 +6221,13 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     }
 
     // 2. Direct execution for read-only questions (property counts, active counts, latest lists).
-    const previousAction = activeAction ?? (ownerState.lastCompletedActionId ? ownerState.actions.find((a) => a.actionId === ownerState.lastCompletedActionId) ?? null : null);
+    // V6.5 FIX: Read FRESH state here — ownerState from line 6115 is stale by this point
+    // because the approval resolution block above may have modified state (readOnlyAuthorized, actions, etc.).
+    const freshStateForClassification = await getOwnerConversationState(conversation.id, ownerContext.userId);
+    const previousAction = activeAction ?? (freshStateForClassification.lastCompletedActionId ? freshStateForClassification.actions.find((a) => a.actionId === freshStateForClassification.lastCompletedActionId) ?? null : null);
     const classified = classifyOwnerActionTypeWithContext(prompt, previousAction);
     if (isReadOnlyActionType(classified.actionType) && classified.resource === 'properties') {
-      const hasConversationAuthorization = ownerState.readOnlyAuthorized === true;
+      const hasConversationAuthorization = freshStateForClassification.readOnlyAuthorized === true;
       if (!hasConversationAuthorization) {
         const action = await addPendingAction(conversation.id, ownerContext.userId, {
           originalQuestion: prompt,

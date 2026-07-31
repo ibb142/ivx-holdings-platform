@@ -1465,6 +1465,10 @@ setProductionState({
     staleStateFix: '2026-07-31T00:15:00Z',
     conversationStateMachineV6_4: '2026-07-31T00:25:00Z',
     tablePriorityMemoryFix: '2026-07-31T00:25:00Z',
+    conversationStateMachineV6_5: '2026-07-31T02:30:00Z',
+    staleFreeClassification: '2026-07-31T02:30:00Z',
+    conversationStateMachineV6_6: '2026-07-31T03:00:00Z',
+    intentRoutingFix: '2026-07-31T03:00:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

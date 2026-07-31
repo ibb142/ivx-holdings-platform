@@ -29,7 +29,7 @@ import {
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
 import { createRequestId } from './ivx-request-id';
 
-export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v1-2026-07-30';
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-6-2026-07-31-intent-routing-fix';
 
 const ROOT = auditDir('owner-conversation-state');
 const STATE = path.join(ROOT, 'states.json');
@@ -396,18 +396,41 @@ export function classifyOwnerActionTypeWithContext(
   previousAction: PendingOwnerAction | null,
 ): { actionType: OwnerActionType; resource: string | null; operation: string | null; metadata: Record<string, unknown> } {
   const classified = classifyOwnerActionType(message);
+  // If the message itself is clearly a property/deal query, use that classification directly.
   if (classified.resource === 'properties' || classified.resource === 'deals' || classified.actionType === 'database_read' || classified.actionType === 'database_read_active' || classified.actionType === 'database_list_latest') {
     return classified;
   }
+  // V6.6 FIX: Only reclassify as a property query if the message actually contains
+  // property-related keywords AND count/list/active keywords. This prevents engineering
+  // questions ("What is the root cause?", "What is the commit SHA?") from being
+  // misrouted to the database just because the previous action was a property query.
   if ((classified.actionType === 'information' || classified.actionType === 'unknown') && previousAction && (previousAction.resource === 'properties' || previousAction.resource === 'deals')) {
     const normalized = asTrimmedString(message).toLowerCase();
+    // The message must mention properties/deals/casas/etc to be reclassified.
+    const mentionsProperty = /\b(propiedad|propiedades|property|properties|casa|casas|deal|deals|jv\s*deal|inmueble|inmuebles)\b/i.test(normalized);
+    // Or it must contain active/latest/count keywords with an implicit property context
+    // (e.g. "¿cuántas están activas?" after a property query).
     const wantsActive = /\b(activas?|activos?|active|activo|en\s*venta|for\s+sale|available|disponible|disponibles|live|published)\b/i.test(normalized);
     const wantsLatest = /\b(últimas?|ultimas?|últimos?|ultimos?|latest|recent|recientes|last\s+five|last\s+5|últimas\s+cinco|ultimas\s+cinco|muéstrame|muestrame|show\s+me|list)\b/i.test(normalized);
-    const listLimitMatch = normalized.match(/\b(\d+)\b/);
-    const listLimit = listLimitMatch ? Math.min(Math.max(Number(listLimitMatch[1]), 1), 100) : 5;
-    if (wantsActive) return { actionType: 'database_read_active', resource: 'properties', operation: 'count_active', metadata: {} };
-    if (wantsLatest) return { actionType: 'database_list_latest', resource: 'properties', operation: 'select_latest', metadata: { limit: listLimit } };
-    return { actionType: 'database_read', resource: 'properties', operation: 'count', metadata: {} };
+    const wantsCount = /\b(cuántas?|cuántos?|cuantas?|cuantos?|how\s+many|count|number\s+of|total)\b/i.test(normalized);
+    // Only reclassify if the message is clearly about properties/deals.
+    // Engineering questions (root cause, commit SHA, deployment, architecture, etc.)
+    // must NOT be reclassified as property queries.
+    const isEngineeringQuestion = /\b(root\s*cause|commit|sha|deploy|deployment|render|github|bug|fix|arregl|repar|solucion|code|codigo|architecture|arquitectura|worker|task|tarea|priority|prioridad|evidence|evidencia|status|health|salud|worker|log|error|test|prueba)\b/i.test(normalized);
+    if (isEngineeringQuestion) {
+      // Don't reclassify — let the original classification stand (information/unknown → LLM).
+      return classified;
+    }
+    if (mentionsProperty || wantsActive || wantsLatest || wantsCount) {
+      const listLimitMatch = normalized.match(/\b(\d+)\b/);
+      const listLimit = listLimitMatch ? Math.min(Math.max(Number(listLimitMatch[1]), 1), 100) : 5;
+      if (wantsActive) return { actionType: 'database_read_active', resource: 'properties', operation: 'count_active', metadata: {} };
+      if (wantsLatest) return { actionType: 'database_list_latest', resource: 'properties', operation: 'select_latest', metadata: { limit: listLimit } };
+      return { actionType: 'database_read', resource: 'properties', operation: 'count', metadata: {} };
+    }
+    // Fallback: if the message is information/unknown and doesn't mention properties,
+    // don't reclassify — let it go to the LLM for a proper answer.
+    return classified;
   }
   return classified;
 }
