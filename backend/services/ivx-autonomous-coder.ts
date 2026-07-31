@@ -1322,10 +1322,20 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           // gate for this controlled pilot.
           const bunRes = resolveRuntimeCommand('bun');
           const bunAvail = !bunRes.usedFallback && bunRes.resolvedPath !== null;
-          const scopedCmd = bunAvail
-            ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`
-            : `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
-          typecheckResult = await runCommand(projectRoot, scopedCmd);
+          // V6.13 FIX: use locally-installed tsc when available instead of
+          // npx --yes which downloads typescript and times out on Render.
+          let pilotScopedCmd: string;
+          if (bunAvail) {
+            pilotScopedCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+          } else {
+            try {
+              await stat(path.join(projectRoot, 'node_modules', '.bin', 'tsc'));
+              pilotScopedCmd = `node ${path.join(projectRoot, 'node_modules', '.bin', 'tsc')} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+            } catch {
+              pilotScopedCmd = `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+            }
+          }
+          typecheckResult = await runCommand(projectRoot, pilotScopedCmd);
         }
         commandsRun.push(typecheckResult);
         typecheckPassed = typecheckResult.ok;
@@ -1612,10 +1622,24 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     const bunResTsc = resolveRuntimeCommand('bun');
     const bunAvailTsc = !bunResTsc.usedFallback && bunResTsc.resolvedPath !== null;
     const changedFileArgs = appliedOps.map((op) => op.path).join(' ');
-    const scopedTypecheckCmd = bunAvailTsc
-      ? `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`
-      : `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
-    const typecheckCmd = scopedTypecheckCmd;
+    // V6.13 FIX: npx --yes tsc downloads typescript on every run and can
+    // timeout on the Render container. Use the locally-installed tsc via
+    // node_modules/.bin/tsc when available. Only fall back to npx if tsc
+    // is not found locally. This eliminates the 60s download stall that
+    // caused every LLM-driven patch to BLOCK at the typecheck stage.
+    const localTscPath = path.join(projectRoot, 'node_modules', '.bin', 'tsc');
+    let tscCmd: string;
+    if (bunAvailTsc) {
+      tscCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+    } else {
+      try {
+        await stat(localTscPath);
+        tscCmd = `node ${localTscPath} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+      } catch {
+        tscCmd = `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+      }
+    }
+    const typecheckCmd = tscCmd;
     const typecheckResult = input.testRunner
       ? await input.testRunner(projectRoot, typecheckCmd)
       : await runCommand(projectRoot, typecheckCmd);

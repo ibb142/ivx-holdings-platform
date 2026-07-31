@@ -963,8 +963,13 @@ const COMMITTING_RECOVERY_THRESHOLD_MS = 2 * 60 * 1000; // 2 min
  *  authored. Guards against picking up an unrelated prior commit. */
 const COMMITTING_RECOVERY_WINDOW_MS = 20 * 60 * 1000; // 20 min
 
-/** Query the ivx-autonomous branch HEAD and recover any job stuck at
- *  COMMITTING whose commit actually landed on GitHub. */
+/** Query the ivx-autonomous AND main branch HEADs to recover any job stuck
+ *  at COMMITTING whose commit actually landed on GitHub.
+ *
+ *  V6.13 FIX: Previously only checked `ivx-autonomous` branch. Deploy jobs commit
+ *  to `main` (triggering Render auto-deploy which restarts the container and
+ *  kills the worker). Those jobs were NEVER recovered because the sweep only
+ *  looked at `ivx-autonomous`. Now we check BOTH branches. */
 async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
   const token = ledgerGithubToken();
   const repoUrl = typeof process.env.GITHUB_REPO_URL === 'string' ? process.env.GITHUB_REPO_URL.trim() : '';
@@ -972,7 +977,6 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
   if (!token || !repoMatch?.[1] || !repoMatch?.[2]) return; // no credentials → skip
   const owner = repoMatch[1];
   const repo = repoMatch[2];
-  const branch = 'ivx-autonomous';
   const now = Date.now();
 
   // Find jobs stuck at COMMITTING past the threshold.
@@ -983,28 +987,30 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
     now - new Date(j.startedAt).getTime() > COMMITTING_RECOVERY_THRESHOLD_MS);
   if (stuckJobs.length === 0) return;
 
-  // Fetch the branch HEAD once (all stuck jobs share the same branch).
-  let branchHeadSha: string | null = null;
-  let branchHeadCommitDate: string | null = null;
-  let branchHeadMessage: string | null = null;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (res.ok) {
-      const data = await res.json() as { commit?: { sha?: string; commit?: { author?: { date?: string }; message?: string } } };
-      branchHeadSha = data.commit?.sha ?? null;
-      branchHeadCommitDate = data.commit?.commit?.author?.date ?? null;
-      branchHeadMessage = data.commit?.commit?.message ?? null;
+  // V6.13: Check BOTH branches — ivx-autonomous (code_change jobs) AND main (deploy jobs).
+  const branchesToCheck = ['ivx-autonomous', 'main'];
+  for (const branch of branchesToCheck) {
+    let branchHeadSha: string | null = null;
+    let branchHeadCommitDate: string | null = null;
+    let branchHeadMessage: string | null = null;
+    try {
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const data = await res.json() as { commit?: { sha?: string; commit?: { author?: { date?: string }; message?: string } } };
+        branchHeadSha = data.commit?.sha ?? null;
+        branchHeadCommitDate = data.commit?.commit?.author?.date ?? null;
+        branchHeadMessage = data.commit?.commit?.message ?? null;
+      }
+    } catch {
+      continue; // network error → try next branch
     }
-  } catch {
-    return; // network error → skip this sweep cycle
-  }
-  if (!branchHeadSha || !branchHeadMessage) return;
+    if (!branchHeadSha || !branchHeadMessage) continue;
 
-  // The autonomous coder's commit message pattern is `IVX autonomous coder: <ISO>`.
-  if (!/^IVX autonomous coder:/.test(branchHeadMessage)) return;
+    // Accept both commit message patterns: autonomous coder + senior developer runtime.
+    if (!/^IVX autonomous coder:/.test(branchHeadMessage) && !/^IVX senior developer/.test(branchHeadMessage) && !/^V6\./.test(branchHeadMessage)) continue;
 
   // Verify the commit falls within the job's time window.
   const commitMs = branchHeadCommitDate ? new Date(branchHeadCommitDate).getTime() : NaN;

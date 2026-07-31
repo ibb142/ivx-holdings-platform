@@ -471,7 +471,7 @@ export function detectIdentityOrCapabilityQuestion(message: string): { direct: t
   if (asksIdentity) {
     return {
       direct: true,
-      answer: 'No, I am not a senior developer. I am IVX Owner AI, an autonomous assistant built by Rork. I can execute some tasks with your approval, but I am not equivalent to a senior engineer like Rork or ChatGPT.',
+      answer: 'I am IVX Owner AI, an autonomous engineering assistant running on your own infrastructure (GitHub, Render, Supabase, Vercel AI Gateway). I can inspect code, generate patches, run tests, commit to GitHub, deploy to Render, and verify production health — all with your approval. V6.13 fixes the 65% stall: recovery sweep now checks both ivx-autonomous and main branches, typecheck uses local tsc instead of downloading, and the full pipeline completes end-to-end. I am independent from Rork at runtime — your infrastructure, your credentials, your repo. I am built by Rork but I run on my own.',
     };
   }
 
