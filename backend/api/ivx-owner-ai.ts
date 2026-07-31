@@ -6227,6 +6227,14 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // executed directly without creating a pending action, but the owner still
     // says "yes, I authorize you" — they expect to see the data again.
     if (approvalSignal === 'approve' && !activeAction) {
+      // V6.9 FIX: Do NOT re-execute DB queries when the owner is clearly approving
+      // a FIX, TASK, or ENGINEERING action — not re-authorizing a DB read. Check
+      // if the message mentions fix/task/deploy/code/bug/engineering keywords.
+      const isEngineeringApproval = /\b(fix|task|deploy|code|bug|engineer|repair|patch|update|change|implement|build|refactor|issue|problem|root cause|root-cause)\b/i.test(prompt);
+      if (isEngineeringApproval) {
+        // This is an engineering approval, not a DB re-exec — fall through to LLM.
+        console.log('[IVXOwnerAIBackend] V6.9 approval routing: engineering approval detected, skipping DB re-exec');
+      } else {
       const approvalNoPendingState = await getOwnerConversationState(conversation.id, ownerContext.userId);
       if (approvalNoPendingState.readOnlyAuthorized === true && approvalNoPendingState.lastCompletedActionId) {
         const lastAction = approvalNoPendingState.actions.find((a) => a.actionId === approvalNoPendingState.lastCompletedActionId) ?? null;
@@ -6253,6 +6261,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           return returnStateAnswer(result.answer, { actionId: reExecAction.actionId, evidence: result.evidence, reExecuted: true }, result.ok ? 'ok' : 'error');
         }
       }
+      } // end else (non-engineering approval)
     }
 
     // 2. Direct execution for read-only questions (property counts, active counts, latest lists).
