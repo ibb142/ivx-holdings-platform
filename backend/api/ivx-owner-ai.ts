@@ -6412,15 +6412,27 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // executed directly without creating a pending action, but the owner still
     // says "yes, I authorize you" — they expect to see the data again.
     if (approvalSignal === 'approve' && !activeAction) {
+      // V6.11 FIX: Check if the last completed action was a deployment/code_change.
+      // If so, re-execute the senior-developer pipeline for that action instead of
+      // re-running a stale property query. This fixes the "Confirm do it" gap where
+      // the pending action was already resolved but the owner is re-confirming.
+      const approvalNoPendingState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+      const lastCompletedAction = approvalNoPendingState.lastCompletedActionId
+        ? approvalNoPendingState.actions.find((a) => a.actionId === approvalNoPendingState.lastCompletedActionId) ?? null
+        : null;
+      if (lastCompletedAction && isOwnerExecutionActionType(lastCompletedAction.actionType)) {
+        // The last action was a deployment/code_change — re-execute it.
+        console.log('[IVXOwnerAIBackend] V6.11 approval routing: last completed action was deployment/code_change, re-executing senior-developer pipeline');
+        return await executeOwnerAuthorizedDeveloperAction(lastCompletedAction.originalQuestion);
+      }
       // V6.9 FIX: Do NOT re-execute DB queries when the owner is clearly approving
       // a FIX, TASK, or ENGINEERING action — not re-authorizing a DB read. Check
-      // if the message mentions fix/task/deploy/code/bug/engineering keywords.
-      const isEngineeringApproval = /\b(fix|task|deploy|code|bug|engineer|repair|patch|update|change|implement|build|refactor|issue|problem|root cause|root-cause)\b/i.test(prompt);
+      // if the message mentions fix/task/deploy/code/bug/engineering/confirm keywords.
+      const isEngineeringApproval = /\b(fix|task|deploy|code|bug|engineer|repair|patch|update|change|implement|build|refactor|issue|problem|root cause|root-cause|confirm|do it|proceed|go ahead|authorize|approved|go for it|ship it)\b/i.test(prompt);
       if (isEngineeringApproval) {
         // This is an engineering approval, not a DB re-exec — fall through to LLM.
         console.log('[IVXOwnerAIBackend] V6.9 approval routing: engineering approval detected, skipping DB re-exec');
       } else {
-      const approvalNoPendingState = await getOwnerConversationState(conversation.id, ownerContext.userId);
       if (approvalNoPendingState.readOnlyAuthorized === true && approvalNoPendingState.lastCompletedActionId) {
         const lastAction = approvalNoPendingState.actions.find((a) => a.actionId === approvalNoPendingState.lastCompletedActionId) ?? null;
         if (lastAction && isReadOnlyActionType(lastAction.actionType)) {
