@@ -1469,6 +1469,9 @@ setProductionState({
     staleFreeClassification: '2026-07-31T02:30:00Z',
     conversationStateMachineV6_6: '2026-07-31T03:00:00Z',
     intentRoutingFix: '2026-07-31T03:00:00Z',
+    conversationStateMachineV6_8: '2026-07-31T03:30:00Z',
+    approvalReExecFix: '2026-07-31T03:30:00Z',
+    taskStatusNarrowing: '2026-07-31T03:30:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
