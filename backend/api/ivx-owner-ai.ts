@@ -3472,7 +3472,7 @@ function resolveOwnerDevelopmentActionIntent(prompt: string): OwnerDevelopmentAc
   // live deploy/show proof/verified evidence, this is a senior-developer execution task — not a
   // standalone deploy confirmation. The senior-developer pipeline executes end-to-end and returns
   // real evidence (task_id, files changed, tests, commit/deploy status, health verification).
-  const hasChatOrUiTarget = /\b(chat(?:s|ting)?|owner\s+room(?:s)?|owner\s+ai|message\s+lists?|message\s+bubbles?|composer(?:s)?|screen(?:s)?|ui(?:s)?|component(?:s)?|load(?:ing|er|s)?|spinner(?:s)?|delay(?:s|ed)?|lag(?:s|ged)?|freez(?:e|es|ing)?|stutter(?:s|ing)?|flicker(?:s|ing)?|glitch(?:es|ing)?|disappear(?:ed|ing|s|ance)?|despair(?:ing|ed)?|vanish(?:es|ed|ing)?|missing|not\s+show(?:ing|ed)?|not\s+display(?:ed|ing)?)\b/.test(normalized);
+  const hasChatOrUiTarget = /\b(chat(?:s|ting)?|owner\s+room(?:s)?|owner\s+ai|message\s+lists?|message\s+bubbles?|composer(?:s)?|screen(?:s)?|ui(?:s)?|component(?:s)?|load(?:ing|er|s)?|spinner(?:s)?|delay(?:s|ed)?|lag(?:s|ged)?|freez(?:e|es|ing)?|stutter(?:s|ing)?|flicker(?:s|ing)?|glitch(?:es|ing)?|disappear(?:ed|ing|s|ance)?|despair(?:ing|ed)?|vanish(?:es|ed|ing)?|missing|not\s+show(?:ing|ed)?|not\s+display(?:ed|ing)?|typ(?:ing|e|ed)?|indicator(?:s)?|live\s+status|read\s+receipt(?:s)?|status\s+bubble(?:s)?)\b/.test(normalized);
   const hasFixOrAuditVerb = /\b(audit|fix|repair|patch|remove|delete|hide|eliminate|clear|clean\s*up|get\s+rid\s+of|implement|build|update|change|improve|optimize|solve|resolve|debug)\b/.test(normalized);
   const asksForProofOrLiveDeploy = /\b(deploy|live|production|verify|verified|proof|prove|show\s+me|evidence|now|immediately|asap|today|end[-\s]?to[-\s]?end)\b/.test(normalized);
   if (hasChatOrUiTarget && hasFixOrAuditVerb && asksForProofOrLiveDeploy) {
@@ -6108,6 +6108,176 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     const conversation = await ensureOwnerConversation(ownerContext.client, tables);
     const requestId = readTrimmedString(body.requestId) || createRequestId();
 
+    // ── V6.10 OWNER-AUTHORIZED DEVELOPER EXECUTION (fixes the gap where the
+    // conversation state machine only executed read-only actions, so "Confirm do it"
+    // after a deploy request re-ran the last property query instead of shipping
+    // the feature). This helper enqueues the same persistent senior-developer worker
+    // used by the self_developer route, so code→test→commit→deploy→verify runs
+    // after owner approval or explicit deploy-live authorization. ──
+    async function executeOwnerAuthorizedDeveloperAction(goal: string): Promise<Response> {
+      const workerOwnerId = ownerContext.userId ?? 'owner';
+      const executionDecision = classifyOwnerExecutionCommand(goal);
+      const autoExecuteEndToEnd = executionDecision.autoExecute || !executionDecision.requiresApproval;
+
+      const workerInput: IVXWorkerJobInput = {
+        goal,
+        ownerApproved: true,
+        approvePatch: autoExecuteEndToEnd,
+        patchConfirmationText: autoExecuteEndToEnd ? IVX_SAFE_PATCH_CONFIRM_TEXT : undefined,
+        approveGitDeploy: autoExecuteEndToEnd,
+        gitDeployConfirmationText: autoExecuteEndToEnd ? IVX_GIT_DEPLOY_CONFIRM_TEXT : undefined,
+        validationMode: 'focused',
+        systemMode: false,
+        ownerApprovedAction: {
+          proposedPlan: goal.slice(0, 500),
+          filesAffected: [],
+          riskLevel: executionDecision.requiresApproval ? 'high' : 'medium',
+          rollbackOption: autoExecuteEndToEnd ? 'git revert + render_trigger_deploy' : '',
+          rollbackAvailable: autoExecuteEndToEnd,
+          auditLog: [
+            `source=ivx_ia_chat_state_machine`,
+            `conversationId=${conversation.id}`,
+            `requestId=${requestId}`,
+            `ownerId=${workerOwnerId}`,
+            `requiresApproval=${executionDecision.requiresApproval}`,
+            `approvalCategories=${executionDecision.approvalCategories.join(',')}`,
+          ],
+          secretValuesReturned: false as const,
+        },
+        ownerId: workerOwnerId,
+        conversationId: conversation.id,
+        approvalRecords: {
+          patchApprovalId: `approval-${randomUUID()}`,
+          gitDeployApprovalId: autoExecuteEndToEnd ? `approval-${randomUUID()}` : null,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        },
+      };
+
+      const devApprovalExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      try {
+        await recordApproval({
+          taskId: `dev-state-${requestId}`,
+          ownerId: workerOwnerId,
+          action: 'GITHUB_WRITE' as IVXSeniorDevApprovalAction,
+          phrase: IVX_SAFE_PATCH_CONFIRM_TEXT,
+          scope: 'patch_apply',
+          expiresAt: devApprovalExpiresAt,
+        });
+        if (autoExecuteEndToEnd) {
+          await recordApproval({
+            taskId: `dev-state-${requestId}`,
+            ownerId: workerOwnerId,
+            action: 'RENDER_DEPLOY' as IVXSeniorDevApprovalAction,
+            phrase: IVX_GIT_DEPLOY_CONFIRM_TEXT,
+            scope: 'git_deploy',
+            expiresAt: devApprovalExpiresAt,
+          });
+        }
+      } catch {
+        // Approval recording is non-fatal — the inline flags still enforce the gate.
+      }
+
+      const { job: enqueuedJob } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+      const taskId = enqueuedJob.jobId;
+      console.log('[IVXOwnerAIBackend] state-machine→developer-worker:', {
+        taskId,
+        ownerId: workerOwnerId,
+        conversationId: conversation.id,
+        goal: goal.slice(0, 120),
+      });
+
+      const WARMUP_INTERVAL_MS = 750;
+      const WARMUP_TIMEOUT_MS = 12_000;
+      const warmupDeadline = Date.now() + WARMUP_TIMEOUT_MS;
+      let finalJob: IVXWorkerJob = enqueuedJob;
+      const isTerminal = (st: IVXWorkerJob['status']): boolean =>
+        st === 'completed' || st === 'failed' || st === 'blocked' || st === 'cancelled';
+      const hasAdvanced = (st: IVXWorkerJob['status']): boolean => st !== 'queued';
+      while (!isTerminal(finalJob.status) && !hasAdvanced(finalJob.status) && Date.now() < warmupDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, WARMUP_INTERVAL_MS));
+        const fresh = await getSeniorDeveloperJob(taskId);
+        if (fresh) finalJob = fresh;
+      }
+      if (!isTerminal(finalJob.status) && hasAdvanced(finalJob.status)) {
+        const extraDeadline = Math.min(Date.now() + 8_000, warmupDeadline + 8_000);
+        while (!isTerminal(finalJob.status) && Date.now() < extraDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, WARMUP_INTERVAL_MS));
+          const fresh = await getSeniorDeveloperJob(taskId);
+          if (fresh) finalJob = fresh;
+        }
+      }
+
+      const executionModeClassification = classifyExecutionModeIntent(goal);
+      const executionModeCategory: IVXExecutionModeCategory | null = executionModeClassification.isExecutionMode
+        ? executionModeClassification.category
+        : null;
+      const enforcedExecution = enforceDeveloperExecutionAnswer(
+        buildSeniorDeveloperWorkerJobAnswer(finalJob, executionDecision),
+      );
+      let answer = assertVisibleOwnerAIAnswer(enforcedExecution.answer);
+      if (hasForbiddenNarrative(answer)) {
+        const violations = findForbiddenNarrativePhrases(answer);
+        for (const phrase of violations) {
+          answer = answer.split(phrase).join('[narrative removed — execution mode]');
+        }
+      }
+
+      let assistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
+      if (persistAssistantMessage && !assistantMessageId) {
+        try {
+          const assistantMessage = await insertMessage(ownerContext.client, tables, {
+            conversationId: conversation.id,
+            senderRole: 'assistant',
+            senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+            senderLabel: IVX_OWNER_AI_PROFILE.name,
+            body: answer,
+          });
+          assistantMessageId = assistantMessage.id;
+        } catch (error) {
+          console.log('[IVXOwnerAIBackend] State-machine developer execution answer persistence failed:', error instanceof Error ? error.message : 'unknown');
+          throw error instanceof Error ? error : new Error('Assistant reply could not be saved.');
+        }
+        await safeUpdateConversationSummary(ownerContext.client, tables, conversation.id, answer);
+        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+      }
+
+      await safeUpsertAIRequest(ownerContext.client, tables, {
+        requestId,
+        conversationId: conversation.id,
+        userId: ownerContext.userId,
+        prompt: goal,
+        responseText: answer,
+        responseMessageId: assistantMessageId,
+        status: 'completed',
+        model: 'ivx_self_developer_runtime',
+      });
+
+      logOwnerAuditRouting({
+        promptText: goal,
+        detectedIntent: 'development_action',
+        selectedRoute: 'ivx_self_developer_runtime',
+        auditEndpointCalled: false,
+        renderedFinalAnswer: answer,
+      });
+
+      const executionStatusPayload = buildExecutionStatusPayload(finalJob, executionModeCategory, answer);
+      return ownerOnlyJson(buildOwnerAIResponsePayload({
+        requestId,
+        conversationId: conversation.id,
+        answer,
+        model: 'ivx_self_developer_runtime',
+        status: 'ok',
+      }, {
+        source: 'local_runtime',
+        provider: 'ivx_self_developer_runtime',
+        endpoint: '/api/ivx/owner-ai',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        assistantMessageId,
+        assistantPersisted: Boolean(assistantMessageId),
+        executionStatus: executionStatusPayload,
+      }, body.devTestModeActive === true), executionStatusPayload.httpStatus);
+    }
+
     // ── Conversation State Machine (owner mandate 2026-07-30, V6.5 stale-free) ──
     // Persist the active request across turns, recognize approval/denial phrases,
     // and execute read-only database questions directly instead of routing them
@@ -6217,6 +6387,19 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           await setOwnerConversationState({ ...approvalFreshState, readOnlyAuthorized: true, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
           return returnStateAnswer(result.answer, { actionId: resolved.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
         }
+        // V6.10 FIX: Owner-approved deployment/code-change actions now execute the real
+        // senior-developer pipeline (code→test→commit→deploy→verify) instead of
+        // falling through to the LLM and losing the thread.
+        if (isOwnerExecutionActionType(resolved.actionType) && resolvedStatus === 'granted') {
+          await updateAction(conversation.id, ownerContext.userId, resolved.actionId, {
+            executionState: 'EXECUTING',
+            traceId: requestId,
+            updatedAt: nowIso(),
+          });
+          const execFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+          await setOwnerConversationState({ ...execFreshState, activeActionId: null, unresolvedQuestion: null });
+          return await executeOwnerAuthorizedDeveloperAction(resolved.originalQuestion);
+        }
       }
     }
 
@@ -6309,6 +6492,46 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const execFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
       await setOwnerConversationState({ ...execFreshState, activeActionId: null, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
       return returnStateAnswer(result.answer, { actionId: action.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
+    }
+
+    // 2b. V6.10 FIX: Deployment / code-change actions. Explicit deploy-live authorization
+    // executes immediately; otherwise we ask for confirmation and store the pending action
+    // so a follow-up "Confirm do it" runs the senior-developer pipeline instead of re-running
+    // the last read-only property query.
+    if (isOwnerExecutionActionType(classified.actionType)) {
+      const explicitAuth = detectExplicitDeployAuthorization(prompt);
+      if (explicitAuth) {
+        const action = await addPendingAction(conversation.id, ownerContext.userId, {
+          originalQuestion: prompt,
+          actionType: classified.actionType,
+          resource: classified.resource,
+          operation: classified.operation,
+          authorizationRequired: false,
+          languagePreference: detectedLang,
+          metadata: classified.metadata,
+        });
+        await updateAction(conversation.id, ownerContext.userId, action.actionId, {
+          executionState: 'EXECUTING',
+          traceId: requestId,
+          updatedAt: nowIso(),
+        });
+        const execFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+        await setOwnerConversationState({ ...execFreshState, activeActionId: null, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
+        return await executeOwnerAuthorizedDeveloperAction(prompt);
+      }
+      const action = await addPendingAction(conversation.id, ownerContext.userId, {
+        originalQuestion: prompt,
+        actionType: classified.actionType,
+        resource: classified.resource,
+        operation: classified.operation,
+        authorizationRequired: true,
+        languagePreference: detectedLang,
+        metadata: classified.metadata,
+      });
+      const approvalQuestion = detectedLang === 'es'
+        ? 'Esto va a modificar código y desplegar en producción. ¿Me autorizas a ejecutar este cambio end-to-end?'
+        : 'This will change code and deploy to production. Do you authorize me to run this end-to-end?';
+      return returnStateAnswer(approvalQuestion, { actionId: action.actionId, pending: true, authorizationRequired: true });
     }
 
     // 3. Context-memory status / "where were we" / "what were you doing".
