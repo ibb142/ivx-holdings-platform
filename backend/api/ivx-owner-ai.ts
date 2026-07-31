@@ -211,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-2-2026-07-30-conversation-context-fix';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-3-2026-07-31-stale-state-fix';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -6197,7 +6197,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
             lastResultSummary: 'Owner denied.',
             updatedAt: nowIso(),
           });
-          await setOwnerConversationState({ ...ownerState, activeActionId: null, unresolvedQuestion: null });
+          const deniedFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+          await setOwnerConversationState({ ...deniedFreshState, activeActionId: null, unresolvedQuestion: null });
           const deniedAnswer = detectedLang === 'es' ? 'Acción cancelada.' : 'Action cancelled.';
           return returnStateAnswer(deniedAnswer, { actionId: resolved.actionId, authorizationStatus: 'denied' });
         }
@@ -6210,7 +6211,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
             traceId: requestId,
             updatedAt: nowIso(),
           });
-          await setOwnerConversationState({ ...ownerState, readOnlyAuthorized: true, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
+          const approvalFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+          await setOwnerConversationState({ ...approvalFreshState, readOnlyAuthorized: true, activeActionId: null, lastCompletedActionId: resolved.actionId, unresolvedQuestion: null });
           return returnStateAnswer(result.answer, { actionId: resolved.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
         }
       }
@@ -6231,7 +6233,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           languagePreference: detectedLang,
           metadata: classified.metadata,
         });
-        await setOwnerConversationState({ ...ownerState, activeActionId: action.actionId, unresolvedQuestion: prompt });
+        // addPendingAction already sets activeActionId and unresolvedQuestion internally.
+        // Do NOT overwrite with stale ownerState — that destroys the actions array.
         const approvalQuestion = detectedLang === 'es'
           ? 'Puedo consultar eso directamente en la base de datos. ¿Me autorizas a ejecutar esta consulta de solo lectura?'
           : 'I can query that directly from the database. Do you authorize me to run this read-only query?';
@@ -6254,7 +6257,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         traceId: requestId,
         updatedAt: nowIso(),
       });
-      await setOwnerConversationState({ ...ownerState, activeActionId: null, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
+      const execFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+      await setOwnerConversationState({ ...execFreshState, activeActionId: null, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
       return returnStateAnswer(result.answer, { actionId: action.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
     }
 
