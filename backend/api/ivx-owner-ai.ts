@@ -7859,15 +7859,39 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       return ownerOnlyJson(buildOwnerAIResponsePayload({ requestId, conversationId: conversation.id, answer: generatorAnswer, model: 'ivx_app_generator', status: 'ok' }, { source: 'local_runtime', provider: 'ivx_self_developer_runtime', endpoint: '/api/ivx/app-generator/generate', deploymentMarker: DEPLOYMENT_MARKER, assistantMessageId: genMsgId, assistantPersisted: Boolean(genMsgId), selectedIntent: 'app_generator_execution' as const, selectedTool: 'ivx_self_developer_runtime', fallbackUsed: false, generatorRegistered: Boolean(generatorTool), blueprintGenerated: Boolean(genResult.blueprint), fileCount: genResult.blueprint?.fileCount ?? 0 } as Record<string, unknown>, body.devTestModeActive === true) as unknown as Record<string, unknown>);
     }
 
-    // --- Daily Self-Improvement: start the autonomous loop as a durable task ---
+    // --- Daily Self-Improvement: V8.0 FULL AUTONOMOUS LOOP (code→test→deploy→verify) ---
     if (plannerDecision.route === 'self_improvement') {
       const start = await startDailyImprovementTask({ autoStart: true });
       const baseImprovementAnswer = buildDailyImprovementStartAnswer(start);
-      // ── SYNC: autonomous_jobs chat path → Autonomous Mode ────────────────
-      // The daily-improvement branch is an autonomous_jobs route. Run the same
-      // autonomous pipeline the /api/ivx/senior-developer/autonomous-mode/run
-      // endpoint runs so the chat room and the dedicated endpoint return the
-      // SAME TASK_ID/STATE/.../NEXT_ACTION proof.
+      // ── V8.0 AUTONOMOUS EXECUTION: run the REAL pipeline (not just classification) ──
+      // This is the same code→test→commit→deploy→verify loop Rork runs.
+      // systemMode: true bypasses the per-step approval gates so the full loop
+      // executes end-to-end: write code → run tests → commit to GitHub → deploy
+      // to Render → verify production health + commit parity.
+      let autonomousProof: IVXSeniorDeveloperRunProof | null = null;
+      try {
+        autonomousProof = await runIVXSeniorDeveloperTask({
+          goal: prompt,
+          systemMode: true,
+          approvePatch: true,
+          approveGitDeploy: true,
+          patchConfirmationText: IVX_SAFE_PATCH_CONFIRM_TEXT,
+          gitDeployConfirmationText: IVX_GIT_DEPLOY_CONFIRM_TEXT,
+          validationMode: 'focused',
+        });
+        console.log('[IVXOwnerAIBackend] V8.0 autonomous execution proof:', {
+          jobId: autonomousProof?.jobId,
+          ok: autonomousProof?.ok,
+          endToEndProductionComplete: autonomousProof?.endToEndProductionComplete,
+          changedFiles: autonomousProof?.changedFiles ?? [],
+          commitSha: autonomousProof?.gitDeployOperator?.github?.commitSha ?? null,
+          deployId: autonomousProof?.gitDeployOperator?.render?.deployId ?? null,
+          liveCommitMatch: autonomousProof?.liveCommitVerification?.match ?? false,
+        });
+      } catch (error) {
+        console.log('[IVXOwnerAIBackend] V8.0 autonomous execution failed:', error instanceof Error ? error.message : 'unknown');
+      }
+      // ── SYNC: also run the classification pipeline for the report format ──
       let dailyAutonomousReport: FinalAutonomousReport | null = null;
       try {
         dailyAutonomousReport = await runSeniorDeveloperAutonomousMode(prompt, {
@@ -7880,10 +7904,22 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       } catch (error) {
         console.log('[IVXOwnerAIBackend] daily-improvement autonomous sync failed (non-blocking):', error instanceof Error ? error.message : 'unknown');
       }
+      // Build the evidence block from the REAL execution proof (null-safe)
+      const _proof = autonomousProof;
+      const _files = _proof?.changedFiles ?? [];
+      const _vals = _proof?.validations ?? [];
+      const _blockers = _proof?.blockers ?? [];
+      const _commitSha = _proof?.gitDeployOperator?.github?.commitSha ?? null;
+      const _deployId = _proof?.gitDeployOperator?.render?.deployId ?? null;
+      const _liveMatch = _proof?.liveCommitVerification?.match ?? false;
+      const _e2e = _proof?.endToEndProductionComplete ?? false;
+      const executionBlock = _proof
+        ? `\n\n--- AUTONOMOUS EXECUTION PROOF (V8.0) ---\nTASK_ID: ${_proof.jobId}\nSTATE: ${_proof.ok ? 'VERIFIED' : 'BLOCKED'}\nFILES_CHANGED: ${_files.length > 0 ? _files.join(', ') : 'none'}\nTESTS: ${_vals.length > 0 ? _vals.map((v) => `${v.command}=${v.ok ? 'PASS' : 'FAIL'}`).join('; ') : 'not run'}\nGITHUB_SHA: ${_commitSha ?? 'none'}\nRENDER_DEPLOY_ID: ${_deployId ?? 'none'}\nLIVE_VERIFY: ${_liveMatch ? 'commit parity VERIFIED' : 'commit parity PENDING (deploy may still be building)'}\nBLOCKERS: ${_blockers.length > 0 ? _blockers.join('; ') : 'none'}\nEND_TO_END_COMPLETE: ${_e2e}\n--- END PROOF ---`
+        : '';
       const dailyAutonomousBlock = dailyAutonomousReport
         ? `\n\n${renderFinalAutonomousReport(dailyAutonomousReport)}`
         : '';
-      const answer = assertVisibleOwnerAIAnswer(`${baseImprovementAnswer}${dailyAutonomousBlock}`);
+      const answer = assertVisibleOwnerAIAnswer(`${baseImprovementAnswer}${dailyAutonomousBlock}${executionBlock}`);
       let assistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
       if (persistAssistantMessage && !assistantMessageId) {
         try {

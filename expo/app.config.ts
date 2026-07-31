@@ -18,7 +18,7 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.7.0",
+  version: "1.8.0",
   runtimeVersion: {
     policy: 'appVersion',
   },
