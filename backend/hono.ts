@@ -1486,6 +1486,7 @@ setProductionState({
     approvalResumeFixV611: '2026-07-31T15:10:00Z',
     honestIdentityAndLiveTypingV612: '2026-07-31T15:55:00Z',
     autonomousEndToEndV613: '2026-07-31T16:30:00Z',
+    identityGuardRegexV614: '2026-07-31T22:00:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3090,6 +3091,7 @@ app.get('/health', async (context) => {
     approvalResumeFixV611: '2026-07-31T15:10:00Z',
     honestIdentityAndLiveTypingV612: '2026-07-31T16:00:00Z',
     autonomousEndToEndV613: '2026-07-31T16:30:00Z',
+    identityGuardRegexV614: '2026-07-31T22:00:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
