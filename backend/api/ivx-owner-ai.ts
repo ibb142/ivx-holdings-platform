@@ -6224,7 +6224,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         }
       }
 
-      let assistantMessageId: string | null = existingAIRequest?.response_message_id ?? null;
+      let assistantMessageId: string | null = null;
       if (persistAssistantMessage && !assistantMessageId) {
         try {
           const assistantMessage = await insertMessage(ownerContext.client, tables, {
