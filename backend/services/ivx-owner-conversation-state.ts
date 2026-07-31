@@ -29,7 +29,7 @@ import {
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
 import { createRequestId } from './ivx-request-id';
 
-export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v6-9-2026-07-31-conversational-narrative';
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v7-0-2026-07-31-rork-level-narrative';
 
 const ROOT = auditDir('owner-conversation-state');
 const STATE = path.join(ROOT, 'states.json');
@@ -520,7 +520,7 @@ export async function executeReadOnlyAction(
     }
 
     return {
-      answer: isSpanish ? 'No puedo ejecutar esa acción directamente. Por favor, reformula tu pregunta.' : 'I cannot execute that action directly. Please rephrase your question.',
+      answer: isSpanish ? 'No puedo ejecutar esa acción directamente — reformula tu pregunta y te ayudo.' : 'I can\'t execute that action directly — rephrase your question and I\'ll help you out.',
       evidence: {},
       ok: false,
       error: 'Unsupported read-only action',
