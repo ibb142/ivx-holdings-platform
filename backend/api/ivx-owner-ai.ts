@@ -211,7 +211,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-3-2026-07-31-stale-state-fix';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v6-4-2026-07-31-table-priority-memory-fix';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';

@@ -502,7 +502,10 @@ export async function executeReadOnlyAction(
 }
 
 export function buildWhereWeWereSummary(state: OwnerConversationState): string {
-  const action = state.actions.find((a) => a.actionId === state.activeActionId) ?? state.actions.find((a) => a.actionId === state.lastCompletedActionId);
+  // Use the most recent action in the actions array (last element = most recent).
+  // This is more reliable than activeActionId/lastCompletedActionId which may
+  // point to stale actions from prior conversation turns.
+  const action = state.actions.length > 0 ? state.actions[state.actions.length - 1] : null;
   if (!action) return 'No tengo una acción activa o reciente recordada en esta conversación.';
   const isSpanish = action.languagePreference === 'es' || /\b(cuántas|propiedades|activas|muestrame|dónde|qué)\b/i.test(action.originalQuestion);
   const stateText = action.executionState === 'COMPLETED' ? (isSpanish ? 'completada' : 'completed') : (isSpanish ? 'pendiente' : 'pending');

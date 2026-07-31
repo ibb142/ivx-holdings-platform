@@ -1463,6 +1463,8 @@ setProductionState({
     readOnlyApprovalFlow: '2026-07-30T23:45:00Z',
     conversationStateMachineV6_3: '2026-07-31T00:15:00Z',
     staleStateFix: '2026-07-31T00:15:00Z',
+    conversationStateMachineV6_4: '2026-07-31T00:25:00Z',
+    tablePriorityMemoryFix: '2026-07-31T00:25:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
