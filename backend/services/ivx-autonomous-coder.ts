@@ -569,12 +569,29 @@ Rules:
 - Respond with JSON ONLY. No \`\`\`json fences. No explanation. No prose.
 - kind must be "replace_exact" (replace oldText with newText) or "create_file" (new file).
 - oldText must be an EXACT substring of the file content (copy it verbatim from the FILE CONTENTS above).
-- Make the smallest safe change (1-3 operations max).
+- For replace_exact: copy a UNIQUE 20-80 character snippet from the target file as oldText. Do NOT use the entire file as oldText.
+- For create_file: oldText must be empty string "". newText is the full file content.
+- You CAN create new files (kind="create_file") for new routes, services, tests, or modules.
+- You CAN modify multiple files in one response (add multiple operations to the array).
+- Make the smallest safe change needed. 1-5 operations is typical for non-trivial tasks.
 - Only modify files under backend/ or expo/.
 - No secrets, no destructive operations.
 - If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
 
-EXAMPLE (add a comment line above an existing const):
+NON-TRIVIAL TASK GUIDANCE:
+- When asked to ADD A FIELD to an endpoint, find the response object in the file and add the field.
+- When asked to CREATE A NEW ROUTE, add both the route handler AND any necessary imports.
+- When asked to MODIFY MULTIPLE FILES, include one operation per file.
+- When asked to ADD A TEST, create a new test file with kind="create_file".
+- Read the FILE CONTENTS carefully and copy exact text for oldText from what you see.
+
+EXAMPLE 1 (add a health field):
+{"rootCause":"need to add ivxDeveloperProofVersion to health response","technicalPlan":"add field to the health response object in hono.ts","operations":[{"path":"backend/hono.ts","kind":"replace_exact","oldText":"status: 'healthy',\n  environment: environment,\n  version: VERSION,","newText":"status: 'healthy',\n  environment: environment,\n  version: VERSION,\n  ivxDeveloperProofVersion: 2,"}]}
+
+EXAMPLE 2 (create a new route):
+{"rootCause":"need a developer proof endpoint","technicalPlan":"create new GET route returning SHA, deploy status, worker version, timestamp","operations":[{"path":"backend/api/ivx-developer-proof.ts","kind":"create_file","oldText":"","newText":"import type { Context } from 'hono';\n\nexport async function handleDeveloperProof(c: Context): Promise<Response> {\n  return c.json({\n    sha: process.env.RENDER_GIT_COMMIT ?? 'unknown',\n    deployStatus: 'live',\n    workerVersion: 'v6.16',\n    timestamp: new Date().toISOString(),\n  });\n}\n","reason":"new developer proof endpoint"}]}
+
+EXAMPLE 3 (add a comment line above an existing const):
 {"rootCause":"need a comment","technicalPlan":"insert comment above PILOT_LABEL","operations":[{"path":"backend/services/ivx-autonomous-coder-pilot.ts","kind":"replace_exact","oldText":"export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-3';","newText":"// IVX autonomous coder pilot sentinel\nexport const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-3';","reason":"add a comment line above the existing const"}]}`;
 
 function buildPatchUserPrompt(goal: string, files: { path: string; content: string }[], failureContext: string | null): string {

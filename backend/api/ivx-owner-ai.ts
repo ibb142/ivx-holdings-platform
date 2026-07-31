@@ -6152,6 +6152,14 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         patchConfirmationText: autoExecuteEndToEnd ? IVX_SAFE_PATCH_CONFIRM_TEXT : undefined,
         approveGitDeploy: autoExecuteEndToEnd,
         gitDeployConfirmationText: autoExecuteEndToEnd ? IVX_GIT_DEPLOY_CONFIRM_TEXT : undefined,
+        // V6.16 FIX: executionMode was MISSING — this was the root cause of the
+        // non-trivial patch generation failure. Without executionMode set, the
+        // worker at line 2035 checks `job.input.executionMode === 'code_change'
+        // || job.input.executionMode === 'deploy'` which evaluates to false for
+        // undefined, causing the autonomous coder to NEVER RUN. The job fell
+        // through to the old non-autonomous path which just deploys existing
+        // code — producing iterations:0, filesChanged:None, DEPLOYED_ONLY.
+        executionMode: autoExecuteEndToEnd ? 'deploy' : 'code_change',
         validationMode: 'focused',
         systemMode: false,
         ownerApprovedAction: {
