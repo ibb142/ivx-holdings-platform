@@ -466,12 +466,17 @@ export function detectIdentityOrCapabilityQuestion(message: string): { direct: t
     || /\b(ivx|t[uú])\b.{0,60}\b(eres|es|is|are)\b.{0,60}\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior)\b/i.test(normalized)
     || /\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior)\b.{0,40}\b(yes\s+or\s+no|s[ií]\s+o\s+no|o\s+no|or\s+no)\b/i.test(normalized)
     || /\b(ivx\s+is\s+senior|ivx\s+es\s+senior|ivx\s+senior\s+developer)\b/i.test(normalized)
-    || /\b(tu\s+eres\s+senior|tu\s+eres\s+un\s+senior|eres\s+un\s+senior)\b/i.test(normalized);
+    || /\b(tu\s+eres\s+senior|tu\s+eres\s+un\s+senior|eres\s+un\s+senior)\b/i.test(normalized)
+    // V6.14: catch plain identity questions without "yes or no" or explicit "ivx" prefix
+    || /\b(are\s+you|is\s+ivx|is\s+this|is\s+it)\b.{0,30}\b(senior\s+(developer|engineer|software\s+engineer|software\s+developer)|ingeniero\s+senior|desarrollador\s+senior)\b/i.test(normalized)
+    || /\b(eres|es)\s+(t[uú]?\s+)?(un\s+|una\s+)?(senior\s+(developer|engineer)|ingeniero\s+senior|desarrollador\s+senior)\b/i.test(normalized)
+    || /\b(you\s+are\s+(a\s+)?(real\s+)?senior|ivx\s+is\s+(a\s+)?(real\s+)?senior)\b/i.test(normalized)
+    || /\b(senior\s+(developer|engineer))\b.{0,20}\?/i.test(normalized);
 
   if (asksIdentity) {
     return {
       direct: true,
-      answer: 'I am IVX Owner AI, an autonomous engineering assistant running on your own infrastructure (GitHub, Render, Supabase, Vercel AI Gateway). I can inspect code, generate patches, run tests, commit to GitHub, deploy to Render, and verify production health — all with your approval. V6.13 fixes the 65% stall: recovery sweep now checks both ivx-autonomous and main branches, typecheck uses local tsc instead of downloading, and the full pipeline completes end-to-end. I am independent from Rork at runtime — your infrastructure, your credentials, your repo. I am built by Rork but I run on my own.',
+      answer: 'I am IVX Owner AI, an autonomous engineering assistant running on your own infrastructure (GitHub, Render, Supabase, Vercel AI Gateway). I can inspect code, generate patches, run tests, commit to GitHub, deploy to Render, and verify production health — all with your approval. V6.14 fixes the identity guard to catch all forms of the question, and the autonomous worker is being tested end-to-end. I am independent from Rork at runtime — your infrastructure, your credentials, your repo. I am built by Rork but I run on my own.',
     };
   }
 
