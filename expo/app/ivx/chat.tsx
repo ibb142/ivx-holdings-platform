@@ -64,6 +64,7 @@ import { getIVXRuntimeInfo } from '@/lib/runtime-environment';
 import { ivxDiagnostics } from '@/src/modules/ivx-developer/diagnosticsStore';
 import { refreshOwnerSession } from '@/src/modules/ivx-developer/authDiagnosticsService';
 import IVXAdvancedExecutionMode from '@/components/IVXAdvancedExecutionMode';
+import { IVXLiveTypingIndicator } from '@/components/IVXLiveTypingIndicator';
 // Legacy panel kept for fallback access (not currently mounted).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import _IVXLiveWorkVisibility from '@/components/IVXLiveWorkVisibility';
@@ -5376,18 +5377,12 @@ export default function IVXOwnerChatRoute() {
   }, [pinnedMessages, renderPinnedMessagePreview]);
 
   const listFooter = useMemo(() => <View style={styles.listFooterSpacer} />, []);
-  // V6.10 LIVE TYPING INDICATOR: shows above the composer whenever the AI is
-  // generating a response. This is the real UI feature the owner asked for.
+  // V6.12 LIVE TYPING INDICATOR: shows above the composer whenever the AI is
+  // generating a response. Text reveals character-by-character so the owner
+  // sees it being typed live.
   const renderTypingHeader = useMemo(() => {
     if (!aiReplyPending) return null;
-    return (
-      <View style={styles.typingIndicator} testID="ivx-owner-chat-typing-indicator">
-        <View style={styles.typingDot} />
-        <View style={[styles.typingDot, styles.typingDotMid]} />
-        <View style={styles.typingDot} />
-        <Text style={styles.typingText}>IVX is typing...</Text>
-      </View>
-    );
+    return <IVXLiveTypingIndicator baseText="IVX is typing..." speedMs={30} />;
   }, [aiReplyPending]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);

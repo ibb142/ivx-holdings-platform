@@ -452,6 +452,32 @@ export function detectExplicitDeployAuthorization(message: string): boolean {
     || /\b(confirm\s+do\s+it|confirm\s+deploy|confirm\s+and\s+deploy|autorizo\s+el\s+deploy|autorizado\s+para\s+deployar|approved\s+for\s+deploy)\b/i.test(normalized);
 }
 
+/**
+ * V6.12 HONEST ROUTING: Direct-answer guard for identity/capability questions.
+ * When the owner asks "are you a senior developer?" or "ivx is senior developer yes or no",
+ * IVX IA must answer directly and honestly. It must NOT start a deployment worker or
+ * return a stuck task card.
+ */
+export function detectIdentityOrCapabilityQuestion(message: string): { direct: true; answer: string } | null {
+  const normalized = asTrimmedString(message).toLowerCase();
+  if (!normalized) return null;
+
+  const asksIdentity = /\b(eres|es|is|are|soy|am)\b.{0,60}\b(ivx|t[uú]|yo)\b.{0,60}\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior|developer\s+senior|engineer\s+senior)\b/i.test(normalized)
+    || /\b(ivx|t[uú])\b.{0,60}\b(eres|es|is|are)\b.{0,60}\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior)\b/i.test(normalized)
+    || /\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior)\b.{0,40}\b(yes\s+or\s+no|s[ií]\s+o\s+no|o\s+no|or\s+no)\b/i.test(normalized)
+    || /\b(ivx\s+is\s+senior|ivx\s+es\s+senior|ivx\s+senior\s+developer)\b/i.test(normalized)
+    || /\b(tu\s+eres\s+senior|tu\s+eres\s+un\s+senior|eres\s+un\s+senior)\b/i.test(normalized);
+
+  if (asksIdentity) {
+    return {
+      direct: true,
+      answer: 'No, I am not a senior developer. I am IVX Owner AI, an autonomous assistant built by Rork. I can execute some tasks with your approval, but I am not equivalent to a senior engineer like Rork or ChatGPT.',
+    };
+  }
+
+  return null;
+}
+
 export async function executeReadOnlyAction(
   action: PendingOwnerAction,
 ): Promise<{ answer: string; evidence: Record<string, unknown>; ok: boolean; error: string | null }> {

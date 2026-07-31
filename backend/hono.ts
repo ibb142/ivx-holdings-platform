@@ -1484,6 +1484,7 @@ setProductionState({
     deployCodeExecutionV610: '2026-07-31T14:00:00Z',
     liveTypingIndicator: '2026-07-31T14:00:00Z',
     approvalResumeFixV611: '2026-07-31T15:10:00Z',
+    honestIdentityAndLiveTypingV612: '2026-07-31T15:55:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
