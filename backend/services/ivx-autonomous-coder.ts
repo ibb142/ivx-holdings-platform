@@ -891,19 +891,21 @@ ${availableFiles.slice(0, 200).join('\n')}`;
         abortController,
       );
       responseText = result.text;
-      trace.model = result.providerMetadata?.model ?? null;
-      trace.provider = result.providerMetadata?.provider ?? null;
+      if (trace) { trace.model = result.providerMetadata?.model ?? null; trace.provider = result.providerMetadata?.provider ?? null; }
     }
-    trace.responseCompletedAt = nowIso();
-    trace.responseStatus = 'ok';
-    trace.outputTokenCount = estimateTokens(responseText);
+    if (trace) {
+      trace.responseCompletedAt = nowIso();
+      trace.responseStatus = 'ok';
+      trace.outputTokenCount = estimateTokens(responseText);
+    }
     const plan = parseTaskPlanResponse(responseText);
-    trace.jsonParsedAt = nowIso();
-    trace.parserStatus = plan ? 'ok' : 'parse_failed';
+    if (trace) { trace.jsonParsedAt = nowIso(); trace.parserStatus = plan ? 'ok' : 'parse_failed'; }
     return plan;
   } catch (error) {
-    trace.exactSanitizedError = safeErrorMessage(error);
-    trace.responseStatus = error instanceof Error && error.name === 'LLMTimeoutError' ? 'timeout' : 'failed';
+    if (trace) {
+      trace.exactSanitizedError = safeErrorMessage(error);
+      trace.responseStatus = error instanceof Error && error.name === 'LLMTimeoutError' ? 'timeout' : 'failed';
+    }
     return null;
   }
 }
@@ -948,9 +950,11 @@ async function callLLMForPatch(
       'LLM patch generation',
       abortController,
     );
-    trace.responseCompletedAt = nowIso();
-    trace.responseStatus = 'ok';
-    trace.outputTokenCount = estimateTokens(result);
+    if (trace) {
+      trace.responseCompletedAt = nowIso();
+      trace.responseStatus = 'ok';
+      trace.outputTokenCount = estimateTokens(result);
+    }
     return result;
   }
   const result = await withTimeoutAndAbort(
@@ -966,11 +970,13 @@ async function callLLMForPatch(
     'LLM patch generation',
     abortController,
   );
-  trace.responseCompletedAt = nowIso();
-  trace.responseStatus = 'ok';
-  trace.model = result.providerMetadata?.model ?? null;
-  trace.provider = result.providerMetadata?.provider ?? null;
-  trace.outputTokenCount = estimateTokens(result.text);
+  if (trace) {
+    trace.responseCompletedAt = nowIso();
+    trace.responseStatus = 'ok';
+    trace.model = result.providerMetadata?.model ?? null;
+    trace.provider = result.providerMetadata?.provider ?? null;
+    trace.outputTokenCount = estimateTokens(result.text);
+  }
   return result.text;
 }
 

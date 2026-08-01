@@ -35,8 +35,32 @@ import {
 } from '../services/ivx-failure-recovery';
 
 describe('IVX Failure Recovery Service', () => {
+  // Prevent test contamination: other test files set SUPABASE_URL at module level,
+  // which makes isDurableStoreConfigured() return true and causes these in-memory
+  // tests to attempt Supabase REST calls (which fail with "Unable to connect").
+  // Force the durable store to be unconfigured so tests use the in-memory Maps.
+  const _prevUrl = process.env.SUPABASE_URL;
+  const _prevKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const _prevKey2 = process.env.SUPABASE_SERVICE_KEY;
+  const _prevExpoUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+
   beforeEach(() => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_SERVICE_KEY;
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
     _resetForTesting();
+  });
+
+  afterEach(() => {
+    if (_prevUrl !== undefined) process.env.SUPABASE_URL = _prevUrl;
+    else delete process.env.SUPABASE_URL;
+    if (_prevKey !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = _prevKey;
+    else delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (_prevKey2 !== undefined) process.env.SUPABASE_SERVICE_KEY = _prevKey2;
+    else delete process.env.SUPABASE_SERVICE_KEY;
+    if (_prevExpoUrl !== undefined) process.env.EXPO_PUBLIC_SUPABASE_URL = _prevExpoUrl;
+    else delete process.env.EXPO_PUBLIC_SUPABASE_URL;
   });
 
   describe('marker and status', () => {
