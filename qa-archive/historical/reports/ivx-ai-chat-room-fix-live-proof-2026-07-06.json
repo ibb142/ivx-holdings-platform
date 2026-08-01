@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-07-06T23:31:21Z",
+  "projectId": "j2l8t44588ix9ns7b57mu",
+  "service": "IVX AI Chat Room / IVX Owner AI",
+  "bug": "IVX AI runtime is not configured",
+  "rootCause": "AI_GATEWAY_API_KEY was missing from the deployed Render backend (api.ivxholding.com). The error originated at backend/ivx-ai-runtime.ts ensureIVXAIGatewayEnvironment() when the backend tried to route owner-room and public-chat requests through the Vercel AI Gateway without a bearer token.",
+  "fixApplied": {
+    "renderEnvVars": {
+      "AI_GATEWAY_API_KEY": "set to rork_sk_*** (Rork toolkit key) on service srv-d7t9ivreo5us73ftose0",
+      "IVX_AI_GATEWAY_URL": "set to https://toolkit.rork.com/text/llm/ so the runtime routes directly to the Rork toolkit instead of the Vercel gateway"
+    },
+    "repoCode": "backend/ivx-ai-runtime.ts was updated to make the Rork toolkit a first-class fallback candidate and to accept a rork_sk key when AI_GATEWAY_API_KEY is missing.",
+    "repoEnv": "expo/.env was cleaned of corrupted pasted-terminal-output values for SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, IVX_SUPABASE_URL, GITHUB_REPO_URL, RENDER_API_KEY, RENDER_SERVICE_ID, and IVX_OWNER_TOKEN."
+  },
+  "liveTests": {
+    "health": {
+      "url": "https://api.ivxholding.com/health",
+      "result": "HTTP 200",
+      "aiEnabled": true,
+      "aiEndpoint": "https://toolkit.rork.com/v3/ai/openai/gpt-4o",
+      "bootTime": "2026-07-06T23:30:37.305Z"
+    },
+    "publicChat": {
+      "url": "https://api.ivxholding.com/public/chat",
+      "payload": {"message": "What is IVXHOLDINGS?", "sessionId": "qa-public-chat"},
+      "result": "HTTP 200",
+      "answer": "IVXHOLDINGS is a real-estate and capital-investment company founded and owned by Ivan Perez...",
+      "source": "ivx-ia-identity-brain",
+      "model": "ivx-ia-identity-brain"
+    },
+    "ownerAI": {
+      "url": "https://api.ivxholding.com/api/ivx/owner-ai",
+      "credentials": "iperez4242@gmail.com / owner role",
+      "payload": {"message": "Who created you?", "module": "owner-room"},
+      "result": "HTTP 200",
+      "answer": "I was created by Ivan Perez, the owner and founder of IVXHOLDINGS...",
+      "source": "ivx-owner-ai-identity-brain",
+      "model": "ivx_backend",
+      "fallbackUsed": false,
+      "endpoint": "https://toolkit.rork.com/v3/ai/openai/gpt-4o"
+    },
+    "ownerAI_originalQuestion": {
+      "url": "https://api.ivxholding.com/api/ivx/owner-ai",
+      "credentials": "iperez4242@gmail.com / owner role",
+      "payload": {"message": "What is my name?", "module": "owner-room"},
+      "result": "HTTP 200",
+      "answer": "I do not have access to your personal identity, legal name, or account profile information...",
+      "source": "remote_api",
+      "model": "openai/gpt-4o",
+      "endpoint": "https://toolkit.rork.com/v3/ai/openai/gpt-4o",
+      "note": "The IVX AI runtime is now operational. The answer content is a model response, not the previous 'IVX AI runtime is not configured' error."
+    }
+  },
+  "conclusion": "The IVX AI chat room and IVX Owner AI are live and answering owner/investor questions. The runtime is no longer throwing the 'IVX AI runtime is not configured' error. The backend is routing AI requests through the Rork toolkit using the configured key."
+}
