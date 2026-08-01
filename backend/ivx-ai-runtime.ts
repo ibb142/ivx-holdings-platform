@@ -503,6 +503,11 @@ export async function requestIVXAIText(input: {
   images?: IVXAIImageAttachment[];
   files?: IVXAIFileAttachment[];
   maxOutputTokens?: number;
+  /** V6.19: Optional AbortSignal — when aborted, the underlying generateText
+   * call is cancelled immediately via the Vercel AI SDK's abortSignal param.
+   * This is the real cancellation path (Promise.race does NOT cancel the HTTP
+   * request — only abortSignal does). */
+  abortSignal?: AbortSignal | null;
 }): Promise<IVXAITextResult> {
   const dedupKey = readTrimmed(input.requestId) ? `${String(input.module)}::${readTrimmed(input.requestId)}` : null;
   if (dedupKey) {
@@ -533,6 +538,7 @@ async function requestIVXAITextInternal(input: {
   images?: IVXAIImageAttachment[];
   files?: IVXAIFileAttachment[];
   maxOutputTokens?: number;
+  abortSignal?: AbortSignal | null;
 }): Promise<IVXAITextResult> {
   const model = resolveIVXAIModel(input.model);
   const endpoint = getIVXAIEndpoint(model);
@@ -630,6 +636,7 @@ async function requestIVXAITextInternal(input: {
             model: gatewayProvider(model),
             system: system.length > 0 ? system : undefined,
             maxOutputTokens: input.maxOutputTokens,
+            abortSignal: input.abortSignal ?? undefined,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             messages: finalMessages as any,
           }), callTimeoutMs);
@@ -639,12 +646,14 @@ async function requestIVXAITextInternal(input: {
                 model: gatewayProvider(model),
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
+                abortSignal: input.abortSignal ?? undefined,
                 messages,
               }), callTimeoutMs)
             : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
                 model: gatewayProvider(model),
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
+                abortSignal: input.abortSignal ?? undefined,
                 prompt,
               }), callTimeoutMs);
         }
