@@ -549,8 +549,8 @@ function isIVXClientDirectGatewayRollbackEnabled(): boolean {
 }
 
 function getLocalAIProviderApiKey(): string {
-  // IVX-owned naming only. No Rork toolkit fallback. The IVX backend proxy
-  // holds the gateway key server-side via `AI_GATEWAY_API_KEY`.
+  // IVX-owned naming only. No external toolkit fallback. The IVX backend proxy
+  // holds the gateway key server-side via `IVX_AI_GATEWAY_KEY`.
   return readTrimmedConfigValue(process.env.EXPO_PUBLIC_IVX_AI_GATEWAY_API_KEY);
 }
 
@@ -3517,7 +3517,7 @@ function formatMissingRuntimeConfig(input: {
     missing.push('EXPO_PUBLIC_IVX_AI_GATEWAY_URL');
   }
   if (getBooleanConfig(aiRuntime, 'hasGatewayApiKey') === false) {
-    missing.push('AI_GATEWAY_API_KEY');
+    missing.push('IVX_AI_GATEWAY_KEY');
   }
   if (getBooleanConfig(supabaseConfig, 'hasSupabaseUrl') === false) {
     missing.push('EXPO_PUBLIC_SUPABASE_URL');
@@ -3544,7 +3544,7 @@ function formatMissingRuntimeConfig(input: {
 function getAcceptedConfigAliasesText(): string {
   return [
     'Owner API: EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL, EXPO_PUBLIC_IVX_API_BASE_URL, EXPO_PUBLIC_API_BASE_URL, derived EXPO_PUBLIC_PROJECT_ID ivxtest host.',
-    'AI runtime: EXPO_PUBLIC_IVX_AI_GATEWAY_URL, AI_GATEWAY_API_KEY, IVX_OWNER_AI_MODEL.',
+    'AI runtime: EXPO_PUBLIC_IVX_AI_GATEWAY_URL, IVX_AI_GATEWAY_KEY, IVX_OWNER_AI_MODEL.',
     'Supabase inspection: EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, SUPABASE_INSPECTION_DATABASE_URL, SUPABASE_READONLY_DATABASE_URL, SUPABASE_DB_URL, DATABASE_URL, POSTGRES_URL, SUPABASE_DB_PASSWORD.',
     'AWS audit: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION, DOMAIN_NAME, S3_BUCKET_NAME, CLOUDFRONT_DISTRIBUTION_ID.',
   ].join('\n');
