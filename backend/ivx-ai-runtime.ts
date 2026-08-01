@@ -206,15 +206,28 @@ export function getIVXAIProviderType(): 'vercel_gateway' | 'openai_direct' | 'un
 }
 
 /**
- * Returns the base URL for the AI provider, auto-detected from the key prefix.
- * If IVX_AI_GATEWAY_URL is explicitly set (and not a Rork domain), it takes
- * priority — this lets the operator override the auto-detection if needed.
- * Otherwise, the key prefix determines the endpoint.
+ * Returns the base URL for the AI provider.
+ *
+ * Priority (independence-first):
+ *   1. IVX_OPENAI_API_KEY is set  → api.openai.com/v1 (owner's direct key)
+ *   2. IVX_ANTHROPIC_API_KEY is set → api.anthropic.com/v1 (owner's direct key)
+ *   3. IVX_AI_GATEWAY_URL explicitly set (non-Rork) → that URL
+ *   4. Auto-detect from key prefix (vck_ → Vercel, sk- → OpenAI direct)
+ *
+ * This ensures that when the owner provides their own OpenAI key, the runtime
+ * routes directly to OpenAI — even if a stale IVX_AI_GATEWAY_URL pointing at
+ * the Vercel gateway is still set on the host.
  */
 function getIVXAIGatewayRootUrl(): string {
+  // Owner-owned keys take absolute priority — route to the matching direct API
+  if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) {
+    return OPENAI_DIRECT_BASE;
+  }
+  if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) {
+    return 'https://api.anthropic.com/v1';
+  }
+  // Explicit gateway URL override (only if not a Rork domain)
   const configured = readTrimmed(process.env.IVX_AI_GATEWAY_URL);
-  // Rork independence guard: never honor a gateway URL that points at a
-  // Rork-hosted domain, even if a stale env var is still set on the host.
   if (configured && !isRorkDomain(configured)) {
     return configured;
   }
@@ -486,6 +499,28 @@ export function validateIVXAIStartup(): IVXAIStartupValidation {
 /** Generate a short trace ID for request correlation. */
 export function generateTraceId(): string {
   return `ivx-trace-${randomUUID().split('-')[0]}`;
+}
+
+/**
+ * Reports which environment variable is actually providing the active AI key.
+ * Used by status endpoints so the owner can see the truth — not a hardcoded string.
+ */
+export function getIVXAIKeySource(): string {
+  if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';
+  if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';
+  if (readTrimmed(process.env.AI_GATEWAY_API_KEY)) return 'AI_GATEWAY_API_KEY';
+  if (readTrimmed(process.env.OPENAI_API_KEY)) return 'OPENAI_API_KEY';
+  return 'none';
+}
+
+/** Reports the actual endpoint URL the runtime is routing to (auto-detected from key prefix). */
+export function getIVXAIActiveEndpoint(): string {
+  return getIVXAIGatewayRootUrl();
+}
+
+/** Reports the actual provider type the runtime is using (auto-detected from key prefix). */
+export function getIVXAIActiveProviderLabel(): 'openai_direct' | 'vercel_gateway' | 'unknown' {
+  return getIVXAIProviderType();
 }
 
 export function isIVXAIConfigured(): boolean {

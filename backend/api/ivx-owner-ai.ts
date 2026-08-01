@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
-import { getIVXAIConfigurationSnapshot, getIVXAIEndpoint, requestIVXAIText, resolveIVXAIModel } from '../ivx-ai-runtime';
+import { getIVXAIConfigurationSnapshot, getIVXAIEndpoint, getIVXAIKeySource, getIVXAIActiveEndpoint, getIVXAIActiveProviderLabel, requestIVXAIText, resolveIVXAIModel } from '../ivx-ai-runtime';
 import { executeIVXAIBrainTool, type IVXAIBrainToolName, type IVXAIBrainToolResult } from '../services/ivx-ai-brain-tool-executor';
 import {
   buildIVXAgentRuntimeV2Envelope,
@@ -5609,7 +5609,10 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
 
   const model = getOwnerAIModel();
   const snapshot = getIVXAIConfigurationSnapshot(model);
-  const hasAiGatewayKey = readBackendEnv('AI_GATEWAY_API_KEY').length > 0;
+  const activeKeySource = getIVXAIKeySource();
+  const activeEndpoint = getIVXAIActiveEndpoint();
+  const activeProviderLabel = getIVXAIActiveProviderLabel();
+  const hasAnyKey = activeKeySource !== 'none';
   const hasLegacyRorkToolkitKeyVisibleToBackend = false;
   const usageStats = await getIVXOwnerAIUsageStats();
   const runtimeV2 = buildIVXAgentRuntimeV2StatusSnapshot();
@@ -5626,17 +5629,19 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
       note: 'Client-direct gateway fallback is disabled by default; the IVX backend proxy is the only active AI path.',
     },
     runtime: {
-      provider: 'chatgpt',
-      gateway: 'ivx_ai_gateway',
+      provider: activeProviderLabel === 'openai_direct' ? 'openai_direct' : activeProviderLabel === 'vercel_gateway' ? 'vercel_ai_gateway' : 'chatgpt',
+      gateway: activeProviderLabel === 'openai_direct' ? 'openai_direct' : 'ivx_ai_gateway',
       layer: snapshot.layer,
       phase: snapshot.phase,
       model: snapshot.model,
       endpointConfigured: snapshot.endpoint !== null,
       gatewayUrlPresent: snapshot.hasGatewayUrl,
-      gatewayKeyPresent: hasAiGatewayKey,
-      backendKeySource: 'AI_GATEWAY_API_KEY',
+      gatewayKeyPresent: hasAnyKey,
+      backendKeySource: activeKeySource,
+      activeEndpoint,
+      independenceActive: activeKeySource === 'IVX_OPENAI_API_KEY' || activeKeySource === 'IVX_ANTHROPIC_API_KEY',
       legacyRorkToolkitKeyDetected: hasLegacyRorkToolkitKeyVisibleToBackend,
-      configured: snapshot.configured && hasAiGatewayKey,
+      configured: snapshot.configured && hasAnyKey,
     },
     runtimeV2,
     auditLogging: {
