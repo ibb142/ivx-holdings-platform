@@ -168,24 +168,28 @@ function isOpenAIDirectKey(key: string): boolean {
 }
 
 function getIVXAIGatewayApiKey(): string {
-  // Phase 4 independence: IVX_OPENAI_API_KEY (owner-owned) takes priority over
-  // AI_GATEWAY_API_KEY (Rork-managed Vercel AI Gateway). When the owner sets
-  // their own OpenAI key, the runtime automatically routes to OpenAI direct
-  // and no longer depends on the Vercel AI Gateway at all.
+  // Phase 4 independence: owner-owned keys take priority over Rork-managed keys.
   //
   // Priority order:
-  //   1. IVX_OPENAI_API_KEY    — owner-provided OpenAI key (independence)
-  //   2. IVX_ANTHROPIC_API_KEY — owner-provided Anthropic key (fallback)
-  //   3. AI_GATEWAY_API_KEY    — Rork-managed Vercel gateway (legacy)
-  //   4. OPENAI_API_KEY        — generic alias (legacy)
+  //   1. IVX_OPENAI_API_KEY    — owner-provided OpenAI key (independence, direct)
+  //   2. IVX_ANTHROPIC_API_KEY — owner-provided Anthropic key (independence, direct)
+  //   3. IVX_AI_GATEWAY_KEY    — owner-provided Vercel AI Gateway key (independence, gateway)
+  //   4. AI_GATEWAY_API_KEY    — Rork-managed Vercel gateway (legacy)
+  //   5. OPENAI_API_KEY        — generic alias (legacy)
   //
   // When IVX_OPENAI_API_KEY is set, the key prefix (sk-) auto-routes to
   // api.openai.com/v1 — no Vercel AI Gateway dependency.
+  // When IVX_AI_GATEWAY_KEY is set, the owner controls their own Vercel gateway
+  // key — this counts as independence because the owner owns the Vercel account.
   const ivxOpenAiKey = readTrimmed(process.env.IVX_OPENAI_API_KEY);
   if (ivxOpenAiKey) return ivxOpenAiKey;
 
   const ivxAnthropicKey = readTrimmed(process.env.IVX_ANTHROPIC_API_KEY);
   if (ivxAnthropicKey) return ivxAnthropicKey;
+
+  // Owner-controlled Vercel AI Gateway key (independence — owner owns the Vercel account)
+  const ivxGatewayKey = readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
+  if (ivxGatewayKey) return ivxGatewayKey;
 
   // Legacy fallback: Rork-managed Vercel AI Gateway key
   return readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
@@ -508,6 +512,7 @@ export function generateTraceId(): string {
 export function getIVXAIKeySource(): string {
   if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';
   if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';
+  if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';
   if (readTrimmed(process.env.AI_GATEWAY_API_KEY)) return 'AI_GATEWAY_API_KEY';
   if (readTrimmed(process.env.OPENAI_API_KEY)) return 'OPENAI_API_KEY';
   return 'none';

@@ -5639,7 +5639,7 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
       gatewayKeyPresent: hasAnyKey,
       backendKeySource: activeKeySource,
       activeEndpoint,
-      independenceActive: activeKeySource === 'IVX_OPENAI_API_KEY' || activeKeySource === 'IVX_ANTHROPIC_API_KEY',
+      independenceActive: activeKeySource === 'IVX_OPENAI_API_KEY' || activeKeySource === 'IVX_ANTHROPIC_API_KEY' || activeKeySource === 'IVX_AI_GATEWAY_KEY',
       legacyRorkToolkitKeyDetected: hasLegacyRorkToolkitKeyVisibleToBackend,
       configured: snapshot.configured && hasAnyKey,
     },
