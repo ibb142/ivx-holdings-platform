@@ -25,7 +25,7 @@ import { checkToolAvailability, type ToolAvailabilityReport } from './ivx-tool-a
 // the pure logic stays loadable without the heavy AI runtime (mirrors BLOCK 37/39).
 import type { HandoffManifest } from './ivx-handoff';
 
-export const IVX_RORK_INDEPENDENCE_MARKER = 'ivx-rork-independence-2026-06-02';
+export const IVX_INDEPENDENCE_MARKER = 'ivx-rork-independence-2026-06-02';
 
 export type IndependencePhaseId = 'shadow' | 'ivx_primary' | 'independence' | 'final_removal';
 export type PhaseReadiness = 'achieved' | 'in_progress' | 'blocked';
@@ -59,7 +59,7 @@ export type KeptSystem = {
 };
 
 /** A Rork-specific dependency that must be gone before full independence. */
-export type RorkDependency = {
+export type ExternalDependency = {
   dependency: string;
   present: boolean;
   risk: 'critical' | 'high' | 'medium' | 'low';
@@ -86,7 +86,7 @@ export type CutoverTooling = {
   detail: string;
 };
 
-export type RorkIndependenceReport = {
+export type IndependenceReport = {
   marker: string;
   generatedAt: string;
   /** Highest fully-achieved phase IVX is operating at right now. */
@@ -96,7 +96,7 @@ export type RorkIndependenceReport = {
   nextPhase: IndependencePhaseId | null;
   phases: IndependencePhase[];
   keptSystems: KeptSystem[];
-  rorkDependenciesRemaining: RorkDependency[];
+  rorkDependenciesRemaining: ExternalDependency[];
   /** BLOCK 47 — the prepared, off-Rork executable cutover. */
   cutoverTooling: CutoverTooling;
   /** The six final-phase owner capabilities, derived from the handoff manifest + tools. */
@@ -173,7 +173,7 @@ async function detectCutoverTooling(): Promise<CutoverTooling> {
 }
 
 /** Detect the Rork-specific dependencies still present in repo/runtime. */
-async function detectRorkDependencies(env: EnvSnapshot): Promise<RorkDependency[]> {
+async function detectRorkDependencies(env: EnvSnapshot): Promise<ExternalDependency[]> {
   const expoPkg = await readJsonFile('expo/package.json');
   const deps = (expoPkg?.dependencies ?? {}) as Record<string, unknown>;
   const rorkSdkInstalled = Object.prototype.hasOwnProperty.call(deps, '@rork-ai/toolkit-sdk');
@@ -291,11 +291,11 @@ function resolveReadiness(requirements: PhaseRequirement[], priorAchieved: boole
   return 'in_progress';
 }
 
-/** Inputs the pure assembler needs — gathered by `buildRorkIndependenceReport`, injectable in tests. */
-export type RorkIndependenceInputs = {
+/** Inputs the pure assembler needs — gathered by `buildIndependenceReport`, injectable in tests. */
+export type IndependenceInputs = {
   tools: ToolAvailabilityReport;
   manifest: HandoffManifest | null;
-  rorkDeps: RorkDependency[];
+  rorkDeps: ExternalDependency[];
   /** BLOCK 47 — optional; defaults to a not-ready cutover when omitted (e.g. older tests). */
   cutover?: CutoverTooling;
 };
@@ -304,9 +304,9 @@ export type RorkIndependenceInputs = {
  * Build the live Rork-independence report from real signals.
  * Read-only; never mutates anything; never throws (degrades to honest unmet).
  */
-export async function buildRorkIndependenceReport(
+export async function buildIndependenceReport(
   env: EnvSnapshot = process.env,
-): Promise<RorkIndependenceReport> {
+): Promise<IndependenceReport> {
   const tools = checkToolAvailability(env);
 
   let manifest: HandoffManifest | null = null;
@@ -319,14 +319,14 @@ export async function buildRorkIndependenceReport(
 
   const rorkDeps = await detectRorkDependencies(env);
   const cutover = await detectCutoverTooling();
-  return assembleRorkIndependenceReport({ tools, manifest, rorkDeps, cutover });
+  return assembleIndependenceReport({ tools, manifest, rorkDeps, cutover });
 }
 
 /**
  * Pure assembler: derive the 4-phase report from already-gathered signals.
  * Deterministic + side-effect-free, so it is fully unit-testable.
  */
-export function assembleRorkIndependenceReport(inputs: RorkIndependenceInputs): RorkIndependenceReport {
+export function assembleIndependenceReport(inputs: IndependenceInputs): IndependenceReport {
   const { tools, manifest, rorkDeps } = inputs;
   const cutoverTooling: CutoverTooling = inputs.cutover ?? {
     ready: false,
@@ -556,7 +556,7 @@ export function assembleRorkIndependenceReport(inputs: RorkIndependenceInputs): 
   }
 
   return {
-    marker: IVX_RORK_INDEPENDENCE_MARKER,
+    marker: IVX_INDEPENDENCE_MARKER,
     generatedAt: new Date().toISOString(),
     currentPhase: resolvedCurrent,
     currentPhaseOrder,

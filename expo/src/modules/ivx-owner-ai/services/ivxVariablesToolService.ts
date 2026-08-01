@@ -211,7 +211,7 @@ export type IVXIndependenceDependency = {
   ownerActionRequired: string;
   proofRequired: string;
   completionDate: string | null;
-  rorkDependencyReduced: string;
+  externalDependencyReduced: string;
   proofBefore: string;
   proofAfter: string;
 };
@@ -249,7 +249,7 @@ export type IVXIndependenceStatus = {
   independenceTrackerAccessible?: boolean;
   role?: string;
   kycStatus?: string;
-  rorkDependencyPercent: number;
+  externalDependencyPercent: number;
   ownerControlPercent: number;
   initialRorkDependencyPercent: number;
   targetRorkDependencyPercent: number;
@@ -675,7 +675,7 @@ function normalizeIndependenceDependency(value: unknown): IVXIndependenceDepende
     ownerActionRequired: readString(record.ownerActionRequired),
     proofRequired: readString(record.proofRequired),
     completionDate: readString(record.completionDate) || null,
-    rorkDependencyReduced: readString(record.rorkDependencyReduced),
+    externalDependencyReduced: readString(record.externalDependencyReduced),
     proofBefore: readString(record.proofBefore),
     proofAfter: readString(record.proofAfter),
   };
@@ -730,7 +730,7 @@ function normalizeIndependenceStatus(payload: unknown): IVXIndependenceStatus {
     independenceTrackerAccessible: ownerAccessProof?.independenceTrackerAccessible ?? readBoolean(payload.independenceTrackerAccessible),
     role: ownerAccessProof?.role || readString(payload.role) || undefined,
     kycStatus: ownerAccessProof?.kycStatus || readString(payload.kycStatus) || undefined,
-    rorkDependencyPercent: typeof payload.rorkDependencyPercent === 'number' && Number.isFinite(payload.rorkDependencyPercent) ? payload.rorkDependencyPercent : 100,
+    externalDependencyPercent: typeof payload.externalDependencyPercent === 'number' && Number.isFinite(payload.externalDependencyPercent) ? payload.externalDependencyPercent : 100,
     ownerControlPercent: typeof payload.ownerControlPercent === 'number' && Number.isFinite(payload.ownerControlPercent) ? payload.ownerControlPercent : 0,
     initialRorkDependencyPercent: typeof payload.initialRorkDependencyPercent === 'number' && Number.isFinite(payload.initialRorkDependencyPercent) ? payload.initialRorkDependencyPercent : 100,
     targetRorkDependencyPercent: typeof payload.targetRorkDependencyPercent === 'number' && Number.isFinite(payload.targetRorkDependencyPercent) ? payload.targetRorkDependencyPercent : 0,

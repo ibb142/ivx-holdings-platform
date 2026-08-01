@@ -1,18 +1,18 @@
 /**
- * IVX → Rork Independence API (owner-only).
+ * IVX Independence Status API (owner-only).
  *
- * One read-only endpoint that returns the live 4-phase Rork→IVX independence
+ * One read-only endpoint that returns the live 4-phase external→IVX independence
  * report — current phase, per-phase requirement readiness (derived from real
  * tool/handoff/dependency signals), the eight kept systems, the Rork
  * dependencies still present, the six owner-required capabilities, and the
  * exact next actions.
  *
- *   GET /api/ivx/rork-independence → full independence report.
+ *   GET /api/ivx/independence-status → full independence report.
  *
  * Owner-gated via the same guard as the rest of the IVX developer surface.
  */
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
-import { buildRorkIndependenceReport } from '../services/ivx-rork-independence';
+import { buildIndependenceReport } from '../services/ivx-rork-independence';
 
 export const OPTIONS = (): Response => ownerOnlyOptions();
 
@@ -30,11 +30,11 @@ async function requireOwner(request: Request): Promise<Response | null> {
   }
 }
 
-export async function handleRorkIndependenceRequest(request: Request): Promise<Response> {
+export async function handleIndependenceStatusRequest(request: Request): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
   try {
-    const report = await buildRorkIndependenceReport();
+    const report = await buildIndependenceReport();
     return ownerOnlyJson({ ok: true, report: report as unknown as Record<string, unknown> });
   } catch (error) {
     return ownerOnlyJson(

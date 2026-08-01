@@ -258,7 +258,7 @@ export async function getSeniorDeveloperWorkerJob(jobId: string): Promise<Worker
 export type WorkerStatus = {
   ok: boolean;
   durableQueue: boolean;
-  rorkRequiredAsExecutor: boolean;
+  externalRequiredAsExecutor: boolean;
   reachable: boolean;
 };
 
@@ -280,7 +280,7 @@ export async function getSeniorDeveloperWorkerStatus(): Promise<WorkerStatus> {
   return {
     ok: readBool(p.ok),
     durableQueue: readBool(p.durableQueue),
-    rorkRequiredAsExecutor: readBool(p.rorkRequiredAsExecutor),
+    externalRequiredAsExecutor: readBool(p.externalRequiredAsExecutor),
     reachable: result.ok,
   };
 }

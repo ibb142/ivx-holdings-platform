@@ -27,7 +27,7 @@ const GRAPH_FILE = path.join(SERVER_ROOT, 'logs', 'audit', 'code-graph.json');
 
 const IGNORE_DIRS = new Set<string>([
   'node_modules', '.git', '.expo', 'dist', 'build', 'tmp', 'core',
-  '.rork', '.next', 'coverage', '.turbo', '.cache', 'logs', 'ios', 'android',
+  '.next', 'coverage', '.turbo', '.cache', 'logs', 'ios', 'android',
 ]);
 const GRAPH_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const RESOLVE_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];

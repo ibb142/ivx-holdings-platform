@@ -24,7 +24,7 @@ type ProxyStatusPayload = {
     gatewayUrlPresent?: boolean;
     gatewayKeyPresent?: boolean;
     backendKeySource?: string;
-    legacyRorkToolkitKeyDetected?: boolean;
+    legacyExternalToolkitKeyDetected?: boolean;
     configured?: boolean;
   };
   deploymentMarker?: string;
@@ -183,7 +183,7 @@ export default function IVXAIProxyStatusScreen() {
                 <Row label="Backend key source" value={runtime.backendKeySource ?? '—'} />
                 <Row
                   label="Legacy external toolkit key in backend env"
-                  value={runtime.legacyRorkToolkitKeyDetected ? 'detected (safe to remove)' : 'not present'}
+                  value={runtime.legacyExternalToolkitKeyDetected ? 'detected (safe to remove)' : 'not present'}
                 />
               </View>
             ) : null}

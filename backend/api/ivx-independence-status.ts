@@ -14,7 +14,7 @@ type IndependenceDependency = {
   ownerActionRequired: string;
   proofRequired: string;
   completionDate: string | null;
-  rorkDependencyReduced: string;
+  externalDependencyReduced: string;
   proofBefore: string;
   proofAfter: string;
 };
@@ -47,20 +47,20 @@ const dependencies: IndependenceDependency[] = [
     ownerActionRequired: 'Rotate any credential that was previously present in local ignored env files after provider ownership is confirmed.',
     proofRequired: 'Common local env files are absent; .gitignore keeps env files ignored; API response returns no secret values.',
     completionDate: '2026-05-08',
-    rorkDependencyReduced: 'Removed active local plaintext credential exposure surface from the Rork workspace.',
+    externalDependencyReduced: 'Removed active local plaintext credential exposure surface from the Rork workspace.',
     proofBefore: 'Known blocker: local ignored .env contained real credential-looking values in the active workspace.',
     proofAfter: '.env, expo/.env, .env.local, expo/.env.local, .env.production, and expo/.env.production were removed/not found; templates remain names-only.',
   },
   {
     id: 'git-remote',
-    dependencyName: 'Rork-managed git remote still active',
+    dependencyName: 'External-managed git remote still active',
     riskLevel: 'high',
     currentStatus: 'in_progress',
-    removalTask: 'Transfer/clone repository to owner-controlled GitHub org, attach owner token, verify deploy source, then remove Rork-managed remote.',
-    ownerActionRequired: 'Confirm owner-controlled GitHub org/repo, save owner GitHub token through Owner Variables, then verify Render can pull that repo before revoking the Rork remote.',
-    proofRequired: 'Old Rork remote proof, new owner GitHub repo proof, commit SHA pushed to owner repo, Render service source repo proof, and production health proof after deploy.',
+    removalTask: 'Transfer/clone repository to owner-controlled GitHub org, attach owner token, verify deploy source, then remove external-managed remote.',
+    ownerActionRequired: 'Confirm owner-controlled GitHub org/repo, save owner GitHub token through Owner Variables, then verify Render can pull that repo before revoking the external remote.',
+    proofRequired: 'Old external remote proof, new owner GitHub repo proof, commit SHA pushed to owner repo, Render service source repo proof, and production health proof after deploy.',
     completionDate: null,
-    rorkDependencyReduced: 'Started safe GitHub migration and prevented source tooling from falling back to a hardcoded repository target.',
+    externalDependencyReduced: 'Started safe GitHub migration and prevented source tooling from falling back to a hardcoded repository target.',
     proofBefore: 'Known blocker: local origin fetch/push pointed to a legacy managed Git URL; production /tool/github-status reported missing GITHUB_REPO_URL.',
     proofAfter: 'Source now reads GitHub repo/token from Owner Variables for status/write tooling and sync scripts no longer default to a hardcoded repo; remote removal remains blocked until owner-repo deploy is proven.',
   },
@@ -73,7 +73,7 @@ const dependencies: IndependenceDependency[] = [
     ownerActionRequired: 'None for this checkpoint; owner sign-in is working. Continue Day 2 GitHub ownership migration without touching signup/reset unless a new login bug appears.',
     proofRequired: 'Owner-authenticated status returns ownerCanSignIn=true, Owner Dashboard/Variables/Independence Tracker accessible=true, role=owner, kycStatus=approved, and secretValuesReturned=false.',
     completionDate: '2026-05-09',
-    rorkDependencyReduced: 'Removed the owner lockout blocker that prevented independent provider migration and owner-only deployment control.',
+    externalDependencyReduced: 'Removed the owner lockout blocker that prevented independent provider migration and owner-only deployment control.',
     proofBefore: 'Owner was locked out or unable to reliably access owner-only control routes, blocking safe Rork dependency removal.',
     proofAfter: 'Owner login works; owner-only routes can authenticate a role=owner session and report kycStatus=approved without returning secret values.',
   },
@@ -86,34 +86,34 @@ const dependencies: IndependenceDependency[] = [
     ownerActionRequired: 'Set GITHUB_REPO_URL/GITHUB_TOKEN to the owner-controlled GitHub repository in Owner Variables or backend runtime before pushing/deploying.',
     proofRequired: 'Source uses GITHUB_REPO or GITHUB_REPO_URL; no secret values are returned; TypeScript validation passes.',
     completionDate: '2026-05-09',
-    rorkDependencyReduced: 'Removed a code-control dependency on the previous hardcoded GitHub repository path.',
+    externalDependencyReduced: 'Removed a code-control dependency on the previous hardcoded GitHub repository path.',
     proofBefore: 'expo/sync-github.mjs, expo/verify-sync.mjs, and expo/pipeline.mjs defaulted to ibb142/ivx-global-real-estate-invest when no owner repo env was loaded.',
     proofAfter: 'expo/sync-github.mjs now requires GITHUB_REPO or parses GITHUB_REPO_URL, preventing accidental push to a non-owner/default repo path.',
   },
   {
-    id: 'rork-sdk-config',
-    dependencyName: 'Rork SDK/Metro/package config residue',
+    id: 'external-sdk-config',
+    dependencyName: 'External SDK/Metro/package config residue',
     riskLevel: 'medium',
     currentStatus: 'completed',
-    removalTask: 'Remove remaining Rork SDK/package/config/env references, rebuild Expo app, and verify mobile/web startup.',
-    ownerActionRequired: 'None for the AI brain. Owner may still delete the 5 orphaned EXPO_PUBLIC_RORK_* entries from the Render/Expo dashboard for cosmetic cleanup.',
-    proofRequired: 'Code search shows no active Rork SDK/config references; Expo/RN checks pass; clean redeploy is live.',
+    removalTask: 'Remove remaining external SDK/package/config/env references, rebuild Expo app, and verify mobile/web startup.',
+    ownerActionRequired: 'None for the AI brain. Owner may still delete the 5 orphaned legacy external env entries from the Render/Expo dashboard for cosmetic cleanup.',
+    proofRequired: 'Code search shows no active external SDK/config references; Expo/RN checks pass; clean redeploy is live.',
     completionDate: '2026-05-12',
-    rorkDependencyReduced: 'Phase 4e (2026-05-12): expo/metro.config.js now uses the default Expo Metro config (no withRorkMetro). @rork-ai/toolkit-sdk removed from expo/package.json via bun remove. expo/scripts/verify-expo-sdk.mjs now asserts the toolkit is absent as a regression guard. IVX IA is 100% brain-free from Rork at runtime AND bundler.',
+    externalDependencyReduced: 'Phase 4e (2026-05-12): expo/metro.config.js now uses the default Expo Metro config (no legacy toolkit wrapper). legacy toolkit SDK removed from expo/package.json via bun remove. expo/scripts/verify-expo-sdk.mjs now asserts the legacy toolkit is absent as a regression guard. IVX IA is 100% free from external platform at runtime AND bundler.',
     proofBefore: 'Known blocker: Rork SDK still present in Expo package/config surface; withRorkMetro wrapped metro.config.js.',
     proofAfter: 'metro.config.js uses default Expo config; @rork-ai/toolkit-sdk absent from package.json; verify-expo-sdk.mjs hard-fails on regression; getIVXAIIndependenceSnapshot() returns brainFreePercent: 100 and toolkitSdkMetroOnly: false.',
   },
   {
-    id: 'rork-public-env',
+    id: 'external-public-env',
     dependencyName: 'Rork public environment variables in runtime config',
     riskLevel: 'medium',
     currentStatus: 'completed',
     removalTask: 'Replace Rork public env variables with IVX-owned API/config endpoints and remove unused public Rork variables from Render/frontend.',
-    ownerActionRequired: 'Optional cosmetic cleanup: delete the 5 orphaned EXPO_PUBLIC_RORK_* entries from the Render/Expo dashboard. No app code reads them anymore.',
-    proofRequired: 'Client code contains zero references to EXPO_PUBLIC_RORK_*; IVX backend proxy /api/ivx/owner-ai is the only active AI path.',
+    ownerActionRequired: 'Optional cosmetic cleanup: delete the 5 orphaned legacy external env entries from the Render/Expo dashboard. No app code reads them anymore.',
+    proofRequired: 'Client code contains zero references to legacy external env; IVX backend proxy /api/ivx/owner-ai is the only active AI path.',
     completionDate: '2026-05-12',
-    rorkDependencyReduced: 'Phase 4d (2026-05-12): client AI runtime no longer reads any EXPO_PUBLIC_RORK_* env at runtime. The legacy client-direct gateway rollback path was removed; the IVX-owned backend proxy /api/ivx/owner-ai (Vercel AI Gateway via backend AI_GATEWAY_API_KEY) is the only active AI path. Owner may now delete the 5 EXPO_PUBLIC_RORK_* entries from the Render/Expo dashboard.',
-    proofBefore: 'Known blocker: EXPO_PUBLIC_RORK_* and toolkit public variables are still configured.',
+    externalDependencyReduced: 'Phase 4d (2026-05-12): client AI runtime no longer reads any legacy external env at runtime. The legacy client-direct gateway rollback path was removed; the IVX-owned backend proxy /api/ivx/owner-ai (Vercel AI Gateway via backend AI_GATEWAY_API_KEY) is the only active AI path. Owner may now delete the 5 legacy external env entries from the Render/Expo dashboard.',
+    proofBefore: 'Known blocker: legacy external env and toolkit public variables are still configured.',
     proofAfter: 'expo/src/modules/ivx-owner-ai/services/ivxAIRequestService.ts: getLocalAIProviderApiKey() only reads EXPO_PUBLIC_IVX_AI_GATEWAY_KEY; isIVXClientDirectGatewayRollbackEnabled() returns constant false. getIVXAIIndependenceSnapshot() no longer calls process.env for any legacy external-platform env var. expo/src/modules/ivx-owner-ai/services/ivxVariablesMetadata.ts: the 5 legacy metadata entries were deleted.',
   },
   {
@@ -125,7 +125,7 @@ const dependencies: IndependenceDependency[] = [
     ownerActionRequired: 'Confirm AWS account root/admin ownership and create/save owner IAM credentials through Owner Variables.',
     proofRequired: 'STS identity shows owner-controlled IAM; Rork1 disabled; AWS read-only tests pass without Rork credentials.',
     completionDate: null,
-    rorkDependencyReduced: 'Pending owner IAM proof and key rotation.',
+    externalDependencyReduced: 'Pending owner IAM proof and key rotation.',
     proofBefore: 'Known blocker: current AWS credential identity is Rork1.',
     proofAfter: 'Pending Day 5 proof.',
   },
@@ -138,7 +138,7 @@ const dependencies: IndependenceDependency[] = [
     ownerActionRequired: 'Open Owner Variables and enter missing owner-controlled provider credentials; do not paste secrets into chat.',
     proofRequired: 'Owner Variables provider readiness returns tested/saved statuses and secretValuesReturned=false.',
     completionDate: null,
-    rorkDependencyReduced: 'Owner Variables portal exists; remaining work is entering owner-controlled credentials.',
+    externalDependencyReduced: 'Owner Variables portal exists; remaining work is entering owner-controlled credentials.',
     proofBefore: 'Known blocker: Supabase/Render/AWS live status routes still need complete independent credentials.',
     proofAfter: 'Owner-only credential module is live; pending owner credential entry and provider tests.',
   },
@@ -151,7 +151,7 @@ const dependencies: IndependenceDependency[] = [
     ownerActionRequired: 'Log into each provider as account owner and verify/export admin lists; remove Rork only after clone/rotate/redeploy/verify.',
     proofRequired: 'Provider admin screenshots/exports showing owner-only control; DNS/domain registrar ownership proof; post-revocation production checks.',
     completionDate: null,
-    rorkDependencyReduced: 'Pending provider-admin evidence and safe revocation sequence.',
+    externalDependencyReduced: 'Pending provider-admin evidence and safe revocation sequence.',
     proofBefore: 'Known blocker: Supabase, AWS, domain registrar, and DNS admin ownership are not fully proven from provider admin lists.',
     proofAfter: 'Pending Days 3-6 provider-admin proof.',
   },
@@ -196,8 +196,8 @@ async function buildOwnerAccessProof(ownerContext: Awaited<ReturnType<typeof ass
 async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof assertIVXOwnerOnly>>): Promise<Record<string, unknown>> {
   const completedRemovals = dependencies.filter((item) => item.currentStatus === 'completed');
   const remainingBlockers = dependencies.filter((item) => item.currentStatus !== 'completed');
-  const rorkDependencyPercent = Math.round((remainingBlockers.length / dependencies.length) * 100);
-  const ownerControlPercent = 100 - rorkDependencyPercent;
+  const externalDependencyPercent = Math.round((remainingBlockers.length / dependencies.length) * 100);
+  const ownerControlPercent = 100 - externalDependencyPercent;
   const ownerAccessProof = await buildOwnerAccessProof(ownerContext);
 
   return {
@@ -215,7 +215,7 @@ async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof 
     independenceTrackerAccessible: ownerAccessProof.independenceTrackerAccessible,
     role: ownerAccessProof.role,
     kycStatus: ownerAccessProof.kycStatus,
-    rorkDependencyPercent,
+    externalDependencyPercent,
     ownerControlPercent,
     initialRorkDependencyPercent: 100,
     targetRorkDependencyPercent: 0,
@@ -233,7 +233,7 @@ async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof 
       id: item.id,
       dependencyName: item.dependencyName,
       completionDate: item.completionDate,
-      rorkDependencyReduced: item.rorkDependencyReduced,
+      externalDependencyReduced: item.externalDependencyReduced,
       proofBefore: item.proofBefore,
       proofAfter: item.proofAfter,
     })),

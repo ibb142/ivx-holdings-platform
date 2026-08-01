@@ -1068,7 +1068,7 @@ export type TaskEngineSummary = {
   leasingActive: boolean;
   approvalGateActive: boolean;
   stateMachineEnforced: boolean;
-  rorkDependencyCount: number;
+  externalDependencyCount: number;
 };
 
 export async function getTaskEngineSummary(): Promise<TaskEngineSummary> {
@@ -1107,7 +1107,7 @@ export async function getTaskEngineSummary(): Promise<TaskEngineSummary> {
     leasingActive: true,
     approvalGateActive: true,
     stateMachineEnforced: true,
-    rorkDependencyCount: 0,
+    externalDependencyCount: 0,
   };
 }
 

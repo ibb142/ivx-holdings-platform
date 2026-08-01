@@ -212,9 +212,9 @@ import {
   handleExecutiveLayerRequest,
 } from './api/ivx-executive-layer';
 import {
-  OPTIONS as rorkIndependenceOptions,
-  handleRorkIndependenceRequest,
-} from './api/ivx-rork-independence';
+  OPTIONS as independenceStatusOptions,
+  handleIndependenceStatusRequest,
+} from './api/ivx-independence-status';
 import {
   OPTIONS as ownerControlProofOptions,
   handleIVXOwnerControlProofRequest,
@@ -448,7 +448,7 @@ import {
   handleOwnerOperationsConnectionsRequest,
   handleOwnerOperationsConnectionTestRequest,
   handleOwnerOperationsActionsRequest,
-  handleOwnerOperationsRorkRemovalPreflightRequest,
+  handleOwnerOperationsRemovalPreflightRequest,
 } from './api/ivx-owner-operations';
 import {
   OPTIONS as globalIntelligenceOptions,
@@ -1477,7 +1477,7 @@ setProductionState({
     antiHallucinationGuard: '2026-07-31T11:10:00Z',
     engineeringApprovalGuard: '2026-07-31T11:27:00Z',
     conversationStateMachineV7_0: '2026-07-31T12:00:00Z',
-    rorkLevelNarrative: '2026-07-31T12:00:00Z',
+    ivxLevelNarrative: '2026-07-31T12:00:00Z',
     autonomousEvidencePipeline: '2026-07-31T12:00:00Z',
     autonomousCodeLoopV8_0: '2026-07-31T13:00:00Z',
     selfImprovementPipelineV8: '2026-07-31T13:00:00Z',
@@ -3025,7 +3025,7 @@ app.get('/health', async (context) => {
       traceId: getProviderHealth().traceId,
       toolRegistryReady: (seniorDeveloperRuntime.blockers as string[]).length === 0,
       variablesValidated: seniorDeveloperRuntime.variablesValidated === true,
-      rorkDependency: false,
+      externalDependency: false,
       commitSha: LIVE_COMMIT_SHA,
       checkedAt: nowIso(),
     },
@@ -3091,7 +3091,7 @@ app.get('/health', async (context) => {
     antiHallucinationGuard: '2026-07-31T11:10:00Z',
     engineeringApprovalGuard: '2026-07-31T11:27:00Z',
     conversationStateMachineV7_0: '2026-07-31T12:00:00Z',
-    rorkLevelNarrative: '2026-07-31T12:00:00Z',
+    ivxLevelNarrative: '2026-07-31T12:00:00Z',
     autonomousEvidencePipeline: '2026-07-31T12:00:00Z',
     autonomousCodeLoopV8_0: '2026-07-31T13:00:00Z',
     selfImprovementPipelineV8: '2026-07-31T13:00:00Z',
@@ -3916,8 +3916,8 @@ app.options('/api/ivx/technology-discovery', () => technologyDiscoveryOptions())
 app.get('/api/ivx/technology-discovery', async (context) => handleTechnologyDiscoveryStatusRequest(context.req.raw));
 app.options('/api/ivx/technology-discovery/scan', () => technologyDiscoveryOptions());
 app.post('/api/ivx/technology-discovery/scan', async (context) => handleTechnologyDiscoveryScanRequest(context.req.raw));
-app.options('/api/ivx/rork-independence', () => rorkIndependenceOptions());
-app.get('/api/ivx/rork-independence', async (context) => handleRorkIndependenceRequest(context.req.raw));
+app.options('/api/ivx/independence-status', () => independenceStatusOptions());
+app.get('/api/ivx/independence-status', async (context) => handleIndependenceStatusRequest(context.req.raw));
 app.options('/api/ivx/owner-control-proof', () => ownerControlProofOptions());
 app.get('/api/ivx/owner-control-proof', async (context) => handleIVXOwnerControlProofRequest(context.req.raw));
 
@@ -3984,8 +3984,8 @@ app.options('/api/ivx/owner-operations/connections/test', () => ownerOperationsO
 app.post('/api/ivx/owner-operations/connections/test', async (context) => handleOwnerOperationsConnectionTestRequest(context.req.raw));
 app.options('/api/ivx/owner-operations/actions', () => ownerOperationsOptions());
 app.get('/api/ivx/owner-operations/actions', async (context) => handleOwnerOperationsActionsRequest(context.req.raw));
-app.options('/api/ivx/owner-operations/rork-removal/preflight', () => ownerOperationsOptions());
-app.get('/api/ivx/owner-operations/rork-removal/preflight', async (context) => handleOwnerOperationsRorkRemovalPreflightRequest(context.req.raw));
+app.options('/api/ivx/owner-operations/removal-preflight', () => ownerOperationsOptions());
+app.get('/api/ivx/owner-operations/removal-preflight', async (context) => handleOwnerOperationsRemovalPreflightRequest(context.req.raw));
 
 app.options('/api/ivx/continuous-improvement/dashboard', () => continuousImprovementOptions());
 app.get('/api/ivx/continuous-improvement/dashboard', async (context) => handleContinuousImprovementDashboardRequest(context.req.raw));
@@ -4222,7 +4222,7 @@ app.get('/api/ivx/senior-developer/provider-diagnostics', async (context) => {
         endpoint: startup.endpoint,
         errors: startup.errors,
       },
-      rorkDependency: false,
+      externalDependency: false,
       secretValuesReturned: false,
       timestamp: nowIso(),
     });
@@ -4235,7 +4235,7 @@ app.get('/api/ivx/senior-developer/provider-diagnostics', async (context) => {
 });
 // IVX self-hosted Senior Developer Worker — receives owner-approved tasks and
 // executes the real end-to-end pipeline (read → edit → test → build → commit →
-// push → deploy → verify) WITHOUT Rork as the executor.
+// push → deploy → verify) WITHOUT external platform as the executor.
 app.options('/api/ivx/senior-developer/worker/status', () => seniorDeveloperWorkerOptions());
 app.get('/api/ivx/senior-developer/worker/status', async (context) => handleSeniorDeveloperWorkerStatusRequest(context.req.raw));
 app.options('/api/ivx/senior-developer/worker/jobs', () => seniorDeveloperWorkerOptions());
@@ -4394,7 +4394,7 @@ app.options('/api/ivx/autonomy/deploy/rollback', () => autonomyOptions());
 app.post('/api/ivx/autonomy/deploy/rollback', async (c) => handleIVXAutonomyDeployRollbackRequest(c.req.raw));
 app.options('/api/ivx/autonomy/github/sync', () => autonomyOptions());
 app.post('/api/ivx/autonomy/github/sync', async (c) => handleIVXAutonomyGithubSyncRequest(c.req.raw));
-// Owner-only one-shot delivery chain: Rork workspace → GitHub push → Render deploy → live /health verify.
+// Owner-only one-shot delivery chain: IVX workspace → GitHub push → Render deploy → live /health verify.
 app.options('/api/ivx/admin/sync-github', () => adminSyncOptions());
 app.post('/api/ivx/admin/sync-github', async (c) => handleIVXAdminSyncGithubRequest(c.req.raw));
 app.options('/api/ivx/night-ops/status', () => nightOpsOptions());

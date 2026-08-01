@@ -27,7 +27,7 @@ const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 
 const IGNORE_DIRS = new Set<string>([
   'node_modules', '.git', '.expo', 'dist', 'build', 'tmp', 'core',
-  '.rork', '.next', 'coverage', '.turbo', '.cache', 'logs', 'ios', 'android',
+  '.next', 'coverage', '.turbo', '.cache', 'logs', 'ios', 'android',
 ]);
 const SCAN_EXTS = new Set<string>(['.ts', '.tsx', '.js', '.jsx']);
 const MAX_FILE_BYTES = 512 * 1024;

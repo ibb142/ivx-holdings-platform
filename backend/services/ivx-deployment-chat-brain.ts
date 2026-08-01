@@ -653,7 +653,7 @@ async function handleSeniorStatus(): Promise<string> {
     '## IVX Senior Developer — Worker Status',
     '',
     `**Executor:** ${status.executor}`,
-    `**Rork required as executor:** ${status.rorkRequiredAsExecutor ? 'YES' : 'NO — self-hosted'}`,
+    `**External platform required as executor:** ${status.externalRequiredAsExecutor ? 'YES' : 'NO — self-hosted'}`,
     `**Durable queue:** ${status.durableQueue ? 'YES (Supabase-backed)' : 'NO (in-memory)'}`,
     '',
     `**Capabilities (${enabled.length}):** ${enabled.join(', ')}`,

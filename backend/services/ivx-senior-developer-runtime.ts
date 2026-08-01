@@ -13,10 +13,10 @@ import { appendDurableEvent, isDurableStoreConfigured, readDurableJson, writeDur
 import { triggerDeduplicatedDeploy as triggerDedupDeploy } from './ivx-deploy-dedup';
 
 /** Canonical GitHub execution path: Git Data API (blobs + trees + commits + ref update).
- * The Rork git proxy does NOT forward to GitHub reliably — it stays at the Rork
+ * The legacy git proxy did NOT forward to GitHub reliably — it stayed at the legacy
  * proxy layer only. The Git Data API is the single canonical production path. */
 export const IVX_GITHUB_CANONICAL_PATH = 'github_git_data_api';
-export const IVX_GITHUB_CANONICAL_PATH_DESCRIPTION = 'Git Data API (blobs → trees → commits → ref PATCH). Rork git proxy is NOT used for production pushes.';
+export const IVX_GITHUB_CANONICAL_PATH_DESCRIPTION = 'Git Data API (blobs → trees → commits → ref PATCH). Legacy git proxy is NOT used for production pushes.';
 
 const execFileAsync = promisify(execFile);
 
@@ -384,7 +384,7 @@ export type IVXSeniorDeveloperRunInput = {
   onCommitLanded?: (commit: { commitSha: string; commitUrl: string | null; branch: string }) => void;
 };
 
-const IGNORED_DIRECTORIES = ['.git', '.rork', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
+const IGNORED_DIRECTORIES = ['.git', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
 const MAX_INDEXED_FILES = 1_800;
 const MAX_OUTPUT_CHARS = 3_500;
 const GITHUB_API_BASE_URL = 'https://api.github.com';
@@ -616,7 +616,7 @@ function assertSafePatchPath(repoPath: string): void {
     throw new Error(`Unsafe patch path rejected: ${repoPath}`);
   }
   const lower = normalized.toLowerCase();
-  if (lower.startsWith('.rork/') || lower.startsWith('.git/') || lower.startsWith('logs/') || lower.startsWith('tmp/')) {
+  if (lower.startsWith('.git/') || lower.startsWith('logs/') || lower.startsWith('tmp/')) {
     throw new Error(`Patch path is outside IVX code allowlist: ${repoPath}`);
   }
   if (lower === '.env' || lower.startsWith('.env.') || lower.includes('/.env') || lower.includes('secret') || lower.endsWith('.pem') || lower.endsWith('.key')) {
@@ -690,7 +690,7 @@ function buildGoalDrivenPatchProposal(goal: string): { path: string; oldText: st
  * Detect autonomous self-improvement goals: "Improve IVX today", "self-improve",
  * "autonomous loop", "find one safe issue and fix it", etc. This is the trigger
  * for the V8.0 autonomous code→test→deploy→verify loop — the exact same
- * capability Rork has: write code, test it, commit, deploy, verify production.
+ * capability the owner has: write code, test it, commit, deploy, verify production.
  */
 function isSelfImprovementGoal(goal: string): boolean {
   const normalized = goal.trim().toLowerCase();

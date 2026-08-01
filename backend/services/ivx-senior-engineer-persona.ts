@@ -17,7 +17,7 @@
  * - Autonomous evidence: when reporting work, shows proof like a senior dev
  */
 
-export const IVX_SENIOR_ENGINEER_MARKER = 'ivx-senior-engineer-persona-v7-0-2026-07-31-rork-level-narrative';
+export const IVX_SENIOR_ENGINEER_MARKER = 'ivx-senior-engineer-persona-v7-0-2026-07-31-ivx-level-narrative';
 
 /**
  * Build the senior engineer system prompt with optional live context block.

@@ -1110,30 +1110,30 @@ export function getContractVersionHistory(agentId: string): AgentContract[] {
   return contractVersions.get(agentId) ?? [];
 }
 
-// ── Rork Independence Check ─────────────────────────────────────────────────
+// ── Independence Check ─────────────────────────────────────────────────
 
-export function verifyRorkIndependence(): {
-  rorkDependencies: number;
-  rorkNetworkCalls: number;
-  rorkFallbackCalls: number;
+export function verifyIndependence(): {
+  externalDependencies: number;
+  externalNetworkCalls: number;
+  externalFallbackCalls: number;
   directGitHubAccess: boolean;
   directRenderDeployment: boolean;
-  worksWithRorkBlocked: boolean;
+  worksWithExternalBlocked: boolean;
 } {
-  // Check all contracts for Rork references
-  let rorkRefs = 0;
+  // Check all contracts for external platform references
+  let externalRefs = 0;
   for (const contract of ALL_AGENT_CONTRACTS) {
-    if (contract.systemInstructions.toLowerCase().includes('rork')) rorkRefs++;
-    if (contract.allowedTools.some((t) => t.toLowerCase().includes('rork'))) rorkRefs++;
-    if (contract.externalServicePermissions.some((p) => p.toLowerCase().includes('rork'))) rorkRefs++;
+    if (contract.systemInstructions.toLowerCase().includes('rork')) externalRefs++;
+    if (contract.allowedTools.some((t) => t.toLowerCase().includes('rork'))) externalRefs++;
+    if (contract.externalServicePermissions.some((p) => p.toLowerCase().includes('rork'))) externalRefs++;
   }
 
   return {
-    rorkDependencies: rorkRefs,
-    rorkNetworkCalls: 0,
-    rorkFallbackCalls: 0,
-    directGitHubAccess: true, // Uses GitHub API directly, not via Rork
-    directRenderDeployment: true, // Uses Render API directly, not via Rork
-    worksWithRorkBlocked: rorkRefs === 0,
+    externalDependencies: externalRefs,
+    externalNetworkCalls: 0,
+    externalFallbackCalls: 0,
+    directGitHubAccess: true, // Uses GitHub API directly
+    directRenderDeployment: true, // Uses Render API directly
+    worksWithExternalBlocked: externalRefs === 0,
   };
 }

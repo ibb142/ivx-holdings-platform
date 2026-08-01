@@ -214,7 +214,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v7-0-2026-07-31-rork-level-narrative';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v7-0-2026-07-31-ivx-level-narrative';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -340,7 +340,7 @@ const LOCAL_DEV_COMMAND_LOG_PATH = path.join(process.cwd(), 'logs', 'audit', 'iv
 const LOCAL_DEV_ERROR_LOG_PATH = path.join(process.cwd(), 'logs', 'audit', 'ivx-local-dev-errors.jsonl');
 const LOCAL_DEV_STORAGE_ROOT = path.join(process.cwd(), 'logs', 'audit', 'ivx-local-dev-storage');
 const LOCAL_DEV_FILES_ROOT = path.join(process.cwd(), 'logs', 'audit', 'ivx-local-dev-files');
-const LOCAL_DEV_IGNORED_DIRS = new Set(['.git', '.rork', '.expo', 'node_modules', 'dist', 'build', 'logs', 'coverage']);
+const LOCAL_DEV_IGNORED_DIRS = new Set(['.git', '.expo', 'node_modules', 'dist', 'build', 'logs', 'coverage']);
 
 const localDevKnowledgeDocuments = new Map<string, Record<string, unknown>>();
 const localDevKnowledgeChunks = new Map<string, Record<string, unknown>[]>();
@@ -500,7 +500,7 @@ function readTrimmedString(value: unknown): string {
  */
 function buildDailyImprovementStartAnswer(start: DailyImprovementStart): string {
   const lines: string[] = [];
-  lines.push('Daily self-improvement started — running the autonomous loop now (no Rork needed).');
+  lines.push('Daily self-improvement started — running the autonomous loop now (no external platform needed).');
   lines.push('Pipeline: find one real safe issue → patch → run tests → commit → deploy → verify production → prove.');
   lines.push(`Scope (safe, non-destructive only): ${start.safeScope.join(', ')}.`);
   lines.push(`Task: ${start.task.id} — ${start.task.totalBlocks} block${start.task.totalBlocks === 1 ? '' : 's'}, status ${start.task.status}.`);
@@ -1786,7 +1786,7 @@ function formatManualOwnerAnswer(prompt: string, intent: OwnerRouterIntent): str
     return [
       'Block 22 is a production-runtime worker issue, not a Supabase schema-inspection issue.',
       'Senior-dev routing: verify the backend job tables, worker status, queued/running/waiting_approval/completed/failed transitions, and saved job logs through the Block 22 worker routes. Do not inspect schema just because the owner wrote “no schema inspection.”',
-      'Correct proof: create a queued job, let the Render-side worker pick it up, confirm running then completed or failed, confirm logs are saved, and confirm the result is independent of the phone screen, app session, and Rork chat.',
+      'Correct proof: create a queued job, let the Render-side worker pick it up, confirm running then completed or failed, confirm logs are saved, and confirm the result is independent of the phone screen, app session, and external chat.',
     ].join('\n');
   }
 
@@ -5458,7 +5458,7 @@ export function GET(): Response {
  * any secret values. Used by the owner-controls debug panel to verify
  * that IVX AI requests are routing through the IVX backend proxy
  * (Vercel AI Gateway via backend IVX_AI_GATEWAY_KEY) and that the legacy
- * Rork toolkit client-direct gateway fallback is disabled.
+ * External toolkit client-direct gateway fallback is disabled.
  */
 /**
  * Phase 4c — Insert one accounting row per IVX Owner AI request into
@@ -5613,7 +5613,7 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
   const activeEndpoint = getIVXAIActiveEndpoint();
   const activeProviderLabel = getIVXAIActiveProviderLabel();
   const hasAnyKey = activeKeySource !== 'none';
-  const hasLegacyRorkToolkitKeyVisibleToBackend = false;
+  const hasLegacyExternalToolkitKeyVisibleToBackend = false;
   const usageStats = await getIVXOwnerAIUsageStats();
   const runtimeV2 = buildIVXAgentRuntimeV2StatusSnapshot();
 
@@ -5640,7 +5640,7 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
       backendKeySource: activeKeySource,
       activeEndpoint,
       independenceActive: activeKeySource === 'IVX_OPENAI_API_KEY' || activeKeySource === 'IVX_ANTHROPIC_API_KEY' || activeKeySource === 'IVX_AI_GATEWAY_KEY',
-      legacyRorkToolkitKeyDetected: hasLegacyRorkToolkitKeyVisibleToBackend,
+      legacyExternalToolkitKeyDetected: hasLegacyExternalToolkitKeyVisibleToBackend,
       configured: snapshot.configured && hasAnyKey,
     },
     runtimeV2,
@@ -6625,7 +6625,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         const knowledgeHistoryBlock = knowledgeTranscript.length > 0
           ? `\n\n=== RECENT CONVERSATION HISTORY (real context — use this to answer questions about what we discussed, what was fixed, what the root cause was. NEVER invent answers when the history is right here) ===\n${knowledgeTranscript}\n=== END CONVERSATION HISTORY ===\n`
           : '';
-        const knowledgeAntiHallucinationBlock = `\n\n=== ANTI-HALLUCINATION (V7.0) ===\nYou are a senior engineer who doesn't make things up. That's not a rule — that's who you are.\n\n1. If asked "what was the last bug?" or "what was the root cause?" — READ the conversation history above and the RECENT ENGINEERING FIXES in the live context. Answer with the ACTUAL fix.\n2. If you don't see the answer in history or context, say "No tengo esa información en el historial reciente" — do NOT invent a root cause.\n3. NEVER fabricate technical details (state validation, race conditions, etc.) when the real root cause is documented.\n4. Real recent fixes: V6.5/V6.6 gzip corruption (contentEncoding missing per file entry), V6.7 clean re-commit, V6.8 task_status regex narrowing, V6.9 conversational narrative upgrade, V6.9.1 engineering approval guard, V7.0 Rork-level narrative + autonomous evidence.\n5. When asked about deploy status, SHA, or production state — use the LIVE PRODUCTION DATA in the context block. Quote it directly.\n6. When reporting work done, ALWAYS provide evidence: commit SHA, test results, health check. No evidence = no claim.\n=== END ANTI-HALLUCINATION ===`;
+        const knowledgeAntiHallucinationBlock = `\n\n=== ANTI-HALLUCINATION (V7.0) ===\nYou are a senior engineer who doesn't make things up. That's not a rule — that's who you are.\n\n1. If asked "what was the last bug?" or "what was the root cause?" — READ the conversation history above and the RECENT ENGINEERING FIXES in the live context. Answer with the ACTUAL fix.\n2. If you don't see the answer in history or context, say "No tengo esa información en el historial reciente" — do NOT invent a root cause.\n3. NEVER fabricate technical details (state validation, race conditions, etc.) when the real root cause is documented.\n4. Real recent fixes: V6.5/V6.6 gzip corruption (contentEncoding missing per file entry), V6.7 clean re-commit, V6.8 task_status regex narrowing, V6.9 conversational narrative upgrade, V6.9.1 engineering approval guard, V7.0 IVX-level narrative + autonomous evidence.\n5. When asked about deploy status, SHA, or production state — use the LIVE PRODUCTION DATA in the context block. Quote it directly.\n6. When reporting work done, ALWAYS provide evidence: commit SHA, test results, health check. No evidence = no claim.\n=== END ANTI-HALLUCINATION ===`;
         const knowledgePrompt = [
           knowledgeCompactCtx ? knowledgeCompactCtx : '',
           knowledgeHistoryBlock,
@@ -6739,7 +6739,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         const manualHistoryBlock = manualTranscript.length > 0
           ? `\n\n=== RECENT CONVERSATION HISTORY (real context — use this to answer questions about what we discussed, what was fixed, what the root cause was. NEVER invent answers when the history is right here) ===\n${manualTranscript}\n=== END CONVERSATION HISTORY ===\n`
           : '';
-        const manualAntiHallucinationBlock = `\n\n=== ANTI-HALLUCINATION (V7.0) ===\nYou are a senior engineer who doesn't make things up. That's not a rule — that's who you are.\n\n1. If asked "what was the last bug?" or "what was the root cause?" — READ the conversation history above and the RECENT ENGINEERING FIXES in the live context. Answer with the ACTUAL fix.\n2. If you don't see the answer in history or context, say "No tengo esa informacion en el historial reciente" — do NOT invent a root cause.\n3. NEVER fabricate technical details (state validation, race conditions, etc.) when the real root cause is documented.\n4. Real recent fixes: V6.5/V6.6 gzip corruption (contentEncoding missing per file entry), V6.7 clean re-commit, V6.8 task_status regex narrowing, V6.9 conversational narrative upgrade, V6.9.1 engineering approval guard, V7.0 Rork-level narrative + autonomous evidence.\n5. When asked about deploy status, SHA, or production state — use the LIVE PRODUCTION DATA in the context block. Quote it directly.\n6. When reporting work done, ALWAYS provide evidence: commit SHA, test results, health check. No evidence = no claim.\n=== END ANTI-HALLUCINATION ===`;
+        const manualAntiHallucinationBlock = `\n\n=== ANTI-HALLUCINATION (V7.0) ===\nYou are a senior engineer who doesn't make things up. That's not a rule — that's who you are.\n\n1. If asked "what was the last bug?" or "what was the root cause?" — READ the conversation history above and the RECENT ENGINEERING FIXES in the live context. Answer with the ACTUAL fix.\n2. If you don't see the answer in history or context, say "No tengo esa informacion en el historial reciente" — do NOT invent a root cause.\n3. NEVER fabricate technical details (state validation, race conditions, etc.) when the real root cause is documented.\n4. Real recent fixes: V6.5/V6.6 gzip corruption (contentEncoding missing per file entry), V6.7 clean re-commit, V6.8 task_status regex narrowing, V6.9 conversational narrative upgrade, V6.9.1 engineering approval guard, V7.0 IVX-level narrative + autonomous evidence.\n5. When asked about deploy status, SHA, or production state — use the LIVE PRODUCTION DATA in the context block. Quote it directly.\n6. When reporting work done, ALWAYS provide evidence: commit SHA, test results, health check. No evidence = no claim.\n=== END ANTI-HALLUCINATION ===`;
         const manualPrompt = [
           manualCompactCtx ? manualCompactCtx : '',
           manualHistoryBlock,
@@ -8138,7 +8138,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const start = await startDailyImprovementTask({ autoStart: true });
       const baseImprovementAnswer = buildDailyImprovementStartAnswer(start);
       // ── V8.0 AUTONOMOUS EXECUTION: run the REAL pipeline (not just classification) ──
-      // This is the same code→test→commit→deploy→verify loop Rork runs.
+      // This is the same code→test→commit→deploy→verify loop IVX runs.
       // systemMode: true bypasses the per-step approval gates so the full loop
       // executes end-to-end: write code → run tests → commit to GitHub → deploy
       // to Render → verify production health + commit parity.

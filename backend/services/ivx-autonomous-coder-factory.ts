@@ -221,7 +221,6 @@ const FACTORY_ALLOWED_ROOTS = new Set([
 /** Paths the factory engine can NEVER touch, regardless of mode. */
 const FACTORY_FORBIDDEN_SEGMENTS = new Set([
   '.git',
-  '.rork',
   'node_modules',
   '.expo',
   'dist',

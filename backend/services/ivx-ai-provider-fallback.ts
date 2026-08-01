@@ -18,9 +18,9 @@
 
 export type IVXProviderName = 'ivx_ai_gateway' | 'openai_direct' | 'anthropic_direct';
 
-/** Rork toolkit fallback was permanently removed on 2026-07-16 by owner directive.
+/** External toolkit fallback was permanently removed on 2026-07-16 by owner directive.
  * The IVX provider chain is exclusively owner-controlled: OpenAI direct + Anthropic direct.
- * No Rork proxy, no Rork credits, no Rork AI Cloud dependency. */
+ * No external proxy, no external credits, no external AI Cloud dependency. */
 export type IVXProviderFailureClass =
   | 'auth'
   | 'quota'
@@ -79,7 +79,7 @@ export function getIVXProviderChainSnapshot(): {
       configured: hasEnv('ANTHROPIC_API_KEY'),
       envGates: ['ANTHROPIC_API_KEY'],
     },
-    // Rork toolkit cutover (2026-07-07): the rork_toolkit fallback has been
+    // External toolkit cutover (2026-07-07): the external_toolkit fallback has been
     // removed. The IVX provider chain is now exclusively IVX-owned:
     // Vercel AI Gateway (primary) + OpenAI direct + Anthropic direct.
   ];
@@ -421,8 +421,8 @@ export async function attemptProviderFallback(input: FallbackInput): Promise<IVX
   // Anthropic direct fallback — always a different key/endpoint
   if (hasEnv('ANTHROPIC_API_KEY')) chain.push({ name: 'anthropic_direct', run: callAnthropicDirect });
 
-  // Rork toolkit fallback: PERMANENTLY REMOVED by owner directive 2026-07-16.
-  // No Rork AI Cloud, no Rork proxy, no Rork credits.
+  // External toolkit fallback: PERMANENTLY REMOVED by owner directive 2026-07-16.
+  // No external AI Cloud, no external proxy, no external credits.
 
   if (chain.length === 0) return null;
 

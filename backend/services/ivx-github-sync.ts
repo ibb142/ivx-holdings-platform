@@ -31,7 +31,7 @@ const API = 'https://api.github.com';
 const IGNORE_DIRS = new Set<string>([
   'node_modules', '.git', '.expo', 'dist', 'build', '.ivx',
   '.DS_Store', '__pycache__', 'tmp', 'core',
-  '.rork', 'logs',
+  'logs',
   'dist-audit-ios', 'dist-audit-ios-final', 'dist-audit-ios-postfix',
   'dist-audit-web', 'dist-audit-web-final', 'dist-audit-web-postfix',
 ]);
@@ -52,7 +52,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB GitHub blob limit
 export interface GithubSyncOptions {
   /** GitHub token with `repo` scope. */
   token: string;
-  /** Owner/repo slug, e.g. `ibb142/rork-app`. */
+  /** Owner/repo slug, e.g. `ibb142/ivx-holdings-platform`. */
   repoSlug: string;
   /** Target branch (defaults handled by caller, e.g. `main`). */
   branch: string;

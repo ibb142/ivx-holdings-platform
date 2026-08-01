@@ -1,8 +1,8 @@
 /**
- * IVX Self-Hosted Senior Developer Worker — removes the Rork dependency as the
+ * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
  * code EXECUTOR.
  *
- * Rork is no longer required to run a development task. Instead:
+ * External platform is no longer required to run a development task. Instead:
  *   1. IVX IA (or the owner-gated API) submits an owner-approved task to this
  *      worker's durable job QUEUE.
  *   2. A single-flight WORKER drains the queue and runs the real end-to-end
@@ -2030,7 +2030,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     // (bounded to MAX_ITERATIONS), commits via the GitHub Git Data API, and —
     // only when executionMode === 'deploy' AND owner approval is verified —
     // triggers render_trigger_deploy + verifies production health. This is the
-    // real code-writing loop: the patch is authored by the IVX LLM, NOT by Rork
+    // real code-writing loop: the patch is authored by the IVX LLM, NOT by an external platform
     // manually editing the code.
     if (job.input.executionMode === 'code_change' || job.input.executionMode === 'deploy') {
       const coderProof = await runIVXAutonomousCoder({
@@ -2361,13 +2361,13 @@ startQueueDrainTimer();
 // STATUS SURFACE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Worker capability snapshot — what this self-hosted executor can do without Rork. */
+/** Worker capability snapshot — what this self-hosted executor can do without external platform. */
 export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
   return {
     ok: true,
     marker: IVX_SENIOR_DEV_WORKER_MARKER,
     executor: 'ivx-self-hosted-worker',
-    rorkRequiredAsExecutor: false,
+    externalRequiredAsExecutor: false,
     durableQueue: isDurableStoreConfigured(),
     perOwnerSingleFlight: true,
     staleJobTimeoutMs: STALE_JOB_TIMEOUT_MS,

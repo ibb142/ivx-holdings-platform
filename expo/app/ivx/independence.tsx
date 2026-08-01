@@ -165,7 +165,7 @@ export default function IVXIndependenceTrackerRoute() {
           <Text style={styles.heroTitle}>IVX 7-Day External Dependency Removal</Text>
           <Text style={styles.heroSubtitle}>Every task now must remove or reduce one external dependency using the safe order: clone/transfer, rotate, redeploy, verify, then revoke.</Text>
           <View style={styles.scoreRow}>
-            <ScoreRing label="External dependency" value={status?.rorkDependencyPercent ?? 100} tone="risk" />
+            <ScoreRing label="External dependency" value={status?.externalDependencyPercent ?? 100} tone="risk" />
             <ScoreRing label="Owner control" value={status?.ownerControlPercent ?? 0} tone="owner" />
           </View>
         </View>
@@ -240,7 +240,7 @@ export default function IVXIndependenceTrackerRoute() {
               <Text style={styles.cardSubtitle}>{status?.firstCompletedDependencyRemoval?.dependencyName ?? 'Local .env exposure risk removed'}</Text>
             </View>
           </View>
-          <Text style={styles.detailText}>{status?.firstCompletedDependencyRemoval?.rorkDependencyReduced ?? 'Local plaintext env files were removed from the workspace without changing production provider variables.'}</Text>
+          <Text style={styles.detailText}>{status?.firstCompletedDependencyRemoval?.externalDependencyReduced ?? 'Local plaintext env files were removed from the workspace without changing production provider variables.'}</Text>
           <Text style={styles.detailText}>Production safety: {status?.productionSafety.reason ?? 'Provider access was not revoked; production remains stable while migrations continue.'}</Text>
           <Pressable style={styles.ownerVariablesButton} onPress={() => router.push('/ivx/variables' as never)} testID="ivx-independence-open-variables">
             <Text style={styles.ownerVariablesButtonText}>Open Owner Variables</Text>
