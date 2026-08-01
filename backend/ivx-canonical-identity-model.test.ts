@@ -14,7 +14,7 @@
  * These tests stub global.fetch (the canonical-members service uses fetch
  * directly to call Supabase REST, not the supabase-js client).
  */
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, mock, beforeEach, afterEach, afterAll } from 'bun:test';
 import type { CanonicalMemberInput, CanonicalMemberRow } from './services/ivx-canonical-members';
 
 // --- In-memory members store ---
@@ -152,9 +152,24 @@ const _fetchMock = mock((_url: string | URL | Request, _init?: RequestInit) => {
   }));
 });
 
-// Set env vars
+// Set env vars (with cleanup to prevent test contamination)
+const _prevSupabaseUrl = process.env.SUPABASE_URL;
+const _prevSupabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 process.env.SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+
+afterAll(() => {
+  if (_prevSupabaseUrl !== undefined) {
+    process.env.SUPABASE_URL = _prevSupabaseUrl;
+  } else {
+    delete process.env.SUPABASE_URL;
+  }
+  if (_prevSupabaseServiceKey !== undefined) {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = _prevSupabaseServiceKey;
+  } else {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  }
+});
 
 describe('ITEM 1 — Canonical Identity Model', () => {
   beforeEach(() => {
