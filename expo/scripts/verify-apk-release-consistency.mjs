@@ -1,1 +1,40 @@
-aW1wb3J0IHsgcmVhZEZpbGUgfSBmcm9tICdub2RlOmZzL3Byb21pc2VzJzsKaW1wb3J0IHBhdGggZnJvbSAnbm9kZTpwYXRoJzsKaW1wb3J0IHsgZmlsZVVSTFRvUGF0aCB9IGZyb20gJ25vZGU6dXJsJzsKCmNvbnN0IHNjcmlwdERpciA9IHBhdGguZGlybmFtZShmaWxlVVJMVG9QYXRoKGltcG9ydC5tZXRhLnVybCkpOwpjb25zdCBleHBvUm9vdCA9IHBhdGgucmVzb2x2ZShzY3JpcHREaXIsICcuLicpOwoKY29uc3QgW2FwcENvbmZpZywgZ3JhZGxlLCBsYW5kaW5nXSA9IGF3YWl0IFByb21pc2UuYWxsKFsKICByZWFkRmlsZShwYXRoLmpvaW4oZXhwb1Jvb3QsICdhcHAuY29uZmlnLnRzJyksICd1dGY4JyksCiAgcmVhZEZpbGUocGF0aC5qb2luKGV4cG9Sb290LCAnYW5kcm9pZC9hcHAvYnVpbGQuZ3JhZGxlJyksICd1dGY4JyksCiAgcmVhZEZpbGUocGF0aC5qb2luKGV4cG9Sb290LCAnaXZ4aG9sZGluZy1sYW5kaW5nL2luZGV4Lmh0bWwnKSwgJ3V0ZjgnKSwKXSk7Cgpjb25zdCBjb25maWdWZXJzaW9uID0gYXBwQ29uZmlnLm1hdGNoKC92ZXJzaW9uOlxzKlsiJ10oW14iJ10rKVsiJ10vKT8uWzFdOwpjb25zdCBncmFkbGVWZXJzaW9uID0gZ3JhZGxlLm1hdGNoKC92ZXJzaW9uTmFtZVxzK1siJ10oW14iJ10rKVsiJ10vKT8uWzFdOwpjb25zdCBsYW5kaW5nVmVyc2lvbnMgPSBbLi4ubGFuZGluZy5tYXRjaEFsbCgvaXZ4LWhvbGRpbmdzLXYoXGQrXC5cZCtcLlxkKylcLmFway9nKV0ubWFwKChtYXRjaCkgPT4gbWF0Y2hbMV0pOwpjb25zdCBleHBlY3RlZFZlcnNpb24gPSBjb25maWdWZXJzaW9uOwoKY29uc29sZS5lcnJvcihKU09OLnN0cmluZ2lmeSh7CiAgZGVidWc6IHRydWUsCiAgY29uZmlnVmVyc2lvbjogY29uZmlnVmVyc2lvbiB8fCBudWxsLAogIGdyYWRsZVZlcnNpb246IGdyYWRsZVZlcnNpb24gfHwgbnVsbCwKICBsYW5kaW5nVmVyc2lvbkNvdW50OiBsYW5kaW5nVmVyc2lvbnMubGVuZ3RoLAogIGxhbmRpbmdWZXJzaW9uczogWy4uLm5ldyBTZXQobGFuZGluZ1ZlcnNpb25zKV0sCiAgYXBwQ29uZmlnTGVuZ3RoOiBhcHBDb25maWcubGVuZ3RoLAogIGdyYWRsZUxlbmd0aDogZ3JhZGxlLmxlbmd0aCwKICBsYW5kaW5nTGVuZ3RoOiBsYW5kaW5nLmxlbmd0aCwKfSkpOwoKaWYgKCFleHBlY3RlZFZlcnNpb24gfHwgIWdyYWRsZVZlcnNpb24gfHwgbGFuZGluZ1ZlcnNpb25zLmxlbmd0aCA9PT0gMCkgewogIHRocm93IG5ldyBFcnJvcignQVBLIHJlbGVhc2UgY29uc2lzdGVuY3kgY2hlY2sgY291bGQgbm90IHJlYWQgZXZlcnkgcmVxdWlyZWQgdmVyc2lvbiBzb3VyY2UuJyk7Cn0KaWYgKGdyYWRsZVZlcnNpb24gIT09IGV4cGVjdGVkVmVyc2lvbikgewogIHRocm93IG5ldyBFcnJvcihgQW5kcm9pZCB2ZXJzaW9uTmFtZSAke2dyYWRsZVZlcnNpb259IGRvZXMgbm90IG1hdGNoIGFwcCB2ZXJzaW9uICR7ZXhwZWN0ZWRWZXJzaW9ufS5gKTsKfQppZiAobGFuZGluZ1ZlcnNpb25zLnNvbWUoKHZlcnNpb24pID0+IHZlcnNpb24gIT09IGV4cGVjdGVkVmVyc2lvbikpIHsKICB0aHJvdyBuZXcgRXJyb3IoYExhbmRpbmcgQVBLIFVSTHMgbXVzdCBhbGwgcmVmZXJlbmNlIHYke2V4cGVjdGVkVmVyc2lvbn07IGZvdW5kOiAke1suLi5uZXcgU2V0KGxhbmRpbmdWZXJzaW9ucyldLmpvaW4oJywgJyl9LmApOwp9Cgpjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeSh7IHN0YXR1czogJ29rJywgdmVyc2lvbjogZXhwZWN0ZWRWZXJzaW9uLCBsYW5kaW5nUmVmZXJlbmNlczogbGFuZGluZ1ZlcnNpb25zLmxlbmd0aCB9KSk7Cg==
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const expoRoot = path.resolve(scriptDir, '..');
+
+const [appConfig, gradle, landing] = await Promise.all([
+  readFile(path.join(expoRoot, 'app.config.ts'), 'utf8'),
+  readFile(path.join(expoRoot, 'android/app/build.gradle'), 'utf8'),
+  readFile(path.join(expoRoot, 'ivxholding-landing/index.html'), 'utf8'),
+]);
+
+const configVersion = appConfig.match(/version:\s*["']([^"']+)["']/)?.[1];
+const gradleVersion = gradle.match(/versionName\s+["']([^"']+)["']/)?.[1];
+const landingVersions = [...landing.matchAll(/ivx-holdings-v(\d+\.\d+\.\d+)\.apk/g)].map((match) => match[1]);
+const expectedVersion = configVersion;
+
+console.error(JSON.stringify({
+  debug: true,
+  configVersion: configVersion || null,
+  gradleVersion: gradleVersion || null,
+  landingVersionCount: landingVersions.length,
+  landingVersions: [...new Set(landingVersions)],
+  appConfigLength: appConfig.length,
+  gradleLength: gradle.length,
+  landingLength: landing.length,
+}));
+
+if (!expectedVersion || !gradleVersion || landingVersions.length === 0) {
+  throw new Error('APK release consistency check could not read every required version source.');
+}
+if (gradleVersion !== expectedVersion) {
+  throw new Error(`Android versionName ${gradleVersion} does not match app version ${expectedVersion}.`);
+}
+if (landingVersions.some((version) => version !== expectedVersion)) {
+  throw new Error(`Landing APK URLs must all reference v${expectedVersion}; found: ${[...new Set(landingVersions)].join(', ')}.`);
+}
+
+console.log(JSON.stringify({ status: 'ok', version: expectedVersion, landingReferences: landingVersions.length }));
