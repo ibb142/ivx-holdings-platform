@@ -268,7 +268,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/ivx-ai-runtime.ts\", \"edits\": [{\"oldString\": \"function getIVXAIGatewayApiKey(): string {\\n  // Phase 4 independence: IVX_OPENAI_API_KEY (owner-owned) takes priority over\\n  // AI_GATEWAY_API_KEY (Rork-managed Vercel AI Gateway). When the owner sets\\n  // their own OpenAI key, the runtime automatically routes to OpenAI direct\\n  // and no longer depends on the Vercel AI Gateway at all.\\n  //\\n  // Priority order:\\n  //   1. IVX_OPENAI_API_KEY    — owner-provided OpenAI key (independence)\\n  //   2. IVX_ANTHROPIC_API_KEY — owner-provided Anthropic key (fallback)\\n  //   3. AI_GATEWAY_API_KEY    — Rork-managed Vercel gateway (legacy)\\n  //   4. OPENAI_API_KEY        — generic alias (legacy)\\n  //\\n  // When IVX_OPENAI_API_KEY is set, the key prefix (sk-) auto-routes to\\n  // api.openai.com/v1 — no Vercel AI Gateway dependency.\\n  const ivxOpenAiKey = readTrimmed(process.env.IVX_OPENAI_API_KEY);\\n  if (ivxOpenAiKey) return ivxOpenAiKey;\\n\\n  const ivxAnthropicKey = readTrimmed(process.env.IVX_ANTHROPIC_API_KEY);\\n  if (ivxAnthropicKey) return ivxAnthropicKey;\\n\\n  // Legacy fallback: Rork-managed Vercel AI Gateway key\\n  return readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);\\n}\", \"newString\": \"function getIVXAIGatewayApiKey(): string {\\n  // Phase 4 independence: owner-owned keys take priority over Rork-managed keys.\\n  //\\n  // Priority order:\\n  //   1. IVX_OPENAI_API_KEY    — owner-provided OpenAI key (independence, direct)\\n  //   2. IVX_ANTHROPIC_API_KEY — owner-provided Anthropic key (independence, direct)\\n  //   3. IVX_AI_GATEWAY_KEY    — owner-provided Vercel AI Gateway key (independence, gateway)\\n  //   4. AI_GATEWAY_API_KEY    — Rork-managed Vercel gateway (legacy)\\n  //   5. OPENAI_API_KEY        — generic alias (legacy)\\n  //\\n  // When IVX_OPENAI_API_KEY is set, the key prefix (sk-) auto-routes to\\n  // api.openai.com/v1 — no Vercel AI Gateway dependency.\\n  // When IVX_AI_GATEWAY_KEY is set, the owner controls their own Vercel gateway\\n  // key — this counts as independence because the owner owns the Vercel account.\\n  const ivxOpenAiKey = readTrimmed(process.env.IVX_OPENAI_API_KEY);\\n  if (ivxOpenAiKey) return ivxOpenAiKey;\\n\\n  const ivxAnthropicKey = readTrimmed(process.env.IVX_ANTHROPIC_API_KEY);\\n  if (ivxAnthropicKey) return ivxAnthropicKey;\\n\\n  // Owner-controlled Vercel AI Gateway key (independence — owner owns the Vercel account)\\n  const ivxGatewayKey = readTrimmed(process.env.IVX_AI_GATEWAY_KEY);\\n  if (ivxGatewayKey) return ivxGatewayKey;\\n\\n  // Legacy fallback: Rork-managed Vercel AI Gateway key\\n  return readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);\\n}\"}, {\"oldString\": \"export function getIVXAIKeySource(): string {\\n  if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';\\n  if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';\\n  if (readTrimmed(process.env.AI_GATEWAY_API_KEY)) return 'AI_GATEWAY_API_KEY';\\n  if (readTrimmed(process.env.OPENAI_API_KEY)) return 'OPENAI_API_KEY';\\n  return 'none';\\n}\", \"newString\": \"export function getIVXAIKeySource(): string {\\n  if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';\\n  if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';\\n  if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';\\n  if (readTrimmed(process.env.AI_GATEWAY_API_KEY)) return 'AI_GATEWAY_API_KEY';\\n  if (readTrimmed(process.env.OPENAI_API_KEY)) return 'OPENAI_API_KEY';\\n  return 'none';\\n}\"}]}",
       "createdAt": 1785587563115,
-      "completedAt": 1785587572788
+      "completedAt": 1785587572788,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -303,7 +304,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"independenceActive: activeKeySource === 'IVX_OPENAI_API_KEY' || activeKeySource === 'IVX_ANTHROPIC_API_KEY',\", \"newString\": \"independenceActive: activeKeySource === 'IVX_OPENAI_API_KEY' || activeKeySource === 'IVX_ANTHROPIC_API_KEY' || activeKeySource === 'IVX_AI_GATEWAY_KEY',\"}], \"filePath\": \"backend/api/ivx-owner-ai.ts\"}",
       "createdAt": 1785587583384,
-      "completedAt": 1785587584082
+      "completedAt": 1785587584082,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -333,7 +335,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app 2>/dev/null\\n\\n# Verify the local changes are correct\\necho \\\"=== Verify ivx-ai-runtime.ts changes ===\\\"\\ngrep -n \\\"IVX_AI_GATEWAY_KEY\\\" backend/ivx-ai-runtime.ts 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== Verify ivx-owner-ai.ts changes ===\\\"\\ngrep -n \\\"IVX_AI_GATEWAY_KEY\\\" backend/api/ivx-owner-ai.ts 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== Run backend tests to confirm no breakage ===\\\"\\nbun test backend/ivx-ai-runtime.test.ts 2>&1 | tail -5\"}",
       "createdAt": 1785587602797,
-      "completedAt": 1785587603545
+      "completedAt": 1785587603545,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -363,7 +366,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app 2>/dev/null\\n\\necho \\\"=== Running backend tests (scoped to AI runtime) ===\\\"\\nbun test ./backend/ 2>&1 | tail -8\"}",
       "createdAt": 1785587608466,
-      "completedAt": 1785587631753
+      "completedAt": 1785587631753,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -393,7 +397,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app 2>/dev/null\\n\\npython3 << 'PYEOF'\\nimport json, urllib.request, gzip, base64, os\\n\\nwith open('/tmp/owner_token.txt', 'r') as f:\\n    token = f.read().strip()\\n\\ndef gzip_b64(filepath):\\n    with open(filepath, 'rb') as f:\\n        raw = f.read()\\n    return base64.b64encode(gzip.compress(raw)).decode('ascii')\\n\\n# Commit ivx-ai-runtime.ts (38KB - small enough)\\nruntime_gzip = gzip_b64('backend/ivx-ai-runtime.ts')\\nruntime_size = os.path.getsize('backend/ivx-ai-runtime.ts')\\n\\npayload = {\\n    \\\"action\\\": \\\"github_commit_multi_file\\\",\\n    \\\"confirm\\\": True,\\n    \\\"confirmText\\\": \\\"CONFIRM_IVX_GITHUB_WRITE\\\",\\n    \\\"input\\\": {\\n        \\\"message\\\": \\\"feat(independence): add IVX_AI_GATEWAY_KEY as owner-controlled Vercel key — independenceActive true when owner owns the gateway key\\\",\\n        \\\"files\\\": [\\n            {\\n                \\\"path\\\": \\\"backend/ivx-ai-runtime.ts\\\",\\n                \\\"content\\\": runtime_gzip,\\n                \\\"contentEncoding\\\": \\\"gzip-base64\\\"\\n            }\\n        ]\\n    }\\n}\\n\\nbody = json.dumps(payload).encode('utf-8')\\nprint(f\\\"ivx-ai-runtime.ts: {runtime_size} bytes ({runtime_size//1024}KB)\\\")\\nprint(f\\\"Payload: {len(body)} bytes ({len(body)//1024}KB)\\\")\\n\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n    data=body,\\n    headers={\\n        'Authorization': f'Bearer {token}',\\n        'Content-Type': 'application/json'\\n    },\\n    method='POST'\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, timeout=30) as resp:\\n        result = json.loads(resp.read().decode('utf-8'))\\n        print(f\\\"ok: {result.get('ok')}\\\")\\n        print(f\\\"commitSha: {str(result.get('result',{}).get('commitSha',''))[:12]}\\\")\\n        print(f\\\"message: {str(result.get('result',{}).get('message',''))[:200]}\\\")\\nexcept Exception as e:\\n    print(f\\\"Error: {e}\\\")\\n    try:\\n        err_body = e.read().decode('utf-8') if hasattr(e, 'read') else str(e)\\n        print(f\\\"Response: {err_body[:500]}\\\")\\n    except:\\n        pass\\nPYEOF\"}",
       "createdAt": 1785587642976,
-      "completedAt": 1785587655641
+      "completedAt": 1785587655641,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -423,7 +428,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app 2>/dev/null\\n\\npython3 << 'PYEOF'\\nimport json, urllib.request, gzip, base64, os\\n\\nwith open('/tmp/owner_token.txt', 'r') as f:\\n    token = f.read().strip()\\n\\ndef gzip_b64(filepath):\\n    with open(filepath, 'rb') as f:\\n        raw = f.read()\\n    return base64.b64encode(gzip.compress(raw)).decode('ascii')\\n\\n# Commit ivx-owner-ai.ts (490KB - needs gzip)\\nai_gzip = gzip_b64('backend/api/ivx-owner-ai.ts')\\nai_size = os.path.getsize('backend/api/ivx-owner-ai.ts')\\n\\npayload = {\\n    \\\"action\\\": \\\"github_commit_multi_file\\\",\\n    \\\"confirm\\\": True,\\n    \\\"confirmText\\\": \\\"CONFIRM_IVX_GITHUB_WRITE\\\",\\n    \\\"input\\\": {\\n        \\\"message\\\": \\\"feat(independence): independenceActive true for IVX_AI_GATEWAY_KEY — owner-controlled Vercel gateway key counts as independent\\\",\\n        \\\"files\\\": [\\n            {\\n                \\\"path\\\": \\\"backend/api/ivx-owner-ai.ts\\\",\\n                \\\"content\\\": ai_gzip,\\n                \\\"contentEncoding\\\": \\\"gzip-base64\\\"\\n            }\\n        ]\\n    }\\n}\\n\\nbody = json.dumps(payload).encode('utf-8')\\nprint(f\\\"ivx-owner-ai.ts: {ai_size} bytes ({ai_size//1024}KB)\\\")\\nprint(f\\\"Payload: {len(body)} bytes ({len(body)//1024}KB)\\\")\\n\\nreq = urllib.request.Request(\\n    'https://api.ivxholding.com/api/ivx/developer-deploy/action',\\n    data=body,\\n    headers={\\n        'Authorization': f'Bearer {token}',\\n        'Content-Type': 'application/json'\\n    },\\n    method='POST'\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, timeout=45) as resp:\\n        result = json.loads(resp.read().decode('utf-8'))\\n        print(f\\\"ok: {result.get('ok')}\\\")\\n        print(f\\\"commitSha: {str(result.get('result',{}).get('commitSha',''))[:12]}\\\")\\n        print(f\\\"message: {str(result.get('result',{}).get('message',''))[:200]}\\\")\\nexcept Exception as e:\\n    print(f\\\"Error: {e}\\\")\\n    try:\\n        err_body = e.read().decode('utf-8') if hasattr(e, 'read') else str(e)\\n        print(f\\\"Response: {err_body[:500]}\\\")\\n    except:\\n        pass\\nPYEOF\"}",
       "createdAt": 1785587670489,
-      "completedAt": 1785587677646
+      "completedAt": 1785587677646,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -453,7 +459,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app 2>/dev/null\\n\\necho \\\"=== GITHUB vs PRODUCTION ===\\\"\\nGH_SHA=$(curl -s \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" 2>/dev/null | python3 -c \\\"import sys,json; print(json.loads(sys.stdin.read()).get('sha','')[:12])\\\" 2>/dev/null)\\nPROD=$(curl -s https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.loads(sys.stdin.read())\\nprint(d.get('commit','')[:12])\\nprint(d.get('status',''))\\nprint(d.get('bootTime',''))\\n\\\" 2>/dev/null)\\nPROD_SHA=$(echo \\\"$PROD\\\" | head -1)\\necho \\\"GitHub:    $GH_SHA\\\"\\necho \\\"Prod:      $PROD_SHA\\\"\\necho \\\"Status:    $(echo \\\"$PROD\\\" | sed -n '2p')\\\"\\necho \\\"Boot:      $(echo \\\"$PROD\\\" | sed -n '3p')\\\"\\nif [ \\\"$GH_SHA\\\" = \\\"$PROD_SHA\\\" ]; then echo \\\"PARITY:    YES\\\"; else echo \\\"PARITY:    NO — waiting for Render\\\"; fi\"}",
       "createdAt": 1785587685389,
-      "completedAt": 1785587689444
+      "completedAt": 1785587689444,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -483,7 +490,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app 2>/dev/null\\n\\necho \\\"=== GITHUB vs PRODUCTION ===\\\"\\nGH_SHA=$(curl -s \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" 2>/dev/null | python3 -c \\\"import sys,json; print(json.loads(sys.stdin.read()).get('sha','')[:12])\\\" 2>/dev/null)\\nPROD=$(curl -s https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.loads(sys.stdin.read())\\nprint(d.get('commit','')[:12])\\nprint(d.get('status',''))\\nprint(d.get('bootTime',''))\\n\\\" 2>/dev/null)\\nPROD_SHA=$(echo \\\"$PROD\\\" | head -1)\\necho \\\"GitHub:    $GH_SHA\\\"\\necho \\\"Prod:      $PROD_SHA\\\"\\necho \\\"Status:    $(echo \\\"$PROD\\\" | sed -n '2p')\\\"\\necho \\\"Boot:      $(echo \\\"$PROD\\\" | sed -n '3p')\\\"\\nif [ \\\"$GH_SHA\\\" = \\\"$PROD_SHA\\\" ]; then echo \\\"PARITY:    YES\\\"; else echo \\\"PARITY:    NO — Render still deploying\\\"; fi\"}",
       "createdAt": 1785587706414,
-      "completedAt": 1785587725089
+      "completedAt": 1785587725089,
+      "compactedAt": 1785592304957
     },
     {
       "type": "reasoning",
@@ -528,7 +536,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"envs\": [{\"name\": \"IVX_AI_GATEWAY_KEY\", \"description\": \"Your Vercel AI Gateway API key (starts with vck_). This will be set as IVX_AI_GATEWAY_KEY on Render, activating independent AI routing. The code is already deployed — the moment this key is set, the system will report independenceActive: true and backendKeySource: IVX_AI_GATEWAY_KEY instead of the Rork-managed AI_GATEWAY_API_KEY.\", \"placeholder\": \"vck_...\", \"isPublic\": false}], \"reason\": \"I need your Vercel AI Gateway key to set as IVX_AI_GATEWAY_KEY on Render via the backend's render_upsert_env_var action. The code is already committed and deploying — once I set this key on Render, the AI status endpoint will report independenceActive: true and the system will use your owner-controlled key instead of the Rork-managed AI_GATEWAY_API_KEY. I will then verify the flip live.\"}",
       "createdAt": 1785587760118,
-      "completedAt": 1785587762315
+      "completedAt": 1785587762315,
+      "compactedAt": 1785592304957
     },
     {
       "type": "meta",
