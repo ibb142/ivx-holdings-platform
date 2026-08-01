@@ -112,7 +112,7 @@ const DEFAULT_CONFIGS: ProviderConfig[] = [
   {
     name: 'vercel_gateway',
     enabled: false,
-    apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
+    apiKeyEnvVar: 'IVX_AI_GATEWAY_KEY',
     baseUrl: 'https://ai-gateway.vercel.sh/v1/chat/completions',
     defaultModel: 'openai/gpt-4o',
     maxOutputTokens: 8192,

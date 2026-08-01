@@ -905,7 +905,7 @@ import {
 } from './api/ivx-autonomy';
 import {
   OPTIONS as adminSyncOptions,
-  handleIVXAdminSyncRorkToGithubRequest,
+  handleIVXAdminSyncGithubRequest,
 } from './api/ivx-admin-sync';
 import { handleIVXRepairJobStart, handleIVXRepairJobList, handleIVXRepairJobGet, handleIVXRepairJobByIncident } from './api/ivx-repair-jobs';
 import {
@@ -4395,8 +4395,8 @@ app.post('/api/ivx/autonomy/deploy/rollback', async (c) => handleIVXAutonomyDepl
 app.options('/api/ivx/autonomy/github/sync', () => autonomyOptions());
 app.post('/api/ivx/autonomy/github/sync', async (c) => handleIVXAutonomyGithubSyncRequest(c.req.raw));
 // Owner-only one-shot delivery chain: Rork workspace → GitHub push → Render deploy → live /health verify.
-app.options('/api/ivx/admin/sync-rork-to-github', () => adminSyncOptions());
-app.post('/api/ivx/admin/sync-rork-to-github', async (c) => handleIVXAdminSyncRorkToGithubRequest(c.req.raw));
+app.options('/api/ivx/admin/sync-github', () => adminSyncOptions());
+app.post('/api/ivx/admin/sync-github', async (c) => handleIVXAdminSyncGithubRequest(c.req.raw));
 app.options('/api/ivx/night-ops/status', () => nightOpsOptions());
 app.get('/api/ivx/night-ops/status', async (c) => handleIVXNightOpsStatusRequest(c.req.raw));
 app.options('/api/ivx/night-ops/config', () => nightOpsOptions());

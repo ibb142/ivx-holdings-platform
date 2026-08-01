@@ -3573,7 +3573,7 @@ function readBooleanField(record: Record<string, unknown>, key: string): boolean
 function formatAcceptedConfigAliases(): string {
   return [
     'Owner API: EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL, EXPO_PUBLIC_API_BASE_URL, or https://api.ivxholding.com.',
-    'AI runtime: EXPO_PUBLIC_IVX_AI_GATEWAY_URL, IVX_AI_GATEWAY_URL, AI_GATEWAY_API_KEY, IVX_OWNER_AI_MODEL.',
+    'AI runtime: EXPO_PUBLIC_IVX_AI_GATEWAY_URL, IVX_AI_GATEWAY_URL, IVX_AI_GATEWAY_KEY, IVX_OWNER_AI_MODEL.',
     'Supabase inspection: EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, SUPABASE_INSPECTION_DATABASE_URL, SUPABASE_READONLY_DATABASE_URL, SUPABASE_DB_URL, DATABASE_URL, POSTGRES_URL, SUPABASE_DB_PASSWORD.',
     'AWS audit: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION, DOMAIN_NAME, S3_BUCKET_NAME, CLOUDFRONT_DISTRIBUTION_ID.',
   ].join('\n');
@@ -3590,7 +3590,7 @@ function formatRuntimeMissingConfig(report: IVXAuditReport): string {
     missing.push('EXPO_PUBLIC_IVX_AI_GATEWAY_URL or IVX_AI_GATEWAY_URL');
   }
   if (readBooleanField(runtime, 'hasGatewayApiKey') === false) {
-    missing.push('AI_GATEWAY_API_KEY');
+    missing.push('IVX_AI_GATEWAY_KEY');
   }
   if (readBooleanField(supabase, 'hasSupabaseUrl') === false) {
     missing.push('EXPO_PUBLIC_SUPABASE_URL');
@@ -5457,7 +5457,7 @@ export function GET(): Response {
  * Reports configuration presence and runtime readiness without exposing
  * any secret values. Used by the owner-controls debug panel to verify
  * that IVX AI requests are routing through the IVX backend proxy
- * (Vercel AI Gateway via backend AI_GATEWAY_API_KEY) and that the legacy
+ * (Vercel AI Gateway via backend IVX_AI_GATEWAY_KEY) and that the legacy
  * Rork toolkit client-direct gateway fallback is disabled.
  */
 /**

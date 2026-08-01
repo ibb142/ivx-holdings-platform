@@ -81,9 +81,9 @@ const TOOL_SPECS: ToolSpec[] = [
     label: 'AI reasoning gateway',
     category: 'ai',
     requiredForSteps: ['classify intent', 'create execution plan', 'execute'],
-    requiredEnv: ['AI_GATEWAY_API_KEY'],
+    requiredEnv: ['IVX_AI_GATEWAY_KEY'],
     detailWhenAvailable: 'AI gateway key present — IVX can reason, plan, and synthesize.',
-    detailWhenMissing: 'AI_GATEWAY_API_KEY missing — reasoning/synthesis falls back to deterministic routing only.',
+    detailWhenMissing: 'IVX_AI_GATEWAY_KEY missing — reasoning/synthesis falls back to deterministic routing only.',
   },
   {
     tool: 'test_runner',

@@ -28,7 +28,7 @@ export function getElevenLabsApiKey(): string {
 }
 
 export function getOpenAITranscriptionApiKey(): string {
-  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.WHISPER_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.WHISPER_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
 }
 
 function getOpenAITranscriptionBaseUrl(): string {
