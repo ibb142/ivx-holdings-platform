@@ -18,13 +18,7 @@ function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function isRorkDomain(url: string): boolean {
-  const lower = url.toLowerCase();
-  return lower.includes('toolkit.rork.com')
-    || lower.includes('api.rork.com')
-    || lower.endsWith('.rork.com')
-    || lower.includes('rork-direct.workers.dev');
-}
+import { isBlockedDomain } from './ivx-domain-blocklist';
 
 /** Returns the API key from OPENAI_API_KEY or IVX_AI_GATEWAY_KEY (fallback). */
 export function getIVXApiKey(): string {
@@ -42,12 +36,12 @@ export function detectIVXProviderType(): 'vercel_gateway' | 'openai_direct' | 'u
 
 /**
  * Returns the correct base URL for the loaded API key.
- * If IVX_AI_GATEWAY_URL (or IVX_AI_BASE_URL) is explicitly set and not a Rork
- * domain, it takes priority. Otherwise, the key prefix determines the endpoint.
+ * If IVX_AI_GATEWAY_URL (or IVX_AI_BASE_URL) is explicitly set and not a blocked
+ * external domain, it takes priority. Otherwise, the key prefix determines the endpoint.
  */
 export function autoDetectGatewayBaseUrl(): string {
   const configured = readTrimmed(process.env.IVX_AI_GATEWAY_URL) || readTrimmed(process.env.IVX_AI_BASE_URL);
-  if (configured && !isRorkDomain(configured)) {
+  if (configured && !isBlockedDomain(configured)) {
     return configured.replace(/\/+$/, '');
   }
   const key = getIVXApiKey();
