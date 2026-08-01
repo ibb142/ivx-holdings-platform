@@ -28,7 +28,7 @@ import {
   type PhaseRequirement,
   type ExternalDependency,
   type IndependenceReport,
-} from '@/src/modules/ivx-developer/independenceService';
+} from '@/src/modules/ivx-developer/rorkIndependenceService';
 
 const POLL_INTERVAL_MS = 25000;
 
