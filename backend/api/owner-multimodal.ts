@@ -197,7 +197,7 @@ async function downloadStoredFile(client: DBClient, storagePath: string, bucket:
 /* ---------------- OpenAI API helpers ---------------- */
 
 function getGatewayApiKey(): string {
-  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
 }
 
 function getGatewayBaseUrl(): string {

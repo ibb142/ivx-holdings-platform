@@ -44,7 +44,7 @@ function readTrimmed(value: unknown): string {
 
 /** True when the AI gateway path (image/video/vision) is configured. */
 export function isAiGatewayConfigured(): boolean {
-  return readTrimmed(process.env.AI_GATEWAY_API_KEY).length > 0;
+  return readTrimmed(process.env.IVX_AI_GATEWAY_KEY).length > 0;
 }
 
 /** True when an owner-controlled 3D provider key (Meshy/Tripo direct) is present. */
@@ -59,9 +59,9 @@ export function buildMultimodalStackReport(): MultimodalStackReport {
   const gatewayBlocker = gatewayReady
     ? null
     : {
-        reason: 'AI_GATEWAY_API_KEY is not set on the backend runtime.',
-        dependency: 'AI_GATEWAY_API_KEY (Vercel AI Gateway bearer).',
-        ownerAction: 'Set AI_GATEWAY_API_KEY on the Render service.',
+        reason: 'IVX_AI_GATEWAY_KEY is not set on the backend runtime.',
+        dependency: 'IVX_AI_GATEWAY_KEY (Vercel AI Gateway bearer).',
+        ownerAction: 'Set IVX_AI_GATEWAY_KEY on the Render service.',
       };
 
   const capabilities: MultimodalCapabilityReport[] = [

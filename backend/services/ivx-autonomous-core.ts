@@ -259,7 +259,7 @@ export async function buildAutonomousDashboard(): Promise<AutonomousDashboard> {
       title: 'Production/dev environment awareness',
       state: databaseConfigured ? 'online' : 'partial',
       backedBy: 'process.env runtime introspection',
-      detail: `mode=${mode}; db=${databaseConfigured}; github=${githubConfigured}; aiGateway=${readEnvFlag('AI_GATEWAY_API_KEY')}.`,
+      detail: `mode=${mode}; db=${databaseConfigured}; github=${githubConfigured}; aiGateway=${readEnvFlag('IVX_AI_GATEWAY_KEY')}.`,
     },
     {
       id: 'unified-dashboard',
@@ -295,7 +295,7 @@ export async function buildAutonomousDashboard(): Promise<AutonomousDashboard> {
       productionBaseUrlConfigured: readEnvFlag('PRODUCTION_BASE_URL'),
       databaseConfigured,
       githubConfigured,
-      aiGatewayConfigured: readEnvFlag('AI_GATEWAY_API_KEY'),
+      aiGatewayConfigured: readEnvFlag('IVX_AI_GATEWAY_KEY'),
     },
     buckets,
     priority,

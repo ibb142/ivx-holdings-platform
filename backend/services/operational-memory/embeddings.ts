@@ -15,7 +15,7 @@ function getGatewayBaseUrl(): string {
 }
 
 function getApiKey(): string {
-  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
 }
 
 function hashEmbedding(input: string, dim: number): number[] {

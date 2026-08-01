@@ -1,9 +1,9 @@
 /**
  * IVX Admin Sync — owner-only, one-shot delivery chain:
  *
- *   Rork workspace → GitHub push → Render deploy → live /health verification
+ *   Workspace → GitHub push → Render deploy → live /health verification
  *
- *   POST /api/ivx/admin/sync-rork-to-github
+ *   POST /api/ivx/admin/sync-github
  *
  * Runs the existing `expo/sync-github.mjs` push server-side using the backend's
  * own GITHUB_TOKEN / GITHUB_REPO_URL (branch GITHUB_BRANCH || main), re-reads the
@@ -27,7 +27,7 @@ import * as path from 'path';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 
-export const IVX_ADMIN_SYNC_MARKER = 'ivx-admin-sync-rork-to-github-v1';
+export const IVX_ADMIN_SYNC_MARKER = 'ivx-admin-sync-github-v1';
 
 const RENDER_API_BASE_URL = 'https://api.render.com/v1';
 
@@ -198,18 +198,18 @@ async function probeProductionHealth(baseUrl: string, expectedSha: string | null
 }
 
 /**
- * POST /api/ivx/admin/sync-rork-to-github
+ * POST /api/ivx/admin/sync-github
  *
  * Owner-only. Body: { message?: string; timeoutMs?: number; healthAttempts?: number }
  */
-export async function handleIVXAdminSyncRorkToGithubRequest(request: Request): Promise<Response> {
+export async function handleIVXAdminSyncGithubSyncRequest(request: Request): Promise<Response> {
   const startedAt = new Date().toISOString();
   try {
     await assertIVXOwnerOnly(request);
     const body = readObjectInput(await request.json().catch(() => ({})));
     const message = typeof body.message === 'string' && body.message.trim().length > 0
       ? body.message.trim().slice(0, 500)
-      : `sync: owner-approved Rork→GitHub→Render delivery ${startedAt}`;
+      : `sync: owner-approved GitHub→Render delivery ${startedAt}`;
     const timeoutMs = typeof body.timeoutMs === 'number' && Number.isFinite(body.timeoutMs)
       ? Math.min(Math.max(body.timeoutMs, 30_000), 10 * 60_000)
       : 5 * 60_000;
@@ -255,7 +255,7 @@ export async function handleIVXAdminSyncRorkToGithubRequest(request: Request): P
     // 2. Run the existing sync script with credentials injected via env only.
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      RORK_AUTO_SYNC_ENABLED: 'true',
+      IVX_AUTO_SYNC_ENABLED: 'true',
       GITHUB_TOKEN: token,
       GITHUB_REPO_URL: repoUrl,
       GITHUB_REPO: repoSlug,
@@ -321,7 +321,7 @@ export async function handleIVXAdminSyncRorkToGithubRequest(request: Request): P
 
     const matched = health.matched;
     const finalStatus = matched
-      ? 'VERIFIED_LIVE_RORK_TO_GITHUB_TO_RENDER_COMPLETE'
+      ? 'VERIFIED_LIVE_GITHUB_TO_RENDER_COMPLETE'
       : 'PARTIAL';
 
     const payload: Record<string, unknown> = {

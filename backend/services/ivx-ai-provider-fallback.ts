@@ -3,7 +3,7 @@
  *
  * Adds a safe, opt-in fallback abstraction around `requestIVXAIText`. The
  * primary provider stays the existing Vercel AI Gateway path
- * (`AI_GATEWAY_API_KEY`). Fallbacks are ONLY registered when their
+ * (`IVX_AI_GATEWAY_KEY`). Fallbacks are ONLY registered when their
  * provider-specific env var is set; otherwise the chain is a no-op and the
  * caller still sees the original primary failure.
  *
@@ -63,8 +63,8 @@ export function getIVXProviderChainSnapshot(): {
   const primary: IVXProviderStatus = {
     name: 'ivx_ai_gateway',
     role: 'primary',
-    configured: hasEnv('AI_GATEWAY_API_KEY'),
-    envGates: ['AI_GATEWAY_API_KEY'],
+    configured: hasEnv('IVX_AI_GATEWAY_KEY'),
+    envGates: ['IVX_AI_GATEWAY_KEY'],
   };
   const fallbacks: IVXProviderStatus[] = [
     {
@@ -145,7 +145,7 @@ type FallbackInput = {
 };
 
 async function callOpenAIDirect(input: FallbackInput): Promise<IVXProviderInvocationResult> {
-  const apiKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  const apiKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   if (!apiKey) throw new Error('openai_direct fallback not configured');
   // Skip if the key is a Vercel AI Gateway key (vck_) — it won't work against
   // the OpenAI direct API. The vercel_gateway fallback handles that key.
@@ -200,7 +200,7 @@ async function callOpenAIDirect(input: FallbackInput): Promise<IVXProviderInvoca
  * This is the correct endpoint for Vercel AI Gateway keys.
  */
 async function callVercelGatewayDirect(input: FallbackInput): Promise<IVXProviderInvocationResult> {
-  const apiKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  const apiKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   if (!apiKey) throw new Error('ivx_ai_gateway fallback not configured');
   // Skip if the key is NOT a Vercel key — it won't work against the gateway.
   if (!apiKey.startsWith('vck_')) throw new Error('ivx_ai_gateway fallback skipped: key is not a Vercel AI Gateway key (vck_)');
@@ -378,7 +378,7 @@ export async function attemptProviderFallback(input: FallbackInput): Promise<IVX
   const chain: { name: IVXProviderName; run: (i: FallbackInput) => Promise<IVXProviderInvocationResult> }[] = [];
 
   // Determine the primary key type so we can skip it in the fallback chain.
-  const primaryKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  const primaryKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   const primaryIsVercelKey = primaryKey.startsWith('vck_');
   const primaryIsOpenAIKey = primaryKey.startsWith('sk-');
 
@@ -410,9 +410,9 @@ export async function attemptProviderFallback(input: FallbackInput): Promise<IVX
     if (vercelKey && vercelKey.startsWith('vck_')) {
       chain.push({ name: 'ivx_ai_gateway', run: (i) => callVercelGatewayDirectWithKey(i, vercelKey) });
     }
-  } else if (!primaryIsVercelKey && (hasEnv('OPENAI_API_KEY') || hasEnv('AI_GATEWAY_API_KEY'))) {
+  } else if (!primaryIsVercelKey && (hasEnv('OPENAI_API_KEY') || hasEnv('IVX_AI_GATEWAY_KEY'))) {
     // Only if there's a vck_ key that's different from the primary
-    const vercelKey = readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
+    const vercelKey = readTrimmed(process.env.IVX_AI_GATEWAY_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
     if (vercelKey.startsWith('vck_') && vercelKey !== primaryKey) {
       chain.push({ name: 'ivx_ai_gateway', run: callVercelGatewayDirect });
     }

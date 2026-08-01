@@ -2032,7 +2032,7 @@ async function runRenderUpsertEnvVar(input: Record<string, unknown>): Promise<Re
 
 /**
  * Copies an environment variable value from the current runtime's process.env
- * to a new key on Render. Used to promote AI_GATEWAY_API_KEY to IVX_AI_GATEWAY_KEY
+ * to a new key on Render. Used to promote IVX_AI_GATEWAY_KEY to IVX_AI_GATEWAY_KEY
  * so the owner controls the key name and the system reports independenceActive: true.
  * The source value is never returned in the response.
  */

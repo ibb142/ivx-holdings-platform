@@ -6,7 +6,7 @@
  * Mirrors the proven call pattern in backend/services/ivx-ai-provider-fallback.ts.
  *
  * Reads credentials from process.env:
- *   - OPENAI_API_KEY or AI_GATEWAY_API_KEY (vck_ key, required)
+ *   - OPENAI_API_KEY or IVX_AI_GATEWAY_KEY (vck_ key, required)
  */
 
 const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -24,7 +24,7 @@ function readEnv(name: string): string {
 }
 
 function resolveApiKey(): string {
-  return readEnv('OPENAI_API_KEY') || readEnv('AI_GATEWAY_API_KEY');
+  return readEnv('OPENAI_API_KEY') || readEnv('IVX_AI_GATEWAY_KEY');
 }
 
 function resolveModel(): string {
@@ -45,7 +45,7 @@ function resolveModel(): string {
 export async function askAI(prompt: string, opts: { systemPrompt?: string; maxTokens?: number; timeoutMs?: number } = {}): Promise<AIReasoningResult> {
   const apiKey = resolveApiKey();
   if (!apiKey) {
-    return { ok: false, content: '', error: 'AI gateway key not configured (OPENAI_API_KEY or AI_GATEWAY_API_KEY).', model: 'none', usage: null };
+    return { ok: false, content: '', error: 'AI gateway key not configured (OPENAI_API_KEY or IVX_AI_GATEWAY_KEY).', model: 'none', usage: null };
   }
   const model = resolveModel();
   const messages: { role: string; content: string }[] = [];

@@ -20,7 +20,7 @@
  *   1. An ffmpeg + ffprobe capable runtime (e.g. node:22 base image or an
  *      `apk add --no-cache ffmpeg` layer), OR set IVX_FFMPEG_PATH / IVX_FFPROBE_PATH.
  *   2. A transcription key: ELEVENLABS_API_KEY (preferred) or OPENAI_API_KEY.
- *   3. AI_GATEWAY_API_KEY for frame vision analysis (already used elsewhere).
+ *   3. IVX_AI_GATEWAY_KEY for frame vision analysis (already used elsewhere).
  */
 
 import { spawn } from 'node:child_process';
@@ -610,13 +610,13 @@ export async function getVideoWorkerCapabilities(): Promise<VideoWorkerCapabilit
     || readTrimmed(process.env.OPENAI_API_KEY)
     || readTrimmed(process.env.WHISPER_API_KEY),
   );
-  const aiGatewayConfigured = Boolean(readTrimmed(process.env.AI_GATEWAY_API_KEY));
+  const aiGatewayConfigured = Boolean(readTrimmed(process.env.IVX_AI_GATEWAY_KEY));
   const ffmpegReady = tooling.ffmpegAvailable && tooling.ffprobeAvailable;
 
   const remaining: string[] = [];
   if (!ffmpegReady) remaining.push('ffmpeg + ffprobe binaries (attach an ffmpeg-capable runtime or set IVX_FFMPEG_PATH / IVX_FFPROBE_PATH)');
   if (!transcriptionConfigured) remaining.push('transcription key (ELEVENLABS_API_KEY or OPENAI_API_KEY)');
-  if (!aiGatewayConfigured) remaining.push('AI_GATEWAY_API_KEY for frame vision analysis');
+  if (!aiGatewayConfigured) remaining.push('IVX_AI_GATEWAY_KEY for frame vision analysis');
 
   return {
     videoUpload: true,

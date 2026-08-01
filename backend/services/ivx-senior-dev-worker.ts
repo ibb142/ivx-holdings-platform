@@ -9,7 +9,7 @@
  *   - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (task queue + proof ledger)
  *   - GITHUB_TOKEN + GITHUB_REPO_URL (read files, commit changes)
  *   - RENDER_API_KEY + RENDER_SERVICE_ID (deploy, poll)
- *   - OPENAI_API_KEY or AI_GATEWAY_API_KEY (AI reasoning for planning + code gen)
+ *   - OPENAI_API_KEY or IVX_AI_GATEWAY_KEY (AI reasoning for planning + code gen)
  *
  * Pipeline:
  *   PLANNING → INSPECTING → IMPLEMENTING → TESTING → WAITING_APPROVAL →
