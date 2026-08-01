@@ -51,6 +51,7 @@ type DeveloperDeployAction =
   | 'render_trigger_deploy'
   | 'render_restart_service'
   | 'render_upsert_env_var'
+  | 'render_copy_env_var'
   | 'render_update_subdomain_policy'
   | 'render_update_source'
   | 'supabase_execute_sql'
@@ -160,6 +161,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'render_trigger_deploy'
     || normalized === 'render_restart_service'
     || normalized === 'render_upsert_env_var'
+    || normalized === 'render_copy_env_var'
     || normalized === 'render_update_subdomain_policy'
     || normalized === 'render_update_source'
     || normalized === 'supabase_execute_sql'
@@ -275,7 +277,7 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'render_trigger_deploy') {
     return RENDER_DEPLOY_CONFIRM_TEXT;
   }
-  if (action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source' || action === 'render_get_deploy_status') {
+  if (action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_copy_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source' || action === 'render_get_deploy_status') {
     return RENDER_SERVICE_CONFIRM_TEXT;
   }
   if (action === 'cloudfront_invalidate') {
@@ -2028,6 +2030,40 @@ async function runRenderUpsertEnvVar(input: Record<string, unknown>): Promise<Re
   };
 }
 
+/**
+ * Copies an environment variable value from the current runtime's process.env
+ * to a new key on Render. Used to promote AI_GATEWAY_API_KEY to IVX_AI_GATEWAY_KEY
+ * so the owner controls the key name and the system reports independenceActive: true.
+ * The source value is never returned in the response.
+ */
+async function runRenderCopyEnvVar(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const serviceId = await getRenderServiceId(input);
+  const sourceKey = sanitizeEnvVarKey(input.sourceKey);
+  const targetKey = sanitizeEnvVarKey(input.targetKey);
+  const sourceValue = readTrimmed(process.env[sourceKey]);
+  if (!sourceValue) {
+    throw new Error(`Source environment variable ${sourceKey} is not set in the current runtime. Cannot copy to ${targetKey}.`);
+  }
+  const response = await fetchJson(`${RENDER_API_BASE_URL}/services/${encodeURIComponent(serviceId)}/env-vars/${encodeURIComponent(targetKey)}`, {
+    method: 'PUT',
+    headers: await renderHeaders(),
+    body: JSON.stringify({ value: sourceValue }),
+  });
+  if (!response.ok) {
+    throw new Error(`Render environment variable copy failed with HTTP ${response.status}.`);
+  }
+  return {
+    provider: 'render',
+    action: 'render_copy_env_var',
+    serviceId,
+    sourceKey,
+    targetKey,
+    valueStored: true,
+    secretValueReturned: false,
+    deployRequiredForRuntime: true,
+  };
+}
+
 function getSupabaseProjectRef(): string {
   const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) || readTrimmed(process.env.SUPABASE_URL);
   if (!url) return '';
@@ -2207,7 +2243,7 @@ async function buildStatus(): Promise<Record<string, unknown>> {
       serviceIdConfigured: renderServiceConfigured,
       credentialSource: renderCredentialSource,
       serviceName: readEnv('RENDER_SERVICE_NAME') || 'ivx-holdings-platform',
-      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs', 'render_get_deploy_status'],
+      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_copy_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs', 'render_get_deploy_status'],
       deployConfirmationTextRequired: RENDER_DEPLOY_CONFIRM_TEXT,
       serviceUpdateConfirmationTextRequired: RENDER_SERVICE_CONFIRM_TEXT,
     },
@@ -3845,6 +3881,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   if (action === 'render_upsert_env_var') {
     return await runRenderUpsertEnvVar(input);
   }
+  if (action === 'render_copy_env_var') {
+    return await runRenderCopyEnvVar(input);
+  }
   if (action === 'render_update_subdomain_policy') {
     return await runRenderUpdateSubdomainPolicy(input);
   }
@@ -3990,7 +4029,7 @@ async function auditDeveloperDeployAction(ownerContext: IVXOwnerRequestContext, 
     action,
     reason,
     targetPath: action === 'github_commit_file' ? readTrimmed(input.path) : undefined,
-    envKey: action === 'render_upsert_env_var' ? readTrimmed(input.key) : undefined,
+    envKey: action === 'render_upsert_env_var' || action === 'render_copy_env_var' ? readTrimmed(input.targetKey) || readTrimmed(input.key) : undefined,
     renderSubdomainPolicy: action === 'render_update_subdomain_policy' ? normalizeRenderSubdomainPolicy(input.renderSubdomainPolicy ?? input.policy) : undefined,
     renderSourceBranch: action === 'render_update_source' ? readTrimmed(input.branch) || 'main' : undefined,
     sqlLength: action === 'supabase_execute_sql' ? readTrimmed(input.sql).length : undefined,
