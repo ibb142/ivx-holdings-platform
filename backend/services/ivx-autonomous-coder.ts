@@ -866,8 +866,7 @@ ${goal}
 
 AVAILABLE FILES (first 200):
 ${availableFiles.slice(0, 200).join('\n')}`;
-  trace?.llmRequestStartedAt = nowIso();
-  trace?.heartbeat = 'planning: LLM request started';
+  if (trace) { trace.llmRequestStartedAt = nowIso(); trace.heartbeat = 'planning: LLM request started'; }
   try {
     let responseText: string;
     if (llmCaller) {
@@ -941,8 +940,7 @@ async function callLLMForPatch(
 ): Promise<string> {
   const effectiveTimeout = timeoutMs ?? LLM_TIMEOUT_MS;
   const abortController = new AbortController();
-  trace?.llmRequestStartedAt = nowIso();
-  trace?.heartbeat = 'patch_generation: LLM request started';
+  if (trace) { trace.llmRequestStartedAt = nowIso(); trace.heartbeat = 'patch_generation: LLM request started'; }
   if (llmCaller) {
     const result = await withTimeoutAndAbort(
       llmCaller(system, user),
