@@ -382,6 +382,7 @@ export type IVXSeniorDeveloperRunInput = {
    * so recovery can resume verification after the deploy restarts the container.
    */
   onCommitLanded?: (commit: { commitSha: string; commitUrl: string | null; branch: string }) => void;
+  // Allow null commitUrl for deploy-only paths where no GitHub URL exists
 };
 
 const IGNORED_DIRECTORIES = ['.git', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
@@ -2038,7 +2039,7 @@ async function buildGitDeployOperator(input: IVXSeniorDeveloperRunInput, project
   if (deployOnly) {
     const headSha = await getGithubBranchHead(githubAccessCheck.branch);
     // Persist the head SHA BEFORE triggering the deploy-only redeploy.
-    input.onCommitLanded?.({ commitSha: headSha, commitUrl: null, branch: githubAccessCheck.branch });
+    input.onCommitLanded?.({ commitSha: headSha, commitUrl: null, branch: githubAccessCheck.branch ?? '' });
     const deploy = await triggerRenderDeploy(headSha);
     const deployReason = deploy.autoDeployFallback
       ? 'Deploy-only: no code change was required; production redeployed via render.yaml autoDeployTrigger:commit because the Render REST trigger was unavailable.'
