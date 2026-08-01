@@ -225,7 +225,7 @@ describe('stale job expiration', () => {
 describe('buildSeniorDeveloperWorkerStatus', () => {
   test('declares Rork is not required as the executor and all capabilities are present', () => {
     const status = buildSeniorDeveloperWorkerStatus();
-    expect(status.rorkRequiredAsExecutor).toBe(false);
+    expect(status.externalRequiredAsExecutor).toBe(false);
     const capabilities = status.capabilities as Record<string, boolean>;
     expect(capabilities.commitService).toBe(true);
     expect(capabilities.renderDeploy).toBe(true);
