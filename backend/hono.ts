@@ -213,7 +213,7 @@ import {
 } from './api/ivx-executive-layer';
 import {
   OPTIONS as independenceStatusOptions,
-  handleIndependenceStatusRequest,
+  handleIVXIndependenceStatusRequest,
 } from './api/ivx-independence-status';
 import {
   OPTIONS as ownerControlProofOptions,
@@ -3917,7 +3917,7 @@ app.get('/api/ivx/technology-discovery', async (context) => handleTechnologyDisc
 app.options('/api/ivx/technology-discovery/scan', () => technologyDiscoveryOptions());
 app.post('/api/ivx/technology-discovery/scan', async (context) => handleTechnologyDiscoveryScanRequest(context.req.raw));
 app.options('/api/ivx/independence-status', () => independenceStatusOptions());
-app.get('/api/ivx/independence-status', async (context) => handleIndependenceStatusRequest(context.req.raw));
+app.get('/api/ivx/independence-status', async (context) => handleIVXIndependenceStatusRequest(context.req.raw));
 app.options('/api/ivx/owner-control-proof', () => ownerControlProofOptions());
 app.get('/api/ivx/owner-control-proof', async (context) => handleIVXOwnerControlProofRequest(context.req.raw));
 
