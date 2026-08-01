@@ -172,6 +172,13 @@ export type IVXAutonomousCoderProof = {
   rollbackTriggered: boolean;
   rollbackCommitSha: string | null;
   rollbackError: string | null;
+  /** V6.19: Stage-level observability — exact timestamps for every step in
+   * the LLM patch-generation flow so the worker can show where the pipeline
+   * is hanging (instead of just "Generating technical plan"). */
+  stageTrace: IVXLLMStageTrace | null;
+  /** V6.19: Task plan from the split planning stage (target files, changes
+   * required, risks). null when planning was skipped or failed. */
+  taskPlan: IVXTaskPlan | null;
 };
 
 export type IVXAutonomousCoderInput = {
@@ -316,6 +323,8 @@ function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, i
     rollbackTriggered: false,
     rollbackCommitSha: null,
     rollbackError: null,
+    stageTrace: null,
+    taskPlan: null,
   };
 }
 
@@ -719,7 +728,37 @@ function parseLLMPatchResponse(response: string): { rootCause: string; technical
   }
 }
 
-/** Promise-race timeout wrapper so the LLM call can never hang the loop. */
+/** Promise-race timeout wrapper so the LLM call can never hang the loop.
+ * V6.19: Now also creates an AbortController and aborts it on timeout so the
+ * underlying HTTP request is actually cancelled (Promise.race alone does NOT
+ * cancel the fetch — the connection stays open consuming resources). */
+function withTimeoutAndAbort<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  abortController?: AbortController,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      const timer = setTimeout(() => {
+        if (abortController) {
+          try { abortController.abort(); } catch { /* already aborted */ }
+        }
+        const err = new Error(`${label} timed out after ${ms}ms`);
+        err.name = 'LLMTimeoutError';
+        reject(err);
+      }, ms);
+      // Clear timer if promise resolves first
+      promise.then(
+        () => clearTimeout(timer),
+        () => clearTimeout(timer),
+      );
+    }),
+  ]);
+}
+
+/** Legacy alias for non-LLM timeouts (no abort needed). */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,
@@ -729,23 +768,209 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+/** V6.19: Stage-level observability — records timestamps for every step in the
+ * LLM patch-generation flow. Exposed in the proof so the worker can show
+ * exactly where the pipeline is hanging. */
+export type IVXLLMStageTrace = {
+  taskReceivedAt: string;
+  repoContextCollectedAt: string | null;
+  targetFileSelectedAt: string | null;
+  promptConstructedAt: string | null;
+  llmRequestStartedAt: string | null;
+  firstTokenReceivedAt: string | null;
+  responseCompletedAt: string | null;
+  jsonParsedAt: string | null;
+  patchValidatedAt: string | null;
+  patchAppliedAt: string | null;
+  testsStartedAt: string | null;
+  testsCompletedAt: string | null;
+  requestId: string;
+  model: string | null;
+  provider: string | null;
+  timeoutMs: number;
+  inputTokenEstimate: number;
+  outputTokenCount: number;
+  retryNumber: number;
+  responseStatus: string | null;
+  parserStatus: string | null;
+  exactSanitizedError: string | null;
+  heartbeat: string | null;
+};
+
+function createStageTrace(requestId: string, timeoutMs: number): IVXLLMStageTrace {
+  return {
+    taskReceivedAt: nowIso(),
+    repoContextCollectedAt: null,
+    targetFileSelectedAt: null,
+    promptConstructedAt: null,
+    llmRequestStartedAt: null,
+    firstTokenReceivedAt: null,
+    responseCompletedAt: null,
+    jsonParsedAt: null,
+    patchValidatedAt: null,
+    patchAppliedAt: null,
+    testsStartedAt: null,
+    testsCompletedAt: null,
+    requestId,
+    model: null,
+    provider: null,
+    timeoutMs,
+    inputTokenEstimate: 0,
+    outputTokenCount: 0,
+    retryNumber: 0,
+    responseStatus: null,
+    parserStatus: null,
+    exactSanitizedError: null,
+    heartbeat: null,
+  };
+}
+
+/** V6.19: Planning stage — asks the LLM to return a lightweight task plan
+ * (target files, changes required, risks) WITHOUT generating the full patch.
+ * This is a small, fast call (45s timeout) that splits the cognitive load:
+ * planning and patch generation are separate LLM calls, not one giant call.
+ *
+ * Returns null when the planning call fails or returns unparseable JSON. */
+export type IVXTaskPlan = {
+  targetFiles: string[];
+  filesToInspect: string[];
+  changesRequired: string;
+  testsRequired: string;
+  risks: string;
+};
+
+const PLAN_SYSTEM_PROMPT = `You are the IVX Autonomous Coder planning stage.
+Given a GOAL, return a lightweight JSON plan identifying which files to change.
+
+OUTPUT FORMAT (strict JSON, no markdown fences, no prose):
+{"targetFiles":["backend/api/example.ts"],"filesToInspect":["backend/hono.ts"],"changesRequired":"create a new endpoint returning SHA + timestamp","testsRequired":"unit test confirming the response shape","risks":"none — new file, no existing code affected"}
+
+Rules:
+- Respond with JSON ONLY. No fences. No prose.
+- targetFiles: files that will be created or modified.
+- filesToInspect: files the patch generator needs to see (imports, routes, types).
+- Keep it concise — this is a PLAN, not the patch itself.
+- For new files (create_file), include just the target path.
+- For modifications, include the target path + any files with the types/imports it needs.`;
+
+async function callLLMForPlan(
+  goal: string,
+  availableFiles: string[],
+  llmCaller?: (system: string, user: string) => Promise<string>,
+  trace?: IVXLLMStageTrace,
+): Promise<IVXTaskPlan | null> {
+  const PLAN_TIMEOUT_MS = 45_000;
+  const abortController = new AbortController();
+  const userPrompt = `GOAL:
+${goal}
+
+AVAILABLE FILES (first 200):
+${availableFiles.slice(0, 200).join('\n')}`;
+  if (trace) { trace.llmRequestStartedAt = nowIso(); trace.heartbeat = 'planning: LLM request started'; }
+  try {
+    let responseText: string;
+    if (llmCaller) {
+      responseText = await withTimeoutAndAbort(
+        llmCaller(PLAN_SYSTEM_PROMPT, userPrompt),
+        PLAN_TIMEOUT_MS,
+        'LLM planning',
+        abortController,
+      );
+    } else {
+      const result = await withTimeoutAndAbort(
+        requestIVXAIText({
+          module: 'ivx-autonomous-coder',
+          requestId: `ac-plan-${randomUUID()}`,
+          system: PLAN_SYSTEM_PROMPT,
+          prompt: userPrompt,
+          maxOutputTokens: 2048,
+          abortSignal: abortController.signal,
+        }),
+        PLAN_TIMEOUT_MS,
+        'LLM planning',
+        abortController,
+      );
+      responseText = result.text;
+      trace.model = result.providerMetadata?.model ?? null;
+      trace.provider = result.providerMetadata?.provider ?? null;
+    }
+    trace.responseCompletedAt = nowIso();
+    trace.responseStatus = 'ok';
+    trace.outputTokenCount = estimateTokens(responseText);
+    const plan = parseTaskPlanResponse(responseText);
+    trace.jsonParsedAt = nowIso();
+    trace.parserStatus = plan ? 'ok' : 'parse_failed';
+    return plan;
+  } catch (error) {
+    trace.exactSanitizedError = safeErrorMessage(error);
+    trace.responseStatus = error instanceof Error && error.name === 'LLMTimeoutError' ? 'timeout' : 'failed';
+    return null;
+  }
+}
+
+function parseTaskPlanResponse(response: string): IVXTaskPlan | null {
+  try {
+    const cleaned = response.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end < 0 || end <= start) return null;
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    return {
+      targetFiles: Array.isArray(parsed.targetFiles) ? parsed.targetFiles.filter((f: unknown) => typeof f === 'string') : [],
+      filesToInspect: Array.isArray(parsed.filesToInspect) ? parsed.filesToInspect.filter((f: unknown) => typeof f === 'string') : [],
+      changesRequired: typeof parsed.changesRequired === 'string' ? parsed.changesRequired : '',
+      testsRequired: typeof parsed.testsRequired === 'string' ? parsed.testsRequired : '',
+      risks: typeof parsed.risks === 'string' ? parsed.risks : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** V6.19: Patch generation stage — generates one file patch at a time using
+ * AbortController for real cancellation. The context is reduced to only the
+ * files identified by the planning stage (or the goal-keyword-matched files
+ * if planning failed). */
 async function callLLMForPatch(
   system: string,
   user: string,
   llmCaller?: (system: string, user: string) => Promise<string>,
+  timeoutMs?: number,
+  trace?: IVXLLMStageTrace,
 ): Promise<string> {
-  if (llmCaller) return llmCaller(system, user);
-  const result = await withTimeout(
+  const effectiveTimeout = timeoutMs ?? LLM_TIMEOUT_MS;
+  const abortController = new AbortController();
+  if (trace) { trace.llmRequestStartedAt = nowIso(); trace.heartbeat = 'patch_generation: LLM request started'; }
+  if (llmCaller) {
+    const result = await withTimeoutAndAbort(
+      llmCaller(system, user),
+      effectiveTimeout,
+      'LLM patch generation',
+      abortController,
+    );
+    trace.responseCompletedAt = nowIso();
+    trace.responseStatus = 'ok';
+    trace.outputTokenCount = estimateTokens(result);
+    return result;
+  }
+  const result = await withTimeoutAndAbort(
     requestIVXAIText({
       module: 'ivx-autonomous-coder',
       requestId: `ac-${randomUUID()}`,
       system,
       prompt: user,
       maxOutputTokens: 8192,
+      abortSignal: abortController.signal,
     }),
-    LLM_TIMEOUT_MS,
+    effectiveTimeout,
     'LLM patch generation',
+    abortController,
   );
+  trace.responseCompletedAt = nowIso();
+  trace.responseStatus = 'ok';
+  trace.model = result.providerMetadata?.model ?? null;
+  trace.provider = result.providerMetadata?.provider ?? null;
+  trace.outputTokenCount = estimateTokens(result.text);
   return result.text;
 }
 
@@ -1225,6 +1450,8 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
       rollbackTriggered: false,
       rollbackCommitSha: null,
       rollbackError: null,
+      stageTrace: null,
+      taskPlan: null,
     };
   }
 }
@@ -1248,6 +1475,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   let rollbackTriggered = false;
   let rollbackCommitSha: string | null = null;
   let rollbackError: string | null = null;
+  // V6.19: Stage-level observability + split planning
+  let stageTrace: IVXLLMStageTrace | null = null;
+  let taskPlan: IVXTaskPlan | null = null;
   // Helper: check cancel + runtime + per-stage-timeout at stage boundaries; returns
   // true if we must stop. The per-stage timer is reset every time a NEW stage
   // starts (via `markStageStart`), so a stage that hangs is detected even when
@@ -1536,12 +1766,69 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // Count the attempt BEFORE the call so a timeout/error still counts toward
     // the per-job call cap (an attempted call that hung is still a call).
     llmCallCount += 1;
-    const userPromptForCall = buildPatchUserPrompt(input.goal, inspectedFiles, lastFailureContext);
+    // V6.19: STAGE A — Task Plan (iteration 1 only, 45s timeout).
+    // Call the LLM for a lightweight plan first, then use only the plan-identified
+    // files for patch generation. This splits the cognitive load and reduces
+    // context from 30 files × 30k chars to just the relevant files.
+    let patchContextFiles = inspectedFiles;
+    if (iterationCount === 1 && !taskPlan && !input.llmCaller) {
+      const planRequestId = `ac-plan-${randomUUID()}`;
+      stageTrace = createStageTrace(planRequestId, 45_000);
+      stageTrace.repoContextCollectedAt = nowIso();
+      stageTrace.inputTokenEstimate = estimateTokens(input.goal) + estimateTokens(availableFiles.slice(0, 200).join('\n'));
+      onPhase?.('planning', `Iteration ${iterationCount}: STAGE A — requesting task plan from LLM (45s timeout).`);
+      const plan = await callLLMForPlan(input.goal, availableFiles, undefined, stageTrace);
+      if (plan) {
+        taskPlan = plan;
+        stageTrace.targetFileSelectedAt = nowIso();
+        onPhase?.('planning', `Iteration ${iterationCount}: plan received — target files: ${plan.targetFiles.join(', ')}.`);
+        // STAGE B — File Context: load only the plan-identified files.
+        const planFiles = [...new Set([...plan.targetFiles, ...plan.filesToInspect])]
+          .filter((f) => availableFiles.includes(f) || f.startsWith('backend/') || f.startsWith('expo/'));
+        if (planFiles.length > 0) {
+          patchContextFiles = [];
+          for (const pf of planFiles.slice(0, 10)) {
+            const preview = await readFilePreview(pf, projectRoot, input.goal);
+            if (preview) {
+              patchContextFiles.push({ path: preview.path, content: preview.content });
+            }
+          }
+          // Always include at least one nearby example file for convention reference
+          if (patchContextFiles.length === 0) {
+            patchContextFiles = inspectedFiles.slice(0, 3);
+          }
+        }
+      } else {
+        onPhase?.('planning', `Iteration ${iterationCount}: plan failed or unparseable — using default inspection targets.`);
+        // Plan failed — reduce context to first 5 inspected files (not 30)
+        patchContextFiles = inspectedFiles.slice(0, 5);
+      }
+      stageTrace.promptConstructedAt = nowIso();
+    } else if (iterationCount > 1 && lastLLMError && lastLLMError.includes('timed out')) {
+      // V6.19: Context reduction on timeout — cut file previews in half and
+      // reduce per-file chars so the retry has a smaller, faster prompt.
+      onPhase?.('planning', `Iteration ${iterationCount}: timeout detected — reducing context from ${patchContextFiles.length} to ${Math.min(3, patchContextFiles.length)} files.`);
+      patchContextFiles = patchContextFiles.slice(0, 3).map((f) => ({
+        path: f.path,
+        content: truncate(f.content, 8000), // was 30000 — reduce to 8000 on timeout retry
+      }));
+    }
+    const userPromptForCall = buildPatchUserPrompt(input.goal, patchContextFiles, lastFailureContext);
     try {
+      // V6.19: STAGE C — Patch Generation with AbortController (90s timeout).
+      // The AbortController is created inside callLLMForPatch and aborted on
+      // timeout so the underlying HTTP request is actually cancelled.
+      const patchTimeout = iterationCount > 1 && llmAttempts > 0 ? 60_000 : 90_000;
+      if (stageTrace) {
+        stageTrace.timeoutMs = patchTimeout;
+        stageTrace.retryNumber = llmAttempts;
+      }
       llmResponse = await callLLMForPatch(
         PATCH_SYSTEM_PROMPT,
         userPromptForCall,
         input.llmCaller,
+        patchTimeout,
+        stageTrace ?? undefined,
       );
       // Only count tokens on a successful response (no response text on throw).
       estimatedTokensUsed += estimateTokens(llmResponse) + estimateTokens(userPromptForCall);
@@ -2083,6 +2370,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     rollbackTriggered,
     rollbackCommitSha,
     rollbackError,
+    stageTrace,
+    taskPlan,
   };
 
   if (finalStatus === 'COMPLETED') {
