@@ -1,0 +1,25 @@
+{
+  "title": "IVX AI Chat — Scroll to Last Conversation & Loading Removal",
+  "timestamp": "2026-07-07T00:23:00Z",
+  "scope": ["expo/app/ivx/chat.tsx", "expo/src/modules/chat/components/MessageBubble.tsx", "expo/src/modules/chat/services/chatMessageUtils.ts", "expo/components/InvestorSupportChat.tsx", "ios-ivx/Ivx/Views/ChatTabView.swift"],
+  "audited": true,
+  "fixes": [
+    "Aggressive scroll-to-end on conversation load with 6 retries (0, 80, 150, 300, 500, 800, 1200ms) so the thread always opens on the latest message.",
+    "Added FlatList onLayout scroll-to-end guard to handle the race where messagesQuery data arrives before the list measures.",
+    "Removed composer loading placeholder ('Sending message...', 'Uploading attachment...', 'Choosing attachment...').",
+    "Removed typing / progress banner above the composer (animated dots + 'Delivering your message…' / 'IVX IA is thinking…').",
+    "Live Work bar now always shows 'Live Work' instead of pulsing 'IVX is working…'.",
+    "Removed 'Sending' / 'Uploading' status labels from message bubbles; kept 'Sent', 'Seen', 'Delivered', 'Not sent'.",
+    "InvestorSupportChat no longer shows connecting/waiting/typing banners; opens directly on latest message.",
+    "iOS ChatTabView opens the AI room link directly without a welcome-banner delay and labels it 'Open room — latest first'."
+  ],
+  "verification": {
+    "expo_tsc": "bunx tsc --noEmit -p tsconfig.json → exit 0",
+    "ios_build": "runChecks({ appPath: 'ios-ivx' }) → passed",
+    "backend_health": "https://api.ivxholding.com/health → 200 healthy",
+    "public_chat": "POST /api/public/chat → 200 ok, answer returned",
+    "live_commit": "1aa49ae5",
+    "live_boot_time": "2026-07-07T00:18:30.270Z"
+  },
+  "remaining": "Expo runChecks reports a structural false-positive ('backend/hono.ts missing') while the file exists at backend/hono.ts; this does not affect the chat fix."
+}
