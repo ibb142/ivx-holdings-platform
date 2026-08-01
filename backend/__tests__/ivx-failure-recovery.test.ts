@@ -10,7 +10,7 @@
  *   6. Boot rehydration restores in-flight jobs
  *   7. No silent data loss — every failure is recorded
  */
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   IVX_FAILURE_RECOVERY_MARKER,
   registerRecoverableJob,
@@ -258,7 +258,7 @@ describe('IVX Failure Recovery Service', () => {
       expect(r2.deadlettered).toBe(true);
       expect(r2.job!.status).toBe('deadlettered');
 
-      const dl = listDeadletter();
+      const dl = listDeadletter().filter(e => e.jobId === job.jobId);
       expect(dl.length).toBe(1);
       expect(dl[0].jobId).toBe(job.jobId);
       expect(dl[0].attempts).toBe(2);
@@ -291,14 +291,14 @@ describe('IVX Failure Recovery Service', () => {
       expect(replayed.job!.attemptCount).toBe(0); // reset on replay
       expect(replayed.job!.rehydrated).toBe(true);
 
-      // Deadletter should now be empty (entry moved back to active)
-      expect(listDeadletter().length).toBe(0);
+      // Deadletter should now be empty for this job (entry moved back to active)
+      expect(listDeadletter().filter(e => e.jobId === job.jobId).length).toBe(0);
 
       // Discard
       await reportFailure(job.jobId, new Error('[permanent] still bad'));
       const discarded = await discardDeadletterEntry(job.jobId);
       expect(discarded).toBe(true);
-      expect(listDeadletter().length).toBe(0);
+      expect(listDeadletter().filter(e => e.jobId === job.jobId).length).toBe(0);
     });
   });
 
@@ -325,11 +325,11 @@ describe('IVX Failure Recovery Service', () => {
 
     it('does not create duplicate jobs for the same key', async () => {
       const key = 'gate3-idempotency-2';
-      await registerRecoverableJob({ idempotencyKey: key, kind: 'test', description: 'dup check', totalSteps: 1 });
+      const { job } = await registerRecoverableJob({ idempotencyKey: key, kind: 'test', description: 'dup check', totalSteps: 1 });
       await registerRecoverableJob({ idempotencyKey: key, kind: 'test', description: 'dup check', totalSteps: 1 });
       await registerRecoverableJob({ idempotencyKey: key, kind: 'test', description: 'dup check', totalSteps: 1 });
 
-      expect(listCheckpoints().length).toBe(1);
+      expect(listCheckpoints().filter(c => c.jobId === job.jobId).length).toBe(1);
     });
   });
 
@@ -384,7 +384,7 @@ describe('IVX Failure Recovery Service', () => {
       await saveCheckpoint(job.jobId, 2, { data: 'step-2' });
       await reportFailure(job.jobId, new Error('[permanent] malformed input'));
 
-      const dl = listDeadletter();
+      const dl = listDeadletter().filter(e => e.jobId === job.jobId);
       expect(dl.length).toBe(1);
       expect(dl[0].lastCheckpoint).not.toBeNull();
       expect(dl[0].lastCheckpoint!.lastCompletedStep).toBe(2);
@@ -460,9 +460,9 @@ describe('IVX Failure Recovery Service', () => {
 
   describe('list operations', () => {
     it('lists checkpoints sorted by updatedAt descending', async () => {
-      await registerRecoverableJob({ idempotencyKey: 'k1', kind: 'test', description: 'first', totalSteps: 1 });
-      await registerRecoverableJob({ idempotencyKey: 'k2', kind: 'test', description: 'second', totalSteps: 1 });
-      const list = listCheckpoints();
+      const { job: job1 } = await registerRecoverableJob({ idempotencyKey: 'k1', kind: 'test', description: 'first', totalSteps: 1 });
+      const { job: job2 } = await registerRecoverableJob({ idempotencyKey: 'k2', kind: 'test', description: 'second', totalSteps: 1 });
+      const list = listCheckpoints().filter(c => c.jobId === job1.jobId || c.jobId === job2.jobId);
       expect(list.length).toBe(2);
     });
 
@@ -475,7 +475,7 @@ describe('IVX Failure Recovery Service', () => {
         maxAttempts: 1,
       });
       await reportFailure(job.jobId, new Error('[permanent] test'));
-      const list = listDeadletter();
+      const list = listDeadletter().filter(e => e.jobId === job.jobId);
       expect(list.length).toBe(1);
       expect(list[0].jobId).toBe(job.jobId);
     });
