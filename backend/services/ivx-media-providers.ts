@@ -23,7 +23,7 @@ export type MediaProviderSelection = {
   /** Which provider endpoint the call uses (owner-controlled only). */
   endpoint: string;
   /** Owner-held auth source the backend uses for this endpoint. Never a Rork toolkit secret. */
-  authSource: 'AI_GATEWAY_API_KEY' | 'OPENAI_API_KEY' | 'MESHY_API_KEY' | 'TRIPO_API_KEY' | 'PROCEDURAL';
+  authSource: 'IVX_AI_GATEWAY_KEY' | 'OPENAI_API_KEY' | 'MESHY_API_KEY' | 'TRIPO_API_KEY' | 'PROCEDURAL';
   /** Plain-English unit the cost is measured in. */
   costUnit: string;
   /** Estimated USD cost for one typical unit of work. */
@@ -61,7 +61,7 @@ const SELECTIONS: Record<StaticCapability, MediaProviderSelection> = {
     modelId: 'gpt-4o-mini',
     providerName: 'openai',
     endpoint: '/chat/completions (multimodal)',
-    authSource: 'AI_GATEWAY_API_KEY',
+    authSource: 'IVX_AI_GATEWAY_KEY',
     costUnit: 'per image analysis (~1 image + 1k prompt tokens)',
     // gpt-4o-mini: $0.15/M input, $0.60/M output. ~1.5k in + 0.5k out ≈ $0.0005.
     estimatedUnitCostUsd: 0.0005,
@@ -75,7 +75,7 @@ const SELECTIONS: Record<StaticCapability, MediaProviderSelection> = {
     modelId: 'gemini-3-flash',
     providerName: 'google',
     endpoint: '/chat/completions (video/frame input)',
-    authSource: 'AI_GATEWAY_API_KEY',
+    authSource: 'IVX_AI_GATEWAY_KEY',
     costUnit: 'per ~8 extracted frames + timeline prompt',
     // gemini-3-flash: $0.50/M in, $3/M out. ~8 frames (~6k img tokens) + 2k text
     // in, 1k out ≈ $0.007.

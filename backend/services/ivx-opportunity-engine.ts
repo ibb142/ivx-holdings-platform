@@ -130,7 +130,7 @@ export async function collectOpportunitySignals(): Promise<OpportunitySignalSnap
  * derived from the environment (no fake "connected" claims).
  */
 export function buildResearchLayer(): ResearchSource[] {
-  const hasAiGateway = Boolean(process.env.AI_GATEWAY_API_KEY);
+  const hasAiGateway = Boolean(process.env.IVX_AI_GATEWAY_KEY);
   const hasSupabase = Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
   return [
     {
@@ -149,7 +149,7 @@ export function buildResearchLayer(): ResearchSource[] {
       status: hasAiGateway ? 'online' : 'unavailable',
       detail: hasAiGateway
         ? 'Available through the AI gateway for second-opinion analysis on a flagged opportunity.'
-        : 'Needs AI_GATEWAY_API_KEY (or toolkit key) to query external models.',
+        : 'Needs IVX_AI_GATEWAY_KEY (or toolkit key) to query external models.',
     },
     {
       id: 'market-news',

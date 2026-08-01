@@ -285,7 +285,7 @@ const CONNECTION_SPECS: ConnectionSpec[] = [
     id: 'ai_gateway',
     label: 'AI Gateway',
     purpose: 'Powers IVX reasoning, chat answers, and document analysis.',
-    requiredSecrets: ['AI_GATEWAY_API_KEY'],
+    requiredSecrets: ['IVX_AI_GATEWAY_KEY'],
     optionalSecrets: ['OPENAI_API_KEY'],
     requiredPermissions: ['A valid AI gateway / model provider key'],
     fixInstructions: [

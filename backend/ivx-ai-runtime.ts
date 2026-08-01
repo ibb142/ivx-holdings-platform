@@ -174,7 +174,7 @@ function getIVXAIGatewayApiKey(): string {
   //   1. IVX_OPENAI_API_KEY    — owner-provided OpenAI key (independence, direct)
   //   2. IVX_ANTHROPIC_API_KEY — owner-provided Anthropic key (independence, direct)
   //   3. IVX_AI_GATEWAY_KEY    — owner-provided Vercel AI Gateway key (independence, gateway)
-  //   4. AI_GATEWAY_API_KEY    — Rork-managed Vercel gateway (legacy)
+  //   4. IVX_AI_GATEWAY_KEY    — owner-provided Vercel gateway key (independence)
   //   5. OPENAI_API_KEY        — generic alias (legacy)
   //
   // When IVX_OPENAI_API_KEY is set, the key prefix (sk-) auto-routes to
@@ -191,8 +191,8 @@ function getIVXAIGatewayApiKey(): string {
   const ivxGatewayKey = readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   if (ivxGatewayKey) return ivxGatewayKey;
 
-  // Legacy fallback: Rork-managed Vercel AI Gateway key
-  return readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
+  // Legacy fallback: owner-provided Vercel AI Gateway key
+  return readTrimmed(process.env.IVX_AI_GATEWAY_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
 }
 
 /**
@@ -513,7 +513,7 @@ export function getIVXAIKeySource(): string {
   if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';
   if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';
   if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';
-  if (readTrimmed(process.env.AI_GATEWAY_API_KEY)) return 'AI_GATEWAY_API_KEY';
+  if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';
   if (readTrimmed(process.env.OPENAI_API_KEY)) return 'OPENAI_API_KEY';
   return 'none';
 }

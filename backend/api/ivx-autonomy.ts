@@ -79,7 +79,7 @@ export async function handleIVXAutonomyStatusRequest(request: Request): Promise<
         sse_replay: { envReady: true },
         token_budget: { envReady: true },
         ai_providers: {
-          envReady: envPresence('AI_GATEWAY_API_KEY'),
+          envReady: envPresence('IVX_AI_GATEWAY_KEY'),
           fallbacksConfigured: {
             openai_direct: envPresence('OPENAI_API_KEY'),
             anthropic_direct: envPresence('ANTHROPIC_API_KEY'),

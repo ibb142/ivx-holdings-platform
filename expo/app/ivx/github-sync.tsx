@@ -31,7 +31,7 @@ type SyncStage =
 
 type DeployProofStage = 'idle' | 'running' | 'verified' | 'partial' | 'failed';
 
-/** Full delivery-chain proof from POST /api/ivx/admin/sync-rork-to-github. */
+/** Full delivery-chain proof from POST /api/ivx/admin/sync-github. */
 type DeployProofResponse = {
   SYNC_HTTP_STATUS?: number;
   GITHUB_PUSHED?: string;
@@ -214,7 +214,7 @@ export default function IVXGithubSyncScreen() {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/ivx/admin/sync-rork-to-github`, {
+      const response = await fetch(`${API_BASE}/api/ivx/admin/sync-github`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -261,7 +261,7 @@ export default function IVXGithubSyncScreen() {
           : Colors.info;
   const deployStatusLabel =
     deployStage === 'running' ? 'Pushing → deploying → verifying /health…'
-      : deployStage === 'verified' ? 'Verified live — Rork → GitHub → Render complete'
+      : deployStage === 'verified' ? 'Verified live — GitHub → Render complete'
         : deployStage === 'partial' ? 'Pushed & deploying — /health not matched yet'
           : deployStage === 'failed' ? 'Full sync + deploy proof failed'
             : 'Not run yet';

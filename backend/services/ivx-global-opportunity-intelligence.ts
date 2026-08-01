@@ -458,7 +458,7 @@ export async function loadTodayRecords(): Promise<IntelligenceRecord[]> {
 // ── Web Search via AI Gateway ──────────────────────────────────────────────
 
 const AI_GATEWAY_URL = process.env.IVX_AI_BASE_URL || process.env.IVX_AI_GATEWAY_URL || (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith('vck_') ? 'https://ai-gateway.vercel.sh/v1' : 'https://api.openai.com/v1');
-const AI_GATEWAY_KEY = process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || '';
+const AI_GATEWAY_KEY = process.env.OPENAI_API_KEY || process.env.IVX_AI_GATEWAY_KEY || '';
 
 type WebSearchResult = {
   title: string;

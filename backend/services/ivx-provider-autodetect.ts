@@ -26,9 +26,9 @@ function isRorkDomain(url: string): boolean {
     || lower.includes('rork-direct.workers.dev');
 }
 
-/** Returns the API key from OPENAI_API_KEY or AI_GATEWAY_API_KEY (fallback). */
+/** Returns the API key from OPENAI_API_KEY or IVX_AI_GATEWAY_KEY (fallback). */
 export function getIVXApiKey(): string {
-  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
 }
 
 /** Detect the provider type from the key prefix. */

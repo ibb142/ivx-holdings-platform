@@ -227,7 +227,7 @@ export async function buildHandoffManifest(): Promise<HandoffManifest> {
     if (cap.missing) ownerActionsRequired.push(`[${cap.capability}] ${cap.missing}`);
   }
   if (!aiConfigured) {
-    ownerActionsRequired.push('[Owner AI brain] AI_GATEWAY_API_KEY must be set so the operator can reason and synthesize.');
+    ownerActionsRequired.push('[Owner AI brain] IVX_AI_GATEWAY_KEY must be set so the operator can reason and synthesize.');
   }
   if (!databaseConfigured) {
     ownerActionsRequired.push('[Persistence] DATABASE_URL / POSTGRES_URL / SUPABASE_DB_URL for durable state.');
