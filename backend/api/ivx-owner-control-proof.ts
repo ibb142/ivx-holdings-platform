@@ -10,7 +10,7 @@
  *
  * The response is the single source of truth for:
  *   - ownerControl: does the owner-controlled backend expose this proof?
- *   - rorkRequired: is Rork still a production runtime dependency?
+ *   - externalRequired: is an external platform still a production runtime dependency?
  *   - githubConnected: can the backend reach GitHub with the configured token?
  *   - renderConnected: can the backend reach the Render service API?
  *   - supabaseConnected: can the backend reach the Supabase REST API?
@@ -141,11 +141,11 @@ async function probeSupabase(): Promise<ConnectivityProbe> {
 }
 
 /**
- * Detect whether Rork is still a production runtime dependency by reading the
+ * Detect whether an external platform is still a production runtime dependency by reading the
  * actual files the bundler runs. We do NOT trust claims — we read the bytes.
  */
-async function detectRorkRuntimeDependency(): Promise<{
-  rorkRequired: boolean;
+async function detectExternalRuntimeDependency(): Promise<{
+  externalRequired: boolean;
   references: string[];
 }> {
   const references: string[] = [];
@@ -156,7 +156,7 @@ async function detectRorkRuntimeDependency(): Promise<{
       return { text: () => Promise.resolve(content) } as Response;
     })).text().catch(() => '');
     if (metro.includes('withRorkMetro') || metro.includes('@rork-ai/toolkit-sdk')) {
-      references.push('expo/metro.config.js: uses withRorkMetro / @rork-ai/toolkit-sdk');
+      references.push('expo/metro.config.js: uses legacy toolkit wrapper');
     }
   } catch {
     // ignore
@@ -165,23 +165,23 @@ async function detectRorkRuntimeDependency(): Promise<{
     const fs = await import('node:fs/promises');
     const pkg = await fs.readFile('expo/package.json', 'utf8').catch(() => '');
     if (pkg.includes('@rork-ai/toolkit-sdk')) {
-      references.push('expo/package.json: @rork-ai/toolkit-sdk dependency present');
+      references.push('expo/package.json: legacy toolkit SDK dependency present');
     }
-    const rorkJson = await fs.readFile('rork.json', 'utf8').catch(() => '');
-    if (rorkJson) {
-      references.push('rork.json: present at project root');
+    const legacyConfig = await fs.readFile('rork.json', 'utf8').catch(() => '');
+    if (legacyConfig) {
+      references.push('rork.json: legacy config present at project root');
     }
   } catch {
     // ignore
   }
   // Public env vars that point at Rork infrastructure are also a dependency.
-  const rorkEnvVars = Object.keys(process.env).filter(
+  const legacyEnvVars = Object.keys(process.env).filter(
     (k) => /^EXPO_PUBLIC_RORK_/.test(k) || k === 'EXPO_PUBLIC_TOOLKIT_URL',
   );
-  if (rorkEnvVars.length > 0) {
-    references.push(`env: ${rorkEnvVars.join(', ')} still configured`);
+  if (legacyEnvVars.length > 0) {
+    references.push(`env: ${legacyEnvVars.join(', ')} still configured`);
   }
-  return { rorkRequired: references.length > 0, references };
+  return { externalRequired: references.length > 0, references };
 }
 
 export async function handleIVXOwnerControlProofRequest(request: Request): Promise<Response> {
@@ -190,7 +190,7 @@ export async function handleIVXOwnerControlProofRequest(request: Request): Promi
     probeGitHub(),
     probeRender(),
     probeSupabase(),
-    detectRorkRuntimeDependency(),
+    detectExternalRuntimeDependency(),
   ]);
 
   const commit = (process.env.IVX_LIVE_COMMIT_SHA ?? process.env.COMMIT_SHA ?? 'unknown').trim();
@@ -199,7 +199,7 @@ export async function handleIVXOwnerControlProofRequest(request: Request): Promi
   const payload = {
     ok: true,
     ownerControl: true, // this endpoint existing IS the proof the owner backend is in control
-    rorkRequired: rork.rorkRequired,
+    externalRequired: rork.rorkRequired,
     rorkReferences: rork.references,
     githubConnected: github.connected,
     githubDetail: github.detail,

@@ -21,7 +21,7 @@
  * GET  /api/ivx/agents/differentiation/test     — agent differentiation test
  * GET  /api/ivx/agents/failure/isolation        — failure isolation test
  * GET  /api/ivx/agents/pause/isolation          — pause isolation test
- * GET  /api/ivx/agents/rork-independence        — Rork independence check
+ * GET  /api/ivx/agents/independence-check       — Independence check
  * GET  /api/ivx/agents/runs                     — list run records
  * GET  /api/ivx/agents/runs/:agentId            — list run records for agent
  * POST /api/ivx/agents/execute-all              — execute one run for all 100 agents (owner only)
@@ -52,7 +52,7 @@ import {
   verifyPermissionMatrix,
   testFailureIsolation,
   testPauseIsolation,
-  verifyRorkIndependence,
+  verifyIndependence,
   getRunRecords,
   getRunRecordCount,
   getRunRecordsWithEvidence,
@@ -374,8 +374,8 @@ export function registerAgentRoutes(app: Hono): void {
     });
   });
 
-  app.get('/api/ivx/agents/rork-independence', (c) => {
-    const result = verifyRorkIndependence();
+  app.get('/api/ivx/agents/independence-check', (c) => {
+    const result = verifyIndependence();
     return c.json({
       ok: true,
       marker: IVX_AGENT_API_MARKER,

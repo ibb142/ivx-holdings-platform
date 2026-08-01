@@ -52,7 +52,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB GitHub blob limit
 export interface GithubSyncOptions {
   /** GitHub token with `repo` scope. */
   token: string;
-  /** Owner/repo slug, e.g. `ibb142/rork-app`. */
+  /** Owner/repo slug, e.g. `ibb142/ivx-holdings-platform`. */
   repoSlug: string;
   /** Target branch (defaults handled by caller, e.g. `main`). */
   branch: string;

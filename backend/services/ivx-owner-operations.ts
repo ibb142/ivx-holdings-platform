@@ -4,7 +4,7 @@
  * The owner is NOT a developer. This layer lets IVX complete owner operations
  * through tools + plain-English guidance instead of terminal commands. It is a
  * read-only composition layer over engines already shipped — the tool/credential
- * availability checker (BLOCK 35), the Rork-independence engine (BLOCK 43/47),
+ * availability checker (BLOCK 35), the independence engine (BLOCK 43/47),
  * the operator handoff manifest, and the live connection probes (Supabase REST,
  * GitHub API, Render API) — plus three new non-developer surfaces:
  *
@@ -15,7 +15,7 @@
  *   3. One-click action catalog — each safe owner action with what-it-does, risk,
  *                                 whether owner approval is required, and the
  *                                 rollback path — in plain English.
- *   4. Rork-removal preflight   — verifies the connections the cutover needs and
+ *   4. Platform removal preflight   — verifies the connections the cutover needs and
  *                                 returns BLOCKED_MISSING_OWNER_CONNECTION (naming
  *                                 the exact missing connection) when not ready.
  *   5. Evidence report          — normalizes any operation result into the four
@@ -151,7 +151,7 @@ export type OperationEvidenceReport = {
   secretValuesReturned: false;
 };
 
-export type RorkRemovalPreflight = {
+export type PlatformRemovalPreflight = {
   marker: string;
   generatedAt: string;
   ready: boolean;
@@ -172,7 +172,7 @@ export type OwnerOperationsDashboard = {
   generatedAt: string;
   vault: OwnerConnectionVault;
   actions: OwnerActionCatalog;
-  rorkRemoval: RorkRemovalPreflight;
+  platformRemoval: PlatformRemovalPreflight;
   /** Plain-English readiness headline for the owner. */
   headline: string;
   secretValuesReturned: false;
@@ -569,14 +569,14 @@ export function buildOwnerActionCatalog(): OwnerActionCatalog {
       requiresConnections: ['render'],
     },
     {
-      id: 'remove_rork',
-      label: 'Remove Rork management',
-      whatHappens: 'IVX verifies your GitHub + Render connections, then runs the prepared cutover that removes the Rork build dependency on your own repository.',
+      id: 'remove_platform',
+      label: 'Remove external platform management',
+      whatHappens: 'IVX verifies your GitHub + Render connections, then runs the prepared cutover that removes the external platform build dependency on your own repository.',
       riskLevel: 'high',
       requiresApproval: true,
       approvalCategory: 'production_deploy',
       rollbackPath: 'The cutover is committed as one change you can revert in GitHub; your live site keeps running throughout.',
-      backingRoute: 'GET /api/ivx/owner-operations/rork-removal/preflight',
+      backingRoute: 'GET /api/ivx/owner-operations/removal-preflight',
       requiresConnections: ['github', 'render'],
     },
     {
@@ -618,11 +618,11 @@ const CONNECTION_LABELS: Record<ConnectionId, string> = {
 };
 
 /**
- * Build the Rork-removal preflight. The cutover needs GitHub + Render. When a
+ * Build the Platform removal preflight. The cutover needs GitHub + Render. When a
  * required connection is missing it returns BLOCKED_MISSING_OWNER_CONNECTION
  * naming the exact missing connection — never a generic failure.
  */
-export function buildRorkRemovalPreflight(vault: OwnerConnectionVault): RorkRemovalPreflight {
+export function buildPlatformRemovalPreflight(vault: OwnerConnectionVault): PlatformRemovalPreflight {
   const required: ConnectionId[] = ['github', 'render'];
   const requiredConnections = required.map((id) => {
     const card = vault.connections.find((c) => c.id === id);
@@ -702,12 +702,12 @@ export function buildOperationEvidenceReport(input: OperationEvidenceInput): Ope
   };
 }
 
-function buildHeadline(vault: OwnerConnectionVault, rork: RorkRemovalPreflight): string {
+function buildHeadline(vault: OwnerConnectionVault, rork: PlatformRemovalPreflight): string {
   if (vault.allConfigured) {
     return 'All owner connections are configured. IVX can run every owner operation; tap "Test all systems" to confirm each is live.';
   }
   const missing = vault.missingConnections.map((id) => CONNECTION_LABELS[id]).join(', ');
-  const rorkNote = rork.ready ? '' : ' Rork removal is blocked until GitHub + Render are connected.';
+  const rorkNote = removal.ready ? '' : ' Platform removal is blocked until GitHub + Render are connected.';
   return `${vault.summary.connectedOrConfigured} of ${vault.summary.total} connections are configured. Add the missing connection(s) to unlock every operation: ${missing}.${rorkNote}`;
 }
 
@@ -721,15 +721,15 @@ export function buildOwnerOperationsDashboard(
 ): OwnerOperationsDashboard & { toolAvailability: ToolAvailabilityReport } {
   const vault = buildOwnerConnectionVault(env);
   const actions = buildOwnerActionCatalog();
-  const rorkRemoval = buildRorkRemovalPreflight(vault);
+  const platformRemoval = buildPlatformRemovalPreflight(vault);
   const toolAvailability = checkToolAvailability(env);
   return {
     marker: IVX_OWNER_OPERATIONS_MARKER,
     generatedAt: nowIso(),
     vault,
     actions,
-    rorkRemoval,
-    headline: buildHeadline(vault, rorkRemoval),
+    platformRemoval,
+    headline: buildHeadline(vault, platformRemoval),
     toolAvailability,
     secretValuesReturned: false,
   };

@@ -21,14 +21,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import {
-  getRorkIndependenceReport,
+  getIndependenceReport,
   type IndependencePhase,
   type KeptSystem,
   type PhaseReadiness,
   type PhaseRequirement,
-  type RorkDependency,
-  type RorkIndependenceReport,
-} from '@/src/modules/ivx-developer/rorkIndependenceService';
+  type ExternalDependency,
+  type IndependenceReport,
+} from '@/src/modules/ivx-developer/independenceService';
 
 const POLL_INTERVAL_MS = 25000;
 
@@ -78,7 +78,7 @@ function PhaseCard({ phase, isCurrent }: { phase: IndependencePhase; isCurrent: 
         </View>
       </View>
       <Text style={styles.phaseObjective}>{phase.objective}</Text>
-      <Text style={styles.phaseRork}><Text style={styles.phaseRorkLabel}>Rork: </Text>{phase.rorkRole}</Text>
+      <Text style={styles.phaseExternal}><Text style={styles.phaseExternalLabel}>Rork: </Text>{phase.externalRole}</Text>
       <View style={styles.reqList}>
         {phase.requirements.map((r, i) => (
           <ReqRow key={i} req={r} />
@@ -105,7 +105,7 @@ function KeptSystemRow({ system }: { system: KeptSystem }) {
   );
 }
 
-function DependencyRow({ dep }: { dep: RorkDependency }) {
+function DependencyRow({ dep }: { dep: ExternalDependency }) {
   return (
     <View style={styles.kvRow}>
       {dep.present ? (
@@ -122,12 +122,12 @@ function DependencyRow({ dep }: { dep: RorkDependency }) {
   );
 }
 
-function RorkIndependenceContent() {
+function IndependenceContent() {
   const insets = useSafeAreaInsets();
 
-  const query = useQuery<RorkIndependenceReport | null>({
-    queryKey: ['ivx-rork-independence'],
-    queryFn: getRorkIndependenceReport,
+  const query = useQuery<IndependenceReport | null>({
+    queryKey: ['ivx-independence-status'],
+    queryFn: getIndependenceReport,
     refetchInterval: POLL_INTERVAL_MS,
   });
 
@@ -139,7 +139,7 @@ function RorkIndependenceContent() {
       style={styles.screen}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
       refreshControl={<RefreshControl tintColor={Colors.primary} refreshing={query.isFetching} onRefresh={onRefresh} />}
-      testID="ivx-rork-independence-scroll"
+      testID="ivx-independence-status-scroll"
     >
       <View style={styles.heroCard}>
         <View style={styles.heroHeaderRow}>
@@ -239,11 +239,11 @@ function RorkIndependenceContent() {
   );
 }
 
-export default function RorkIndependenceScreen() {
+export default function IndependenceScreen() {
   return (
     <ErrorBoundary>
       <Stack.Screen options={{ title: 'Rork Independence', headerStyle: { backgroundColor: Colors.background }, headerTintColor: Colors.text }} />
-      <RorkIndependenceContent />
+      <IndependenceContent />
     </ErrorBoundary>
   );
 }
@@ -277,8 +277,8 @@ const styles = StyleSheet.create({
   readinessPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   readinessPillText: { color: Colors.black, fontSize: 10, fontWeight: '800' as const },
   phaseObjective: { color: Colors.textSecondary, fontSize: 12.5, marginTop: 8, lineHeight: 18 },
-  phaseRork: { color: Colors.textTertiary, fontSize: 12, marginTop: 6 },
-  phaseRorkLabel: { color: Colors.textSecondary, fontWeight: '700' as const },
+  phaseExternal: { color: Colors.textTertiary, fontSize: 12, marginTop: 6 },
+  phaseExternalLabel: { color: Colors.textSecondary, fontWeight: '700' as const },
   reqList: { marginTop: 10, gap: 8 },
   reqRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   reqCopy: { flex: 1 },

@@ -344,8 +344,8 @@ export default function IVXWorkerProofRoute() {
                 />
                 <StatRow
                   label="Rork required as executor"
-                  value={data.status.rorkRequiredAsExecutor ? 'YES' : 'NO (self-hosted)'}
-                  tone={data.status.rorkRequiredAsExecutor ? Colors.warning : Colors.success}
+                  value={data.status.externalRequiredAsExecutor ? 'YES' : 'NO (self-hosted)'}
+                  tone={data.status.externalRequiredAsExecutor ? Colors.warning : Colors.success}
                 />
                 <StatRow label="Queue depth" value={String(data.jobs.length)} />
               </View>

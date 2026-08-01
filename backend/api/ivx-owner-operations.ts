@@ -1,11 +1,11 @@
 /**
  * IVX Owner Operations API (owner-only, non-developer).
  *
- *   GET  /api/ivx/owner-operations/dashboard              → vault + actions + rork preflight + headline
+ *   GET  /api/ivx/owner-operations/dashboard              → vault + actions + removal preflight + headline
  *   GET  /api/ivx/owner-operations/connections            → credential vault (status only, never values)
  *   POST /api/ivx/owner-operations/connections/test       { connection } → live connection test
  *   GET  /api/ivx/owner-operations/actions                → one-click action catalog
- *   GET  /api/ivx/owner-operations/rork-removal/preflight → Rork-removal readiness / BLOCKED_MISSING_OWNER_CONNECTION
+ *   GET  /api/ivx/owner-operations/removal-preflight → Platform removal readiness / BLOCKED_MISSING_OWNER_CONNECTION
  *
  * Read-only + presence-only. Never returns or logs a secret value. Same owner
  * guard as the rest of the IVX developer surface.
@@ -13,7 +13,7 @@
 import {
   buildOwnerConnectionVault,
   buildOwnerActionCatalog,
-  buildRorkRemovalPreflight,
+  buildPlatformRemovalPreflight,
   buildOwnerOperationsDashboard,
   testOwnerConnection,
   type ConnectionId,
@@ -108,13 +108,13 @@ export async function handleOwnerOperationsActionsRequest(request: Request): Pro
   }
 }
 
-/** GET /api/ivx/owner-operations/rork-removal/preflight — Rork-removal readiness. */
-export async function handleOwnerOperationsRorkRemovalPreflightRequest(request: Request): Promise<Response> {
+/** GET /api/ivx/owner-operations/removal-preflight — Platform removal readiness. */
+export async function handleOwnerOperationsRemovalPreflightRequest(request: Request): Promise<Response> {
   const auth = await requireOwner(request);
   if (!auth.ok) return auth.response;
   try {
     const vault = buildOwnerConnectionVault();
-    const preflight = buildRorkRemovalPreflight(vault);
+    const preflight = buildPlatformRemovalPreflight(vault);
     return ownerOnlyJson({ ok: true, preflight });
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Failed to build Rork-removal preflight.' }, 500);
