@@ -17,6 +17,7 @@ import {
 
 export { getProviderHealth, type IVXProviderHealth };
 import { randomUUID } from 'crypto';
+import { isBlockedDomain } from './services/ivx-domain-blocklist';
 
 export type IVXAIModule = 'owner-room' | 'p0-ai-assistant' | 'p1-plan-creator' | 'public-chat' | string;
 export type IVXAIMessageRole = 'user' | 'assistant';
@@ -230,9 +231,9 @@ function getIVXAIGatewayRootUrl(): string {
   if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) {
     return 'https://api.anthropic.com/v1';
   }
-  // Explicit gateway URL override (only if not a Rork domain)
+  // Explicit gateway URL override (only if not a blocked external domain)
   const configured = readTrimmed(process.env.IVX_AI_GATEWAY_URL);
-  if (configured && !isRorkDomain(configured)) {
+  if (configured && !isBlockedDomain(configured)) {
     return configured;
   }
   // Auto-detect from key prefix
@@ -252,14 +253,6 @@ function getGatewayBaseUrl(): string | null {
   return buildGatewayBaseUrl(getIVXAIGatewayRootUrl());
 }
 
-function isRorkDomain(url: string): boolean {
-  const lower = url.toLowerCase();
-  return lower.includes('toolkit.rork.com')
-    || lower.includes('api.rork.com')
-    || lower.endsWith('.rork.com')
-    || lower.includes('rork-direct.workers.dev');
-}
-
 function getGatewayBaseUrlCandidates(): string[] {
   const configured = getGatewayBaseUrl();
   // Auto-detect fallback candidate based on key prefix.
@@ -270,9 +263,9 @@ function getGatewayBaseUrlCandidates(): string[] {
   const fallbackCandidate = key && isVercelGatewayKey(key)
     ? buildGatewayBaseUrl(OPENAI_DIRECT_BASE)
     : buildGatewayBaseUrl(VERCEL_AI_GATEWAY_BASE);
-  // Rork independence guard: any candidate that resolves to a Rork domain is
-  // filtered out, so a stale env var cannot re-route through toolkit.rork.com.
-  const candidates = [configured, fallbackCandidate].filter((c): c is string => c !== null && !isRorkDomain(c));
+  // Independence guard: any candidate that resolves to a blocked external
+  // domain is filtered out, so a stale env var cannot re-route there.
+  const candidates = [configured, fallbackCandidate].filter((c): c is string => c !== null && !isBlockedDomain(c));
   return [...new Set(candidates)];
 }
 
@@ -473,8 +466,8 @@ export function validateIVXAIStartup(): IVXAIStartupValidation {
   if (!rootUrl) {
     errors.push('AI gateway root URL is empty');
   }
-  if (rootUrl && isRorkDomain(rootUrl)) {
-    errors.push('AI gateway URL points to a blocked Rork domain');
+  if (rootUrl && isBlockedDomain(rootUrl)) {
+    errors.push('AI gateway URL points to a blocked external domain');
   }
   // Verify the adapter is spec v3 compatible (v4 is rejected by ai@6)
   const majorVersion = Number.parseInt(adapterVersion.split('.')[0] ?? '0', 10);
