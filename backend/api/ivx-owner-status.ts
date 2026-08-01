@@ -72,7 +72,7 @@ const ENV_AUDIT: { name: string; feature: string; aliases?: string[] }[] = [
   { name: 'DATABASE_URL', feature: 'Postgres connection (CRM / pipeline persistence)', aliases: ['POSTGRES_URL', 'SUPABASE_DB_URL'] },
   { name: 'SUPABASE_URL', feature: 'Supabase REST endpoint for durable persistence', aliases: ['EXPO_PUBLIC_SUPABASE_URL'] },
   { name: 'SUPABASE_SERVICE_ROLE_KEY', feature: 'Server-side Supabase reads/writes + storage' },
-  { name: 'OPENAI_API_KEY', feature: 'AI reasoning (Owner AI, public chat, synthesis)', aliases: ['AI_GATEWAY_API_KEY'] },
+  { name: 'OPENAI_API_KEY', feature: 'AI reasoning (Owner AI, public chat, synthesis)', aliases: ['IVX_AI_GATEWAY_KEY'] },
   { name: 'RESEND_API_KEY', feature: 'Outbound email (capital outreach delivery)', aliases: ['SENDGRID_API_KEY', 'SMTP_URL', 'SMTP_HOST'] },
   { name: 'IVX_OWNER_REGISTRATION_EMAILS', feature: 'Owner allowlist that promotes a session to owner' },
   { name: 'GITHUB_TOKEN', feature: 'Code commit/push + rollback tag' },

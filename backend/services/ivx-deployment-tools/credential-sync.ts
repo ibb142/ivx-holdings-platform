@@ -82,7 +82,7 @@ const CREDENTIAL_REGISTRY: Array<{
   { name: 'AWS_REGION', category: 'aws', required: false, envName: 'AWS_REGION' },
   { name: 'S3_BUCKET_NAME', category: 'aws', required: false, envName: 'S3_BUCKET_NAME' },
   { name: 'CLOUDFRONT_DISTRIBUTION_ID', category: 'aws', required: false, envName: 'CLOUDFRONT_DISTRIBUTION_ID' },
-  { name: 'AI_GATEWAY_API_KEY', category: 'ai', required: false, envName: 'AI_GATEWAY_API_KEY' },
+  { name: 'IVX_AI_GATEWAY_KEY', category: 'ai', required: false, envName: 'IVX_AI_GATEWAY_KEY' },
   { name: 'JWT_SECRET', category: 'security', required: false, envName: 'JWT_SECRET' },
   { name: 'APP_SECRET', category: 'security', required: false, envName: 'APP_SECRET' },
   { name: 'OWNER_NEW_PASSWORD', category: 'security', required: false, envName: 'OWNER_NEW_PASSWORD' },

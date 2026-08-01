@@ -93,7 +93,7 @@ export const IVX_REQUESTED_PRODUCTION_ACCESS_ENV_NAMES = [
   'S3_BUCKET_NAME',
   'MINIO_PASSWORD',
   'CLOUDFRONT_DISTRIBUTION_ID',
-  'AI_GATEWAY_API_KEY',
+  'IVX_AI_GATEWAY_KEY',
   'STRIPE_API_KEY',
   'APP_SECRET',
 ] as const;
@@ -375,7 +375,7 @@ export const IVX_CREDENTIAL_REQUEST_MANIFEST: readonly IVXCredentialManifestEntr
     description: 'CloudFront distribution ID for IVX CDN checks.',
   },
   {
-    name: 'AI_GATEWAY_API_KEY',
+    name: 'IVX_AI_GATEWAY_KEY',
     integration: 'ai_gateway',
     accessLevel: 'backend_secret',
     secret: true,

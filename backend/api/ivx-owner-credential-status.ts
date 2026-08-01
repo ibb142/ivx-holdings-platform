@@ -97,11 +97,11 @@ function buildCredentialMatrix(): CredentialMatrixRow[] {
   // RENDER_WORKER_SERVICE_ID — 0 backend readers → NOT REQUIRED
   rows.push(notRequired('RENDER_WORKER_SERVICE_ID', 'Worker service ID (hardcoded in code)'));
 
-  // AI_GATEWAY_API_KEY — required for AI runtime
-  if (envPresent('AI_GATEWAY_API_KEY')) {
-    rows.push({ ...present('AI_GATEWAY_API_KEY', 'AI gateway / model inference', both), verificationResult: 'key present' });
+  // IVX_AI_GATEWAY_KEY — required for AI runtime
+  if (envPresent('IVX_AI_GATEWAY_KEY')) {
+    rows.push({ ...present('IVX_AI_GATEWAY_KEY', 'AI gateway / model inference', both), verificationResult: 'key present' });
   } else {
-    rows.push(missing('AI_GATEWAY_API_KEY', 'AI gateway / model inference', both));
+    rows.push(missing('IVX_AI_GATEWAY_KEY', 'AI gateway / model inference', both));
   }
 
   // IVX_AI_SYSTEM_SECRET — required for system-key auth bypass

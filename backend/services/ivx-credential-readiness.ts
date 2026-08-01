@@ -104,7 +104,7 @@ const PLACEHOLDER_FRAGMENTS = [
 
 const CREDENTIAL_SPECS: CredentialSpec[] = [
   {
-    name: 'AI_GATEWAY_API_KEY',
+    name: 'IVX_AI_GATEWAY_KEY',
     category: 'ai',
     importance: 'required',
     purpose: 'AI reasoning gateway for Owner AI, public chat, planning, and synthesis.',

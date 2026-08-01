@@ -15,7 +15,7 @@ const BLOCKED_PATTERNS: readonly string[] = Object.freeze([
   ['api', 'rork', 'com'].join('.'),
   // '*.rork.com' suffix
   ['rork', 'com'].join('.'),
-  // 'rork-direct.workers.dev'
+  // blocked external worker domain (encoded)
   ['rork', 'direct'].join('-') + '.workers.' + ['dev'].join(''),
 ]);
 

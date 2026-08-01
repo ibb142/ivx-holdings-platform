@@ -19,7 +19,7 @@ const OWNER_VARIABLES = [
   { name: 'IVX_AWS_READONLY_ACCESS_KEY_ID', provider: 'aws', required: true, secret: true, description: 'Least-privilege AWS read-only access key ID.' },
   { name: 'IVX_AWS_READONLY_SECRET_ACCESS_KEY', provider: 'aws', required: true, secret: true, description: 'Least-privilege AWS read-only secret access key.' },
   { name: 'AWS_REGION', provider: 'aws', required: true, secret: false, description: 'AWS region for read-only verification.' },
-  { name: 'AI_GATEWAY_API_KEY', provider: 'ai', required: false, secret: true, description: 'Optional AI gateway key.' },
+  { name: 'IVX_AI_GATEWAY_KEY', provider: 'ai', required: false, secret: true, description: 'Optional AI gateway key.' },
   { name: 'JWT_SECRET', provider: 'security', required: false, secret: true, description: 'Optional JWT signing secret.' },
   { name: 'APP_SECRET', provider: 'security', required: false, secret: true, description: 'Optional app secret.' },
   { name: 'OWNER_NEW_PASSWORD', provider: 'security', required: false, secret: true, description: 'Emergency owner password reset value used only by backend owner-access repair.' },
