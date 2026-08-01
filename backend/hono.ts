@@ -1546,7 +1546,7 @@ const REQUIRED_PRODUCTION_ACCESS_ENV_NAMES = [
   'AWS_REGION',
   'S3_BUCKET_NAME',
   'CLOUDFRONT_DISTRIBUTION_ID',
-  'AI_GATEWAY_API_KEY',
+  'IVX_AI_GATEWAY_KEY',
   'JWT_SECRET',
   'APP_SECRET',
 ] as const;
@@ -1751,7 +1751,7 @@ function summarizeSupabaseReadinessOutput(output: unknown): Record<string, unkno
 }
 
 function buildMultimodalStatusPayload(): Record<string, unknown> {
-  const aiGatewayConfigured = Boolean(readTrimmed(process.env.AI_GATEWAY_API_KEY));
+  const aiGatewayConfigured = Boolean(readTrimmed(process.env.IVX_AI_GATEWAY_KEY));
   const supabaseStorageConfigured = Boolean(readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) && (readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) || readTrimmed(process.env.SUPABASE_SERVICE_KEY)));
   return {
     ok: true,
@@ -4922,7 +4922,7 @@ app.get('/api/ivx/ai-test', async (context) => {
   // Raw HTTP fetch test — bypasses all SDK layers and sends a direct request
   // to the Vercel AI Gateway with the key as a Bearer token. This definitively
   // determines if the key is valid/expired vs an SDK routing issue.
-  const rawKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  const rawKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   const rawEndpoint = startup.baseUrl ?? 'https://ai-gateway.vercel.sh/v1';
   let rawTestResult: { ok: boolean; status: number; body: string } | null = null;
   if (rawKey) {
