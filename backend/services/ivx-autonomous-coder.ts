@@ -1120,6 +1120,34 @@ function readEnv(name: string): string {
   return (typeof process.env[name] === 'string' ? process.env[name] : '').trim();
 }
 
+/**
+ * Read an owner-controlled runtime variable using the SAME canonical path as the
+ * working github_commit_file action and factory runners: process.env FIRST, then
+ * the owner variables store (getIVXOwnerVariableRuntimeValue) as a fallback.
+ *
+ * CRITICAL FIX: The autonomous coder was previously using bare readEnv() which
+ * only checks process.env. On Render, GITHUB_TOKEN / RENDER_API_KEY / etc. live
+ * in the encrypted owner variables store, NOT in process.env. This caused
+ * commitFilesViaGitDataApi to throw "GITHUB_TOKEN is missing" every time,
+ * leaving the worker orphaned at the COMMITTING phase (65%) with commitSha=''.
+ */
+async function readOwnerRuntimeVariable(name: string): Promise<string> {
+  const envValue = readEnv(name);
+  if (envValue) return envValue;
+  try {
+    const ownerVariables = await import('../api/ivx-owner-variables');
+    if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue === 'function') {
+      const stored = await ownerVariables.getIVXOwnerVariableRuntimeValue(name as never);
+      return (stored || '').trim();
+    }
+  } catch (error) {
+    console.log('[IVXAutonomousCoder] Owner Variables bridge unavailable for', name, {
+      message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+    });
+  }
+  return '';
+}
+
 function parseGithubRepoUrl(value: string): { owner: string; repo: string } | null {
   const match = value.match(/github\.com[:/]([^/\s]+)\/([^/.\s]+)(?:\.git)?/i);
   if (!match?.[1] || !match[2]) return null;
@@ -1127,11 +1155,11 @@ function parseGithubRepoUrl(value: string): { owner: string; repo: string } | nu
 }
 
 async function getStartingSha(): Promise<string | null> {
-  const repoUrl = readEnv('GITHUB_REPO_URL');
-  const token = readEnv('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
   const repoInfo = parseGithubRepoUrl(repoUrl);
   if (!repoInfo || !token) return null;
-  const branch = readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH;
+  const branch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
   try {
     const res = await fetch(
       `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/git/ref/heads/${encodeURIComponent(branch)}`,
@@ -1169,7 +1197,7 @@ async function ensureBranchExists(
   }
   if (refRes.status !== 404) throw new Error(`GitHub branch ref lookup failed: ${refRes.status}`);
   // Branch does not exist — create it from the default branch HEAD.
-  const defaultBranch = readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH;
+  const defaultBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
   const baseRefRes = await fetch(
     `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(defaultBranch)}`,
     { headers, signal: AbortSignal.timeout(10000) },
@@ -1198,11 +1226,14 @@ async function commitFilesViaGitDataApi(
   filePaths: string[],
   branch: string,
 ): Promise<{ commitSha: string; commitUrl: string; branch: string }> {
-  const repoUrl = readEnv('GITHUB_REPO_URL');
-  const token = readEnv('GITHUB_TOKEN');
+  // CRITICAL FIX: Use readOwnerRuntimeVariable (process.env + owner variables store fallback)
+  // instead of bare readEnv. On Render, GITHUB_TOKEN lives in the encrypted owner variables
+  // store, not in process.env. This was the root cause of the worker stuck at COMMITTING 65%.
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
   const repoInfo = parseGithubRepoUrl(repoUrl);
   if (!repoInfo) throw new Error('GITHUB_REPO_URL is missing or invalid.');
-  if (!token) throw new Error('GITHUB_TOKEN is missing.');
+  if (!token) throw new Error('GITHUB_TOKEN is missing (checked process.env and owner variables store).');
 
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -1286,10 +1317,11 @@ async function commitFilesViaGitDataApi(
 // ── RENDER DEPLOY ────────────────────────────────────────────────────────────
 
 async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: string | null; deployStatus: string | null }> {
-  const apiKey = readEnv('RENDER_API_KEY');
-  const serviceId = readEnv('RENDER_SERVICE_ID');
+  // CRITICAL FIX: Use readOwnerRuntimeVariable for the same reason as commitFilesViaGitDataApi.
+  const apiKey = await readOwnerRuntimeVariable('RENDER_API_KEY');
+  const serviceId = await readOwnerRuntimeVariable('RENDER_SERVICE_ID');
   if (!apiKey || !serviceId) {
-    throw new Error('RENDER_API_KEY or RENDER_SERVICE_ID is missing.');
+    throw new Error('RENDER_API_KEY or RENDER_SERVICE_ID is missing (checked process.env and owner variables store).');
   }
   const res = await fetch(`https://api.render.com/v1/services/${serviceId}/deploys`, {
     method: 'POST',
@@ -1332,10 +1364,10 @@ async function getCommitParentSha(owner: string, repo: string, token: string, co
 }
 
 async function rollbackProductionDeploy(commitSha: string, branch: string): Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }> {
-  const repoUrl = readEnv('GITHUB_REPO_URL');
-  const token = readEnv('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
   const repoInfo = parseGithubRepoUrl(repoUrl);
-  if (!repoInfo || !token) return { reverted: false, revertCommitSha: null, error: 'Rollback aborted: GitHub credentials unavailable.' };
+  if (!repoInfo || !token) return { reverted: false, revertCommitSha: null, error: 'Rollback aborted: GitHub credentials unavailable (checked process.env and owner variables store).' };
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' };
   // 1. Get the parent of the bad commit (the last known-good SHA).
   const parentSha = await getCommitParentSha(repoInfo.owner, repoInfo.repo, token, commitSha);
@@ -1390,8 +1422,12 @@ async function verifyProductionHealth(): Promise<{ ok: boolean; commit: string |
   try {
     const res = await fetch(healthUrl, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return { ok: false, commit: null };
-    const data = await res.json() as { commitSha?: string; status?: string };
-    return { ok: data.status === 'healthy', commit: data.commitSha ?? null };
+    // CRITICAL FIX: The health endpoint returns `commit` (not `commitSha`).
+    // The prior code read `data.commitSha` which was always undefined, causing
+    // production verification to ALWAYS fail even when the deploy succeeded.
+    // This made every deploy job report as a verify-fail, triggering rollback.
+    const data = await res.json() as { commit?: string; commitSha?: string; status?: string };
+    return { ok: data.status === 'healthy', commit: data.commit ?? data.commitSha ?? null };
   } catch {
     return { ok: false, commit: null };
   }
@@ -2221,7 +2257,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // jobs still commit to main (the self-deploy handoff persists resumable
         // state before triggering Render, so the restart is expected there).
         const branchName = input.executionMode === 'deploy'
-          ? (readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH)
+          ? ((await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH)
           : AUTONOMOUS_CODER_BRANCH;
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
@@ -2285,8 +2321,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
             onPhase?.('production_verifying', `Deploy verify-fail (healthOk=${healthOk}, liveCommit=${liveCommit}, expected=${commitSha}); attempting rollback.`);
             try {
               const rb = input.rollbackFn
-                ? await input.rollbackFn(commitSha, readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH)
-                : await rollbackProductionDeploy(commitSha, readEnv('GITHUB_DEFAULT_BRANCH') || GITHUB_DEFAULT_BRANCH);
+                ? await input.rollbackFn(commitSha, (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH)
+                : await rollbackProductionDeploy(commitSha, (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH);
               rollbackTriggered = true;
               rollbackCommitSha = rb.revertCommitSha;
               rollbackError = rb.error;
