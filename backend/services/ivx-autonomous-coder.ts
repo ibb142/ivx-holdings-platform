@@ -39,7 +39,7 @@ const execFileAsync = promisify(execFile);
 export const IVX_AUTONOMOUS_CODER_MARKER = 'ivx-autonomous-coder-2026-07-19';
 
 /** Bounded loop: max LLM revision iterations before BLOCKED. */
-const MAX_ITERATIONS = 4;
+const MAX_ITERATIONS = 6;
 /** Per-command timeout (ms). */
 const COMMAND_TIMEOUT_MS = 60_000;
 /** LLM planning timeout (ms). The Render runtime was hanging in the planning
@@ -47,7 +47,7 @@ const COMMAND_TIMEOUT_MS = 60_000;
  * a real reason instead of sitting at RUNNING 10% forever. */
 const LLM_TIMEOUT_MS = 90_000;
 /** LLM planning attempts before LLM_PLAN_INVALID BLOCKED. */
-const MAX_LLM_ATTEMPTS = 3;
+const MAX_LLM_ATTEMPTS = 4;
 /** Stage-specific timeouts (ms) — each bounded loop stage has its own hard cap
  * so a stuck inspection / patch / test / commit / deploy is detectable and the
  * engine BLOCKS with a real reason instead of hanging forever. These are
@@ -55,7 +55,7 @@ const MAX_LLM_ATTEMPTS = 3;
 const STAGE_TIMEOUTS_MS: Record<string, number> = {
   inspecting: 30_000,
   planning: LLM_TIMEOUT_MS + 5_000,
-  patching: 20_000,
+  patching: 120_000,
   testing: 90_000,
   analyzing: 5_000,
   revising: 5_000,
@@ -78,12 +78,17 @@ const DEFAULT_MAX_LLM_CALLS = MAX_ITERATIONS * MAX_LLM_ATTEMPTS;
  * real coding task with up to 5 iterations (each iteration sends file previews +
  * a patch response). The 60k cap was too tight and BLOCKED a legitimate PILOT-3
  * change after 4 iterations. */
-const DEFAULT_MAX_TOKEN_BUDGET = 200_000;
+const DEFAULT_MAX_TOKEN_BUDGET = 400_000;
 /** Max files to inspect per job. */
 const MAX_INSPECTED_FILES = 30;
-/** Max file preview chars sent to the LLM. Small files get full content. */
-const FILE_PREVIEW_CHARS = 6000;
-const FULL_CONTENT_THRESHOLD = 8000;
+/** Max file preview chars sent to the LLM for large files. V6.17: increased
+ * from 6000 to 30000 so the LLM can see enough context to find the right
+ * section in large files like hono.ts (3000+ lines). The old 6000-char limit
+ * meant the LLM only saw the first ~150 lines and could never find the health
+ * endpoint or route definitions further down, causing endless revision loops. */
+const FILE_PREVIEW_CHARS = 30000;
+/** Files under this size get full content sent to the LLM. */
+const FULL_CONTENT_THRESHOLD = 35000;
 /** Max stdout/stderr fed back to the LLM on revision. */
 const FAILURE_OUTPUT_CHARS = 4000;
 
@@ -408,13 +413,68 @@ function pickInspectionTargets(goal: string, availableFiles: string[]): string[]
   return Array.from(new Set([...alwaysInclude, ...hintMatches])).slice(0, MAX_INSPECTED_FILES);
 }
 
-async function readFilePreview(relPath: string, projectRoot: string): Promise<{ path: string; content: string; bytes: number } | null> {
+/** Extract a relevant section of a large file based on goal keywords.
+ * Instead of sending the first N chars (which may miss the target code),
+ * search for lines containing goal keywords and return a window around
+ * the best match. Falls back to head+tail if no keywords match. */
+function extractRelevantSection(content: string, goal: string, maxChars: number): string {
+  const lines = content.split('\n');
+  const goalWords = goal.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4)
+    .filter((w) => !['that', 'this', 'with', 'from', 'have', 'please', 'change', 'deploy', 'anything', 'current', 'status', 'label', 'version', 'endpoint', 'route', 'field'].includes(w));
+
+  if (goalWords.length === 0) {
+    return truncate(content, maxChars);
+  }
+
+  // Score each line by how many goal words it contains
+  let bestLineIdx = 0;
+  let bestScore = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const lower = lines[i].toLowerCase();
+    let score = 0;
+    for (const w of goalWords) {
+      if (lower.includes(w)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestLineIdx = i;
+    }
+  }
+
+  if (bestScore === 0) {
+    // No keyword match — send head + tail so the LLM sees imports and exports
+    const headChars = Math.floor(maxChars * 0.6);
+    const tailChars = maxChars - headChars;
+    const head = truncate(content, headChars);
+    const tail = content.length > tailChars ? content.slice(-tailChars) : '';
+    return head + '\n\n... [middle section omitted for length] ...\n\n' + tail;
+  }
+
+  // Return a window of lines around the best match
+  const contextLines = 60; // ~60 lines before and after the match
+  const startLine = Math.max(0, bestLineIdx - contextLines);
+    const endLine = Math.min(lines.length, bestLineIdx + contextLines);
+  const section = lines.slice(startLine, endLine).join('\n');
+  const prefix = startLine > 0 ? `... [lines 1-${startLine} omitted] ...\n` : '';
+  const suffix = endLine < lines.length ? `\n... [lines ${endLine + 1}-${lines.length} omitted] ...` : '';
+  const result = prefix + section + suffix;
+  return truncate(result, maxChars);
+}
+
+async function readFilePreview(relPath: string, projectRoot: string, goal?: string): Promise<{ path: string; content: string; bytes: number } | null> {
   try {
     const absPath = path.join(projectRoot, relPath);
     const content = await readFile(absPath, 'utf8');
     const bytes = Buffer.byteLength(content, 'utf8');
-    // Send full content for small files so the LLM can copy oldText verbatim.
-    const preview = bytes <= FULL_CONTENT_THRESHOLD ? content : truncate(content, FILE_PREVIEW_CHARS);
+    if (bytes <= FULL_CONTENT_THRESHOLD) {
+      return { path: relPath, content, bytes };
+    }
+    // V6.17: For large files, extract the relevant section based on goal keywords
+    // instead of blindly truncating to the first N chars.
+    const preview = goal ? extractRelevantSection(content, goal, FILE_PREVIEW_CHARS) : truncate(content, FILE_PREVIEW_CHARS);
     return { path: relPath, content: preview, bytes };
   } catch {
     return null;
@@ -570,6 +630,8 @@ Rules:
 - kind must be "replace_exact" (replace oldText with newText) or "create_file" (new file).
 - oldText must be an EXACT substring of the file content (copy it verbatim from the FILE CONTENTS above).
 - For replace_exact: copy a UNIQUE 20-80 character snippet from the target file as oldText. Do NOT use the entire file as oldText.
+- The oldText MUST be copied EXACTLY from the FILE CONTENTS section above — character-for-character including spaces, quotes, commas, and newlines.
+- If the file content shows "... [lines omitted] ...", the target code may be in the omitted section. Try to use a snippet from the VISIBLE portion, or use create_file to write a new file instead.
 - For create_file: oldText must be empty string "". newText is the full file content.
 - You CAN create new files (kind="create_file") for new routes, services, tests, or modules.
 - You CAN modify multiple files in one response (add multiple operations to the array).
@@ -580,10 +642,13 @@ Rules:
 
 NON-TRIVIAL TASK GUIDANCE:
 - When asked to ADD A FIELD to an endpoint, find the response object in the file and add the field.
-- When asked to CREATE A NEW ROUTE, add both the route handler AND any necessary imports.
+- When asked to CREATE A NEW ROUTE, create a new file with kind="create_file" containing the route handler. Do NOT try to replace_exact in a 3000+ line file unless you can see the exact target text in the FILE CONTENTS.
 - When asked to MODIFY MULTIPLE FILES, include one operation per file.
 - When asked to ADD A TEST, create a new test file with kind="create_file".
 - Read the FILE CONTENTS carefully and copy exact text for oldText from what you see.
+- PREFER create_file for new functionality — it is always reliable and never fails to apply.
+- For large files (1000+ lines), PREFER create_file for new routes/modules instead of replace_exact.
+- If a replace_exact fails because oldText is not found, on revision use a DIFFERENT snippet or switch to create_file.
 
 EXAMPLE 1 (add a health field):
 {"rootCause":"need to add ivxDeveloperProofVersion to health response","technicalPlan":"add field to the health response object in hono.ts","operations":[{"path":"backend/hono.ts","kind":"replace_exact","oldText":"status: 'healthy',\n  environment: environment,\n  version: VERSION,","newText":"status: 'healthy',\n  environment: environment,\n  version: VERSION,\n  ivxDeveloperProofVersion: 2,"}]}
@@ -676,7 +741,7 @@ async function callLLMForPatch(
       requestId: `ac-${randomUUID()}`,
       system,
       prompt: user,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
     }),
     LLM_TIMEOUT_MS,
     'LLM patch generation',
@@ -1219,7 +1284,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   const targetPaths = pickInspectionTargets(input.goal, availableFiles);
   const inspectedFiles: { path: string; content: string }[] = [];
   for (const target of targetPaths) {
-    const preview = await readFilePreview(target, projectRoot);
+    const preview = await readFilePreview(target, projectRoot, input.goal);
     if (preview) {
       inspectedFiles.push({ path: preview.path, content: preview.content });
     }
