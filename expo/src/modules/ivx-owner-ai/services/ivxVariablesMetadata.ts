@@ -339,7 +339,7 @@ export const IVX_TRACKED_VARIABLE_METADATA: IVXTrackedVariableMetadata[] = [
 
   // --- AI Gateway ---
   meta({
-    name: 'AI_GATEWAY_API_KEY',
+    name: 'IVX_AI_GATEWAY_KEY',
     category: 'AI Gateway',
     sourceLocation: 'Render service env (ivx-holdings-platform)',
     provider: 'ai',
@@ -388,7 +388,7 @@ export const IVX_TRACKED_VARIABLE_METADATA: IVXTrackedVariableMetadata[] = [
   }),
 
   // --- Rork Runtime (REMOVED 2026-07-12) ---
-  // All EXPO_PUBLIC_RORK_* env vars have been permanently removed from the
+  // All legacy external-platform env vars have been permanently removed from the
   // app. The client AI runtime routes through api.ivxholding.com only.
   // No app code reads any Rork env var at runtime.
 ];

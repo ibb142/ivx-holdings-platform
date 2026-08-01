@@ -114,7 +114,7 @@ const dependencies: IndependenceDependency[] = [
     completionDate: '2026-05-12',
     rorkDependencyReduced: 'Phase 4d (2026-05-12): client AI runtime no longer reads any EXPO_PUBLIC_RORK_* env at runtime. The legacy client-direct gateway rollback path was removed; the IVX-owned backend proxy /api/ivx/owner-ai (Vercel AI Gateway via backend AI_GATEWAY_API_KEY) is the only active AI path. Owner may now delete the 5 EXPO_PUBLIC_RORK_* entries from the Render/Expo dashboard.',
     proofBefore: 'Known blocker: EXPO_PUBLIC_RORK_* and toolkit public variables are still configured.',
-    proofAfter: 'expo/src/modules/ivx-owner-ai/services/ivxAIRequestService.ts: getLocalAIProviderApiKey() only reads EXPO_PUBLIC_IVX_AI_GATEWAY_API_KEY; isIVXClientDirectGatewayRollbackEnabled() returns constant false. getIVXAIIndependenceSnapshot() no longer calls process.env for any EXPO_PUBLIC_RORK_* name. expo/src/modules/ivx-owner-ai/services/ivxVariablesMetadata.ts: the 5 EXPO_PUBLIC_RORK_* metadata entries were deleted.',
+    proofAfter: 'expo/src/modules/ivx-owner-ai/services/ivxAIRequestService.ts: getLocalAIProviderApiKey() only reads EXPO_PUBLIC_IVX_AI_GATEWAY_KEY; isIVXClientDirectGatewayRollbackEnabled() returns constant false. getIVXAIIndependenceSnapshot() no longer calls process.env for any legacy external-platform env var. expo/src/modules/ivx-owner-ai/services/ivxVariablesMetadata.ts: the 5 legacy metadata entries were deleted.',
   },
   {
     id: 'aws-rork1',
