@@ -1493,6 +1493,9 @@ setProductionState({
     qaSystemRestored: '2026-08-01T01:10:00Z',
     qaRunnerVersion: 'ivx-qa-v1.0.0',
     criticalFileProtection: '2026-08-01T01:10:00Z',
+    llmPatchGenerationV619: '2026-08-01T02:00:00Z',
+    abortControllerEnabled: '2026-08-01T02:00:00Z',
+    splitPlanningStage: '2026-08-01T02:00:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3104,6 +3107,9 @@ app.get('/health', async (context) => {
     qaSystemRestored: '2026-08-01T01:10:00Z',
     qaRunnerVersion: 'ivx-qa-v1.0.0',
     criticalFileProtection: '2026-08-01T01:10:00Z',
+    llmPatchGenerationV619: '2026-08-01T02:00:00Z',
+    abortControllerEnabled: '2026-08-01T02:00:00Z',
+    splitPlanningStage: '2026-08-01T02:00:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
