@@ -551,7 +551,7 @@ function isIVXClientDirectGatewayRollbackEnabled(): boolean {
 function getLocalAIProviderApiKey(): string {
   // IVX-owned naming only. No external toolkit fallback. The IVX backend proxy
   // holds the gateway key server-side via `IVX_AI_GATEWAY_KEY`.
-  return readTrimmedConfigValue(process.env.EXPO_PUBLIC_IVX_AI_GATEWAY_API_KEY);
+  return readTrimmedConfigValue(process.env.EXPO_PUBLIC_IVX_AI_GATEWAY_KEY);
 }
 
 function getLocalAIGatewayBaseUrl(): string | null {
