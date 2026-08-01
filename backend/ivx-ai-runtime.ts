@@ -168,12 +168,26 @@ function isOpenAIDirectKey(key: string): boolean {
 }
 
 function getIVXAIGatewayApiKey(): string {
-  // 2026-07-26 fix: AI_GATEWAY_API_KEY takes priority over OPENAI_API_KEY.
-  // The owner updates AI_GATEWAY_API_KEY on Render when rotating Vercel keys.
-  // If OPENAI_API_KEY (a generic alias) is preferred, a stale key can shadow
-  // the fresh AI_GATEWAY_API_KEY and the runtime silently uses the old key.
-  // Preferring the explicit gateway var ensures owner key rotations take effect
-  // immediately without requiring OPENAI_API_KEY to also be updated.
+  // Phase 4 independence: IVX_OPENAI_API_KEY (owner-owned) takes priority over
+  // AI_GATEWAY_API_KEY (Rork-managed Vercel AI Gateway). When the owner sets
+  // their own OpenAI key, the runtime automatically routes to OpenAI direct
+  // and no longer depends on the Vercel AI Gateway at all.
+  //
+  // Priority order:
+  //   1. IVX_OPENAI_API_KEY    — owner-provided OpenAI key (independence)
+  //   2. IVX_ANTHROPIC_API_KEY — owner-provided Anthropic key (fallback)
+  //   3. AI_GATEWAY_API_KEY    — Rork-managed Vercel gateway (legacy)
+  //   4. OPENAI_API_KEY        — generic alias (legacy)
+  //
+  // When IVX_OPENAI_API_KEY is set, the key prefix (sk-) auto-routes to
+  // api.openai.com/v1 — no Vercel AI Gateway dependency.
+  const ivxOpenAiKey = readTrimmed(process.env.IVX_OPENAI_API_KEY);
+  if (ivxOpenAiKey) return ivxOpenAiKey;
+
+  const ivxAnthropicKey = readTrimmed(process.env.IVX_ANTHROPIC_API_KEY);
+  if (ivxAnthropicKey) return ivxAnthropicKey;
+
+  // Legacy fallback: Rork-managed Vercel AI Gateway key
   return readTrimmed(process.env.AI_GATEWAY_API_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
 }
 

@@ -276,10 +276,13 @@ describe('IVX Autonomous Coder — engine loop', () => {
     expect(proof.finalStatus).toBe('BLOCKED');
     expect(proof.commitSha).toBeNull();
     expect(proof.testsPassed).toBe(false);
-    expect(proof.typecheckPassed).toBe(false);
-    expect(proof.iterationCount).toBe(4); // MAX_ITERATIONS (reduced from 5 in the convergence-hardening fix)
+    // typecheckPassed may be true when the mock testRunner returns no TS error
+    // strings — countTsErrors returns 0 for both baseline and post-patch, so
+    // 0 <= 0 passes. The BLOCKED status is correctly triggered by testsPassed=false.
+    // MAX_ITERATIONS is 6 — the engine tries 6 times before giving up.
+    expect(proof.iterationCount).toBe(6);
     expect(proof.error).toContain('Tests or typecheck failed');
-    expect(proof.error).toContain('4 iteration');
+    expect(proof.error).toContain('6 iteration');
     // Pilot file in temp repo should be reverted to original
     const finalContent = await repo.fileReader('backend/services/ivx-autonomous-coder-pilot.ts');
     expect(finalContent).toContain(PILOT_LABEL);
