@@ -1489,6 +1489,7 @@ setProductionState({
     identityGuardRegexV614: '2026-07-31T22:00:00Z',
     autonomousWorkerFixV615: '2026-07-31T23:30:00Z',
     capabilityRecoveryV616: '2026-07-31T23:45:00Z',
+    fullRestoreV617: '2026-08-01T00:30:00Z',
   },
 });
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3096,6 +3097,7 @@ app.get('/health', async (context) => {
     identityGuardRegexV614: '2026-07-31T22:00:00Z',
     autonomousWorkerFixV615: '2026-07-31T23:30:00Z',
     capabilityRecoveryV616: '2026-07-31T23:45:00Z',
+    fullRestoreV617: '2026-08-01T00:30:00Z',
     sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
     commitShort: LIVE_COMMIT_SHORT,
