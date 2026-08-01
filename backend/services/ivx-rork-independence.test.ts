@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  assembleRorkIndependenceReport,
-  IVX_RORK_INDEPENDENCE_MARKER,
-  type RorkDependency,
+  assembleIndependenceReport,
+  IVX_INDEPENDENCE_MARKER,
+  type ExternalDependency,
   type CutoverTooling,
 } from './ivx-rork-independence';
 import type { ToolAvailabilityReport } from './ivx-tool-availability';
@@ -65,7 +65,7 @@ function cutover(ready: boolean): CutoverTooling {
   };
 }
 
-function deps(opts: { sdk: boolean; envs: boolean; config: boolean }): RorkDependency[] {
+function deps(opts: { sdk: boolean; envs: boolean; config: boolean }): ExternalDependency[] {
   return [
     { dependency: '@rork-ai/toolkit-sdk (expo/package.json)', present: opts.sdk, risk: 'high', detail: '', removalAction: '' },
     { dependency: 'EXPO_PUBLIC_RORK_* / EXPO_PUBLIC_TOOLKIT_URL runtime envs', present: opts.envs, risk: 'high', detail: '', removalAction: '' },
@@ -76,19 +76,19 @@ function deps(opts: { sdk: boolean; envs: boolean; config: boolean }): RorkDepen
 
 describe('assembleRorkIndependenceReport', () => {
   it('carries the marker and all four ordered phases', () => {
-    const report = assembleRorkIndependenceReport({
+    const report = assembleIndependenceReport({
       tools: toolsReport(true), manifest: handoff(true), rorkDeps: deps({ sdk: false, envs: false, config: false }),
     });
-    expect(report.marker).toBe(IVX_RORK_INDEPENDENCE_MARKER);
+    expect(report.marker).toBe(IVX_INDEPENDENCE_MARKER);
     expect(report.phases.map((p) => p.order)).toEqual([1, 2, 3, 4]);
     expect(report.phases.map((p) => p.id)).toEqual(['shadow', 'ivx_primary', 'independence', 'final_removal']);
   });
 
-  it('achieves all four phases when tools+handoff are ready and Rork deps are gone', () => {
-    const report = assembleRorkIndependenceReport({
+  it('achieves all four phases when tools+handoff are ready and external deps are gone', () => {
+    const report = assembleIndependenceReport({
       tools: toolsReport(true), manifest: handoff(true), rorkDeps: deps({ sdk: false, envs: false, config: false }),
     });
-    expect(report.phases.every((p) => p.readiness === 'achieved')).toBe(true);
+    expect(report.phases.every((p: { readiness: string }) => p.readiness === 'achieved')).toBe(true);
     expect(report.currentPhase).toBe('final_removal');
     expect(report.currentPhaseOrder).toBe(4);
     expect(report.nextPhase).toBeNull();
@@ -96,11 +96,11 @@ describe('assembleRorkIndependenceReport', () => {
     expect(report.summary.rorkRequiredForNormalWorkflow).toBe(false);
   });
 
-  it('blocks Independence (phase 3) while the Rork SDK is still declared, but achieves Shadow + Primary', () => {
-    const report = assembleRorkIndependenceReport({
+  it('blocks Independence (phase 3) while the external SDK is still declared, but achieves Shadow + Primary', () => {
+    const report = assembleIndependenceReport({
       tools: toolsReport(true), manifest: handoff(true), rorkDeps: deps({ sdk: true, envs: true, config: true }),
     });
-    const byId = Object.fromEntries(report.phases.map((p) => [p.id, p]));
+    const byId = Object.fromEntries(report.phases.map((p: { id: string; readiness: string }) => [p.id, p]));
     expect(byId.shadow.readiness).toBe('achieved');
     expect(byId.ivx_primary.readiness).toBe('achieved');
     expect(byId.independence.readiness).toBe('in_progress');
@@ -112,21 +112,21 @@ describe('assembleRorkIndependenceReport', () => {
     expect(report.summary.rorkOptional).toBe(false);
   });
 
-  it('reports next actions naming the exact remaining Rork dependency', () => {
-    const report = assembleRorkIndependenceReport({
+  it('reports next actions naming the exact remaining external dependency', () => {
+    const report = assembleIndependenceReport({
       tools: toolsReport(true), manifest: handoff(true), rorkDeps: deps({ sdk: true, envs: false, config: false }),
     });
-    expect(report.nextActions.some((a) => /toolkit-sdk/i.test(a))).toBe(true);
+    expect(report.nextActions.some((a: string) => /toolkit-sdk/i.test(a))).toBe(true);
   });
 
   it('reports a not-ready cutover by default and carries the provided cutover tooling when supplied', () => {
-    const withoutCutover = assembleRorkIndependenceReport({
+    const withoutCutover = assembleIndependenceReport({
       tools: toolsReport(true), manifest: handoff(true), rorkDeps: deps({ sdk: true, envs: true, config: true }),
     });
     expect(withoutCutover.cutoverTooling.ready).toBe(false);
     expect(withoutCutover.cutoverTooling.cutoverScript).toBe('expo/scripts/rork-independence-cutover.mjs');
 
-    const withCutover = assembleRorkIndependenceReport({
+    const withCutover = assembleIndependenceReport({
       tools: toolsReport(true), manifest: handoff(true), rorkDeps: deps({ sdk: true, envs: true, config: true }), cutover: cutover(true),
     });
     expect(withCutover.cutoverTooling.ready).toBe(true);
@@ -135,10 +135,10 @@ describe('assembleRorkIndependenceReport', () => {
   });
 
   it('blocks every phase past Shadow when the lifecycle is not end-to-end capable', () => {
-    const report = assembleRorkIndependenceReport({
+    const report = assembleIndependenceReport({
       tools: toolsReport(false), manifest: handoff(false), rorkDeps: deps({ sdk: true, envs: true, config: true }),
     });
-    const byId = Object.fromEntries(report.phases.map((p) => [p.id, p]));
+    const byId = Object.fromEntries(report.phases.map((p: { id: string; readiness: string }) => [p.id, p]));
     expect(byId.shadow.readiness).not.toBe('achieved');
     expect(byId.ivx_primary.readiness).toBe('blocked');
     expect(report.currentPhaseOrder).toBe(0);
@@ -148,7 +148,7 @@ describe('assembleRorkIndependenceReport', () => {
   it('maps the six owner-required capabilities and degrades canModifyCode when github_write is down', () => {
     const tools = toolsReport(true);
     tools.tools = tools.tools.map((t) => (t.tool === 'github_write' ? { ...t, available: false } : t));
-    const report = assembleRorkIndependenceReport({ tools, manifest: handoff(true), rorkDeps: deps({ sdk: false, envs: false, config: false }) });
+    const report = assembleIndependenceReport({ tools, manifest: handoff(true), rorkDeps: deps({ sdk: false, envs: false, config: false }) });
     expect(report.ownerCapabilities).toHaveLength(6);
     expect(report.summary.canModifyCode).toBe(false);
     expect(report.summary.canReceiveOwnerCommands).toBe(true);
@@ -156,13 +156,13 @@ describe('assembleRorkIndependenceReport', () => {
   });
 
   it('lists the eight kept systems with GitHub/Render/Supabase/AI flagged unavailable when their tools are down', () => {
-    const report = assembleRorkIndependenceReport({
+    const report = assembleIndependenceReport({
       tools: toolsReport(false), manifest: handoff(false), rorkDeps: deps({ sdk: true, envs: true, config: true }),
     });
     expect(report.keptSystems).toHaveLength(8);
-    const backend = report.keptSystems.find((k) => k.system === 'IVX backend');
+    const backend = report.keptSystems.find((k: { system: string; available: boolean }) => k.system === 'IVX backend');
     expect(backend?.available).toBe(true);
-    const github = report.keptSystems.find((k) => k.system === 'GitHub');
+    const github = report.keptSystems.find((k: { system: string; available: boolean; missing: string | null }) => k.system === 'GitHub');
     expect(github?.available).toBe(false);
     expect(github?.missing).toBeTruthy();
   });

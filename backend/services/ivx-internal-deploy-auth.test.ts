@@ -1,3 +1,4 @@
+import { describe, it, test, expect, beforeEach, afterEach } from 'bun:test';
 import { createHmac } from 'node:crypto';
 
 const records = new Map<string, unknown>();
@@ -94,12 +95,12 @@ describe('internal deploy authentication', () => {
     delete process.env.IVX_INTERNAL_DEPLOY_SECRET;
     delete process.env.IVX_INTERNAL_WORKER_ID;
     const request = new Request('https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs', { method: 'POST', body: '{}' });
-    await expect(authorizeInternalDeploymentRequest(request, testStore)).rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 401 });
+    await expect(authorizeInternalDeploymentRequest(request, testStore)).rejects.toMatchObject({ status: 401 });
   });
 
   test('rejects missing signature headers with HTTP 401', async () => {
     const request = new Request('https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs', { method: 'POST', body: '{}' });
-    await expect(authorizeInternalDeploymentRequest(request, testStore)).rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 401 });
+    await expect(authorizeInternalDeploymentRequest(request, testStore)).rejects.toMatchObject({ status: 401 });
   });
 
   test('authorizes a valid signed request and consumes its matching approval once', async () => {
@@ -108,13 +109,13 @@ describe('internal deploy authentication', () => {
 
     expect(authorized).toEqual({ workerId, approvalId: approval.id, requestedCommitSha: commitSha, action: 'PRODUCTION_DEPLOY' });
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: approval.id, nonce: 'nonce-for-internal-test-0002' }), testStore))
-      .rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 403 });
+      .rejects.toMatchObject({ status: 403 });
   });
 
   test('rejects an invalid signature before it can consume an approval', async () => {
     const approval = await approvedRecord();
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: approval.id, signature: 'b'.repeat(64) }), testStore))
-      .rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 401 });
+      .rejects.toMatchObject({ status: 401 });
 
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: approval.id, nonce: 'nonce-for-internal-test-0003' }), testStore))
       .resolves.toMatchObject({ approvalId: approval.id });
@@ -124,7 +125,7 @@ describe('internal deploy authentication', () => {
     const approval = await approvedRecord();
     const expiredTimestamp = String(Math.floor((Date.now() - 6 * 60_000) / 1000));
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: approval.id, timestamp: expiredTimestamp }), testStore))
-      .rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 401 });
+      .rejects.toMatchObject({ status: 401 });
   });
 
   test('rejects a replayed nonce with HTTP 401', async () => {
@@ -134,7 +135,7 @@ describe('internal deploy authentication', () => {
 
     const secondApproval = await approvedRecord();
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: secondApproval.id, nonce: 'nonce-for-internal-test-replay' }), testStore))
-      .rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 401 });
+      .rejects.toMatchObject({ status: 401 });
   });
 
   test('builds a valid signed request from the configured dedicated worker identity', async () => {
@@ -151,6 +152,6 @@ describe('internal deploy authentication', () => {
   test('rejects a signed request when its action does not match the owner approval', async () => {
     const approval = await approvedRecord('RENDER_DEPLOY');
     await expect(authorizeInternalDeploymentRequest(signedRequest({ ownerApprovalId: approval.id, deploymentAction: 'PRODUCTION_DEPLOY' }), testStore))
-      .rejects.toMatchObject<Partial<InternalDeployAuthError>>({ status: 403 });
+      .rejects.toMatchObject({ status: 403 });
   });
 });

@@ -483,6 +483,8 @@ describe('IVX Autonomous Coder — answer format', () => {
       rollbackTriggered: false,
       rollbackCommitSha: null,
       rollbackError: null,
+      stageTrace: null,
+      taskPlan: null,
     };
     const answer = buildAutonomousCoderAnswer(proof);
     expect(answer).toContain('TASK ID:');
@@ -546,6 +548,8 @@ describe('IVX Autonomous Coder — answer format', () => {
       rollbackTriggered: false,
       rollbackCommitSha: null,
       rollbackError: null,
+      stageTrace: null,
+      taskPlan: null,
     };
     const answer = buildAutonomousCoderAnswer(proof);
     expect(answer).toContain('STATUS:\nBLOCKED');

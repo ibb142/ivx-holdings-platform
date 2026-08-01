@@ -6,6 +6,7 @@
  * DEF-IA-02: detectMathQuestion had a redundant double regex test.
  * DEF-IA-03: No percentage calculation support for investor questions.
  */
+import { describe, test, expect } from 'bun:test';
 import {
   detectIVXConversationQuestion,
   buildIVXConversationAnswer,

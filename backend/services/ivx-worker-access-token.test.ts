@@ -1,3 +1,4 @@
+import { describe, it, test, expect, beforeEach } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
   consumeWorkerAccessToken,
@@ -53,7 +54,7 @@ describe('worker access tokens', () => {
       action: 'QA_ONLY',
       commitSha: 'not-a-sha',
       requestId: 'req-2',
-    }, testStore)).rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 400, code: 'INVALID_COMMIT_SHA' });
+    }, testStore)).rejects.toMatchObject({ status: 400, code: 'INVALID_COMMIT_SHA' });
   });
 
   test('rejects minting with a disallowed action', async () => {
@@ -63,7 +64,7 @@ describe('worker access tokens', () => {
       action: 'DELETE_EVERYTHING',
       commitSha,
       requestId: 'req-3',
-    }, testStore)).rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 400, code: 'INVALID_ACTION' });
+    }, testStore)).rejects.toMatchObject({ status: 400, code: 'INVALID_ACTION' });
   });
 
   test('clamps TTL into the 5-15 minute window', async () => {
@@ -82,12 +83,12 @@ describe('worker access tokens', () => {
     expect(consumed.ownerId).toBe('owner-1');
 
     await expect(consumeWorkerAccessToken({ rawToken, action: 'QA_ONLY', commitSha, workerId }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 409, code: 'TOKEN_REPLAY' });
+      .rejects.toMatchObject({ status: 409, code: 'TOKEN_REPLAY' });
   });
 
   test('rejects an unknown/invalid raw token', async () => {
     await expect(consumeWorkerAccessToken({ rawToken: 'not-a-real-token', action: 'QA_ONLY', commitSha, workerId }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 401, code: 'TOKEN_INVALID' });
+      .rejects.toMatchObject({ status: 401, code: 'TOKEN_INVALID' });
   });
 
   test('rejects an expired token', async () => {
@@ -98,25 +99,25 @@ describe('worker access tokens', () => {
     records.set('logs/audit/worker-access-tokens/tokens.json', stored);
 
     await expect(consumeWorkerAccessToken({ rawToken, action: 'QA_ONLY', commitSha, workerId }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 401, code: 'TOKEN_EXPIRED' });
+      .rejects.toMatchObject({ status: 401, code: 'TOKEN_EXPIRED' });
   });
 
   test('rejects an action mismatch', async () => {
     const { rawToken } = await generateWorkerAccessToken({ ownerId: 'owner-1', action: 'QA_ONLY', commitSha, requestId: 'req-8' }, testStore);
     await expect(consumeWorkerAccessToken({ rawToken, action: 'RENDER_DEPLOY', commitSha, workerId }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 403, code: 'ACTION_MISMATCH' });
+      .rejects.toMatchObject({ status: 403, code: 'ACTION_MISMATCH' });
   });
 
   test('rejects a commit SHA mismatch', async () => {
     const { rawToken } = await generateWorkerAccessToken({ ownerId: 'owner-1', action: 'QA_ONLY', commitSha, requestId: 'req-9' }, testStore);
     await expect(consumeWorkerAccessToken({ rawToken, action: 'QA_ONLY', commitSha: otherCommitSha, workerId }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 403, code: 'COMMIT_MISMATCH' });
+      .rejects.toMatchObject({ status: 403, code: 'COMMIT_MISMATCH' });
   });
 
   test('rejects a worker-ID mismatch when the token is worker-bound', async () => {
     const { rawToken } = await generateWorkerAccessToken({ ownerId: 'owner-1', action: 'QA_ONLY', commitSha, requestId: 'req-10', workerId }, testStore);
     await expect(consumeWorkerAccessToken({ rawToken, action: 'QA_ONLY', commitSha, workerId: 'some-other-worker' }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 403, code: 'WORKER_MISMATCH' });
+      .rejects.toMatchObject({ status: 403, code: 'WORKER_MISMATCH' });
   });
 
   test('allows any worker to consume a token that is not worker-bound', async () => {
@@ -131,7 +132,7 @@ describe('worker access tokens', () => {
     expect(revoked).toBe(true);
 
     await expect(consumeWorkerAccessToken({ rawToken, action: 'QA_ONLY', commitSha, workerId }, testStore))
-      .rejects.toMatchObject<Partial<WorkerAccessTokenError>>({ status: 403, code: 'TOKEN_REVOKED' });
+      .rejects.toMatchObject({ status: 403, code: 'TOKEN_REVOKED' });
   });
 
   test('does not allow revoking an already-used token', async () => {

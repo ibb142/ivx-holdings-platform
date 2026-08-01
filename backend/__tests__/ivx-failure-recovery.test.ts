@@ -10,7 +10,7 @@
  *   6. Boot rehydration restores in-flight jobs
  *   7. No silent data loss — every failure is recorded
  */
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   IVX_FAILURE_RECOVERY_MARKER,
   registerRecoverableJob,

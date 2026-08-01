@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   buildOwnerConnectionVault,
   buildOwnerActionCatalog,
-  buildRorkRemovalPreflight,
+  buildPlatformRemovalPreflight,
   buildOperationEvidenceReport,
   testOwnerConnection,
   IVX_OWNER_OPERATIONS_MARKER,
@@ -135,7 +135,7 @@ describe('buildOwnerActionCatalog', () => {
     expect(ids).toContain('fix_crash');
     expect(ids).toContain('deploy_update');
     expect(ids).toContain('rollback_last_deploy');
-    expect(ids).toContain('remove_rork');
+    expect(ids).toContain('remove_platform');
     expect(ids).toContain('verify_production');
     expect(ids).toContain('import_contacts');
     expect(ids).toContain('generate_proof_report');
@@ -166,7 +166,7 @@ describe('buildOwnerActionCatalog', () => {
 describe('buildRorkRemovalPreflight', () => {
   it('is VERIFIED when GitHub + Render are configured', () => {
     const vault = buildOwnerConnectionVault(FULL_ENV);
-    const preflight = buildRorkRemovalPreflight(vault);
+    const preflight = buildPlatformRemovalPreflight(vault);
     expect(preflight.ready).toBe(true);
     expect(preflight.status).toBe('VERIFIED');
     expect(preflight.missingConnections).toEqual([]);
@@ -174,7 +174,7 @@ describe('buildRorkRemovalPreflight', () => {
 
   it('is BLOCKED_MISSING_OWNER_CONNECTION naming the exact missing connection', () => {
     const vault = buildOwnerConnectionVault({ GITHUB_TOKEN: 'g', GITHUB_REPO_URL: 'https://github.com/x/y.git' });
-    const preflight = buildRorkRemovalPreflight(vault);
+    const preflight = buildPlatformRemovalPreflight(vault);
     expect(preflight.ready).toBe(false);
     expect(preflight.status).toBe('BLOCKED_MISSING_OWNER_CONNECTION');
     expect(preflight.missingConnections).toContain('render' as ConnectionId);
@@ -209,7 +209,7 @@ describe('buildOperationEvidenceReport', () => {
 
   it('keeps the blocker for non-verified statuses and generates unique operation ids', () => {
     const blocked = buildOperationEvidenceReport({
-      action: 'remove_rork',
+      action: 'remove_platform',
       status: 'BLOCKED',
       blocker: 'Render not connected.',
     });

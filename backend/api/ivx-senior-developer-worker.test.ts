@@ -45,6 +45,8 @@ function autonomousProof(overrides: Partial<IVXAutonomousCoderProof> = {}): IVXA
     rollbackTriggered: false,
     rollbackCommitSha: null,
     rollbackError: null,
+    stageTrace: null,
+    taskPlan: null,
     ...overrides,
   };
 }

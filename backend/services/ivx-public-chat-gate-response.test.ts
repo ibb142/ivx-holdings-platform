@@ -1,3 +1,4 @@
+import { describe, test, expect } from 'bun:test';
 import { formatPublicChatGateBlock } from './ivx-public-chat-gate-response';
 
 describe('formatPublicChatGateBlock', () => {
