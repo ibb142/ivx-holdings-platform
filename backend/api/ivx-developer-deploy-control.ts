@@ -2529,10 +2529,12 @@ export async function runGithubListDirectory(input: Record<string, unknown>): Pr
   };
 }
 
-/** Read-only: gets the full recursive file tree (filtered to source files, capped at 500). */
+/** Read-only: gets the full recursive file tree (filtered to source files). Supports an optional limit parameter; default 500, max 100000. */
 export async function runGithubGetFileTree(input: Record<string, unknown>): Promise<Record<string, unknown>> {
   const repoInfo = await getGithubRepoInfo(input);
   const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const limitRaw = Number(input.limit);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.trunc(limitRaw), 100_000) : 500;
   const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
   const response = await fetchJson(url, { method: 'GET', headers: await githubHeaders() });
   if (!response.ok) {
@@ -2549,7 +2551,7 @@ export async function runGithubGetFileTree(input: Record<string, unknown>): Prom
       if (path.includes('node_modules/') || path.includes('.git/') || path.includes('/dist/') || path.includes('/.next/')) return false;
       return true;
     })
-    .slice(0, 500)
+    .slice(0, limit)
     .map((itemValue: unknown) => {
       const record = readRecord(itemValue);
       return {
@@ -2564,9 +2566,10 @@ export async function runGithubGetFileTree(input: Record<string, unknown>): Prom
     owner: repoInfo.owner,
     repo: repoInfo.repo,
     branch,
+    limit,
     totalEntries: rawTree.length,
     filteredEntries: entries.length,
-    truncated: rawTree.length > 500,
+    truncated: rawTree.length > limit,
     tree: entries,
     readOnly: true,
     secretValuesReturned: false,
