@@ -4,6 +4,7 @@
  * Verifies the owner's reported bug: "my name is Ivan Perez" / "what is my name"
  * were not recognized by the intent router and fell through to clarification.
  */
+import { describe, test, expect } from 'bun:test';
 import { parseMemoryCommand, executeMemoryCommand } from './ivx-ia-memory-commands';
 import { classifyIntent } from './ivx-authoritative-intent-router';
 
