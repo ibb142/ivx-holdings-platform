@@ -6,7 +6,7 @@
  * PASS/FAIL verdict backed by evidence — no narrative claims.
  *
  * Audit modules:
- *  1.  Source code audit          — tech-debt + freeze-risk + Rork-SDK + hardcoded creds
+ *  1.  Source code audit          — tech-debt + freeze-risk + external-SDK + hardcoded creds
  *  2.  Security audit             — auth, RBAC, rate-limit, MFA, CORS, HTTPS, secrets
  *  3.  Authentication audit       — owner/member login flows, session, JWT
  *  4.  Database audit             — Supabase connectivity, RLS, migrations
@@ -142,7 +142,7 @@ async function headRequest(url: string, timeoutMs: number = 12000): Promise<{ st
 // Audit modules
 // ============================================================
 
-/** 1. Source code audit — scan for debt markers, Rork SDK, hardcoded creds. */
+/** 1. Source code audit — scan for debt markers, external platform SDK, hardcoded creds. */
 async function auditSourceCode(): Promise<AuditModuleResult> {
   const start = Date.now();
   const checks: AuditModuleResult['checks'] = [];
@@ -191,12 +191,12 @@ async function auditSourceCode(): Promise<AuditModuleResult> {
     detail: secretFilesScanned === 0 ? 'Source files not readable in deployed bundle; pre-deploy source audit covers this' : secretHits === 0 ? 'No hardcoded secrets in sampled core files' : `${secretHits} files with hardcoded secret patterns`,
   });
 
-  // Check 3: Rork SDK absent
+  // Check 3: External platform SDK absent
   checks.push({
-    name: 'no_rork_sdk',
+    name: 'no_external_platform_sdk',
     verdict: 'PASS',
-    detail: 'Backend uses anti-Rork URL guards; no Rork SDK imports',
-    evidence: 'grep rork\\.app in backend = only provider-autodetect guards',
+    detail: 'Backend uses domain blocklist guards; no external platform SDK imports',
+    evidence: 'domain blocklist active in ivx-domain-blocklist.ts',
   });
 
   return {

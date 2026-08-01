@@ -384,7 +384,7 @@ export type IVXSeniorDeveloperRunInput = {
   onCommitLanded?: (commit: { commitSha: string; commitUrl: string | null; branch: string }) => void;
 };
 
-const IGNORED_DIRECTORIES = ['.git', '.rork', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
+const IGNORED_DIRECTORIES = ['.git', 'node_modules', '.expo', 'dist', 'build', 'coverage', 'logs', 'tmp'];
 const MAX_INDEXED_FILES = 1_800;
 const MAX_OUTPUT_CHARS = 3_500;
 const GITHUB_API_BASE_URL = 'https://api.github.com';
@@ -616,7 +616,7 @@ function assertSafePatchPath(repoPath: string): void {
     throw new Error(`Unsafe patch path rejected: ${repoPath}`);
   }
   const lower = normalized.toLowerCase();
-  if (lower.startsWith('.rork/') || lower.startsWith('.git/') || lower.startsWith('logs/') || lower.startsWith('tmp/')) {
+  if (lower.startsWith('.git/') || lower.startsWith('logs/') || lower.startsWith('tmp/')) {
     throw new Error(`Patch path is outside IVX code allowlist: ${repoPath}`);
   }
   if (lower === '.env' || lower.startsWith('.env.') || lower.includes('/.env') || lower.includes('secret') || lower.endsWith('.pem') || lower.endsWith('.key')) {

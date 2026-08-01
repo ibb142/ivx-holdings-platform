@@ -29,7 +29,7 @@ import {
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type CountTarget } from './ivx-db-count';
 import { createRequestId } from './ivx-request-id';
 
-export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v7-0-2026-07-31-rork-level-narrative';
+export const IVX_OWNER_CONVERSATION_STATE_MARKER = 'ivx-owner-conversation-state-v7-0-2026-07-31-ivx-level-narrative';
 
 const ROOT = auditDir('owner-conversation-state');
 const STATE = path.join(ROOT, 'states.json');

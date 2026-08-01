@@ -12,7 +12,7 @@ const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 
 const IGNORE_DIRS = new Set<string>([
   'node_modules', '.git', '.expo', 'dist', 'build', 'tmp', 'core',
-  '.rork', '.next', 'coverage', '.turbo', '.cache', 'logs',
+  '.next', 'coverage', '.turbo', '.cache', 'logs',
 ]);
 
 const SOURCE_EXTS = new Set<string>(['.ts', '.tsx', '.js', '.jsx', '.sql', '.md', '.json']);

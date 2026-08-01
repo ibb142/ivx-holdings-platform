@@ -31,7 +31,7 @@ const API = 'https://api.github.com';
 const IGNORE_DIRS = new Set<string>([
   'node_modules', '.git', '.expo', 'dist', 'build', '.ivx',
   '.DS_Store', '__pycache__', 'tmp', 'core',
-  '.rork', 'logs',
+  'logs',
   'dist-audit-ios', 'dist-audit-ios-final', 'dist-audit-ios-postfix',
   'dist-audit-web', 'dist-audit-web-final', 'dist-audit-web-postfix',
 ]);

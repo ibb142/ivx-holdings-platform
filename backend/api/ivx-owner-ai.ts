@@ -214,7 +214,7 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
-const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v7-0-2026-07-31-rork-level-narrative';
+const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v7-0-2026-07-31-ivx-level-narrative';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
 const GENERIC_ASSISTANT_SENDER_ID = '__ivx_assistant__';
@@ -340,7 +340,7 @@ const LOCAL_DEV_COMMAND_LOG_PATH = path.join(process.cwd(), 'logs', 'audit', 'iv
 const LOCAL_DEV_ERROR_LOG_PATH = path.join(process.cwd(), 'logs', 'audit', 'ivx-local-dev-errors.jsonl');
 const LOCAL_DEV_STORAGE_ROOT = path.join(process.cwd(), 'logs', 'audit', 'ivx-local-dev-storage');
 const LOCAL_DEV_FILES_ROOT = path.join(process.cwd(), 'logs', 'audit', 'ivx-local-dev-files');
-const LOCAL_DEV_IGNORED_DIRS = new Set(['.git', '.rork', '.expo', 'node_modules', 'dist', 'build', 'logs', 'coverage']);
+const LOCAL_DEV_IGNORED_DIRS = new Set(['.git', '.expo', 'node_modules', 'dist', 'build', 'logs', 'coverage']);
 
 const localDevKnowledgeDocuments = new Map<string, Record<string, unknown>>();
 const localDevKnowledgeChunks = new Map<string, Record<string, unknown>[]>();
