@@ -707,7 +707,7 @@ function buildHeadline(vault: OwnerConnectionVault, rork: PlatformRemovalPreflig
     return 'All owner connections are configured. IVX can run every owner operation; tap "Test all systems" to confirm each is live.';
   }
   const missing = vault.missingConnections.map((id) => CONNECTION_LABELS[id]).join(', ');
-  const rorkNote = removal.ready ? '' : ' Platform removal is blocked until GitHub + Render are connected.';
+  const rorkNote = rork.ready ? '' : ' Platform removal is blocked until GitHub + Render are connected.';
   return `${vault.summary.connectedOrConfigured} of ${vault.summary.total} connections are configured. Add the missing connection(s) to unlock every operation: ${missing}.${rorkNote}`;
 }
 
