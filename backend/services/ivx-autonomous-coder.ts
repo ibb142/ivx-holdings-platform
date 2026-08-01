@@ -2126,8 +2126,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       }
     }
     let typecheckResult: IVXAutonomousCoderTestResult;
+    const typecheckCmd: string = tscCmd ?? 'tsc (skipped — not installed)';
     if (tscCmd && typecheckActuallyRun) {
-      const typecheckCmd = tscCmd;
       typecheckResult = input.testRunner
         ? await input.testRunner(projectRoot, typecheckCmd)
         : await runCommand(projectRoot, typecheckCmd);

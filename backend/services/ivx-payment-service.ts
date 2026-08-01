@@ -772,7 +772,7 @@ export async function refundPayment(
   const stripe = getStripe();
 
   const { data: payment } = await sb.from('payment_intents')
-    .select('id, provider_payment_intent_id, amount_cents, state, deal_id, pathway, share_count')
+    .select('id, provider_payment_intent_id, amount_cents, state, deal_id, pathway, share_count, user_id')
     .eq('id', paymentId)
     .single();
 

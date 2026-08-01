@@ -255,7 +255,7 @@ export type ClassificationStore = {
 
 async function loadStore(): Promise<ClassificationStore> {
   if (isDurableStoreConfigured()) {
-    const durable = await readDurableJson<ClassificationStore>('business-classification/records.json');
+    const durable = await readDurableJson<ClassificationStore>('business-classification/records.json', { records: [] });
     if (durable && Array.isArray(durable.records)) return durable;
   }
   return { records: [] };

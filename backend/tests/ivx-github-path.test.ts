@@ -32,7 +32,7 @@ describe('GitHub Execution Path Standardization', () => {
   test('canonical path is the Git Data API (not Rork git proxy)', () => {
     expect(IVX_GITHUB_CANONICAL_PATH).toBe('github_git_data_api');
     expect(IVX_GITHUB_CANONICAL_PATH_DESCRIPTION).toContain('Git Data API');
-    expect(IVX_GITHUB_CANONICAL_PATH_DESCRIPTION).toContain('Rork git proxy is NOT used');
+    expect(IVX_GITHUB_CANONICAL_PATH_DESCRIPTION).toContain('Legacy git proxy is NOT used');
   });
 
   test('repository read via GitHub API', async () => {
@@ -278,7 +278,7 @@ describe('GitHub Execution Path Standardization', () => {
 
   test('Rork git proxy is NOT the canonical path', () => {
     // The description must explicitly state the Rork git proxy is NOT used
-    expect(IVX_GITHUB_CANONICAL_PATH_DESCRIPTION).toMatch(/Rork git proxy is NOT used/);
+    expect(IVX_GITHUB_CANONICAL_PATH_DESCRIPTION).toMatch(/Legacy git proxy is NOT used/);
     // The canonical path must be the Git Data API
     expect(IVX_GITHUB_CANONICAL_PATH).toBe('github_git_data_api');
     // No mention of using the Rork proxy as the active path

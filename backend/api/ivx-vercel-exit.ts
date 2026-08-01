@@ -1299,7 +1299,7 @@ export async function handleVercelExitControlsState(rawRequest: Request): Promis
     return ownerOnlyJson({ error: 'Authentication required' }, status);
   }
 
-  return ownerOnlyJson(controlState, 200);
+  return ownerOnlyJson(controlState as unknown as Record<string, unknown>, 200);
 }
 
 /**

@@ -199,7 +199,7 @@ export async function handleIVXOwnerControlProofRequest(request: Request): Promi
   const payload = {
     ok: true,
     ownerControl: true, // this endpoint existing IS the proof the owner backend is in control
-    externalRequired: rork.rorkRequired,
+    externalRequired: rork.externalRequired,
     rorkReferences: rork.references,
     githubConnected: github.connected,
     githubDetail: github.detail,
@@ -216,7 +216,7 @@ export async function handleIVXOwnerControlProofRequest(request: Request): Promi
     probeDurationMs: Date.now() - startTime,
     source: 'ivx-owner-control-proof-endpoint',
     // Single deterministic status for this read-only proof
-    status: github.connected && render.connected && supabase.connected && !rork.rorkRequired
+    status: github.connected && render.connected && supabase.connected && !rork.externalRequired
       ? 'VERIFIED'
       : 'UNVERIFIED',
     blocker: !github.connected
@@ -225,8 +225,8 @@ export async function handleIVXOwnerControlProofRequest(request: Request): Promi
         ? `Render: ${render.detail}`
         : !supabase.connected
           ? `Supabase: ${supabase.detail}`
-          : rork.rorkRequired
-            ? `Rork runtime dependency still present: ${rork.references.join('; ')}`
+          : rork.externalRequired
+            ? `External runtime dependency still present: ${rork.references.join('; ')}`
             : null,
   };
 

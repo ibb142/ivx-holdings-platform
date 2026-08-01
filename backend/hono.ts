@@ -735,7 +735,6 @@ import {
 } from './api/ivx-agent-audit';
 import { handleLandingFullDeploy, handleLandingFullDeployStatus } from './api/ivx-landing-full-deploy';
 import { qaMigrationOptions, handleQaMigrationRun, handleQaMigrationVerify } from './api/ivx-qa-migration-runner';
-import { OPTIONS as independenceStatusOptions, handleIVXIndependenceStatusRequest } from './api/ivx-independence-status';
 import { handleProofTestRequest, proofTestOptions } from './api/proof-test';
 import {
   executorOptions as ivxExecutorOptions,
@@ -905,7 +904,7 @@ import {
 } from './api/ivx-autonomy';
 import {
   OPTIONS as adminSyncOptions,
-  handleIVXAdminSyncGithubRequest,
+  handleIVXAdminSyncGithubSyncRequest as handleIVXAdminSyncGithubRequest,
 } from './api/ivx-admin-sync';
 import { handleIVXRepairJobStart, handleIVXRepairJobList, handleIVXRepairJobGet, handleIVXRepairJobByIncident } from './api/ivx-repair-jobs';
 import {
@@ -1289,7 +1288,7 @@ import {
   handleUpdateDealPathways,
   handlePublishDeal,
   handleGetSyncReport,
-  handleGetAuditTrail,
+  handleGetAuditTrail as handleGetDealAuditTrail,
   handleListDealPathways,
 } from './api/ivx-deal-pathways';
 import {
@@ -4085,11 +4084,11 @@ app.post('/api/ivx/chat-qa/evidence', async (context) => {
     }
     // Persist the QA evidence to the durable store (fire-and-forget).
     try {
-      const { createServiceClient } = await import('@supabase/supabase-js');
+      const { createClient } = await import('@supabase/supabase-js');
       const supabaseUrl = process.env.SUPABASE_URL || process.env.IVX_SUPABASE_URL;
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (supabaseUrl && serviceKey) {
-        const sb = createServiceClient(supabaseUrl, serviceKey);
+        const sb = createClient(supabaseUrl, serviceKey);
         await sb.from('ivx_chat_qa_evidence').insert({
           trace_id: traceId,
           report_type: reportType || 'ivx-chat-qa',
@@ -4137,11 +4136,11 @@ app.get('/api/ivx/chat-qa/evidence/:traceId', async (context) => {
     await assertIVXOwnerOnly(context.req.raw);
     const traceId = context.req.param('traceId');
     try {
-      const { createServiceClient } = await import('@supabase/supabase-js');
+      const { createClient } = await import('@supabase/supabase-js');
       const supabaseUrl = process.env.SUPABASE_URL || process.env.IVX_SUPABASE_URL;
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (supabaseUrl && serviceKey) {
-        const sb = createServiceClient(supabaseUrl, serviceKey);
+        const sb = createClient(supabaseUrl, serviceKey);
         const { data, error: dbError } = await sb.from('ivx_chat_qa_evidence')
           .select('*')
           .eq('trace_id', traceId)
@@ -5524,7 +5523,7 @@ app.post('/api/ivx/deals/:dealId/publish', async (c) => {
   return handlePublishDeal(c.req.raw, c.req.param('dealId'), authCtx.approval.userId ?? '');
 });
 app.get('/api/ivx/deals/:dealId/sync-report', async (c) => handleGetSyncReport(c.req.raw, c.req.param('dealId')));
-app.get('/api/ivx/deals/:dealId/audit-trail', async (c) => handleGetAuditTrail(c.req.raw, c.req.param('dealId')));
+app.get('/api/ivx/deals/:dealId/audit-trail', async (c) => handleGetDealAuditTrail(c.req.raw, c.req.param('dealId')));
 
 // ── Payment Infrastructure (Stripe) ──
 app.options('/api/ivx/payments/config', () => handlePaymentOptions());

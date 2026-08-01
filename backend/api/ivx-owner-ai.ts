@@ -8182,13 +8182,14 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const _proof = autonomousProof;
       const _files = _proof?.changedFiles ?? [];
       const _vals = _proof?.validations ?? [];
-      const _blockers = _proof?.blockers ?? [];
+      const _blockersRaw = (_proof as Record<string, unknown> | null)?.blockers ?? [];
+      const _blockersArr = Array.isArray(_blockersRaw) ? _blockersRaw as string[] : [];
       const _commitSha = _proof?.gitDeployOperator?.github?.commitSha ?? null;
       const _deployId = _proof?.gitDeployOperator?.render?.deployId ?? null;
       const _liveMatch = _proof?.liveCommitVerification?.match ?? false;
       const _e2e = _proof?.endToEndProductionComplete ?? false;
       const executionBlock = _proof
-        ? `\n\n--- AUTONOMOUS EXECUTION PROOF (V8.0) ---\nTASK_ID: ${_proof.jobId}\nSTATE: ${_proof.ok ? 'VERIFIED' : 'BLOCKED'}\nFILES_CHANGED: ${_files.length > 0 ? _files.join(', ') : 'none'}\nTESTS: ${_vals.length > 0 ? _vals.map((v) => `${v.command}=${v.ok ? 'PASS' : 'FAIL'}`).join('; ') : 'not run'}\nGITHUB_SHA: ${_commitSha ?? 'none'}\nRENDER_DEPLOY_ID: ${_deployId ?? 'none'}\nLIVE_VERIFY: ${_liveMatch ? 'commit parity VERIFIED' : 'commit parity PENDING (deploy may still be building)'}\nBLOCKERS: ${_blockers.length > 0 ? _blockers.join('; ') : 'none'}\nEND_TO_END_COMPLETE: ${_e2e}\n--- END PROOF ---`
+        ? `\n\n--- AUTONOMOUS EXECUTION PROOF (V8.0) ---\nTASK_ID: ${_proof.jobId}\nSTATE: ${_proof.ok ? 'VERIFIED' : 'BLOCKED'}\nFILES_CHANGED: ${_files.length > 0 ? _files.join(', ') : 'none'}\nTESTS: ${_vals.length > 0 ? _vals.map((v) => `${v.command}=${v.ok ? 'PASS' : 'FAIL'}`).join('; ') : 'not run'}\nGITHUB_SHA: ${_commitSha ?? 'none'}\nRENDER_DEPLOY_ID: ${_deployId ?? 'none'}\nLIVE_VERIFY: ${_liveMatch ? 'commit parity VERIFIED' : 'commit parity PENDING (deploy may still be building)'}\nBLOCKERS: ${_blockersArr.length > 0 ? _blockersArr.join('; ') : 'none'}\nEND_TO_END_COMPLETE: ${_e2e}\n--- END PROOF ---`
         : '';
       const dailyAutonomousBlock = dailyAutonomousReport
         ? `\n\n${renderFinalAutonomousReport(dailyAutonomousReport)}`

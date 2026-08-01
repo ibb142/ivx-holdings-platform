@@ -80,7 +80,7 @@ export const SCHEDULED_JOB_KINDS: readonly ScheduledJobKind[] = [
   'daily_enterprise_os',
 ];
 
-export type JobRunStatus = 'never' | 'ok' | 'failed';
+export type JobRunStatus = 'never' | 'ok' | 'failed' | 'completed_no_results' | 'timed_out';
 
 export type ScheduledJobState = {
   kind: ScheduledJobKind;
