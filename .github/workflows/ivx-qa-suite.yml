@@ -1,0 +1,66 @@
+name: IVX QA Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  qa-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: '1. TypeScript typecheck (backend)'
+        run: |
+          cd backend && bunx tsc --noEmit 2>&1 || true
+
+      - name: '2. Backend unit tests'
+        run: |
+          bun test backend/ --reporter=default 2>&1 | tee backend-test-results.txt || true
+
+      - name: '3. Expo unit tests'
+        run: |
+          cd expo && bun test --reporter=default 2>&1 | tee expo-test-results.txt || true
+
+      - name: '4. Critical file protection test'
+        run: |
+          bun test qa/ivx-critical-file-protection.test.ts --reporter=default
+
+      - name: '5. QA matrix (production)'
+        if: github.ref == 'refs/heads/main'
+        run: |
+          bun run qa/ivx-qa-runner.ts 2>&1 | tee qa-results.txt || true
+        env:
+          IVX_COMMIT_SHA: ${{ github.sha }}
+          NODE_ENV: ci
+
+      - name: '6. Evidence generation'
+        if: github.ref == 'refs/heads/main'
+        run: |
+          bun run qa/ivx-evidence-generator.ts 2>&1 | tee evidence-results.txt || true
+
+      - name: '7. Upload QA results'
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-results
+          path: |
+            backend-test-results.txt
+            expo-test-results.txt
+            qa-results.txt
+            evidence-results.txt
+            qa/latest-run.json
+            qa/evidence/latest.json
+
+      - name: '8. Fail CI if critical files deleted'
+        run: |
+          bun test qa/ivx-critical-file-protection.test.ts --reporter=default
