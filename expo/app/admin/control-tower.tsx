@@ -705,6 +705,13 @@ export default function ControlTowerScreen() {
             <Text style={styles.headerTitle}>Nerve Center</Text>
             <Text style={styles.headerSubtitle}>{severityCopy}</Text>
           </View>
+          <TouchableOpacity
+            onPress={() => router.push('/autonomous-dashboard' as never)}
+            style={[styles.refreshButton, { backgroundColor: 'rgba(0,230,118,0.15)', borderColor: '#00E676', borderWidth: 1 }]}
+            testID="nerve-autonomous-live-work-btn"
+          >
+            <Cpu size={16} color="#00E676" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={refreshSnapshot} style={styles.refreshButton} testID="nerve-refresh-button">
             <RefreshCw size={16} color="#76A9FF" />
           </TouchableOpacity>
