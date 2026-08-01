@@ -51,7 +51,7 @@ describe('Block 1 — owner-ai/status auth guard', () => {
     const res = await handleIVXOwnerAIProxyStatus(req);
     const text = await res.text();
     // Must not contain key material, env values, file paths, or deployment controls.
-    expect(text).not.toContain('AI_GATEWAY_API_KEY');
+    expect(text).not.toContain('IVX_AI_GATEWAY_KEY');
     expect(text).not.toContain('vck_');
     expect(text).not.toContain('sk-');
     expect(text).not.toContain('service_role');
@@ -84,7 +84,7 @@ describe('Block 1 — owner-ai/public-status public-safe endpoint', () => {
   it('does not leak secrets in public-status', async () => {
     const res = handleIVXOwnerAIPublicStatus();
     const text = await res.text();
-    expect(text).not.toContain('AI_GATEWAY_API_KEY');
+    expect(text).not.toContain('IVX_AI_GATEWAY_KEY');
     expect(text).not.toContain('vck_');
     expect(text).not.toContain('sk-');
     expect(text).not.toContain('service_role');

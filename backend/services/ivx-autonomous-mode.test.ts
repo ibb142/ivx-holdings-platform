@@ -34,7 +34,7 @@ describe('checkToolAvailability', () => {
     const env = {
       GITHUB_TOKEN: 'gh_xxx',
       GITHUB_REPO_URL: 'https://github.com/x/y.git',
-      AI_GATEWAY_API_KEY: 'k',
+      IVX_AI_GATEWAY_KEY: 'k',
     };
     expect(isToolAvailable('github_write', env)).toBe(true);
     const report = checkToolAvailability(env);
@@ -42,10 +42,10 @@ describe('checkToolAvailability', () => {
   });
 
   it('canExecuteEndToEnd requires the core tools plus a deploy path', () => {
-    const noDeploy = checkToolAvailability({ AI_GATEWAY_API_KEY: 'k' });
+    const noDeploy = checkToolAvailability({ IVX_AI_GATEWAY_KEY: 'k' });
     expect(noDeploy.canExecuteEndToEnd).toBe(false);
     const full = checkToolAvailability({
-      AI_GATEWAY_API_KEY: 'k',
+      IVX_AI_GATEWAY_KEY: 'k',
       RENDER_API_KEY: 'r',
       RENDER_SERVICE_ID: 's',
     });

@@ -181,16 +181,16 @@ export const RUNTIME_VARIABLE_SPECS: RuntimeVariableSpec[] = [
     description: 'Server owner service token accepted by the owner-gated routes.',
   },
   {
-    name: 'AI_GATEWAY_API_KEY', aliases: ['OPENAI_API_KEY'], isPublic: false, scopes: ['server', 'runtime'],
+    name: 'IVX_AI_GATEWAY_KEY', aliases: ['OPENAI_API_KEY'], isPublic: false, scopes: ['server', 'runtime'],
     usedBy: ['owner AI runtime', 'public chat AI', 'vision/OCR'],
     verify: 'ai_gateway', knownInRork: true,
     description: 'AI gateway / OpenAI key powering reasoning, planning, and vision.',
   },
   {
-    name: 'OPENAI_API_KEY', aliases: ['AI_GATEWAY_API_KEY'], isPublic: false, scopes: ['server', 'runtime'],
-    usedBy: ['AI runtime (alternative to AI_GATEWAY_API_KEY)'],
+    name: 'OPENAI_API_KEY', aliases: ['IVX_AI_GATEWAY_KEY'], isPublic: false, scopes: ['server', 'runtime'],
+    usedBy: ['AI runtime (alternative to IVX_AI_GATEWAY_KEY)'],
     verify: 'ai_gateway', knownInRork: false,
-    description: 'Optional OpenAI key; AI_GATEWAY_API_KEY is the configured equivalent.',
+    description: 'Optional OpenAI key; IVX_AI_GATEWAY_KEY is the configured equivalent.',
   },
   {
     name: 'AWS_ACCESS_KEY_ID', aliases: [], isPublic: false, scopes: ['server', 'runtime'],

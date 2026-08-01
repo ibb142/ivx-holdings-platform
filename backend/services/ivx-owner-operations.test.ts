@@ -21,7 +21,7 @@ const FULL_ENV: Record<string, string> = {
   AWS_SECRET_ACCESS_KEY: 'secret',
   AWS_REGION: 'us-east-1',
   PRODUCTION_BASE_URL: 'https://api.ivxholding.com',
-  AI_GATEWAY_API_KEY: 'key',
+  IVX_AI_GATEWAY_KEY: 'key',
   MESHY_API_KEY: 'meshy',
 };
 

@@ -200,10 +200,10 @@ const CAPABILITY_SPECS: CapabilitySpec[] = [
           status: 'BLOCKED',
           blockers: [{
             reason: 'AI reasoning gateway is not configured.',
-            dependency: 'AI_GATEWAY_API_KEY on the backend runtime.',
-            ownerAction: 'Set AI_GATEWAY_API_KEY so Owner AI can reason and synthesize.',
+            dependency: 'IVX_AI_GATEWAY_KEY on the backend runtime.',
+            ownerAction: 'Set IVX_AI_GATEWAY_KEY so Owner AI can reason and synthesize.',
           }],
-          nextAction: 'Set AI_GATEWAY_API_KEY on the Render service.',
+          nextAction: 'Set IVX_AI_GATEWAY_KEY on the Render service.',
         };
       }
       return { status: 'COMPLETE', blockers: [], nextAction: 'None — owner-gated route live, intent router + execution mode wired.' };
@@ -226,10 +226,10 @@ const CAPABILITY_SPECS: CapabilitySpec[] = [
           status: 'BLOCKED',
           blockers: [{
             reason: 'AI reasoning gateway is not configured.',
-            dependency: 'AI_GATEWAY_API_KEY on the backend runtime.',
-            ownerAction: 'Set AI_GATEWAY_API_KEY so public chat can answer from the model.',
+            dependency: 'IVX_AI_GATEWAY_KEY on the backend runtime.',
+            ownerAction: 'Set IVX_AI_GATEWAY_KEY so public chat can answer from the model.',
           }],
-          nextAction: 'Set AI_GATEWAY_API_KEY on the Render service.',
+          nextAction: 'Set IVX_AI_GATEWAY_KEY on the Render service.',
         };
       }
       return { status: 'COMPLETE', blockers: [], nextAction: 'None — business-context + deal-intelligence grounding live.' };

@@ -36,7 +36,7 @@ describe('media labels', () => {
 describe('media providers + cost', () => {
   it('selects a concrete provider per capability', () => {
     expect(selectMediaProvider('image_generation').modelId).toBe('openai/gpt-image-2');
-    expect(selectMediaProvider('image_understanding').authSource).toBe('AI_GATEWAY_API_KEY');
+    expect(selectMediaProvider('image_understanding').authSource).toBe('IVX_AI_GATEWAY_KEY');
     // No owner 3D key in the test env -> procedural fallback, never a Rork toolkit secret.
     expect(selectMediaProvider('model3d_generation').authSource).toBe('PROCEDURAL');
     expect(listMediaProviderSelections()).toHaveLength(4);
@@ -53,12 +53,12 @@ describe('media providers + cost', () => {
 describe('image generation (injected gateway)', () => {
   let prevKey: string | undefined;
   beforeAll(() => {
-    prevKey = process.env.AI_GATEWAY_API_KEY;
-    process.env.AI_GATEWAY_API_KEY = 'test-key';
+    prevKey = process.env.IVX_AI_GATEWAY_KEY;
+    process.env.IVX_AI_GATEWAY_KEY = 'test-key';
   });
   afterAll(() => {
-    if (prevKey === undefined) delete process.env.AI_GATEWAY_API_KEY;
-    else process.env.AI_GATEWAY_API_KEY = prevKey;
+    if (prevKey === undefined) delete process.env.IVX_AI_GATEWAY_KEY;
+    else process.env.IVX_AI_GATEWAY_KEY = prevKey;
   });
 
   it('returns GENERATED images on success', async () => {
@@ -137,10 +137,10 @@ describe('video understanding (injected analyzer)', () => {
 
 describe('multimodal stack report', () => {
   it('reports image capabilities COMPLETE when the gateway key is set and 3D BLOCKED (procedural) without an owner 3D key', () => {
-    const prevGateway = process.env.AI_GATEWAY_API_KEY;
+    const prevGateway = process.env.IVX_AI_GATEWAY_KEY;
     const prevMeshy = process.env.MESHY_API_KEY;
     const prevTripo = process.env.TRIPO_API_KEY;
-    process.env.AI_GATEWAY_API_KEY = 'test-key';
+    process.env.IVX_AI_GATEWAY_KEY = 'test-key';
     delete process.env.MESHY_API_KEY;
     delete process.env.TRIPO_API_KEY;
     try {
@@ -158,8 +158,8 @@ describe('multimodal stack report', () => {
       expect(report.labels).toContain('PROCEDURAL_PREVIEW');
       expect(report.summary.total).toBe(4);
     } finally {
-      if (prevGateway === undefined) delete process.env.AI_GATEWAY_API_KEY;
-      else process.env.AI_GATEWAY_API_KEY = prevGateway;
+      if (prevGateway === undefined) delete process.env.IVX_AI_GATEWAY_KEY;
+      else process.env.IVX_AI_GATEWAY_KEY = prevGateway;
       if (prevMeshy === undefined) delete process.env.MESHY_API_KEY;
       else process.env.MESHY_API_KEY = prevMeshy;
       if (prevTripo === undefined) delete process.env.TRIPO_API_KEY;

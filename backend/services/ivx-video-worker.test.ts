@@ -162,13 +162,13 @@ describe('getVideoWorkerCapabilities', () => {
     eleven: process.env.ELEVENLABS_API_KEY,
     openai: process.env.OPENAI_API_KEY,
     whisper: process.env.WHISPER_API_KEY,
-    gateway: process.env.AI_GATEWAY_API_KEY,
+    gateway: process.env.IVX_AI_GATEWAY_KEY,
   };
   afterEach(() => {
     process.env.ELEVENLABS_API_KEY = prev.eleven;
     process.env.OPENAI_API_KEY = prev.openai;
     process.env.WHISPER_API_KEY = prev.whisper;
-    process.env.AI_GATEWAY_API_KEY = prev.gateway;
+    process.env.IVX_AI_GATEWAY_KEY = prev.gateway;
   });
 
   it('always reports upload + retry tracking, and lists concrete remaining runtime dependencies', async () => {

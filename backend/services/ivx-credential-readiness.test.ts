@@ -14,8 +14,8 @@ const REAL_TOKEN = ['sk', 'live', '8f3a9c2b1d7e4f60a5c8b9d2e1f0a3c4'].join('_');
 
 describe('ivx-credential-readiness — presence checker', () => {
   it('reports a configured credential as present with no diagnostic', () => {
-    const report = buildCredentialReadiness({ AI_GATEWAY_API_KEY: REAL_TOKEN });
-    const ai = report.credentials.find((c) => c.name === 'AI_GATEWAY_API_KEY')!;
+    const report = buildCredentialReadiness({ IVX_AI_GATEWAY_KEY: REAL_TOKEN });
+    const ai = report.credentials.find((c) => c.name === 'IVX_AI_GATEWAY_KEY')!;
     expect(ai.configured).toBe(true);
     expect(ai.diagnostic).toBeNull();
     expect(ai.fallback).toBeNull();
@@ -23,15 +23,15 @@ describe('ivx-credential-readiness — presence checker', () => {
 
   it('reports a missing credential with an actionable diagnostic + safe fallback', () => {
     const report = buildCredentialReadiness({});
-    const ai = report.credentials.find((c) => c.name === 'AI_GATEWAY_API_KEY')!;
+    const ai = report.credentials.find((c) => c.name === 'IVX_AI_GATEWAY_KEY')!;
     expect(ai.configured).toBe(false);
-    expect(ai.diagnostic).toContain('AI_GATEWAY_API_KEY');
+    expect(ai.diagnostic).toContain('IVX_AI_GATEWAY_KEY');
     expect(ai.diagnostic).toContain('REQUIRED');
     expect(ai.fallback).toBeTruthy();
   });
 
   it('never returns a secret value', () => {
-    const report = buildCredentialReadiness({ AI_GATEWAY_API_KEY: REAL_TOKEN });
+    const report = buildCredentialReadiness({ IVX_AI_GATEWAY_KEY: REAL_TOKEN });
     expect(report.secretValuesReturned).toBe(false);
     const serialized = JSON.stringify(report);
     expect(serialized.includes(REAL_TOKEN)).toBe(false);
@@ -78,7 +78,7 @@ describe('ivx-credential-readiness — roll-up + autonomy level', () => {
 
   it('marks autonomy full when required creds present + a deploy path exists', () => {
     const report = buildCredentialReadiness({
-      AI_GATEWAY_API_KEY: REAL_TOKEN,
+      IVX_AI_GATEWAY_KEY: REAL_TOKEN,
       EXPO_PUBLIC_SUPABASE_URL: 'https://x.supabase.co',
       SUPABASE_SERVICE_ROLE_KEY: REAL_TOKEN,
       IVX_OWNER_REGISTRATION_EMAILS: 'owner@ivxholding.com',
@@ -92,7 +92,7 @@ describe('ivx-credential-readiness — roll-up + autonomy level', () => {
 
   it('marks autonomy degraded when required creds present but no deploy path', () => {
     const report = buildCredentialReadiness({
-      AI_GATEWAY_API_KEY: REAL_TOKEN,
+      IVX_AI_GATEWAY_KEY: REAL_TOKEN,
       EXPO_PUBLIC_SUPABASE_URL: 'https://x.supabase.co',
       SUPABASE_SERVICE_ROLE_KEY: REAL_TOKEN,
       IVX_OWNER_REGISTRATION_EMAILS: 'owner@ivxholding.com',

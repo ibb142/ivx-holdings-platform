@@ -518,19 +518,19 @@ async function testAwsSms(): Promise<CredentialRow> {
 async function testAiGateway(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
   const evidenceId = makeEvidenceId('AiGateway');
-  // 2026-07-26 fix: AI_GATEWAY_API_KEY takes priority over OPENAI_API_KEY.
-  // The owner rotates AI_GATEWAY_API_KEY on Render; OPENAI_API_KEY is a legacy alias.
+  // 2026-07-26 fix: IVX_AI_GATEWAY_KEY takes priority over OPENAI_API_KEY.
+  // The owner rotates IVX_AI_GATEWAY_KEY on Render; OPENAI_API_KEY is a legacy alias.
   // If OPENAI_API_KEY were preferred, a stale key would shadow the fresh gateway key.
-  const gatewayKey = envClean('AI_GATEWAY_API_KEY');
+  const gatewayKey = envClean('IVX_AI_GATEWAY_KEY');
   const openaiKey = envClean('OPENAI_API_KEY');
   const key = gatewayKey || openaiKey;
   const stored = key.length > 0;
   const keyPrefix = maskToken(key);
-  const keySource = gatewayKey ? 'AI_GATEWAY_API_KEY' : 'OPENAI_API_KEY';
+  const keySource = gatewayKey ? 'IVX_AI_GATEWAY_KEY' : 'OPENAI_API_KEY';
   const staleAliasPresent = openaiKey.length > 0 && gatewayKey.length > 0 && openaiKey !== gatewayKey;
   const base = {
     service: 'AI Gateway',
-    variable: 'AI_GATEWAY_API_KEY / OPENAI_API_KEY',
+    variable: 'IVX_AI_GATEWAY_KEY / OPENAI_API_KEY',
     variable_name: keySource,
     provider: 'vercel_ai_gateway',
     credential_id: 'cred-ai-gateway',
@@ -605,7 +605,7 @@ async function testAiGateway(): Promise<CredentialRow> {
   const authenticated = rawAuthenticated;
   const runtimeSucceeded = liveAnswer !== null && liveAnswer.length > 0 && liveError === null;
   const health = getProviderHealth();
-  const detail = `provider=${health.provider}, model=${health.model}, state=${health.state}, credentialLoaded=${health.credentialLoaded}, keySource=${keySource}${staleAliasPresent ? ', WARNING: stale OPENAI_API_KEY also present (shadowed by AI_GATEWAY_API_KEY)' : ''}`;
+  const detail = `provider=${health.provider}, model=${health.model}, state=${health.state}, credentialLoaded=${health.credentialLoaded}, keySource=${keySource}${staleAliasPresent ? ', WARNING: stale OPENAI_API_KEY also present (shadowed by IVX_AI_GATEWAY_KEY)' : ''}`;
   const fallbackResult = authenticated
     ? null
     : (runtimeSucceeded
