@@ -532,15 +532,15 @@ function getLocalAIProviderName(): 'chatgpt' {
 }
 
 function getLocalAIGatewayRootUrl(): string {
-  // IVX-owned naming only. No Rork toolkit URL fallback at runtime.
+  // IVX-owned naming only. No external toolkit URL fallback at runtime.
   return readTrimmedConfigValue(process.env.EXPO_PUBLIC_IVX_AI_GATEWAY_URL);
 }
 
 /**
  * Phase 4d (2026-05-12): the legacy client-direct gateway rollback path is
  * permanently OFF. The IVX-owned backend proxy (`POST /api/ivx/owner-ai`) is
- * the single active AI path. The client never reads any Rork toolkit
- * credential or legacy Rork public environment variable at runtime.
+ * the single active AI path. The client never reads any external toolkit
+ * credential or legacy external public environment variable at runtime.
  * The rollback toggle helper is retained as a constant `false` so existing
  * call sites and diagnostic fields keep their shape.
  */
@@ -687,7 +687,7 @@ function formatManualOwnerAnswer(intent: OwnerManualRouterIntent): string {
     return [
       'Block 22 is a production-runtime worker issue, not a Supabase schema-inspection issue.',
       'Senior-dev routing: verify the backend job tables, worker status, queued/running/waiting_approval/completed/failed transitions, and saved job logs through the Block 22 worker routes. Do not inspect schema just because the owner wrote “no schema inspection.”',
-      'Correct proof: create a queued job, let the Render-side worker pick it up, confirm running then completed or failed, confirm logs are saved, and confirm the result is independent of the phone screen, app session, and Rork chat.',
+      'Correct proof: create a queued job, let the Render-side worker pick it up, confirm running then completed or failed, confirm logs are saved, and confirm the result is independent of the phone screen, app session, and external chat.',
     ].join('\n');
   }
   if (intent === 'infrastructure_runtime') {
@@ -4334,7 +4334,7 @@ export type IVXAIIndependenceSnapshot = {
   ivxBackendProxyPath: string;
   ivxBackendBaseUrl: string | null;
   clientDirectGatewayRollbackEnabled: boolean;
-  rorkToolkitSecretPresentOnClient: boolean;
+  externalToolkitSecretPresentOnClient: boolean;
   rorkPublicEnvPresentOnClient: { name: string; present: boolean }[];
   toolkitSdkMetroOnly: boolean;
   lastFallbackState: 'remote_api' | 'local_app_brain' | 'provider_fallback' | 'pending' | 'unknown';
@@ -4359,7 +4359,7 @@ export function getIVXAIIndependenceSnapshot(): IVXAIIndependenceSnapshot {
     ivxBackendProxyPath: '/api/ivx/owner-ai',
     ivxBackendBaseUrl: audit.activeBaseUrl,
     clientDirectGatewayRollbackEnabled: false,
-    rorkToolkitSecretPresentOnClient: false,
+    externalToolkitSecretPresentOnClient: false,
     rorkPublicEnvPresentOnClient: publicEnv,
     toolkitSdkMetroOnly: false,
     lastFallbackState: proof?.source ?? 'pending',

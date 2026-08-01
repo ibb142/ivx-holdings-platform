@@ -3,7 +3,7 @@
  *
  * Thin client over the owner-gated Owner Operations API — credential vault
  * (status only, never values), live connection tests, the one-click action
- * catalog, and the Rork-removal preflight. Auth + base URL reuse the same
+ * catalog, and the Platform removal preflight. Auth + base URL reuse the same
  * owner-session pattern as the rest of the IVX developer module.
  */
 import { getDirectApiBaseUrl } from '@/lib/api-base';
@@ -77,7 +77,7 @@ export type OneClickAction = {
   requiresConnections: ConnectionId[];
 };
 
-export type RorkRemovalPreflight = {
+export type PlatformRemovalPreflight = {
   ready: boolean;
   status: 'VERIFIED' | 'BLOCKED_MISSING_OWNER_CONNECTION';
   requiredConnections: { connection: ConnectionId; label: string; satisfied: boolean; missing: string | null }[];
@@ -91,7 +91,7 @@ export type OwnerOperationsDashboard = {
   generatedAt: string;
   vault: OwnerConnectionVault;
   actions: { marker: string; generatedAt: string; actions: OneClickAction[] };
-  rorkRemoval: RorkRemovalPreflight;
+  platformRemoval: PlatformRemovalPreflight;
   headline: string;
 };
 
@@ -154,7 +154,7 @@ export async function testOwnerConnection(connection: ConnectionId): Promise<Con
   return (payload.result as ConnectionTestResult | undefined) ?? null;
 }
 
-export async function getRorkRemovalPreflight(): Promise<RorkRemovalPreflight | null> {
-  const payload = readRecord(await ownerFetch('/api/ivx/owner-operations/rork-removal/preflight'));
-  return (payload.preflight as RorkRemovalPreflight | undefined) ?? null;
+export async function getPlatformRemovalPreflight(): Promise<PlatformRemovalPreflight | null> {
+  const payload = readRecord(await ownerFetch('/api/ivx/owner-operations/removal-preflight'));
+  return (payload.preflight as PlatformRemovalPreflight | undefined) ?? null;
 }

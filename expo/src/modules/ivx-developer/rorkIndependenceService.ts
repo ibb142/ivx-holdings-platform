@@ -1,9 +1,9 @@
 /**
- * IVX → Rork Independence client (owner-only).
+ * IVX Independence Status client (owner-only).
  *
- * Thin client over the owner-gated Rork Independence API — the live 4-phase
- * Rork→IVX transition report (current phase, per-phase requirement readiness,
- * the eight kept systems, the Rork dependencies still present, the six owner
+ * Thin client over the owner-gated Independence Status API — the live 4-phase
+ * External→IVX transition report (current phase, per-phase requirement readiness,
+ * the eight kept systems, the external dependencies still present, the six owner
  * capabilities, and the next actions). Auth + base URL reuse the same
  * owner-session pattern as the rest of the IVX developer module.
  */
@@ -25,7 +25,7 @@ export type IndependencePhase = {
   order: number;
   title: string;
   objective: string;
-  rorkRole: string;
+  externalRole: string;
   requirements: PhaseRequirement[];
   readiness: PhaseReadiness;
 };
@@ -37,7 +37,7 @@ export type KeptSystem = {
   missing: string | null;
 };
 
-export type RorkDependency = {
+export type ExternalDependency = {
   dependency: string;
   present: boolean;
   risk: 'critical' | 'high' | 'medium' | 'low';
@@ -45,7 +45,7 @@ export type RorkDependency = {
   removalAction: string;
 };
 
-export type RorkIndependenceReport = {
+export type IndependenceReport = {
   marker: string;
   generatedAt: string;
   currentPhase: IndependencePhaseId;
@@ -53,12 +53,12 @@ export type RorkIndependenceReport = {
   nextPhase: IndependencePhaseId | null;
   phases: IndependencePhase[];
   keptSystems: KeptSystem[];
-  rorkDependenciesRemaining: RorkDependency[];
+  externalDependenciesRemaining: ExternalDependency[];
   ownerCapabilities: PhaseRequirement[];
   summary: {
     phasesAchieved: number;
-    rorkRequiredForNormalWorkflow: boolean;
-    rorkOptional: boolean;
+    externalRequiredForNormalWorkflow: boolean;
+    externalOptional: boolean;
     canReceiveOwnerCommands: boolean;
     canModifyCode: boolean;
     canDeploy: boolean;
@@ -108,12 +108,12 @@ async function ownerFetch(path: string, init: RequestInit = {}): Promise<unknown
   });
   const payload = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(readError(payload, `IVX rork-independence request failed with HTTP ${response.status}.`));
+    throw new Error(readError(payload, `IVX independence-status request failed with HTTP ${response.status}.`));
   }
   return payload;
 }
 
-export async function getRorkIndependenceReport(): Promise<RorkIndependenceReport | null> {
-  const payload = readRecord(await ownerFetch('/api/ivx/rork-independence'));
-  return (payload.report as RorkIndependenceReport | undefined) ?? null;
+export async function getIndependenceReport(): Promise<IndependenceReport | null> {
+  const payload = readRecord(await ownerFetch('/api/ivx/independence-status'));
+  return (payload.report as IndependenceReport | undefined) ?? null;
 }
