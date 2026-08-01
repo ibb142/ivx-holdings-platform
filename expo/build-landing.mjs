@@ -1,1 +1,198 @@
-aW1wb3J0IHsgcmVhZEZpbGVTeW5jLCB3cml0ZUZpbGVTeW5jLCBta2RpclN5bmMsIGV4aXN0c1N5bmMsIGNvcHlGaWxlU3luYyB9IGZyb20gJ2ZzJzsKaW1wb3J0IHsgZmV0Y2hTdGF0aWNMYW5kaW5nQXBpUGF5bG9hZHMgfSBmcm9tICcuL3NjcmlwdHMvbGFuZGluZy1zdGF0aWMtYXBpLm1qcyc7CmltcG9ydCB7IGluamVjdExhbmRpbmdDYXJkUmVuZGVyZXIgfSBmcm9tICcuL3NjcmlwdHMvbGFuZGluZy1jYXJkLXJlbmRlcmVyLWluamVjdG9yLm1qcyc7CmltcG9ydCB7IHNhbml0aXplTGFuZGluZ0h0bWwgfSBmcm9tICcuL3NjcmlwdHMvbGFuZGluZy1odG1sLXNhbml0aXplci5tanMnOwoKY29uc3QgUFJPRFVDVElPTl9CQUNLRU5EX1VSTCA9ICdodHRwczovL2FwaS5pdnhob2xkaW5nLmNvbSc7CmNvbnN0IExBTkRJTkdfSFRNTF9DQUNIRV9DT05UUk9MID0gJ25vLWNhY2hlLCBuby1zdG9yZSwgbXVzdC1yZXZhbGlkYXRlJzsKY29uc3QgTEFORElOR19DT05GSUdfQ0FDSEVfQ09OVFJPTCA9ICduby1jYWNoZSwgbm8tc3RvcmUsIG11c3QtcmV2YWxpZGF0ZSc7CmNvbnN0IExBTkRJTkdfQVBJX0NBQ0hFX0NPTlRST0wgPSAncHVibGljLCBtYXgtYWdlPTYwLCBzLW1heGFnZT0zMDAsIHN0YWxlLXdoaWxlLXJldmFsaWRhdGU9NjAwJzsKY29uc3QgTEFORElOR19IRUFMVEhfQ0FDSEVfQ09OVFJPTCA9ICdwdWJsaWMsIG1heC1hZ2U9MzAsIHMtbWF4YWdlPTYwLCBzdGFsZS13aGlsZS1yZXZhbGlkYXRlPTEyMCc7CgpmdW5jdGlvbiBpc0xvY2FsRGV2Q3JlZGVudGlhbCh2YWx1ZSkgewogIGNvbnN0IHYgPSBTdHJpbmcodmFsdWUgfHwgJycpLnRvTG93ZXJDYXNlKCk7CiAgcmV0dXJuIHYuaW5jbHVkZXMoJzEyNy4wLjAuMScpIHx8IHYuaW5jbHVkZXMoJ2xvY2FsaG9zdCcpIHx8IHYuaW5jbHVkZXMoJzo6MScpIHx8CiAgICB2LmluY2x1ZGVzKCdzdXBhYmFzZSBsb2NhbCBkZXZlbG9wbWVudCcpIHx8IHYuaW5jbHVkZXMoJ3N1cGVyLXNlY3JldC1qd3QnKSB8fAogICAgdi5pbmNsdWRlcygnNTQzMjEnKSB8fCB2LmluY2x1ZGVzKCc1NDMyMicpIHx8IHYuaW5jbHVkZXMoJzU0MzIzJyk7Cn0KCmZ1bmN0aW9uIGlzVmFsaWRTdXBhYmFzZVVybCh1cmwpIHsKICByZXR1cm4gL15odHRwczpcL1wvW2EtejAtOS1dK1wuc3VwYWJhc2VcLmNvJC9pLnRlc3QoU3RyaW5nKHVybCB8fCAnJykudHJpbSgpKTsKfQoKZnVuY3Rpb24gaXNWYWxpZFN1cGFiYXNlQW5vbktleShrZXkpIHsKICBjb25zdCBrID0gU3RyaW5nKGtleSB8fCAnJykudHJpbSgpOwogIHJldHVybiBrLnN0YXJ0c1dpdGgoJ2V5SicpICYmIGsubGVuZ3RoID4gMzAgJiYgIWlzTG9jYWxEZXZDcmVkZW50aWFsKGspOwp9CgpmdW5jdGlvbiBzYW5pdGl6ZUJhY2tlbmRVcmwodXJsKSB7CiAgY29uc3QgdSA9IFN0cmluZyh1cmwgfHwgJycpLnRyaW0oKS5yZXBsYWNlKC9cLyQvLCAnJyk7CiAgaWYgKCF1KSByZXR1cm4gUFJPRFVDVElPTl9CQUNLRU5EX1VSTDsKICBpZiAoaXNMb2NhbERldkNyZWRlbnRpYWwodSkpIHJldHVybiBQUk9EVUNUSU9OX0JBQ0tFTkRfVVJMOwogIGlmICh1LmluY2x1ZGVzKCdpdnhob2xkaW5nLmNvbScpKSByZXR1cm4gdTsKICBpZiAodS5pbmNsdWRlcygnb25yZW5kZXIuY29tJykpIHJldHVybiBQUk9EVUNUSU9OX0JBQ0tFTkRfVVJMOwogIHJldHVybiB1Owp9CgpmdW5jdGlvbiBzYW5pdGl6ZVN1cGFiYXNlVXJsKHVybCkgewogIGNvbnN0IHUgPSBTdHJpbmcodXJsIHx8ICcnKS50cmltKCk7CiAgaWYgKGlzTG9jYWxEZXZDcmVkZW50aWFsKHUpIHx8ICFpc1ZhbGlkU3VwYWJhc2VVcmwodSkpIHJldHVybiAnJzsKICByZXR1cm4gdTsKfQoKZnVuY3Rpb24gc2FuaXRpemVTdXBhYmFzZUFub25LZXkoa2V5KSB7CiAgY29uc3QgayA9IFN0cmluZyhrZXkgfHwgJycpLnRyaW0oKTsKICBpZiAoaXNMb2NhbERldkNyZWRlbnRpYWwoaykgfHwgIWlzVmFsaWRTdXBhYmFzZUFub25LZXkoaykpIHJldHVybiAnJzsKICByZXR1cm4gazsKfQoKY29uc3QgU1VQQUJBU0VfVVJMID0gc2FuaXRpemVTdXBhYmFzZVVybChwcm9jZXNzLmVudi5FWFBPX1BVQkxJQ19TVVBBQkFTRV9VUkwgfHwgcHJvY2Vzcy5lbnYuU1VQQUJBU0VfVVJMIHx8ICcnKTsKY29uc3QgU1VQQUJBU0VfQU5PTl9LRVkgPSBzYW5pdGl6ZVN1cGFiYXNlQW5vbktleShwcm9jZXNzLmVudi5FWFBPX1BVQkxJQ19TVVBBQkFTRV9BTk9OX0tFWSB8fCBwcm9jZXNzLmVudi5TVVBBQkFTRV9BTk9OX0tFWSB8fCAnJyk7CmNvbnN0IEFQSV9CQVNFX1VSTCA9IHNhbml0aXplQmFja2VuZFVybCgocHJvY2Vzcy5lbnYuRVhQT19QVUJMSUNfSVZYX0FQSV9CQVNFX1VSTCB8fCBwcm9jZXNzLmVudi5FWFBPX1BVQkxJQ19BUElfQkFTRV9VUkwgfHwgJ2h0dHBzOi8vaXZ4aG9sZGluZy5jb20nKS50cmltKCkucmVwbGFjZSgvXC8kLywgJycpKTsKY29uc3QgQVBQX1VSTCA9IChwcm9jZXNzLmVudi5FWFBPX1BVQkxJQ19BUFBfVVJMIHx8IHByb2Nlc3MuZW52LkVYUE9fUFVCTElDX0lWWF9BUElfQkFTRV9VUkwgfHwgJycpLnRyaW0oKS5yZXBsYWNlKC9cLyQvLCAnJyk7CmNvbnN0IEJBQ0tFTkRfVVJMID0gc2FuaXRpemVCYWNrZW5kVXJsKChwcm9jZXNzLmVudi5FWFBPX1BVQkxJQ19JVlhfQVBJX0JBU0VfVVJMIHx8ICcnKS50cmltKCkucmVwbGFjZSgvXC8kLywgJycpKTsKY29uc3QgR09PR0xFX0FEU19LRVkgPSAocHJvY2Vzcy5lbnYuRVhQT19QVUJMSUNfR09PR0xFX0FEU19BUElfS0VZIHx8ICcnKS50cmltKCk7CmNvbnN0IE1FVEFfUElYRUxfSUQgPSAocHJvY2Vzcy5lbnYuTUVUQV9QSVhFTF9JRCB8fCAnJykudHJpbSgpOwpjb25zdCBUSUtUT0tfUElYRUxfSUQgPSAocHJvY2Vzcy5lbnYuVElLVE9LX1BJWEVMX0lEIHx8ICcnKS50cmltKCk7CmNvbnN0IExJTktFRElOX1BBUlRORVJfSUQgPSAocHJvY2Vzcy5lbnYuTElOS0VESU5fUEFSVE5FUl9JRCB8fCAnJykudHJpbSgpOwoKY29uc29sZS5sb2coJ/CflKggQnVpbGRpbmcgSVZYIEhvbGRpbmdzIGxhbmRpbmcgcGFnZSB3aXRoIGNyZWRlbnRpYWxzLi4uJyk7CmNvbnNvbGUubG9nKCcgICBTdXBhYmFzZSBVUkw6JywgU1VQQUJBU0VfVVJMID8gU1VQQUJBU0VfVVJMLnN1YnN0cmluZygwLCA0MCkgKyAnLi4uJyA6ICfinYwgTk9UIFNFVCcpOwpjb25zb2xlLmxvZygnICAgU3VwYWJhc2UgS2V5OicsIFNVUEFCQVNFX0FOT05fS0VZID8gU1VQQUJBU0VfQU5PTl9LRVkuc3Vic3RyaW5nKDAsIDIwKSArICcuLi4nIDogJ+KdjCBOT1QgU0VUJyk7CmNvbnNvbGUubG9nKCcgICBBUEkgQmFzZSBVUkw6JywgQVBJX0JBU0VfVVJMIHx8ICcoZGVmYXVsdCknKTsKY29uc29sZS5sb2coJyAgIEFwcCBVUkw6JywgQVBQX1VSTCB8fCAnKG5vdCBzZXQpJyk7CmNvbnNvbGUubG9nKCcgICBCYWNrZW5kIFVSTDonLCBCQUNLRU5EX1VSTCB8fCAnKG5vdCBzZXQpJyk7CmNvbnNvbGUubG9nKCcgICBHb29nbGUgQWRzIEtleTonLCBHT09HTEVfQURTX0tFWSA/IEdPT0dMRV9BRFNfS0VZLnN1YnN0cmluZygwLCAxNSkgKyAnLi4uJyA6ICcobm90IHNldCknKTsKY29uc29sZS5sb2coJyAgIE1ldGEgUGl4ZWwgSUQ6JywgTUVUQV9QSVhFTF9JRCB8fCAnKG5vdCBzZXQpJyk7CmNvbnNvbGUubG9nKCcgICBUaWtUb2sgUGl4ZWwgSUQ6JywgVElLVE9LX1BJWEVMX0lEIHx8ICcobm90IHNldCknKTsKY29uc29sZS5sb2coJyAgIExpbmtlZEluIFBhcnRuZXIgSUQ6JywgTElOS0VESU5fUEFSVE5FUl9JRCB8fCAnKG5vdCBzZXQpJyk7CgppZiAoIVNVUEFCQVNFX1VSTCB8fCAhU1VQQUJBU0VfQU5PTl9LRVkpIHsKICBjb25zb2xlLndhcm4oJ1xu4pqg77iPICBTdXBhYmFzZSBjcmVkZW50aWFscyBub3QgZm91bmQgaW4gZW52IHZhcnMuJyk7CiAgY29uc29sZS53YXJuKCcgICBMYW5kaW5nIHBhZ2Ugd2lsbCBkaXNjb3ZlciBjcmVkZW50aWFscyBhdCBydW50aW1lIGZyb20gYmFja2VuZC4nKTsKICBjb25zb2xlLndhcm4oJyAgIEZvciBiZXN0IHBlcmZvcm1hbmNlLCBzZXQgRVhQT19QVUJMSUNfU1VQQUJBU0VfVVJMIGFuZCBFWFBPX1BVQkxJQ19TVVBBQkFTRV9BTk9OX0tFWSBiZWZvcmUgYnVpbGRpbmcuJyk7CiAgY29uc29sZS53YXJuKCcgICBCdWlsZGluZyBhbnl3YXkgd2l0aCBydW50aW1lIGNyZWRlbnRpYWwgZGlzY292ZXJ5IGVuYWJsZWQuLi5cbicpOwp9CgpsZXQgaHRtbCA9IHJlYWRGaWxlU3luYygnLi9pdnhob2xkaW5nLWxhbmRpbmcvaW5kZXguaHRtbCcsICd1dGYtOCcpOwpjb25zdCBzYW5pdGl6ZWRMYW5kaW5nSHRtbCA9IHNhbml0aXplTGFuZGluZ0h0bWwoaHRtbCk7Cmh0bWwgPSBzYW5pdGl6ZWRMYW5kaW5nSHRtbC5odG1sOwppZiAoc2FuaXRpemVkTGFuZGluZ0h0bWwuZHVwbGljYXRlQmxvY2tDb3VudCA+IDApIHsKICBjb25zb2xlLmxvZygnICAgUmVtb3ZlZCBkdXBsaWNhdGUgbGFuZGluZyBydW50aW1lIGJsb2NrczonLCBzYW5pdGl6ZWRMYW5kaW5nSHRtbC5kdXBsaWNhdGVCbG9ja0NvdW50LCAnKG1hcmtlcnM6Jywgc2FuaXRpemVkTGFuZGluZ0h0bWwubWFya2VyT2NjdXJyZW5jZXMgKyAnKScpOwp9Cmh0bWwgPSBpbmplY3RMYW5kaW5nQ2FyZFJlbmRlcmVyKGh0bWwpOwoKaHRtbCA9IGh0bWwucmVwbGFjZSgvX19JVlhfU1VQQUJBU0VfVVJMX18vZywgU1VQQUJBU0VfVVJMKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvX19JVlhfU1VQQUJBU0VfQU5PTl9LRVlfXy9nLCBTVVBBQkFTRV9BTk9OX0tFWSk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoL19fSVZYX0FQSV9CQVNFX1VSTF9fL2csIEFQSV9CQVNFX1VSTCk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoL19fSVZYX0FQUF9VUkxfXy9nLCBBUFBfVVJMKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvX19JVlhfQkFDS0VORF9VUkxfXy9nLCBCQUNLRU5EX1VSTCk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoL19fSVZYX0dPT0dMRV9BRFNfS0VZX18vZywgR09PR0xFX0FEU19LRVkpOwpodG1sID0gaHRtbC5yZXBsYWNlKC9fX0lWWF9NRVRBX1BJWEVMX0lEX18vZywgTUVUQV9QSVhFTF9JRCk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoL19fSVZYX1RJS1RPS19QSVhFTF9JRF9fL2csIFRJS1RPS19QSVhFTF9JRCk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoL19fSVZYX0xJTktFRElOX1BBUlRORVJfSURfXy9nLCBMSU5LRURJTl9QQVJUTkVSX0lEKTsKCi8vIEFsc28gaW5qZWN0IGludG8gSlMgdmFyaWFibGVzIGFuZCBtZXRhIHRhZ3MgZGlyZWN0bHkKaHRtbCA9IGh0bWwucmVwbGFjZSgvdmFyIF9GQUxMQkFDS19TVVBBQkFTRV9VUkwgPSAnW14nXSonOy8sIGB2YXIgX0ZBTExCQUNLX1NVUEFCQVNFX1VSTCA9ICcke1NVUEFCQVNFX1VSTH0nO2ApOwpodG1sID0gaHRtbC5yZXBsYWNlKC92YXIgX0ZBTExCQUNLX1NVUEFCQVNFX0tFWSA9ICdbXiddKic7LywgYHZhciBfRkFMTEJBQ0tfU1VQQUJBU0VfS0VZID0gJyR7U1VQQUJBU0VfQU5PTl9LRVl9JztgKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvdmFyIF9JVlhfQVBJX1VSTCA9ICdbXiddKic7LywgYHZhciBfSVZYX0FQSV9VUkwgPSAnJHtBUElfQkFTRV9VUkx9JztgKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvdmFyIF9JVlhfQkFDS0VORF9VUkwgPSAnW14nXSonOy8sIGB2YXIgX0lWWF9CQUNLRU5EX1VSTCA9ICcke0JBQ0tFTkRfVVJMfSc7YCk7CgovLyBJbmplY3QgaW50byBtZXRhIHRhZ3MgY29udGVudCBhdHRyaWJ1dGVzCmh0bWwgPSBodG1sLnJlcGxhY2UoLzxtZXRhXHMrbmFtZT0iaXZ4LXNiLXVybCJccytjb250ZW50PSJbXiJdKiIvLCBgPG1ldGEgbmFtZT0iaXZ4LXNiLXVybCIgY29udGVudD0iJHtTVVBBQkFTRV9VUkx9ImApOwpodG1sID0gaHRtbC5yZXBsYWNlKC88bWV0YVxzK25hbWU9Iml2eC1zYi1rZXkiXHMrY29udGVudD0iW14iXSoiLywgYDxtZXRhIG5hbWU9Iml2eC1zYi1rZXkiIGNvbnRlbnQ9IiR7U1VQQUJBU0VfQU5PTl9LRVl9ImApOwpodG1sID0gaHRtbC5yZXBsYWNlKC88bWV0YVxzK25hbWU9Iml2eC1zYi11cmwtZmFsbGJhY2siXHMrY29udGVudD0iW14iXSoiLywgYDxtZXRhIG5hbWU9Iml2eC1zYi11cmwtZmFsbGJhY2siIGNvbnRlbnQ9IiR7U1VQQUJBU0VfVVJMfSJgKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvPG1ldGFccytuYW1lPSJpdngtc2Ita2V5LWZhbGxiYWNrIlxzK2NvbnRlbnQ9IlteIl0qIi8sIGA8bWV0YSBuYW1lPSJpdngtc2Ita2V5LWZhbGxiYWNrIiBjb250ZW50PSIke1NVUEFCQVNFX0FOT05fS0VZfSJgKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvPG1ldGFccytuYW1lPSJpdngtYXBpLXVybCJccytjb250ZW50PSJbXiJdKiIvLCBgPG1ldGEgbmFtZT0iaXZ4LWFwaS11cmwiIGNvbnRlbnQ9IiR7QVBJX0JBU0VfVVJMfSJgKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvPG1ldGFccytuYW1lPSJpdngtYmFja2VuZC11cmwiXHMrY29udGVudD0iW14iXSoiLywgYDxtZXRhIG5hbWU9Iml2eC1iYWNrZW5kLXVybCIgY29udGVudD0iJHtCQUNLRU5EX1VSTH0iYCk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoLzxtZXRhXHMrbmFtZT0iaXZ4LWdhZHMta2V5IlxzK2NvbnRlbnQ9IlteIl0qIi8sIGA8bWV0YSBuYW1lPSJpdngtZ2Fkcy1rZXkiIGNvbnRlbnQ9IiR7R09PR0xFX0FEU19LRVl9ImApOwpodG1sID0gaHRtbC5yZXBsYWNlKC88bWV0YVxzK25hbWU9Iml2eC1tZXRhLXBpeGVsLWlkIlxzK2NvbnRlbnQ9IlteIl0qIi8sIGA8bWV0YSBuYW1lPSJpdngtbWV0YS1waXhlbC1pZCIgY29udGVudD0iJHtNRVRBX1BJWEVMX0lEfSJgKTsKaHRtbCA9IGh0bWwucmVwbGFjZSgvPG1ldGFccytuYW1lPSJpdngtdGlrdG9rLXBpeGVsLWlkIlxzK2NvbnRlbnQ9IlteIl0qIi8sIGA8bWV0YSBuYW1lPSJpdngtdGlrdG9rLXBpeGVsLWlkIiBjb250ZW50PSIke1RJS1RPS19QSVhFTF9JRH0iYCk7Cmh0bWwgPSBodG1sLnJlcGxhY2UoLzxtZXRhXHMrbmFtZT0iaXZ4LWxpbmtlZGluLXBhcnRuZXItaWQiXHMrY29udGVudD0iW14iXSoiLywgYDxtZXRhIG5hbWU9Iml2eC1saW5rZWRpbi1wYXJ0bmVyLWlkIiBjb250ZW50PSIke0xJTktFRElOX1BBUlRORVJfSUR9ImApOwoKCmNvbnNvbGUubG9nKCcgICBJbmplY3RlZCBjcmVkZW50aWFscyArIGFkIHBpeGVsIElEcyBpbnRvIEpTIHZhcnMgKyBtZXRhIHRhZ3MnKTsKCmNvbnN0IGRpc3REaXIgPSAnLi9pdnhob2xkaW5nLWxhbmRpbmcvZGlzdCc7CmNvbnN0IGRpc3RBcGlEaXIgPSBkaXN0RGlyICsgJy9hcGknOwppZiAoIWV4aXN0c1N5bmMoZGlzdERpcikpIHsKICBta2RpclN5bmMoZGlzdERpciwgeyByZWN1cnNpdmU6IHRydWUgfSk7Cn0KaWYgKCFleGlzdHNTeW5jKGRpc3RBcGlEaXIpKSB7CiAgbWtkaXJTeW5jKGRpc3RBcGlEaXIsIHsgcmVjdXJzaXZlOiB0cnVlIH0pOwp9Cgp3cml0ZUZpbGVTeW5jKGRpc3REaXIgKyAnL2luZGV4Lmh0bWwnLCBodG1sLCAndXRmLTgnKTsKY29uc29sZS5sb2coJyAgIOKchSBpbmRleC5odG1sIGJ1aWx0IOKGkiBpdnhob2xkaW5nLWxhbmRpbmcvZGlzdC9pbmRleC5odG1sJyk7CgovLyBFbnRlcnByaXNlIHJlZ2lzdHJhdGlvbiBwYWdlIChJVEVNIDIpCmxldCBlbnRlcnByaXNlSHRtbCA9IHJlYWRGaWxlU3luYygnLi9pdnhob2xkaW5nLWxhbmRpbmcvZW50ZXJwcmlzZS1yZWdpc3Rlci5odG1sJywgJ3V0Zi04Jyk7CmVudGVycHJpc2VIdG1sID0gZW50ZXJwcmlzZUh0bWwucmVwbGFjZSgvX19JVlhfQVBJX0JBU0VfVVJMX18vZywgQVBJX0JBU0VfVVJMKTsKZW50ZXJwcmlzZUh0bWwgPSBlbnRlcnByaXNlSHRtbC5yZXBsYWNlKC9fX0lWWF9CQUNLRU5EX1VSTF9fL2csIEJBQ0tFTkRfVVJMKTsKd3JpdGVGaWxlU3luYyhkaXN0RGlyICsgJy9lbnRlcnByaXNlLXJlZ2lzdGVyLmh0bWwnLCBlbnRlcnByaXNlSHRtbCwgJ3V0Zi04Jyk7CmNvbnNvbGUubG9nKCcgICDinIUgZW50ZXJwcmlzZS1yZWdpc3Rlci5odG1sIGJ1aWx0IOKGkiBpdnhob2xkaW5nLWxhbmRpbmcvZGlzdC9lbnRlcnByaXNlLXJlZ2lzdGVyLmh0bWwnKTsKCmNvcHlGaWxlU3luYygnLi9pdnhob2xkaW5nLWxhbmRpbmcvbGFuZGluZy1zdXBwb3J0LWNoYXQuY3NzJywgZGlzdERpciArICcvbGFuZGluZy1zdXBwb3J0LWNoYXQuY3NzJyk7CmNvcHlGaWxlU3luYygnLi9pdnhob2xkaW5nLWxhbmRpbmcvbGFuZGluZy1zdXBwb3J0LWNoYXQuanMnLCBkaXN0RGlyICsgJy9sYW5kaW5nLXN1cHBvcnQtY2hhdC5qcycpOwpjb25zb2xlLmxvZygnICAg4pyFIGxhbmRpbmcgc3VwcG9ydCBjaGF0IGFzc2V0cyBjb3BpZWQg4oaSIGl2eGhvbGRpbmctbGFuZGluZy9kaXN0L2xhbmRpbmctc3VwcG9ydC1jaGF0LionKTsKCmNvbnN0IGNvbmZpZ0pzb24gPSBKU09OLnN0cmluZ2lmeSh7CiAgc3VwYWJhc2VVcmw6IFNVUEFCQVNFX1VSTCwKICBzdXBhYmFzZUFub25LZXk6IFNVUEFCQVNFX0FOT05fS0VZLAogIGFwaUJhc2VVcmw6IEFQSV9CQVNFX1VSTCwKICBhcHBVcmw6IEFQUF9VUkwsCiAgYmFja2VuZFVybDogQkFDS0VORF9VUkwsCiAgYnVpbHRBdDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLAp9LCBudWxsLCAyKTsKCndyaXRlRmlsZVN5bmMoZGlzdERpciArICcvaXZ4LWNvbmZpZy5qc29uJywgY29uZmlnSnNvbiwgJ3V0Zi04Jyk7CmNvbnNvbGUubG9nKCcgICDinIUgaXZ4LWNvbmZpZy5qc29uIGJ1aWx0IOKGkiBpdnhob2xkaW5nLWxhbmRpbmcvZGlzdC9pdngtY29uZmlnLmpzb24nKTsKCmNvbnN0IHsgZGVhbHNQYXlsb2FkLCBoZWFsdGhQYXlsb2FkIH0gPSBhd2FpdCBmZXRjaFN0YXRpY0xhbmRpbmdBcGlQYXlsb2Fkcyh7CiAgc3VwYWJhc2VVcmw6IFNVUEFCQVNFX1VSTCwKICBzdXBhYmFzZUFub25LZXk6IFNVUEFCQVNFX0FOT05fS0VZLAogIGRpcmVjdEFwaUJhc2VVcmw6IEJBQ0tFTkRfVVJMIHx8IEFQSV9CQVNFX1VSTCwKfSk7CmNvbnN0IGRlYWxzSnNvbiA9IEpTT04uc3RyaW5naWZ5KGRlYWxzUGF5bG9hZCwgbnVsbCwgMik7CmNvbnN0IGhlYWx0aEpzb24gPSBKU09OLnN0cmluZ2lmeShoZWFsdGhQYXlsb2FkLCBudWxsLCAyKTsKd3JpdGVGaWxlU3luYyhkaXN0QXBpRGlyICsgJy9sYW5kaW5nLWRlYWxzJywgZGVhbHNKc29uLCAndXRmLTgnKTsKd3JpdGVGaWxlU3luYyhkaXN0QXBpRGlyICsgJy9wdWJsaXNoZWQtanYtZGVhbHMnLCBkZWFsc0pzb24sICd1dGYtOCcpOwp3cml0ZUZpbGVTeW5jKGRpc3REaXIgKyAnL2hlYWx0aCcsIGhlYWx0aEpzb24sICd1dGYtOCcpOwpjb25zb2xlLmxvZygnICAg4pyFIHN0YXRpYyBBUEkgSlNPTiBidWlsdCDihpIgaXZ4aG9sZGluZy1sYW5kaW5nL2Rpc3QvYXBpL2xhbmRpbmctZGVhbHMnKTsKY29uc29sZS5sb2coJyAgIOKchSBzdGF0aWMgQVBJIEpTT04gYnVpbHQg4oaSIGl2eGhvbGRpbmctbGFuZGluZy9kaXN0L2FwaS9wdWJsaXNoZWQtanYtZGVhbHMnKTsKY29uc29sZS5sb2coJyAgIOKchSBzdGF0aWMgaGVhbHRoIEpTT04gYnVpbHQg4oaSIGl2eGhvbGRpbmctbGFuZGluZy9kaXN0L2hlYWx0aCcpOwoKY29uc29sZS5sb2coJ1xu8J+OiSBCVUlMRCBDT01QTEVURSEnKTsKY29uc29sZS5sb2coJ+KUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgScpOwpjb25zb2xlLmxvZygnRmlsZXMgcmVhZHkgaW46IGl2eGhvbGRpbmctbGFuZGluZy9kaXN0LycpOwpjb25zb2xlLmxvZygnJyk7CmNvbnNvbGUubG9nKCdUbyBkZXBsb3kgdG8gUzMsIGVpdGhlcjonKTsKY29uc29sZS5sb2coJycpOwpjb25zb2xlLmxvZygnICBPcHRpb24gQSDigJQgVXNlIGRlcGxveSBzY3JpcHQgKGhhbmRsZXMgYnVja2V0IHNldHVwICsgdXBsb2FkKTonKTsKY29uc29sZS5sb2coJyAgICBBV1NfQUNDRVNTX0tFWV9JRD0ieW91ci1rZXkiIFxcJyk7CmNvbnNvbGUubG9nKCcgICAgQVdTX1NFQ1JFVF9BQ0NFU1NfS0VZPSJ5b3VyLXNlY3JldCIgXFwnKTsKY29uc29sZS5sb2coJyAgICBBV1NfUkVHSU9OPSJ1cy1lYXN0LTEiIFxcJyk7CmNvbnNvbGUubG9nKGAgICAgRVhQT19QVUJMSUNfU1VQQUJBU0VfVVJMPSIke1NVUEFCQVNFX1VSTH0iIFxcYCk7CmNvbnNvbGUubG9nKGAgICAgRVhQT19QVUJMSUNfU1VQQUJBU0VfQU5PTl9LRVk9IiR7U1VQQUJBU0VfQU5PTl9LRVl9IiBcXGApOwpjb25zb2xlLmxvZygnICAgIG5vZGUgZGVwbG95LWxhbmRpbmcubWpzJyk7CmNvbnNvbGUubG9nKCcnKTsKY29uc29sZS5sb2coJyAgT3B0aW9uIEIg4oCUIE1hbnVhbCBTMyB1cGxvYWQ6Jyk7CmNvbnNvbGUubG9nKCcgICAgYXdzIHMzIGNwIGl2eGhvbGRpbmctbGFuZGluZy9kaXN0L2luZGV4Lmh0bWwgczM6Ly9pdnhob2xkaW5nLmNvbS9pbmRleC5odG1sIFxcJyk7CmNvbnNvbGUubG9nKGAgICAgICAtLWNvbnRlbnQtdHlwZSAidGV4dC9odG1sIiAtLWNhY2hlLWNvbnRyb2wgIiR7TEFORElOR19IVE1MX0NBQ0hFX0NPTlRST0x9ImApOwpjb25zb2xlLmxvZygnICAgIGF3cyBzMyBjcCBpdnhob2xkaW5nLWxhbmRpbmcvZGlzdC9pdngtY29uZmlnLmpzb24gczM6Ly9pdnhob2xkaW5nLmNvbS9pdngtY29uZmlnLmpzb24gXFwnKTsKY29uc29sZS5sb2coYCAgICAgIC0tY29udGVudC10eXBlICJhcHBsaWNhdGlvbi9qc29uIiAtLWNhY2hlLWNvbnRyb2wgIiR7TEFORElOR19DT05GSUdfQ0FDSEVfQ09OVFJPTH0iYCk7CmNvbnNvbGUubG9nKCcgICAgYXdzIHMzIGNwIGl2eGhvbGRpbmctbGFuZGluZy9kaXN0L2FwaS9sYW5kaW5nLWRlYWxzIHMzOi8vaXZ4aG9sZGluZy5jb20vYXBpL2xhbmRpbmctZGVhbHMgXFwnKTsKY29uc29sZS5sb2coYCAgICAgIC0tY29udGVudC10eXBlICJhcHBsaWNhdGlvbi9qc29uIiAtLWNhY2hlLWNvbnRyb2wgIiR7TEFORElOR19BUElfQ0FDSEVfQ09OVFJPTH0iYCk7CmNvbnNvbGUubG9nKCcgICAgYXdzIHMzIGNwIGl2eGhvbGRpbmctbGFuZGluZy9kaXN0L2FwaS9wdWJsaXNoZWQtanYtZGVhbHMgczM6Ly9pdnhob2xkaW5nLmNvbS9hcGkvcHVibGlzaGVkLWp2LWRlYWxzIFxcJyk7CmNvbnNvbGUubG9nKGAgICAgICAtLWNvbnRlbnQtdHlwZSAiYXBwbGljYXRpb24vanNvbiIgLS1jYWNoZS1jb250cm9sICIke0xBTkRJTkdfQVBJX0NBQ0hFX0NPTlRST0x9ImApOwpjb25zb2xlLmxvZygnICAgIGF3cyBzMyBjcCBpdnhob2xkaW5nLWxhbmRpbmcvZGlzdC9oZWFsdGggczM6Ly9pdnhob2xkaW5nLmNvbS9oZWFsdGggXFwnKTsKY29uc29sZS5sb2coYCAgICAgIC0tY29udGVudC10eXBlICJhcHBsaWNhdGlvbi9qc29uIiAtLWNhY2hlLWNvbnRyb2wgIiR7TEFORElOR19IRUFMVEhfQ0FDSEVfQ09OVFJPTH0iYCk7CmNvbnNvbGUubG9nKCcnKTsKY29uc29sZS5sb2coJyAgT3B0aW9uIEMg4oCUIEFXUyBDb25zb2xlOicpOwpjb25zb2xlLmxvZygnICAgIDEuIEdvIHRvIFMzIOKGkiBpdnhob2xkaW5nLmNvbSBidWNrZXQnKTsKY29uc29sZS5sb2coJyAgICAyLiBVcGxvYWQgZGlzdC9pbmRleC5odG1sIChyZXBsYWNlIGV4aXN0aW5nKScpOwpjb25zb2xlLmxvZygnICAgIDMuIFVwbG9hZCBkaXN0L2l2eC1jb25maWcuanNvbicpOwpjb25zb2xlLmxvZygnICAgIDQuIFVwbG9hZCBkaXN0L2FwaS9sYW5kaW5nLWRlYWxzIGFuZCBkaXN0L2FwaS9wdWJsaXNoZWQtanYtZGVhbHMnKTsKY29uc29sZS5sb2coJyAgICA1LiBVcGxvYWQgZGlzdC9oZWFsdGgnKTsKY29uc29sZS5sb2coJyAgICA2LiBTZXQgSlNPTiBDb250ZW50LVR5cGUgYW5kIGVuYWJsZSBDRE4gY2FjaGluZyBmb3IgQVBJIGZpbGVzIGFuZCBoZWFsdGggcGF5bG9hZHMnKTsKY29uc29sZS5sb2coJ+KUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgeKUgScpOwo=
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'fs';
+import { fetchStaticLandingApiPayloads } from './scripts/landing-static-api.mjs';
+import { injectLandingCardRenderer } from './scripts/landing-card-renderer-injector.mjs';
+import { sanitizeLandingHtml } from './scripts/landing-html-sanitizer.mjs';
+
+const PRODUCTION_BACKEND_URL = 'https://api.ivxholding.com';
+const LANDING_HTML_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
+const LANDING_CONFIG_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
+const LANDING_API_CACHE_CONTROL = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
+const LANDING_HEALTH_CACHE_CONTROL = 'public, max-age=30, s-maxage=60, stale-while-revalidate=120';
+
+function isLocalDevCredential(value) {
+  const v = String(value || '').toLowerCase();
+  return v.includes('127.0.0.1') || v.includes('localhost') || v.includes('::1') ||
+    v.includes('supabase local development') || v.includes('super-secret-jwt') ||
+    v.includes('54321') || v.includes('54322') || v.includes('54323');
+}
+
+function isValidSupabaseUrl(url) {
+  return /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(String(url || '').trim());
+}
+
+function isValidSupabaseAnonKey(key) {
+  const k = String(key || '').trim();
+  return k.startsWith('eyJ') && k.length > 30 && !isLocalDevCredential(k);
+}
+
+function sanitizeBackendUrl(url) {
+  const u = String(url || '').trim().replace(/\/$/, '');
+  if (!u) return PRODUCTION_BACKEND_URL;
+  if (isLocalDevCredential(u)) return PRODUCTION_BACKEND_URL;
+  if (u.includes('ivxholding.com')) return u;
+  if (u.includes('onrender.com')) return PRODUCTION_BACKEND_URL;
+  return u;
+}
+
+function sanitizeSupabaseUrl(url) {
+  const u = String(url || '').trim();
+  if (isLocalDevCredential(u) || !isValidSupabaseUrl(u)) return '';
+  return u;
+}
+
+function sanitizeSupabaseAnonKey(key) {
+  const k = String(key || '').trim();
+  if (isLocalDevCredential(k) || !isValidSupabaseAnonKey(k)) return '';
+  return k;
+}
+
+const SUPABASE_URL = sanitizeSupabaseUrl(process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '');
+const SUPABASE_ANON_KEY = sanitizeSupabaseAnonKey(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '');
+const API_BASE_URL = sanitizeBackendUrl((process.env.EXPO_PUBLIC_IVX_API_BASE_URL || process.env.EXPO_PUBLIC_API_BASE_URL || 'https://ivxholding.com').trim().replace(/\/$/, ''));
+const APP_URL = (process.env.EXPO_PUBLIC_APP_URL || process.env.EXPO_PUBLIC_IVX_API_BASE_URL || '').trim().replace(/\/$/, '');
+const BACKEND_URL = sanitizeBackendUrl((process.env.EXPO_PUBLIC_IVX_API_BASE_URL || '').trim().replace(/\/$/, ''));
+const GOOGLE_ADS_KEY = (process.env.EXPO_PUBLIC_GOOGLE_ADS_API_KEY || '').trim();
+const META_PIXEL_ID = (process.env.META_PIXEL_ID || '').trim();
+const TIKTOK_PIXEL_ID = (process.env.TIKTOK_PIXEL_ID || '').trim();
+const LINKEDIN_PARTNER_ID = (process.env.LINKEDIN_PARTNER_ID || '').trim();
+
+console.log('🔨 Building IVX Holdings landing page with credentials...');
+console.log('   Supabase URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 40) + '...' : '❌ NOT SET');
+console.log('   Supabase Key:', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.substring(0, 20) + '...' : '❌ NOT SET');
+console.log('   API Base URL:', API_BASE_URL || '(default)');
+console.log('   App URL:', APP_URL || '(not set)');
+console.log('   Backend URL:', BACKEND_URL || '(not set)');
+console.log('   Google Ads Key:', GOOGLE_ADS_KEY ? GOOGLE_ADS_KEY.substring(0, 15) + '...' : '(not set)');
+console.log('   Meta Pixel ID:', META_PIXEL_ID || '(not set)');
+console.log('   TikTok Pixel ID:', TIKTOK_PIXEL_ID || '(not set)');
+console.log('   LinkedIn Partner ID:', LINKEDIN_PARTNER_ID || '(not set)');
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn('\n⚠️  Supabase credentials not found in env vars.');
+  console.warn('   Landing page will discover credentials at runtime from backend.');
+  console.warn('   For best performance, set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY before building.');
+  console.warn('   Building anyway with runtime credential discovery enabled...\n');
+}
+
+let html = readFileSync('./ivxholding-landing/index.html', 'utf-8');
+const sanitizedLandingHtml = sanitizeLandingHtml(html);
+html = sanitizedLandingHtml.html;
+if (sanitizedLandingHtml.duplicateBlockCount > 0) {
+  console.log('   Removed duplicate landing runtime blocks:', sanitizedLandingHtml.duplicateBlockCount, '(markers:', sanitizedLandingHtml.markerOccurrences + ')');
+}
+html = injectLandingCardRenderer(html);
+
+html = html.replace(/__IVX_SUPABASE_URL__/g, SUPABASE_URL);
+html = html.replace(/__IVX_SUPABASE_ANON_KEY__/g, SUPABASE_ANON_KEY);
+html = html.replace(/__IVX_API_BASE_URL__/g, API_BASE_URL);
+html = html.replace(/__IVX_APP_URL__/g, APP_URL);
+html = html.replace(/__IVX_BACKEND_URL__/g, BACKEND_URL);
+html = html.replace(/__IVX_GOOGLE_ADS_KEY__/g, GOOGLE_ADS_KEY);
+html = html.replace(/__IVX_META_PIXEL_ID__/g, META_PIXEL_ID);
+html = html.replace(/__IVX_TIKTOK_PIXEL_ID__/g, TIKTOK_PIXEL_ID);
+html = html.replace(/__IVX_LINKEDIN_PARTNER_ID__/g, LINKEDIN_PARTNER_ID);
+
+// Also inject into JS variables and meta tags directly
+html = html.replace(/var _FALLBACK_SUPABASE_URL = '[^']*';/, `var _FALLBACK_SUPABASE_URL = '${SUPABASE_URL}';`);
+html = html.replace(/var _FALLBACK_SUPABASE_KEY = '[^']*';/, `var _FALLBACK_SUPABASE_KEY = '${SUPABASE_ANON_KEY}';`);
+html = html.replace(/var _IVX_API_URL = '[^']*';/, `var _IVX_API_URL = '${API_BASE_URL}';`);
+html = html.replace(/var _IVX_BACKEND_URL = '[^']*';/, `var _IVX_BACKEND_URL = '${BACKEND_URL}';`);
+
+// Inject into meta tags content attributes
+html = html.replace(/<meta\s+name="ivx-sb-url"\s+content="[^"]*"/, `<meta name="ivx-sb-url" content="${SUPABASE_URL}"`);
+html = html.replace(/<meta\s+name="ivx-sb-key"\s+content="[^"]*"/, `<meta name="ivx-sb-key" content="${SUPABASE_ANON_KEY}"`);
+html = html.replace(/<meta\s+name="ivx-sb-url-fallback"\s+content="[^"]*"/, `<meta name="ivx-sb-url-fallback" content="${SUPABASE_URL}"`);
+html = html.replace(/<meta\s+name="ivx-sb-key-fallback"\s+content="[^"]*"/, `<meta name="ivx-sb-key-fallback" content="${SUPABASE_ANON_KEY}"`);
+html = html.replace(/<meta\s+name="ivx-api-url"\s+content="[^"]*"/, `<meta name="ivx-api-url" content="${API_BASE_URL}"`);
+html = html.replace(/<meta\s+name="ivx-backend-url"\s+content="[^"]*"/, `<meta name="ivx-backend-url" content="${BACKEND_URL}"`);
+html = html.replace(/<meta\s+name="ivx-gads-key"\s+content="[^"]*"/, `<meta name="ivx-gads-key" content="${GOOGLE_ADS_KEY}"`);
+html = html.replace(/<meta\s+name="ivx-meta-pixel-id"\s+content="[^"]*"/, `<meta name="ivx-meta-pixel-id" content="${META_PIXEL_ID}"`);
+html = html.replace(/<meta\s+name="ivx-tiktok-pixel-id"\s+content="[^"]*"/, `<meta name="ivx-tiktok-pixel-id" content="${TIKTOK_PIXEL_ID}"`);
+html = html.replace(/<meta\s+name="ivx-linkedin-partner-id"\s+content="[^"]*"/, `<meta name="ivx-linkedin-partner-id" content="${LINKEDIN_PARTNER_ID}"`);
+
+
+console.log('   Injected credentials + ad pixel IDs into JS vars + meta tags');
+
+const distDir = './ivxholding-landing/dist';
+const distApiDir = distDir + '/api';
+if (!existsSync(distDir)) {
+  mkdirSync(distDir, { recursive: true });
+}
+if (!existsSync(distApiDir)) {
+  mkdirSync(distApiDir, { recursive: true });
+}
+
+writeFileSync(distDir + '/index.html', html, 'utf-8');
+console.log('   ✅ index.html built → ivxholding-landing/dist/index.html');
+
+// Enterprise registration page (ITEM 2)
+let enterpriseHtml = readFileSync('./ivxholding-landing/enterprise-register.html', 'utf-8');
+enterpriseHtml = enterpriseHtml.replace(/__IVX_API_BASE_URL__/g, API_BASE_URL);
+enterpriseHtml = enterpriseHtml.replace(/__IVX_BACKEND_URL__/g, BACKEND_URL);
+writeFileSync(distDir + '/enterprise-register.html', enterpriseHtml, 'utf-8');
+console.log('   ✅ enterprise-register.html built → ivxholding-landing/dist/enterprise-register.html');
+
+copyFileSync('./ivxholding-landing/landing-support-chat.css', distDir + '/landing-support-chat.css');
+copyFileSync('./ivxholding-landing/landing-support-chat.js', distDir + '/landing-support-chat.js');
+console.log('   ✅ landing support chat assets copied → ivxholding-landing/dist/landing-support-chat.*');
+
+const configJson = JSON.stringify({
+  supabaseUrl: SUPABASE_URL,
+  supabaseAnonKey: SUPABASE_ANON_KEY,
+  apiBaseUrl: API_BASE_URL,
+  appUrl: APP_URL,
+  backendUrl: BACKEND_URL,
+  builtAt: new Date().toISOString(),
+}, null, 2);
+
+writeFileSync(distDir + '/ivx-config.json', configJson, 'utf-8');
+console.log('   ✅ ivx-config.json built → ivxholding-landing/dist/ivx-config.json');
+
+const { dealsPayload, healthPayload } = await fetchStaticLandingApiPayloads({
+  supabaseUrl: SUPABASE_URL,
+  supabaseAnonKey: SUPABASE_ANON_KEY,
+  directApiBaseUrl: BACKEND_URL || API_BASE_URL,
+});
+const dealsJson = JSON.stringify(dealsPayload, null, 2);
+const healthJson = JSON.stringify(healthPayload, null, 2);
+writeFileSync(distApiDir + '/landing-deals', dealsJson, 'utf-8');
+writeFileSync(distApiDir + '/published-jv-deals', dealsJson, 'utf-8');
+writeFileSync(distDir + '/health', healthJson, 'utf-8');
+console.log('   ✅ static API JSON built → ivxholding-landing/dist/api/landing-deals');
+console.log('   ✅ static API JSON built → ivxholding-landing/dist/api/published-jv-deals');
+console.log('   ✅ static health JSON built → ivxholding-landing/dist/health');
+
+console.log('\n🎉 BUILD COMPLETE!');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('Files ready in: ivxholding-landing/dist/');
+console.log('');
+console.log('To deploy to S3, either:');
+console.log('');
+console.log('  Option A — Use deploy script (handles bucket setup + upload):');
+console.log('    AWS_ACCESS_KEY_ID="your-key" \\');
+console.log('    AWS_SECRET_ACCESS_KEY="your-secret" \\');
+console.log('    AWS_REGION="us-east-1" \\');
+console.log(`    EXPO_PUBLIC_SUPABASE_URL="${SUPABASE_URL}" \\`);
+console.log(`    EXPO_PUBLIC_SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \\`);
+console.log('    node deploy-landing.mjs');
+console.log('');
+console.log('  Option B — Manual S3 upload:');
+console.log('    aws s3 cp ivxholding-landing/dist/index.html s3://ivxholding.com/index.html \\');
+console.log(`      --content-type "text/html" --cache-control "${LANDING_HTML_CACHE_CONTROL}"`);
+console.log('    aws s3 cp ivxholding-landing/dist/ivx-config.json s3://ivxholding.com/ivx-config.json \\');
+console.log(`      --content-type "application/json" --cache-control "${LANDING_CONFIG_CACHE_CONTROL}"`);
+console.log('    aws s3 cp ivxholding-landing/dist/api/landing-deals s3://ivxholding.com/api/landing-deals \\');
+console.log(`      --content-type "application/json" --cache-control "${LANDING_API_CACHE_CONTROL}"`);
+console.log('    aws s3 cp ivxholding-landing/dist/api/published-jv-deals s3://ivxholding.com/api/published-jv-deals \\');
+console.log(`      --content-type "application/json" --cache-control "${LANDING_API_CACHE_CONTROL}"`);
+console.log('    aws s3 cp ivxholding-landing/dist/health s3://ivxholding.com/health \\');
+console.log(`      --content-type "application/json" --cache-control "${LANDING_HEALTH_CACHE_CONTROL}"`);
+console.log('');
+console.log('  Option C — AWS Console:');
+console.log('    1. Go to S3 → ivxholding.com bucket');
+console.log('    2. Upload dist/index.html (replace existing)');
+console.log('    3. Upload dist/ivx-config.json');
+console.log('    4. Upload dist/api/landing-deals and dist/api/published-jv-deals');
+console.log('    5. Upload dist/health');
+console.log('    6. Set JSON Content-Type and enable CDN caching for API files and health payloads');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
