@@ -53,9 +53,11 @@ jobs:
           bun-version: 1.3.9
       - run: bun install --frozen-lockfile --cwd expo
       - name: Install Playwright browsers
+        working-directory: expo
         run: bunx playwright install --with-deps chromium
       - name: Run Playwright tests
-        run: bunx playwright test --config=expo/playwright.config.ts
+        working-directory: expo
+        run: bunx playwright test --config=playwright.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -72,10 +74,14 @@ jobs:
         with:
           bun-version: 1.3.9
       - run: bun install --frozen-lockfile --cwd expo
+      - name: Build and launch the iOS simulator app
+        working-directory: expo
+        timeout-minutes: 45
+        run: bunx expo run:ios --configuration debug --no-bundler
       - name: Install Maestro
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
-      - name: Run Maestro flows (dry)
-        run: ~/.maestro/bin/maestro test expo/.maestro --format junit --output maestro-report.xml
+      - name: Run Maestro launch smoke test
+        run: ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
