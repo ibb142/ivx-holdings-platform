@@ -573,7 +573,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".github/workflows/android-emulator-qa.yml\",\"edits\":[{\"oldString\":\"      # ============================================================\\n      # Build release APK using committed android/ directory.\\n      # ============================================================\\n      - name: Build Android release APK\",\"newString\":\"      # ============================================================\\n      # Build a disposable QA APK. Production release signing is isolated from\\n      # this workflow and never uses this runner-generated debug signer.\\n      # ============================================================\\n      - name: Build Android QA APK\",\"replaceAll\":false},{\"oldString\":\"          echo \\\"=== Building release APK with Gradle ===\\\"\",\"newString\":\"          echo \\\"=== Building disposable QA APK with Gradle ===\\\"\",\"replaceAll\":false},{\"oldString\":\"          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log\",\"newString\":\"          ./gradlew assembleQa --no-daemon -x lint 2>&1 | tee gradle-build.log\",\"replaceAll\":false},{\"oldString\":\"          name: ivx-android-release-gradle-log-${{ github.sha }}\",\"newString\":\"          name: ivx-android-qa-gradle-log-${{ github.sha }}\",\"replaceAll\":false},{\"oldString\":\"          echo \\\"::error::Gradle release build failed. Creating diagnostic issue with error logs.\\\"\",\"newString\":\"          echo \\\"::error::Gradle QA build failed. Creating diagnostic issue with error logs.\\\"\",\"replaceAll\":false},{\"oldString\":\"            echo \\\"## Android Release APK Build Diagnostics\\\"\",\"newString\":\"            echo \\\"## Android QA APK Build Diagnostics\\\"\",\"replaceAll\":false},{\"oldString\":\"{'title':'Android Release APK Build Diagnostics — ${GITHUB_SHA:0:12}'\",\"newString\":\"{'title':'Android QA APK Build Diagnostics — ${GITHUB_SHA:0:12}'\",\"replaceAll\":false},{\"oldString\":\"          echo \\\"=== Searching for release APK ===\\\"\\n          APK_PATH=$(find app/build/outputs/apk/release -name \\\"*.apk\\\" -type f 2>/dev/null | head -1)\\n          if [ -z \\\"$APK_PATH\\\" ]; then\\n            echo \\\"::error::No release APK found\\\"\",\"newString\":\"          echo \\\"=== Searching for QA APK ===\\\"\\n          APK_PATH=$(find app/build/outputs/apk/qa -name \\\"*.apk\\\" -type f 2>/dev/null | head -1)\\n          if [ -z \\\"$APK_PATH\\\" ]; then\\n            echo \\\"::error::No QA APK found\\\"\",\"replaceAll\":false},{\"oldString\":\"          name: ivx-android-apk-${{ github.sha }}\",\"newString\":\"          name: ivx-android-qa-apk-${{ github.sha }}\",\"replaceAll\":false}]}",
       "createdAt": 1785694098066,
-      "completedAt": 1785694100673
+      "completedAt": 1785694100673,
+      "compactedAt": 1785697872592
     },
     {
       "type": "reasoning",
@@ -596,7 +597,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/android/app/debug.keystore\"}",
       "createdAt": 1785694109317,
-      "completedAt": 1785694109342
+      "completedAt": 1785694109342,
+      "compactedAt": 1785697872592
     },
     {
       "type": "tool",
@@ -612,7 +614,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"android-ivx-holdings/app/play-upload-key.jks\"}",
       "createdAt": 1785694109331,
-      "completedAt": 1785694109343
+      "completedAt": 1785694109343,
+      "compactedAt": 1785697872592
     },
     {
       "type": "tool",
@@ -629,7 +632,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".github/workflows/android-production-signing.yml\",\"content\":\"name: Android Production Signing\\n\\non:\\n  workflow_dispatch:\\n\\npermissions:\\n  contents: read\\n\\njobs:\\n  signed-release:\\n    name: Signed APK and AAB\\n    runs-on: ubuntu-latest\\n    environment: production\\n    timeout-minutes: 45\\n    env:\\n      IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}\\n      IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}\\n      IVX_RELEASE_KEY_ALIAS: ${{ secrets.IVX_RELEASE_KEY_ALIAS }}\\n      IVX_RELEASE_KEY_PASSWORD: ${{ secrets.IVX_RELEASE_KEY_PASSWORD }}\\n    steps:\\n      - uses: actions/checkout@v4\\n\\n      - uses: actions/setup-java@v4\\n        with:\\n          distribution: temurin\\n          java-version: '17'\\n\\n      - name: Validate protected release signing inputs\\n        shell: bash\\n        run: |\\n          set -euo pipefail\\n          for variable in IVX_RELEASE_KEYSTORE_BASE64 IVX_RELEASE_KEYSTORE_PASSWORD IVX_RELEASE_KEY_ALIAS IVX_RELEASE_KEY_PASSWORD; do\\n            if [ -z \\\"${!variable}\\\" ]; then\\n              echo \\\"::error::Required protected release-signing input is unavailable: $variable\\\"\\n              exit 1\\n            fi\\n          done\\n          umask 077\\n          KEYSTORE_PATH=\\\"$RUNNER_TEMP/ivx-release.keystore\\\"\\n          printf '%s' \\\"$IVX_RELEASE_KEYSTORE_BASE64\\\" | base64 --decode > \\\"$KEYSTORE_PATH\\\"\\n          keytool -list -keystore \\\"$KEYSTORE_PATH\\\" -storepass \\\"$IVX_RELEASE_KEYSTORE_PASSWORD\\\" -alias \\\"$IVX_RELEASE_KEY_ALIAS\\\" >/dev/null\\n          echo \\\"IVX_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH\\\" >> \\\"$GITHUB_ENV\\\"\\n          echo \\\"Release key validated without printing signing material.\\\"\\n\\n      - name: Build signed release APK and AAB\\n        working-directory: expo/android\\n        run: |\\n          set -euo pipefail\\n          chmod +x gradlew\\n          ./gradlew assembleRelease bundleRelease --no-daemon -x lint\\n\\n      - name: Verify signed artifacts\\n        working-directory: expo/android\\n        run: |\\n          set -euo pipefail\\n          APK=app/build/outputs/apk/release/app-release.apk\\n          AAB=app/build/outputs/bundle/release/app-release.aab\\n          APKSIGNER=\\\"$ANDROID_HOME/build-tools/$(ls \\\"$ANDROID_HOME/build-tools\\\" | sort -V | tail -1)/apksigner\\\"\\n          \\\"$APKSIGNER\\\" verify --verbose --print-certs \\\"$APK\\\"\\n          jarsigner -verify -strict \\\"$AAB\\\"\\n          sha256sum \\\"$APK\\\" \\\"$AAB\\\"\\n\\n      - uses: actions/upload-artifact@v4\\n        with:\\n          name: ivx-android-production-signed-${{ github.sha }}\\n          path: |\\n            expo/android/app/build/outputs/apk/release/app-release.apk\\n            expo/android/app/build/outputs/bundle/release/app-release.aab\\n          retention-days: 30\\n\"}",
       "createdAt": 1785694109334,
-      "completedAt": 1785694109345
+      "completedAt": 1785694109345,
+      "compactedAt": 1785697872592
     },
     {
       "type": "tool",
@@ -652,7 +656,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"android-ivx-holdings/app/build.gradle.kts\",\"edits\":[{\"oldString\":\"            signingConfig = signingConfigs.getByName(\\\"debug\\\")\",\"newString\":\"            // Production signing is intentionally not configured in source.\\n            // This legacy module must receive protected signing material in its\\n            // dedicated release pipeline before a distributable build is made.\",\"replaceAll\":false}]}",
       "createdAt": 1785694109337,
-      "completedAt": 1785694109346
+      "completedAt": 1785694109346,
+      "compactedAt": 1785697872592
     },
     {
       "type": "tool",
@@ -671,7 +676,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"set -euo pipefail; QA_KEYSTORE=\\\"$HOME/.android/debug.keystore\\\"; mkdir -p \\\"$(dirname \\\"$QA_KEYSTORE\\\")\\\"; rm -f \\\"$QA_KEYSTORE\\\"; keytool -genkeypair -v -keystore \\\"$QA_KEYSTORE\\\" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname \\\"CN=IVX CI QA, OU=Engineering, O=IVX Holdings, L=Miami, ST=Florida, C=US\\\" >/dev/null; keytool -list -keystore \\\"$QA_KEYSTORE\\\" -storepass android -alias androiddebugkey >/dev/null; IVX_QA_KEYSTORE=\\\"$QA_KEYSTORE\\\" ./gradlew assembleQa --no-daemon -x lint\",\"cwd\":\"expo/android\"}",
       "createdAt": 1785694114517,
-      "completedAt": 1785694134020
+      "completedAt": 1785694134020,
+      "compactedAt": 1785697872592
     },
     {
       "type": "tool",
@@ -690,7 +696,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"python3 - <<'PY'\\nimport yaml\\nfor path in ['.github/workflows/android-emulator-qa.yml', '.github/workflows/android-production-signing.yml']:\\n    with open(path) as handle:\\n        yaml.safe_load(handle)\\n    print(f'{path}: YAML valid')\\nPY\\nprintf 'tracked signing files:\\\\n'; git ls-files | rg -i '(^|/)([^/]*\\\\.(keystore|jks|p12|pem)|debug\\\\.keystore)$' || true\\nprintf 'release debug signer references:\\\\n'; rg -n 'signingConfig\\\\s+signingConfigs\\\\.debug|signingConfigs\\\\.getByName\\\\(\\\"debug\\\"\\\\)' expo android-ivx-holdings .github || true\\nprintf 'status:\\\\n'; git status --short\",\"cwd\":\".\"}",
       "createdAt": 1785694114558,
-      "completedAt": 1785694134355
+      "completedAt": 1785694134355,
+      "compactedAt": 1785697872592
     },
     {
       "type": "reasoning",
@@ -720,7 +727,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"expo/android/app/build.gradle\",\"edits\":[{\"oldString\":\"        qa {\\n            initWith release\\n            signingConfig signingConfigs.qa\",\"newString\":\"        qa {\\n            initWith release\\n            matchingFallbacks = ['release']\\n            signingConfig signingConfigs.qa\",\"replaceAll\":false}] }",
       "createdAt": 1785694142422,
-      "completedAt": 1785694142811
+      "completedAt": 1785694142811,
+      "compactedAt": 1785697872592
     },
     {
       "type": "reasoning",
