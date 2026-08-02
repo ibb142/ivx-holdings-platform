@@ -142,8 +142,7 @@ describe('GATE 5 — Materialization (real disk writes)', () => {
     // generateApp with empty name should still produce a blueprint,
     // but validateAppSpec should reject it before we get to materialize
     try {
-      // @ts-expect-error — intentionally bad spec
-      await materializeApp(badSpec);
+      await materializeApp(badSpec as never);
       // If generateApp doesn't throw on empty name, materializeApp should
       // still refuse if validation fails
     } catch (e) {

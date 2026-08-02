@@ -143,7 +143,7 @@ export async function handleClassifyMember(
   const denied = await requireOwner(request);
   if (denied) return denied;
   const result = await classifyMember(memberId);
-  return ownerOnlyJson(result, result.ok ? 200 : 400);
+  return ownerOnlyJson(result as unknown as Record<string, unknown>, result.ok ? 200 : 400);
 }
 
 // ── POST /api/ivx/classification/reconcile ──
@@ -152,7 +152,7 @@ export async function handleReconcileAll(request: Request): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
   const result = await reconcileAllMembers();
-  return ownerOnlyJson(result, result.ok ? 200 : 500);
+  return ownerOnlyJson(result as unknown as Record<string, unknown>, result.ok ? 200 : 500);
 }
 
 // ── POST /api/ivx/classification/override ──
@@ -178,7 +178,7 @@ export async function handleManualOverride(request: Request): Promise<Response> 
   }
 
   const result = await applyManualOverride(input);
-  return ownerOnlyJson(result, result.ok ? 200 : 400);
+  return ownerOnlyJson(result as unknown as Record<string, unknown>, result.ok ? 200 : 400);
 }
 
 // ── GET /api/ivx/classification/audit/:memberId ──
