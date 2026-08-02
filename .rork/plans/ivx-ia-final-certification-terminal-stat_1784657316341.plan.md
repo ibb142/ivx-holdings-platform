@@ -7,8 +7,19 @@ updatedAt: 2026-08-02T15:02:00.000Z
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
 - [x] Establish the current source-of-truth baseline: GitHub `main` and production both report `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` through authenticated GitHub and public `/health` + `/version` reads.
-- [ ] Establish CI-tested SHA parity: current required workflow executions for `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` are failed and cannot certify the live runtime.
-- [ ] Resolve the local checkout divergence before any production-related mutation: local `main` is 71 commits ahead of its configured remote and cannot be treated as production source of truth.
+- [ ] Establish CI-tested SHA parity: current required workflow executions for `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` are failed and cannot certify the live runtime. Evidence: all ten failed jobs ended in 2–9 seconds with no assigned runner and no executed steps; GitHub Actions is enabled but the runner-execution path must be restored before code-level CI can run.
+- [ ] Resolve the local checkout divergence before any production-related mutation: local `main` is 72 commits ahead of its configured remote and cannot be treated as production source of truth.
+
+## Prioritized stabilization backlog
+
+1. **P0 — CI execution unavailable** (`CI-001`, FAILED): Restore GitHub Actions runner execution, then rerun each required workflow on the approved main SHA. Evidence required: runner assignment, step results, and three consecutive green runs per workflow.
+2. **P0 — Source-of-truth divergence** (`REPO-001`, BLOCKED): Reconcile the Rork-router checkout with canonical `ibb142/ivx-holdings-platform:main` without overwriting the 72 divergent commits or the existing local history changes.
+3. **P0 — Deployment certification gap** (`DEPLOY-001`, QUEUED): After CI is healthy, capture one owner-approved GitHub → CI → Render → `/health` → `/version` chain with a real deployment ID.
+4. **P1 — Durable autonomous task queue** (`AUTO-001`, QUEUED): Normalize task IDs, status transitions, retries, evidence pointers, and approval gates into the existing durable worker/ledger after the canonical source is available.
+5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
+
+**Current active task:** `CI-001`. No production mutation, deployment, signing change, or source-code repair has been performed while the canonical checkout and CI execution path are unresolved.
+
 - [ ] Obtain three consecutive successful runs for IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, and iOS Simulator QA on one approved SHA.
 - [ ] Do not claim `SELF_HEALING_VERIFIED` until the owner-approved incident, deployment, canary, rollback, mobile-device, and SHA-parity requirements have complete evidence.
 

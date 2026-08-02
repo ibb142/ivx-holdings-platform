@@ -2527,7 +2527,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.ts\",\"offset\":1,\"limit\":250}",
       "createdAt": 1785699133360,
-      "completedAt": 1785699133365
+      "completedAt": 1785699133365,
+      "compactedAt": 1785701553323
     },
     {
       "type": "tool",
@@ -2546,7 +2547,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-runtime.ts\",\"offset\":1,\"limit\":180}",
       "createdAt": 1785699133361,
-      "completedAt": 1785699133365
+      "completedAt": 1785699133365,
+      "compactedAt": 1785701553323
     },
     {
       "type": "tool",
@@ -2604,7 +2606,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Audit current source, live production, and autonomous-run evidence\",\"activeForm\":\"Auditing current source, live production, and autonomous-run evidence\",\"status\":\"completed\"},{\"content\":\"Complete and validate pending health-contract regression coverage\",\"activeForm\":\"Completing and validating pending health-contract regression coverage\",\"status\":\"completed\"},{\"content\":\"Verify deployed production parity and authenticated autonomous lifecycle evidence\",\"activeForm\":\"Verifying deployed production parity and authenticated autonomous lifecycle evidence\",\"status\":\"in_progress\"},{\"content\":\"Publish a truthful end-to-end certification with remaining blockers\",\"activeForm\":\"Publishing a truthful end-to-end certification with remaining blockers\",\"status\":\"pending\"}]}",
       "createdAt": 1785699133363,
-      "completedAt": 1785699133365
+      "completedAt": 1785699133365,
+      "compactedAt": 1785701553323
     },
     {
       "type": "tool",
@@ -2623,7 +2626,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-runtime.ts\",\"offset\":163,\"limit\":170}",
       "createdAt": 1785699137524,
-      "completedAt": 1785699137724
+      "completedAt": 1785699137724,
+      "compactedAt": 1785701553323
     },
     {
       "type": "tool",
@@ -2642,7 +2646,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"set -euo pipefail\\ntoken=$(cat /tmp/ivx-owner-live.jwt)\\npython3 - <<'PY' > /tmp/ivx-worker-request.json\\nimport json\\nprint(json.dumps({\\n  'goal': 'Apply the bounded health-contract correction: separate provider configuration from verified runtime readiness in the public /health response; retain existing fields; add focused regression coverage; run focused tests; commit, deploy, and verify live production.',\\n  'proposedPlan': 'Update only the health-provider semantics and its focused regression test, then validate, commit, deploy, and verify the live contract.',\\n  'filesAffected': ['backend/hono.ts', 'backend/tests/ivx-provider-state-machine.test.ts'],\\n  'riskLevel': 'medium',\\n  'rollbackOption': 'Revert the generated commit and trigger a Render redeploy of the prior commit.',\\n  'approvePatch': True,\\n  'patchConfirmationText': 'CONFIRM_IVX_SAFE_CODE_PATCH',\\n  'approveGitDeploy': True,\\n  'gitDeployConfirmationText': 'CONFIRM_IVX_GIT_DEPLOY_OPERATOR',\\n  'validationMode': 'focused'\\n}))\\nPY\\ncode=$(curl -sS --max-time 45 -o /tmp/ivx-worker-enqueue.json -w '%{http_code}' -X POST https://api.ivxholding.com/api/ivx/senior-developer/run -H \\\"Authorization: Bearer $token\\\" -H 'Content-Type: application/json' --data-binary @/tmp/ivx-worker-request.json)\\npython3 - \\\"$code\\\" <<'PY'\\nimport json,sys\\np=json.load(open('/tmp/ivx-worker-enqueue.json'))\\nprint('WORKER_ENQUEUE_HTTP='+sys.argv[1])\\nprint('WORKER_OK='+str(p.get('ok')))\\nprint('WORKER_JOB_ID='+str(p.get('jobId')))\\nprint('WORKER_STAGE='+str(p.get('stage')))\\nprint('WORKER_DETAIL='+str(p.get('stageDetail') or p.get('error') or p.get('message'))[:500])\\nopen('/tmp/ivx-worker-job-id','w').write(str(p.get('jobId','')))\\nPY\",\"cwd\":\".\"}",
       "createdAt": 1785699142038,
-      "completedAt": 1785699147090
+      "completedAt": 1785699147090,
+      "compactedAt": 1785701553323
     },
     {
       "type": "tool",
@@ -2661,7 +2666,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"set -euo pipefail\\ntoken=$(cat /tmp/ivx-owner-live.jwt)\\njob_id=$(cat /tmp/ivx-worker-job-id)\\nfor attempt in 1 2 3 4 5 6 7 8; do\\n  curl -sS --max-time 30 -H \\\"Authorization: Bearer $token\\\" \\\"https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/$job_id\\\" -o /tmp/ivx-worker-poll.json\\n  python3 - \\\"$attempt\\\" <<'PY'\\nimport json,sys\\np=json.load(open('/tmp/ivx-worker-poll.json'))\\nj=p.get('job') or p\\nprint('POLL='+sys.argv[1]+' STATUS='+str(j.get('status'))+' STAGE='+str(j.get('stage'))+' PROGRESS='+str(j.get('progressPercent'))+' DETAIL='+str(j.get('stageDetail') or j.get('error') or '')[:200])\\nprint('TERMINAL='+str(j.get('status') in {'completed','failed','blocked','cancelled'}))\\nPY\\n  status=$(python3 -c \\\"import json; p=json.load(open('/tmp/ivx-worker-poll.json')); j=p.get('job') or p; print(j.get('status',''))\\\")\\n  case \\\"$status\\\" in completed|failed|blocked|cancelled) break;; esac\\n  sleep 5\\ndone\\npython3 - <<'PY'\\nimport json\\np=json.load(open('/tmp/ivx-worker-poll.json')); j=p.get('job') or p\\nr=j.get('result') or {}\\nprint('FINAL_STATUS='+str(j.get('status')))\\nprint('FINAL_STAGE='+str(j.get('stage')))\\nprint('FINAL_ERROR='+str(j.get('error') or r.get('error') or '')[:800])\\nprint('RESULT_COMMIT='+str(r.get('commitSha')))\\nprint('RESULT_DEPLOY='+str(r.get('deployId')))\\nprint('RESULT_HEALTH='+str(r.get('healthStatus')))\\nprint('RESULT_MATCH='+str(r.get('commitMatch')))\\nprint('RESULT_FILES='+str(r.get('changedFiles')))\\nPY\",\"cwd\":\".\"}",
       "createdAt": 1785699149815,
-      "completedAt": 1785699152611
+      "completedAt": 1785699152611,
+      "compactedAt": 1785701553323
     },
     {
       "type": "reasoning",
@@ -2726,7 +2732,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Audit current source, live production, and autonomous-run evidence\",\"activeForm\":\"Auditing current source, live production, and autonomous-run evidence\",\"status\":\"completed\"},{\"content\":\"Complete and validate pending health-contract regression coverage\",\"activeForm\":\"Completing and validating pending health-contract regression coverage\",\"status\":\"completed\"},{\"content\":\"Verify deployed production parity and authenticated autonomous lifecycle evidence\",\"activeForm\":\"Verifying deployed production parity and authenticated autonomous lifecycle evidence\",\"status\":\"completed\"},{\"content\":\"Publish a truthful end-to-end certification with remaining blockers\",\"activeForm\":\"Publishing a truthful end-to-end certification with remaining blockers\",\"status\":\"completed\"}]}",
       "createdAt": 1785699160688,
-      "completedAt": 1785699160704
+      "completedAt": 1785699160704,
+      "compactedAt": 1785701553323
     },
     {
       "type": "text",
