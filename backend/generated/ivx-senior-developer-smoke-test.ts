@@ -1,0 +1,1 @@
+export const SUCCESS_VERIFICATION = 'IVX Senior Developer Smoke Test Successful';
