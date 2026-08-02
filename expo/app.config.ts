@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import type { ExpoConfig } from 'expo/config';
 import { execSync } from 'child_process';
+import withFmtXcode26Fix from './plugins/withFmtXcode26Fix';
 
 // Dynamically read the current git HEAD SHA at build time.
 // This breaks the circular dependency where hardcoding the SHA
@@ -17,13 +18,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.4.31",
+  version: "1.9.4",
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_07_21_BUILD_63_CHAT_COMPOSER_LOADING_REMOVED',
-    buildTimestamp: "2026-07-21T01:15:00.000000+00:00",
+    buildMarker: 'IVX_BUNDLE_2026_08_02_WORKER_DEPLOY_APPROVAL_FIX',
+    buildTimestamp: "2026-07-31T15:10:00.000000+00:00",
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',
@@ -33,7 +34,7 @@ const config: ExpoConfig = {
   },
   sdkVersion: '54.0.0',
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: './assets/images/icon.png', // Official IVX master logo (brand standardization 2026-07-21)
   scheme: 'ivx-app',
   userInterfaceStyle: 'dark',
   backgroundColor: '#000000',
@@ -44,26 +45,26 @@ const config: ExpoConfig = {
     fallbackToCacheTimeout: 0,
   },
   splash: {
-    image: './assets/images/splash-icon.png',
+    image: './assets/images/splash-icon.png', // Official IVX splash logo (brand standardization 2026-07-21)
     resizeMode: 'contain',
     backgroundColor: '#000000',
   },
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.ivxholdings.app',
-    buildNumber: '1',
+    buildNumber: '5',
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: './assets/images/adaptive-icon.png',
+      foregroundImage: './assets/images/adaptive-icon.png', // Official IVX adaptive icon (brand standardization 2026-07-21)
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 63,
+    versionCode: 92,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {
-    favicon: './assets/images/favicon.png',
+    favicon: './assets/images/favicon.png', // Official IVX favicon (brand standardization 2026-07-21)
     bundler: 'metro',
   },
   plugins: [
@@ -77,6 +78,12 @@ const config: ExpoConfig = {
         microphonePermission: 'Allow IVX Holdings to capture voice prompts for transcription.',
       },
     ],
+    // Fix fmt 11.0.2 consteval compilation error with Xcode 26 / Apple Clang 21+.
+    // React Native bundles fmt 11.0.2 via RCT-Folly; Xcode 26 enforces stricter
+    // consteval rules that fmt 11.0.2 doesn't handle. fmt 12.1.0 fixes this but
+    // RN hasn't upgraded yet. This plugin patches the Podfile post_install to
+    // force C++17 for the fmt target and patch base.h to disable consteval.
+    withFmtXcode26Fix as unknown as [string, any],
   ],
   experiments: {
     typedRoutes: true,
