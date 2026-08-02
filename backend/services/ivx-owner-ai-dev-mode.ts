@@ -49,14 +49,12 @@ export function detectSeniorDeveloperModeStatusRequest(message: string): boolean
 
 export function buildSeniorDeveloperModeStatusAnswer(): string {
   return [
-    'YES — IVX Enterprise Senior Developer mode is live and owner-gated.',
-    'CAPABILITIES: end-to-end repo inspection, safe code patch, test/build runner, GitHub commit/push, Render deploy, production health verify, proof ledger.',
-    'REQUIRED: owner sign-in + real GitHub/Render/Supabase credentials.',
-    'TO USE IT:',
-    '1. Make sure you are signed in as the IVX owner.',
-    '2. Ask: "Run a senior developer task: <goal>" or go to Admin → IVX Developer Workspace.',
-    '3. The worker will execute, commit, deploy, and return live proof.',
-    'No proof = no VERIFIED status.',
+    'IVX Senior Developer execution mode is live and owner-gated.',
+    'VERIFIED CAPABILITIES: repository inspection, bounded safe patches, evidence-first task contracts, focused validation, GitHub commit/push, Render deploy, and production health verification.',
+    'LIMIT: this is a bounded IVX execution system. It is not a general-equivalence claim to Rork, ChatGPT, or a human senior developer.',
+    'REQUIRED: owner sign-in and configured GitHub/Render/Supabase credentials.',
+    'TO USE IT: ask “Run a senior developer task: <goal>” or open Admin → IVX Developer Workspace.',
+    'A task is only VERIFIED after its proof contains the applicable test/build results, commit SHA, deploy result, and live verification.',
   ].join('\n');
 }
 
@@ -104,23 +102,15 @@ export function detectSeniorDeveloperBrainRequest(message: string): boolean {
 
 export function buildSeniorDeveloperBrainAnswer(): string {
   return [
-    'I am IVX Enterprise Senior Developer mode — same brain as the IVX agent, owner-gated, live now.',
+    'I am IVX IA’s owner-gated engineering execution mode.',
     '',
-    'What I do as an enterprise senior developer:',
-    '- Answer architecture, code, security, and infrastructure questions directly.',
-    '- Audit the codebase, Supabase, GitHub, Render, and AWS setup and tell you what is wrong.',
-    '- Propose exact patches, file paths, and commands.',
-    '- Execute end-to-end when you tell me to: inspect, patch, test, commit, deploy, and verify — returning a strict evidence block (task_id, files changed, commands run, status, proof).',
+    'I can inspect the IVX codebase and infrastructure, define an evidence-first plan, propose a bounded patch, run applicable validation, and—after the required owner approvals—commit, deploy, and verify production.',
     '',
-    'What I do NOT do without your explicit owner approval:',
-    '- Write files, commit, push, deploy, or change production schema/data.',
-    '- Those actions route through the owner-gated Senior Developer Worker so you always see real proof (task_id, commit_sha, render_deploy_id, live_http_status).',
+    'I do not claim to be the same level as Rork, ChatGPT, or a human senior engineer. I report the evidence available for this IVX system and identify any stage that did not complete.',
     '',
-    'How to use me right now:',
-    '1. Ask me anything technical: "audit my auth flow", "why is the chat slow?", "review my Supabase RLS", etc.',
-    '2. If you want me to actually change code, say: "Run a senior developer task: <exact goal>" or "fix X and deploy live with proof" and I will execute end-to-end with real evidence.',
+    'For a real change, ask: “Run a senior developer task: <exact goal>” or “fix X and deploy live with proof.” The result is only complete when the proof records changed files, validation, commit SHA, deployment, and live verification.',
     '',
-    'STATUS: READY. No BLOCKED state. I answer exactly what you ask.',
+    'STATUS: READY FOR OWNER-AUTHORIZED WORK.',
   ].join('\n');
 }
 

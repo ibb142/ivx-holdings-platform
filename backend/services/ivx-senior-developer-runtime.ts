@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { dispatchTask, completeTask, failTask, readAgentMemory, recordAudit, writeAgentMemory, type AgentId } from './agents/multi-agent-framework';
 import { buildGeneratedFeatureFromGoal, type IVXGeneratedFeature } from './ivx-generated-feature-registry';
+import { buildSeniorDeveloperTaskContract } from './ivx-senior-developer-capability-engine';
 import { resolveRuntimeCommand } from './ivx-runtime-resolver';
 import { appendDurableEvent, isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
 import { triggerDeduplicatedDeploy as triggerDedupDeploy } from './ivx-deploy-dedup';
@@ -2388,6 +2389,7 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   const logs: IVXSeniorDeveloperLog[] = [];
   const phases: IVXSeniorDeveloperPhase[] = [];
   const taskTree = createTaskTree();
+  const engineeringContract = buildSeniorDeveloperTaskContract(goal);
 
   const log = (phase: IVXSeniorDeveloperPhase, level: IVXSeniorDeveloperLog['level'], message: string, metadata: Record<string, unknown> = {}): void => {
     phases.push(phase);
@@ -2409,7 +2411,11 @@ export async function runIVXSeniorDeveloperTask(input: IVXSeniorDeveloperRunInpu
   writeAgentMemory('cto_orchestrator', memoryKey, JSON.stringify({ goal, jobId, marker: IVX_SENIOR_DEVELOPER_RUNTIME_MARKER }), { block: 37 });
   const loadedMemory = readAgentMemory('cto_orchestrator', memoryKey);
   recordAudit('cto_orchestrator', 'senior_developer.plan', goal, dispatch.task.id, { jobId, blocks: [33, 34, 35, 36, 37], ownerApprovedAction: input.ownerApprovedAction ?? null });
-  log('plan_created', 'info', 'Senior planner created one-goal execution plan.', { taskTree, ownerApprovedAction: input.ownerApprovedAction ?? null });
+  log('plan_created', 'info', 'Senior planner created an evidence-first engineering contract.', {
+    taskTree,
+    ownerApprovedAction: input.ownerApprovedAction ?? null,
+    capabilityContract: engineeringContract,
+  });
   onPhase?.('plan_created', 'Execution plan created.');
 
   const patchProposal = await buildPatchProposal(projectRoot, goal);
