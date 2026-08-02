@@ -776,7 +776,10 @@ function autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): stri
   if (!proof.commitSha) return 'Code-change job produced no commit SHA; stale evidence is not accepted.';
   if (proof.startingSha && proof.commitSha === proof.startingSha) return 'Code-change job reused its starting commit SHA; stale evidence is not accepted.';
   if (proof.executionMode === 'deploy') {
-    if (!proof.deployId) return 'Deploy job produced no deployment ID.';
+    if (proof.branch !== 'main') return `Production deployment commit was rejected because it landed on ${proof.branch ?? 'no branch'}, not the approved production branch main.`;
+    if (!proof.deployId) return 'Deploy job produced no Render deployment ID.';
+    if (proof.deployStatus !== 'live') return `Deploy job did not reach Render live status (status=${proof.deployStatus ?? 'missing'}).`;
+    if (!proof.healthOk) return 'Deploy job did not verify a healthy production /health response.';
     if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';
   }
   return null;
@@ -1025,7 +1028,25 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
     if (Number.isNaN(startedMs) || Number.isNaN(commitMs)) continue;
     if (commitMs < startedMs - 60_000 || commitMs > startedMs + COMMITTING_RECOVERY_WINDOW_MS) continue;
 
-    // GitHub evidence confirms the commit landed for this job → recover.
+    // A deploy task is never complete from GitHub evidence alone. It must resume
+    // at verification with its real Render deployment ID and live endpoint proof.
+    if (job.input.approveGitDeploy) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.progressPercent = STAGE_PROGRESS['FAILED'];
+      job.stageDetail = `Commit ${branchHeadSha.slice(0, 7)} landed on ${branch}, but no completed production verification chain exists.`;
+      job.finishedAt = nowIso();
+      job.error = 'Deployment task failed: a GitHub commit alone is not production verification.';
+      if (job.result) {
+        job.result.ok = false;
+        job.result.endToEndProductionComplete = false;
+        job.result.finalStatus = 'FAILED';
+        job.result.error = job.error;
+      }
+      recovered = true;
+      continue;
+    }
+    // GitHub evidence confirms the commit landed for this non-deploy job → recover.
     const commitUrl = `https://github.com/${owner}/${repo}/commit/${branchHeadSha}`;
     job.status = 'completed';
     job.stage = 'COMPLETED';
@@ -1172,15 +1193,23 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
       continue; // no GitHub credentials → can't verify ancestry
     }
 
-    // Production is serving our commit → complete the job with verified evidence.
-    // Set a synthetic deployId when auto-deploy-on-commit was used (no Render
-    // REST deploy ID was returned, but the deploy clearly happened since the
-    // commit is live on production). The state machine guard requires a
-    // deployId for deploy-requested tasks — without it the guard would
-    // downgrade the result to FAILED even though the deploy is verified.
+    // Production is serving our commit. A deployment task still requires the
+    // actual Render deployment ID returned at trigger time; synthetic IDs are
+    // forbidden because they cannot be audited or polled.
+    if ((job.input.executionMode === 'deploy' || job.input.approveGitDeploy) && !job.result!.deployId) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.progressPercent = STAGE_PROGRESS['FAILED'];
+      job.stageDetail = 'Production commit appeared live, but the task has no auditable Render deployment ID.';
+      job.finishedAt = nowIso();
+      job.error = 'Deployment task failed: Render deployment ID is missing.';
+      job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };
+      recovered = true;
+      continue;
+    }
     const result: IVXWorkerJobResult = {
       ...(job.result!),
-      deployId: job.result!.deployId ?? 'auto_deploy_on_commit',
+      deployId: job.result!.deployId,
       deployStatus: job.result!.deployStatus ?? 'live',
       deployVerified: true,
       deployRequested: job.input.approveGitDeploy,

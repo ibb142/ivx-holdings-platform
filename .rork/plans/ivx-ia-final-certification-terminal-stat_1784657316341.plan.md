@@ -3,6 +3,15 @@ overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura
 createdAt: 2026-07-21T18:08:36.341Z
 updatedAt: 2026-08-02T15:02:00.000Z
 ---
+# 2026-08-02 Autonomous Deployment Certification Gate — Implemented, Not Yet Certified
+
+- [x] Restricted deploy-mode commits to the approved production branch and reject non-production branch evidence.
+- [x] Required a real Render deployment ID, `live` deploy status, healthy production response, and matching live commit before a deploy task can be complete.
+- [x] Changed crash recovery so a deploy task cannot become completed from a GitHub commit alone or a synthetic deployment ID.
+- [x] Changed rollback handling so a failed verification remains FAILED, even when rollback succeeds.
+- [x] Added regression coverage for `ivx-autonomous` rejection, missing Render IDs, and non-live Render states; focused backend validation passes.
+- [ ] Run a new owner-authorized deploy task that produces the full GitHub → Render → `/health` → `/version` evidence chain before certifying IVX IA.
+
 # 2026-08-02 Android Signing Separation — In Progress
 
 - [x] Isolated Android Emulator QA from production signing with a runner-generated disposable keystore.

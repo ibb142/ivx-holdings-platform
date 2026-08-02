@@ -84,11 +84,26 @@ describe('summarizeAutonomousCoderProof', () => {
     expect(result.error).toContain('produced no changed files');
   });
 
-  test('accepts only fresh deploy proof with new live commit parity', () => {
+  test('accepts only fresh deploy proof on main with a live Render deployment and new live commit parity', () => {
     const result = summarizeAutonomousCoderProof('job-fresh', autonomousProof());
     expect(result.finalStatus).toBe('COMPLETE');
     expect(result.ok).toBe(true);
     expect(result.endToEndProductionComplete).toBe(true);
     expect(result.commitMatch).toBe(true);
+  });
+
+  test('rejects a deploy proof committed to ivx-autonomous even if all other evidence appears valid', () => {
+    const result = summarizeAutonomousCoderProof('job-wrong-branch', autonomousProof({ branch: 'ivx-autonomous' }));
+    expect(result.finalStatus).toBe('FAILED');
+    expect(result.error).toContain('approved production branch main');
+  });
+
+  test('rejects a deploy proof without a real Render deployment ID or live status', () => {
+    const missingId = summarizeAutonomousCoderProof('job-no-deploy-id', autonomousProof({ deployId: null }));
+    const pending = summarizeAutonomousCoderProof('job-pending-deploy', autonomousProof({ deployStatus: 'build_in_progress' }));
+    expect(missingId.finalStatus).toBe('FAILED');
+    expect(missingId.error).toContain('Render deployment ID');
+    expect(pending.finalStatus).toBe('FAILED');
+    expect(pending.error).toContain('Render live status');
   });
 });

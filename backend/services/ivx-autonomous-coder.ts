@@ -2256,8 +2256,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // does not restart the service and orphan the worker mid-stage. Deploy
         // jobs still commit to main (the self-deploy handoff persists resumable
         // state before triggering Render, so the restart is expected there).
+        const approvedProductionBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
         const branchName = input.executionMode === 'deploy'
-          ? ((await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH)
+          ? approvedProductionBranch
           : AUTONOMOUS_CODER_BRANCH;
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
@@ -2265,6 +2266,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         commitSha = commitResult.commitSha;
         commitUrl = commitResult.commitUrl;
         branch = commitResult.branch;
+        if (input.executionMode === 'deploy' && branch !== approvedProductionBranch) {
+          throw new Error(`Production deployment commit was rejected: expected approved branch ${approvedProductionBranch}, received ${branch}.`);
+        }
         // RESILIENCE: persist the commit SHA to the job record IMMEDIATELY, before
         // any further work (proof construction, deploy, verify). If the process
         // crashes between this point and the proof return, the recovery sweep can
@@ -2327,8 +2331,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
               rollbackCommitSha = rb.revertCommitSha;
               rollbackError = rb.error;
               if (rb.reverted) {
-                finalStatus = 'COMPLETED';
-                error = `Deploy verify-fail triggered automatic rollback. Revert commit: ${rb.revertCommitSha}. Production restored to prior SHA.`;
+                finalStatus = 'FAILED';
+                error = `Deploy verification failed; rollback was triggered with revert commit ${rb.revertCommitSha}. This task is FAILED because the requested commit was not verified in production.`;
+                onPhase?.('failed', error);
               } else {
                 finalStatus = 'FAILED';
                 error = `Deploy verify-fail AND rollback failed: healthOk=${healthOk}, liveCommit=${liveCommit}, expected=${commitSha}. Rollback error: ${rb.error}`;
