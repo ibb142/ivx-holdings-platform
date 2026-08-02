@@ -32,6 +32,8 @@ function autonomousProof(overrides: Partial<IVXAutonomousCoderProof> = {}): IVXA
     productionVerified: true,
     liveCommit: 'after-sha',
     healthOk: true,
+    healthResponse: { endpoint: 'https://api.ivxholding.com/health', httpStatus: 200, commitSha: 'after-sha', ok: true },
+    versionResponse: { endpoint: 'https://api.ivxholding.com/version', httpStatus: 200, commitSha: 'after-sha', ok: true },
     iterationCount: 1,
     durationMs: 1,
     finalStatus: 'COMPLETED',
@@ -96,6 +98,12 @@ describe('summarizeAutonomousCoderProof', () => {
     const result = summarizeAutonomousCoderProof('job-wrong-branch', autonomousProof({ branch: 'ivx-autonomous' }));
     expect(result.finalStatus).toBe('FAILED');
     expect(result.error).toContain('approved production branch main');
+  });
+
+  test('rejects a deploy proof without both endpoint receipts', () => {
+    const missingVersion = summarizeAutonomousCoderProof('job-no-version', autonomousProof({ versionResponse: null }));
+    expect(missingVersion.finalStatus).toBe('FAILED');
+    expect(missingVersion.error).toContain('/version');
   });
 
   test('rejects a deploy proof without a real Render deployment ID or live status', () => {

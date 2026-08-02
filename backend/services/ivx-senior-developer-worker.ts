@@ -287,6 +287,9 @@ export type IVXWorkerJobResult = {
   healthOk: boolean;
   healthStatus: number | null;
   versionEndpoint: string | null;
+  /** Captured deployment certification receipts; contain only endpoint, HTTP status, and SHA. */
+  healthResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;
+  versionResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;
   generatedFeatureSlug: string | null;
   auditFiles: { json: string; jsonl: string };
   finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED';
@@ -779,7 +782,8 @@ function autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): stri
     if (proof.branch !== 'main') return `Production deployment commit was rejected because it landed on ${proof.branch ?? 'no branch'}, not the approved production branch main.`;
     if (!proof.deployId) return 'Deploy job produced no Render deployment ID.';
     if (proof.deployStatus !== 'live') return `Deploy job did not reach Render live status (status=${proof.deployStatus ?? 'missing'}).`;
-    if (!proof.healthOk) return 'Deploy job did not verify a healthy production /health response.';
+    if (!proof.healthOk || !proof.healthResponse?.ok || proof.healthResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a healthy production /health response with the requested commit.';
+    if (!proof.versionResponse?.ok || proof.versionResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a production /version response with the requested commit.';
     if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';
   }
   return null;
@@ -819,8 +823,10 @@ export function summarizeAutonomousCoderProof(
     liveCommit: proof.liveCommit,
     commitMatch: completed && proof.productionVerified && proof.liveCommit === proof.commitSha,
     healthOk: completed && proof.healthOk,
-    healthStatus: null,
-    versionEndpoint: null,
+    healthStatus: proof.healthResponse?.httpStatus ?? null,
+    versionEndpoint: proof.versionResponse?.endpoint ?? null,
+    healthResponse: proof.healthResponse,
+    versionResponse: proof.versionResponse,
     generatedFeatureSlug: null,
     auditFiles: { json: '', jsonl: '' },
     finalStatus,
@@ -1193,10 +1199,22 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
       continue; // no GitHub credentials → can't verify ancestry
     }
 
-    // Production is serving our commit. A deployment task still requires the
-    // actual Render deployment ID returned at trigger time; synthetic IDs are
-    // forbidden because they cannot be audited or polled.
-    if ((job.input.executionMode === 'deploy' || job.input.approveGitDeploy) && !job.result!.deployId) {
+    // A deploy-mode task requires the atomic evidence captured by the active
+    // worker: real Render ID + live status + /health + /version + SHA parity.
+    // A restart cannot recreate that chain from a later health check, so fail closed.
+    if (job.input.executionMode === 'deploy' || job.input.approveGitDeploy) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.progressPercent = STAGE_PROGRESS['FAILED'];
+      job.stageDetail = 'Deployment task interrupted before its complete Render, /health, and /version evidence chain was persisted.';
+      job.finishedAt = nowIso();
+      job.error = 'Deployment task failed: incomplete production certification evidence after restart.';
+      job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };
+      recovered = true;
+      continue;
+    }
+    // A non-deploy job may be recovered from a commit/health match.
+    if (!job.result!.deployId) {
       job.status = 'failed';
       job.stage = 'FAILED';
       job.progressPercent = STAGE_PROGRESS['FAILED'];
