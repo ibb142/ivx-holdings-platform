@@ -97,17 +97,24 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
-    // Use the Android Gradle Plugin's generated debug keystore for local and CI QA
-    // builds. A corrupted tracked keystore must never block a release candidate build.
-    // Store distribution requires an owner-controlled upload key configured separately.
+    // CI QA must use the keystore generated and verified by the runner rather
+    // than any tracked project keystore. Store distribution uses an
+    // owner-controlled upload key through the release process.
+    signingConfigs {
+        qa {
+            storeFile file(System.getenv('IVX_QA_KEYSTORE') ?: "${System.getProperty('user.home')}/.android/debug.keystore")
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.qa
         }
         release {
-            // QA artifacts use the Android Gradle Plugin's generated debug signer.
-            // Play Store distribution requires an owner-controlled upload key.
-            signingConfig signingConfigs.debug
+            // Release candidates are signed with the verified CI QA signer.
+            signingConfig signingConfigs.qa
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
