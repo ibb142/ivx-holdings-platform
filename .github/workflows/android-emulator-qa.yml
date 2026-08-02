@@ -100,6 +100,25 @@ jobs:
           node --version
           npx expo --version
 
+      - name: Prepare QA signing key
+        run: |
+          set -euo pipefail
+          QA_KEYSTORE="$HOME/.android/debug.keystore"
+          mkdir -p "$(dirname "$QA_KEYSTORE")"
+          if [ ! -f "$QA_KEYSTORE" ]; then
+            keytool -genkeypair -v \
+              -keystore "$QA_KEYSTORE" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=IVX CI QA, OU=Engineering, O=IVX Holdings, L=Miami, ST=Florida, C=US"
+          fi
+          keytool -list -keystore "$QA_KEYSTORE" -storepass android -alias androiddebugkey >/dev/null
+          echo "QA signing key verified. This signer is for QA artifacts only."
+
       # ============================================================
       # Build release APK using committed android/ directory.
       # ============================================================
