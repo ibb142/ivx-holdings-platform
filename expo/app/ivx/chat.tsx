@@ -119,6 +119,7 @@ import type { IVXOwnerFileInsight } from '@/src/modules/ivx-owner-ai/services/iv
 import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
 import { executeReliably, type ReliabilityTrace } from '@/src/modules/chat/services/aiReliability';
 import { useChatSendQueue } from '@/src/modules/chat/services/useChatSendQueue';
+import { shouldStartAssistantBeforePersistence } from '@/src/modules/chat/services/ivxSendTriggerPolicy';
 import {
   isExplicitSensitiveActionConfirmation,
   resolveOwnerTrustContext,
@@ -3362,31 +3363,50 @@ export default function IVXOwnerChatRoute() {
 
       if (localFirstChatMode) {
         const wdLF = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        try {
-          await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-          setLastSendAt(new Date().toISOString());
-          if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
-            wdLF?.pass('AI_TRIGGER_DECISION', 'branch=local_first_elevated_confirmation');
-            await persistSupportMessage(buildLocalSafeActionConfirmationMessage({
-              normalizedText: effectiveText,
-              requestClass: trustContext.requestClass,
-            }), 'assistant');
-            wdLF?.complete('SUCCESS');
-            return;
+        const startAssistantImmediately = shouldStartAssistantBeforePersistence({ localFirstChatMode, mode });
+        const persistencePromise = sendQueue.mutateAsync({
+          text: persistedOwnerText,
+          mode,
+          clientId,
+          replyTo,
+          senderLabel: ownerLabel,
+          capturedText,
+        });
+
+        if (startAssistantImmediately) {
+          // The local queue can retry persistence for minutes. The optimistic row is
+          // already visible, so it must not block a valid Owner AI request.
+          void persistencePromise
+            .then(() => setLastSendAt(new Date().toISOString()))
+            .catch((sendError: unknown) => {
+              console.log('[IVXOwnerChatRoute] local-first persistence continues in the retry queue:', sendError instanceof Error ? sendError.message : String(sendError));
+            });
+        } else {
+          try {
+            await persistencePromise;
+            setLastSendAt(new Date().toISOString());
+          } catch (sendError) {
+            wdLF?.fail('AI_TRIGGER_DECISION', `sendQueue failed in localFirst: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
+            throw sendError instanceof Error ? sendError : new Error(String(sendError));
           }
-        } catch (sendError) {
-          wdLF?.fail('AI_TRIGGER_DECISION', `sendQueue failed in localFirst: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
-          throw sendError instanceof Error ? sendError : new Error(String(sendError));
+        }
+
+        if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
+          wdLF?.pass('AI_TRIGGER_DECISION', 'branch=local_first_elevated_confirmation');
+          await persistSupportMessage(buildLocalSafeActionConfirmationMessage({
+            normalizedText: effectiveText,
+            requestClass: trustContext.requestClass,
+          }), 'assistant');
+          wdLF?.complete('SUCCESS');
+          return;
         }
 
         if (mode === 'send_and_ai' || mode === 'ai_only') {
-          console.log('[IVX_TRACE] 2.2_AI_TRIGGER_LOCAL_FIRST', { clientId, mode });
-          wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first mode=${mode}`);
-          // Synchronously mark the assistant mutation as started so the watchdog
-          // never reports a phantom stall at AI_TRIGGER_DECISION if the async
-          // call is delayed or queued behind an earlier mutation.
+          console.log('[IVX_TRACE] 2.2_AI_TRIGGER_LOCAL_FIRST', { clientId, mode, startAssistantImmediately });
+          wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first mode=${mode} persistence=${startAssistantImmediately ? 'background' : 'confirmed'}`);
+          // Mark the handoff before invoking the mutation so a blocked persistence
+          // queue can never strand this trace at USER_ROW_INSERTED.
           wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
-          // Retry-once guard: catch the first rejection, log it, and retry once
           try {
             await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId });
           } catch (aiErr) {
