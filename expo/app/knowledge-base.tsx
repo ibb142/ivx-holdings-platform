@@ -320,7 +320,7 @@ export default function KnowledgeBaseScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={article.title}
                 >
-                  <View style={styles.recentDot} backgroundColor={cat?.color ?? Colors.gold} />
+                  <View style={[styles.recentDot, { backgroundColor: cat?.color ?? Colors.gold }]} />
                   <View style={styles.recentContent}>
                     <Text style={styles.recentTitle} numberOfLines={2}>
                       {article.title}

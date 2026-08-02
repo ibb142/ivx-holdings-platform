@@ -2017,6 +2017,7 @@ export const ivxChatService = {
   getCanonicalConversationIdSync,
   setCanonicalConversationId,
   listOwnerMessages,
+  getLocalOwnerMessages,
   listOlderOwnerMessages,
   searchOwnerMessages,
   sendOwnerTextMessage,

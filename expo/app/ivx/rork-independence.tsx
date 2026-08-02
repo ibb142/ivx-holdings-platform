@@ -179,8 +179,8 @@ function IndependenceContent() {
             </View>
             <Text style={styles.summaryLine}>
               {data.summary.phasesAchieved}/4 phases achieved ·{' '}
-              {data.summary.rorkRequiredForNormalWorkflow ? 'Rork still in normal workflow' : 'Rork out of normal workflow'}
-              {data.summary.rorkOptional ? ' · Rork optional' : ''}
+              {data.summary.externalRequiredForNormalWorkflow ? 'External services still in normal workflow' : 'External services out of normal workflow'}
+              {data.summary.externalOptional ? ' · External services optional' : ''}
             </Text>
             <View style={styles.capRow}>
               {([
@@ -211,9 +211,9 @@ function IndependenceContent() {
             ))}
           </View>
 
-          <Text style={styles.sectionHeading}>Rork dependencies remaining</Text>
+          <Text style={styles.sectionHeading}>External dependencies remaining</Text>
           <View style={styles.listCard}>
-            {data.rorkDependenciesRemaining.map((d, i) => (
+            {data.externalDependenciesRemaining.map((d, i) => (
               <DependencyRow key={i} dep={d} />
             ))}
           </View>

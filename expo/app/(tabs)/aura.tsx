@@ -43,13 +43,13 @@ import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 
-const fetchWithAuth = async (url: string) => {
+const fetchWithAuth = async <T,>(url: string): Promise<T> => {
   const token = await getIVXAccessToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json() as Promise<unknown>;
+  return await res.json() as T;
 };
 
 type AuraPulse = {
@@ -62,15 +62,15 @@ type AuraPulse = {
 
 async function loadAuraPulse(): Promise<AuraPulse> {
   const [ai, qa, credentials, runs, executive] = await Promise.allSettled([
-    fetchWithAuth(`${API_BASE}/api/ivx/owner-ai/status`),
-    fetchWithAuth(`${API_BASE}/api/ivx/autonomous/qa`),
-    fetchWithAuth(`${API_BASE}/api/ivx/autonomous/credentials`),
-    fetchWithAuth(`${API_BASE}/api/ivx/autonomous/runs/summary`),
-    fetchWithAuth(`${API_BASE}/api/ivx/executive-layer`),
+    fetchWithAuth<AuraPulse['ai']>(`${API_BASE}/api/ivx/owner-ai/status`),
+    fetchWithAuth<AuraPulse['qa']>(`${API_BASE}/api/ivx/autonomous/qa`),
+    fetchWithAuth<AuraPulse['credentials']>(`${API_BASE}/api/ivx/autonomous/credentials`),
+    fetchWithAuth<AuraPulse['runs']>(`${API_BASE}/api/ivx/autonomous/runs/summary`),
+    fetchWithAuth<AuraPulse['executive']>(`${API_BASE}/api/ivx/executive-layer`),
   ]);
 
   const unwrap = <T,>(p: PromiseSettledResult<T>, fallback: T): T =>
-    p.status === 'fulfilled' ? p.value as T : fallback;
+    p.status === 'fulfilled' ? p.value : fallback;
 
   return {
     ai: unwrap<{ ok: boolean; provider?: string; configured?: boolean; model?: string; error?: string }>(ai, { ok: false, error: 'AI status unavailable' }),
