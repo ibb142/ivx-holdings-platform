@@ -1,8 +1,18 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-01T23:45:00.000Z
+updatedAt: 2026-08-02T15:02:00.000Z
 ---
+# 2026-08-02 Production Deployment Repair — Verified Complete
+
+- [x] Identified the exact production startup failure from Render logs: the deployed worker route imported a missing internal authorization module.
+- [x] Restored the missing module in GitHub commit `12644a4005a3582b45256324f4c53c6206ae40a5`.
+- [x] Validated locally with TypeScript and 16 focused worker/auth tests passing.
+- [x] Triggered Render deployment `dep-d9nlm7i7a9hs738ovvfg`; Render reported `live` at 2026-08-02T15:00:16Z.
+- [x] Verified production `/health` and `/version` are serving commit `12644a4005a3582b45256324f4c53c6206ae40a5` after the deployment.
+- [x] Verified the owner-gated worker surface is available in production: no active job, 25 proof-ledger entries, and deploy/commit/health verification capabilities are present.
+- [x] Android 1.9.4 direct-install APK remains published at the GitHub release; SHA-256 `51ab3c6cfe48ccea9f7dce85b5063afbf2181a66d7d4e68c70d8b6bf5c62736e`.
+
 # IVX IA 16-phase final certification — 2026-08-01 OWNER CONTROL + 100% DEPLOY + FULL FILE INTEGRITY AUDIT
 
 > **STATUS: ✅ 100% COMPLETE — OWNER CONTROL VERIFIED, GITHUB REPOSITORY COMPLETE, PRODUCTION DEPLOYED, APK BUILT AND UPLOADED, FULL FILE INTEGRITY AUDIT COMPLETE.**
