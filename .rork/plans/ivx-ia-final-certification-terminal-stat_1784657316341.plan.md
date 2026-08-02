@@ -3,6 +3,12 @@ overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura
 createdAt: 2026-07-21T18:08:36.341Z
 updatedAt: 2026-08-02T15:02:00.000Z
 ---
+# 2026-08-02 Android Signing Separation — In Progress
+
+- [x] Isolated Android Emulator QA from production signing with a runner-generated disposable keystore.
+- [x] Configured production release tasks to require protected release-signing environment variables and never fall back to QA/debug signing.
+- [ ] Provision the owner-controlled release key, encrypted off-platform backup, and protected GitHub Actions secrets before production signing can be certified.
+
 # 2026-08-02 Production Deployment Repair — Verified Complete
 
 - [x] Identified the exact production startup failure from Render logs: the deployed worker route imported a missing internal authorization module.

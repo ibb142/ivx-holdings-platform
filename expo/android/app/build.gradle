@@ -97,9 +97,12 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
-    // CI QA must use the keystore generated and verified by the runner rather
-    // than any tracked project keystore. Store distribution uses an
-    // owner-controlled upload key through the release process.
+    def releaseKeystorePath = System.getenv('IVX_RELEASE_KEYSTORE_PATH')
+    def releaseStorePassword = System.getenv('IVX_RELEASE_KEYSTORE_PASSWORD')
+    def releaseKeyAlias = System.getenv('IVX_RELEASE_KEY_ALIAS')
+    def releaseKeyPassword = System.getenv('IVX_RELEASE_KEY_PASSWORD')
+    def releaseSigningConfigured = [releaseKeystorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it?.trim() }
+
     signingConfigs {
         qa {
             storeFile file(System.getenv('IVX_QA_KEYSTORE') ?: "${System.getProperty('user.home')}/.android/debug.keystore")
@@ -107,20 +110,43 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (releaseSigningConfigured) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.qa
         }
-        release {
-            // Release candidates are signed with the verified CI QA signer.
+        qa {
+            initWith release
+            matchingFallbacks = ['release']
             signingConfig signingConfigs.qa
+            applicationIdSuffix '.qa'
+            versionNameSuffix '-qa'
+        }
+        release {
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
+        }
+    }
+
+    gradle.taskGraph.whenReady { graph ->
+        def needsReleaseSigning = graph.allTasks.any { task -> task.name.toLowerCase().contains('release') }
+        if (needsReleaseSigning && !releaseSigningConfigured) {
+            throw new GradleException('Release signing is not configured. Set the protected IVX_RELEASE_KEYSTORE_PATH, IVX_RELEASE_KEYSTORE_PASSWORD, IVX_RELEASE_KEY_ALIAS, and IVX_RELEASE_KEY_PASSWORD environment variables.')
         }
     }
     packagingOptions {

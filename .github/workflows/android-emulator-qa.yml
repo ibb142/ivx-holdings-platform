@@ -121,9 +121,10 @@ jobs:
           echo "QA signing key verified. This signer is for QA artifacts only."
 
       # ============================================================
-      # Build release APK using committed android/ directory.
+      # Build a disposable QA APK. Production release signing is isolated from
+      # this workflow and never uses this runner-generated debug signer.
       # ============================================================
-      - name: Build Android release APK
+      - name: Build Android QA APK
         id: build
         working-directory: expo/android
         timeout-minutes: 30
@@ -133,11 +134,11 @@ jobs:
           IVX_QA_KEYSTORE: ${{ runner.home }}/.android/debug.keystore
         run: |
           set -o pipefail
-          echo "=== Building release APK with Gradle ==="
+          echo "=== Building disposable QA APK with Gradle ==="
           echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME"
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee gradle-build.log
+          ./gradlew assembleQa --no-daemon -x lint 2>&1 | tee gradle-build.log
           GRADLE_EXIT=${PIPESTATUS[0]}
           echo "=== Gradle exit code: $GRADLE_EXIT ==="
           echo "build_exit=$GRADLE_EXIT" >> $GITHUB_OUTPUT
@@ -159,7 +160,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ivx-android-release-gradle-log-${{ github.sha }}
+          name: ivx-android-qa-gradle-log-${{ github.sha }}
           path: expo/android/gradle-build.log
           retention-days: 30
 
@@ -170,9 +171,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "::error::Gradle release build failed. Creating diagnostic issue with error logs."
+          echo "::error::Gradle QA build failed. Creating diagnostic issue with error logs."
           {
-            echo "## Android Release APK Build Diagnostics"
+            echo "## Android QA APK Build Diagnostics"
             echo ""
             echo "**Commit:** ${GITHUB_SHA}"
             echo "**Run:** ${GITHUB_RUN_ID}"
@@ -187,7 +188,7 @@ jobs:
           RESPONSE=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "Content-Type: application/json" \
-            -d "$(python3 -c "import json,sys; print(json.dumps({'title':'Android Release APK Build Diagnostics — ${GITHUB_SHA:0:12}','body':open('diagnostic-body.md').read(),'labels':['android-qa-diagnostic']}))")" \
+            -d "$(python3 -c "import json,sys; print(json.dumps({'title':'Android QA APK Build Diagnostics — ${GITHUB_SHA:0:12}','body':open('diagnostic-body.md').read(),'labels':['android-qa-diagnostic']}))")" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues")
           echo "Issue create response: $RESPONSE"
           echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Created issue:', d.get('html_url', d.get('message','unknown')))"
@@ -197,10 +198,10 @@ jobs:
         working-directory: expo/android
         if: steps.build.outcome == 'success'
         run: |
-          echo "=== Searching for release APK ==="
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
+          echo "=== Searching for QA APK ==="
+          APK_PATH=$(find app/build/outputs/apk/qa -name "*.apk" -type f 2>/dev/null | head -1)
           if [ -z "$APK_PATH" ]; then
-            echo "::error::No release APK found"
+            echo "::error::No QA APK found"
             find . -name "*.apk" 2>/dev/null
             exit 1
           fi
@@ -219,7 +220,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: steps.build.outcome == 'success'
         with:
-          name: ivx-android-apk-${{ github.sha }}
+          name: ivx-android-qa-apk-${{ github.sha }}
           path: ${{ steps.apk.outputs.path }}
           retention-days: 30
           if-no-files-found: error

@@ -20,7 +20,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            // Production signing is intentionally not configured in source.
+            // This legacy module must receive protected signing material in its
+            // dedicated release pipeline before a distributable build is made.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
