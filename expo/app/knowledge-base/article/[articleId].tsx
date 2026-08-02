@@ -322,6 +322,12 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     marginLeft: -4,
   },
+  headerTitle: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '700' as const,
+  },
   headerTitleWrap: {
     flex: 1,
     marginLeft: 4,

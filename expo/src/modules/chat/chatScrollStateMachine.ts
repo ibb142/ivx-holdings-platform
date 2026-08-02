@@ -203,7 +203,7 @@ export function isValidStateTransition(
   if (next.pendingNewMessageCount < 0) return false;
 
   // If pagination is in progress, we should not also be applying initial position.
-  if (next.paginationInProgress && !(next as Record<string, unknown>).shouldResetConversationState) {
+  if (next.paginationInProgress) {
     // pagination + initial position is contradictory
     if (!next.initialPositionApplied && next.initialLayoutReady && next.initialDataLoaded) {
       // This could happen if pagination triggers before initial scroll —
