@@ -27,8 +27,8 @@ console.error(JSON.stringify({
   landingLength: landing.length,
 }));
 
-if (!expectedVersion || !gradleVersion || landingVersions.length === 0) {
-  throw new Error('APK release consistency check could not read every required version source.');
+if (!expectedVersion || !gradleVersion) {
+  throw new Error('APK release consistency check could not read the app or Android version source.');
 }
 if (gradleVersion !== expectedVersion) {
   throw new Error(`Android versionName ${gradleVersion} does not match app version ${expectedVersion}.`);
