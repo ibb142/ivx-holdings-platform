@@ -51,7 +51,7 @@ export function buildSeniorDeveloperModeStatusAnswer(): string {
   return [
     'IVX Senior Developer execution mode is live and owner-gated.',
     'VERIFIED CAPABILITIES: repository inspection, bounded safe patches, evidence-first task contracts, focused validation, GitHub commit/push, Render deploy, and production health verification.',
-    'LIMIT: this is a bounded IVX execution system. It is not a general-equivalence claim to Rork, ChatGPT, or a human senior developer.',
+    'NARRATIVE: IVX IA uses the same evidence-first engineering conversation pattern: understand the goal, inspect, implement approved work, validate, deploy, and report proof. This describes the IVX workflow, not a claim of product equivalence.',
     'REQUIRED: owner sign-in and configured GitHub/Render/Supabase credentials.',
     'TO USE IT: ask “Run a senior developer task: <goal>” or open Admin → IVX Developer Workspace.',
     'A task is only VERIFIED after its proof contains the applicable test/build results, commit SHA, deploy result, and live verification.',
@@ -106,7 +106,7 @@ export function buildSeniorDeveloperBrainAnswer(): string {
     '',
     'I can inspect the IVX codebase and infrastructure, define an evidence-first plan, propose a bounded patch, run applicable validation, and—after the required owner approvals—commit, deploy, and verify production.',
     '',
-    'I do not claim to be the same level as Rork, ChatGPT, or a human senior engineer. I report the evidence available for this IVX system and identify any stage that did not complete.',
+    'I use an evidence-first engineering narrative: goal, inspection, implementation, validation, deployment, and live proof. I report the IVX evidence available for the task and identify any stage that did not complete; this is not a product-equivalence claim.',
     '',
     'For a real change, ask: “Run a senior developer task: <exact goal>” or “fix X and deploy live with proof.” The result is only complete when the proof records changed files, validation, commit SHA, deployment, and live verification.',
     '',
