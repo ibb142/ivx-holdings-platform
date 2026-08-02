@@ -256,7 +256,7 @@ jobs:
             echo "APK installed successfully"
 
             echo "=== Launching app ==="
-            adb shell am start -n com.ivxholdings.app/.MainActivity || {
+            adb shell am start -n com.ivxholdings.app.qa/.MainActivity || {
               echo "::warning::App launch failed — capturing diagnostics"
               adb logcat -d -t 200 > logcat.txt 2>&1 || true
               adb exec-out screencap -p > screenshot-02-launch-fail.png 2>/dev/null || true
@@ -283,7 +283,7 @@ jobs:
             echo "=== Running Maestro launch test ==="
             cd "$GITHUB_WORKSPACE/expo"
             set -o pipefail
-            maestro test .maestro/ivx-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
+            maestro test .maestro/ivx-android-qa-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
             echo "maestro_result=completed" >> $GITHUB_OUTPUT
             echo "Maestro launch test completed"
 
@@ -338,7 +338,7 @@ jobs:
       - name: Generate QA summary
         if: always()
         run: |
-          echo "## Android Release APK + Emulator QA Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Android QA APK + Emulator QA Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
@@ -351,8 +351,8 @@ jobs:
           echo "| APK Size | \`${{ steps.apk.outputs.size }} bytes\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- APK: \`ivx-android-apk-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Gradle log: \`ivx-android-release-gradle-log-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- APK: \`ivx-android-qa-apk-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Gradle log: \`ivx-android-qa-gradle-log-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Screenshots: \`screenshot-01-launch.png\`, \`screenshot-02-post-test.png\`" >> $GITHUB_STEP_SUMMARY
           echo "- Logcat: \`logcat.txt\`" >> $GITHUB_STEP_SUMMARY
           echo "- Maestro results: \`maestro-launch-results.xml\`" >> $GITHUB_STEP_SUMMARY
