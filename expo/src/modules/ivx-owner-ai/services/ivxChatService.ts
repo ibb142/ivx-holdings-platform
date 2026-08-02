@@ -247,6 +247,11 @@ async function loadLocalMessages(): Promise<IVXMessage[]> {
   }
 }
 
+/** Returns the durable local thread immediately when a remote cold start is slow. */
+export async function getLocalOwnerMessages(): Promise<IVXMessage[]> {
+  return await loadLocalMessages();
+}
+
 async function saveLocalMessages(messages: IVXMessage[]): Promise<void> {
   try {
     const bounded = capOwnerMessages(messages, IVX_LOCAL_MESSAGES_MIRROR_CAP);

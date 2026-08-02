@@ -474,6 +474,25 @@ const AuditInfoRow = React.memo(function AuditInfoRow({ label, value, testID }: 
 
 const IVX_OWNER_MESSAGES_QUERY_KEY = ['ivx-owner-ai', 'messages'] as const;
 const IVX_OWNER_CONVERSATION_QUERY_KEY = ['ivx-owner-ai', 'conversation'] as const;
+const IVX_CHAT_COLD_START_TIMEOUT_MS = 8_000;
+
+async function resolveWithinChatColdStartDeadline<T>(operation: Promise<T>, fallback: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race<T>([
+      operation,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          void fallback().then(resolve);
+        }, IVX_CHAT_COLD_START_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
 const IVX_ROOM_STATUS_QUERY_KEY = ['ivx-owner-ai', 'room-status'] as const;
 const IVX_CONTROL_ROOM_STATUS_QUERY_KEY = ['ivx-owner-ai', 'control-room-status'] as const;
 const CONTROL_ROOM_FALLBACK_ITEMS: IVXControlRoomItem[] = [
@@ -1067,7 +1086,10 @@ export default function IVXOwnerChatRoute() {
     queryFn: async () => {
       console.log('[IVXOwnerChatRoute] Loading owner messages');
       try {
-        const loaded = await ivxChatService.listOwnerMessages();
+        const loaded = await resolveWithinChatColdStartDeadline(
+          ivxChatService.listOwnerMessages(),
+          ivxChatService.getLocalOwnerMessages,
+        );
         // Proof-first hydration log: prove the thread re-hydrates on mount /
         // refresh / route change with a real message count, not an empty reset.
         console.log('[IVXChatStateProof] hydration_ok', {
@@ -1121,7 +1143,19 @@ export default function IVXOwnerChatRoute() {
     queryFn: async () => {
       console.log('[IVXOwnerChatRoute] Bootstrapping owner conversation');
       try {
-        return await ivxChatService.bootstrapOwnerConversation();
+        return await resolveWithinChatColdStartDeadline(
+          ivxChatService.bootstrapOwnerConversation(),
+          async () => ({
+            id: IVX_OWNER_AI_ROOM_ID,
+            slug: IVX_OWNER_AI_PROFILE.sharedRoom.id,
+            title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
+            subtitle: 'Local conversation while the secure room reconnects.',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastMessageText: null,
+            lastMessageAt: null,
+          }),
+        );
       } catch (error) {
         console.log('[IVXOwnerChatRoute] Owner conversation bootstrap failed:', error instanceof Error ? error.message : 'unknown');
         if (!isOpenAccessBuild) {
