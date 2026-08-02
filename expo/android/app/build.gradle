@@ -92,33 +92,66 @@ android {
         applicationId 'com.ivxholdings.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 91
-        versionName "1.9.3"
+        versionCode 92
+        versionName "1.9.4"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
+    def releaseKeystorePath = System.getenv('IVX_RELEASE_KEYSTORE_PATH')
+    def releaseStorePassword = System.getenv('IVX_RELEASE_KEYSTORE_PASSWORD')
+    def releaseKeyAlias = System.getenv('IVX_RELEASE_KEY_ALIAS')
+    def releaseKeyPassword = System.getenv('IVX_RELEASE_KEY_PASSWORD')
+    def releaseSigningConfigured = [releaseKeystorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it?.trim() }
+
     signingConfigs {
-        debug {
-            storeFile file('debug.keystore')
+        qa {
+            storeFile file(System.getenv('IVX_QA_KEYSTORE') ?: "${System.getProperty('user.home')}/.android/debug.keystore")
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (releaseSigningConfigured) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.qa
+        }
+        qa {
+            initWith release
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.qa
+            applicationIdSuffix '.qa'
+            versionNameSuffix '-qa'
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
+        }
+    }
+
+    gradle.taskGraph.whenReady {
+        // Inspect requested tasks rather than all resolved tasks: a QA variant initialized
+        // from release can resolve release-named helper tasks without producing a release artifact.
+        def requestedTasks = gradle.startParameter.taskNames.collect { it.toLowerCase() }
+        def needsReleaseSigning = requestedTasks.any { taskName ->
+            taskName.contains('release') || taskName == 'assemble' || taskName == 'build'
+        }
+        if (needsReleaseSigning && !releaseSigningConfigured) {
+            throw new GradleException('Release signing is not configured. Set the protected IVX_RELEASE_KEYSTORE_PATH, IVX_RELEASE_KEYSTORE_PASSWORD, IVX_RELEASE_KEY_ALIAS, and IVX_RELEASE_KEY_PASSWORD environment variables.')
         }
     }
     packagingOptions {
