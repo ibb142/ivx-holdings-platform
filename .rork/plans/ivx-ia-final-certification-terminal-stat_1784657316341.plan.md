@@ -3,6 +3,15 @@ overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura
 createdAt: 2026-07-21T18:08:36.341Z
 updatedAt: 2026-08-02T15:02:00.000Z
 ---
+# 2026-08-02 P0 Stabilization Freeze — Active
+
+- [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
+- [x] Establish the current source-of-truth baseline: GitHub `main` and production both report `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` through authenticated GitHub and public `/health` + `/version` reads.
+- [ ] Establish CI-tested SHA parity: current required workflow executions for `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` are failed and cannot certify the live runtime.
+- [ ] Resolve the local checkout divergence before any production-related mutation: local `main` is 71 commits ahead of its configured remote and cannot be treated as production source of truth.
+- [ ] Obtain three consecutive successful runs for IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, and iOS Simulator QA on one approved SHA.
+- [ ] Do not claim `SELF_HEALING_VERIFIED` until the owner-approved incident, deployment, canary, rollback, mobile-device, and SHA-parity requirements have complete evidence.
+
 # 2026-08-02 Autonomous Deployment Certification Gate — Implemented, Not Yet Certified
 
 - [x] Restricted deploy-mode commits to the approved production branch and reject non-production branch evidence.
