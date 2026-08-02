@@ -16,7 +16,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report' }]],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8081',
+    baseURL: process.env.E2E_BASE_URL ?? 'https://ivxholding.com',
     headless: true,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
