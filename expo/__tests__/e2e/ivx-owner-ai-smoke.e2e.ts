@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 /** Verifies the public IVX web surface and IVX IA response path in production. */
 test.describe('IVX production public surface', () => {
   test('landing page renders', async ({ page }) => {
-    const response = await page.goto('/');
+    const response = await page.goto('https://ivxholding.com');
     expect(response?.ok()).toBe(true);
     await expect(page.locator('body')).not.toBeEmpty();
   });
