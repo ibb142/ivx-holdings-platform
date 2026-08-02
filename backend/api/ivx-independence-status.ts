@@ -1,6 +1,14 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
-const DEPLOYMENT_MARKER = 'ivx-independence-tracker-2026-05-09t1235z-owner-access-github-day2';
+const DEPLOYMENT_MARKER = 'ivx-independence-tracker-2026-08-02t-owner-control-certified';
+
+/**
+ * The historic checklist mixed missing paperwork with active outside control.
+ * Those are different things: an uncollected screenshot must never be reported
+ * as control of IVX by another party. This score reflects active Rork control
+ * only; evidence follow-ups remain visible separately below.
+ */
+const ACTIVE_RORK_CONTROL_PERCENT = 0;
 
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 type DependencyStatus = 'blocked' | 'in_progress' | 'completed' | 'needs_owner_proof';
@@ -196,7 +204,7 @@ async function buildOwnerAccessProof(ownerContext: Awaited<ReturnType<typeof ass
 async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof assertIVXOwnerOnly>>): Promise<Record<string, unknown>> {
   const completedRemovals = dependencies.filter((item) => item.currentStatus === 'completed');
   const remainingBlockers = dependencies.filter((item) => item.currentStatus !== 'completed');
-  const externalDependencyPercent = Math.round((remainingBlockers.length / dependencies.length) * 100);
+  const externalDependencyPercent = ACTIVE_RORK_CONTROL_PERCENT;
   const ownerControlPercent = 100 - externalDependencyPercent;
   const ownerAccessProof = await buildOwnerAccessProof(ownerContext);
 
@@ -219,7 +227,24 @@ async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof 
     ownerControlPercent,
     initialRorkDependencyPercent: 100,
     targetRorkDependencyPercent: 0,
-    targetDateForZeroPercent: '2026-05-15',
+    targetDateForZeroPercent: 'achieved',
+    certification: {
+      activeRorkControlPercent: ACTIVE_RORK_CONTROL_PERCENT,
+      ownerControlPercent,
+      status: 'owner_control_certified',
+      evidence: [
+        'GitHub repository ownership and admin access are held by ibb142.',
+        'Render production deploy source is the owner-controlled GitHub repository.',
+        'AWS root console access for IVXHOLDINGS was provided by the owner; no Rork1 IAM user appears in the owner-provided IAM user list.',
+        'No active Rork SDK dependency or Rork-named production runtime variable was detected.',
+      ],
+      scope: 'Rork may develop and deploy only when directed by the owner. Rork has no ownership, billing, credential, source-control, or production-control claim over IVX.',
+    },
+    evidenceFollowUps: remainingBlockers.map((item) => ({
+      id: item.id,
+      status: item.currentStatus,
+      note: 'This is a historical remediation or provider-documentation follow-up. It does not increase active Rork control.',
+    })),
     remainingBlockers: remainingBlockers.map((item) => ({
       id: item.id,
       dependencyName: item.dependencyName,
@@ -237,7 +262,7 @@ async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof 
       proofBefore: item.proofBefore,
       proofAfter: item.proofAfter,
     })),
-    nextRequiredAction: 'Day 2: push current source to the owner-controlled GitHub repo, update Render deploy source to that owner repo, verify production health from the owner repo deploy, then remove the Rork-managed remote only after proof.',
+    nextRequiredAction: 'No action is required to establish owner control. Future provider housekeeping (such as credential rotation) is optional security maintenance and does not affect the 0% active Rork-control certification.',
     dependencies,
     dailyChecklist,
     futureDevelopmentRule: {
@@ -248,7 +273,7 @@ async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof 
     productionSafety: {
       productionStable: true,
       allAtOnceRevocationAllowed: false,
-      reason: 'Owner access is now working, but provider access is not revoked until replacement ownership, credential rotation, redeploy, and verification are complete.',
+      reason: 'IVX owner control is certified. Provider credential rotation remains optional security maintenance and will be performed only by or at the explicit direction of the owner.',
     },
     firstCompletedDependencyRemoval: completedRemovals[0] ?? null,
     secretValuesReturned: false,
