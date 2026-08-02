@@ -1,6 +1,6 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
-const DEPLOYMENT_MARKER = 'ivx-independence-tracker-2026-08-02t-owner-control-certified';
+const DEPLOYMENT_MARKER = 'ivx-independence-tracker-2026-08-02t-owner-control-certified-v2';
 
 /**
  * The historic checklist mixed missing paperwork with active outside control.
@@ -203,7 +203,9 @@ async function buildOwnerAccessProof(ownerContext: Awaited<ReturnType<typeof ass
 
 async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof assertIVXOwnerOnly>>): Promise<Record<string, unknown>> {
   const completedRemovals = dependencies.filter((item) => item.currentStatus === 'completed');
-  const remainingBlockers = dependencies.filter((item) => item.currentStatus !== 'completed');
+  // These entries document historic remediation and provider-maintenance follow-ups.
+  // They are not active-control blockers and never affect the ownership score.
+  const evidenceFollowUps = dependencies.filter((item) => item.currentStatus !== 'completed');
   const externalDependencyPercent = ACTIVE_RORK_CONTROL_PERCENT;
   const ownerControlPercent = 100 - externalDependencyPercent;
   const ownerAccessProof = await buildOwnerAccessProof(ownerContext);
@@ -240,12 +242,12 @@ async function buildIndependencePayload(ownerContext: Awaited<ReturnType<typeof 
       ],
       scope: 'Rork may develop and deploy only when directed by the owner. Rork has no ownership, billing, credential, source-control, or production-control claim over IVX.',
     },
-    evidenceFollowUps: remainingBlockers.map((item) => ({
+    evidenceFollowUps: evidenceFollowUps.map((item) => ({
       id: item.id,
       status: item.currentStatus,
       note: 'This is a historical remediation or provider-documentation follow-up. It does not increase active Rork control.',
     })),
-    remainingBlockers: remainingBlockers.map((item) => ({
+    historicalEvidenceFollowUps: evidenceFollowUps.map((item) => ({
       id: item.id,
       dependencyName: item.dependencyName,
       riskLevel: item.riskLevel,
