@@ -788,7 +788,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"offset\":340,\"limit\":230}",
       "createdAt": 1785709300607,
-      "completedAt": 1785709300658
+      "completedAt": 1785709300658,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -807,7 +808,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-evidence-generator.ts\",\"offset\":100,\"limit\":190}",
       "createdAt": 1785709300648,
-      "completedAt": 1785709300659
+      "completedAt": 1785709300659,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -826,7 +828,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-owner-passwordless-login.ts\",\"offset\":1,\"limit\":260}",
       "createdAt": 1785709300650,
-      "completedAt": 1785709300660
+      "completedAt": 1785709300660,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -845,7 +848,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-runtime.ts\",\"offset\":400,\"limit\":100}",
       "createdAt": 1785709300651,
-      "completedAt": 1785709300661
+      "completedAt": 1785709300661,
+      "compactedAt": 1785710778548
     },
     {
       "type": "reasoning",
@@ -885,7 +889,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"edits\":[{\"oldString\":\"async function fetchJson(url: string, opts?: RequestInit): Promise<Record<string, unknown>> {\\n  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });\\n  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);\\n  return (await res.json()) as Record<string, unknown>;\\n}\\n\",\"newString\":\"async function fetchJson(url: string, opts?: RequestInit): Promise<Record<string, unknown>> {\\n  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });\\n  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);\\n  return (await res.json()) as Record<string, unknown>;\\n}\\n\\nlet qaOwnerTokenPromise: Promise<string> | null = null;\\n\\n/**\\n * Gets one fresh owner session for the whole QA run.\\n *\\n * QA previously reused a local token file that could be expired, causing\\n * misleading 401 results midway through an otherwise healthy audit.\\n */\\nasync function resolveQAToken(): Promise<string> {\\n  const configuredToken = (process.env.IVX_QA_OWNER_TOKEN ?? process.env.IVX_OWNER_TOKEN ?? '').trim();\\n  if (configuredToken) return configuredToken;\\n\\n  const ownerEmail = (process.env.IVX_QA_OWNER_EMAIL ?? process.env.IVX_OWNER_EMAIL ?? '').trim();\\n  if (!ownerEmail) {\\n    throw new Error('QA owner authentication is not configured. Set IVX_QA_OWNER_TOKEN or IVX_QA_OWNER_EMAIL in the protected runner environment.');\\n  }\\n\\n  const session = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-passwordless-login`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json' },\\n    body: JSON.stringify({ email: ownerEmail, emergency: 'ivx_emergency_recovery' }),\\n  });\\n  const token = typeof session.accessToken === 'string' ? session.accessToken.trim() : '';\\n  if (token.length < 100) {\\n    throw new Error('QA owner authentication did not return a valid access token.');\\n  }\\n  return token;\\n}\\n\\nasync function getQAToken(): Promise<string> {\\n  qaOwnerTokenPromise ??= resolveQAToken();\\n  return qaOwnerTokenPromise;\\n}\\n\\nasync function fetchOwnerJson(url: string, init?: RequestInit): Promise<Record<string, unknown>> {\\n  const token = await getQAToken();\\n  return fetchJson(url, {\\n    ...init,\\n    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },\\n  });\\n}\\n\\nfunction isOwnerAuthenticationUnavailable(error: unknown): boolean {\\n  return error instanceof Error && error.message.startsWith('QA owner authentication');\\n}\\n\\nasync function runOwnerTest(fn: () => Promise<{ actual: string; status: TestStatus; errorDetail?: string; evidenceRef: string }>): Promise<{ actual: string; status: TestStatus; errorDetail?: string; evidenceRef: string }> {\\n  try {\\n    return await fn();\\n  } catch (error) {\\n    if (isOwnerAuthenticationUnavailable(error)) {\\n      return { actual: 'Owner QA authentication unavailable', status: 'SKIP', errorDetail: error.message, evidenceRef: 'owner-auth-unavailable' };\\n    }\\n    throw error;\\n  }\\n}\\n\",\"replaceAll\":false},{\"oldString\":\"      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();\\n      const r1 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {\\n        method: 'POST',\\n        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },\\n        body: JSON.stringify({ message: 'How many properties do we have?' }),\\n      });\\n      const r2 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {\\n        method: 'POST',\\n        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },\\n        body: JSON.stringify({ message: 'Show me the active ones' }),\\n      });\",\"newString\":\"      return runOwnerTest(async () => {\\n      const r1 = await fetchOwnerJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {\\n        method: 'POST',\\n        headers: { 'Content-Type': 'application/json' },\\n        body: JSON.stringify({ message: 'How many properties do we have?' }),\\n      });\\n      const r2 = await fetchOwnerJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {\\n        method: 'POST',\\n        headers: { 'Content-Type': 'application/json' },\\n        body: JSON.stringify({ message: 'Show me the active ones' }),\\n      });\",\"replaceAll\":false},{\"oldString\":\"        evidenceRef: 'multi-turn-context',\\n      };\\n    },\\n  },\",\"newString\":\"        evidenceRef: 'multi-turn-context',\\n      };\\n      });\\n    },\\n  },\",\"replaceAll\":false}]}",
       "createdAt": 1785709310452,
-      "completedAt": 1785709313667
+      "completedAt": 1785709313667,
+      "compactedAt": 1785710778548
     },
     {
       "type": "reasoning",
@@ -911,7 +916,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"offset\":55,\"limit\":170}",
       "createdAt": 1785709317292,
-      "completedAt": 1785709317296
+      "completedAt": 1785709317296,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -939,7 +945,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"edits\":[{\"oldString\":\"const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();\",\"newString\":\"const token = await getQAToken();\",\"replaceAll\":true},{\"oldString\":\"  const results: QATestResult[] = [];\\n  for (const def of TESTS) {\",\"newString\":\"  const results: QATestResult[] = [];\\n  for (const def of TESTS) {\",\"replaceAll\":false}]}",
       "createdAt": 1785709323234,
-      "completedAt": 1785709323713
+      "completedAt": 1785709323713,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -986,7 +993,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"tmp/owner_token|const token = await getQAToken\",\"path\":\"qa/ivx-qa-runner.ts\",\"include\":\"*.ts\"}",
       "createdAt": 1785709327018,
-      "completedAt": 1785709327067
+      "completedAt": 1785709327067,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -1005,7 +1013,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"package.json\",\"offset\":1,\"limit\":100}",
       "createdAt": 1785709327047,
-      "completedAt": 1785709327068
+      "completedAt": 1785709327068,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -1024,7 +1033,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"offset\":180,\"limit\":100}",
       "createdAt": 1785709327062,
-      "completedAt": 1785709327070
+      "completedAt": 1785709327070,
+      "compactedAt": 1785710778548
     },
     {
       "type": "reasoning",
@@ -1054,7 +1064,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"edits\":[{\"oldString\":\"    fn: async () => {\\n      const d = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-passwordless-login`, {\\n        method: 'POST',\\n        headers: { 'Content-Type': 'application/json' },\\n        body: JSON.stringify({ email: 'iperez4242@gmail.com', emergency: 'ivx_emergency_recovery' }),\\n      });\\n      const token = String(d.accessToken || '');\\n      return {\\n        actual: `token length=${token.length}, success=${d.success}`,\\n        status: token.length > 100 ? 'PASS' : 'FAIL',\\n        evidenceRef: 'owner-login',\\n      };\\n    },\",\"newString\":\"    fn: async () => runOwnerTest(async () => {\\n      const token = await getQAToken();\\n      return {\\n        actual: `fresh session token length=${token.length}`,\\n        status: token.length > 100 ? 'PASS' : 'FAIL',\\n        evidenceRef: 'owner-login',\\n      };\\n    }),\",\"replaceAll\":false}]}",
       "createdAt": 1785709331916,
-      "completedAt": 1785709332030
+      "completedAt": 1785709332030,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -1073,7 +1084,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"qa/ivx-qa-runner.ts\",\"offset\":570,\"limit\":80}",
       "createdAt": 1785709335330,
-      "completedAt": 1785709335381
+      "completedAt": 1785709335381,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -1092,7 +1104,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun --eval \\\"import('./qa/ivx-qa-runner.ts').then((module) => { const tests = module.getTestDefinitions(); if (tests.length === 0) throw new Error('QA tests were not loaded'); console.log('QA runner import OK: ' + tests.length + ' tests'); })\\\"\",\"cwd\":\".\"}",
       "createdAt": 1785709338501,
-      "completedAt": 1785709338766
+      "completedAt": 1785709338766,
+      "compactedAt": 1785710778548
     },
     {
       "type": "tool",
@@ -1140,7 +1153,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Audit QA owner authentication and 401 handling paths\",\"activeForm\":\"Auditing QA owner authentication and 401 handling paths\",\"status\":\"completed\"},{\"content\":\"Repair application-side QA authorization defects\",\"activeForm\":\"Repairing application-side QA authorization defects\",\"status\":\"completed\"},{\"content\":\"Run focused QA validation and document external credential blockers\",\"activeForm\":\"Running focused QA validation and documenting external credential blockers\",\"status\":\"completed\"}]}",
       "createdAt": 1785709350154,
-      "completedAt": 1785709350207
+      "completedAt": 1785709350207,
+      "compactedAt": 1785710778548
     },
     {
       "type": "text",
