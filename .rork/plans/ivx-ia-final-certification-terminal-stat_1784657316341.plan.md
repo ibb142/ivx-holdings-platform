@@ -1,24 +1,24 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-02T15:02:00.000Z
+updatedAt: 2026-08-02T21:33:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
-- [x] Establish the current source-of-truth baseline: GitHub `main` and production both report `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` through authenticated GitHub and public `/health` + `/version` reads.
-- [ ] Establish CI-tested SHA parity: BLOCKED_OWNER_ACTION. GitHub explicitly annotated every failed job on `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`: `The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings.` Actions is enabled, all actions are allowed, workflows are active, and GitHub Actions service status is operational; this is an account billing/spend restriction, not an application-code failure.
-- [ ] Resolve the local checkout divergence before any production-related mutation: local `main` is 72 commits ahead of its configured remote and cannot be treated as production source of truth.
+- [ ] Establish the current source-of-truth baseline: production `/health` and `/version` currently report `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`, but the configured local checkout is at `19be75b320bec9223ae3f4777d09291826ba1880` and two commits ahead of its Rork-router remote. Canonical GitHub `main` is unverified.
+- [ ] Establish CI-tested SHA parity: BLOCKED_CREDENTIALS. The configured `GITHUB_TOKEN` returns `401 Bad credentials` to GitHub's repository and Actions APIs, so current workflow/run/runner evidence and CI-tested SHA cannot be captured.
+- [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by two commits. Do not use it as production source of truth.
 
 ## Prioritized stabilization backlog
 
-1. **P0 — CI execution unavailable** (`CI-001`, BLOCKED_OWNER_ACTION): GitHub job annotations identify the exact blocker: recent account payment failure or the GitHub Actions spending limit. Owner action: open GitHub **Settings → Billing & plans → Spending limits**, settle any failed payment and raise/enable the Actions spending limit. Rork cannot change account billing. After that, run the isolated `RUNNER_HEARTBEAT` and collect runner/step evidence before rerunning the five required workflows.
-2. **P0 — Source-of-truth divergence** (`REPO-001`, BLOCKED): Reconcile the Rork-router checkout with canonical `ibb142/ivx-holdings-platform:main` without overwriting the 72 divergent commits or the existing local history changes.
+1. **P0 — GitHub Actions evidence unavailable** (`CI-001`, BLOCKED_CREDENTIALS): The configured GitHub credential returns `401 Bad credentials` for both repository and Actions API reads. Owner action: replace or restore a token with read access to `ibb142/ivx-holdings-platform` and Actions read/workflow permissions. Then run the isolated `RUNNER_HEARTBEAT` and collect runner/step evidence before rerunning the five required workflows.
+2. **P0 — Source-of-truth divergence** (`REPO-001`, BLOCKED): Reconcile the Rork-router checkout (`19be75b...`, ahead two commits) with canonical `ibb142/ivx-holdings-platform:main` without overwriting local history changes.
 3. **P0 — Deployment certification gap** (`DEPLOY-001`, QUEUED): After CI is healthy, capture one owner-approved GitHub → CI → Render → `/health` → `/version` chain with a real deployment ID.
 4. **P1 — Durable autonomous task queue** (`AUTO-001`, QUEUED): Normalize task IDs, status transitions, retries, evidence pointers, and approval gates into the existing durable worker/ledger after the canonical source is available.
 5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
 
-**Current active task:** `CI-001`, BLOCKED_OWNER_ACTION for GitHub Actions billing/spending restoration. No production mutation, deployment, signing change, or source-code repair has been performed while the canonical checkout and CI execution path are unresolved.
+**Current active task:** `CI-001`, BLOCKED_CREDENTIALS for GitHub repository and Actions API restoration. No production mutation, deployment, signing change, or source-code repair may proceed while canonical GitHub state and CI execution evidence are unresolved.
 
 - [ ] Obtain three consecutive successful runs for IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, and iOS Simulator QA on one approved SHA.
 - [ ] Do not claim `SELF_HEALING_VERIFIED` until the owner-approved incident, deployment, canary, rollback, mobile-device, and SHA-parity requirements have complete evidence.
