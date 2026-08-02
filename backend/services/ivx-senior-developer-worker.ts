@@ -1684,6 +1684,10 @@ function finalizeResultWithStateRecord(
  * worker as the runtime progresses through phases.
  */
 async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: string): Promise<void> {
+  const current = await getSeniorDeveloperJob(jobId);
+  if (current && !ACTIVE_STATUSES.has(current.status)) {
+    return;
+  }
   const statusMap: Record<IVXWorkerJobStage, IVXWorkerJobStatus> = {
     QUEUED: 'queued',
     RUNNING: 'running',

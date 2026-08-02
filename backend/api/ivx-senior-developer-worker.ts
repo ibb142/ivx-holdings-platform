@@ -255,6 +255,10 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
       ownerApproved: true,
       approvePatch,
       approveGitDeploy,
+      // The owner-gated route has already verified the approval contract above.
+      // Persist the canonical confirmation so the autonomous deploy runner receives
+      // the same authorization that selected executionMode='deploy'.
+      gitDeployConfirmationText: approveGitDeploy ? 'CONFIRM_IVX_RENDER_DEPLOY' : '',
       executionMode,
       validationMode: normalizeValidationMode(body.validationMode),
       systemMode: isSystemMode,
