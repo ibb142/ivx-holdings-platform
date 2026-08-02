@@ -143,8 +143,13 @@ android {
         }
     }
 
-    gradle.taskGraph.whenReady { graph ->
-        def needsReleaseSigning = graph.allTasks.any { task -> task.name.toLowerCase().contains('release') }
+    gradle.taskGraph.whenReady {
+        // Inspect requested tasks rather than all resolved tasks: a QA variant initialized
+        // from release can resolve release-named helper tasks without producing a release artifact.
+        def requestedTasks = gradle.startParameter.taskNames.collect { it.toLowerCase() }
+        def needsReleaseSigning = requestedTasks.any { taskName ->
+            taskName.contains('release') || taskName == 'assemble' || taskName == 'build'
+        }
         if (needsReleaseSigning && !releaseSigningConfigured) {
             throw new GradleException('Release signing is not configured. Set the protected IVX_RELEASE_KEYSTORE_PATH, IVX_RELEASE_KEYSTORE_PASSWORD, IVX_RELEASE_KEY_ALIAS, and IVX_RELEASE_KEY_PASSWORD environment variables.')
         }
