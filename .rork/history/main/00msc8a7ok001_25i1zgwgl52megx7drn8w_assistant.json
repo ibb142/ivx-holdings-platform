@@ -1042,7 +1042,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"healthOk|productionVerified|liveCommitVerification|versionEndpoint\",\"path\":\"backend/services/ivx-senior-developer-runtime.ts\",\"include\":\"*.ts\"}",
       "createdAt": 1785700900944,
-      "completedAt": 1785700900994
+      "completedAt": 1785700900994,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1070,7 +1071,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"ivx-autonomous-coder\",\"path\":\"backend/services/ivx-senior-developer-runtime.ts\",\"include\":\"*.ts\"}",
       "createdAt": 1785700908108,
-      "completedAt": 1785700908156
+      "completedAt": 1785700908156,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1089,7 +1091,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-runtime.ts\",\"offset\":2490,\"limit\":110}",
       "createdAt": 1785700908139,
-      "completedAt": 1785700908160
+      "completedAt": 1785700908160,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1108,7 +1111,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-worker.ts\",\"offset\":2040,\"limit\":210}",
       "createdAt": 1785700908142,
-      "completedAt": 1785700908162
+      "completedAt": 1785700908162,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1127,7 +1131,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/ivx-autonomous-coder.test.ts\",\"offset\":1,\"limit\":260}",
       "createdAt": 1785700908147,
-      "completedAt": 1785700908184
+      "completedAt": 1785700908184,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1148,7 +1153,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"recoverStuckVerifying|Recovered from VERIFYING|COMMITTING crash|auto_deploy\",\"path\":\"backend\",\"include\":\"*.test.ts\"}",
       "createdAt": 1785700908149,
-      "completedAt": 1785700908190
+      "completedAt": 1785700908190,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1223,7 +1229,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-autonomous-coder.ts\",\"edits\":[{\"oldString\":\"import { resolveRuntimeCommand } from './ivx-runtime-resolver';\",\"newString\":\"import { resolveRuntimeCommand } from './ivx-runtime-resolver';\\nimport { verifyLiveCommitMatch } from './ivx-senior-developer-runtime';\",\"replaceAll\":false},{\"oldString\":\"export type IVXAutonomousCoderProof = {\",\"newString\":\"export type IVXDeploymentEndpointEvidence = {\\n  endpoint: string;\\n  httpStatus: number | null;\\n  commitSha: string | null;\\n  ok: boolean;\\n};\\n\\nexport type IVXAutonomousCoderProof = {\",\"replaceAll\":false},{\"oldString\":\"  healthOk: boolean;\\n  iterationCount: number;\",\"newString\":\"  healthOk: boolean;\\n  /** Captured production proof required for a deploy-mode PASS. */\\n  healthResponse: IVXDeploymentEndpointEvidence | null;\\n  versionResponse: IVXDeploymentEndpointEvidence | null;\\n  iterationCount: number;\",\"replaceAll\":false},{\"oldString\":\"  /** Injectable health checker for testing. */\\n  healthChecker?: () => Promise<{ ok: boolean; commit: string | null }>,\",\"newString\":\"  /** Injectable health checker for testing. */\\n  healthChecker?: () => Promise<{ ok: boolean; commit: string | null }>,\\n  /** Injectable full production verifier. Deploy mode is FAILED unless it returns\\n   * a live Render deployment and matching /health + /version evidence. */\\n  productionVerifier?: (commitSha: string, deploymentId: string) => Promise<{\\n    deployStatus: string | null;\\n    health: IVXDeploymentEndpointEvidence;\\n    version: IVXDeploymentEndpointEvidence;\\n  }>,\",\"replaceAll\":false},{\"oldString\":\"async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: string | null; deployStatus: string | null }> {\",\"newString\":\"async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: string | null; deployStatus: string | null }> {\",\"replaceAll\":false},{\"oldString\":\"// ── PRODUCTION ROLLBACK (Phase 16) ────────────────────────────────────────────\",\"newString\":\"async function readDeploymentEndpoint(url: string): Promise<IVXDeploymentEndpointEvidence> {\\n  try {\\n    const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(15_000) });\\n    const body = await response.json().catch((): Record<string, unknown> => ({}));\\n    const commitSha = typeof body.commit === 'string' ? body.commit : null;\\n    return { endpoint: url, httpStatus: response.status, commitSha, ok: response.ok };\\n  } catch {\\n    return { endpoint: url, httpStatus: null, commitSha: null, ok: false };\\n  }\\n}\\n\\nasync function verifyProductionDeployment(commitSha: string, deploymentId: string): Promise<{\\n  deployStatus: string | null;\\n  health: IVXDeploymentEndpointEvidence;\\n  version: IVXDeploymentEndpointEvidence;\\n}> {\\n  const parity = await verifyLiveCommitMatch({ requestedCommit: commitSha, deploymentId });\\n  const baseUrl = (process.env.PRODUCTION_BASE_URL\\n    ?? process.env.EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL\\n    ?? process.env.EXPO_PUBLIC_IVX_API_BASE_URL\\n    ?? process.env.EXPO_PUBLIC_API_BASE_URL\\n    ?? 'https://api.ivxholding.com').replace(/\\\\/+$/, '');\\n  const [health, version] = await Promise.all([\\n    readDeploymentEndpoint(`${baseUrl}/health`),\\n    readDeploymentEndpoint(`${baseUrl}/version`),\\n  ]);\\n  return {\\n    deployStatus: parity.deployStatus,\\n    health,\\n    version,\\n  };\\n}\\n\\n// ── PRODUCTION ROLLBACK (Phase 16) ────────────────────────────────────────────\",\"replaceAll\":false},{\"oldString\":\"  let healthOk = false;\\n  let finalStatus: 'COMPLETED' | 'BLOCKED' | 'FAILED' | 'CANCELED' = 'BLOCKED';\",\"newString\":\"  let healthOk = false;\\n  let healthResponse: IVXDeploymentEndpointEvidence | null = null;\\n  let versionResponse: IVXDeploymentEndpointEvidence | null = null;\\n  let finalStatus: 'COMPLETED' | 'BLOCKED' | 'FAILED' | 'CANCELED' = 'BLOCKED';\",\"replaceAll\":false},{\"oldString\":\"          // ── PRODUCTION VERIFY ────────────────────────────────────────────\\n          onPhase?.('production_verifying', 'Waiting for deploy + verifying production health.');\\n          // Bounded wait for the deploy to propagate (simplified: poll health)\\n          const sleep = input.sleepFn ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));\\n          await sleep(20_000);\\n          const health = input.healthChecker\\n            ? await input.healthChecker()\\n            : await verifyProductionHealth();\\n          healthOk = health.ok;\\n          liveCommit = health.commit;\\n          productionVerified = healthOk && liveCommit === commitSha;\\n          if (productionVerified) {\",\"newString\":\"          // ── PRODUCTION VERIFY ────────────────────────────────────────────\\n          onPhase?.('production_verifying', 'Waiting for Render live status and verifying production /health + /version.');\\n          if (!deployId) throw new Error('Render deploy trigger returned no deployment ID.');\\n          const verification = input.productionVerifier\\n            ? await input.productionVerifier(commitSha, deployId)\\n            : await verifyProductionDeployment(commitSha, deployId);\\n          deployStatus = verification.deployStatus;\\n          healthResponse = verification.health;\\n          versionResponse = verification.version;\\n          healthOk = healthResponse.ok;\\n          liveCommit = versionResponse.commitSha;\\n          productionVerified = deployStatus === 'live'\\n            && healthResponse.ok\\n            && versionResponse.ok\\n            && healthResponse.commitSha === commitSha\\n            && versionResponse.commitSha === commitSha;\\n          if (productionVerified) {\",\"replaceAll\":false},{\"oldString\":\"            onPhase?.('production_verifying', `Deploy verify-fail (healthOk=${healthOk}, liveCommit=${liveCommit}, expected=${commitSha}); attempting rollback.`);\",\"newString\":\"            onPhase?.('production_verifying', `Deploy verify-fail (deployStatus=${deployStatus}, healthCommit=${healthResponse.commitSha}, versionCommit=${versionResponse.commitSha}, expected=${commitSha}); attempting rollback.`);\",\"replaceAll\":false},{\"oldString\":\"    healthOk,\\n    iterationCount,\",\"newString\":\"    healthOk,\\n    healthResponse,\\n    versionResponse,\\n    iterationCount,\",\"replaceAll\":false}]}",
       "createdAt": 1785700918020,
-      "completedAt": 1785700923527
+      "completedAt": 1785700923527,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1261,7 +1268,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-worker.ts\",\"edits\":[{\"oldString\":\"  healthStatus: number | null;\\n  versionEndpoint: string | null;\",\"newString\":\"  healthStatus: number | null;\\n  versionEndpoint: string | null;\\n  /** Captured deployment certification receipts; contain only endpoint, HTTP status, and SHA. */\\n  healthResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;\\n  versionResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;\",\"replaceAll\":false},{\"oldString\":\"    if (!proof.healthOk) return 'Deploy job did not verify a healthy production /health response.';\\n    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';\",\"newString\":\"    if (!proof.healthOk || !proof.healthResponse?.ok || proof.healthResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a healthy production /health response with the requested commit.';\\n    if (!proof.versionResponse?.ok || proof.versionResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a production /version response with the requested commit.';\\n    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';\",\"replaceAll\":false},{\"oldString\":\"    healthStatus: null,\\n    versionEndpoint: null,\\n    generatedFeatureSlug: null,\",\"newString\":\"    healthStatus: proof.healthResponse?.httpStatus ?? null,\\n    versionEndpoint: proof.versionResponse?.endpoint ?? null,\\n    healthResponse: proof.healthResponse,\\n    versionResponse: proof.versionResponse,\\n    generatedFeatureSlug: null,\",\"replaceAll\":false},{\"oldString\":\"    // Production is serving our commit. A deployment task still requires the\\n    // actual Render deployment ID returned at trigger time; synthetic IDs are\\n    // forbidden because they cannot be audited or polled.\\n    if ((job.input.executionMode === 'deploy' || job.input.approveGitDeploy) && !job.result!.deployId) {\",\"newString\":\"    // A deploy-mode task requires an atomic proof captured by the active worker:\\n    // real Render ID + live status + /health + /version + SHA parity. A restart\\n    // cannot recreate that chain from a later health check, so fail closed.\\n    if (job.input.executionMode === 'deploy' || job.input.approveGitDeploy) {\\n      job.status = 'failed';\\n      job.stage = 'FAILED';\\n      job.progressPercent = STAGE_PROGRESS['FAILED'];\\n      job.stageDetail = 'Deployment task interrupted before its complete Render, /health, and /version evidence chain was persisted.';\\n      job.finishedAt = nowIso();\\n      job.error = 'Deployment task failed: incomplete production certification evidence after restart.';\\n      job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };\\n      recovered = true;\\n      continue;\\n    }\\n    // A non-deploy job may be recovered from a commit/health match.\\n    if (!job.result!.deployId) {\",\"replaceAll\":false}]}",
       "createdAt": 1785700926828,
-      "completedAt": 1785700931073
+      "completedAt": 1785700931073,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1299,7 +1307,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-senior-developer-worker.ts\",\"edits\":[{\"oldString\":\"  healthStatus: number | null;\\n  versionEndpoint: string | null;\\n  generatedFeatureSlug: string | null;\",\"newString\":\"  healthStatus: number | null;\\n  versionEndpoint: string | null;\\n  /** Captured deployment certification receipts; contain only endpoint, HTTP status, and SHA. */\\n  healthResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;\\n  versionResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;\\n  generatedFeatureSlug: string | null;\",\"replaceAll\":false},{\"oldString\":\"    if (!proof.healthOk) return 'Deploy job did not verify a healthy production /health response.';\\n    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';\",\"newString\":\"    if (!proof.healthOk || !proof.healthResponse?.ok || proof.healthResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a healthy production /health response with the requested commit.';\\n    if (!proof.versionResponse?.ok || proof.versionResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a production /version response with the requested commit.';\\n    if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';\",\"replaceAll\":false},{\"oldString\":\"    healthOk: completed && proof.healthOk,\\n    healthStatus: null,\\n    versionEndpoint: null,\\n    generatedFeatureSlug: null,\",\"newString\":\"    healthOk: completed && proof.healthOk,\\n    healthStatus: proof.healthResponse?.httpStatus ?? null,\\n    versionEndpoint: proof.versionResponse?.endpoint ?? null,\\n    healthResponse: proof.healthResponse,\\n    versionResponse: proof.versionResponse,\\n    generatedFeatureSlug: null,\",\"replaceAll\":false},{\"oldString\":\"    // Production is serving our commit. A deployment task still requires the\\n    // actual Render deployment ID returned at trigger time; synthetic IDs are\\n    // forbidden because they cannot be audited or polled.\\n    if ((job.input.executionMode === 'deploy' || job.input.approveGitDeploy) && !job.result!.deployId) {\",\"newString\":\"    // A deploy-mode task requires the atomic evidence captured by the active\\n    // worker: real Render ID + live status + /health + /version + SHA parity.\\n    // A restart cannot recreate that chain from a later health check, so fail closed.\\n    if (job.input.executionMode === 'deploy' || job.input.approveGitDeploy) {\\n      job.status = 'failed';\\n      job.stage = 'FAILED';\\n      job.progressPercent = STAGE_PROGRESS['FAILED'];\\n      job.stageDetail = 'Deployment task interrupted before its complete Render, /health, and /version evidence chain was persisted.';\\n      job.finishedAt = nowIso();\\n      job.error = 'Deployment task failed: incomplete production certification evidence after restart.';\\n      job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };\\n      recovered = true;\\n      continue;\\n    }\\n    // A non-deploy job may be recovered from a commit/health match.\\n    if (!job.result!.deployId) {\",\"replaceAll\":false}] }",
       "createdAt": 1785700933749,
-      "completedAt": 1785700937420
+      "completedAt": 1785700937420,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1325,7 +1334,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bunx tsc --noEmit\",\"cwd\":\".\"}",
       "createdAt": 1785700941720,
-      "completedAt": 1785700944357
+      "completedAt": 1785700944357,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1351,7 +1361,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-autonomous-coder.ts\",\"offset\":280,\"limit\":75}",
       "createdAt": 1785700948334,
-      "completedAt": 1785700948343
+      "completedAt": 1785700948343,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1370,7 +1381,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-autonomous-coder.ts\",\"offset\":1465,\"limit\":75}",
       "createdAt": 1785700948337,
-      "completedAt": 1785700948343
+      "completedAt": 1785700948343,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1389,7 +1401,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.test.ts\",\"offset\":20,\"limit\":35}",
       "createdAt": 1785700948340,
-      "completedAt": 1785700948344
+      "completedAt": 1785700948344,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1417,7 +1430,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-autonomous-coder.ts\",\"edits\":[{\"oldString\":\"    healthOk: false,\\n    iterationCount: iterations.length,\",\"newString\":\"    healthOk: false,\\n    healthResponse: null,\\n    versionResponse: null,\\n    iterationCount: iterations.length,\",\"replaceAll\":false},{\"oldString\":\"      healthOk: false,\\n      iterationCount: 0,\",\"newString\":\"      healthOk: false,\\n      healthResponse: null,\\n      versionResponse: null,\\n      iterationCount: 0,\",\"replaceAll\":false}]}",
       "createdAt": 1785700951017,
-      "completedAt": 1785700951557
+      "completedAt": 1785700951557,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1452,7 +1466,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/api/ivx-senior-developer-worker.test.ts\",\"edits\":[{\"oldString\":\"    healthOk: true,\\n    iterationCount: 1,\",\"newString\":\"    healthOk: true,\\n    healthResponse: { endpoint: 'https://api.ivxholding.com/health', httpStatus: 200, commitSha: 'after-sha', ok: true },\\n    versionResponse: { endpoint: 'https://api.ivxholding.com/version', httpStatus: 200, commitSha: 'after-sha', ok: true },\\n    iterationCount: 1,\",\"replaceAll\":false},{\"oldString\":\"  test('rejects a deploy proof without a real Render deployment ID or live status', () => {\",\"newString\":\"  test('rejects a deploy proof without both endpoint receipts', () => {\\n    const missingVersion = summarizeAutonomousCoderProof('job-no-version', autonomousProof({ versionResponse: null }));\\n    expect(missingVersion.finalStatus).toBe('FAILED');\\n    expect(missingVersion.error).toContain('/version');\\n  });\\n\\n  test('rejects a deploy proof without a real Render deployment ID or live status', () => {\",\"replaceAll\":false}]}",
       "createdAt": 1785700956015,
-      "completedAt": 1785700959354
+      "completedAt": 1785700959354,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1471,7 +1486,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bunx tsc --noEmit && bun test backend/api/ivx-senior-developer-worker.test.ts backend/ivx-autonomous-coder.test.ts backend/ivx-senior-developer-worker.test.ts backend/verify-live-commit-match.test.ts\",\"cwd\":\".\"}",
       "createdAt": 1785700962359,
-      "completedAt": 1785700986061
+      "completedAt": 1785700986061,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1501,7 +1517,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-autonomous-coder.ts\",\"edits\":[{\"oldString\":\"          const verification = input.productionVerifier\\n            ? await input.productionVerifier(commitSha, deployId)\\n            : await verifyProductionDeployment(commitSha, deployId);\",\"newString\":\"          const verification = input.productionVerifier\\n            ? await input.productionVerifier(commitSha, deployId)\\n            : input.healthChecker\\n              ? await input.healthChecker().then((health) => ({\\n                  deployStatus,\\n                  health: { endpoint: 'injected://health', httpStatus: health.ok ? 200 : 503, commitSha: health.commit, ok: health.ok },\\n                  version: { endpoint: 'injected://version', httpStatus: health.ok ? 200 : 503, commitSha: health.commit, ok: health.ok },\\n                }))\\n              : await verifyProductionDeployment(commitSha, deployId);\",\"replaceAll\":false}]}",
       "createdAt": 1785700992891,
-      "completedAt": 1785700992919
+      "completedAt": 1785700992919,
+      "compactedAt": 1785702288062
     },
     {
       "type": "reasoning",
@@ -1527,7 +1544,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun test backend/ivx-autonomous-coder.test.ts backend/api/ivx-senior-developer-worker.test.ts\",\"cwd\":\".\"}",
       "createdAt": 1785700997111,
-      "completedAt": 1785701001421
+      "completedAt": 1785701001421,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1550,7 +1568,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/ivx-autonomous-coder.test.ts\",\"edits\":[{\"oldString\":\"    expect(proof.finalStatus).toBe('COMPLETED');\\n    expect(proof.error).toContain('automatic rollback');\",\"newString\":\"    expect(proof.finalStatus).toBe('FAILED');\\n    expect(proof.error).toContain('requested commit was not verified');\",\"replaceAll\":false}]}",
       "createdAt": 1785701006226,
-      "completedAt": 1785701006762
+      "completedAt": 1785701006762,
+      "compactedAt": 1785702288062
     },
     {
       "type": "tool",
@@ -1597,7 +1616,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"rollbackCommitSha|automatic rollback|G21\",\"path\":\"backend/ivx-autonomous-coder.test.ts\",\"include\":\"*.ts\"}",
       "createdAt": 1785701009922,
-      "completedAt": 1785701010623
+      "completedAt": 1785701010623,
+      "compactedAt": 1785702288062
     },
     {
       "type": "text",
