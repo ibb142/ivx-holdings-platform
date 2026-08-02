@@ -240,6 +240,9 @@ export type IVXWorkerJob = {
   ownerId: string;
   createdAt: string;
   startedAt: string | null;
+  /** Updated by every persisted stage change; prevents active work from being
+   * misclassified as stale simply because it has been running for a while. */
+  lastHeartbeatAt?: string | null;
   finishedAt: string | null;
   cancelledAt: string | null;
   attempts: number;
@@ -897,8 +900,9 @@ const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set([
 ]);
 
 /**
- * Expire stale jobs whose `startedAt` is older than `STALE_JOB_TIMEOUT_MS`.
- * Stale jobs are marked FAILED with an honest reason. This frees the queue so
+ * Expire active jobs whose last heartbeat is older than `STALE_JOB_TIMEOUT_MS`.
+ * Jobs created before heartbeat tracking fall back to `startedAt`. Stale jobs are
+ * marked FAILED with an honest reason. This frees the queue so
  * a new job can start for the same owner.
  *
  * @returns array of expired job IDs
@@ -910,15 +914,16 @@ export async function expireStaleJobs(): Promise<string[]> {
 
   for (const job of queue.jobs) {
     if (!ACTIVE_STATUSES.has(job.status)) continue;
-    if (!job.startedAt) continue;
-    const startedAtMs = new Date(job.startedAt).getTime();
-    if (Number.isNaN(startedAtMs)) continue;
-    if (now - startedAtMs > STALE_JOB_TIMEOUT_MS) {
+    const activityAt = job.lastHeartbeatAt ?? job.startedAt;
+    if (!activityAt) continue;
+    const activityAtMs = new Date(activityAt).getTime();
+    if (Number.isNaN(activityAtMs)) continue;
+    if (now - activityAtMs > STALE_JOB_TIMEOUT_MS) {
       job.status = 'failed';
       job.stage = 'FAILED';
-      job.stageDetail = `Job expired after ${Math.round(STALE_JOB_TIMEOUT_MS / 1000)}s of inactivity.`;
+      job.stageDetail = `Job expired after ${Math.round(STALE_JOB_TIMEOUT_MS / 1000)}s without a worker heartbeat.`;
       job.finishedAt = nowIso();
-      job.error = `Stale job expired (timeout: ${STALE_JOB_TIMEOUT_MS}ms).`;
+      job.error = `Stale job expired after heartbeat timeout (${STALE_JOB_TIMEOUT_MS}ms).`;
       expired.push(job.jobId);
     }
   }
@@ -1336,6 +1341,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     ownerId,
     createdAt: nowIso(),
     startedAt: null,
+    lastHeartbeatAt: null,
     finishedAt: null,
     cancelledAt: null,
     attempts: 0,
@@ -1484,7 +1490,15 @@ async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<v
   const queue = await loadQueue();
   const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
   if (idx < 0) return;
-  queue.jobs[idx] = { ...queue.jobs[idx], ...patch };
+  const existing = queue.jobs[idx];
+  const isActive = ACTIVE_STATUSES.has(patch.status ?? existing.status);
+  queue.jobs[idx] = {
+    ...existing,
+    ...patch,
+    // Every active write is evidence that the worker is alive. Terminal jobs
+    // retain their final heartbeat as the last observed execution signal.
+    lastHeartbeatAt: patch.lastHeartbeatAt ?? (isActive ? nowIso() : existing.lastHeartbeatAt),
+  };
   await saveQueue(queue);
 }
 
@@ -1803,6 +1817,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     progressPercent: STAGE_PROGRESS.RUNNING,
     stageDetail: 'Job started.',
     startedAt: nowIso(),
+    lastHeartbeatAt: nowIso(),
     attempts: job.attempts + 1,
   });
 
@@ -2370,6 +2385,13 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
     externalRequiredAsExecutor: false,
     durableQueue: isDurableStoreConfigured(),
     perOwnerSingleFlight: true,
+    concurrency: {
+      globalExecutionSlots: 1,
+      independentRuntimeCount: 0,
+      classification: 'SHARED_WORKER_WITH_ROLE',
+      note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.',
+    },
+    heartbeatTracking: true,
     staleJobTimeoutMs: STALE_JOB_TIMEOUT_MS,
     staleCheckIntervalMs: STALE_CHECK_INTERVAL_MS,
     granularStages: ['QUEUED', 'RUNNING', 'PATCHING', 'TESTING', 'COMMITTING', 'DEPLOYING', 'VERIFYING', 'COMPLETED', 'FAILED'],
