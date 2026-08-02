@@ -2016,7 +2016,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"rork-agent logs backend --limit 100 | rg -i 'ivx|worker|execution|owner-ai|error|exception' | head -160\",\"cwd\":\".\"}",
       "createdAt": 1785679110793,
-      "completedAt": 1785679112070
+      "completedAt": 1785679112070,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2035,7 +2036,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/expo/app.config.ts\",\"offset\":1,\"limit\":160}",
       "createdAt": 1785679110795,
-      "completedAt": 1785679112071
+      "completedAt": 1785679112071,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2054,7 +2056,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/expo/android/app/build.gradle\",\"offset\":1,\"limit\":140}",
       "createdAt": 1785679110796,
-      "completedAt": 1785679112072
+      "completedAt": 1785679112072,
+      "compactedAt": 1785681453847
     },
     {
       "type": "reasoning",
@@ -2103,7 +2106,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"ownerAccessToken|accessToken|authToken|ownerToken\",\"path\":\"ivx-holdings-platform/expo/app/ivx/chat.tsx\",\"include\":\"*.tsx\"}",
       "createdAt": 1785679121159,
-      "completedAt": 1785679121173
+      "completedAt": 1785679121173,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2122,7 +2126,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/backend/api/ivx-senior-developer-worker.ts\",\"offset\":150,\"limit\":320}",
       "createdAt": 1785679121163,
-      "completedAt": 1785679121173
+      "completedAt": 1785679121173,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2141,7 +2146,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/backend/services/ivx-senior-developer-worker.ts\",\"offset\":1230,\"limit\":250}",
       "createdAt": 1785679121165,
-      "completedAt": 1785679121173
+      "completedAt": 1785679121173,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2308,7 +2314,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"startSeniorDevWorker|drain|runNext|process.*Job|STALE_JOB\",\"path\":\"ivx-holdings-platform/backend/services/ivx-senior-developer-worker.ts\",\"include\":\"*.ts\"}",
       "createdAt": 1785679121166,
-      "completedAt": 1785679121173
+      "completedAt": 1785679121173,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2327,7 +2334,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/expo/lib/ivx-supabase-client.ts\",\"offset\":1,\"limit\":170}",
       "createdAt": 1785679121168,
-      "completedAt": 1785679121174
+      "completedAt": 1785679121174,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2849,7 +2857,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"getIVXAccessToken\",\"path\":\"ivx-holdings-platform/expo\",\"include\":\"*.{ts,tsx}\"}",
       "createdAt": 1785679121171,
-      "completedAt": 1785679121174
+      "completedAt": 1785679121174,
+      "compactedAt": 1785681453847
     },
     {
       "type": "reasoning",
@@ -2894,7 +2903,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/expo/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll.ts\",\"edits\":[{\"oldString\":\"import { useCallback, useEffect, useRef, useState } from 'react';\\n\",\"newString\":\"import { useCallback, useEffect, useRef, useState } from 'react';\\nimport { getIVXAccessToken } from '@/lib/ivx-supabase-client';\\n\",\"replaceAll\":false},{\"oldString\":\"      const response = await fetch(url, {\\n        method: 'GET',\\n        headers: {\\n          'Content-Type': 'application/json',\\n          ...(authTokenRef.current ? { Authorization: `Bearer ${authTokenRef.current}` } : {}),\\n        },\\n      });\\n      if (!response.ok) {\\n        // 404/401 → keep the last status but stop polling to avoid a loop.\\n        setState((prev) => ({\\n          ...prev,\\n          polling: false,\\n          error: `status endpoint returned ${response.status}`,\\n          attempts: prev.attempts + 1,\\n        }));\\n        stoppedRef.current = true;\\n        return;\\n      }\\n\",\"newString\":\"      // The execution endpoint is owner-gated. The screen intentionally does\\n      // not retain a bearer token in React state, so resolve the current session\\n      // token here when the caller did not supply one.\\n      const sessionToken = authTokenRef.current ?? await getIVXAccessToken();\\n      const response = await fetch(url, {\\n        method: 'GET',\\n        headers: {\\n          'Content-Type': 'application/json',\\n          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),\\n        },\\n      });\\n      if (!response.ok) {\\n        setState((prev) => ({\\n          ...prev,\\n          polling: false,\\n          error: response.status === 401 || response.status === 403\\n            ? 'Owner session expired. Sign in again to resume live status.'\\n            : `status endpoint returned ${response.status}`,\\n          attempts: prev.attempts + 1,\\n        }));\\n        stoppedRef.current = true;\\n        return;\\n      }\\n\",\"replaceAll\":false},{\"oldString\":\"    if (state.attempts >= maxAttempts && state.polling) {\\n      setState((prev) => ({ ...prev, polling: false, error: prev.error ?? 'poll timeout' }));\\n      stoppedRef.current = true;\\n    }\\n\",\"newString\":\"    if (state.attempts >= maxAttempts && state.polling) {\\n      setState((prev) => ({\\n        ...prev,\\n        status: prev.status\\n          ? { ...prev.status, status: 'blocked', stage: 'FAILED' }\\n          : prev.status,\\n        polling: false,\\n        error: prev.error ?? 'Status polling timed out. The task was not verified; retry after reopening the chat.',\\n      }));\\n      stoppedRef.current = true;\\n    }\\n\",\"replaceAll\":false}]}",
       "createdAt": 1785679132148,
-      "completedAt": 1785679132315
+      "completedAt": 1785679132315,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2927,7 +2937,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/expo/app.config.ts\",\"edits\":[{\"oldString\":\"  version: \\\"1.9.3\\\",\",\"newString\":\"  version: \\\"1.9.4\\\",\",\"replaceAll\":false},{\"oldString\":\"    buildMarker: 'IVX_BUNDLE_2026_07_31_V613_AUTONOMOUS_END_TO_END',\\n    buildTimestamp: \\\"2026-07-31T15:10:00.000000+00:00\\\",\",\"newString\":\"    buildMarker: 'IVX_BUNDLE_2026_08_02_EXECUTION_STATUS_AUTH_FIX',\\n    buildTimestamp: \\\"2026-08-02T14:05:00.000000+00:00\\\",\",\"replaceAll\":false},{\"oldString\":\"    versionCode: 85,\",\"newString\":\"    versionCode: 92,\",\"replaceAll\":false}]}",
       "createdAt": 1785679136413,
-      "completedAt": 1785679141901
+      "completedAt": 1785679141901,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2950,7 +2961,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"ivx-holdings-platform/expo/android/app/build.gradle\",\"edits\":[{\"oldString\":\"        versionCode 91\\n        versionName \\\"1.9.3\\\"\",\"newString\":\"        versionCode 92\\n        versionName \\\"1.9.4\\\"\",\"replaceAll\":false}]}",
       "createdAt": 1785679145582,
-      "completedAt": 1785679146517
+      "completedAt": 1785679146517,
+      "compactedAt": 1785681453847
     },
     {
       "type": "reasoning",
@@ -2976,7 +2988,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun x tsc --noEmit\",\"cwd\":\"ivx-holdings-platform/expo\"}",
       "createdAt": 1785679151486,
-      "completedAt": 1785679208460
+      "completedAt": 1785679208460,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -2995,7 +3008,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"bun test src/modules/ivx-owner-ai\",\"cwd\":\"ivx-holdings-platform/expo\"}",
       "createdAt": 1785679151565,
-      "completedAt": 1785679209276
+      "completedAt": 1785679209276,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3014,7 +3028,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"python3 - <<'PY'\\nfrom pathlib import Path\\np=Path('src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll.ts')\\ns=p.read_text()\\nchecks={\\n 'session backed token':'authTokenRef.current ?? await getIVXAccessToken()' in s,\\n 'no null-only console auth': 'authToken={null}' not in Path('app/ivx/chat.tsx').read_text(),\\n 'timeout terminal':'status: \\\\'blocked\\\\'' in s,\\n}\\nfor name, value in checks.items(): print(name, 'PASS' if value else 'FAIL')\\nraise SystemExit(0 if all(checks.values()) else 1)\\nPY\",\"cwd\":\"ivx-holdings-platform/expo\"}",
       "createdAt": 1785679151568,
-      "completedAt": 1785679209321
+      "completedAt": 1785679209321,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3062,7 +3077,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Reproduce the IVX IA stuck execution state and map its client-to-server flow\",\"activeForm\":\"Reproducing the IVX IA stuck execution state and mapping its client-to-server flow\",\"status\":\"completed\"},{\"content\":\"Repair the chat execution and completion reporting behavior\",\"activeForm\":\"Repairing the chat execution and completion reporting behavior\",\"status\":\"completed\"},{\"content\":\"Run targeted QA, deploy verification, and create a fresh Android APK\",\"activeForm\":\"Running targeted QA, deploy verification, and creating a fresh Android APK\",\"status\":\"in_progress\"}]}",
       "createdAt": 1785679151582,
-      "completedAt": 1785679209322
+      "completedAt": 1785679209322,
+      "compactedAt": 1785681453847
     },
     {
       "type": "reasoning",
@@ -3088,7 +3104,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"python3 - <<'PY'\\nfrom pathlib import Path\\nhook=Path('src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll.ts').read_text()\\nconsole=Path('app/ivx/chat.tsx').read_text()\\nchecks={\\n 'console uses the polling hook': 'useExecutionStatusPoll(initialStatus, authToken)' in Path('src/modules/ivx-owner-ai/components/ExecutionConsoleBubble.tsx').read_text(),\\n 'poll resolves owner session token': 'authTokenRef.current ?? await getIVXAccessToken()' in hook,\\n 'console no longer depends on caller-held token': 'authToken={null}' in console and 'getIVXAccessToken' in hook,\\n 'timeout becomes terminal blocked': \\\"status: 'blocked'\\\" in hook,\\n}\\nfor name, value in checks.items(): print(name, 'PASS' if value else 'FAIL')\\nraise SystemExit(0 if all(checks.values()) else 1)\\nPY\",\"cwd\":\"ivx-holdings-platform/expo\"}",
       "createdAt": 1785679215001,
-      "completedAt": 1785679215090
+      "completedAt": 1785679215090,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3107,7 +3124,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"python3 - <<'PY'\\nimport urllib.request, json\\nwith urllib.request.urlopen('https://api.ivxholding.com/health', timeout=20) as response:\\n body=json.load(response)\\n print('http',response.status)\\n print('status',body.get('status'))\\n print('commit',body.get('commit'))\\n print('environment',body.get('environment'))\\nPY\",\"cwd\":\".\"}",
       "createdAt": 1785679215004,
-      "completedAt": 1785679216197
+      "completedAt": 1785679216197,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3126,7 +3144,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"NODE_ENV=production ./gradlew assembleRelease --no-daemon -x lint\",\"cwd\":\"ivx-holdings-platform/expo/android\"}",
       "createdAt": 1785679218932,
-      "completedAt": 1785679279722
+      "completedAt": 1785679279722,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3145,7 +3164,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"NODE_ENV=production ./gradlew assembleRelease --no-daemon -x lint\",\"cwd\":\"ivx-holdings-platform/expo/android\"}",
       "createdAt": 1785679284332,
-      "completedAt": 1785679350078
+      "completedAt": 1785679350078,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3164,7 +3184,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"rm -f /tmp/ivx194-build.exit /tmp/ivx194-build.log; nohup sh -c 'NODE_ENV=production ./gradlew assembleRelease --no-daemon -x lint > /tmp/ivx194-build.log 2>&1; printf \\\"%s\\\" \\\"$?\\\" > /tmp/ivx194-build.exit' >/dev/null 2>&1 & printf '%s\\\\n' $!\",\"cwd\":\"ivx-holdings-platform/expo/android\"}",
       "createdAt": 1785679355145,
-      "completedAt": 1785679355265
+      "completedAt": 1785679355265,
+      "compactedAt": 1785681453847
     },
     {
       "type": "tool",
@@ -3212,7 +3233,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Reproduce the IVX IA stuck execution state and map its client-to-server flow\",\"activeForm\":\"Reproducing the IVX IA stuck execution state and mapping its client-to-server flow\",\"status\":\"completed\"},{\"content\":\"Repair the chat execution and completion reporting behavior\",\"activeForm\":\"Repairing the chat execution and completion reporting behavior\",\"status\":\"completed\"},{\"content\":\"Run targeted QA, deploy verification, and create a fresh Android APK\",\"activeForm\":\"Running targeted QA, deploy verification, and creating a fresh Android APK\",\"status\":\"in_progress\"}]}",
       "createdAt": 1785679355206,
-      "completedAt": 1785679355277
+      "completedAt": 1785679355277,
+      "compactedAt": 1785681453847
     }
   ],
   "id": "t5mpst4k12al6gtqxr7mw",
