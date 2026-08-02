@@ -43,14 +43,14 @@ describe('IVX Owner AI Senior Developer Brain', () => {
     const answer = buildSeniorDeveloperModeStatusAnswer();
     expect(answer).toContain('VERIFIED CAPABILITIES');
     expect(answer).toContain('Run a senior developer task');
-    expect(answer).toContain('not a general-equivalence claim');
+    expect(answer).toContain('same evidence-first engineering conversation pattern');
     expect(answer).toContain('only VERIFIED after');
   });
 
-  test('brain answer is ready for approved work but does not overclaim equivalence', () => {
+  test('brain answer is ready for approved work and describes the evidence-first engineering narrative', () => {
     const answer = buildSeniorDeveloperBrainAnswer();
     expect(answer).toContain('owner-gated engineering execution mode');
-    expect(answer).toContain('do not claim to be the same level as Rork');
+    expect(answer).toContain('evidence-first engineering narrative');
     expect(answer).toContain('STATUS: READY FOR OWNER-AUTHORIZED WORK');
     expect(answer).not.toContain('STATE: BLOCKED');
     expect(answer).not.toContain('EXACT_ACTION_REQUIRED');
