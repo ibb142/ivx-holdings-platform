@@ -1,14 +1,14 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-02T21:33:00.000Z
+updatedAt: 2026-08-02T21:43:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
-- [ ] Establish the current source-of-truth baseline: production `/health` and `/version` currently report `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`, but the configured local checkout is at `19be75b320bec9223ae3f4777d09291826ba1880` and two commits ahead of its Rork-router remote. Canonical GitHub `main` is unverified.
-- [ ] Establish CI-tested SHA parity: BLOCKED_CREDENTIALS. The configured `GITHUB_TOKEN` returns `401 Bad credentials` to GitHub's repository and Actions APIs, so current workflow/run/runner evidence and CI-tested SHA cannot be captured.
-- [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by two commits. Do not use it as production source of truth.
+- [ ] Establish the current source-of-truth baseline: production `/health` and `/version` both returned `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` at 2026-08-02T21:42Z. The configured local checkout is at `26522bb03a07c8e33f2674672e8c51842429d32d`, three commits ahead of its Rork-router remote. Canonical GitHub `main` remains unverified.
+- [ ] Establish CI-tested SHA parity: BLOCKED_CREDENTIALS. Both configured local GitHub credentials returned `401 Bad credentials`; unauthenticated GitHub repository and Actions reads returned `404` because the repository is private. Current workflow/run/runner evidence and CI-tested SHA cannot be captured.
+- [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. Do not use it as production source of truth.
 
 ## Prioritized stabilization backlog
 
@@ -18,7 +18,7 @@ updatedAt: 2026-08-02T21:33:00.000Z
 4. **P1 — Durable autonomous task queue** (`AUTO-001`, QUEUED): Normalize task IDs, status transitions, retries, evidence pointers, and approval gates into the existing durable worker/ledger after the canonical source is available.
 5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
 
-**Current active task:** `CI-001`, BLOCKED_CREDENTIALS for GitHub repository and Actions API restoration. No production mutation, deployment, signing change, or source-code repair may proceed while canonical GitHub state and CI execution evidence are unresolved.
+**Current active task:** `CI-001`, BLOCKED_CREDENTIALS for GitHub repository and Actions API restoration. Production runtime is healthy, but no production mutation, deployment, signing change, or source-code repair may proceed while canonical GitHub state and CI execution evidence are unresolved.
 
 - [ ] Obtain three consecutive successful runs for IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, and iOS Simulator QA on one approved SHA.
 - [ ] Do not claim `SELF_HEALING_VERIFIED` until the owner-approved incident, deployment, canary, rollback, mobile-device, and SHA-parity requirements have complete evidence.
