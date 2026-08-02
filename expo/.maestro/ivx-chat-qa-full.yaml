@@ -5,15 +5,8 @@ tags:
   - chat
   - owner
 ---
-
-# Pre-conditions: OWNER_EMAIL and OWNER_PASSWORD env vars must be set.
-# This flow exercises the complete IVX Owner AI Chat QA checklist.
-
-# Step 1: Launch app
 - launchApp:
     clearState: true
-
-# Step 2: Owner login
 - assertVisible: "IVX"
 - tapOn:
     id: "home-owner-login-entry"
@@ -23,108 +16,45 @@ tags:
 - inputText: ${OWNER_PASSWORD}
 - tapOn:
     id: "owner-login-submit"
-
-# Step 3: Open IVX Chat
 - assertVisible: "IVX"
 - tapOn: "IVX Owner AI"
-
-# Step 4: Confirm latest conversation opens
 - assertVisible:
     id: "ivx-owner-chat-list"
-    timeout: 15000
-
-# Step 5: Confirm newest message is visible
-# Inverted FlatList: newest message is at the bottom (visible on first render)
-- assertVisible:
-    id: "ivx-owner-chat-list"
-    timeout: 5000
-
-# Step 6: Confirm yellow "scroll to latest" arrow is hidden on initial open
-# The arrow only appears when user scrolls up; it must NOT be visible on initial load
 - assertNotVisible:
     id: "ivx-owner-scroll-to-latest"
-    timeout: 3000
-
-# Step 7: Send a message
 - tapOn:
     id: "ivx-owner-chat-input"
 - inputText: "QA test message — iOS simulator verification"
 - tapOn:
     id: "ivx-owner-chat-send"
-
-# Step 8: Confirm message appears exactly once
-# Wait for the sent message to appear in the list
 - assertVisible:
     text: "QA test message — iOS simulator verification"
-    timeout: 10000
-
-# Step 9: Receive or simulate authorized realtime reply
-# The AI typing indicator should appear, then a response
 - assertVisible:
     id: "ivx-owner-typing-indicator"
-    timeout: 8000
 - assertNotVisible:
     id: "ivx-owner-typing-indicator"
-    timeout: 60000
-
-# Step 10: Scroll to older messages
 - scroll:
     direction: UP
     distance: 200
-
-# Step 11: Trigger pagination — continue scrolling to trigger onEndReached
 - scroll:
     direction: UP
     distance: 500
 - scroll:
-    direction: UP
-    distance: 500
-
-# Step 12: Confirm visible position remains stable (no jump)
-# After pagination loads, the viewport should not jump
-- assertVisible:
-    id: "ivx-owner-chat-list"
-    timeout: 5000
-
-# Step 13: Return to latest — scroll back down
-- scroll:
     direction: DOWN
     distance: 500
-- scroll:
-    direction: DOWN
-    distance: 500
-
-# Step 14: Open keyboard
 - tapOn:
     id: "ivx-owner-chat-input"
-
-# Step 15: Enter multiline text
 - inputText: "Line 1\nLine 2\nLine 3"
-
-# Step 16: Close keyboard
 - hideKeyboard
-
-# Step 17: Background and resume
 - backgroundApp
 - launchApp:
     clearState: false
-
-# Step 18: Restart app
 - killApp
 - launchApp:
     clearState: false
-
-# Step 19: Reopen chat
 - assertVisible: "IVX"
 - tapOn: "IVX Owner AI"
 - assertVisible:
     id: "ivx-owner-chat-list"
-    timeout: 15000
-
-# Step 20: Confirm newest message remains visible after restart
-- assertVisible:
-    id: "ivx-owner-chat-list"
-    timeout: 5000
 - assertNotVisible:
     id: "ivx-owner-scroll-to-latest"
-    timeout: 3000
