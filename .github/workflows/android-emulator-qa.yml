@@ -105,17 +105,18 @@ jobs:
           set -euo pipefail
           QA_KEYSTORE="$HOME/.android/debug.keystore"
           mkdir -p "$(dirname "$QA_KEYSTORE")"
-          if [ ! -f "$QA_KEYSTORE" ]; then
-            keytool -genkeypair -v \
-              -keystore "$QA_KEYSTORE" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=IVX CI QA, OU=Engineering, O=IVX Holdings, L=Miami, ST=Florida, C=US"
-          fi
+          # Recreate the CI-only signer on every run so a runner image's stale or
+          # malformed debug keystore can never be selected for the release candidate.
+          rm -f "$QA_KEYSTORE"
+          keytool -genkeypair -v \
+            -keystore "$QA_KEYSTORE" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=IVX CI QA, OU=Engineering, O=IVX Holdings, L=Miami, ST=Florida, C=US"
           keytool -list -keystore "$QA_KEYSTORE" -storepass android -alias androiddebugkey >/dev/null
           echo "QA signing key verified. This signer is for QA artifacts only."
 
