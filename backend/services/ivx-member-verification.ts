@@ -26,12 +26,21 @@ import {
   writeDurableJson,
 } from './ivx-durable-store';
 
-const DEPLOYMENT_MARKER = 'ivx-member-verification-v3-hashed-codes';
+const DEPLOYMENT_MARKER = 'ivx-member-verification-v4-secure-persistence';
 const CODE_TTL_MINUTES = 10;
 const CODE_LENGTH = 6;
 const MAX_ATTEMPTS = 5;
 const MAX_RESENDS = 3;
+const RESEND_COOLDOWN_MS = 60_000;
 const CODE_HASH_PREFIX = 'scrypt';
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+function canUseFilesystemFallback(): boolean {
+  return !isProductionRuntime();
+}
 
 function getSupabaseAdmin(): SupabaseClient {
   const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -104,6 +113,7 @@ async function readStore<T>(file: string, fallback: T): Promise<T> {
       return fallback;
     }
   }
+  if (!canUseFilesystemFallback()) return fallback;
   try {
     const raw = await readFile(file, 'utf8');
     return JSON.parse(raw) as T;
@@ -114,24 +124,38 @@ async function readStore<T>(file: string, fallback: T): Promise<T> {
 
 async function writeStore<T>(file: string, value: T): Promise<void> {
   if (isDurableStoreConfigured()) {
-    try {
-      await writeDurableJson(file, value);
-      return;
-    } catch {
-      // fall through to filesystem
-    }
+    await writeDurableJson(file, value);
+    return;
+  }
+  if (!canUseFilesystemFallback()) {
+    throw new Error('Secure verification storage is unavailable.');
   }
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify(value, null, 2), 'utf8');
 }
 
+function pruneExpiredCodes(codes: FallbackCodesStore, now: Date): void {
+  for (const [key, record] of Object.entries(codes)) {
+    if (record.verifiedAt || new Date(record.expiresAt) < now) {
+      delete codes[key];
+    }
+  }
+}
+
 async function fallbackStoreCode(input: StoreCodeInput, code: string, expiresAt: Date): Promise<void> {
   const codes = await readStore<FallbackCodesStore>(CODES_FILE(), {});
+  const nowDate = new Date();
+  pruneExpiredCodes(codes, nowDate);
   const key = codeKey(input.userId, input.type);
   const existing = codes[key];
-  const now = new Date().toISOString();
-  if (existing && !existing.verifiedAt && new Date(existing.expiresAt) >= new Date() && existing.resendCount >= MAX_RESENDS) {
-    throw new Error('Verification resend limit reached. Please wait for the current code to expire.');
+  const now = nowDate.toISOString();
+  if (existing && !existing.verifiedAt && new Date(existing.expiresAt) >= nowDate) {
+    if (nowDate.getTime() - new Date(existing.lastSentAt).getTime() < RESEND_COOLDOWN_MS) {
+      throw new Error('Please wait before requesting another verification code.');
+    }
+    if (existing.resendCount >= MAX_RESENDS) {
+      throw new Error('Verification resend limit reached. Please wait for the current code to expire.');
+    }
   }
   codes[key] = {
     userId: input.userId,
@@ -281,10 +305,10 @@ export async function storeVerificationCode(input: StoreCodeInput): Promise<Veri
     );
 
     if (error) {
-      console.error('[MemberVerification] Supabase code store failed, using fallback store:', error.message);
+      console.warn('[MemberVerification] Primary verification storage unavailable; attempting secure fallback.');
       await fallbackStoreCode(input, code, expiresAt);
     } else {
-      console.log(`[MemberVerification] Code stored for ${input.userId} (${input.type})`);
+      console.info('[MemberVerification] Verification code stored.');
     }
 
     return {
@@ -294,8 +318,7 @@ export async function storeVerificationCode(input: StoreCodeInput): Promise<Veri
       deploymentMarker: DEPLOYMENT_MARKER,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[MemberVerification] Code store exception, using fallback store:', message);
+    console.warn('[MemberVerification] Primary verification storage request failed; attempting secure fallback.');
     try {
       await fallbackStoreCode(input, code, expiresAt);
       return {
@@ -328,7 +351,7 @@ export async function verifyCode(input: VerifyCodeInput): Promise<VerificationRe
       .maybeSingle();
 
     if (error) {
-      console.error('[MemberVerification] Supabase code lookup failed, checking fallback store:', error.message);
+      console.warn('[MemberVerification] Primary verification lookup unavailable; attempting secure fallback.');
       return fallbackVerifyCode(input);
     }
 
@@ -410,8 +433,7 @@ export async function verifyCode(input: VerifyCodeInput): Promise<VerificationRe
       deploymentMarker: DEPLOYMENT_MARKER,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[MemberVerification] Code verify exception, checking fallback store:', message);
+    console.warn('[MemberVerification] Primary verification request failed; attempting secure fallback.');
     try {
       return await fallbackVerifyCode(input);
     } catch {
