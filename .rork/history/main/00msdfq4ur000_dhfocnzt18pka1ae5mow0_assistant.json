@@ -1,0 +1,40 @@
+{
+  "id": "dhfocnzt18pka1ae5mow0",
+  "role": "assistant",
+  "preferredModelName": "gpt-5.6-terra",
+  "resolvedModelName": "gpt-5.6-terra",
+  "createdAt": 1785773989395,
+  "responseMessageContents": [
+    {
+      "type": "tool",
+      "id": "call_3mgNlAnwlwiElg6j9BM8DBFV",
+      "toolName": "read",
+      "input": {
+        "filePath": ".rork/skills/platforms/SKILL.md",
+        "offset": 0,
+        "limit": 58
+      },
+      "output": {
+        "path": ".rork/skills/platforms/SKILL.md",
+        "content": "     1|---\n     2|name: platforms\n     3|description: Use this skill whenever the user asks to create, scaffold, add, or\n     4|  set up an app in the current Rork workspace, including requests like \"create\n     5|  an iOS app for this website\" or adding a native iOS/Swift, Android/Kotlin,\n     6|  Expo/React Native, or web app alongside an existing app. This unlocks app\n     7|  scaffolding; do not reject app-creation requests just because another app\n     8|  already exists.\n     9|---\n    10|\n    11|### createApp\n    12|\n    13|Create a new app inside the workspace. Writes template files into a subfolder and\n    14|creates/updates the root rork.json manifest.\n    15|\n    16|When to call:\n    17|- Empty workspace: you MUST call this before writing any code.\n    18|- Existing workspace: call when the user asks to add another app (e.g. an iOS app alongside an\n    19|  existing web app).\n    20|\n    21|Picking `framework` for the FIRST app:\n    22|- Default to the user's selected platform (named in the new-project nudge).\n    23|- Override only on clear intent for another platform — by name OR by use:\n    24|  iPhone/iPad/App Store/widget → `swift`; Android/Play Store → `kotlin`;\n    25|  website/dashboard/\"deploy to my domain\"/runs in a browser → `web`. Intent need not be the\n    26|  exact word (\"deploy it to my domain\" → `web`); the app's genre alone is not intent (a\n    27|  \"CS2-style FPS is a PC game\" stays on the selected platform).\n    28|- createApp rejects the first attempt whose `framework` differs from the selected platform.\n    29|  If the user really did ask for the other platform, just call createApp again with the same\n    30|  `framework` and it goes through; otherwise switch to the selected platform.\n    31|- `react-native` is only valid when the project was originally started with React Native;\n    32|  the call is rejected otherwise. React native is deprecated and will be removed in the future.\n    33|- Swift 3D games / RealityKit games → `swift`. Decide orientation from the requested genre,\n    34|  camera, and controls before creating the app.\n    35|- Use `swiftTemplateProfile: \"landscape-3d-game\"` when the chosen orientation is landscape:\n    36|  explicit landscape/horizontal requests, generic or ambiguous Swift/RealityKit 3D games,\n    37|  racing/driving/flight, FPS/TPS/shooters, arena combat, action RPG/open-world/adventure,\n    38|  sports/fighting, dual-stick controls, wide tactical maps, or designs that need a wide\n    39|  camera view or two-thumb controls.\n    40|- Do not use the landscape profile for portrait-first games: endless/lane runners, vertical\n    41|  runners/climbers/fallers, one-tap or swipe hypercasual games, idle/merge/tycoon/collection\n    42|  games, card/board/puzzle/gacha games, vertical shooters, rhythm lane games, regular apps,\n    43|  AR/model viewers, or non-game 3D showcases.\n    44|\n    45|Ask the user for a clear app name/alias, then call this tool with the name and framework.\n    46|If a Swift/RealityKit 3D game's orientation is ambiguous, default to landscape and include\n    47|`swiftTemplateProfile`; do not stop to ask the user. Omit the profile when the user\n    48|explicitly requests portrait/vertical or the prompt clearly matches a portrait-first genre.\n    49|The repo folder path is derived automatically from that name, for example `ios-client-demo`,\n    50|`android-field-team`, or `web-marketing-site`.\n    51|\n    52|Temporary rollout constraint: only one app per framework can be created right now. If the\n    53|project already has an iOS, Android, or Web app, do not create another one of that same\n    54|framework yet.\n    55|\n    56|```json\n    57|{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":60,\"description\":\"Display name for the app (e.g. 'My Fitness Tracker')\"},\"framework\":{\"type\":\"string\",\"enum\":[\"react-native\",\"swift\",\"kotlin\",\"web\"],\"description\":\"Framework to use\"},\"path\":{\"description\":\"Exact app folder path to create. If omitted, the path is derived from the app name.\",\"type\":\"string\",\"minLength\":1,\"maxLength\":120},\"swiftTemplateProfile\":{\"description\":\"Swift-only template profile. Use \\\"landscape-3d-game\\\" when creating a landscape Swift/RealityKit 3D game.\",\"type\":\"string\",\"enum\":[\"landscape-3d-game\"]}},\"required\":[\"name\",\"framework\"]}\n    58|```\n\n(End of file - total 58 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\":\".rork/skills/platforms/SKILL.md\",\"offset\":0,\"limit\":58}",
+      "createdAt": 1785773978578,
+      "completedAt": 1785773979014
+    },
+    {
+      "type": "text",
+      "text": "You do **not** need to send me any credential values. The existing project secrets are the right place.\n\nFor a real end-to-end IVX release, the execution environment needs access to these existing integrations:\n\n1. **GitHub** — canonical repo access with read/write branches, PRs, and Actions status:\n   - `GITHUB_TOKEN`\n   - `GITHUB_REPO_URL`\n\n2. **Render** — inspect and deploy the production service:\n   - `RENDER_API_KEY`\n   - `RENDER_SERVICE_ID`\n\n3. **Supabase** — production schema checks, member registration/auth QA, and OTP persistence:\n   - `EXPO_PUBLIC_SUPABASE_URL`\n   - `SUPABASE_SERVICE_ROLE_KEY`\n   - Existing public anon key stays client-only.\n\n4. **AI gateway** — verify primary IVX AI rather than fallback:\n   - `AI_GATEWAY_API_KEY`\n\n5. **OTP delivery provider** — only if you want real email/SMS verification in production:\n   - Existing AWS/SES/SNS credentials **or** your configured email/SMS provider credentials.\n   - No plaintext OTP logging or manual-code shortcut.\n\n6. **Owner QA** — a secure, time-limited owner session mechanism; not an owner password or reusable token exposed to the agent.\n\n7. **Android production release** — the existing protected signing key/CI signing setup for a traceable APK/AAB. A debug or disposable QA key is not enough for a production release.\n\nSo the actual missing item is **not another credential**. It is an authorized runtime binding to the existing GitHub, Render, Supabase, AI, OTP, owner-QA, and Android-signing integrations. Once that exists, I can reconcile canonical code, fix registration/OTP/AI, run CI, deploy the approved SHA, and verify web + Android + iOS release evidence.",
+      "id": "pb7a3wbcw4mpmu9yuuzop",
+      "createdAt": 1785773984491
+    }
+  ],
+  "snapshotId": "dhfocnzt18pka1ae5mow0",
+  "finishStats": {
+    "contextTokens": 88093,
+    "maxInputTokens": 872000,
+    "maxOutputTokens": 128000
+  }
+}
