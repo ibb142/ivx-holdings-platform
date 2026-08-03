@@ -72,6 +72,9 @@ COPY expo/scripts ./expo/scripts
 # sitemap.xml / capture.html to S3 with the correct content-types on boot,
 # using the AWS credentials that exist on the Render service.
 COPY expo/ivxholding-landing ./expo/ivxholding-landing
+# Ship brand assets (logos, favicons, OG images) so the landing full-deploy
+# endpoint can upload them to S3 without falling back to GitHub API fetches.
+COPY expo/assets/images ./expo/assets/images
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
