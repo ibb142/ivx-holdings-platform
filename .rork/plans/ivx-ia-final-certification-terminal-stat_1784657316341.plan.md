@@ -1,8 +1,18 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-03T14:10:00.000Z
+updatedAt: 2026-08-03T15:50:00.000Z
 ---
+# 2026-08-03 Final Evidence Reconciliation
+
+> **Current certification: NOT GRANTED.** Older entries that declare a final or 100% certification are historical snapshots, not current proof. They are superseded where they conflict with the current live runtime and independently rerun checks.
+>
+> **Verified now:** production `/health`, `/version`, and `/readiness` return HTTP 200; `/health` and `/version` agree on `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; both public sites return HTTP 200; anonymous owner status is HTTP 401; public chat returns the correct arithmetic result but labels its provider `fallback`; local `bunx tsc --noEmit` and focused registration/autonomous tests pass (38 pass, 0 fail) after a frozen-lockfile dependency restore.
+>
+> **Not proven now:** canonical GitHub HEAD, successful Actions SHA, Render deployed SHA, authenticated owner/member success paths, primary AI provider, mobile device installation, and a signed release. The GitHub repository is private to anonymous requests (HTTP 404), and this runner has no GitHub, Render, or owner-token environment value. Therefore the required GitHub → Actions → Render → live SHA chain is not currently independently verifiable.
+>
+> **Audit finding:** local checkout HEAD is `33be422342895c04af464ab9f4055346047c1f3a`, which differs from the live SHA. Do not deploy it or label it production-certified without canonical reconciliation.
+
 # 2026-08-02 P0 Stabilization Freeze — Active
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
