@@ -7,8 +7,8 @@ updatedAt: 2026-08-03T11:55:00.000Z
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
 - [x] Establish the current source-of-truth baseline: authenticated GitHub API confirms owner `ibb142`, private canonical `main` commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; production `/health` and `/version` report the same SHA at 2026-08-03T11:51Z.
-- [ ] Establish CI-tested SHA parity: the Android release-consistency failure is reproduced and repaired locally by aligning landing-page APK references from `v1.4.38` to `v1.9.4`; its validator now passes. Canonical GitHub Actions remain unavailable because the configured GitHub credential returns `Bad credentials`; lint, typecheck, E2E, Android emulator, iOS simulator, and QA Suite still require canonical runs.
-- [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. Do not use it as production source of truth.
+- [ ] Establish CI-tested SHA parity: local dependency restoration allowed backend and Expo typechecks, Expo lint (warnings only), the selected CI backend suite, chat/intent/performance suite, critical-file protection, and Android release consistency to pass. Canonical GitHub Actions remain unavailable because the configured GitHub credential returns HTTP 401; Playwright, Android/iOS emulator, full QA Suite, and canonical workflow evidence still require valid canonical access.
+- [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. The local 55-commit history does not contain the production SHA `012bb088…`; therefore those local commits cannot be certified as live. Do not use it as production source of truth.
 
 ## Prioritized stabilization backlog
 
@@ -18,7 +18,7 @@ updatedAt: 2026-08-03T11:55:00.000Z
 4. **P1 — Durable autonomous task queue** (`AUTO-001`, QUEUED): Normalize task IDs, status transitions, retries, evidence pointers, and approval gates into the existing durable worker/ledger after the canonical source is available.
 5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
 
-**Current active task:** `CI-001`, ACTIVE workflow repair. Production runtime is healthy and SHA-matched to canonical GitHub, but production-quality certification remains blocked until the canonical CI gate is green.
+**Current active task:** `CI-001`, ACTIVE workflow repair. Current production is healthy on `012bb088…`, but the 55 local commits are not proven deployed and production-quality certification remains blocked until canonical GitHub/Render evidence and CI gates are green.
 
 ## 2026-08-03 Member Registration QA Audit
 
