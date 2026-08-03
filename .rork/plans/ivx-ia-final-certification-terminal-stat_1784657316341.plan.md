@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-02T21:43:00.000Z
+updatedAt: 2026-08-03T02:55:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
@@ -25,8 +25,8 @@ updatedAt: 2026-08-02T21:43:00.000Z
 - [x] Re-probed production `/health` and `/version`; both report live commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`, matching each other, with boot time `2026-08-03T00:56:48.348Z`.
 - [x] Confirmed member phone-code CORS preflight returns HTTP 204 and a deliberately invalid registration is rejected safely with HTTP 400, `stage=VALIDATING`, and no account creation.
 - [x] Ran `bun test backend/ivx-registration-orchestrator.test.ts`: 13 pass, 0 fail, 45 expectations.
-- [ ] Member Registration end-to-end certification remains blocked: deployed/local member handlers generate codes without calling SES/SNS transports; legacy registration still requires ZIP, gender, and role/interests; fallback verification persistence retains plaintext codes; no safe provider delivery receipt, Supabase-session completion, canonical GitHub CI, or Render deployment evidence exists for a repair.
-- [ ] Do not deploy or label the member flow verified until the registration repair is implemented on an isolated canonical branch, reviewed in a PR, passed in CI, owner-approved, merged, and SHA-matched through Render.
+- [ ] Member Registration end-to-end certification remains blocked: live Phase 1 contract probe (required fields only, valid E.164 phone) returned HTTP 400 `Gender is required`, proving deployed registration still violates the optional-gender requirement. Deployed/local handlers also generate codes without calling SES/SNS transports; fallback verification persistence retains plaintext codes; no safe provider delivery receipt, Supabase-session completion, canonical GitHub CI, or Render deployment evidence exists for a repair.
+- [ ] Do not deploy or label the member flow verified until the registration repair is implemented on an isolated canonical branch, reviewed in a PR, passed in CI, owner-approved, merged, and SHA-matched through Render. Android project validation passed on 2026-08-03, but it is not canonical-backend or registration E2E evidence.
 
 - [ ] Obtain three consecutive successful runs for IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, and iOS Simulator QA on one approved SHA.
 - [ ] Do not claim `SELF_HEALING_VERIFIED` until the owner-approved incident, deployment, canary, rollback, mobile-device, and SHA-parity requirements have complete evidence.
