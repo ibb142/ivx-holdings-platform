@@ -7,12 +7,12 @@ updatedAt: 2026-08-03T11:55:00.000Z
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
 - [x] Establish the current source-of-truth baseline: authenticated GitHub API confirms owner `ibb142`, private canonical `main` commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; production `/health` and `/version` report the same SHA at 2026-08-03T11:51Z.
-- [ ] Establish CI-tested SHA parity: authenticated Actions evidence is now available, but the five required workflows on `012bb088` are not green. Backend, chat/intent/performance, and secret-scan checks passed; Android release consistency, lint, typecheck, E2E, Android emulator, iOS simulator, and QA Suite have failures or skips.
+- [ ] Establish CI-tested SHA parity: the Android release-consistency failure is reproduced and repaired locally by aligning landing-page APK references from `v1.4.38` to `v1.9.4`; its validator now passes. Canonical GitHub Actions remain unavailable because the configured GitHub credential returns `Bad credentials`; lint, typecheck, E2E, Android emulator, iOS simulator, and QA Suite still require canonical runs.
 - [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. Do not use it as production source of truth.
 
 ## Prioritized stabilization backlog
 
-1. **P0 — GitHub Actions green-gate failure** (`CI-001`, ACTIVE): Canonical Actions access is restored. Repair the failing Android release consistency, lint/typecheck, E2E, Android emulator, iOS simulator, and QA Suite workflows, then obtain green runs on one approved SHA before a production-quality certification.
+1. **P0 — GitHub Actions green-gate failure** (`CI-001`, ACTIVE): Repair is in progress. The local Android release-consistency defect is fixed and its validator passes; restore valid canonical Actions access, repair remaining lint/typecheck/E2E/emulator/QA failures, then obtain green runs on one approved SHA before a production-quality certification.
 2. **P0 — Source-of-truth divergence** (`REPO-001`, BLOCKED): Reconcile the Rork-router checkout (`19be75b...`, ahead two commits) with canonical `ibb142/ivx-holdings-platform:main` without overwriting local history changes.
 3. **P0 — Deployment certification gap** (`DEPLOY-001`, QUEUED): After CI is healthy, capture one owner-approved GitHub → CI → Render → `/health` → `/version` chain with a real deployment ID.
 4. **P1 — Durable autonomous task queue** (`AUTO-001`, QUEUED): Normalize task IDs, status transitions, retries, evidence pointers, and approval gates into the existing durable worker/ledger after the canonical source is available.
