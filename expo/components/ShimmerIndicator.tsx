@@ -10,7 +10,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, Platform } from 'react-native';
 import Colors from '@/constants/colors';
-import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ShimmerIndicatorProps = {
   size?: 'small' | 'large';
