@@ -20,6 +20,15 @@ updatedAt: 2026-08-03T11:55:00.000Z
 
 **Current active task:** `CI-001`, ACTIVE workflow repair. Current production is healthy on `012bb088…`, but the 55 local commits are not proven deployed and production-quality certification remains blocked until canonical GitHub/Render evidence and CI gates are green.
 
+## 2026-08-03 Independent Production Recheck
+
+- [x] Live recheck: `/health`, `/version`, and `/readiness` returned HTTP 200 and agree on deployed commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; landing and chat surfaces each returned HTTP 200.
+- [x] Public chat returned HTTP 200 and the correct arithmetic response, persisted to Supabase, but reported `source: fallback`; this does not certify primary-model execution.
+- [x] Public verification CORS preflight returned HTTP 204; owner-protected QA endpoint returned HTTP 401 without a session, which is the expected access-control result.
+- [x] Local TypeScript checks, Expo test suite, Expo lint (warnings only), and Android release consistency passed. A stale rollback regression test was aligned with the implemented safety rule (a failed deployment verification remains `FAILED` even after rollback); the targeted autonomous-coder suite passes 25/25.
+- [ ] Production certification remains blocked: the complete backend suite previously reported a failure before the stale test expectation was aligned, and canonical GitHub authentication still returns HTTP 401. Canonical Actions history, Render deployment records, device/emulator E2E, and a canonical SHA-matched green run are unavailable.
+- [ ] Do not label all local commits or end-to-end product flows production-certified until canonical commit/CI/Render evidence and authenticated member-flow/device QA are captured.
+
 ## 2026-08-03 Member Registration QA Audit
 
 - [x] Re-probed production `/health` and `/version`; both report live commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`, matching each other, with boot time `2026-08-03T00:56:48.348Z`.
