@@ -1,24 +1,24 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-03T02:55:00.000Z
+updatedAt: 2026-08-03T11:55:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
-- [ ] Establish the current source-of-truth baseline: production `/health` and `/version` both returned `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` at 2026-08-03T01:10Z. The configured local checkout is `2a27e3107f26a4450428556442a6b69bcd91ed4a`, 28 commits ahead of its Rork-router remote. Canonical GitHub `main` remains unverified.
-- [ ] Establish CI-tested SHA parity: BLOCKED_CREDENTIALS. Both configured local GitHub credentials returned `401 Bad credentials`; unauthenticated GitHub repository and Actions reads returned `404` because the repository is private. Current workflow/run/runner evidence and CI-tested SHA cannot be captured.
+- [x] Establish the current source-of-truth baseline: authenticated GitHub API confirms owner `ibb142`, private canonical `main` commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; production `/health` and `/version` report the same SHA at 2026-08-03T11:51Z.
+- [ ] Establish CI-tested SHA parity: authenticated Actions evidence is now available, but the five required workflows on `012bb088` are not green. Backend, chat/intent/performance, and secret-scan checks passed; Android release consistency, lint, typecheck, E2E, Android emulator, iOS simulator, and QA Suite have failures or skips.
 - [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. Do not use it as production source of truth.
 
 ## Prioritized stabilization backlog
 
-1. **P0 — GitHub Actions evidence unavailable** (`CI-001`, BLOCKED_CREDENTIALS): The configured GitHub credential returns `401 Bad credentials` for both repository and Actions API reads. Owner action: replace or restore a token with read access to `ibb142/ivx-holdings-platform` and Actions read/workflow permissions. Then run the isolated `RUNNER_HEARTBEAT` and collect runner/step evidence before rerunning the five required workflows.
+1. **P0 — GitHub Actions green-gate failure** (`CI-001`, ACTIVE): Canonical Actions access is restored. Repair the failing Android release consistency, lint/typecheck, E2E, Android emulator, iOS simulator, and QA Suite workflows, then obtain green runs on one approved SHA before a production-quality certification.
 2. **P0 — Source-of-truth divergence** (`REPO-001`, BLOCKED): Reconcile the Rork-router checkout (`19be75b...`, ahead two commits) with canonical `ibb142/ivx-holdings-platform:main` without overwriting local history changes.
 3. **P0 — Deployment certification gap** (`DEPLOY-001`, QUEUED): After CI is healthy, capture one owner-approved GitHub → CI → Render → `/health` → `/version` chain with a real deployment ID.
 4. **P1 — Durable autonomous task queue** (`AUTO-001`, QUEUED): Normalize task IDs, status transitions, retries, evidence pointers, and approval gates into the existing durable worker/ledger after the canonical source is available.
 5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
 
-**Current active task:** `CI-001`, BLOCKED_CREDENTIALS for GitHub repository and Actions API restoration. Production runtime is healthy, but no production mutation, deployment, signing change, or source-code repair may proceed while canonical GitHub state and CI execution evidence are unresolved.
+**Current active task:** `CI-001`, ACTIVE workflow repair. Production runtime is healthy and SHA-matched to canonical GitHub, but production-quality certification remains blocked until the canonical CI gate is green.
 
 ## 2026-08-03 Member Registration QA Audit
 
