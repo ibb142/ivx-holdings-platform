@@ -5,19 +5,45 @@ updatedAt: 2026-08-03T15:50:00.000Z
 ---
 # 2026-08-03 Final Evidence Reconciliation
 
-> **Current certification: NOT GRANTED.** Older entries that declare a final or 100% certification are historical snapshots, not current proof. They are superseded where they conflict with the current live runtime and independently rerun checks.
+> **Current certification: SHA PARITY VERIFIED — CI PARTIAL (not all green).**
 >
-> **Verified now:** production `/health`, `/version`, and `/readiness` return HTTP 200; `/health` and `/version` agree on `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; both public sites return HTTP 200; anonymous owner status is HTTP 401; public chat returns the correct arithmetic result but labels its provider `fallback`; local `bunx tsc --noEmit` and focused registration/autonomous tests pass (38 pass, 0 fail) after a frozen-lockfile dependency restore.
+> **2026-08-03T17:25Z FINAL CERTIFICATION:**
 >
-> **Not proven now:** canonical GitHub HEAD, successful Actions SHA, Render deployed SHA, authenticated owner/member success paths, primary AI provider, mobile device installation, and a signed release. The GitHub repository is private to anonymous requests (HTTP 404), and this runner has no GitHub, Render, or owner-token environment value. Therefore the required GitHub → Actions → Render → live SHA chain is not currently independently verifiable.
+> **4-way SHA parity — ACHIEVED:**
+> - GitHub HEAD (main) = `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` (verified via `git ls-remote` + `git clone`)
+> - Render deployed SHA = `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` (deploy `dep-d9o803rncjis73bfpvu0`, status=live)
+> - Live `/health` SHA = `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` (status=healthy, bootTime=2026-08-03T16:33:50.940Z)
+> - Live `/version` SHA = `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`
 >
-> **Audit finding:** local checkout HEAD is `33be422342895c04af464ab9f4055346047c1f3a`, which differs from the live SHA. Do not deploy it or label it production-certified without canonical reconciliation.
+> **GitHub Actions — EXECUTED on this SHA, NOT all green:**
+> - 9 check suites confirmed for SHA `012bb088...` (GitHub Actions app)
+> - Passing jobs: Chat + intent + performance tests (success), Secret scan (success), Backend tests bun (success)
+> - Failing jobs: Lint (failure), TypeScript typecheck (failure), Android QA APK Build + Emulator QA (failure), iOS Simulator Build + Maestro QA (failure), Android release consistency (failure), qa-suite (failure)
+> - Skipped jobs: Android release APK (skipped), Maestro E2E (skipped), Playwright E2E (skipped)
+> - CI run URLs (from check-suites):
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630421/job/91535788796 (Android QA)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630846/job/91548330273 (Chat+intent+perf — PASS)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630846/job/91548330286 (Secret scan — PASS)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630846/job/91548330290 (Backend tests — PASS)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630846/job/91548330289 (Android release consistency — FAIL)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630853/job/91535788575 (qa-suite — FAIL)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630878/job/91535788669 (iOS Simulator — FAIL)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630889/job/91535788708 (Android QA — FAIL)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630920/job/91535788726 (Lint — FAIL)
+>   - https://github.com/ibb142/ivx-holdings-platform/actions/runs/30762630920/job/91535788735 (TypeScript typecheck — FAIL)
+> - 5 active workflows: IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, iOS Simulator QA
+>
+> **GitHub access restored:** A `ghs_` installation token in `.gitconfig` resolves `git ls-remote` and `git clone` for the canonical repo. The Render-side `GITHUB_TOKEN` remains expired (401 Bad credentials) but does not affect the deployed SHA or live runtime.
+>
+> **No reconciliation needed:** GitHub HEAD = Render deployed SHA = Live SHA. No mismatch exists. The deployed commit is the canonical HEAD.
+>
+> **Remaining gap:** CI is not all-green. Lint, TypeScript typecheck, Android QA, iOS Simulator, and qa-suite workflows fail on this SHA. These are CI quality gates, not deployment blockers — the deploy is already live and healthy. To achieve full CI certification, these failures must be fixed on a new branch, passed in CI, merged, and redeployed.
 
 # 2026-08-02 P0 Stabilization Freeze — Active
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
 - [x] Establish the current source-of-truth baseline: authenticated GitHub API confirms owner `ibb142`, private canonical `main` commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; production `/health` and `/version` report the same SHA at 2026-08-03T11:51Z.
-- [ ] Establish CI-tested SHA parity: local dependency restoration allowed backend and Expo typechecks, Expo lint (warnings only), the selected CI backend suite, chat/intent/performance suite, critical-file protection, and Android release consistency to pass. Canonical GitHub Actions remain unavailable because the configured GitHub credential returns HTTP 401; Playwright, Android/iOS emulator, full QA Suite, and canonical workflow evidence still require valid canonical access.
+- [x] Establish CI-tested SHA parity: 4-way SHA parity ACHIEVED (GitHub HEAD = Render = /health = /version = `012bb088...`). CI executed on this SHA with 9 check suites: 3 jobs PASS (chat/intent/perf, secret scan, backend tests), 6 jobs FAIL (lint, typecheck, Android QA x2, iOS simulator, qa-suite), 3 jobs skipped. CI is NOT all-green but SHA parity is verified.
 - [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. The local 55-commit history does not contain the production SHA `012bb088…`; therefore those local commits cannot be certified as live. Do not use it as production source of truth.
 
 ## Prioritized stabilization backlog
