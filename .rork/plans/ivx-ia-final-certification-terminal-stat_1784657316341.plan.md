@@ -6,7 +6,7 @@ updatedAt: 2026-08-02T21:43:00.000Z
 # 2026-08-02 P0 Stabilization Freeze — Active
 
 - [x] Freeze non-critical product work and restrict production certification to `ibb142/ivx-holdings-platform` branch `main`.
-- [ ] Establish the current source-of-truth baseline: production `/health` and `/version` both returned `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` at 2026-08-02T21:42Z. The configured local checkout is at `26522bb03a07c8e33f2674672e8c51842429d32d`, three commits ahead of its Rork-router remote. Canonical GitHub `main` remains unverified.
+- [ ] Establish the current source-of-truth baseline: production `/health` and `/version` both returned `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c` at 2026-08-03T01:10Z. The configured local checkout is `2a27e3107f26a4450428556442a6b69bcd91ed4a`, 28 commits ahead of its Rork-router remote. Canonical GitHub `main` remains unverified.
 - [ ] Establish CI-tested SHA parity: BLOCKED_CREDENTIALS. Both configured local GitHub credentials returned `401 Bad credentials`; unauthenticated GitHub repository and Actions reads returned `404` because the repository is private. Current workflow/run/runner evidence and CI-tested SHA cannot be captured.
 - [ ] Resolve the local checkout divergence before any production-related mutation: the configured `origin` is a Rork-router remote, not verifiable canonical GitHub, and local `main` is ahead by three commits. Do not use it as production source of truth.
 
@@ -19,6 +19,14 @@ updatedAt: 2026-08-02T21:43:00.000Z
 5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
 
 **Current active task:** `CI-001`, BLOCKED_CREDENTIALS for GitHub repository and Actions API restoration. Production runtime is healthy, but no production mutation, deployment, signing change, or source-code repair may proceed while canonical GitHub state and CI execution evidence are unresolved.
+
+## 2026-08-03 Member Registration QA Audit
+
+- [x] Re-probed production `/health` and `/version`; both report live commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`, matching each other, with boot time `2026-08-03T00:56:48.348Z`.
+- [x] Confirmed member phone-code CORS preflight returns HTTP 204 and a deliberately invalid registration is rejected safely with HTTP 400, `stage=VALIDATING`, and no account creation.
+- [x] Ran `bun test backend/ivx-registration-orchestrator.test.ts`: 13 pass, 0 fail, 45 expectations.
+- [ ] Member Registration end-to-end certification remains blocked: deployed/local member handlers generate codes without calling SES/SNS transports; legacy registration still requires ZIP, gender, and role/interests; fallback verification persistence retains plaintext codes; no safe provider delivery receipt, Supabase-session completion, canonical GitHub CI, or Render deployment evidence exists for a repair.
+- [ ] Do not deploy or label the member flow verified until the registration repair is implemented on an isolated canonical branch, reviewed in a PR, passed in CI, owner-approved, merged, and SHA-matched through Render.
 
 - [ ] Obtain three consecutive successful runs for IVX CI, IVX QA Suite, IVX E2E Acceptance Pipeline, Android Emulator QA, and iOS Simulator QA on one approved SHA.
 - [ ] Do not claim `SELF_HEALING_VERIFIED` until the owner-approved incident, deployment, canary, rollback, mobile-device, and SHA-parity requirements have complete evidence.
