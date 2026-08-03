@@ -28,10 +28,6 @@ import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.plugins.logging.ANDROID
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger
-import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -51,10 +47,6 @@ class IVXApiService {
 
     private val client = HttpClient(Android) {
         install(ContentNegotiation) { json(json) }
-        install(Logging) {
-            logger = Logger.ANDROID
-            level = LogLevel.INFO
-        }
         defaultRequest {
             url(AppConfig.API_BASE_URL)
             contentType(ContentType.Application.Json)
