@@ -98,7 +98,7 @@ const VALID_GENDERS = new Set(['male', 'female', 'prefer_not_to_say']);
 
 // Validate gender: required, must be one of the allowed values
 function validateGender(gender: string): { valid: boolean; reason?: string } {
-  if (!gender) return { valid: false, reason: 'Gender is required.' };
+  if (!gender) return { valid: true };
   if (!VALID_GENDERS.has(gender)) {
     return { valid: false, reason: 'Please select a valid gender option.' };
   }
@@ -124,6 +124,7 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
   const body = await parseBody(request);
   const email = asString(body.email).toLowerCase();
   const password = asString(body.password);
+  const confirmPassword = asString(body.confirmPassword);
   const firstName = asString(body.firstName);
   const lastName = asString(body.lastName);
   const phone = asString(body.phone);
@@ -151,6 +152,9 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
   }
   if (!isValidEmail(email)) {
     return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: 'Please enter a valid email address.' });
+  }
+  if (confirmPassword && password !== confirmPassword) {
+    return normalizedError('WEAK_PASSWORD', 'VALIDATING', { message: 'Password confirmation does not match.' });
   }
   const pwCheck = validatePassword(password);
   if (!pwCheck.valid) {

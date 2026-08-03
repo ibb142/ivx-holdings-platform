@@ -18,6 +18,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import {
   isDurableStoreConfigured,
@@ -25,10 +26,12 @@ import {
   writeDurableJson,
 } from './ivx-durable-store';
 
-const DEPLOYMENT_MARKER = 'ivx-member-verification-v2-fallback-store';
+const DEPLOYMENT_MARKER = 'ivx-member-verification-v3-hashed-codes';
 const CODE_TTL_MINUTES = 10;
 const CODE_LENGTH = 6;
 const MAX_ATTEMPTS = 5;
+const MAX_RESENDS = 3;
+const CODE_HASH_PREFIX = 'scrypt';
 
 function getSupabaseAdmin(): SupabaseClient {
   const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -47,9 +50,23 @@ function getSupabaseAdmin(): SupabaseClient {
 function generateCode(): string {
   let code = '';
   for (let i = 0; i < CODE_LENGTH; i++) {
-    code += Math.floor(Math.random() * 10).toString();
+    code += randomInt(0, 10).toString();
   }
   return code;
+}
+
+function hashCode(code: string): string {
+  const salt = randomBytes(16).toString('hex');
+  const digest = scryptSync(code, salt, 32).toString('hex');
+  return `${CODE_HASH_PREFIX}:${salt}:${digest}`;
+}
+
+function matchesCode(code: string, storedHash: string): boolean {
+  const [algorithm, salt, digest] = storedHash.split(':');
+  if (algorithm !== CODE_HASH_PREFIX || !salt || !digest) return false;
+  const candidate = scryptSync(code, salt, 32);
+  const expected = Buffer.from(digest, 'hex');
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,11 +76,13 @@ function generateCode(): string {
 interface FallbackCodeRecord {
   userId: string;
   type: 'email' | 'phone';
-  code: string;
+  codeHash: string;
   attempts: number;
+  resendCount: number;
   expiresAt: string;
   verifiedAt: string | null;
   createdAt: string;
+  lastSentAt: string;
 }
 
 type FallbackCodesStore = Record<string, FallbackCodeRecord>;
@@ -108,14 +127,22 @@ async function writeStore<T>(file: string, value: T): Promise<void> {
 
 async function fallbackStoreCode(input: StoreCodeInput, code: string, expiresAt: Date): Promise<void> {
   const codes = await readStore<FallbackCodesStore>(CODES_FILE(), {});
-  codes[codeKey(input.userId, input.type)] = {
+  const key = codeKey(input.userId, input.type);
+  const existing = codes[key];
+  const now = new Date().toISOString();
+  if (existing && !existing.verifiedAt && new Date(existing.expiresAt) >= new Date() && existing.resendCount >= MAX_RESENDS) {
+    throw new Error('Verification resend limit reached. Please wait for the current code to expire.');
+  }
+  codes[key] = {
     userId: input.userId,
     type: input.type,
-    code,
+    codeHash: hashCode(code),
     attempts: 0,
+    resendCount: existing && !existing.verifiedAt ? existing.resendCount + 1 : 0,
     expiresAt: expiresAt.toISOString(),
     verifiedAt: null,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    lastSentAt: now,
   };
   await writeStore(CODES_FILE(), codes);
 }
@@ -165,7 +192,7 @@ async function fallbackVerifyCode(input: VerifyCodeInput): Promise<VerificationR
 
   record.attempts += 1;
 
-  if (record.code !== input.code) {
+  if (!matchesCode(input.code, record.codeHash)) {
     codes[key] = record;
     await writeStore(CODES_FILE(), codes);
     const remaining = MAX_ATTEMPTS - record.attempts;
@@ -207,6 +234,7 @@ interface VerificationCodeRecord {
   id: string;
   user_id: string;
   type: 'email' | 'phone';
+  /** Legacy database column name; it contains a salted scrypt hash, never plaintext. */
   code: string;
   attempts: number;
   expires_at: string;
@@ -229,7 +257,6 @@ interface VerificationResult {
   success: boolean;
   message: string;
   verified: boolean;
-  code?: string;
   deploymentMarker: string;
 }
 
@@ -244,7 +271,7 @@ export async function storeVerificationCode(input: StoreCodeInput): Promise<Veri
       {
         user_id: input.userId,
         type: input.type,
-        code,
+        code: hashCode(code),
         attempts: 0,
         expires_at: expiresAt.toISOString(),
         verified_at: null,
@@ -264,7 +291,6 @@ export async function storeVerificationCode(input: StoreCodeInput): Promise<Veri
       success: true,
       message: `Verification code generated`,
       verified: false,
-      code,
       deploymentMarker: DEPLOYMENT_MARKER,
     };
   } catch (err) {
@@ -276,7 +302,6 @@ export async function storeVerificationCode(input: StoreCodeInput): Promise<Veri
         success: true,
         message: `Verification code generated`,
         verified: false,
-        code,
         deploymentMarker: DEPLOYMENT_MARKER,
       };
     } catch {
@@ -337,7 +362,7 @@ export async function verifyCode(input: VerifyCodeInput): Promise<VerificationRe
     // Increment attempts
     const newAttempts = record.attempts + 1;
 
-    if (record.code !== input.code) {
+    if (!matchesCode(input.code, record.code)) {
       await supabase
         .from('verification_codes')
         .update({ attempts: newAttempts })
