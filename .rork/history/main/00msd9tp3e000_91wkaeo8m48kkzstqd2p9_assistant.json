@@ -1,0 +1,21 @@
+{
+  "id": "91wkaeo8m48kkzstqd2p9",
+  "role": "assistant",
+  "preferredModelName": "gpt-5.6-terra",
+  "resolvedModelName": "gpt-5.6-terra",
+  "createdAt": 1785764077898,
+  "responseMessageContents": [
+    {
+      "type": "text",
+      "text": "Here is the practical layout:\n\n```text\nYou / GitHub\n   │\n   │  Render GitHub integration (OAuth / GitHub App)\n   ▼\nRender service\n   │\n   ├─ pulls your selected GitHub repository and branch\n   ├─ builds the code\n   ├─ deploys the built service to Render\n   └─ injects only the environment variables configured on that Render service\n        │\n        ▼\nYour live backend: api.ivxholding.com\n        │\n        ├─ uses Supabase credentials → Supabase\n        ├─ uses AI gateway key → AI provider\n        ├─ uses AWS credentials → AWS services\n        └─ serves the Expo/Android app and web clients\n```\n\n### Does “GitHub connected on Render” mean Render has access to your GitHub?\n**Yes — but only the permission you granted to Render.**\n\nUsually that means Render can:\n- read/clone the connected repository;\n- detect commits on the selected branch;\n- build and deploy from those commits.\n\nIt does **not automatically mean**:\n- Render can access every GitHub repository;\n- Render can push commits, create PRs, change Actions, or administer your GitHub account;\n- your backend receives a usable `GITHUB_TOKEN`.\n\n### Important distinction\nThere are two different things:\n\n1. **Render’s GitHub integration**  \n   Used by Render to pull code and auto-deploy. Render may hold this connection internally; it is not necessarily visible as `GITHUB_TOKEN` inside your running app.\n\n2. **`GITHUB_TOKEN` environment variable on Render**  \n   An explicit token you add to the Render service. Your backend can use it to call GitHub APIs—only with that token’s scopes. This is the token we need to validate for backend GitHub API actions.\n\n### Delivery direction\nThe normal delivery route is:\n\n```text\nGitHub commit → Render build/deploy → live API\n```\n\nRender does **not** automatically deliver your code or credentials “to every other service.” The running backend reaches Supabase, AI, AWS, etc. only when you explicitly configure the appropriate credentials and code integration.\n\nCurrent status: we have not yet proven whether the explicit `GITHUB_TOKEN` variable on your Render service exists and is valid.",
+      "id": "nxclcb4evl5aok7njea5i",
+      "createdAt": 1785764071287
+    }
+  ],
+  "snapshotId": "91wkaeo8m48kkzstqd2p9",
+  "finishStats": {
+    "contextTokens": 59014,
+    "maxInputTokens": 872000,
+    "maxOutputTokens": 128000
+  }
+}
