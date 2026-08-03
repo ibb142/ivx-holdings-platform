@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-03T12:20:00.000Z
+updatedAt: 2026-08-03T14:10:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
@@ -23,6 +23,14 @@ updatedAt: 2026-08-03T12:20:00.000Z
 ## 2026-08-03 Render GitHub Token QA
 
 - [x] Audited the post-sync GitHub token path without exposing credentials. The secure GitHub-token field was submitted, but neither `GITHUB_TOKEN` nor `RORK_PUBLIC_GITHUB_TOKEN` is available to the execution environment, so it cannot yet be tested against the canonical repository. This workspace also has no `RENDER_API_KEY`, so Render environment variables cannot be inspected or exercised. Render-side GitHub token validity is therefore **not verified** and remains a certification blocker.
+
+## 2026-08-03 Deployment Evidence Audit
+
+- [x] Public runtime proof: `/health` and `/version` returned HTTP 200 with the same deployed commit `012bb0880c94cc2a52ba5eb52e964d3d5b5cd25c`; `/readiness` returned HTTP 200 (`ok`); `ivxholding.com` and `chat.ivxholding.com` both returned HTTP 200.
+- [x] Public functional and guard proof: `POST /api/public/chat` returned the expected arithmetic result (HTTP 200), though `source: fallback`; owner and autonomous endpoints rejected anonymous access with HTTP 401; verification preflight returned HTTP 204.
+- [x] Local gate: `bunx tsc --noEmit` and the focused registration/autonomous deploy suite passed (38 tests, 0 failures).
+- [ ] Full end-to-end deployment certification is **not established**. GitHub is private and anonymous repository access returned HTTP 404; no GitHub token, Render API key, owner bearer session, canonical Actions run, or Render deploy record is available to independently prove `GitHub HEAD = Actions source SHA = Render deploy SHA = live SHA`.
+- [ ] Member-flow certification is also blocked: anonymous `GET /api/members/me` and `/api/members/verification-status` respond HTTP 400 `User ID is required`, so the live deployment has not independently demonstrated bearer-bound member identity. Do not claim member authentication is verified until an authorized test session proves it on the live SHA.
 
 ## 2026-08-03 Independent Production Recheck
 
