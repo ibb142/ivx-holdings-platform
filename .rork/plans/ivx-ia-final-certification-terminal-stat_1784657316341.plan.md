@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-03T12:10:00.000Z
+updatedAt: 2026-08-03T12:20:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
@@ -22,7 +22,7 @@ updatedAt: 2026-08-03T12:10:00.000Z
 
 ## 2026-08-03 Render GitHub Token QA
 
-- [x] Audited the post-sync GitHub token path without exposing credentials. This workspace has no `RENDER_API_KEY`, so Render environment variables could not be inspected or exercised. The workspace also has no `GITHUB_TOKEN`; the previously configured GitHub credential returned HTTP 401. Render-side GitHub token validity is therefore **not verified** and remains a certification blocker.
+- [x] Audited the post-sync GitHub token path without exposing credentials. The secure GitHub-token field was submitted, but neither `GITHUB_TOKEN` nor `RORK_PUBLIC_GITHUB_TOKEN` is available to the execution environment, so it cannot yet be tested against the canonical repository. This workspace also has no `RENDER_API_KEY`, so Render environment variables cannot be inspected or exercised. Render-side GitHub token validity is therefore **not verified** and remains a certification blocker.
 
 ## 2026-08-03 Independent Production Recheck
 
