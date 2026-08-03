@@ -34,6 +34,7 @@ import {
   type RegistrationStage,
   type RegistrationErrorCode,
 } from '../services/ivx-registration-orchestrator';
+import { createClient } from '@supabase/supabase-js';
 import { assertIVXOwnerOnly } from './owner-only';
 
 const DEPLOYMENT_MARKER = 'ivx-members-api-v1';
@@ -62,10 +63,21 @@ function asString(value: unknown, fallback = ''): string {
   return fallback;
 }
 
-function getAuthUserId(request: Request): string | null {
-  const authHeader = request.headers.get('Authorization') || '';
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1] : null;
+async function requireAuthenticatedMember(request: Request): Promise<string | null> {
+  const token = request.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) return null;
+
+  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  if (!url || !key) return null;
+
+  try {
+    const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await client.auth.getUser(token);
+    return error || !data.user ? null : data.user.id;
+  } catch {
+    return null;
+  }
 }
 
 // Validate email format
@@ -280,11 +292,9 @@ export async function handleRegistrationMetricsRequest(request: Request): Promis
 
 // POST /api/members/send-email-code
 export async function handleSendEmailCode(request: Request): Promise<Response> {
-  const body = await parseBody(request);
-  const userId = asString(body.userId) || getAuthUserId(request) || '';
-
+  const userId = await requireAuthenticatedMember(request);
   if (!userId) {
-    return jsonResponse({ success: false, message: 'User ID is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
 
   const result = await storeVerificationCode({ userId, type: 'email' });
@@ -298,11 +308,14 @@ export async function handleSendEmailCode(request: Request): Promise<Response> {
 // POST /api/members/verify-email
 export async function handleVerifyEmail(request: Request): Promise<Response> {
   const body = await parseBody(request);
-  const userId = asString(body.userId) || getAuthUserId(request) || '';
+  const userId = await requireAuthenticatedMember(request);
   const code = asString(body.code);
 
-  if (!userId || !code) {
-    return jsonResponse({ success: false, message: 'User ID and code are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+  if (!userId) {
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
+  }
+  if (!code) {
+    return jsonResponse({ success: false, message: 'Verification code is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
   }
 
   if (!/^\d{6}$/.test(code)) {
@@ -313,8 +326,8 @@ export async function handleVerifyEmail(request: Request): Promise<Response> {
   if ((result as { success?: boolean; verified?: boolean }).success || (result as { verified?: boolean }).verified) {
     try {
       await markCanonicalMemberVerified({ authUserId: userId }, { emailVerified: true });
-    } catch (syncErr) {
-      console.error('[Members] Canonical email-verified sync failed (non-fatal):', syncErr);
+    } catch {
+      console.warn('[Members] Canonical email verification sync failed.');
     }
   }
   return jsonResponse(result);
@@ -322,11 +335,9 @@ export async function handleVerifyEmail(request: Request): Promise<Response> {
 
 // POST /api/members/send-phone-code
 export async function handleSendPhoneCode(request: Request): Promise<Response> {
-  const body = await parseBody(request);
-  const userId = asString(body.userId) || getAuthUserId(request) || '';
-
+  const userId = await requireAuthenticatedMember(request);
   if (!userId) {
-    return jsonResponse({ success: false, message: 'User ID is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
 
   const result = await storeVerificationCode({ userId, type: 'phone' });
@@ -340,11 +351,14 @@ export async function handleSendPhoneCode(request: Request): Promise<Response> {
 // POST /api/members/verify-phone
 export async function handleVerifyPhone(request: Request): Promise<Response> {
   const body = await parseBody(request);
-  const userId = asString(body.userId) || getAuthUserId(request) || '';
+  const userId = await requireAuthenticatedMember(request);
   const code = asString(body.code);
 
-  if (!userId || !code) {
-    return jsonResponse({ success: false, message: 'User ID and code are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+  if (!userId) {
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
+  }
+  if (!code) {
+    return jsonResponse({ success: false, message: 'Verification code is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
   }
 
   if (!/^\d{6}$/.test(code)) {
@@ -355,8 +369,8 @@ export async function handleVerifyPhone(request: Request): Promise<Response> {
   if ((result as { success?: boolean; verified?: boolean }).success || (result as { verified?: boolean }).verified) {
     try {
       await markCanonicalMemberVerified({ authUserId: userId }, { smsVerified: true });
-    } catch (syncErr) {
-      console.error('[Members] Canonical SMS-verified sync failed (non-fatal):', syncErr);
+    } catch {
+      console.warn('[Members] Canonical phone verification sync failed.');
     }
   }
   return jsonResponse(result);
@@ -364,11 +378,10 @@ export async function handleVerifyPhone(request: Request): Promise<Response> {
 
 // GET /api/members/me
 export async function handleGetMemberProfile(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const userId = url.searchParams.get('userId') || getAuthUserId(request) || '';
+  const userId = await requireAuthenticatedMember(request);
 
   if (!userId) {
-    return jsonResponse({ success: false, message: 'User ID is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
 
   const profile = await getMemberProfile(userId);
@@ -391,11 +404,10 @@ export async function handleGetMemberProfile(request: Request): Promise<Response
 
 // POST /api/members/start-kyc
 export async function handleStartKYC(request: Request): Promise<Response> {
-  const body = await parseBody(request);
-  const userId = asString(body.userId) || getAuthUserId(request) || '';
+  const userId = await requireAuthenticatedMember(request);
 
   if (!userId) {
-    return jsonResponse({ success: false, message: 'User ID is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
 
   // Check verification status first
@@ -424,11 +436,10 @@ export async function handleStartKYC(request: Request): Promise<Response> {
 
 // GET /api/members/verification-status
 export async function handleVerificationStatus(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const userId = url.searchParams.get('userId') || getAuthUserId(request) || '';
+  const userId = await requireAuthenticatedMember(request);
 
   if (!userId) {
-    return jsonResponse({ success: false, message: 'User ID is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
 
   const verification = await checkVerificationStatus(userId);
@@ -485,9 +496,9 @@ export async function handleMemberResetPassword(request: Request): Promise<Respo
 // PUT /api/members/me  (profile update — never deletes fields the caller omits)
 export async function handleUpdateMemberProfile(request: Request): Promise<Response> {
   const body = await parseBody(request);
-  const userId = asString(body.userId) || getAuthUserId(request) || '';
+  const userId = await requireAuthenticatedMember(request);
   if (!userId) {
-    return jsonResponse({ success: false, message: 'User ID is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
   const result = await updateMemberProfile({
     userId,
