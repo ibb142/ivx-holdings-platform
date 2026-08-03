@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { renderSafeViewChildren } from '@/components/SafeViewChildren';
@@ -29,8 +28,7 @@ import {
   Eye,
   Radio,
   HardDrive,
-  Layers,
-} from 'lucide-react-native';
+  Layers} from 'lucide-react-native';
 
 type LayerStatus = 'healthy' | 'warning' | 'critical';
 
@@ -53,14 +51,12 @@ const LAYER_COLORS = {
   realtime: '#30D158',
   landing: '#FF453A',
   supabase: '#3ECF8E',
-  async: '#64D2FF',
-} as const;
+  async: '#64D2FF'} as const;
 
 const STATUS_COLORS: Record<LayerStatus, string> = {
   healthy: '#30D158',
   warning: '#FF9F0A',
-  critical: '#FF453A',
-};
+  critical: '#FF453A'};
 
 const CONNECTIONS: ConnectionPoint[] = [
   {
@@ -70,8 +66,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'CRUD Operations',
     protocol: 'Function Call',
     status: 'healthy',
-    dataFlow: 'Create / Update / Delete / Trash / Restore deals',
-  },
+    dataFlow: 'Create / Update / Delete / Trash / Restore deals'},
   {
     id: 'c2',
     from: 'jv-storage.ts',
@@ -79,8 +74,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'Primary Sync',
     protocol: 'Supabase SDK (REST)',
     status: 'healthy',
-    dataFlow: 'INSERT / UPSERT / SELECT on jv_deals table',
-  },
+    dataFlow: 'INSERT / UPSERT / SELECT on jv_deals table'},
   {
     id: 'c3',
     from: 'jv-storage.ts',
@@ -88,8 +82,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'Local Fallback',
     protocol: 'AsyncStorage API',
     status: 'healthy',
-    dataFlow: 'JSON serialized deals cached locally as backup',
-  },
+    dataFlow: 'JSON serialized deals cached locally as backup'},
   {
     id: 'c4',
     from: 'Supabase DB',
@@ -98,8 +91,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     protocol: 'WebSocket (wss://)',
     status: 'warning',
     riskNote: 'Can disconnect on poor network. Fallback polling at 3-5s intervals.',
-    dataFlow: 'INSERT / UPDATE / DELETE events on jv_deals table',
-  },
+    dataFlow: 'INSERT / UPDATE / DELETE events on jv_deals table'},
   {
     id: 'c5',
     from: 'Realtime Channel',
@@ -107,8 +99,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'Invalidate + Refetch',
     protocol: 'invalidateQueries()',
     status: 'healthy',
-    dataFlow: 'Invalidates all jv-deals, published-jv-deals query keys',
-  },
+    dataFlow: 'Invalidates all jv-deals, published-jv-deals query keys'},
   {
     id: 'c6',
     from: 'React Query Cache',
@@ -116,8 +107,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'UI Re-render',
     protocol: 'useQuery() subscription',
     status: 'healthy',
-    dataFlow: 'Published deals list auto-refreshes in UI',
-  },
+    dataFlow: 'Published deals list auto-refreshes in UI'},
   {
     id: 'c7',
     from: 'Realtime Channel',
@@ -126,8 +116,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     protocol: 'triggerLandingSync()',
     status: 'warning',
     riskNote: 'Debounced 5s. If realtime disconnects, landing page won\'t auto-update.',
-    dataFlow: 'Only fires when deal.published === true changes',
-  },
+    dataFlow: 'Only fires when deal.published === true changes'},
   {
     id: 'c8',
     from: 'Landing Sync',
@@ -136,8 +125,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     protocol: 'Supabase SDK (REST)',
     status: 'warning',
     riskNote: 'Table may not exist. Falls back gracefully with error log.',
-    dataFlow: 'Published deal data upserted to landing_deals table',
-  },
+    dataFlow: 'Published deal data upserted to landing_deals table'},
   {
     id: 'c9',
     from: 'Landing Sync',
@@ -146,8 +134,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     protocol: 'HTTPS POST (fetch)',
     status: 'warning',
     riskNote: 'Requires EXPO_PUBLIC_API_BASE_URL. Falls back to Supabase table if API fails.',
-    dataFlow: 'JSON payload of all published deals sent to /api/landing-sync',
-  },
+    dataFlow: 'JSON payload of all published deals sent to /api/landing-sync'},
   {
     id: 'c10',
     from: 'ivxholding.com',
@@ -156,8 +143,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     protocol: 'Supabase SDK / REST API',
     status: 'warning',
     riskNote: 'Landing page must be configured to read from landing_deals or API.',
-    dataFlow: 'Landing page queries published deals for public display',
-  },
+    dataFlow: 'Landing page queries published deals for public display'},
   {
     id: 'c11',
     from: 'BroadcastChannel',
@@ -165,8 +151,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'Cross-Tab Sync',
     protocol: 'BroadcastChannel API (Web)',
     status: 'healthy',
-    dataFlow: 'Web-only: syncs JV deal changes across browser tabs',
-  },
+    dataFlow: 'Web-only: syncs JV deal changes across browser tabs'},
   {
     id: 'c12',
     from: 'App Startup',
@@ -174,8 +159,7 @@ const CONNECTIONS: ConnectionPoint[] = [
     label: 'Local→Cloud Sync',
     protocol: 'syncLocalDealsToSupabase()',
     status: 'healthy',
-    dataFlow: 'On launch, pushes any local-only deals to Supabase',
-  },
+    dataFlow: 'On launch, pushes any local-only deals to Supabase'},
 ];
 
 function PulsingDot({ color, delay = 0 }: { color: string; delay?: number }) {
@@ -221,8 +205,7 @@ function LayerCard({
   icon,
   color,
   children,
-  status,
-}: {
+  status}: {
   title: string;
   subtitle: string;
   icon: React.ReactNode;
@@ -288,8 +271,7 @@ function ConnectionLine({ connection, onPress }: { connection: ConnectionPoint; 
 
 function DetailModal({
   connection,
-  onClose,
-}: {
+  onClose}: {
   connection: ConnectionPoint | null;
   onClose: () => void;
 }) {
@@ -640,182 +622,149 @@ export default function JVArchitectureScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0C0C0E',
-  },
+    backgroundColor: '#0C0C0E'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1C1C1E',
-  },
+    borderBottomColor: '#1C1C1E'},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: '#1C1C1E',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   headerTitle: {
     color: '#fff',
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerSub: {
     color: '#8E8E93',
     fontSize: 12,
-    marginTop: 1,
-  },
+    marginTop: 1},
   headerRight: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: '#5E5CE620',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 20,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   layerCard: {
     backgroundColor: '#1C1C1E',
     borderRadius: 14,
     padding: 16,
-    borderLeftWidth: 3,
-  },
+    borderLeftWidth: 3},
   layerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   layerIconWrap: {
     width: 34,
     height: 34,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   layerTitleWrap: {
     flex: 1,
-    marginLeft: 10,
-  },
+    marginLeft: 10},
   layerTitle: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   layerSubtitle: {
     color: '#8E8E93',
     fontSize: 11,
-    marginTop: 1,
-  },
+    marginTop: 1},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    gap: 4,
-  },
+    gap: 4},
   statusText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   pulsingDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   layerModules: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   moduleChip: {
     backgroundColor: '#2C2C2E',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   moduleChipWeb: {
     borderWidth: 1,
-    borderColor: '#64D2FF30',
-  },
+    borderColor: '#64D2FF30'},
   moduleChipDB: {
     borderWidth: 1,
-    borderColor: '#3ECF8E30',
-  },
+    borderColor: '#3ECF8E30'},
   moduleChipText: {
     color: '#AEAEB2',
     fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'},
   fileList: {
-    gap: 4,
-  },
+    gap: 4},
   fileNote: {
     color: '#636366',
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   arrowContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
   dualPathBox: {
     flexDirection: 'row',
     backgroundColor: '#0C0C0E',
     borderRadius: 10,
     padding: 10,
     marginBottom: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   dualPathItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   dualPathLabel: {
     color: '#fff',
     fontSize: 11,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   dualPathDesc: {
     color: '#636366',
     fontSize: 10,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   dualPathDivider: {
     width: 1,
     height: 40,
     backgroundColor: '#2C2C2E',
-    marginHorizontal: 8,
-  },
+    marginHorizontal: 8},
   realtimeFlow: {
     gap: 6,
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   rtStep: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -824,13 +773,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    width: '100%',
-  },
+    width: '100%'},
   rtStepText: {
     color: '#AEAEB2',
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   warningBox: {
     flexDirection: 'row',
     backgroundColor: '#FF9F0A10',
@@ -839,69 +786,57 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     gap: 10,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   warningTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   warningTitle: {
     color: '#FF9F0A',
     fontSize: 12,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   warningDesc: {
     color: '#8E8E93',
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   syncPathBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    width: '100%',
-  },
+    width: '100%'},
   syncPath: {
     flex: 1,
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#0C0C0E',
     padding: 10,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   syncPathLabel: {
     color: '#fff',
     fontSize: 11,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   syncPathDesc: {
     color: '#636366',
     fontSize: 10,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   syncOr: {
     color: '#636366',
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dividerLine: {
     height: 1,
     backgroundColor: '#2C2C2E',
-    marginVertical: 24,
-  },
+    marginVertical: 24},
   sectionTitle: {
     color: '#fff',
     fontSize: 17,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   sectionSub: {
     color: '#636366',
     fontSize: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   connectionLine: {
     flexDirection: 'row',
     backgroundColor: '#1C1C1E',
@@ -909,66 +844,53 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     gap: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   connectionDotLine: {
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   connectionDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   connectionPipe: {
     width: 4,
     height: 20,
     borderRadius: 2,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   connectionPipeInner: {
     width: 2,
     height: 14,
-    borderRadius: 1,
-  },
+    borderRadius: 1},
   connectionInfo: {
-    flex: 1,
-  },
+    flex: 1},
   connectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   connectionLabel: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   connectionProtocol: {
     color: '#636366',
     fontSize: 11,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginTop: 2,
-  },
+    marginTop: 2},
   connectionFlow: {
     color: '#8E8E93',
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   legendGrid: {
     gap: 8,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   legendText: {
     color: '#AEAEB2',
-    fontSize: 12,
-  },
+    fontSize: 12},
   summaryBox: {
     flexDirection: 'row',
     backgroundColor: '#30D15810',
@@ -977,22 +899,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     gap: 12,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   summaryContent: {
-    flex: 1,
-  },
+    flex: 1},
   summaryTitle: {
     color: '#30D158',
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   summaryLine: {
     color: '#AEAEB2',
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   modalOverlay: {
     position: 'absolute',
     top: 0,
@@ -1002,50 +920,42 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-  },
+    padding: 24},
   modalContent: {
     backgroundColor: '#1C1C1E',
     borderRadius: 16,
     padding: 20,
     width: '100%',
-    maxWidth: 400,
-  },
+    maxWidth: 400},
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   modalStatusDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   modalTitle: {
     color: '#fff',
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   modalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   modalKey: {
     color: '#636366',
     fontSize: 13,
     fontWeight: '500' as const,
-    minWidth: 70,
-  },
+    minWidth: 70},
   modalValue: {
     color: '#fff',
     fontSize: 13,
     flex: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   riskBox: {
     flexDirection: 'row',
     backgroundColor: '#FF9F0A10',
@@ -1053,24 +963,19 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
     marginTop: 14,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   riskText: {
     color: '#FF9F0A',
     fontSize: 12,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   modalClose: {
     marginTop: 16,
     alignItems: 'center',
     paddingVertical: 10,
     backgroundColor: '#2C2C2E',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   modalCloseText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

@@ -9,8 +9,7 @@ import {
   Image,
   Alert,
   Modal,
-  Switch,
-} from 'react-native';
+  Switch} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -25,8 +24,7 @@ import {
   ChevronDown,
   Check,
   ExternalLink,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 interface Banner {
@@ -59,8 +57,7 @@ const INITIAL_BANNERS: Banner[] = [
     endDate: '2026-02-28',
     impressions: 12540,
     clicks: 892,
-    createdAt: '2025-12-28',
-  },
+    createdAt: '2025-12-28'},
   {
     id: '2',
     title: 'Refer & Earn $500',
@@ -74,8 +71,7 @@ const INITIAL_BANNERS: Banner[] = [
     endDate: '2026-03-15',
     impressions: 8320,
     clicks: 654,
-    createdAt: '2025-12-30',
-  },
+    createdAt: '2025-12-30'},
   {
     id: '3',
     title: 'IVXHOLDINGS Token Sale Live',
@@ -88,8 +84,7 @@ const INITIAL_BANNERS: Banner[] = [
     endDate: '2026-04-01',
     impressions: 0,
     clicks: 0,
-    createdAt: '2026-01-20',
-  },
+    createdAt: '2026-01-20'},
 ];
 
 const TARGET_SCREENS = [
@@ -117,8 +112,7 @@ export default function BannersScreen() {
     linkType: 'internal' as 'internal' | 'external',
     targetScreen: '',
     startDate: '',
-    endDate: '',
-  });
+    endDate: ''});
 
   const resetForm = useCallback(() => {
     setFormData({
@@ -128,8 +122,7 @@ export default function BannersScreen() {
       linkType: 'internal',
       targetScreen: '',
       startDate: '',
-      endDate: '',
-    });
+      endDate: ''});
     setEditingBanner(null);
   }, []);
 
@@ -147,8 +140,7 @@ export default function BannersScreen() {
       linkType: banner.linkType,
       targetScreen: banner.targetScreen || '',
       startDate: banner.startDate,
-      endDate: banner.endDate,
-    });
+      endDate: banner.endDate});
     setShowModal(true);
   }, []);
 
@@ -170,8 +162,7 @@ export default function BannersScreen() {
                 linkType: formData.linkType,
                 targetScreen: formData.targetScreen,
                 startDate: formData.startDate,
-                endDate: formData.endDate,
-              }
+                endDate: formData.endDate}
             : b
         )
       );
@@ -190,8 +181,7 @@ export default function BannersScreen() {
         endDate: formData.endDate,
         impressions: 0,
         clicks: 0,
-        createdAt: new Date().toISOString().split('T')[0],
-      };
+        createdAt: new Date().toISOString().split('T')[0]};
       setBanners(prev => [newBanner, ...prev]);
       Alert.alert('Success', 'Banner created successfully');
     }
@@ -219,8 +209,7 @@ export default function BannersScreen() {
           style: 'destructive',
           onPress: () => {
             setBanners(prev => prev.filter(b => b.id !== bannerId));
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -565,5 +554,4 @@ const styles = StyleSheet.create({
   pickerItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.surfaceBorder },
   pickerItemActive: { backgroundColor: Colors.primary + '10' },
   pickerItemText: { color: Colors.text, fontSize: 16 },
-  pickerItemTextActive: { color: Colors.primary, fontWeight: '600' as const },
-});
+  pickerItemTextActive: { color: Colors.primary, fontWeight: '600' as const }});

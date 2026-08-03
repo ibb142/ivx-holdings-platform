@@ -8,8 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 
 type ErrorCategory =
   | 'AUTH_ERROR'
@@ -61,8 +60,7 @@ const CATEGORY_LABELS: Record<ErrorCategory, string> = {
   DATA_ERROR: 'Data Error',
   RENDER_ERROR: 'IVX encountered a rendering error',
   CONFIG_ERROR: 'Configuration Error',
-  UNKNOWN_ERROR: 'Unexpected Error',
-};
+  UNKNOWN_ERROR: 'Unexpected Error'};
 
 export class DiagnosticErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null, errorInfo: null, traceId: null, category: 'UNKNOWN_ERROR' };
@@ -72,8 +70,7 @@ export class DiagnosticErrorBoundary extends Component<Props, State> {
       hasError: true,
       error,
       traceId: generateTraceId(),
-      category: classifyError(error),
-    };
+      category: classifyError(error)};
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -143,66 +140,53 @@ export class DiagnosticErrorBoundary extends Component<Props, State> {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a0000',
-  },
+    backgroundColor: '#1a0000'},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    paddingTop: 60,
-  },
+    paddingTop: 60},
   title: {
     color: '#FF4444',
     fontSize: 24,
     fontWeight: 'bold' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   subtitle: {
     color: '#FF8888',
     fontSize: 14,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   section: {
     marginBottom: 16,
     backgroundColor: '#2a0000',
     borderRadius: 8,
-    padding: 12,
-  },
+    padding: 12},
   label: {
     color: '#FF8888',
     fontSize: 12,
     fontWeight: 'bold' as const,
     marginBottom: 6,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   value: {
     color: '#FFAAAA',
     fontSize: 14,
-    fontFamily: 'monospace' as const,
-  },
+    fontFamily: 'monospace' as const},
   errorText: {
     color: '#FFCCCC',
     fontSize: 15,
-    fontFamily: 'monospace' as const,
-  },
+    fontFamily: 'monospace' as const},
   stackText: {
     color: '#DDAAAA',
     fontSize: 11,
     fontFamily: 'monospace' as const,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   button: {
     backgroundColor: '#FF4444',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center' as const,
     marginTop: 8,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold' as const,
-  },
-});
+    fontWeight: 'bold' as const}});

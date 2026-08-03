@@ -11,8 +11,7 @@ import {
   Modal,
   Animated,
   RefreshControl,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -53,8 +52,7 @@ import {
   BarChart3,
   Target,
   Megaphone,
-    Type,
-} from 'lucide-react-native';
+    Type} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -66,8 +64,7 @@ import {
   LANDING_CONFIG_MAIN_KEY,
   isLandingAuthError,
   isLandingConfigSchemaMismatchError,
-  isLandingConfigTableMissingError,
-} from '@/lib/landing-deploy';
+  isLandingConfigTableMissingError} from '@/lib/landing-deploy';
 import { useAuth } from '@/lib/auth-context';
 import '@/lib/landing-sync';
 import {
@@ -78,8 +75,7 @@ import {
   getAutoDeployLogs,
   clearAutoDeployLogs,
   type AutoDeployConfig,
-  type AutoDeployLogEntry,
-} from '@/lib/auto-deploy';
+  type AutoDeployLogEntry} from '@/lib/auto-deploy';
 
 const STORAGE_KEY = 'landing_page_controls_v3';
 
@@ -101,8 +97,7 @@ const SECTION_ICON_MAP: Record<string, React.ComponentType<any>> = {
   'footer': Globe,
   'contact': Phone,
   'blog-preview': FileText,
-  'gallery': Image,
-};
+  'gallery': Image};
 
 const MODULE_ICON_MAP: Record<string, React.ComponentType<any>> = {
   'home': Layout,
@@ -124,21 +119,18 @@ const MODULE_ICON_MAP: Record<string, React.ComponentType<any>> = {
   'notifications': Radio,
   'app-guide': FileText,
   'company-info': Globe,
-  'trust-center': Shield,
-};
+  'trust-center': Shield};
 
 function restoreSectionIcons(sections: LandingSection[]): LandingSection[] {
   return sections.map(s => ({
     ...s,
-    icon: SECTION_ICON_MAP[s.id] || DEFAULT_SECTIONS.find(d => d.id === s.id)?.icon || Globe,
-  }));
+    icon: SECTION_ICON_MAP[s.id] || DEFAULT_SECTIONS.find(d => d.id === s.id)?.icon || Globe}));
 }
 
 function restoreModuleIcons(modules: AppModule[]): AppModule[] {
   return modules.map(m => ({
     ...m,
-    icon: MODULE_ICON_MAP[m.id] || DEFAULT_MODULES.find(d => d.id === m.id)?.icon || Globe,
-  }));
+    icon: MODULE_ICON_MAP[m.id] || DEFAULT_MODULES.find(d => d.id === m.id)?.icon || Globe}));
 }
 
 type TabType = 'sections' | 'modules' | 'content' | 'deploy';
@@ -249,22 +241,19 @@ const SECTION_CATEGORY_MAP: Record<string, { label: string; color: string }> = {
   content: { label: 'CONTENT', color: '#4A90D9' },
   social: { label: 'SOCIAL', color: '#7B68EE' },
   conversion: { label: 'CONVERSION', color: '#00C48C' },
-  footer: { label: 'FOOTER', color: '#9A9A9A' },
-};
+  footer: { label: 'FOOTER', color: '#9A9A9A' }};
 
 const MODULE_CATEGORY_MAP: Record<string, { label: string; color: string }> = {
   core: { label: 'CORE', color: '#FFD700' },
   invest: { label: 'INVEST', color: '#00C48C' },
   social: { label: 'SOCIAL', color: '#7B68EE' },
   tools: { label: 'TOOLS', color: '#4A90D9' },
-  admin: { label: 'ADMIN', color: '#FF6B6B' },
-};
+  admin: { label: 'ADMIN', color: '#FF6B6B' }};
 
 const VISIBILITY_MAP: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
   public: { label: 'Public', color: '#00C48C', icon: Globe },
   members: { label: 'Members', color: '#4A90D9', icon: Users },
-  admin: { label: 'Admin', color: '#FF6B6B', icon: Shield },
-};
+  admin: { label: 'Admin', color: '#FF6B6B', icon: Shield }};
 
 function PulseDot({ active, color }: { active: boolean; color: string }) {
   const pulse = useRef(new Animated.Value(1)).current;
@@ -311,8 +300,7 @@ export default function LandingControlScreen() {
     enabled: true,
     deployOnSave: true,
     deployOnDealPublish: true,
-    deployOnContentChange: true,
-  });
+    deployOnContentChange: true});
   const [autoDeployLogs, setAutoDeployLogs] = useState<AutoDeployLogEntry[]>([]);
   const [autoDeployLoading, setAutoDeployLoading] = useState(false);
 
@@ -393,8 +381,7 @@ export default function LandingControlScreen() {
       }
       return null;
     },
-    staleTime: Infinity,
-  });
+    staleTime: Infinity});
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -417,8 +404,7 @@ export default function LandingControlScreen() {
             contentBlocks,
             landingEnabled,
             maintenanceMode,
-            savedAt: state.savedAt,
-          },
+            savedAt: state.savedAt},
           auth.userId,
           state.savedAt,
         );
@@ -467,8 +453,7 @@ export default function LandingControlScreen() {
               action: `Auto-deploy on save (${result.filesUploaded.length} files)`,
               status: result.status === 'success' ? 'success' : 'failed',
               changes: result.syncedDeals + result.filesUploaded.length,
-              user: 'Auto',
-            };
+              user: 'Auto'};
             setDeployLogs(prev => [newLog, ...prev]);
             await refreshAutoDeployLogs();
             if (result.status === 'success') {
@@ -481,8 +466,7 @@ export default function LandingControlScreen() {
           setAutoDeployLoading(false);
         }
       }
-    },
-  });
+    }});
 
   const deployMutation = useMutation({
     mutationFn: async () => {
@@ -516,8 +500,7 @@ export default function LandingControlScreen() {
             action: `Full deploy (${result.filesUploaded.length} files)`,
             status: 'failed',
             changes: result.syncedDeals + result.filesUploaded.length,
-            user: 'Owner',
-          };
+            user: 'Owner'};
           setDeployLogs(prev => [failedLog, ...prev]);
         }
         throw new Error(result.errors.join('; '));
@@ -529,8 +512,7 @@ export default function LandingControlScreen() {
         action: `Full deploy (${result.filesUploaded.length} files)`,
         status: result.status === 'success' ? 'success' : 'failed',
         changes: result.syncedDeals + result.filesUploaded.length,
-        user: 'Owner',
-      };
+        user: 'Owner'};
       setDeployLogs(prev => [newLog, ...prev]);
       setIsDeploying(false);
 
@@ -571,8 +553,7 @@ export default function LandingControlScreen() {
       if (Platform.OS !== 'web') {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
-    },
-  });
+    }});
 
   const toggleSection = useCallback((id: string) => {
     setSections(prev => prev.map(s =>
@@ -619,8 +600,7 @@ export default function LandingControlScreen() {
           onPress: () => {
             setSections(prev => prev.map(s => ({ ...s, enabled, isLive: enabled, lastModified: new Date().toISOString() })));
             setHasUnsavedChanges(true);
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -636,8 +616,7 @@ export default function LandingControlScreen() {
           onPress: () => {
             setModules(prev => prev.map(m => ({ ...m, enabled })));
             setHasUnsavedChanges(true);
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -1333,8 +1312,7 @@ export default function LandingControlScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1342,47 +1320,39 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.card,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSub: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   headerSaveBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: '#FFD70015',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   searchRow: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1392,19 +1362,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 8,
-    gap: 6,
-  },
+    gap: 6},
   tab: {
     flex: 1,
     flexDirection: 'row',
@@ -1415,24 +1382,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 5,
-  },
+    gap: 5},
   tabActive: {
     backgroundColor: '#FFD70012',
-    borderColor: '#FFD70040',
-  },
+    borderColor: '#FFD70040'},
   tabText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: '#666',
-  },
+    color: '#666'},
   tabTextActive: {
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   masterCard: {
     backgroundColor: '#0E1A14',
     borderRadius: 16,
@@ -1440,77 +1402,63 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 12,
     borderWidth: 1.5,
-    borderColor: '#00C48C30',
-  },
+    borderColor: '#00C48C30'},
   masterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   masterLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   masterTitle: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   masterSub: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: '#00C48C',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   masterDivider: {
     height: 1,
     backgroundColor: '#1A2E22',
-    marginVertical: 12,
-  },
+    marginVertical: 12},
   masterLabel: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   masterDesc: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   masterStats: {
     flexDirection: 'row',
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1A2E22',
-  },
+    borderTopColor: '#1A2E22'},
   masterStat: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   masterStatValue: {
     fontSize: 22,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   masterStatLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: 2,
-  },
+    marginTop: 2},
   masterStatDivider: {
     width: 1,
-    backgroundColor: '#1A2E22',
-  },
+    backgroundColor: '#1A2E22'},
   bulkRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   bulkBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1521,43 +1469,35 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   bulkBtnText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   categoryBlock: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   categoryDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   categoryLabel: {
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   categoryCountBadge: {
     backgroundColor: '#222',
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   categoryCountText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1567,45 +1507,36 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   itemCardDisabled: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   itemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 12,
-  },
+    gap: 12},
   itemIcon: {
     width: 40,
     height: 40,
     borderRadius: 11,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   itemInfo: {
-    flex: 1,
-  },
+    flex: 1},
   itemNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   itemName: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   itemNameDisabled: {
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   itemDesc: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1613,43 +1544,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#00C48C15',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   liveBadgeDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#00C48C',
-  },
+    backgroundColor: '#00C48C'},
   liveBadgeText: {
     fontSize: 8,
     fontWeight: '800' as const,
     color: '#00C48C',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   moduleMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 3,
-  },
+    marginTop: 3},
   visBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   visBadgeText: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   moduleRoute: {
     fontSize: 10,
     color: '#444',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'},
   contentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1659,25 +1583,21 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#FFD70020',
-  },
+    borderColor: '#FFD70020'},
   contentInfoText: {
     flex: 1,
     fontSize: 12,
     color: '#FFD700',
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   contentSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   contentSectionTitle: {
     fontSize: 12,
     fontWeight: '800' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1687,23 +1607,19 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   contentLeft: {
     flex: 1,
-    marginRight: 12,
-  },
+    marginRight: 12},
   contentLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   contentValue: {
     fontSize: 14,
     color: Colors.text,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   deployBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1712,28 +1628,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#00C48C',
     borderRadius: 14,
     paddingVertical: 16,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   deployBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   deployBtnText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#062218',
-  },
+    color: '#062218'},
   deployChangeBadge: {
     backgroundColor: '#062218',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   deployChangeBadgeText: {
     fontSize: 9,
     fontWeight: '800' as const,
     color: '#00C48C',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1744,63 +1655,52 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#FFD70030',
-  },
+    borderColor: '#FFD70030'},
   saveBtnText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   deploySummary: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   deploySummaryTitle: {
     fontSize: 14,
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   deploySummaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
-  },
+    borderBottomColor: '#1A1A1A'},
   deploySummaryLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   deploySummaryValue: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   deploySummaryBadge: {
     paddingHorizontal: 10,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   deploySummaryBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   deployLogSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   deployLogTitle: {
     fontSize: 14,
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   deployLogRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1810,86 +1710,70 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   deployLogDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   deployLogInfo: {
-    flex: 1,
-  },
+    flex: 1},
   deployLogAction: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   deployLogMeta: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   deployLogStatus: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   deployLogStatusText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   autoDeployCard: {
     backgroundColor: '#0E1A14',
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1.5,
-    borderColor: '#00C48C25',
-  },
+    borderColor: '#00C48C25'},
   autoDeployHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   autoDeployHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   autoDeployTitle: {
     fontSize: 15,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   autoDeploySubtitle: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   autoDeployOptions: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#1A2E22',
-    gap: 10,
-  },
+    gap: 10},
   autoDeployOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   autoDeployOptionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   autoDeployOptionLabel: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   autoDeployLastRun: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1897,28 +1781,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#1A2E22',
-  },
+    borderTopColor: '#1A2E22'},
   autoDeployLastDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   autoDeployLastText: {
     flex: 1,
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   autoDeployLastBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   autoDeployLastBadgeText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   autoDeployRunning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1926,38 +1805,32 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#1A2E22',
-  },
+    borderTopColor: '#1A2E22'},
   autoDeployRunningText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   autoDeployBadgeInline: {
     width: 20,
     height: 20,
     borderRadius: 10,
     backgroundColor: '#00C48C18',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   autoDeployLogHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   clearLogsBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#FF6B6B12',
-  },
+    backgroundColor: '#FF6B6B12'},
   clearLogsBtnText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: '#FF6B6B',
-  },
+    color: '#FF6B6B'},
   unsavedBar: {
     position: 'absolute',
     bottom: 30,
@@ -1976,31 +1849,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 8,
-  },
+    elevation: 8},
   unsavedBarDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FFB800',
-  },
+    backgroundColor: '#FFB800'},
   unsavedBarText: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   unsavedBarBtn: {
     backgroundColor: '#FFD70015',
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   unsavedBarBtnText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   unsavedDeployBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2008,59 +1876,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#00C48C',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   unsavedDeployBtnText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: '#062218',
-  },
+    color: '#062218'},
   pulseWrap: {
     width: 20,
     height: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   pulseRing: {
     position: 'absolute',
     width: 16,
     height: 16,
     borderRadius: 8,
-    borderWidth: 2,
-  },
+    borderWidth: 2},
   pulseDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   modalContent: {
     backgroundColor: Colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   modalTitle: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   modalSubtitle: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalInput: {
     backgroundColor: Colors.card,
     borderRadius: 12,
@@ -2069,34 +1927,28 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalInputMultiline: {
     minHeight: 80,
-    textAlignVertical: 'top',
-  },
+    textAlignVertical: 'top'},
   colorPreview: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   colorSwatch: {
     width: 40,
     height: 40,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   colorPreviewText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   modalActions: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   modalCancelBtn: {
     flex: 1,
     alignItems: 'center',
@@ -2104,13 +1956,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   modalCancelText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   modalSaveBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -2119,11 +1969,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#FFD700',
-  },
+    backgroundColor: '#FFD700'},
   modalSaveText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#062218',
-  },
-});
+    color: '#062218'}});

@@ -4,8 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-} from 'react-native';
+  TouchableOpacity} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Shield, Wallet, BarChart3, Sparkles } from 'lucide-react-native';
@@ -18,22 +17,19 @@ const MEMBER_READY_ITEMS = [
     title: 'Real member onboarding',
     description: 'Capture verified contact data, two ID references, tax responsibility acknowledgement, and agreement signature before activation.',
     icon: Shield,
-    accent: Colors.primary,
-  },
+    accent: Colors.primary},
   {
     id: 'wallet',
     title: 'Wallet activation',
     description: 'Approved members move into wallet setup and funding review before live allocations open.',
     icon: Wallet,
-    accent: Colors.info,
-  },
+    accent: Colors.info},
   {
     id: 'records',
     title: 'Transaction records',
     description: 'Investor statements, transaction history, and timeline records stay tied to the member account.',
     icon: BarChart3,
-    accent: Colors.success,
-  },
+    accent: Colors.success},
 ] as const;
 
 export default function WaitlistScreen() {
@@ -97,12 +93,10 @@ export default function WaitlistScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   backButton: {
     width: 44,
     height: 44,
@@ -111,12 +105,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
+    paddingBottom: 32},
   heroCard: {
     backgroundColor: Colors.surface,
     borderRadius: 24,
@@ -125,8 +117,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 22,
     marginTop: 8,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   heroIconWrap: {
     width: 56,
     height: 56,
@@ -136,24 +127,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '28',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   heroTitle: {
     color: Colors.text,
     fontSize: 30,
     fontWeight: '900' as const,
     letterSpacing: -0.6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 15,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   readinessSection: {
     gap: 10,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   readinessCard: {
     flexDirection: 'row',
     gap: 12,
@@ -162,27 +149,21 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 16,
-  },
+    padding: 16},
   readinessIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   readinessCopy: {
-    flex: 1,
-  },
+    flex: 1},
   readinessTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '800' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   readinessDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
-});
+    lineHeight: 20}});

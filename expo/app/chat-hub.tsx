@@ -4,7 +4,6 @@ import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ActivityIndicator,
   Animated,
   FlatList,
   KeyboardAvoidingView,
@@ -15,8 +14,7 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Archive, MessageCirclePlus, RefreshCw, Send, ShieldCheck, Sparkles, Wifi, WifiOff } from 'lucide-react-native';
 import ChatBubble from '@/components/ChatBubble';
@@ -32,11 +30,11 @@ import {
   type PublicChatHistoryResponse,
   type PublicChatSessionMessage,
   type PublicChatSessionSummary,
-  type PublicHealthResponse,
-} from '@/lib/public-chat';
+  type PublicHealthResponse} from '@/lib/public-chat';
 import { usePublicChatSession } from '@/lib/public-chat-session-context';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
 import type { ChatMessage } from '@/types';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ConnectionTone = 'live' | 'warn' | 'error';
 
@@ -95,8 +93,7 @@ function createWelcomeMessage(): ChatMessage {
     message: WELCOME_COPY,
     timestamp: new Date().toISOString(),
     isSupport: true,
-    status: 'read',
-  };
+    status: 'read'};
 }
 
 function mapPublicMessageToChatMessage(message: PublicChatSessionMessage): ChatMessage {
@@ -109,8 +106,7 @@ function mapPublicMessageToChatMessage(message: PublicChatSessionMessage): ChatM
     message: message.content ?? message.text,
     timestamp: message.createdAt,
     isSupport: role !== 'user',
-    status: 'read',
-  };
+    status: 'read'};
 }
 
 function buildHistoryPayload(messages: ChatMessage[]): PublicChatHistoryItem[] {
@@ -118,8 +114,7 @@ function buildHistoryPayload(messages: ChatMessage[]): PublicChatHistoryItem[] {
     .filter((message) => message.id !== 'public-chat-welcome' && readTrimmed(message.message).length > 0)
     .map((message) => ({
       role: message.isSupport ? 'assistant' as const : 'user' as const,
-      content: message.message,
-    }))
+      content: message.message}))
     .slice(-8);
 }
 
@@ -171,24 +166,21 @@ export default function ChatHubScreen() {
     queryFn: fetchPublicChatHealth,
     staleTime: 20_000,
     refetchInterval: 30_000,
-    retry: 1,
-  });
+    retry: 1});
 
   const historyQuery = useQuery<PublicChatHistoryResponse, Error>({
     queryKey: ['public-chat', 'history', sessionId],
     queryFn: async () => fetchPublicChatHistory(sessionId, HISTORY_LIMIT, clientId),
     enabled: isHydrated && Boolean(sessionId),
     staleTime: 5_000,
-    retry: 1,
-  });
+    retry: 1});
 
   const sessionsQuery = useQuery({
     queryKey: ['public-chat', 'sessions', clientId],
     queryFn: async () => fetchPublicChatSessions(SESSION_LIMIT, clientId),
     enabled: isHydrated,
     staleTime: 10_000,
-    retry: 1,
-  });
+    retry: 1});
 
   useEffect(() => {
     Animated.loop(
@@ -219,8 +211,7 @@ export default function ChatHubScreen() {
       history,
       sessionId,
       requestId,
-      clientId,
-    }),
+      clientId}),
     onMutate: async ({ text, requestId }) => {
       const pendingMessage: ChatMessage = {
         id: `${requestId}-user-pending`,
@@ -230,8 +221,7 @@ export default function ChatHubScreen() {
         message: text,
         timestamp: new Date().toISOString(),
         isSupport: false,
-        status: 'sent',
-      };
+        status: 'sent'};
       setMessages((current) => mergeMessages(current.filter((message) => message.id !== 'public-chat-welcome'), [pendingMessage]));
       setComposerValue('');
     },
@@ -246,8 +236,7 @@ export default function ChatHubScreen() {
         message: response.answer,
         timestamp: response.timestamp,
         isSupport: true,
-        status: 'read',
-      };
+        status: 'read'};
       setMessages((current) => mergeMessages(current.filter((message) => message.id !== `${variables.requestId}-user-pending`), [
         {
           id: `${response.requestId}-user`,
@@ -257,8 +246,7 @@ export default function ChatHubScreen() {
           message: variables.text,
           timestamp: response.timestamp,
           isSupport: false,
-          status: 'read',
-        },
+          status: 'read'},
         assistantMessage,
       ]));
       void historyQuery.refetch();
@@ -268,8 +256,7 @@ export default function ChatHubScreen() {
     onError: async (error) => {
       setLocalError(error.message);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    },
-  });
+    }});
 
   const canSend = useMemo<boolean>(() => {
     return readTrimmed(composerValue).length > 0 && !sendMutation.isPending && isHydrated;
@@ -357,8 +344,7 @@ export default function ChatHubScreen() {
     await sendMutation.mutateAsync({
       text,
       requestId,
-      history: buildHistoryPayload(messages),
-    });
+      history: buildHistoryPayload(messages)});
   }, [composerValue, messages, sendMutation]);
 
   const renderMessage = useCallback(({ item }: { item: ChatMessage }) => {
@@ -489,7 +475,7 @@ export default function ChatHubScreen() {
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
                 ListFooterComponent={sendMutation.isPending || historyQuery.isLoading ? (
                   <View style={styles.typingRow} testID="public-chat-loading-state">
-                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <ShimmerIndicator size="small" color={Colors.primary} />
                     <Text style={styles.typingText}>{sendMutation.isPending ? 'ChatGPT is replying…' : 'Restoring history…'}</Text>
                   </View>
                 ) : <View style={styles.listFooterSpacing} />}
@@ -546,65 +532,52 @@ export default function ChatHubScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#040404',
-  },
+    backgroundColor: '#040404'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   keyboardView: {
-    flex: 1,
-  },
+    flex: 1},
   headerShell: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    gap: 12,
-  },
+    gap: 12},
   heroCard: {
     position: 'relative',
     borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.14)',
-    backgroundColor: '#101010',
-  },
+    backgroundColor: '#101010'},
   heroGradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
+    ...StyleSheet.absoluteFillObject},
   heroContent: {
     padding: 20,
-    gap: 14,
-  },
+    gap: 14},
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   heroTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   eyebrow: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   heroTitle: {
     color: Colors.text,
     fontSize: 30,
     fontWeight: '800' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    marginTop: 10,
-  },
+    marginTop: 10},
   heroActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   iconButton: {
     width: 40,
     height: 40,
@@ -613,12 +586,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   iconButtonPressed: {
     opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
+    transform: [{ scale: 0.98 }]},
   newChatButton: {
     height: 40,
     borderRadius: 14,
@@ -627,22 +598,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   newChatButtonPressed: {
     opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
+    transform: [{ scale: 0.98 }]},
   newChatText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -650,46 +617,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   statusChipText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sessionCard: {
     backgroundColor: 'rgba(14, 14, 14, 0.94)',
     borderRadius: 22,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   sessionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   sessionTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   sessionIdText: {
     color: Colors.textTertiary,
     fontSize: 11,
     marginTop: 3,
-    maxWidth: 260,
-  },
+    maxWidth: 260},
   sessionCountText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   sessionListContent: {
     gap: 10,
-    paddingRight: 4,
-  },
+    paddingRight: 4},
   sessionPill: {
     width: 178,
     borderRadius: 16,
@@ -698,38 +657,30 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 5,
-  },
+    gap: 5},
   sessionPillActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
-    borderColor: 'rgba(255, 215, 0, 0.35)',
-  },
+    borderColor: 'rgba(255, 215, 0, 0.35)'},
   sessionPillPressed: {
     opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
+    transform: [{ scale: 0.99 }]},
   sessionPillTitle: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sessionPillTitleActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   sessionPillMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   sessionPillMetaActive: {
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emptySessionText: {
     color: Colors.textTertiary,
     fontSize: 12,
     lineHeight: 18,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   feedCard: {
     flex: 1,
     marginHorizontal: 16,
@@ -739,8 +690,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10, 10, 10, 0.96)',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   feedHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -748,20 +698,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 10,
-    gap: 12,
-  },
+    gap: 12},
   feedTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   feedMetaText: {
     flex: 1,
     textAlign: 'right',
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -773,19 +720,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.24)',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   errorBannerText: {
     flex: 1,
     color: Colors.warning,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   listContent: {
     paddingTop: 6,
-    paddingBottom: 14,
-  },
+    paddingBottom: 14},
   typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -798,21 +742,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   typingText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   listFooterSpacing: {
-    height: 8,
-  },
+    height: 8},
   composerShell: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    gap: 10,
-  },
+    gap: 10},
   composerCard: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -822,19 +762,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   composerInputWrap: {
     flex: 1,
-    gap: 8,
-  },
+    gap: 8},
   fieldLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   composerInput: {
     minHeight: 30,
     maxHeight: 120,
@@ -849,36 +786,28 @@ const styles = StyleSheet.create({
           touchAction: 'manipulation',
           userSelect: 'text',
           WebkitUserSelect: 'text',
-          outlineStyle: 'none',
-        } as any)
-      : {}),
-  },
+          outlineStyle: 'none'} as any)
+      : {})},
   sendButton: {
     width: 48,
     height: 48,
     borderRadius: 18,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sendButtonPressed: {
     opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
+    transform: [{ scale: 0.98 }]},
   sendButtonDisabled: {
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   bottomMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
     flexWrap: 'wrap',
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   bottomMetaText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

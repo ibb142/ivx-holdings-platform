@@ -9,17 +9,14 @@
  * - View per-project analytics
  */
 import React, { memo, useCallback, useEffect, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   Alert,
   Image,
-  FlatList,
-} from 'react-native';
+  FlatList} from "react-native";
 import {
   Upload,
   Image as ImageIcon,
@@ -35,11 +32,11 @@ import {
   Share2,
   Bookmark,
   RefreshCw,
-  ShieldCheck,
-} from 'lucide-react-native';
+  ShieldCheck} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   uploadProjectMedia,
   deleteProjectMedia,
@@ -52,8 +49,7 @@ import {
   type ProjectMedia,
   type ProjectVideo,
   type ProjectComment,
-  type ProjectAnalytics,
-} from '@/lib/project-engagement';
+  type ProjectAnalytics} from '@/lib/project-engagement';
 
 const GOLD = '#FFD700';
 const SURFACE_ELEVATED = '#181818';
@@ -67,8 +63,7 @@ interface AdminMediaUploadProps {
 
 const AdminMediaUpload = memo(function AdminMediaUpload({
   projectId,
-  projectTitle,
-}: AdminMediaUploadProps) {
+  projectTitle}: AdminMediaUploadProps) {
   const [media, setMedia] = useState<ProjectMedia[]>([]);
   const [videos, setVideos] = useState<ProjectVideo[]>([]);
   const [comments, setComments] = useState<ProjectComment[]>([]);
@@ -112,8 +107,7 @@ const AdminMediaUpload = memo(function AdminMediaUpload({
         mediaTypes: mediaType === 'video' ? ImagePicker.MediaTypeOptions.Videos : ImagePicker.MediaTypeOptions.Images,
         quality: 1,
         allowsEditing: false,
-        videoMaxDuration: 120,
-      };
+        videoMaxDuration: 120};
 
       const result = mediaType === 'video'
         ? await ImagePicker.launchImageLibraryAsync(options)
@@ -149,8 +143,7 @@ const AdminMediaUpload = memo(function AdminMediaUpload({
         onPress: async () => {
           await deleteProjectMedia(mediaId);
           await loadData();
-        },
-      },
+        }},
     ]);
   }, [loadData]);
 
@@ -176,8 +169,7 @@ const AdminMediaUpload = memo(function AdminMediaUpload({
     shares: acc.shares + a.share_count,
     saves: acc.saves + a.save_count,
     views: acc.views + a.video_views,
-    invests: acc.invests + a.invest_clicks,
-  }), { likes: 0, comments: 0, shares: 0, saves: 0, views: 0, invests: 0 });
+    invests: acc.invests + a.invest_clicks}), { likes: 0, comments: 0, shares: 0, saves: 0, views: 0, invests: 0 });
 
   return (
     <View style={styles.container}>
@@ -198,7 +190,7 @@ const AdminMediaUpload = memo(function AdminMediaUpload({
           testID="upload-photo"
         >
           {isUploading ? (
-            <ActivityIndicator size="small" color={GOLD} />
+            <ShimmerIndicator size="small" color={GOLD} />
           ) : (
             <ImageIcon size={20} color={GOLD} />
           )}
@@ -234,7 +226,7 @@ const AdminMediaUpload = memo(function AdminMediaUpload({
       {selectedTab === 'media' && (
         <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
           {loadingMedia ? (
-            <ActivityIndicator size="small" color={GOLD} style={{ marginTop: 20 }} />
+            <ShimmerIndicator size="small" color={GOLD} style={{ marginTop: 20 }} />
           ) : (
             <>
               {/* Videos */}
@@ -422,8 +414,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#222',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -431,18 +422,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
+    borderBottomColor: '#222'},
   headerTitle: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   uploadRow: {
     flexDirection: 'row',
     gap: 10,
-    padding: 12,
-  },
+    padding: 12},
   uploadBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -453,49 +441,39 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE_ELEVATED,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#333',
-  },
+    borderColor: '#333'},
   uploadBtnText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
+    borderBottomColor: '#222'},
   tab: {
     flex: 1,
     paddingVertical: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: GOLD,
-  },
+    borderBottomColor: GOLD},
   tabText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabTextActive: {
-    color: GOLD,
-  },
+    color: GOLD},
   tabContent: {
-    maxHeight: 400,
-  },
+    maxHeight: 400},
   section: {
-    padding: 12,
-  },
+    padding: 12},
   sectionTitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '700' as const,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   mediaItem: {
     flexDirection: 'row',
     gap: 12,
@@ -504,67 +482,54 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#222',
-  },
+    borderColor: '#222'},
   mediaPreview: {
     width: 60,
     height: 60,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   thumb: {
     width: 60,
-    height: 60,
-  },
+    height: 60},
   thumbPlaceholder: {
     width: 60,
     height: 60,
     backgroundColor: '#111',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   mediaInfo: {
     flex: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   mediaTitle: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   mediaMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   mediaActions: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 6,
-  },
+    marginTop: 6},
   mediaActionBtn: {
     padding: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   mediaActionBtnActive: {
-    backgroundColor: GOLD + '15',
-  },
+    backgroundColor: GOLD + '15'},
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   photoItem: {
     width: '30%',
     aspectRatio: 1,
     borderRadius: 8,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   photoThumb: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   photoDeleteBtn: {
     position: 'absolute',
     top: 4,
@@ -574,63 +539,51 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: 'rgba(0,0,0,0.7)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 32,
-    gap: 8,
-  },
+    gap: 8},
   emptyText: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   // Comments
   commentItem: {
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
-  },
+    borderBottomColor: '#1A1A1A'},
   commentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   commentAuthor: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   commentTime: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   commentBody: {
     color: Colors.text,
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   commentModRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   modBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   modBtnText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   // Analytics
   analyticsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   analyticsCard: {
     width: '31%',
     backgroundColor: SURFACE_ELEVATED,
@@ -639,18 +592,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: '#222',
-  },
+    borderColor: '#222'},
   analyticsValue: {
     color: '#fff',
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   analyticsLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dayRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -658,19 +608,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
-  },
+    borderBottomColor: '#1A1A1A'},
   dayDate: {
     color: Colors.textSecondary,
     fontSize: 11,
-    width: 50,
-  },
+    width: 50},
   dayStats: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   dayStat: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
-});
+    fontSize: 11}});

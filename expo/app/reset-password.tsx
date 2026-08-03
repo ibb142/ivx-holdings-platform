@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react-native';
@@ -16,6 +13,7 @@ import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { validatePassword } from '@/lib/auth-helpers';
 import { updateOwnerPasswordViaBackend } from '@/lib/owner-password-update-bypass';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type RecoveryBootstrapState = 'checking' | 'ready' | 'failed';
 
@@ -100,8 +98,7 @@ export default function ResetPasswordScreen() {
         console.log('[ResetPassword] Setting recovery session from URL tokens. Type:', recoveryType || 'unknown');
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,
-          refresh_token: refreshToken,
-        });
+          refresh_token: refreshToken});
         if (error) {
           throw new Error(error.message || 'This password reset link could not restore a session.');
         }
@@ -158,8 +155,7 @@ export default function ResetPasswordScreen() {
         if (isAal2Block) {
           const bypassResult = await updateOwnerPasswordViaBackend({
             currentPassword: newPassword,
-            newPassword,
-          });
+            newPassword});
           if (!bypassResult.ok) {
             throw new Error(bypassResult.message || 'Supabase rejected the password update.');
           }
@@ -183,11 +179,9 @@ export default function ResetPasswordScreen() {
               void supabase.auth.signOut().finally(() => {
                 router.replace({
                   pathname: '/login',
-                  params: email ? { email } : undefined,
-                } as any);
+                  params: email ? { email } : undefined} as any);
               });
-            },
-          },
+            }},
         ]
       );
     },
@@ -209,15 +203,13 @@ export default function ResetPasswordScreen() {
                 void supabase.auth.signOut().finally(() => {
                   router.replace({ pathname: '/login', params: resolvedEmail ? { email: resolvedEmail } : undefined } as any);
                 });
-              },
-            },
+              }},
           ]
         );
         return;
       }
       Alert.alert('Reset Failed', raw);
-    },
-  });
+    }});
 
   const statusTone = useMemo(() => {
     if (bootstrapState === 'ready') {
@@ -263,7 +255,7 @@ export default function ResetPasswordScreen() {
             ) : bootstrapState === 'failed' ? (
               <AlertTriangle size={18} color={Colors.error} />
             ) : (
-              <ActivityIndicator size="small" color={Colors.warning} />
+              <ShimmerIndicator size="small" color={Colors.warning} />
             )}
             <Text style={styles.statusTitle}>
               {bootstrapState === 'ready'
@@ -340,7 +332,7 @@ export default function ResetPasswordScreen() {
             testID="reset-password-submit"
           >
             {updatePasswordMutation.isPending ? (
-              <ActivityIndicator size="small" color={Colors.black} />
+              <ShimmerIndicator size="small" color={Colors.black} />
             ) : (
               <>
                 <Text style={styles.primaryButtonText}>Update password</Text>
@@ -368,21 +360,18 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     padding: 20,
     paddingBottom: 40,
-    gap: 16,
-  },
+    gap: 16},
   heroCard: {
     marginTop: 12,
     backgroundColor: Colors.surface,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 22,
-  },
+    padding: 22},
   heroIconWrap: {
     width: 48,
     height: 48,
@@ -390,26 +379,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   eyebrow: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   title: {
     color: Colors.text,
     fontSize: 28,
     fontWeight: '800' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    marginTop: 10,
-  },
+    marginTop: 10},
   authVersionBadge: {
     alignSelf: 'flex-start',
     marginTop: 14,
@@ -418,36 +403,30 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '33',
     backgroundColor: Colors.primary + '12',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   authVersionBadgeText: {
     color: Colors.primary,
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   statusCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     borderWidth: 1,
     padding: 16,
-    gap: 10,
-  },
+    gap: 10},
   statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   statusTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statusText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   emailChip: {
     borderRadius: 14,
     borderWidth: 1,
@@ -455,36 +434,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#080F18',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 4,
-  },
+    gap: 4},
   emailChipLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   emailChipValue: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   formCard: {
     backgroundColor: Colors.surface,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 20,
-  },
+    padding: 20},
   fieldGroup: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   fieldLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,14 +467,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
     gap: 10,
-    height: 54,
-  },
+    height: 54},
   input: {
     flex: 1,
     height: '100%' as const,
     color: Colors.text,
-    fontSize: 15,
-  },
+    fontSize: 15},
   rulesCard: {
     borderRadius: 18,
     borderWidth: 1,
@@ -509,19 +480,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '10',
     padding: 14,
     gap: 4,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   rulesTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '800' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   rulesText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   primaryButton: {
     minHeight: 54,
     borderRadius: 16,
@@ -529,16 +497,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   primaryButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   primaryButtonText: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   secondaryButton: {
     minHeight: 48,
     borderRadius: 14,
@@ -547,11 +512,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF08',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
-  },
+    marginTop: 12},
   secondaryButtonText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

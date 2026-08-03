@@ -8,8 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-} from "react-native";
+  View} from "react-native";
 
 export default function ModalScreen() {
   return (
@@ -47,37 +46,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
-    alignItems: "center",
-  },
+    alignItems: "center"},
   modalContent: {
     backgroundColor: "white",
     borderRadius: 20,
     padding: 24,
     margin: 20,
     alignItems: "center",
-    minWidth: 300,
-  },
+    minWidth: 300},
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   description: {
     textAlign: "center",
     marginBottom: 24,
     color: "#666",
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   closeButton: {
     backgroundColor: "#007AFF",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 10,
-    minWidth: 100,
-  },
+    minWidth: 100},
   closeButtonText: {
     color: "white",
     fontWeight: "600",
-    textAlign: "center",
-  },
-});
+    textAlign: "center"}});

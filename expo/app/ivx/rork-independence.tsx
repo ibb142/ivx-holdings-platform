@@ -2,24 +2,22 @@ import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   CircleDashed,
   Lock,
   ShieldCheck,
   Unplug,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getIndependenceReport,
   type IndependencePhase,
@@ -27,22 +25,19 @@ import {
   type PhaseReadiness,
   type PhaseRequirement,
   type ExternalDependency,
-  type IndependenceReport,
-} from '@/src/modules/ivx-developer/rorkIndependenceService';
+  type IndependenceReport} from '@/src/modules/ivx-developer/rorkIndependenceService';
 
 const POLL_INTERVAL_MS = 25000;
 
 const READINESS_COLOR: Record<PhaseReadiness, string> = {
   achieved: Colors.success,
   in_progress: Colors.warning,
-  blocked: Colors.error,
-};
+  blocked: Colors.error};
 
 const READINESS_LABEL: Record<PhaseReadiness, string> = {
   achieved: 'ACHIEVED',
   in_progress: 'IN PROGRESS',
-  blocked: 'BLOCKED',
-};
+  blocked: 'BLOCKED'};
 
 function ReqRow({ req }: { req: PhaseRequirement }) {
   return (
@@ -128,8 +123,7 @@ function IndependenceContent() {
   const query = useQuery<IndependenceReport | null>({
     queryKey: ['ivx-independence-status'],
     queryFn: getIndependenceReport,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const data = query.data ?? null;
   const onRefresh = useCallback(() => { void query.refetch(); }, [query]);
@@ -154,7 +148,7 @@ function IndependenceContent() {
 
       {query.isLoading && !data ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={Colors.primary} />
+          <ShimmerIndicator color={Colors.primary} />
           <Text style={styles.loadingText}>Computing independence state…</Text>
         </View>
       ) : null}
@@ -293,5 +287,4 @@ const styles = StyleSheet.create({
   kvDetail: { color: Colors.textSecondary, fontSize: 12, marginTop: 1, lineHeight: 17 },
   nextActionRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   nextActionText: { color: Colors.textSecondary, fontSize: 12.5, flex: 1, lineHeight: 18 },
-  footerNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, textAlign: 'center' },
-});
+  footerNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, textAlign: 'center' }});

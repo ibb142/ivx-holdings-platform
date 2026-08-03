@@ -1,21 +1,18 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Modal,
   Animated,
   Image,
-  ActivityIndicator,
   Alert,
   TextInput,
   Keyboard,
   TouchableWithoutFeedback,
   ScrollView,
   KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import {
   X,
   TrendingUp,
@@ -34,8 +31,7 @@ import {
   EyeOff,
   ArrowLeft,
   Globe,
-  Phone,
-} from 'lucide-react-native';
+  Phone} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { formatCurrencyWithDecimals, formatCurrencyCompact, formatNumber } from '@/lib/formatters';
@@ -44,6 +40,7 @@ import { formatTrustTimelineLabel, resolveTrustMarket } from '@/lib/trust-market
 import { purchaseJVInvestment } from '@/lib/investment-service';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type InvestType = 'jv' | 'fractional';
 type ModalStep = 'select' | 'confirm' | 'processing' | 'success' | 'auth' | 'auth_login';
@@ -139,14 +136,12 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
         toValue: 1,
         friction: 8,
         tension: 65,
-        useNativeDriver: true,
-      }).start();
+        useNativeDriver: true}).start();
     } else {
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 200,
-        useNativeDriver: true,
-      }).start();
+        useNativeDriver: true}).start();
     }
   }, [visible, slideAnim, successScale]);
 
@@ -188,8 +183,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
     timelineMax: deal?.timelineMax,
     timelineUnit: 'months',
     priceChange1h: deal?.priceChange1h,
-    priceChange2h: deal?.priceChange2h,
-  });
+    priceChange2h: deal?.priceChange2h});
   const liveSalePrice = resolvedTrustMarket.salePrice;
   const ownershipSnapshot = buildOwnershipSnapshot(selectedAmount, liveSalePrice);
   const equityPercent = ownershipSnapshot.ownershipPercent;
@@ -234,8 +228,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
       firstName: authFirstName.trim(),
       lastName: authLastName.trim() || authFirstName.trim(),
       phone: authPhone.trim(),
-      country: authCountry,
-    });
+      country: authCountry});
 
     if (result.success) {
       console.log('[QuickBuy] Registration successful, will proceed to invest');
@@ -272,8 +265,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
       console.log('[QuickBuy] Submitting real purchase to Supabase...', {
         dealId: deal.id,
         amount: selectedAmount,
-        type: investType,
-      });
+        type: investType});
 
       const eqPct = ownershipSnapshot.ownershipPercent;
 
@@ -285,8 +277,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
         amount: selectedAmount,
         equityPercent: eqPct,
         expectedROI: deal.expectedROI,
-        paymentMethod: 'bank',
-      });
+        paymentMethod: 'bank'});
 
       if (result.success) {
         console.log('[QuickBuy] Purchase successful:', result.confirmationNumber);
@@ -303,8 +294,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
           toValue: 1,
           friction: 4,
           tension: 50,
-          useNativeDriver: true,
-        }).start();
+          useNativeDriver: true}).start();
       } else {
         console.error('[QuickBuy] Purchase failed:', result.error, result.message);
         setPurchaseError(result.message);
@@ -337,8 +327,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [600, 0],
-  });
+    outputRange: [600, 0]});
 
   return (
     <Modal
@@ -634,7 +623,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
                         testID="qb-signup-btn"
                       >
                         {registerLoading ? (
-                          <ActivityIndicator size="small" color="#000" />
+                          <ShimmerIndicator size="small" color="#000" />
                         ) : (
                           <Shield size={16} color="#000" />
                         )}
@@ -724,7 +713,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
                         testID="qb-login-btn"
                       >
                         {loginLoading ? (
-                          <ActivityIndicator size="small" color="#000" />
+                          <ShimmerIndicator size="small" color="#000" />
                         ) : (
                           <Lock size={16} color="#000" />
                         )}
@@ -841,7 +830,7 @@ export default function QuickBuyModal({ visible, onClose, deal, onNavigateToFull
 
                 {step === 'processing' && (
                   <View style={ms.processingWrap}>
-                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <ShimmerIndicator size="large" color={Colors.primary} />
                     <Text style={ms.processingText}>Processing your investment...</Text>
                     <Text style={ms.processingSubtext}>Securing your position in {deal.projectName}</Text>
                   </View>
@@ -891,25 +880,20 @@ const ms = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   backdropTouch: {
-    flex: 1,
-  },
+    flex: 1},
   kavWrap: {
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   sheet: {
     backgroundColor: Colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingBottom: 34,
-    maxHeight: '92%',
-  },
+    maxHeight: '92%'},
   scrollContent: {
-    paddingBottom: 20,
-  },
+    paddingBottom: 20},
   handle: {
     width: 40,
     height: 4,
@@ -917,41 +901,35 @@ const ms = StyleSheet.create({
     backgroundColor: Colors.surfaceBorder,
     alignSelf: 'center',
     marginTop: 10,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
-  },
+    flex: 1},
   headerBackBtn: {
     width: 32,
     height: 32,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   dealRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -961,48 +939,39 @@ const ms = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   dealThumb: {
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   dealThumbPlaceholder: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   dealInfo: {
-    flex: 1,
-  },
+    flex: 1},
   dealName: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   dealAddressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   dealAddress: {
     fontSize: 11,
     color: Colors.textTertiary,
-    flex: 1,
-  },
+    flex: 1},
   dealMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   dealInvestment: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   dealRoiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1010,18 +979,15 @@ const ms = StyleSheet.create({
     backgroundColor: '#00C48C15',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   dealRoi: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   typeRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   typeBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1032,38 +998,31 @@ const ms = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.surface,
     borderWidth: 1.5,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   typeBtnActive: {
     borderColor: '#00C48C',
-    backgroundColor: '#00C48C' + '0A',
-  },
+    backgroundColor: '#00C48C' + '0A'},
   typeBtnActiveFractional: {
     borderColor: '#FFD700',
-    backgroundColor: '#FFD700' + '0A',
-  },
+    backgroundColor: '#FFD700' + '0A'},
   typeBtnText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   typeBtnTextActive: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   amountLabel: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   amountsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   amountChip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1072,20 +1031,16 @@ const ms = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     minWidth: '30%' as any,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   amountChipActive: {
     backgroundColor: Colors.primary + '18',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   amountChipText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   amountChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   customInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1096,19 +1051,16 @@ const ms = StyleSheet.create({
     paddingHorizontal: 14,
     height: 48,
     marginBottom: 16,
-    gap: 4,
-  },
+    gap: 4},
   customPrefix: {
     fontSize: 20,
     fontWeight: '300' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   customInput: {
     flex: 1,
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   marketValueNote: {
     marginBottom: 14,
     backgroundColor: 'rgba(255,255,255,0.04)',
@@ -1116,18 +1068,15 @@ const ms = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   marketValueNoteText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   previewMarketStrip: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   previewMarketPill: {
     flex: 1,
     borderRadius: 14,
@@ -1135,23 +1084,19 @@ const ms = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   previewMarketLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     marginBottom: 6,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   previewMarketValue: {
     fontSize: 15,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   previewMarketValueUp: {
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   previewRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1160,36 +1105,30 @@ const ms = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   previewItem: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   previewLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   previewValue: {
     fontSize: 14,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   previewDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   ownershipHint: {
     marginTop: -4,
     marginBottom: 18,
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   ctaBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1198,16 +1137,13 @@ const ms = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   ctaBtnDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   ctaBtnText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#000',
-  },
+    color: '#000'},
   authNoteBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1218,31 +1154,26 @@ const ms = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   authNoteText: {
     fontSize: 12,
     color: '#C4A84D',
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   fullFlowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   fullFlowText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
 
   authHeader: {
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   authBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1253,27 +1184,22 @@ const ms = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    alignSelf: 'flex-start' as const,
-  },
+    alignSelf: 'flex-start' as const},
   authBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: '#FFD700',
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   authSubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   authForm: {
     gap: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   authInputRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   authInput: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1283,53 +1209,43 @@ const ms = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     borderRadius: 12,
     paddingHorizontal: 14,
-    height: 50,
-  },
+    height: 50},
   authInputText: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
-    height: 50,
-  },
+    height: 50},
   authErrorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 2,
-  },
+    paddingHorizontal: 2},
   authErrorText: {
     fontSize: 12,
     color: '#FF6B6B',
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   switchAuthBtn: {
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   switchAuthText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   switchAuthLink: {
     color: Colors.primary,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   authTrustRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
-  },
+    gap: 16},
   authTrustItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   authTrustText: {
     fontSize: 11,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   confirmCard: {
     backgroundColor: Colors.surface,
@@ -1337,54 +1253,44 @@ const ms = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   confirmRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   confirmLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   confirmValue: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   confirmValueBold: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   confirmDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   confirmLabelBold: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   confirmValueTotal: {
     fontSize: 20,
     fontWeight: '900' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   securityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 16,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   securityText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   riskDisclaimer: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -1394,22 +1300,19 @@ const ms = StyleSheet.create({
     borderColor: 'rgba(255,184,0,0.2)',
     borderRadius: 12,
     padding: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   riskDisclaimerText: {
     flex: 1,
     fontSize: 11,
     color: '#C4A84D',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   tosRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   tosCheckbox: {
     width: 24,
     height: 24,
@@ -1418,18 +1321,15 @@ const ms = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginTop: 1,
-  },
+    marginTop: 1},
   tosCheckboxActive: {
     borderColor: '#00C48C',
-    backgroundColor: '#00C48C15',
-  },
+    backgroundColor: '#00C48C15'},
   tosText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1439,42 +1339,34 @@ const ms = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#FF444430',
-  },
+    borderColor: '#FF444430'},
   errorBannerText: {
     flex: 1,
     fontSize: 13,
     color: '#FF6B6B',
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   backBtn: {
     alignItems: 'center',
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   backBtnText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   processingWrap: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 14,
-  },
+    gap: 14},
   processingText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   processingSubtext: {
     fontSize: 14,
     color: Colors.textSecondary,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   successWrap: {
     alignItems: 'center',
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   successCircle: {
     width: 88,
     height: 88,
@@ -1482,21 +1374,18 @@ const ms = StyleSheet.create({
     backgroundColor: '#00C48C15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   successTitle: {
     fontSize: 22,
     fontWeight: '900' as const,
     color: Colors.text,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   successSubtext: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
     marginBottom: 20,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   successStats: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1506,28 +1395,23 @@ const ms = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     marginBottom: 16,
-    width: '100%',
-  },
+    width: '100%'},
   successStatItem: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   successStatValue: {
     fontSize: 14,
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   successStatLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   successStatDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   successNextSteps: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1536,23 +1420,18 @@ const ms = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     marginBottom: 20,
-    gap: 10,
-  },
+    gap: 10},
   successNextTitle: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: Colors.textTertiary,
     letterSpacing: 1.2,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   successNextItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   successNextText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    flex: 1,
-  },
-});
+    flex: 1}});

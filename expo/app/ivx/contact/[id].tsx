@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import {
-  ActivityIndicator,
   Linking,
   Platform,
   Pressable,
@@ -10,8 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Briefcase,
   Building2,
@@ -28,49 +26,43 @@ import {
   Sparkles,
   Target,
   UserCircle2,
-  Users,
-} from 'lucide-react-native';
+  Users} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   listInvestors,
   type InvestorRecord,
   type InvestorSource,
   type InvestorStatus,
-  type AccreditedStatus,
-} from '@/src/modules/ivx-developer/investorCrmService';
+  type AccreditedStatus} from '@/src/modules/ivx-developer/investorCrmService';
 import {
   getDealMatching,
-  type DealMatchingResult,
-} from '@/src/modules/ivx-developer/dealMatchingService';
+  type DealMatchingResult} from '@/src/modules/ivx-developer/dealMatchingService';
 
 const STATUS_LABEL: Record<InvestorStatus, string> = {
   prospect: 'Prospect',
   contacted: 'Contacted',
   meeting_scheduled: 'Meeting scheduled',
   active: 'Active',
-  invested: 'Invested',
-};
+  invested: 'Invested'};
 const STATUS_TONE: Record<InvestorStatus, string> = {
   prospect: Colors.textTertiary,
   contacted: Colors.info,
   meeting_scheduled: Colors.warning,
   active: Colors.primary,
-  invested: Colors.success,
-};
+  invested: Colors.success};
 const SOURCE_LABEL: Record<InvestorSource, string> = {
   owner_entered: 'Owner entered',
   submitted_form: 'Submitted form',
   crm_import: 'CRM import',
   public_source: 'Public source',
-  verified_deal: 'Verified deal',
-};
+  verified_deal: 'Verified deal'};
 const ACCREDITED_LABEL: Record<AccreditedStatus, string> = {
   accredited: 'Accredited',
   non_accredited: 'Non-accredited',
-  unknown: 'Unknown',
-};
+  unknown: 'Unknown'};
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return '—';
@@ -166,13 +158,11 @@ function ContactProfileContent({ id }: { id: string }) {
 
   const query = useQuery({
     queryKey: ['ivx-investor-crm', 'list'],
-    queryFn: listInvestors,
-  });
+    queryFn: listInvestors});
 
   const matchingQuery = useQuery<DealMatchingResult | null>({
     queryKey: ['ivx-deal-matching'],
-    queryFn: getDealMatching,
-  });
+    queryFn: getDealMatching});
 
   const record = useMemo<InvestorRecord | null>(
     () => query.data?.investors.find((i) => i.id === id) ?? null,
@@ -195,7 +185,7 @@ function ContactProfileContent({ id }: { id: string }) {
 
   if (query.isLoading) {
     return (
-      <View style={styles.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>
+      <View style={styles.centered}><ShimmerIndicator size="large" color={Colors.primary} /></View>
     );
   }
 
@@ -329,7 +319,7 @@ function ContactProfileContent({ id }: { id: string }) {
 
       <Section icon={<Target size={16} color={Colors.primary} />} title={`Related opportunities${relatedOpportunities.length ? ` (${relatedOpportunities.length})` : ''}`}>
         {matchingQuery.isLoading ? (
-          <ActivityIndicator size="small" color={Colors.primary} />
+          <ShimmerIndicator size="small" color={Colors.primary} />
         ) : relatedOpportunities.length === 0 ? (
           <Text style={styles.emptyInline}>No matched deals yet. Matches appear when this contact fits an active IVX deal.</Text>
         ) : (
@@ -428,5 +418,4 @@ const styles = StyleSheet.create({
   relatedMeta: { fontSize: 12, color: Colors.textSecondary },
   docsEmpty: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '700' as const, color: Colors.text },
-  emptyBody: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19 },
-});
+  emptyBody: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19 }});

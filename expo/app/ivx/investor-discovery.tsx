@@ -2,15 +2,13 @@ import { useCallback, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Building2,
   CheckCircle2,
@@ -21,24 +19,22 @@ import {
   Search,
   ShieldCheck,
   TrendingUp,
-  Users,
-} from 'lucide-react-native';
+  Users} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   generateInvestorReport,
   runInvestorDiscovery,
   type DiscoveredInvestor,
   type InvestorDiscoveryClass,
   type InvestorDiscoveryResult,
-  type InvestorReportResult,
-} from '@/src/modules/ivx-developer/investorDiscoveryService';
+  type InvestorReportResult} from '@/src/modules/ivx-developer/investorDiscoveryService';
 
 const CLASS_LABEL: Record<InvestorDiscoveryClass, string> = {
   buyers: 'Buyers ($10M+)',
-  jv_deals: 'JV / Investors',
-};
+  jv_deals: 'JV / Investors'};
 
 function formatUsd(value: number | null): string {
   if (value === null) return '—';
@@ -126,12 +122,10 @@ function InvestorDiscoveryScreen() {
   const [discoveryClass, setDiscoveryClass] = useState<InvestorDiscoveryClass>('buyers');
 
   const mutation = useMutation<InvestorDiscoveryResult, Error, void>({
-    mutationFn: () => runInvestorDiscovery({ query: query.trim() || 'real estate', discoveryClass }),
-  });
+    mutationFn: () => runInvestorDiscovery({ query: query.trim() || 'real estate', discoveryClass })});
 
   const reportMutation = useMutation<InvestorReportResult, Error, void>({
-    mutationFn: () => generateInvestorReport({ query: query.trim() || 'real estate', discoveryClass }),
-  });
+    mutationFn: () => generateInvestorReport({ query: query.trim() || 'real estate', discoveryClass })});
 
   const onScan = useCallback(() => {
     mutation.mutate();
@@ -194,7 +188,7 @@ function InvestorDiscoveryScreen() {
 
         <Pressable style={styles.scanButton} onPress={onScan} disabled={mutation.isPending} testID="ivx-discovery-scan">
           {mutation.isPending ? (
-            <ActivityIndicator color={Colors.black} />
+            <ShimmerIndicator color={Colors.black} />
           ) : (
             <Text style={styles.scanButtonText}>Find real investors</Text>
           )}
@@ -235,7 +229,7 @@ function InvestorDiscoveryScreen() {
             testID="ivx-discovery-generate-report"
           >
             {reportMutation.isPending ? (
-              <ActivityIndicator color={Colors.white} />
+              <ShimmerIndicator color={Colors.white} />
             ) : (
               <>
                 <FileSpreadsheet size={16} color={Colors.white} />
@@ -313,8 +307,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   classChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   classChipText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
   classChipTextActive: { color: Colors.black },
@@ -328,8 +321,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   searchInput: { flex: 1, color: Colors.text, fontSize: 14, paddingVertical: 10 },
   scanButton: {
     backgroundColor: Colors.primary,
@@ -337,8 +329,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   scanButtonText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
   errorBox: { backgroundColor: '#3a1212', borderRadius: 10, padding: 12, marginBottom: 12 },
   errorText: { color: '#ff9b9b', fontSize: 13, lineHeight: 18 },
@@ -351,8 +342,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 14,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   typeBadge: {
     flexDirection: 'row',
@@ -361,8 +351,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 7,
-  },
+    borderRadius: 7},
   typeBadgeText: { fontSize: 11, fontWeight: '700' as const, color: Colors.black },
   amountPill: { backgroundColor: Colors.background, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7 },
   amountPillText: { fontSize: 13, fontWeight: '800' as const, color: Colors.success },
@@ -394,8 +383,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 13,
     marginTop: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   reportButtonText: { fontSize: 14, fontWeight: '700' as const, color: Colors.white },
   reportResultBox: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
   reportResultOk: { backgroundColor: '#0f2417', borderColor: Colors.success },
@@ -410,8 +398,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingVertical: 11,
-    marginTop: 10,
-  },
+    marginTop: 10},
   reportDownloadText: { fontSize: 13, fontWeight: '700' as const, color: Colors.black },
   reportProofRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   reportProofText: { fontSize: 11, color: Colors.success, fontWeight: '600' as const },
@@ -421,7 +408,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: 10,
     padding: 12,
-    marginTop: 8,
-  },
-  complianceText: { flex: 1, fontSize: 11, color: Colors.textTertiary, lineHeight: 16 },
-});
+    marginTop: 8},
+  complianceText: { flex: 1, fontSize: 11, color: Colors.textTertiary, lineHeight: 16 }});

@@ -2929,6 +2929,11 @@ app.get('/health/ready', async () => {
 app.get('/health', async (context) => {
   const publicChatHealth = getPublicChatHealthSnapshot();
   const aiStartup = validateIVXAIStartup();
+  const providerHealth = getProviderHealth();
+  // Configuration confirms a key and endpoint are present; only a successful
+  // live request confirms that the configured provider is actually ready.
+  const primaryProviderReady = providerHealth.state === 'PROVIDER_READY';
+  const aiServiceAvailable = primaryProviderReady || providerHealth.state === 'FALLBACK_READY';
 
   // Senior Developer Runtime diagnostic: validates that all execution
   // credentials (GitHub, Render) are present and reachable at runtime.
@@ -3007,21 +3012,23 @@ app.get('/health', async (context) => {
       checkedAt: nowIso(),
     },
     ivxSeniorDeveloperProviderVerification: {
-      providerReady: aiStartup.ok,
+      providerConfigured: aiStartup.ok,
+      providerReady: primaryProviderReady,
+      aiServiceAvailable,
       provider: aiStartup.provider,
       providerType: aiStartup.providerType,
       model: aiStartup.model,
       adapterVersion: aiStartup.adapterVersion,
       credentialLoaded: aiStartup.keyLoaded,
-      credentialValid: aiStartup.ok,
+      credentialValid: providerHealth.credentialValid,
       keyPrefix: aiStartup.keyPrefix,
       baseUrl: aiStartup.baseUrl,
-      lastValidationTime: getProviderHealth().lastValidationTime,
-      lastHttpStatus: getProviderHealth().lastHttpStatus,
-      fallbackEnabled: getProviderHealth().fallbackEnabled,
-      fallbackUsed: getProviderHealth().fallbackUsed,
-      providerState: getProviderHealth().state,
-      traceId: getProviderHealth().traceId,
+      lastValidationTime: providerHealth.lastValidationTime,
+      lastHttpStatus: providerHealth.lastHttpStatus,
+      fallbackEnabled: providerHealth.fallbackEnabled,
+      fallbackUsed: providerHealth.fallbackUsed,
+      providerState: providerHealth.state,
+      traceId: providerHealth.traceId,
       toolRegistryReady: (seniorDeveloperRuntime.blockers as string[]).length === 0,
       variablesValidated: seniorDeveloperRuntime.variablesValidated === true,
       externalDependency: false,
@@ -3034,7 +3041,9 @@ app.get('/health', async (context) => {
       intentRouterReady: true,
       toolRegistryReady: (seniorDeveloperRuntime.blockers as string[]).length === 0,
       variablesValidated: seniorDeveloperRuntime.variablesValidated === true,
-      aiProviderReady: aiStartup.ok,
+      aiProviderConfigured: aiStartup.ok,
+      aiProviderReady: primaryProviderReady,
+      aiServiceAvailable,
       liveWorkReady: true,
       githubReady: sdGithubReady,
       renderReady: sdRenderReady,

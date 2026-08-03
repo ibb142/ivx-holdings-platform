@@ -9,20 +9,20 @@ export function ErrorBoundary(props: { children: React.ReactNode }) {
   return <DiagnosticErrorBoundary>{props.children}</DiagnosticErrorBoundary>;
 }
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FloatingChatButton from '@/components/FloatingChatButton';
 import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
+import { Skeleton } from '@/components/InstantSkeleton';
 import { logStartup, logStartupError } from '@/lib/startup-trace';
 
 const tabColors = {
   active: '#FFD700',
   inactive: '#777777',
   background: '#000000',
-  border: '#242424',
-};
+  border: '#242424'};
 
 const TABS_LOADING_TIMEOUT_MS = 2000;
 
@@ -80,10 +80,14 @@ export default function TabsLayout() {
   // Show a loading spinner while auth state is being resolved.
   // The loadingTimedOut safety net above ensures this never shows forever.
   if (effectiveLoading) {
+    // Instagram-style: skeleton bones instead of spinner
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={tabColors.active} />
-        <Text style={styles.loadingText}>Loading IVX…</Text>
+        <View style={{ width: '80%', gap: 10, marginBottom: 20 }}>
+          <Skeleton width="60%" height={20} borderRadius={10} />
+          <Skeleton width="90%" height={14} />
+          <Skeleton width="70%" height={14} />
+        </View>
       </View>
     );
   }
@@ -121,13 +125,11 @@ export default function TabsLayout() {
   const tabBarHeight = Platform.select({
     ios: 82,
     android: 76 + androidBottomInset,
-    default: 72 + androidBottomInset,
-  });
+    default: 72 + androidBottomInset});
   const tabBarPaddingBottom = Platform.select({
     ios: 22,
     android: androidBottomInset,
-    default: androidBottomInset,
-  });
+    default: androidBottomInset});
 
   return (
     <View style={styles.root}>
@@ -141,56 +143,49 @@ export default function TabsLayout() {
         tabBarStyle: [styles.tabBar, { height: tabBarHeight, paddingBottom: tabBarPaddingBottom }],
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
-        tabBarIconStyle: styles.tabBarIcon,
-      }}
+        tabBarIconStyle: styles.tabBarIcon}}
     >
       <Tabs.Screen
         name="(home)"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} strokeWidth={2.3} />,
-          tabBarButtonTestID: 'tab-home',
-        }}
+          tabBarButtonTestID: 'tab-home'}}
       />
       <Tabs.Screen
         name="invest"
         options={{
           title: 'Invest',
           tabBarIcon: ({ color, size }) => <TrendingUp color={color} size={size} strokeWidth={2.3} />,
-          tabBarButtonTestID: 'tab-invest',
-        }}
+          tabBarButtonTestID: 'tab-invest'}}
       />
       <Tabs.Screen
         name="market"
         options={{
           title: 'Market',
           tabBarIcon: ({ color, size }) => <BarChart3 color={color} size={size} strokeWidth={2.3} />,
-          tabBarButtonTestID: 'tab-market',
-        }}
+          tabBarButtonTestID: 'tab-market'}}
       />
       <Tabs.Screen
         name="portfolio"
         options={{
           title: 'Portfolio',
           tabBarIcon: ({ color, size }) => <Briefcase color={color} size={size} strokeWidth={2.3} />,
-          tabBarButtonTestID: 'tab-portfolio',
-        }}
+          tabBarButtonTestID: 'tab-portfolio'}}
       />
       <Tabs.Screen
         name="chat"
         options={{
           title: 'Chat',
           tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} strokeWidth={2.3} />,
-          tabBarButtonTestID: 'tab-chat',
-        }}
+          tabBarButtonTestID: 'tab-chat'}}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <User color={color} size={size} strokeWidth={2.3} />,
-          tabBarButtonTestID: 'tab-profile',
-        }}
+          tabBarButtonTestID: 'tab-profile'}}
       />
       <Tabs.Screen
         name="crm"
@@ -198,8 +193,7 @@ export default function TabsLayout() {
           title: 'CRM',
           tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} strokeWidth={2.3} />,
           tabBarButtonTestID: 'tab-crm',
-          href: isOwner ? undefined : null,
-        }}
+          href: isOwner ? undefined : null}}
       />
       <Tabs.Screen
         name="aura"
@@ -207,8 +201,7 @@ export default function TabsLayout() {
           title: 'Aura',
           tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} strokeWidth={2.3} />,
           tabBarButtonTestID: 'tab-aura',
-          href: isOwner ? undefined : null,
-        }}
+          href: isOwner ? undefined : null}}
       />
     </Tabs>
     <FloatingChatButton />
@@ -218,58 +211,47 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   root: {
-    flex: 1,
-  },
+    flex: 1},
   loadingContainer: {
     flex: 1,
     backgroundColor: '#0A0A0F',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-  },
+    padding: 24},
   loadingText: {
     color: '#FFD700',
     fontSize: 14,
     fontWeight: '600' as const,
     marginTop: 12,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   errorText: {
     color: '#888',
     fontSize: 12,
     textAlign: 'center' as const,
     marginTop: 8,
     marginBottom: 24,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   retryButton: {
     backgroundColor: '#FFD700',
     borderRadius: 12,
     paddingHorizontal: 32,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   retryButtonText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   tabBar: {
     backgroundColor: tabColors.background,
     borderTopColor: tabColors.border,
     borderTopWidth: 0.5,
-    paddingTop: Platform.select({ ios: 6, android: 8, default: 8 }),
-  },
+    paddingTop: Platform.select({ ios: 6, android: 8, default: 8 })},
   tabBarItem: {
     paddingVertical: 0,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   tabBarIcon: {
     marginTop: 0,
-    marginBottom: 1,
-  },
+    marginBottom: 1},
   tabBarLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
-    marginTop: 0,
-  },
-});
+    marginTop: 0}});

@@ -21,8 +21,7 @@ const STATE_ICONS: Record<string, string> = {
   'Illinois': '🏙️', 'Georgia': '🍑', 'Pennsylvania': '🔔', 'Ohio': '🌰',
   'Michigan': '🚗', 'New Jersey': '🏖️', 'Virginia': '🏛️', 'Washington': '🌲',
   'Massachusetts': '📚', 'Arizona': '🌵', 'Colorado': '⛰️', 'North Carolina': '🐝',
-  'Maryland': '🦀', 'Nevada': '🎰', 'Oregon': '🌿', 'Connecticut': '🏘️',
-};
+  'Maryland': '🦀', 'Nevada': '🎰', 'Oregon': '🌿', 'Connecticut': '🏘️'};
 
 export function GeoTab({ geo }: GeoTabProps) {
   if (!geo || (geo.byCountry.length === 0 && geo.byCity.length === 0)) {
@@ -205,5 +204,4 @@ const s = StyleSheet.create({
   cityInfo: { flex: 1, gap: 1 },
   cityName: { fontSize: 13, fontWeight: '700' as const, color: Colors.text },
   cityCountry: { fontSize: 10, fontWeight: '500' as const, color: Colors.textTertiary },
-  cityCount: { fontSize: 14, fontWeight: '800' as const, color: Colors.text },
-});
+  cityCount: { fontSize: 14, fontWeight: '800' as const, color: Colors.text }});

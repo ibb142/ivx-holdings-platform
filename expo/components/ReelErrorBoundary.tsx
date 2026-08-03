@@ -48,8 +48,7 @@ export default class ReelErrorBoundary extends Component<Props, State> {
       reelId: this.props.videoId,
       errorClass: error?.constructor?.name || 'Error',
       route: '/videos',
-      component: 'ReelVideoPlayer',
-    });
+      component: 'ReelVideoPlayer'});
     this.setState((prev) => ({ errorCount: prev.errorCount + 1, traceId }));
   }
 
@@ -102,30 +101,25 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   posterFallback: {
     flex: 1,
-    opacity: 0.3,
-  },
+    opacity: 0.3},
   content: {
     alignItems: 'center',
     paddingHorizontal: 32,
-    zIndex: 10,
-  },
+    zIndex: 10},
   title: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700' as const,
-    marginTop: 14,
-  },
+    marginTop: 14},
   subtitle: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 13,
     textAlign: 'center',
     marginTop: 6,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   retryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -134,17 +128,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 11,
     borderRadius: 999,
-    marginTop: 18,
-  },
+    marginTop: 18},
   retryText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   traceId: {
     color: 'rgba(255,255,255,0.35)',
     fontSize: 11,
     marginTop: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
-  },
-});
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' })}});

@@ -1,13 +1,11 @@
 import React, { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { Stack } from 'expo-router';
 import {
   Activity,
@@ -19,11 +17,11 @@ import {
   Moon,
   Search,
   TrendingUp,
-  Users,
-} from 'lucide-react-native';
+  Users} from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ScaleResult = 'VERIFIED' | 'FAILED' | 'BLOCKED_FOR_APPROVAL' | 'never';
 
@@ -210,8 +208,7 @@ function AutonomousActivityScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ACTIVITY_KEY,
     queryFn: fetchActivity,
-    refetchInterval: 30_000,
-  });
+    refetchInterval: 30_000});
 
   const onRefresh = useCallback(() => {
     void refetch();
@@ -280,7 +277,7 @@ function AutonomousActivityScreen() {
         </View>
 
         {isLoading ? (
-          <View style={styles.center}><ActivityIndicator color={Colors.text} /></View>
+          <View style={styles.center}><ShimmerIndicator color={Colors.text} /></View>
         ) : isError ? (
           <View style={styles.errorCard}>
             <CircleX size={18} color={Colors.error ?? '#FF4D4D'} />
@@ -396,8 +393,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 8,
-  },
+    gap: 8},
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroTitle: { color: Colors.text, fontSize: 18, fontWeight: '800' as const },
   liveBadge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, marginTop: 2 },
@@ -414,8 +410,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 4,
-  },
+    gap: 4},
   statIcon: { marginBottom: 2 },
   statValue: { color: Colors.text, fontSize: 16, fontWeight: '800' as const },
   statLabel: { color: Colors.muted ?? '#94a3b8', fontSize: 11 },
@@ -425,8 +420,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 8,
-  },
+    gap: 8},
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   cardBody: { color: Colors.muted ?? '#94a3b8', fontSize: 13, lineHeight: 19 },
@@ -436,8 +430,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border ?? '#1f2937',
-  },
+    borderTopColor: Colors.border ?? '#1f2937'},
   pipeLabel: { color: Colors.muted ?? '#94a3b8', fontSize: 13, flex: 1 },
   pipeValue: { color: Colors.text, fontSize: 15, fontWeight: '800' as const },
   runRow: {
@@ -445,8 +438,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border ?? '#1f2937',
-  },
+    borderTopColor: Colors.border ?? '#1f2937'},
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
   runBody: { flex: 1, gap: 2 },
   runTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' as const },
@@ -460,8 +452,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border ?? '#1f2937',
-  },
+    borderTopColor: Colors.border ?? '#1f2937'},
   leadIndex: { color: Colors.muted ?? '#94a3b8', fontSize: 12, fontWeight: '700' as const, width: 22 },
   leadBody: { flex: 1 },
   leadName: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
@@ -477,7 +468,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.error ?? '#FF4D4D',
-  },
-  errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 },
-});
+    borderColor: Colors.error ?? '#FF4D4D'},
+  errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 }});

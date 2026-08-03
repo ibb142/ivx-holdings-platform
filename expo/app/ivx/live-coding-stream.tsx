@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   CircleDashed,
@@ -16,11 +14,11 @@ import {
   Play,
   Radio,
   Rewind,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getMonitorTaskBlocks,
   getMonitorTaskEvents,
@@ -29,8 +27,7 @@ import {
   type IVXBlockStatus,
   type IVXMonitorBlock,
   type IVXMonitorEvent,
-  type IVXMonitorTask,
-} from '@/src/modules/ivx-developer/developerMonitorService';
+  type IVXMonitorTask} from '@/src/modules/ivx-developer/developerMonitorService';
 
 const POLL_INTERVAL_MS = 2500;
 /** Characters revealed per animation tick — the live "typing" speed. */
@@ -127,8 +124,7 @@ function LiveCodingStreamContent() {
   const tasksQuery = useQuery({
     queryKey: ['ivx-live-coding', 'tasks'],
     queryFn: listMonitorTasks,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const resolvedTaskId = useMemo<string | null>(() => {
     if (activeTaskId) return activeTaskId;
@@ -139,15 +135,13 @@ function LiveCodingStreamContent() {
     queryKey: ['ivx-live-coding', 'blocks', resolvedTaskId],
     queryFn: () => getMonitorTaskBlocks(resolvedTaskId as string),
     enabled: !!resolvedTaskId,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const eventsQuery = useQuery({
     queryKey: ['ivx-live-coding', 'events', resolvedTaskId],
     queryFn: () => getMonitorTaskEvents(resolvedTaskId as string, 120),
     enabled: !!resolvedTaskId,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const task = blocksQuery.data?.task ?? null;
   const blocks: IVXMonitorBlock[] = blocksQuery.data?.blocks ?? [];
@@ -274,7 +268,7 @@ function LiveCodingStreamContent() {
       {!resolvedTaskId || codedBlocks.length === 0 ? (
         <View style={styles.emptyWrap} testID="ivx-stream-empty">
           {tasksQuery.isLoading || blocksQuery.isLoading ? (
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
           ) : (
             <CircleDashed size={28} color={Colors.textSecondary} />
           )}
@@ -358,7 +352,7 @@ function LiveCodingStreamContent() {
           testID="ivx-stream-start"
         >
           {starting ? (
-            <ActivityIndicator size="small" color={Colors.black} />
+            <ShimmerIndicator size="small" color={Colors.black} />
           ) : (
             <Play size={15} color={Colors.black} />
           )}
@@ -394,8 +388,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.12)',
     borderRadius: 999,
     paddingHorizontal: 9,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   liveDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: Colors.error },
   liveBadgeText: { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.6, color: Colors.error },
   headerSubtitle: { fontSize: 12.5, lineHeight: 18, color: Colors.textSecondary },
@@ -408,8 +401,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   emptyTitle: { fontSize: 15.5, fontWeight: '600' as const, color: Colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 13, lineHeight: 19, color: Colors.textSecondary, textAlign: 'center' },
   editorHeader: {
@@ -425,8 +417,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 12,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   editorFile: { flex: 1, fontSize: 12.5, color: Colors.text, fontWeight: '600' as const, ...mono },
   statusPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   statusPillText: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.4 },
@@ -435,8 +426,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     backgroundColor: '#0B0B0C',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   editorContent: { padding: 12, paddingBottom: 28 },
   codeBody: { gap: 1 },
   codeLineRow: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -449,8 +439,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 10,
-    gap: 10,
-  },
+    gap: 10},
   controlButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -460,8 +449,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   controlDisabled: { opacity: 0.45 },
   controlText: { fontSize: 12.5, fontWeight: '600' as const, color: Colors.text },
   flip: { transform: [{ scaleX: -1 }] },
@@ -475,8 +463,6 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     paddingVertical: 13,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   startButtonText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
-  errorText: { fontSize: 12, color: Colors.error, lineHeight: 18, textAlign: 'center' },
-});
+  errorText: { fontSize: 12, color: Colors.error, lineHeight: 18, textAlign: 'center' }});

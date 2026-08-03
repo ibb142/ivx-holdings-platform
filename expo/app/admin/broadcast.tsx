@@ -11,8 +11,7 @@ import {
   Image,
   Alert,
   Modal,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -42,8 +41,7 @@ import {
   Save,
   Trash2,
   Edit3,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -52,8 +50,7 @@ import {
   RecipientFilter,
   BroadcastTemplate,
   BroadcastRecipient,
-  BroadcastMessage,
-} from '@/types';
+  BroadcastMessage} from '@/types';
 
 type TabType = 'compose' | 'drafts' | 'history';
 
@@ -142,11 +139,9 @@ export default function BroadcastScreen() {
         email: p.email || '',
         phone: p.phone || '',
         avatar: p.avatar,
-        selected: false,
-      }));
+        selected: false}));
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const broadcastTemplates: BroadcastTemplate[] = [
     { id: 'tpl-1', name: 'Welcome New Member', subject: 'Welcome to IVX HOLDINGS', body: 'Dear {{name}},\n\nWelcome to IVX HOLDINGS!', category: 'welcome' },
@@ -234,8 +229,7 @@ export default function BroadcastScreen() {
     Animated.timing(progressAnim, {
       toValue: progress,
       duration: 300,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
     
     setTimeout(() => {
       simulateSending();
@@ -271,8 +265,7 @@ export default function BroadcastScreen() {
             setIsPaused(false);
             setSentCount(0);
             progressAnim.setValue(0);
-          },
-        },
+          }},
       ]
     );
   }, [subject, body, recipients.length, channels, batchSize, progressAnim]);
@@ -301,8 +294,7 @@ export default function BroadcastScreen() {
             setIsPaused(false);
             setSentCount(0);
             progressAnim.setValue(0);
-          },
-        },
+          }},
       ]
     );
   }, [sentCount, recipients.length, resumeSending, progressAnim]);
@@ -384,8 +376,7 @@ Use {{name}} for personalization where appropriate.`;
         channels,
         recipientFilter,
         createdAt: now,
-        updatedAt: now,
-      };
+        updatedAt: now};
       void saveDrafts([newDraft, ...drafts]);
       Alert.alert('Success', 'Saved to drafts');
     }
@@ -417,8 +408,7 @@ Use {{name}} for personalization where appropriate.`;
             if (editingDraftId === draftId) {
               setEditingDraftId(null);
             }
-          },
-        },
+          }},
       ]
     );
   }, [drafts, editingDraftId]);
@@ -447,8 +437,7 @@ Use {{name}} for personalization where appropriate.`;
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const getStatusColor = (status: BroadcastMessage['status']) => {
@@ -615,9 +604,7 @@ Use {{name}} for personalization where appropriate.`;
                 {
                   width: progressAnim.interpolate({
                     inputRange: [0, 100],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
+                    outputRange: ['0%', '100%']})},
               ]}
             />
           </View>
@@ -1162,5 +1149,4 @@ const styles = StyleSheet.create({
   aiHint: { gap: 4 },
   generateBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   generateBtnDisabled: { opacity: 0.4 },
-  generateBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
-});
+  generateBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 }});

@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TextInput,
   Animated,
   Platform,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -35,14 +32,14 @@ import {
   BarChart3,
   RefreshCw,
   Copy,
-  Check,
-} from 'lucide-react-native';
+  Check} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Lender, LenderOutreach, OutreachType } from '@/types';
 import { lenders, lenderOutreachHistory, outreachCampaigns, getLenderStats } from '@/mocks/lenders';
 import { discoveredLenders } from '@/mocks/lender-discovery';
 import { properties } from '@/mocks/properties';
 import { formatCurrencyCompact } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const formatCurrency = (amount: number): string => formatCurrencyCompact(amount);
 
@@ -55,8 +52,7 @@ const OUTREACH_STATUS_COLORS: Record<string, string> = {
   clicked: '#E879F9',
   replied: Colors.success,
   bounced: Colors.error,
-  failed: Colors.error,
-};
+  failed: Colors.error};
 
 type StepType = 'select_property' | 'select_lenders' | 'compose' | 'review' | 'sent';
 type LenderFilter = 'all' | 'private' | 'public';
@@ -92,8 +88,7 @@ I would welcome the opportunity to schedule a brief call to discuss how this inv
 
 Best regards,
 IVX HOLDINGS LLC
-Investment Relations Team`,
-  },
+Investment Relations Team`},
   follow_up: {
     subject: 'Following Up: {{property_name}} Investment Opportunity',
     body: `Dear {{lender_contact}},
@@ -108,8 +103,7 @@ Key highlights since our last communication:
 Would you have 15 minutes this week to discuss further?
 
 Best regards,
-IVX HOLDINGS LLC`,
-  },
+IVX HOLDINGS LLC`},
   property_alert: {
     subject: '🔔 New Listing Alert: {{property_name}} Now Available',
     body: `Dear {{lender_contact}},
@@ -124,21 +118,17 @@ A new premium property has just been listed on IVX HOLDINGS that matches {{lende
 View the full investment memorandum on our platform to learn more.
 
 Best regards,
-IVX HOLDINGS LLC`,
-  },
+IVX HOLDINGS LLC`},
   newsletter: {
     subject: 'IVX HOLDINGS Monthly Update - New Opportunities & Market Insights',
     body: `Dear {{lender_contact}},
 
-Here's your monthly update from IVX HOLDINGS LLC with the latest investment opportunities and market insights...`,
-  },
+Here's your monthly update from IVX HOLDINGS LLC with the latest investment opportunities and market insights...`},
   partnership: {
     subject: 'IVX HOLDINGS LLC - Strategic Partnership Opportunity',
     body: `Dear {{lender_contact}},
 
-I would like to introduce IVX HOLDINGS's institutional partnership program designed for leading organizations like {{lender_name}}...`,
-  },
-};
+I would like to introduce IVX HOLDINGS's institutional partnership program designed for leading organizations like {{lender_name}}...`}};
 
 export default function AIOutreachScreen() {
   const router = useRouter();
@@ -258,11 +248,9 @@ export default function AIOutreachScreen() {
               Animated.spring(successAnim, {
                 toValue: 1,
                 useNativeDriver: true,
-                friction: 4,
-              }).start();
+                friction: 4}).start();
             }, 2000);
-          },
-        },
+          }},
       ]
     );
   }, [selectedLenders, selectedProperty, successAnim]);
@@ -472,7 +460,7 @@ export default function AIOutreachScreen() {
           onPress={generateAIEmail}
         >
           {isGenerating ? (
-            <ActivityIndicator color={Colors.background} size="small" />
+            <ShimmerIndicator color={Colors.background} size="small" />
           ) : (
             <>
               <Sparkles size={18} color={selectedLenderIds.length === 0 ? Colors.textTertiary : Colors.background} />
@@ -591,7 +579,7 @@ export default function AIOutreachScreen() {
           disabled={isSending}
         >
           {isSending ? (
-            <ActivityIndicator color={Colors.background} size="small" />
+            <ShimmerIndicator color={Colors.background} size="small" />
           ) : (
             <>
               <Send size={18} color={Colors.background} />
@@ -916,5 +904,4 @@ const styles = StyleSheet.create({
   outreachItemInfo: { flex: 1 },
   outreachItemName: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   outreachItemSubject: { gap: 4 },
-  outreachItemDate: { color: Colors.textTertiary, fontSize: 12 },
-});
+  outreachItemDate: { color: Colors.textTertiary, fontSize: 12 }});

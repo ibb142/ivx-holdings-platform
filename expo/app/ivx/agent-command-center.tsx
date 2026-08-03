@@ -5,18 +5,15 @@
  * task ledger, ownership rules, and drill-down capability details.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   ScrollView,
   Pressable,
   RefreshControl,
   Modal,
   StyleSheet,
-  ActivityIndicator,
   FlatList,
-  Linking,
-} from 'react-native';
+  Linking} from "react-native";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import {
@@ -26,9 +23,9 @@ import {
   type AgentAuditOverview,
   type CapabilityScore,
   type SeniorityLevel,
-  type TaskLedgerEntry,
-} from '@/src/modules/ivx-owner-ai/services/ivxAgentAuditService';
+  type TaskLedgerEntry} from '@/src/modules/ivx-owner-ai/services/ivxAgentAuditService';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const GOLD = '#FFD700';
 const GREEN = '#00C48C';
@@ -42,15 +39,13 @@ const SENIORITY_COLORS: Record<SeniorityLevel, string> = {
   SENIOR: GREEN,
   MID: GOLD,
   JUNIOR: BLUE,
-  NOT_A_DEVELOPER: RED,
-};
+  NOT_A_DEVELOPER: RED};
 
 const SCORE_COLORS: Record<CapabilityScore, string> = {
   PASS: GREEN,
   PARTIAL: GOLD,
   FAIL: RED,
-  NOT_CONFIGURED: '#666',
-};
+  NOT_CONFIGURED: '#666'};
 
 const STATUS_COLORS: Record<string, string> = {
   NOT_STARTED: '#666',
@@ -64,8 +59,7 @@ const STATUS_COLORS: Record<string, string> = {
   DEPLOYED: BLUE,
   PRODUCTION_VERIFIED: GREEN,
   BLOCKED: RED,
-  REJECTED: RED,
-};
+  REJECTED: RED};
 
 type AgentFilter = 'all' | SeniorityLevel;
 type LedgerFilter = 'all' | 'completed' | 'failed' | 'blocked' | 'deployed' | 'verified';
@@ -79,8 +73,7 @@ export default function AgentCommandCenterScreen() {
 
   const auditQuery = useQuery<AgentAuditOverview>({
     queryKey: ['ivx-agent-audit', 'overview'],
-    queryFn: getAgentAuditOverview,
-  });
+    queryFn: getAgentAuditOverview});
 
   const onRefresh = useCallback(() => {
     void auditQuery.refetch();
@@ -91,8 +84,7 @@ export default function AgentCommandCenterScreen() {
       createTaskLedgerEntry(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ivx-agent-audit', 'overview'] });
-    },
-  });
+    }});
 
   const data = auditQuery.data;
   const summary = data?.summary;
@@ -117,7 +109,7 @@ export default function AgentCommandCenterScreen() {
   if (auditQuery.isLoading && !data) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={GOLD} />
+        <ShimmerIndicator size="large" color={GOLD} />
         <Text style={styles.loadingText}>Loading AI Engineering Command Center…</Text>
       </View>
     );
@@ -483,5 +475,4 @@ const styles = StyleSheet.create({
   capabilityContent: { flex: 1 },
   capabilityName: { color: '#FFF', fontSize: 13, fontWeight: '500' as const, marginBottom: 2 },
   capabilityScore: { fontSize: 11, fontWeight: '700' as const, marginBottom: 2 },
-  capabilityEvidence: { color: '#888', fontSize: 11, lineHeight: 15 },
-});
+  capabilityEvidence: { color: '#888', fontSize: 11, lineHeight: 15 }});

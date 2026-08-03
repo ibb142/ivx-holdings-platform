@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -12,9 +11,7 @@ import {
   Platform,
   TextInput,
   Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-} from 'react-native';
+  KeyboardAvoidingView} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -55,11 +52,11 @@ import {
   ArrowLeft,
   MapPin,
   Clock,
-  Award,
-} from 'lucide-react-native';
+  Award} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { generateText } from '@/lib/ai-service';
 import * as Haptics from 'expo-haptics';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   socialPlatforms,
   aiAgents,
@@ -74,8 +71,7 @@ import {
   getTotalFollowers,
   getAverageEngagement,
   AIAgent,
-  ContentPost,
-} from '@/mocks/social-media';
+  ContentPost} from '@/mocks/social-media';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_HEIGHT = 110;
@@ -130,8 +126,7 @@ export default function SocialCommandScreen() {
           toValue: 1,
           duration: 600,
           delay: i * 60,
-          useNativeDriver: false,
-        }).start();
+          useNativeDriver: false}).start();
       });
     }
   }, [activeTab, barAnims]);
@@ -285,8 +280,7 @@ export default function SocialCommandScreen() {
           {analyticsHistory.map((day, index) => {
             const barH = barAnims[index].interpolate({
               inputRange: [0, 1],
-              outputRange: [0, (day.impressions / maxImpressions) * CHART_HEIGHT],
-            });
+              outputRange: [0, (day.impressions / maxImpressions) * CHART_HEIGHT]});
             const isLast = index === analyticsHistory.length - 1;
             return (
               <View key={day.date} style={styles.barWrapper}>
@@ -297,8 +291,7 @@ export default function SocialCommandScreen() {
                       {
                         height: barH,
                         backgroundColor: isLast ? GOLD : 'rgba(255,215,0,0.3)',
-                        borderRadius: 4,
-                      },
+                        borderRadius: 4},
                     ]}
                   />
                 </View>
@@ -439,8 +432,7 @@ export default function SocialCommandScreen() {
         {['draft', 'reviewing', 'approved', 'scheduled', 'published'].map((status) => {
           const count = contentQueue.filter(c => c.status === status).length;
           const colors: Record<string, string> = {
-            draft: '#6B7280', reviewing: '#F59E0B', approved: GREEN, scheduled: BLUE, published: GOLD,
-          };
+            draft: '#6B7280', reviewing: '#F59E0B', approved: GREEN, scheduled: BLUE, published: GOLD};
           return (
             <View key={status} style={[styles.statusCapsule, { borderColor: (colors[status] ?? '#6B7280') + '55' }]}>
               <Text style={[styles.statusCapsuleCount, { color: colors[status] ?? '#6B7280' }]}>{count}</Text>
@@ -452,8 +444,7 @@ export default function SocialCommandScreen() {
 
       {contentQueue.map((post) => {
         const statusColors: Record<string, string> = {
-          approved: GREEN, reviewing: '#F59E0B', published: BLUE, rejected: RED, draft: '#6B7280', scheduled: GOLD,
-        };
+          approved: GREEN, reviewing: '#F59E0B', published: BLUE, rejected: RED, draft: '#6B7280', scheduled: GOLD};
         const sc = statusColors[post.status] ?? '#6B7280';
         return (
           <TouchableOpacity key={post.id} style={styles.contentCard} onPress={() => setSelectedContent(post)}>
@@ -557,8 +548,7 @@ export default function SocialCommandScreen() {
                   <View style={styles.countryBarBg}>
                     <View style={[styles.countryBarFill, {
                       width: barW,
-                      backgroundColor: i === 0 ? GOLD : i === 1 ? '#C0C0C0' : 'rgba(255,255,255,0.2)',
-                    }]} />
+                      backgroundColor: i === 0 ? GOLD : i === 1 ? '#C0C0C0' : 'rgba(255,255,255,0.2)'}]} />
                   </View>
                 </View>
               </View>
@@ -582,8 +572,7 @@ export default function SocialCommandScreen() {
                     <View style={[styles.peakBarFill, {
                       height: barH,
                       backgroundColor: isPeak ? GOLD : 'rgba(255,215,0,0.25)',
-                      borderRadius: 4,
-                    }]} />
+                      borderRadius: 4}]} />
                   </View>
                   <Text style={[styles.peakHourLabel, { color: isPeak ? GOLD : Colors.textTertiary }]}>{h.hour.replace(' ', '\n')}</Text>
                 </View>
@@ -611,8 +600,7 @@ export default function SocialCommandScreen() {
                     <View style={[styles.ageBarFill, {
                       height: barH,
                       backgroundColor: i === 1 ? GOLD : 'rgba(255,215,0,0.3)',
-                      borderRadius: 4,
-                    }]} />
+                      borderRadius: 4}]} />
                   </View>
                   <Text style={styles.ageRangeLabel}>{g.range}</Text>
                 </View>
@@ -671,7 +659,7 @@ export default function SocialCommandScreen() {
                 disabled={generatingCommentId === comment.id}
               >
                 {generatingCommentId === comment.id
-                  ? <ActivityIndicator size="small" color="#000" />
+                  ? <ShimmerIndicator size="small" color="#000" />
                   : <Sparkles size={14} color="#000" />}
                 <Text style={styles.generateRespText}>
                   {generatingCommentId === comment.id ? 'Generating...' : 'Generate AI Response'}
@@ -758,7 +746,7 @@ export default function SocialCommandScreen() {
             onPress={handleGenerateContent}
             disabled={isGeneratingContent}
           >
-            {isGeneratingContent ? <ActivityIndicator size="small" color="#000" /> : <Sparkles size={18} color="#000" />}
+            {isGeneratingContent ? <ShimmerIndicator size="small" color="#000" /> : <Sparkles size={18} color="#000" />}
             <Text style={styles.generateBtnText}>{isGeneratingContent ? 'Generating...' : 'Generate Content'}</Text>
           </TouchableOpacity>
           {generatedContent ? (
@@ -921,28 +909,24 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    backgroundColor: '#0A0A0A',
-  },
+    backgroundColor: '#0A0A0A'},
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' as const, letterSpacing: -0.3 },
   headerSub: { color: Colors.textTertiary, fontSize: 12, marginTop: 1 },
   botBadge: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: GOLD_DIM, borderWidth: 1, borderColor: 'rgba(255,215,0,0.25)',
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   tabsRow: { flexDirection: 'row', gap: 8, paddingBottom: 12 },
   tabChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 7, paddingHorizontal: 14,
     borderRadius: 20, backgroundColor: SURFACE,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   tabChipActive: { backgroundColor: GOLD, borderColor: GOLD },
   tabChipText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' as const },
   tabChipTextActive: { color: '#000', fontWeight: '700' as const },
@@ -954,13 +938,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start', marginBottom: 16,
     backgroundColor: 'rgba(0,196,140,0.08)',
     borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1, borderColor: 'rgba(0,196,140,0.2)',
-  },
+    borderWidth: 1, borderColor: 'rgba(0,196,140,0.2)'},
   livePulse: {
     position: 'absolute', left: 10,
     width: 10, height: 10, borderRadius: 5,
-    backgroundColor: 'rgba(0,196,140,0.3)',
-  },
+    backgroundColor: 'rgba(0,196,140,0.3)'},
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: GREEN },
   liveText: { color: GREEN, fontSize: 11, fontWeight: '800' as const, letterSpacing: 1 },
   liveSubtext: { color: Colors.textSecondary, fontSize: 12 },
@@ -968,8 +950,7 @@ const styles = StyleSheet.create({
   heroRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   heroCard: {
     flex: 1, borderRadius: 18, padding: 16,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   heroCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   heroIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   trendChip: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
@@ -980,8 +961,7 @@ const styles = StyleSheet.create({
   miniStatsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   miniCard: {
     flex: 1, borderRadius: 14, padding: 12,
-    alignItems: 'center', gap: 4,
-  },
+    alignItems: 'center', gap: 4},
   miniValue: { color: '#fff', fontSize: 15, fontWeight: '800' as const, marginTop: 4 },
   miniLabel: { color: Colors.textTertiary, fontSize: 10 },
 
@@ -989,31 +969,26 @@ const styles = StyleSheet.create({
 
   chartCard: {
     backgroundColor: SURFACE, borderRadius: 18, padding: 16,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 20,
-  },
+    borderWidth: 1, borderColor: BORDER, marginBottom: 20},
   chartBarsRow: {
     flexDirection: 'row', alignItems: 'flex-end',
-    height: CHART_HEIGHT, gap: 6,
-  },
+    height: CHART_HEIGHT, gap: 6},
   barWrapper: { flex: 1, alignItems: 'center', height: CHART_HEIGHT },
   barTrack: {
     flex: 1, width: '100%', justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   barFill: { width: '100%' },
   barLabel: { color: Colors.textTertiary, fontSize: 11, marginTop: 6 },
   chartFooter: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12,
-    paddingTop: 12, borderTopWidth: 1, borderTopColor: BORDER,
-  },
+    paddingTop: 12, borderTopWidth: 1, borderTopColor: BORDER},
   legendDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: GOLD },
   legendText: { color: Colors.textSecondary, fontSize: 12, flex: 1 },
   legendValue: { fontSize: 13, fontWeight: '700' as const },
 
   platformChip: {
     backgroundColor: SURFACE2, borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: BORDER, alignItems: 'center', gap: 6, minWidth: 100,
-  },
+    borderWidth: 1, borderColor: BORDER, alignItems: 'center', gap: 6, minWidth: 100},
   platformChipIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   platformChipName: { color: '#fff', fontSize: 12, fontWeight: '600' as const },
   platformChipFollowers: { color: Colors.textSecondary, fontSize: 11 },
@@ -1022,8 +997,7 @@ const styles = StyleSheet.create({
 
   postCard: {
     backgroundColor: SURFACE, borderRadius: 16, overflow: 'hidden',
-    borderWidth: 1, borderColor: BORDER, marginBottom: 12,
-  },
+    borderWidth: 1, borderColor: BORDER, marginBottom: 12},
   postImage: { width: '100%', height: 150 },
   postBody: { padding: 12 },
   postText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: 10 },
@@ -1035,38 +1009,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 4,
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)',
-  },
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)'},
   viralBadgeText: { color: GOLD, fontSize: 11, fontWeight: '700' as const },
 
   agentSummaryRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   summaryPill: {
     flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: 'center',
-    backgroundColor: SURFACE2, borderWidth: 1,
-  },
+    backgroundColor: SURFACE2, borderWidth: 1},
   summaryPillValue: { fontSize: 22, fontWeight: '800' as const },
   summaryPillLabel: { color: Colors.textTertiary, fontSize: 11, marginTop: 2 },
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   filterBtn: {
     paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
-    backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER,
-  },
+    backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER},
   filterBtnActive: { backgroundColor: GOLD, borderColor: GOLD },
   filterBtnText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' as const },
   filterBtnTextActive: { color: '#000', fontWeight: '700' as const },
   agentCard: {
     backgroundColor: SURFACE, borderRadius: 16, padding: 14,
     borderWidth: 1, borderColor: BORDER, marginBottom: 10,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-  },
+    flexDirection: 'row', alignItems: 'center', gap: 12},
   agentAvatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: BORDER },
   agentInfo: { flex: 1 },
   agentNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
   agentName: { color: '#fff', fontSize: 14, fontWeight: '700' as const },
   statusBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
-  },
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3},
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusBadgeText: { fontSize: 11, fontWeight: '600' as const },
   agentRole: { color: Colors.textTertiary, fontSize: 11, marginBottom: 6 },
@@ -1074,8 +1043,7 @@ const styles = StyleSheet.create({
   platformDot: {
     width: 20, height: 20, borderRadius: 6,
     backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   agentRight: { alignItems: 'center', gap: 2 },
   agentTaskNum: { color: '#fff', fontSize: 16, fontWeight: '800' as const },
   agentTaskLabel: { color: Colors.textTertiary, fontSize: 10, marginBottom: 4 },
@@ -1086,30 +1054,25 @@ const styles = StyleSheet.create({
   createBtn: {
     backgroundColor: GOLD, borderRadius: 16, paddingVertical: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, marginBottom: 16,
-  },
+    gap: 8, marginBottom: 16},
   createBtnText: { color: '#000', fontSize: 15, fontWeight: '700' as const },
   statusCapsuleRow: { flexDirection: 'row', gap: 6, marginBottom: 16, flexWrap: 'wrap' as const },
   statusCapsule: {
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6,
-    backgroundColor: SURFACE2, borderWidth: 1, alignItems: 'center',
-  },
+    backgroundColor: SURFACE2, borderWidth: 1, alignItems: 'center'},
   statusCapsuleCount: { fontSize: 16, fontWeight: '800' as const },
   statusCapsuleLabel: { color: Colors.textTertiary, fontSize: 10 },
   contentCard: {
     backgroundColor: SURFACE, borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 12,
-  },
+    borderWidth: 1, borderColor: BORDER, marginBottom: 12},
   contentCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   contentPlatformIcons: { flexDirection: 'row', gap: 6 },
   contentPlatformIcon: {
     width: 26, height: 26, borderRadius: 8, backgroundColor: SURFACE2,
-    borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center',
-  },
+    borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center'},
   contentStatusPill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
-  },
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3},
   contentStatusText: { fontSize: 11, fontWeight: '600' as const },
   contentMedia: { width: '100%', height: 140, borderRadius: 12, marginBottom: 10 },
   contentText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: 10 },
@@ -1122,23 +1085,20 @@ const styles = StyleSheet.create({
 
   analyticsTopRow: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 16,
-  },
+    alignItems: 'center', marginBottom: 16},
   analyticsTitle: { color: '#fff', fontSize: 20, fontWeight: '800' as const },
   analyticsSubtitle: { color: Colors.textTertiary, fontSize: 12, marginTop: 2 },
   exportBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: GOLD_DIM, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.25)',
-  },
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.25)'},
   exportBtnText: { color: GOLD, fontSize: 13, fontWeight: '700' as const },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 10, marginBottom: 20 },
   metricCard: {
     width: CARD_WIDTH, backgroundColor: SURFACE,
     borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   metricName: { color: Colors.textTertiary, fontSize: 11, marginBottom: 6 },
   metricValue: { color: '#fff', fontSize: 20, fontWeight: '800' as const, letterSpacing: -0.3, marginBottom: 6 },
   metricTrendRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -1146,8 +1106,7 @@ const styles = StyleSheet.create({
 
   insightBlock: {
     backgroundColor: SURFACE, borderRadius: 18, padding: 16,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 14,
-  },
+    borderWidth: 1, borderColor: BORDER, marginBottom: 14},
   insightBlockHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   insightBlockTitle: { color: '#fff', fontSize: 15, fontWeight: '700' as const },
 
@@ -1163,8 +1122,7 @@ const styles = StyleSheet.create({
 
   peakChartRow: {
     flexDirection: 'row', alignItems: 'flex-end',
-    height: 130, gap: 10, marginBottom: 12,
-  },
+    height: 130, gap: 10, marginBottom: 12},
   peakBarWrapper: { flex: 1, alignItems: 'center', gap: 4 },
   peakPct: { fontSize: 10, fontWeight: '700' as const, marginBottom: 4 },
   peakTrack: { flex: 1, width: '100%', justifyContent: 'flex-end', alignItems: 'center' },
@@ -1174,8 +1132,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: GOLD_DIM2, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.12)',
-  },
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.12)'},
   peakNoteText: { color: Colors.textSecondary, fontSize: 12 },
 
   ageChartRow: { flexDirection: 'row', alignItems: 'flex-end', height: 110, gap: 8, marginBottom: 10 },
@@ -1189,15 +1146,13 @@ const styles = StyleSheet.create({
   commentSummaryRow: {
     flexDirection: 'row', gap: 12, marginBottom: 16,
     backgroundColor: SURFACE, borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   commentStat: { flex: 1, alignItems: 'center' },
   commentStatVal: { fontSize: 22, fontWeight: '800' as const },
   commentStatLabel: { color: Colors.textTertiary, fontSize: 11, marginTop: 2 },
   commentCard: {
     backgroundColor: SURFACE, borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 12,
-  },
+    borderWidth: 1, borderColor: BORDER, marginBottom: 12},
   commentHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   commentAvatar: { width: 38, height: 38, borderRadius: 19 },
   commentUsername: { color: '#fff', fontSize: 14, fontWeight: '700' as const },
@@ -1205,21 +1160,18 @@ const styles = StyleSheet.create({
   commentTime: { color: Colors.textTertiary, fontSize: 11 },
   sentimentBadge: {
     width: 32, height: 32, borderRadius: 10,
-    backgroundColor: SURFACE2, alignItems: 'center', justifyContent: 'center',
-  },
+    backgroundColor: SURFACE2, alignItems: 'center', justifyContent: 'center'},
   commentText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: 12 },
   aiRespBox: {
     backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: 'rgba(59,130,246,0.2)',
-  },
+    borderWidth: 1, borderColor: 'rgba(59,130,246,0.2)'},
   aiRespHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   aiRespLabel: { color: BLUE, fontSize: 12, fontWeight: '600' as const, flex: 1 },
   aiRespText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   pendingBox: { gap: 8 },
   generateRespBtn: {
     backgroundColor: GOLD, borderRadius: 12, paddingVertical: 10,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6},
   generateRespText: { color: '#000', fontSize: 13, fontWeight: '700' as const },
   manualRespBtn: { paddingVertical: 8, alignItems: 'center' },
   manualRespText: { color: Colors.textTertiary, fontSize: 13 },
@@ -1227,31 +1179,25 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: '#111', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, paddingBottom: 36,
-  },
+    padding: 20, paddingBottom: 36},
   createModalSheet: {
     backgroundColor: '#111', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, paddingBottom: 36, maxHeight: '92%',
-  },
+    padding: 20, paddingBottom: 36, maxHeight: '92%'},
   agentModalSheet: {
     backgroundColor: '#111', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, paddingBottom: 36, maxHeight: '90%',
-  },
+    padding: 20, paddingBottom: 36, maxHeight: '90%'},
   modalHandle: {
     width: 40, height: 4, borderRadius: 2, backgroundColor: BORDER,
-    alignSelf: 'center', marginBottom: 16,
-  },
+    alignSelf: 'center', marginBottom: 16},
   modalTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: '800' as const },
   modalCloseBtn: {
     width: 32, height: 32, borderRadius: 10, backgroundColor: SURFACE2,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   exportOption: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: SURFACE2, borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 10,
-  },
+    borderWidth: 1, borderColor: BORDER, marginBottom: 10},
   exportIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   exportOptTitle: { color: '#fff', fontSize: 15, fontWeight: '600' as const },
   exportOptDesc: { color: Colors.textTertiary, fontSize: 12, marginTop: 2 },
@@ -1260,24 +1206,20 @@ const styles = StyleSheet.create({
   platformOpt: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: SURFACE2, borderRadius: 12, padding: 10,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   platformOptActive: { borderColor: GOLD, backgroundColor: GOLD_DIM },
   platformOptText: { color: Colors.textSecondary, fontSize: 12 },
   topicInput: {
     backgroundColor: SURFACE2, borderRadius: 14, padding: 14,
     color: '#fff', fontSize: 14, borderWidth: 1, borderColor: BORDER,
-    minHeight: 70, textAlignVertical: 'top' as const, marginBottom: 14,
-  },
+    minHeight: 70, textAlignVertical: 'top' as const, marginBottom: 14},
   generateBtn: {
     backgroundColor: GOLD, borderRadius: 14, paddingVertical: 14,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 14,
-  },
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 14},
   generateBtnText: { color: '#000', fontSize: 15, fontWeight: '700' as const },
   generatedBox: {
     backgroundColor: SURFACE2, borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   generatedHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   generatedTitle: { color: GOLD, fontSize: 13, fontWeight: '700' as const },
   generatedText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20 },
@@ -1285,30 +1227,25 @@ const styles = StyleSheet.create({
   copyBtn: {
     flex: 1, borderRadius: 12, paddingVertical: 10,
     alignItems: 'center', backgroundColor: SURFACE,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   copyBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' as const },
   queueBtn: { flex: 2, borderRadius: 12, paddingVertical: 10, alignItems: 'center', backgroundColor: GOLD },
   queueBtnText: { color: '#000', fontSize: 13, fontWeight: '700' as const },
 
   agentModalClose: {
     alignSelf: 'flex-end', width: 32, height: 32, borderRadius: 10,
-    backgroundColor: SURFACE2, alignItems: 'center', justifyContent: 'center',
-  },
+    backgroundColor: SURFACE2, alignItems: 'center', justifyContent: 'center'},
   agentModalAvatar: {
     width: 80, height: 80, borderRadius: 40, alignSelf: 'center',
-    marginVertical: 12, borderWidth: 3, borderColor: GOLD_DIM,
-  },
+    marginVertical: 12, borderWidth: 3, borderColor: GOLD_DIM},
   agentModalName: { color: '#fff', fontSize: 20, fontWeight: '800' as const, textAlign: 'center' as const },
   agentModalRole: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center' as const, marginTop: 3 },
   agentModalDesc: {
     color: Colors.textTertiary, fontSize: 13, lineHeight: 20,
-    textAlign: 'center' as const, marginVertical: 12,
-  },
+    textAlign: 'center' as const, marginVertical: 12},
   agentModalStats: {
     flexDirection: 'row', backgroundColor: SURFACE2, borderRadius: 16,
-    borderWidth: 1, borderColor: BORDER, overflow: 'hidden', marginBottom: 16,
-  },
+    borderWidth: 1, borderColor: BORDER, overflow: 'hidden', marginBottom: 16},
   agentModalStat: { flex: 1, alignItems: 'center', gap: 4, padding: 16 },
   agentModalStatVal: { color: '#fff', fontSize: 20, fontWeight: '800' as const },
   agentModalStatLabel: { color: Colors.textTertiary, fontSize: 11 },
@@ -1317,19 +1254,15 @@ const styles = StyleSheet.create({
   agentModalPlatformChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: SURFACE2, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: BORDER,
-  },
+    borderWidth: 1, borderColor: BORDER},
   agentModalPlatformText: { color: Colors.textSecondary, fontSize: 12 },
   agentModalActions: { flexDirection: 'row', gap: 10 },
   agentActionBtn: {
     flex: 1, backgroundColor: GOLD, borderRadius: 14, paddingVertical: 13,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6},
   agentActionBtnText: { color: '#000', fontSize: 14, fontWeight: '700' as const },
   agentSecBtn: {
     flex: 1, backgroundColor: SURFACE2, borderRadius: 14, paddingVertical: 13,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    borderWidth: 1, borderColor: BORDER,
-  },
-  agentSecBtnText: { color: GOLD, fontSize: 14, fontWeight: '700' as const },
-});
+    borderWidth: 1, borderColor: BORDER},
+  agentSecBtnText: { color: GOLD, fontSize: 14, fontWeight: '700' as const }});

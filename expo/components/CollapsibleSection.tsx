@@ -21,8 +21,7 @@ function CollapsibleSectionInner({
   defaultExpanded = false,
   children,
   badge,
-  testID,
-}: CollapsibleSectionProps) {
+  testID}: CollapsibleSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const animValue = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
 
@@ -31,15 +30,13 @@ function CollapsibleSectionInner({
     Animated.timing(animValue, {
       toValue,
       duration: 200,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
     setExpanded(!expanded);
   }, [expanded, animValue]);
 
   const contentHeight = animValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 2000],
-  });
+    outputRange: [0, 2000]});
 
   return (
     <View style={styles.container} testID={testID}>
@@ -83,45 +80,36 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-  },
+    padding: 14},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
+    flex: 1},
   iconWrap: {
     width: 32,
     height: 32,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-  },
+    marginRight: 10},
   title: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
-    marginLeft: 8,
-  },
+    marginLeft: 8},
   badgeText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   content: {
     paddingHorizontal: 14,
-    paddingBottom: 14,
-  },
-});
+    paddingBottom: 14}});

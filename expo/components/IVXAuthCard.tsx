@@ -21,10 +21,8 @@ import React, {
   useRef,
   useCallback,
   useMemo,
-  useEffect,
-} from 'react';
-import {
-  View,
+  useEffect} from 'react';
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
@@ -34,11 +32,9 @@ import {
   Platform,
   Image,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Dimensions,
-  LayoutChangeEvent,
-} from 'react-native';
+  LayoutChangeEvent} from "react-native";
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -67,8 +63,7 @@ import {
   Briefcase,
   Megaphone,
   Handshake,
-  Coins,
-} from 'lucide-react-native';
+  Coins} from 'lucide-react-native';
 import { useRouter, Href } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 
@@ -81,11 +76,11 @@ import {
   validatePhone,
   sanitizeEmail,
   formatBirthdayInput,
-  parseBirthday,
-} from '@/lib/auth-helpers';
+  parseBirthday} from '@/lib/auth-helpers';
 import { getPasswordResetRedirectUrl } from '@/lib/auth-password-recovery';
 import * as MemberService from '@/lib/member-service';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -226,8 +221,7 @@ interface IVXAuthCardProps {
 export function IVXAuthCard({
   initialMode = 'login',
   ownerMode = false,
-  testIdPrefix = 'ivx-auth',
-}: IVXAuthCardProps) {
+  testIdPrefix = 'ivx-auth'}: IVXAuthCardProps) {
   const router = useRouter();
   const { login, register, loginLoading, registerLoading, isAuthenticated } = useAuth();
 
@@ -377,8 +371,7 @@ export function IVXAuthCard({
       toValue: newMode === 'login' ? 0 : 1,
       tension: 80,
       friction: 10,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [mode, tabAnim]);
 
   // --- Tab Indicator Layout ---
@@ -393,8 +386,7 @@ export function IVXAuthCard({
 
   const indicatorTranslateX = tabAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, tabLayouts.login || 0],
-  });
+    outputRange: [0, tabLayouts.login || 0]});
 
   const indicatorWidth = useMemo(() => {
     return mode === 'login' ? tabLayouts.login : tabLayouts.signup;
@@ -412,8 +404,7 @@ export function IVXAuthCard({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
-      });
+        quality: 0.85});
       if (result.canceled || !result.assets || result.assets.length === 0) return;
       const uri = result.assets[0].uri;
       setPictureUri(uri);
@@ -454,8 +445,7 @@ export function IVXAuthCard({
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: 'file',
           mimeType: 'image/jpeg',
-          headers,
-        });
+          headers});
         uploadOk = result.status >= 200 && result.status < 300;
       }
       if (!uploadOk) throw new Error('Upload failed');
@@ -645,8 +635,7 @@ export function IVXAuthCard({
         zipCode: '',
         roles: [memberRole],
         acceptTerms,
-        pictureUrl: uploadedPictureUrl ?? undefined,
-      });
+        pictureUrl: uploadedPictureUrl ?? undefined});
 
       if (result.success && result.userId) {
         // Email is auto-confirmed server-side — skip verification, go straight to complete
@@ -664,8 +653,7 @@ export function IVXAuthCard({
           lastName: lastName.trim(),
           phone: signupPhone,
           country: 'United States',
-          accountType: 'investor',
-        });
+          accountType: 'investor'});
 
         if (authResult.success) {
           if (authResult.requiresLogin) {
@@ -841,7 +829,7 @@ export function IVXAuthCard({
             </View>
 
             {verifying && (
-              <ActivityIndicator size="small" color={Colors.gold} style={styles.verifySpinner} />
+              <ShimmerIndicator size="small" color={Colors.gold} style={styles.verifySpinner} />
             )}
 
             <View style={styles.resendRow}>
@@ -932,8 +920,7 @@ export function IVXAuthCard({
               styles.cardWrapper,
               {
                 opacity: cardFade,
-                transform: [{ translateY: cardSlide }],
-              },
+                transform: [{ translateY: cardSlide }]},
             ]}
           >
             <GlassBackground style={styles.glassCard}>
@@ -955,8 +942,7 @@ export function IVXAuthCard({
                       styles.tabIndicator,
                       {
                         width: indicatorWidth || 100,
-                        transform: [{ translateX: indicatorTranslateX }],
-                      },
+                        transform: [{ translateX: indicatorTranslateX }]},
                     ]}
                   />
                   <TouchableOpacity
@@ -1080,7 +1066,7 @@ export function IVXAuthCard({
                           disabled={forgotPasswordSending}
                         >
                           {forgotPasswordSending ? (
-                            <ActivityIndicator size="small" color={Colors.gold} />
+                            <ShimmerIndicator size="small" color={Colors.gold} />
                           ) : (
                             <Text style={styles.forgotLink}>Forgot password?</Text>
                           )}
@@ -1103,7 +1089,7 @@ export function IVXAuthCard({
                         testID={`${testIdPrefix}-login-submit`}
                       >
                         {isLoading ? (
-                          <ActivityIndicator size="small" color={Colors.black} />
+                          <ShimmerIndicator size="small" color={Colors.black} />
                         ) : (
                           <>
                             <Text style={styles.primaryButtonText}>Sign In</Text>
@@ -1141,7 +1127,7 @@ export function IVXAuthCard({
                       ) : (
                         <View style={styles.picturePlaceholder}>
                           {pictureUploading ? (
-                            <ActivityIndicator size="small" color={Colors.gold} />
+                            <ShimmerIndicator size="small" color={Colors.gold} />
                           ) : (
                             <>
                               <Camera size={24} color={Colors.textTertiary} />
@@ -1327,8 +1313,7 @@ export function IVXAuthCard({
                               styles.strengthFill,
                               {
                                 width: strengthInfo.width,
-                                backgroundColor: strengthInfo.color,
-                              },
+                                backgroundColor: strengthInfo.color},
                             ]}
                           />
                         </View>
@@ -1438,7 +1423,7 @@ export function IVXAuthCard({
                     testID={`${testIdPrefix}-signup-submit`}
                   >
                     {isLoading ? (
-                      <ActivityIndicator size="small" color={Colors.black} />
+                      <ShimmerIndicator size="small" color={Colors.black} />
                     ) : (
                       <>
                         <Text style={styles.primaryButtonText}>Create Account</Text>
@@ -1488,8 +1473,7 @@ const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
     backgroundColor: '#000000',
-    minHeight: 800,
-  },
+    minHeight: 800},
   glowOrb1: {
     position: 'absolute',
     top: -100,
@@ -1497,8 +1481,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(255, 215, 0, 0.08)',
-  },
+    backgroundColor: 'rgba(255, 215, 0, 0.08)'},
   glowOrb2: {
     position: 'absolute',
     bottom: -120,
@@ -1506,70 +1489,59 @@ const styles = StyleSheet.create({
     width: 350,
     height: 350,
     borderRadius: 175,
-    backgroundColor: 'rgba(255, 215, 0, 0.05)',
-  },
+    backgroundColor: 'rgba(255, 215, 0, 0.05)'},
   keyboardAvoid: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
     paddingHorizontal: 16,
-    minHeight: 800,
-  },
+    minHeight: 800},
   cardWrapper: {
     width: '100%' as any,
-    maxWidth: cardMaxWidth,
-  },
+    maxWidth: cardMaxWidth},
   glassCard: {
     borderRadius: 24,
     overflow: 'hidden',
     paddingHorizontal: 28,
-    paddingVertical: 32,
-  },
+    paddingVertical: 32},
   glassCardWeb: {
     backgroundColor: 'rgba(20, 20, 20, 0.75)',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.15)',
     paddingHorizontal: 28,
-    paddingVertical: 32,
-  } as any,
+    paddingVertical: 32} as any,
   glassCardNative: {
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.15)',
     overflow: 'hidden',
     paddingHorizontal: 28,
-    paddingVertical: 32,
-  },
+    paddingVertical: 32},
   glassCardVerify: {
     borderRadius: 24,
     paddingHorizontal: 28,
     paddingVertical: 36,
-    alignItems: 'center',
-  } as any,
+    alignItems: 'center'} as any,
 
   // Logo
   logoSection: {
     alignItems: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   logo: {
     width: 64,
     height: 64,
     borderRadius: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   tagline: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.gold,
     letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
 
   // Tabs
   tabContainer: {
@@ -1578,8 +1550,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     marginBottom: 24,
-    position: 'relative',
-  },
+    position: 'relative'},
   tabIndicator: {
     position: 'absolute',
     top: 4,
@@ -1587,22 +1558,18 @@ const styles = StyleSheet.create({
     left: 4,
     backgroundColor: Colors.gold,
     borderRadius: 10,
-    zIndex: 0,
-  },
+    zIndex: 0},
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    zIndex: 1,
-  },
+    zIndex: 1},
   tabText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   tabTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
 
   // Owner Mode
   ownerModeBanner: {
@@ -1613,34 +1580,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 215, 0, 0.08)',
     borderRadius: 12,
     paddingVertical: 12,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   ownerModeText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.gold,
-  },
+    color: Colors.gold},
 
   // Form
   formSection: {
-    gap: 14,
-  } as any,
+    gap: 14} as any,
 
   // Profile Picture
   pictureSection: {
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   picturePicker: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-  } as any,
+    borderRadius: 40} as any,
   picturePreview: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-  } as any,
+    borderRadius: 40} as any,
   picturePlaceholder: {
     width: 80,
     height: 80,
@@ -1651,29 +1612,24 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
+    gap: 4},
   pictureText: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   pictureOptionalText: {
     fontSize: 8,
     color: Colors.textTertiary,
-    opacity: 0.7,
-  },
+    opacity: 0.7},
 
   // Fields
   fieldGroup: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   fieldLabel: {
     fontSize: 13,
     fontWeight: '500' as const,
     color: Colors.textSecondary,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1684,35 +1640,29 @@ const styles = StyleSheet.create({
     borderColor: Colors.inputBorder,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    minHeight: 50,
-  },
+    minHeight: 50},
   inputWrapError: {
     borderColor: Colors.error,
-    borderWidth: 1.5,
-  },
+    borderWidth: 1.5},
   input: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
-    paddingVertical: 0,
-  },
+    paddingVertical: 0},
 
   // Name Row
   nameRow: {
-    flexDirection: 'row',
-  },
+    flexDirection: 'row'},
 
   // Error
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 5,
-  },
+    marginTop: 5},
   errorText: {
     fontSize: 12,
-    color: Colors.error,
-  },
+    color: Colors.error},
   errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1722,55 +1672,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 77, 77, 0.2)',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   errorCardText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.error,
-  },
+    color: Colors.error},
 
   // Password Strength
   strengthContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 6,
-  },
+    marginTop: 6},
   strengthBar: {
     flex: 1,
     height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 2,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   strengthFill: {
     height: '100%' as any,
-    borderRadius: 2,
-  } as any,
+    borderRadius: 2} as any,
   strengthLabel: {
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Match indicator
   matchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 5,
-  },
+    marginTop: 5},
   matchText: {
     fontSize: 12,
-    color: Colors.green,
-  },
+    color: Colors.green},
 
   // Role Grid
   roleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  } as any,
+    gap: 8} as any,
   roleChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1781,27 +1722,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: Colors.inputBorder,
-    minHeight: 44,
-  },
+    minHeight: 44},
   roleChipActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   roleChipText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   roleChipTextActive: {
-    color: Colors.gold,
-  },
+    color: Colors.gold},
 
   // Gender chips
   genderRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  } as any,
+    gap: 8} as any,
   genderChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1812,31 +1748,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: Colors.inputBorder,
-    minHeight: 44,
-  },
+    minHeight: 44},
   genderChipActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   genderChipError: {
-    borderColor: Colors.red,
-  },
+    borderColor: Colors.red},
   genderChipText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   genderChipTextActive: {
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Checkbox / Terms
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   checkbox: {
     width: 20,
     height: 20,
@@ -1844,45 +1774,37 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.inputBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkboxChecked: {
     backgroundColor: Colors.gold,
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   checkboxLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   termsText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   termsLink: {
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Login Options
   loginOptionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   forgotLink: {
     fontSize: 13,
     color: Colors.gold,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
 
   // Buttons
   primaryButton: {
@@ -1894,43 +1816,35 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     marginTop: 8,
-    minHeight: 52,
-  },
+    minHeight: 52},
   primaryButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   primaryButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   secondaryButton: {
     alignItems: 'center',
     paddingVertical: 12,
-    marginTop: 10,
-  },
+    marginTop: 10},
   secondaryButtonText: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
 
   // Switch Mode
   switchModeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
-  },
+    marginTop: 16},
   switchModeText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   switchModeLink: {
     fontSize: 14,
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Secure Badges
   secureBadgesRow: {
@@ -1940,36 +1854,30 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
-  },
+    borderTopColor: 'rgba(255, 255, 255, 0.06)'},
   secureBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   secureBadgeText: {
     fontSize: 11,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
 
   // Forgot Password Sent
   forgotSentCard: {
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 20,
-  },
+    paddingVertical: 20},
   forgotSentTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.green,
-  },
+    color: Colors.green},
   forgotSentText: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-  },
+    lineHeight: 20},
 
   // Verification
   verifyIconWrap: {
@@ -1979,30 +1887,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 215, 0, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   verifyTitle: {
     fontSize: 22,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   verifySubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   verifyTarget: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.gold,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   codeRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   codeInput: {
     width: 44,
     height: 52,
@@ -2013,32 +1916,25 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700' as const,
     color: Colors.text,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   codeInputFilled: {
     borderColor: Colors.gold,
-    backgroundColor: 'rgba(255, 215, 0, 0.05)',
-  },
+    backgroundColor: 'rgba(255, 215, 0, 0.05)'},
   verifySpinner: {
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   resendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   resendText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   resendLink: {
     fontSize: 13,
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   resendLinkDisabled: {
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
 
   // Complete
   completeIconWrap: {
@@ -2048,8 +1944,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 196, 140, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
-});
+    marginBottom: 16}});
 
 export default IVXAuthCard;

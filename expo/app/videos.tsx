@@ -18,17 +18,14 @@
  *   • Per-item error boundary so one bad video never crashes the feed
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   useWindowDimensions,
   Platform,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
@@ -42,14 +39,12 @@ import {
   toggleVideoFollow,
   reportVideo,
   getViewerId,
-  buildVideoShareUrl,
-} from '@/lib/video-platform';
+  buildVideoShareUrl} from '@/lib/video-platform';
 import ProjectCommentsSheet from '@/components/ProjectCommentsSheet';
 import ProjectShareSheet from '@/components/ProjectShareSheet';
 import CanonicalInvestmentReelCard, {
   feedVideoToReelData,
-  type CanonicalReelData,
-} from '@/components/CanonicalInvestmentReelCard';
+  type CanonicalReelData} from '@/components/CanonicalInvestmentReelCard';
 import { useReelPlayback } from '@/hooks/useReelPlayback';
 import { useReelEngagement, type EngagementState } from '@/hooks/useReelEngagement';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
@@ -57,9 +52,9 @@ import {
   fetchProjectComments,
   addProjectComment,
   deleteProjectComment,
-  type ProjectComment,
-} from '@/lib/project-engagement';
+  type ProjectComment} from '@/lib/project-engagement';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const GOLD = Colors.primary;
 
@@ -109,8 +104,7 @@ export default function VideosScreen() {
       return fetchVideoFeed(PAGE_SIZE, 0);
     },
     staleTime: 60_000,
-    retry: 2,
-  });
+    retry: 2});
 
   // Sync initial query results into local state via guarded effect
   const queryData = feedQuery.data;
@@ -350,8 +344,7 @@ export default function VideosScreen() {
         saveCount: fallback.save_count ?? 0,
         liked: false,
         saved: false,
-        following: false,
-      };
+        following: false};
     },
     [],
   );
@@ -367,8 +360,7 @@ export default function VideosScreen() {
         likeCount: eng.likeCount,
         saveCount: eng.saveCount,
         shareCount: eng.shareCount,
-        commentCount: eng.commentCount,
-      };
+        commentCount: eng.commentCount};
       return (
         <CanonicalInvestmentReelCard
           data={mergedData}
@@ -422,7 +414,7 @@ export default function VideosScreen() {
 
       {feedQuery.isLoading ? (
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={GOLD} />
+          <ShimmerIndicator size="large" color={GOLD} />
         </View>
       ) : filteredVideos.length === 0 ? (
         <View style={styles.loading}>
@@ -456,7 +448,7 @@ export default function VideosScreen() {
           ListFooterComponent={
             isFetchingMore ? (
               <View style={{ height: windowHeight, alignItems: 'center', justifyContent: 'center' }}>
-                <ActivityIndicator size="large" color={GOLD} />
+                <ShimmerIndicator size="large" color={GOLD} />
               </View>
             ) : null
           }
@@ -513,8 +505,7 @@ export default function VideosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   topBar: {
     position: 'absolute',
     top: 0,
@@ -522,68 +513,57 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 30,
     paddingHorizontal: 10,
-    paddingBottom: 10,
-  },
+    paddingBottom: 10},
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-  },
+    gap: 8},
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   tabs: {
     flex: 1,
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   tab: {
     flexShrink: 0,
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 999,
     paddingVertical: 7,
-    paddingHorizontal: 14,
-  },
+    paddingHorizontal: 14},
   tabActive: {
-    backgroundColor: GOLD,
-  },
+    backgroundColor: GOLD},
   tabText: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '700' as const,
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
+    textShadowRadius: 3},
   tabTextActive: {
     color: '#000',
-    textShadowColor: 'transparent',
-  },
+    textShadowColor: 'transparent'},
   loading: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   emptyText: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 15,
-  },
+    fontSize: 15},
   toast: {
     position: 'absolute',
     bottom: 100,
     left: 0,
     right: 0,
     alignItems: 'center',
-    zIndex: 60,
-  },
+    zIndex: 60},
   toastText: {
     backgroundColor: 'rgba(20,20,20,0.92)',
     color: '#fff',
@@ -591,6 +571,4 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     fontSize: 13,
-    fontWeight: '600',
-  },
-});
+    fontWeight: '600'}});

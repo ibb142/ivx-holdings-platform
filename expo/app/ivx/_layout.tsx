@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { Stack } from 'expo-router';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import {View, Text, StyleSheet } from "react-native";
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { isAdminRole } from '@/lib/auth-helpers';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // IVX Crash Shield: route-level error boundary for every ivx screen
 // (chat / cto-dashboard / diagnostics / incidents / deploy / etc.).
@@ -16,8 +17,7 @@ const IVX_STACK_SCREEN_OPTIONS = {
   headerTintColor: Colors.text,
   headerTitleStyle: { fontWeight: '700' as const },
   contentStyle: { backgroundColor: Colors.background },
-  headerShadowVisible: false,
-} as const;
+  headerShadowVisible: false} as const;
 
 const IVX_INBOX_OPTIONS = { title: 'IVX Inbox' } as const;
 const IVX_CHAT_OPTIONS = { title: 'IVX Owner AI', headerShown: false } as const;
@@ -67,7 +67,7 @@ export default function IVXOwnerLayout() {
   if (isLoading) {
     return (
       <View style={ivxStyles.loading}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={ivxStyles.loadingText}>Loading IVX…</Text>
       </View>
     );
@@ -120,18 +120,14 @@ const ivxStyles = StyleSheet.create({
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-  },
+    padding: 24},
   loadingText: {
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '600' as const,
-    marginTop: 12,
-  },
+    marginTop: 12},
   deniedText: {
     color: Colors.error,
     fontSize: 14,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
-});
+    textAlign: 'center' as const}});

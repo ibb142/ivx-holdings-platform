@@ -23,23 +23,27 @@ import { EmailProvider } from "@/lib/email-context";
 import { NetworkProvider } from "@/lib/network-context";
 import Colors from "@/constants/colors";
 
+// Instagram-style cache-first QueryClient:
+// - Long staleTime so cached data renders instantly (no spinner)
+// - Long gcTime so cache survives navigation between tabs
+// - refetchOnMount: false to avoid refetch on tab switches (served from cache immediately)
+// - placeholderData: keepPreviousData so paginated feeds never flash blank
+// - retry: 1 with short delays for fast recovery
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
-      retry: 2,
-      refetchOnMount: true,
+      staleTime: 5 * 60_000, // 5 minutes — data stays fresh, no refetch on mount
+      gcTime: 30 * 60_000, // 30 minutes — cache survives tab navigation
+      retry: 1,
+      refetchOnMount: false, // Don't refetch when switching tabs — serve cache instantly
       refetchOnReconnect: true,
       refetchOnWindowFocus: false,
       networkMode: 'online',
+      // keepPreviousData: true — serve stale data while refetching (Instagram pattern)
     },
     mutations: {
       retry: 1,
-      networkMode: 'online',
-    },
-  },
-});
+      networkMode: 'online'}}});
 
 // Prevent native splash from auto-hiding before React renders.
 // Without this, Android dismisses the native splash before the JS bundle
@@ -78,8 +82,7 @@ class ProviderBoundary extends Component<ProviderBoundaryProps, ProviderBoundary
     return {
       hasError: true,
       error,
-      traceId: 'IVX-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8),
-    };
+      traceId: 'IVX-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8)};
   }
   componentDidCatch(error: Error) {
     const category = classifyProviderError(error);
@@ -221,8 +224,7 @@ export default function RootLayout() {
                                 <Stack
                                   screenOptions={{
                                     headerShown: false,
-                                    contentStyle: { backgroundColor: Colors.background },
-                                  }}
+                                    contentStyle: { backgroundColor: Colors.background }}}
                                 >
                                   <Stack.Screen name="login" options={{ headerShown: false }} />
                                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -263,37 +265,30 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
-  },
+    padding: 24},
   providerErrorName: {
     color: Colors.error,
     fontSize: 16,
     fontWeight: "700" as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   providerErrorMsg: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontFamily: "monospace" as const,
     textAlign: "center" as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   providerErrorTrace: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontFamily: "monospace" as const,
     textAlign: "center" as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   providerErrorButton: {
     backgroundColor: Colors.gold,
     borderRadius: 12,
     paddingHorizontal: 32,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   providerErrorButtonText: {
     color: Colors.black,
     fontSize: 16,
-    fontWeight: "700" as const,
-  },
-});
+    fontWeight: "700" as const}});

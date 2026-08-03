@@ -5,8 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { 
   Banknote, 
   Copy, 
@@ -18,8 +17,7 @@ import {
   ChevronUp,
   Clock,
   AlertTriangle,
-  FileText,
-} from 'lucide-react-native';
+  FileText} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -39,8 +37,7 @@ export default function WireTransferForm({
   fee,
   onWireTypeChange,
   wireType,
-  disabled = false,
-}: WireTransferFormProps) {
+  disabled = false}: WireTransferFormProps) {
   return (
     <View style={styles.container}>
       <View style={styles.wireTypeSelector}>
@@ -405,8 +402,7 @@ Amount: ${formatNumber(amount)}
               month: 'long',
               day: 'numeric',
               hour: '2-digit',
-              minute: '2-digit',
-            })}
+              minute: '2-digit'})}
           </Text>
         </View>
       )}
@@ -442,12 +438,10 @@ function DetailRow({ label, value, onCopy, highlight = false }: DetailRowProps) 
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
-  },
+    gap: 16},
   wireTypeSelector: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   wireTypeButton: {
     flex: 1,
     flexDirection: 'row',
@@ -458,36 +452,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.backgroundTertiary,
     borderWidth: 1,
-    borderColor: 'transparent',
-  },
+    borderColor: 'transparent'},
   wireTypeButtonActive: {
     backgroundColor: Colors.primary + '15',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   wireTypeText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   wireTypeTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   infoCard: {
     backgroundColor: Colors.backgroundTertiary,
     padding: 14,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   infoHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   infoText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   feeNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -496,61 +483,50 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.warning + '30',
-  },
+    borderColor: Colors.warning + '30'},
   feeNoticeText: {
     flex: 1,
     fontSize: 13,
     color: Colors.warning,
     fontWeight: '500' as const,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   summaryCard: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 12,
-    padding: 16,
-  },
+    padding: 16},
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   summaryRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     marginTop: 8,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   summaryLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   summaryValue: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   summaryLabelTotal: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   summaryValueTotal: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: Colors.success,
-  },
+    color: Colors.success},
   instructionsContainer: {
-    flex: 1,
-  },
+    flex: 1},
   instructionsHeader: {
     alignItems: 'center',
     paddingVertical: 20,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   instructionsIconContainer: {
     width: 60,
     height: 60,
@@ -558,18 +534,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   instructionsTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   instructionsSubtitle: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   copyAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -578,27 +551,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: Colors.primary + '10',
     borderRadius: 10,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   copyAllText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   detailsSection: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -607,70 +575,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   detailContent: {
     flex: 1,
-    marginRight: 12,
-  },
+    marginRight: 12},
   detailLabel: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   detailValue: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   detailValueHighlight: {
     color: Colors.primary,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   addressCard: {
     backgroundColor: Colors.backgroundTertiary,
     padding: 14,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   addressText: {
     fontSize: 14,
     color: Colors.text,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   beneficiaryName: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   collapsibleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   intermediaryDetails: {
-    marginTop: 8,
-  },
+    marginTop: 8},
   referenceSection: {
     backgroundColor: Colors.primary + '10',
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   referenceSectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.primary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   referenceNote: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   referenceBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -678,52 +633,43 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     padding: 14,
     borderRadius: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   referenceLabel: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   referenceValue: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.primary,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   memoValue: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   instructionsList: {
     gap: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   instructionItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   instructionNumber: {
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: Colors.primary + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   instructionNumberText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   instructionText: {
     flex: 1,
     fontSize: 14,
     color: Colors.text,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   expirationNotice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -731,14 +677,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning + '15',
     padding: 12,
     borderRadius: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   expirationText: {
     flex: 1,
     fontSize: 12,
     color: Colors.warning,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   securityNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -746,12 +690,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '10',
     padding: 14,
     borderRadius: 10,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   securityText: {
     flex: 1,
     fontSize: 13,
     color: Colors.success,
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});

@@ -6,8 +6,7 @@ import {
   TouchableOpacity,
   Animated,
   Platform,
-  Share,
-} from 'react-native';
+  Share} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -34,8 +33,7 @@ import {
   Flame,
   BrainCircuit,
   ChevronRight,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
@@ -73,8 +71,7 @@ const GLOBAL_STATS = {
   internetUsers: '5.4B',
   socialMediaUsers: '4.9B',
   targetMarket: 'Global',
-  investorPool: '$450T',
-};
+  investorPool: '$450T'};
 
 const SYSTEM_MODULES: SystemModule[] = [
   { id: 'landing', name: 'Landing Page', status: 'live', uptime: '99.99%', requests: '24/7', color: '#00C48C', icon: <Monitor size={16} color="#00C48C" /> },
@@ -137,8 +134,7 @@ function PulsingDot({ color, size = 8 }: { color: string; size?: number }) {
           borderRadius: size,
           backgroundColor: color + '30',
           transform: [{ scale: pulseAnim }],
-          opacity: opacityAnim,
-        }}
+          opacity: opacityAnim}}
       />
       <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
     </View>
@@ -174,8 +170,7 @@ function GlobalReachMeter() {
     Animated.timing(fillAnim, {
       toValue: 1,
       duration: 2000,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
   }, [fillAnim]);
 
   const regions = useMemo(() => [
@@ -202,8 +197,7 @@ function GlobalReachMeter() {
               borderRadius: 3,
               backgroundColor: r.color,
               flex: r.pct,
-              opacity: fillAnim,
-            }}
+              opacity: fillAnim}}
           />
         ))}
       </View>
@@ -228,15 +222,13 @@ function MoneyFlowVisualizer() {
       Animated.timing(flowAnim, {
         toValue: 1,
         duration: 3000,
-        useNativeDriver: true,
-      })
+        useNativeDriver: true})
     ).start();
   }, [flowAnim]);
 
   const translateX = flowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-100, 300],
-  });
+    outputRange: [-100, 300]});
 
   return (
     <View style={styles.moneyFlow}>
@@ -295,8 +287,7 @@ export default function ActivationCenterScreen() {
     try {
       await Share.share({
         message: 'Invest in real estate from $1. Join 52,000+ investors worldwide. Start free: https://ivxholding.com',
-        title: 'IVXHOLDINGS — Real Estate Investment',
-      });
+        title: 'IVXHOLDINGS — Real Estate Investment'});
     } catch (err) {
       console.log('[Activation] Share error:', err);
     }
@@ -504,56 +495,47 @@ export default function ActivationCenterScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#050507',
-  },
+    backgroundColor: '#050507'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: '#1A1A1E',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   headerLiveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   headerLiveText: {
     color: '#00C48C',
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   headerTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   shareBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scrollContent: {
     paddingHorizontal: 16,
-    gap: 16,
-  },
+    gap: 16},
   heroCard: {
     backgroundColor: '#0A0E0C',
     borderRadius: 24,
@@ -561,16 +543,14 @@ const styles = StyleSheet.create({
     borderColor: '#00C48C30',
     padding: 24,
     alignItems: 'center',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   heroGlow: {
     position: 'absolute',
     top: -60,
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: '#00C48C08',
-  },
+    backgroundColor: '#00C48C08'},
   heroIconWrap: {
     width: 64,
     height: 64,
@@ -580,22 +560,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   heroTitle: {
     color: Colors.text,
     fontSize: 22,
     fontWeight: '900' as const,
     letterSpacing: 3,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   heroStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -605,130 +582,108 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A1E',
     overflow: 'hidden',
-    width: '100%',
-  },
+    width: '100%'},
   heroStat: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 14,
-    gap: 4,
-  },
+    gap: 4},
   heroStatLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '600' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   heroStatValue: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '800' as const,
-    fontVariant: ['tabular-nums'] as any,
-  },
+    fontVariant: ['tabular-nums'] as any},
   heroStatDivider: {
     width: 1,
     height: 32,
-    backgroundColor: '#1A1A1E',
-  },
+    backgroundColor: '#1A1A1E'},
   liveCounterValue: {
     color: Colors.primary,
     fontSize: 16,
     fontWeight: '800' as const,
-    fontVariant: ['tabular-nums'] as any,
-  },
+    fontVariant: ['tabular-nums'] as any},
   reachMeter: {
     backgroundColor: '#0D0D10',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#1E1E22',
     padding: 18,
-    gap: 12,
-  },
+    gap: 12},
   reachHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   reachTitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   reachTotal: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   reachBar: {
     flexDirection: 'row',
     gap: 2,
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   reachLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   reachLegendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   reachLegendDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   reachLegendText: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   reachLegendPop: {
     color: Colors.textSecondary,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 8,
-  },
+    marginTop: 8},
   sectionTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '800' as const,
-    flex: 1,
-  },
+    flex: 1},
   sectionSubtitle: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   allLiveBadge: {
     backgroundColor: '#00C48C15',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: '#00C48C30',
-  },
+    borderColor: '#00C48C30'},
   allLiveText: {
     color: '#00C48C',
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   modulesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   moduleCard: {
     width: '48%' as any,
     backgroundColor: '#0D0D10',
@@ -738,68 +693,56 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
     flexGrow: 1,
-    flexBasis: '46%' as any,
-  },
+    flexBasis: '46%' as any},
   moduleTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   moduleName: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   moduleUptime: {
     color: Colors.textTertiary,
-    fontSize: 10,
-  },
+    fontSize: 10},
   moduleStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   moduleStatusDot: {
     width: 5,
     height: 5,
-    borderRadius: 2.5,
-  },
+    borderRadius: 2.5},
   moduleStatusText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   moneyFlow: {
     backgroundColor: '#0D0D10',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#1E1E22',
     padding: 18,
-    gap: 12,
-  },
+    gap: 12},
   moneyFlowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   moneyFlowTitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   moneyFlowTrack: {
     height: 4,
     borderRadius: 2,
     overflow: 'hidden',
-    position: 'relative',
-  },
+    position: 'relative'},
   moneyFlowBg: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1A1A1E',
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   moneyFlowPulse: {
     position: 'absolute',
     top: 0,
@@ -807,29 +750,24 @@ const styles = StyleSheet.create({
     width: 80,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.primary + '60',
-  },
+    backgroundColor: Colors.primary + '60'},
   moneyFlowStages: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   moneyFlowStage: {
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   moneyFlowDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: '#2A2A2E',
     borderWidth: 2,
-    borderColor: '#1A1A1E',
-  },
+    borderColor: '#1A1A1E'},
   moneyFlowStageText: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   channelRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -839,51 +777,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A1E',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   channelIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   channelInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   channelName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   channelReach: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   channelStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   channelStatusDot: {
     width: 5,
     height: 5,
-    borderRadius: 2.5,
-  },
+    borderRadius: 2.5},
   channelStatusText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   revenueGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   revenueCard: {
     flexGrow: 1,
     flexBasis: '46%' as any,
@@ -893,8 +822,7 @@ const styles = StyleSheet.create({
     borderColor: '#1A1A1E',
     padding: 14,
     gap: 6,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   revenueAccent: {
     position: 'absolute',
     top: 0,
@@ -902,35 +830,29 @@ const styles = StyleSheet.create({
     right: 0,
     height: 2,
     borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
-  },
+    borderTopRightRadius: 14},
   revenueLabel: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   revenueAmount: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   revenueReadyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   revenueReadyText: {
     color: '#00C48C',
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   aiTasksList: {
     backgroundColor: '#0D0D10',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#1E1E22',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   aiTaskRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -938,27 +860,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1E',
-  },
+    borderBottomColor: '#1A1A1E'},
   aiTaskIconWrap: {
     width: 28,
     height: 28,
     borderRadius: 8,
     backgroundColor: '#15151A',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   aiTaskText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   actionCard: {
     flexGrow: 1,
     flexBasis: '30%' as any,
@@ -969,22 +887,19 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 12,
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   actionIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: '#15151A',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   actionLabel: {
     color: Colors.textSecondary,
     fontSize: 11,
     fontWeight: '700' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   missionCard: {
     backgroundColor: '#0C0A10',
     borderRadius: 24,
@@ -993,41 +908,33 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   missionTitle: {
     color: Colors.primary,
     fontSize: 18,
     fontWeight: '900' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   missionText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   missionProgress: {
     width: '100%',
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   missionProgressBar: {
     height: 6,
     borderRadius: 3,
     backgroundColor: '#1A1A1E',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   missionProgressFill: {
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.primary,
-    minWidth: 4,
-  },
+    minWidth: 4},
   missionProgressText: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
-});
+    textAlign: 'center' as const}});

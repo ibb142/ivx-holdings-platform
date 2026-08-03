@@ -9,16 +9,13 @@
  * admin aesthetic so iOS and Android show the same surface.
  */
 import React, { useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   RefreshControl,
   Pressable,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -37,10 +34,10 @@ import {
   MonitorSmartphone,
   Building2,
   ArrowUpRight,
-  KeyRound,
-} from 'lucide-react-native';
+  KeyRound} from 'lucide-react-native';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { assertOwnerSessionAccessToken } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const GOLD = '#FFD700';
 const BG = '#000000';
@@ -63,8 +60,7 @@ async function authedGet<T>(path: string): Promise<T> {
   const token = await assertOwnerSessionAccessToken();
   const base = getDirectApiBaseUrl().replace(/\/+$/, '');
   const response = await fetch(`${base}${path}`, {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  });
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }});
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(typeof payload.error === 'string' ? payload.error : `Request failed (${response.status})`);
@@ -78,8 +74,7 @@ async function authedPost<T>(path: string, body: Record<string, unknown>): Promi
   const response = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
+    body: JSON.stringify(body)});
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(typeof payload.error === 'string' ? payload.error : `Request failed (${response.status})`);
@@ -185,15 +180,13 @@ const INVESTMENT_LABEL: Record<InvestmentRecord['investmentType'], string> = {
   real_estate: 'Real Estate',
   jv_deal: 'JV Deal',
   private_lender: 'Private Lender',
-  tokenized: 'Tokenized',
-};
+  tokenized: 'Tokenized'};
 
 const INVESTMENT_ICON: Record<InvestmentRecord['investmentType'], React.ReactNode> = {
   real_estate: <Building2 color={GOLD} size={18} />,
   jv_deal: <Handshake color={GOLD} size={18} />,
   private_lender: <Banknote color={GOLD} size={18} />,
-  tokenized: <Coins color={GOLD} size={18} />,
-};
+  tokenized: <Coins color={GOLD} size={18} />};
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -208,44 +201,37 @@ export default function InvestorProtectionScreen() {
 
   const walletQuery = useQuery<WalletResponse>({
     queryKey: ['investor-protection-wallet'],
-    queryFn: () => authedGet<WalletResponse>('/api/ivx/protection/wallet?userId=me'),
-  });
+    queryFn: () => authedGet<WalletResponse>('/api/ivx/protection/wallet?userId=me')});
 
   const investmentsQuery = useQuery<InvestmentsResponse>({
     queryKey: ['investor-protection-investments'],
     queryFn: () => authedGet<InvestmentsResponse>('/api/ivx/protection/investments?userId=me'),
-    enabled: tab === 'investments',
-  });
+    enabled: tab === 'investments'});
 
   const withdrawalsQuery = useQuery<WithdrawalsResponse>({
     queryKey: ['investor-protection-withdrawals'],
     queryFn: () => authedGet<WithdrawalsResponse>('/api/ivx/protection/withdrawals?userId=me'),
-    enabled: tab === 'withdrawals',
-  });
+    enabled: tab === 'withdrawals'});
 
   const complianceQuery = useQuery<ComplianceResponse>({
     queryKey: ['investor-protection-compliance'],
     queryFn: () => authedGet<ComplianceResponse>('/api/ivx/protection/compliance?userId=me'),
-    enabled: tab === 'compliance',
-  });
+    enabled: tab === 'compliance'});
 
   const sessionsQuery = useQuery<SessionsResponse>({
     queryKey: ['investor-protection-sessions'],
     queryFn: () => authedGet<SessionsResponse>('/api/ivx/protection/sessions?userId=me&active=1'),
-    enabled: tab === 'sessions',
-  });
+    enabled: tab === 'sessions'});
 
   const revokeMutation = useMutation({
     mutationFn: (sessionId: string) =>
       authedPost<{ ok: boolean; session: SessionRecord }>('/api/ivx/protection/sessions/revoke', {
         sessionId,
-        reason: 'Revoked by investor from protection dashboard.',
-      }),
+        reason: 'Revoked by investor from protection dashboard.'}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['investor-protection-sessions'] }),
     onError: (err: unknown) => {
       Alert.alert('Revoke failed', err instanceof Error ? err.message : 'Unknown error');
-    },
-  });
+    }});
 
   const refreshing =
     walletQuery.isRefetching ||
@@ -271,8 +257,7 @@ export default function InvestorProtectionScreen() {
           title: 'My Protection',
           headerStyle: { backgroundColor: BG },
           headerTintColor: GOLD,
-          headerTitleStyle: { color: TEXT },
-        }}
+          headerTitleStyle: { color: TEXT }}}
       />
       <ScrollView
         style={styles.scroll}
@@ -352,7 +337,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletSummary | undefined; loa
   if (loading && !wallet) {
     return (
       <View style={styles.card}>
-        <ActivityIndicator color={GOLD} />
+        <ShimmerIndicator color={GOLD} />
         <Text style={styles.cardSub}>Loading wallet…</Text>
       </View>
     );
@@ -508,8 +493,7 @@ function ComplianceTab({ query }: { query: ReturnType<typeof useQuery<Compliance
 function SessionsTab({
   query,
   onRevoke,
-  revoking,
-}: {
+  revoking}: {
   query: ReturnType<typeof useQuery<SessionsResponse>>;
   onRevoke: (id: string) => void;
   revoking: boolean;
@@ -576,7 +560,7 @@ function Badge({ label, tone }: { label: string; tone: string }) {
 function LoadingCard({ label }: { label: string }) {
   return (
     <View style={styles.card}>
-      <ActivityIndicator color={GOLD} />
+      <ShimmerIndicator color={GOLD} />
       <Text style={styles.cardSub}>{label}</Text>
     </View>
   );
@@ -616,8 +600,7 @@ const styles = StyleSheet.create({
     borderColor: GOLD,
     borderWidth: 1,
     borderRadius: 16,
-    padding: 16,
-  },
+    padding: 16},
   heroBody: { flex: 1, gap: 4 },
   heroTitle: { color: GOLD, fontSize: 16, fontWeight: '700' as const },
   heroSub: { color: SUB, fontSize: 11, lineHeight: 16 },
@@ -629,8 +612,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 16,
-    gap: 6,
-  },
+    gap: 6},
   heroLabel: { color: SUB, fontSize: 12 },
   heroValue: { color: GOLD, fontSize: 24, fontWeight: '700' as const },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -641,8 +623,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    gap: 4,
-  },
+    gap: 4},
   statLabel: { color: SUB, fontSize: 11 },
   statValue: { color: TEXT, fontSize: 16, fontWeight: '600' as const },
   statSub: { color: SUB, fontSize: 10 },
@@ -654,8 +635,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   cardBody: { flex: 1, gap: 3 },
   cardTitle: { color: TEXT, fontSize: 14, fontWeight: '600' as const },
   cardSub: { color: SUB, fontSize: 11 },
@@ -668,8 +648,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginTop: 2,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   badge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   badgeText: { fontSize: 10, fontWeight: '700' as const },
@@ -683,11 +662,9 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   tabActive: { borderColor: GOLD, backgroundColor: CARD_ALT },
   tabText: { color: SUB, fontSize: 12, fontWeight: '600' as const },
   tabTextActive: { color: GOLD },
   revokeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6 },
-  revokeText: { color: RED, fontSize: 11, fontWeight: '700' as const },
-});
+  revokeText: { color: RED, fontSize: 11, fontWeight: '700' as const }});

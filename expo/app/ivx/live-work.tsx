@@ -2,14 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Activity,
   CheckCircle2,
@@ -21,11 +19,11 @@ import {
   Rocket,
   ShieldAlert,
   TerminalSquare,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getLiveWorkFeed,
   runSupabaseCheck,
@@ -33,8 +31,7 @@ import {
   type LiveWorkLogEntry,
   type LiveWorkSnapshot,
   type SupabaseCheckResult,
-  type SupabaseCheckStage,
-} from '@/src/modules/ivx-developer/liveWorkService';
+  type SupabaseCheckStage} from '@/src/modules/ivx-developer/liveWorkService';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -114,8 +111,7 @@ function LiveWorkContent() {
   const feedQuery = useQuery({
     queryKey: ['ivx-live-work', 'feed'],
     queryFn: () => getLiveWorkFeed(60),
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const snapshot: LiveWorkSnapshot | undefined = feedQuery.data;
   const currentTask = snapshot?.currentTask ?? null;
@@ -261,7 +257,7 @@ function LiveWorkContent() {
             disabled={checking}
             testID="ivx-live-work-check-supabase"
           >
-            {checking ? <ActivityIndicator size="small" color={Colors.black} /> : <Radar size={14} color={Colors.black} />}
+            {checking ? <ShimmerIndicator size="small" color={Colors.black} /> : <Radar size={14} color={Colors.black} />}
             <Text style={styles.primaryButtonText}>{checking ? 'Streaming…' : 'Check Supabase'}</Text>
           </Pressable>
         </View>
@@ -459,5 +455,4 @@ const styles = StyleSheet.create({
   completedTitle: { flex: 1, fontSize: 13, color: Colors.text },
   completedStatePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
   completedStateText: { fontSize: 9.5, fontWeight: '700' as const, letterSpacing: 0.3 },
-  completedMeta: { fontSize: 12, color: Colors.textSecondary },
-});
+  completedMeta: { fontSize: 12, color: Colors.textSecondary }});

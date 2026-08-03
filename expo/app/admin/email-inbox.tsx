@@ -1,15 +1,12 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Modal,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -26,12 +23,12 @@ import {
   CheckCircle,
   X,
   Search,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { generateText } from '@/lib/ai-service';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { getAuthToken } from '@/lib/auth-store';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface InvestorIntent {
   budget?: string;
@@ -89,8 +86,7 @@ async function fetchAdminInboxEmails(): Promise<InboxEmail[]> {
       isRead: (e.isRead as boolean) ?? false,
       isStarred: (e.isStarred as boolean) ?? false,
       tag: inferTag((e.subject as string) || '', (e.body as string) || ''),
-      status: 'new' as const,
-    }));
+      status: 'new' as const}));
   } catch (err) {
     console.log('[AdminInbox] Fetch failed:', (err as Error)?.message);
     return [];
@@ -112,23 +108,20 @@ const TAG_COLORS: Record<string, string> = {
   jv: '#E879F9',
   lender: Colors.accent,
   buyer: Colors.success,
-  general: Colors.textSecondary,
-};
+  general: Colors.textSecondary};
 
 const TAG_LABELS: Record<string, string> = {
   investor: 'Investor',
   jv: 'JV Partner',
   lender: 'Lender',
   buyer: 'Buyer',
-  general: 'General',
-};
+  general: 'General'};
 
 const STATUS_COLORS: Record<string, string> = {
   new: Colors.warning,
   ai_replied: Colors.success,
   manual_replied: Colors.accent,
-  archived: Colors.textTertiary,
-};
+  archived: Colors.textTertiary};
 
 export default function EmailInboxScreen() {
   const router = useRouter();
@@ -236,10 +229,8 @@ Return a brief analysis covering:
    - Institutional lender program ($3M+) | Broker/referral partner program
 8. NEXT STEP: Best follow-up action for this specific lead
 
-Keep it to 8-10 lines total.`,
-          },
-        ],
-      });
+Keep it to 8-10 lines total.`},
+        ]});
       console.log('[EmailInbox] Analysis complete for:', email.id);
       setEmails(prev => prev.map(e => e.id === email.id ? { ...e, aiAnalysis: analysis } : e));
       if (selectedEmail?.id === email.id) {
@@ -284,10 +275,8 @@ Email to reply to:
 From: ${email.from}
 Subject: ${email.subject}
 Body:
-${email.body}`,
-          },
-        ],
-      });
+${email.body}`},
+        ]});
       console.log('[EmailInbox] AI reply generated for:', email.id);
       setEmails(prev => prev.map(e => e.id === email.id ? { ...e, aiReply: reply } : e));
       if (selectedEmail?.id === email.id) {
@@ -332,8 +321,7 @@ ${email.body}`,
     total: emails.length,
     unread: unreadCount,
     aiReplied: emails.filter(e => e.status === 'ai_replied').length,
-    starred: emails.filter(e => e.isStarred).length,
-  }), [emails, unreadCount]);
+    starred: emails.filter(e => e.isStarred).length}), [emails, unreadCount]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -460,7 +448,7 @@ ${email.body}`,
         ))}
         {loadingEmails && filteredEmails.length === 0 && (
           <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.emptyText}>Loading real emails...</Text>
           </View>
         )}
@@ -549,7 +537,7 @@ ${email.body}`,
                     disabled={analyzingFor === selectedEmail.id}
                   >
                     {analyzingFor === selectedEmail.id ? (
-                      <ActivityIndicator color={Colors.success} size="small" />
+                      <ShimmerIndicator color={Colors.success} size="small" />
                     ) : (
                       <Zap size={16} color={Colors.success} />
                     )}
@@ -582,7 +570,7 @@ ${email.body}`,
                   >
                     {generatingFor === selectedEmail.id ? (
                       <>
-                        <ActivityIndicator color={Colors.background} size="small" />
+                        <ShimmerIndicator color={Colors.background} size="small" />
                         <Text style={styles.generateBtnText}>AI is crafting reply...</Text>
                       </>
                     ) : (
@@ -606,7 +594,7 @@ ${email.body}`,
                         disabled={generatingFor === selectedEmail.id}
                       >
                         {generatingFor === selectedEmail.id ? (
-                          <ActivityIndicator color={Colors.primary} size="small" />
+                          <ShimmerIndicator color={Colors.primary} size="small" />
                         ) : (
                           <RefreshCw size={16} color={Colors.primary} />
                         )}
@@ -630,7 +618,7 @@ ${email.body}`,
                       disabled={sendingReply}
                     >
                       {sendingReply ? (
-                        <ActivityIndicator color={Colors.background} size="small" />
+                        <ShimmerIndicator color={Colors.background} size="small" />
                       ) : (
                         <>
                           <Send size={16} color={Colors.background} />
@@ -654,8 +642,7 @@ ${email.body}`,
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -663,22 +650,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   backBtn: {
-    padding: 4,
-  },
+    padding: 4},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   unreadBadge: {
     backgroundColor: Colors.warning,
     borderRadius: 10,
@@ -686,24 +669,20 @@ const styles = StyleSheet.create({
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 5,
-  },
+    paddingHorizontal: 5},
   unreadBadgeText: {
     color: Colors.background,
     fontSize: 11,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   refreshBtn: {
     padding: 8,
     backgroundColor: Colors.primary + '15',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 8,
-  },
+    gap: 8},
   statPill: {
     flex: 1,
     flexDirection: 'row',
@@ -714,17 +693,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statPillText: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   searchRow: {
     paddingHorizontal: 14,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -734,44 +710,35 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterScroll: {
-    maxHeight: 44,
-  },
+    maxHeight: 44},
   filterContent: {
     paddingHorizontal: 14,
     gap: 8,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: Colors.background,
-  },
+    color: Colors.background},
   emailList: {
-    flex: 1,
-  },
+    flex: 1},
   emailCard: {
     flexDirection: 'row',
     paddingHorizontal: 14,
@@ -779,25 +746,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     gap: 12,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   emailCardUnread: {
-    backgroundColor: Colors.card,
-  },
+    backgroundColor: Colors.card},
   emailCardLeft: {
-    position: 'relative',
-  },
+    position: 'relative'},
   avatarCircle: {
     width: 46,
     height: 46,
     borderRadius: 23,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   avatarText: {
     fontSize: 18,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   unreadDot: {
     position: 'absolute',
     top: 0,
@@ -807,73 +769,58 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: Colors.warning,
     borderWidth: 2,
-    borderColor: Colors.background,
-  },
+    borderColor: Colors.background},
   emailCardBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   emailCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   emailFrom: {
     fontSize: 14,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   emailFromBold: {
     color: Colors.text,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   emailTime: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginLeft: 8,
-  },
+    marginLeft: 8},
   emailSubject: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emailSubjectBold: {
     color: Colors.text,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   emailCardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 2,
-  },
+    marginTop: 2},
   tagBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   tagText: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   statusDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   emptyText: {
     fontSize: 16,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -881,83 +828,67 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   modalCloseBtn: {
-    padding: 4,
-  },
+    padding: 4},
   modalTitle: {
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   modalHeaderActions: {
     flexDirection: 'row',
     gap: 16,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   modalScroll: {
-    flex: 1,
-  },
+    flex: 1},
   emailMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   avatarCircleLg: {
     width: 52,
     height: 52,
     borderRadius: 26,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   avatarTextLg: {
     fontSize: 22,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   emailMetaInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   emailMetaFrom: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   emailMetaEmail: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emailMetaTime: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   tagBadgeLg: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   tagTextLg: {
     fontSize: 12,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   emailBodyCard: {
     margin: 14,
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emailBodyText: {
     fontSize: 14,
     color: Colors.textSecondary,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   aiSection: {
     marginHorizontal: 14,
     marginBottom: 14,
@@ -965,20 +896,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
-  },
+    borderColor: Colors.success + '30'},
   aiSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   aiSectionTitle: {
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   aiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -986,13 +914,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '20',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   aiBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   aiActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1002,31 +928,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
-  },
+    borderColor: Colors.success + '30'},
   aiActionBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.success,
-  },
+    color: Colors.success},
   analysisBox: {
-    gap: 8,
-  },
+    gap: 8},
   analysisHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   analysisTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.success,
-  },
+    color: Colors.success},
   analysisText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   replySection: {
     marginHorizontal: 14,
     marginBottom: 14,
@@ -1034,19 +954,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.accent + '30',
-  },
+    borderColor: Colors.accent + '30'},
   replySectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   replySectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   generateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1054,53 +971,43 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   generateBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.background,
-  },
+    color: Colors.background},
   replyBox: {
-    gap: 12,
-  },
+    gap: 12},
   replyBoxHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   replyBoxTo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   replyBoxToLabel: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   replyBoxToEmail: {
     fontSize: 12,
-    color: Colors.accent,
-  },
+    color: Colors.accent},
   replySubjectRow: {
     flexDirection: 'row',
     gap: 6,
     alignItems: 'center',
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   replySubjectLabel: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   replySubjectValue: {
     fontSize: 12,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   replyTextArea: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
@@ -1111,8 +1018,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: Colors.border,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   sendBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1120,14 +1026,10 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.accent,
     borderRadius: 12,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   sendBtnLoading: {
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   sendBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.white,
-  },
-});
+    color: Colors.white}});

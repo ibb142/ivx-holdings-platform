@@ -1,14 +1,11 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Animated,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -23,11 +20,11 @@ import {
   Zap,
   AlertTriangle,
   Activity,
-  History,
-} from 'lucide-react-native';
+  History} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface SMSStats {
   total_sent: number;
@@ -51,16 +48,14 @@ const TYPE_COLORS: Record<string, string> = {
   emergency: Colors.error,
   manual: Colors.primary,
   daily_summary: Colors.success,
-  smart_update: '#00C9A7',
-};
+  smart_update: '#00C9A7'};
 
 const TYPE_LABELS: Record<string, string> = {
   hourly: 'Hourly Reports',
   emergency: 'Emergency Alerts',
   manual: 'Manual Messages',
   daily_summary: 'Daily Summaries',
-  smart_update: 'AI Smart Updates',
-};
+  smart_update: 'AI Smart Updates'};
 
 const SMS_DASHBOARD_REFRESH_MS = 60_000;
 
@@ -95,8 +90,7 @@ export default function SMSDashboardScreen() {
     refetchIntervalInBackground: false,
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const breakdownQuery = useQuery<TypeBreakdown[]>({
     queryKey: ['smsDashboard.breakdown'],
@@ -117,8 +111,7 @@ export default function SMSDashboardScreen() {
         .map(([type, count]) => ({ type, count }))
         .sort((a, b) => b.count - a.count);
     },
-    staleTime: 10000,
-  });
+    staleTime: 10000});
 
   const recentQuery = useQuery<Array<{ id: string; type: string; status: string; message: string; created_at: string; recipient_phone?: string }>>({
     queryKey: ['smsDashboard.recent'],
@@ -135,8 +128,7 @@ export default function SMSDashboardScreen() {
       }
       return (data ?? []) as Array<{ id: string; type: string; status: string; message: string; created_at: string; recipient_phone?: string }>;
     },
-    staleTime: 5000,
-  });
+    staleTime: 5000});
 
   const onRefresh = useCallback(() => {
     void statsQuery.refetch();
@@ -166,7 +158,7 @@ export default function SMSDashboardScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading dashboard...</Text>
           </View>
         </SafeAreaView>
@@ -298,7 +290,7 @@ export default function SMSDashboardScreen() {
               </View>
 
               {recentQuery.isLoading ? (
-                <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 16 }} />
+                <ShimmerIndicator size="small" color={Colors.primary} style={{ marginTop: 16 }} />
               ) : (recentQuery.data ?? []).length === 0 ? (
                 <View style={styles.emptyRecent}>
                   <Text style={styles.emptyRecentText}>No messages yet</Text>
@@ -379,11 +371,9 @@ export default function SMSDashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -391,87 +381,72 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   headerCenter: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: Colors.text,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   historyBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   systemStatusCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   systemStatusRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 10,
-  },
+    gap: 10},
   systemDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   systemStatusLabel: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   lastActivityText: {
     fontSize: 12,
     color: Colors.textTertiary,
     marginTop: 6,
-    marginLeft: 20,
-  },
+    marginLeft: 20},
   statsGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   statCard: {
     flex: 1,
     minWidth: '45%' as any,
@@ -480,32 +455,25 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center' as const,
     gap: 8,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   statCardPrimary: {
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   statCardSuccess: {
-    borderColor: Colors.success + '30',
-  },
+    borderColor: Colors.success + '30'},
   statCardWarning: {
-    borderColor: Colors.warning + '30',
-  },
+    borderColor: Colors.warning + '30'},
   statCardError: {
-    borderColor: Colors.error + '30',
-  },
+    borderColor: Colors.error + '30'},
   statNumber: {
     fontSize: 28,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 11,
     fontWeight: '500' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   warningBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -515,143 +483,116 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 184, 0, 0.2)',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   warningText: {
     fontSize: 12,
     color: Colors.warning,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   breakdownCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   sectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   breakdownRow: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   breakdownLabelRow: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   breakdownLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   breakdownCount: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   barContainer: {
     height: 6,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 3,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   bar: {
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   recentCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   viewAllBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Colors.primary + '15',
-  },
+    backgroundColor: Colors.primary + '15'},
   viewAllText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   emptyRecent: {
     paddingVertical: 20,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   emptyRecentText: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   recentItem: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   recentItemLeft: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     flex: 1,
     gap: 10,
-    marginRight: 12,
-  },
+    marginRight: 12},
   recentDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   recentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   recentMessage: {
     fontSize: 13,
     color: Colors.text,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   recentMeta: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   recentType: {
     fontSize: 10,
     fontWeight: '600' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   recentPhone: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   recentItemRight: {
     alignItems: 'flex-end' as const,
-    gap: 4,
-  },
+    gap: 4},
   recentTime: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   quickActions: {
     flexDirection: 'row' as const,
-    gap: 10,
-  },
+    gap: 10},
   quickActionBtn: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -660,12 +601,9 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   quickActionText: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
-    textAlign: 'center' as const,
-  },
-});
+    textAlign: 'center' as const}});

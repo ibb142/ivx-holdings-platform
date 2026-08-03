@@ -73,8 +73,7 @@ export default function PriceChart({
   data,
   timeRange,
   onTimeRangeChange,
-  showVolume = true,
-}: PriceChartProps) {
+  showVolume = true}: PriceChartProps) {
   const { width: screenWidth } = useWindowDimensions();
   const CHART_WIDTH = screenWidth - 40;
   const filteredData = useMemo(() => {
@@ -142,8 +141,7 @@ export default function PriceChart({
       minPrice: min,
       maxPrice: max,
       priceChange: change,
-      priceChangePercent: changePercent,
-    };
+      priceChangePercent: changePercent};
   }, [filteredData, CHART_WIDTH]);
 
   const isPositive = priceChange >= 0;
@@ -246,58 +244,46 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   header: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   currentPrice: {
     fontSize: 28,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   changeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   changeText: {
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   periodText: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   chartContainer: {
-    marginHorizontal: -16,
-  },
+    marginHorizontal: -16},
   timeRangeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 16,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
-    padding: 4,
-  },
+    padding: 4},
   timeRangeButton: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   timeRangeButtonActive: {
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   timeRangeText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   timeRangeTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   volumeSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -305,15 +291,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   volumeLabel: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   volumeValue: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
-});
+    color: Colors.text}});

@@ -705,7 +705,7 @@ export async function handleIVXAutonomyGithubSyncRequest(request: Request): Prom
 
     // Run the existing sync script with credentials injected into env only.
     // Explicit owner approval flags are set so the push never depends on the
-    // background kill-switch (RORK_AUTO_SYNC_ENABLED): this is a single,
+    // background kill-switch (IVX_AUTO_SYNC_ENABLED): this is a single,
     // owner-authenticated, on-demand push, not background auto-sync.
     const exec = await runSyncGithubScript({ token, repoSlug, branch }, !apply, message, timeoutMs);
     const secrets = [token].filter(Boolean) as string[];

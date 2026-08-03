@@ -10,8 +10,7 @@ import {
   Animated,
   Linking,
   RefreshControl,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -36,8 +35,7 @@ import {
   Activity,
   Megaphone,
   TrendingUp,
-  Clipboard,
-} from 'lucide-react-native';
+  Clipboard} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
@@ -89,8 +87,7 @@ const CATEGORIES: APICategory[] = [
       { id: 3, name: 'TikTok Marketing API', description: 'Short video awareness campaigns. Need: App ID, Secret, Access Token, Advertiser ID, Pixel ID', url: 'https://business-api.tiktok.com', checkUrl: 'https://tiktok.com', priority: 'important' },
       { id: 4, name: 'LinkedIn Marketing API', description: 'B2B outreach to developers, lenders, brokers. Need: OAuth Client ID/Secret, Access Token, Ad Account ID, Insight Tag', url: 'https://www.linkedin.com/developers', checkUrl: 'https://linkedin.com', priority: 'important' },
       { id: 5, name: 'WhatsApp Business API', description: 'Retargeting & follow-up messaging. Need: Business Account ID, Phone Number ID, Permanent Access Token, Approved Templates', url: 'https://developers.facebook.com/docs/whatsapp/cloud-api', checkUrl: 'https://facebook.com', priority: 'important' },
-    ],
-  },
+    ]},
   {
     id: 'tracking',
     title: 'Tracking & Analytics',
@@ -101,8 +98,7 @@ const CATEGORIES: APICategory[] = [
       { id: 6, name: 'Google Analytics 4', description: 'Track app events, conversions, user behavior analytics', url: 'https://analytics.google.com', checkUrl: 'https://analytics.google.com', priority: 'must' },
       { id: 7, name: 'Meta Conversions API', description: 'Server-side conversion tracking for Facebook/Instagram ads', url: 'https://developers.facebook.com/docs/marketing-api/conversions-api', checkUrl: 'https://facebook.com', priority: 'important' },
       { id: 8, name: 'Google Tag Manager', description: 'Manage all tracking pixels and tags in one place', url: 'https://tagmanager.google.com', checkUrl: 'https://tagmanager.google.com', priority: 'important' },
-    ],
-  },
+    ]},
   {
     id: 'payments',
     title: 'Payments',
@@ -114,8 +110,7 @@ const CATEGORIES: APICategory[] = [
       { id: 10, name: 'Plaid', description: 'Bank linking, ACH transfers, account verification, balance checks', url: 'https://dashboard.plaid.com/signup', checkUrl: 'https://plaid.com', priority: 'important' },
       { id: 11, name: 'PayPal', description: 'Alternative payment method, PayPal checkout integration', url: 'https://developer.paypal.com/dashboard', checkUrl: 'https://paypal.com', priority: 'optional' },
       { id: 12, name: 'Coinbase Commerce', description: 'Crypto payments, Bitcoin/ETH/USDC acceptance', url: 'https://commerce.coinbase.com/signup', checkUrl: 'https://coinbase.com', priority: 'optional' },
-    ],
-  },
+    ]},
   {
     id: 'email',
     title: 'Email',
@@ -124,8 +119,7 @@ const CATEGORIES: APICategory[] = [
     icon: Mail,
     apis: [
       { id: 13, name: 'SendGrid', description: 'Transactional emails, welcome, KYC, receipts, statements', url: 'https://signup.sendgrid.com', checkUrl: 'https://sendgrid.com', priority: 'must' },
-    ],
-  },
+    ]},
   {
     id: 'sms',
     title: 'SMS / Messaging',
@@ -134,8 +128,7 @@ const CATEGORIES: APICategory[] = [
     icon: Phone,
     apis: [
       { id: 14, name: 'Twilio', description: 'SMS verification, 2FA codes, programmable messaging', url: 'https://www.twilio.com/try-twilio', checkUrl: 'https://twilio.com', priority: 'must' },
-    ],
-  },
+    ]},
   {
     id: 'kyc',
     title: 'KYC / Identity Verification',
@@ -145,8 +138,7 @@ const CATEGORIES: APICategory[] = [
     apis: [
       { id: 15, name: 'Onfido', description: 'Document verification, face match, biometric checks', url: 'https://onfido.com/signup', checkUrl: 'https://onfido.com', priority: 'important' },
       { id: 16, name: 'Jumio', description: 'AI-powered identity verification, global document coverage', url: 'https://www.jumio.com/contact-us', checkUrl: 'https://jumio.com', priority: 'important' },
-    ],
-  },
+    ]},
   {
     id: 'storage',
     title: 'File Storage',
@@ -155,8 +147,7 @@ const CATEGORIES: APICategory[] = [
     icon: HardDrive,
     apis: [
       { id: 17, name: 'Cloudflare R2', description: 'S3-compatible object storage, zero egress fees, CDN included', url: 'https://dash.cloudflare.com/sign-up', checkUrl: 'https://cloudflare.com', priority: 'important' },
-    ],
-  },
+    ]},
   {
     id: 'market',
     title: 'Market Data',
@@ -167,8 +158,7 @@ const CATEGORIES: APICategory[] = [
       { id: 18, name: 'Alpha Vantage', description: 'Stock/REIT market data, price history, financial metrics', url: 'https://www.alphavantage.co/support/#api-key', checkUrl: 'https://alphavantage.co', priority: 'optional' },
       { id: 19, name: 'ATTOM Property Data', description: 'Real estate property data, valuations, market analytics', url: 'https://api.attomdata.com/signup', priority: 'optional' },
       { id: 20, name: 'Google Maps', description: 'Property map display, location services, geocoding', url: 'https://console.cloud.google.com', checkUrl: 'https://maps.google.com', priority: 'optional' },
-    ],
-  },
+    ]},
   {
     id: 'monitoring',
     title: 'Monitoring',
@@ -177,21 +167,18 @@ const CATEGORIES: APICategory[] = [
     icon: AlertTriangle,
     apis: [
       { id: 21, name: 'Sentry', description: 'Error tracking, performance monitoring, crash reports', url: 'https://sentry.io/signup', checkUrl: 'https://sentry.io', priority: 'important' },
-    ],
-  },
+    ]},
 ];
 
 const PRIORITY_LABEL: Record<string, string> = {
   must: '🔴 Must Have',
   important: '🟠 Important',
-  optional: '🟡 Optional',
-};
+  optional: '🟡 Optional'};
 
 const PRIORITY_COLOR: Record<string, string> = {
   must: '#FF4D4D',
   important: '#F97316',
-  optional: '#EAB308',
-};
+  optional: '#EAB308'};
 
 const ALL_APIS: APIItem[] = CATEGORIES.flatMap(c => c.apis);
 
@@ -439,14 +426,12 @@ export default function APIListScreen() {
     Animated.timing(progressAnim, {
       toValue: progressPercent,
       duration: 600,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
   }, [progressAnim, progressPercent]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-  });
+    outputRange: ['0%', '100%']});
 
   function getStatusColor(status: APIStatus): string {
     switch (status) {
@@ -750,8 +735,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: { padding: 8 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -769,8 +753,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   liveBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   liveBarText: { fontSize: 12, fontWeight: '700' as const },
   liveBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -781,8 +764,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   countdownText: { color: Colors.primary, fontSize: 11, fontWeight: '800' as const },
 
   progressContainer: {
@@ -793,20 +775,17 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   progressBg: {
     flex: 1,
     height: 5,
     backgroundColor: Colors.surfaceBorder,
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressFill: {
     height: '100%',
     backgroundColor: '#00C48C',
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   progressLabel: { color: Colors.textTertiary, fontSize: 11, width: 80, textAlign: 'right' as const },
 
   heroBanner: {
@@ -819,8 +798,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   heroStat: { alignItems: 'center', flex: 1 },
   heroNum: { color: Colors.primary, fontSize: 20, fontWeight: '800' as const },
   heroLabel: { color: Colors.textTertiary, fontSize: 10, marginTop: 2 },
@@ -838,8 +816,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 13,
     borderWidth: 1,
-    borderColor: '#25D36640',
-  },
+    borderColor: '#25D36640'},
   whatsappText: { color: '#25D366', fontSize: 13, fontWeight: '700' as const },
   copyBtn: {
     flex: 1,
@@ -851,8 +828,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 13,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   copyText: { color: Colors.primary, fontSize: 13, fontWeight: '700' as const },
   pasteBtn: {
     flexDirection: 'row',
@@ -863,8 +839,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   pasteText: { color: Colors.text, fontSize: 13, fontWeight: '700' as const },
   clipboardHint: { color: Colors.textTertiary, fontSize: 11, lineHeight: 16 },
   clipboardPreviewCard: {
@@ -875,8 +850,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   clipboardPreviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   clipboardPreviewTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' as const },
   clipboardPreviewMeta: { color: Colors.textTertiary, fontSize: 11 },
@@ -896,16 +870,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   catIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   categoryTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const, flex: 1 },
   catStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -919,8 +891,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder + '60',
-  },
+    borderBottomColor: Colors.surfaceBorder + '60'},
   apiItemLast: { borderBottomWidth: 0 },
   apiLeft: { marginRight: 12, alignItems: 'center', paddingTop: 3, gap: 6 },
   apiNumber: { color: Colors.textTertiary, fontSize: 12, fontWeight: '700' as const, width: 22, textAlign: 'center' as const },
@@ -936,8 +907,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   statusBadgeText: { fontSize: 9, fontWeight: '800' as const },
   latencyText: { fontSize: 9, fontWeight: '600' as const, opacity: 0.8 },
   priorityBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
@@ -952,8 +922,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   summaryTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   summaryTitle: { color: Colors.text, fontSize: 13, fontWeight: '800' as const, letterSpacing: 1 },
   completedSection: { marginBottom: 12, backgroundColor: '#00C48C12', borderRadius: 10, padding: 10 },
@@ -971,8 +940,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: '#25D36635',
-  },
+    borderColor: '#25D36635'},
   footerWhatsAppText: { color: '#25D366', fontSize: 15, fontWeight: '700' as const },
   footerShare: {
     flexDirection: 'row',
@@ -983,11 +951,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: Colors.primary + '35',
-  },
+    borderColor: Colors.primary + '35'},
   footerShareText: { color: Colors.primary, fontSize: 14, fontWeight: '700' as const },
 
   footer: { alignItems: 'center', paddingVertical: 12 },
   footerNote: { color: Colors.textTertiary, fontSize: 12 },
-  footerDate: { color: Colors.textTertiary, fontSize: 11, marginTop: 3 },
-});
+  footerDate: { color: Colors.textTertiary, fontSize: 11, marginTop: 3 }});

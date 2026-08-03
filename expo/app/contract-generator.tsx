@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,11 +8,9 @@ import {
   Alert,
   Platform,
   Linking,
-  ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
-  Image,
-} from 'react-native';
+  Image} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -51,8 +48,7 @@ import {
   BookOpen,
   IdCard,
   Sparkles,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
@@ -61,6 +57,7 @@ import { z } from 'zod';
 
 import Colors from '@/constants/colors';
 import { generateContractHTML, ContractData } from '@/lib/contract-template';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type DocType = 'id' | 'passport' | 'license';
 
@@ -106,8 +103,7 @@ export default function ContractGeneratorScreen() {
     payment: false,
     attachments: false,
     branding: false,
-    terms: false,
-  });
+    terms: false});
 
   const [clientName, setClientName] = useState('');
   const [clientId, setClientId] = useState('');
@@ -177,8 +173,7 @@ export default function ContractGeneratorScreen() {
     scanErrorMsg: 'Intente con una foto más clara o ingrese los datos manualmente.',
     scannedDoc: 'Documento escaneado',
     rescan: 'Escanear otro',
-    autoFilled: 'Auto-llenado por IA',
-  } : {
+    autoFilled: 'Auto-llenado por IA'} : {
     scanTitle: 'Quick Document Scan',
     scanHint: 'Upload a photo of your ID document to auto-fill the fields below',
     docTypeId: 'ID Card',
@@ -193,8 +188,7 @@ export default function ContractGeneratorScreen() {
     scanErrorMsg: 'Try a clearer photo or enter data manually.',
     scannedDoc: 'Scanned document',
     rescan: 'Scan another',
-    autoFilled: 'Auto-filled by AI',
-  };
+    autoFilled: 'Auto-filled by AI'};
 
   const labels = isES ? {
     title: 'Generador de Contratos',
@@ -278,8 +272,7 @@ export default function ContractGeneratorScreen() {
     success: 'PDF generado exitosamente',
     error: 'Error al generar',
     whatsappMsg: 'Le comparto el contrato de desarrollo de software N° ',
-    noWhatsApp: 'WhatsApp no disponible en esta plataforma',
-  } : {
+    noWhatsApp: 'WhatsApp no disponible en esta plataforma'} : {
     title: 'Contract Generator',
     subtitle: 'International Contract with Full Legal Protection',
     langToggle: 'Contract Language',
@@ -361,8 +354,7 @@ export default function ContractGeneratorScreen() {
     success: 'PDF generated successfully',
     error: 'Error generating',
     whatsappMsg: 'Sharing the software development contract No. ',
-    noWhatsApp: 'WhatsApp not available on this platform',
-  };
+    noWhatsApp: 'WhatsApp not available on this platform'};
 
   const toggleSection = useCallback((key: string) => {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -382,16 +374,14 @@ export default function ContractGeneratorScreen() {
         mediaTypes: ['images'],
         quality: 0.7,
         base64: true,
-        allowsEditing: true,
-      });
+        allowsEditing: true});
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         console.log('[ContractGenerator] Camera image picked:', asset.uri);
         setAttachedImages(prev => [...prev, {
           uri: asset.uri,
           base64: asset.base64 ?? undefined,
-          label: label || (isES ? `Foto ${prev.length + 1}` : `Photo ${prev.length + 1}`),
-        }]);
+          label: label || (isES ? `Foto ${prev.length + 1}` : `Photo ${prev.length + 1}`)}]);
       }
     } catch (error) {
       console.log('[ContractGenerator] Camera error:', error);
@@ -406,15 +396,13 @@ export default function ContractGeneratorScreen() {
         base64: true,
         allowsEditing: false,
         allowsMultipleSelection: true,
-        selectionLimit: 5,
-      });
+        selectionLimit: 5});
       if (!result.canceled && result.assets.length > 0) {
         console.log('[ContractGenerator] Gallery images picked:', result.assets.length);
         const newImages = result.assets.map((asset, idx) => ({
           uri: asset.uri,
           base64: asset.base64 ?? undefined,
-          label: label || (isES ? `Imagen ${attachedImages.length + idx + 1}` : `Image ${attachedImages.length + idx + 1}`),
-        }));
+          label: label || (isES ? `Imagen ${attachedImages.length + idx + 1}` : `Image ${attachedImages.length + idx + 1}`)}));
         setAttachedImages(prev => [...prev, ...newImages]);
       }
     } catch (error) {
@@ -446,8 +434,7 @@ export default function ContractGeneratorScreen() {
       documentNumber: z.string().describe('ID number, passport number, or license number'),
       address: z.string().optional().describe('Address if visible on the document'),
       dateOfBirth: z.string().optional().describe('Date of birth if visible'),
-      nationality: z.string().optional().describe('Nationality if visible'),
-    });
+      nationality: z.string().optional().describe('Nationality if visible')});
 
     const docTypeLabel = scanDocType === 'passport' ? 'passport' : scanDocType === 'license' ? 'driver license' : 'national ID card';
 
@@ -458,17 +445,13 @@ export default function ContractGeneratorScreen() {
           content: [
             {
               type: 'image',
-              image: `data:image/jpeg;base64,${base64}`,
-            },
+              image: `data:image/jpeg;base64,${base64}`},
             {
               type: 'text',
-              text: `Extract personal information from this ${docTypeLabel} document image. Return the full name, document number, and address if visible. If a field is not readable, return an empty string for it.`,
-            },
-          ],
-        },
+              text: `Extract personal information from this ${docTypeLabel} document image. Return the full name, document number, and address if visible. If a field is not readable, return an empty string for it.`},
+          ]},
       ],
-      schema,
-    });
+      schema});
 
     return result;
   }, [scanDocType]);
@@ -490,15 +473,13 @@ export default function ContractGeneratorScreen() {
           mediaTypes: ['images'],
           quality: 0.8,
           base64: true,
-          allowsEditing: true,
-        });
+          allowsEditing: true});
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.8,
           base64: true,
-          allowsEditing: true,
-        });
+          allowsEditing: true});
       }
 
       if (result.canceled || !result.assets[0]) return;
@@ -540,8 +521,7 @@ export default function ContractGeneratorScreen() {
         quality: 0.8,
         base64: true,
         allowsEditing: true,
-        aspect: [1, 1],
-      });
+        aspect: [1, 1]});
       if (!result.canceled && result.assets[0]) {
         console.log('[ContractGenerator] Logo picked:', result.assets[0].uri);
         setBrandingLogoUri(result.assets[0].uri);
@@ -587,16 +567,14 @@ export default function ContractGeneratorScreen() {
     paymentRoutingNumber: paymentRoutingNumber || '_______________',
     attachedImages: attachedImages.filter(img => img.base64).map(img => ({
       base64: img.base64 || '',
-      label: img.label,
-    })),
+      label: img.label})),
     brandingAppName,
     brandingCompanyName,
     brandingTagline,
     brandingWebsite,
     brandingLogoBase64: brandingLogoBase64 || undefined,
     brandingPrimaryColor,
-    brandingAccentColor,
-  }), [
+    brandingAccentColor}), [
     contractNumber, clientName, clientId, clientAddress, clientEmail, clientPhone,
     developerName, developerId, developerAddress, developerEmail, developerPhone,
     projectName, projectDescription, projectObjectives, projectPlatforms, projectFeatures,
@@ -666,8 +644,7 @@ export default function ContractGeneratorScreen() {
       } else {
         const { uri } = await Print.printToFileAsync({
           html,
-          base64: false,
-        });
+          base64: false});
         console.log('[ContractGenerator] PDF created at:', uri);
 
         const canShare = await Sharing.isAvailableAsync();
@@ -675,8 +652,7 @@ export default function ContractGeneratorScreen() {
           await Sharing.shareAsync(uri, {
             mimeType: 'application/pdf',
             dialogTitle: `Contract ${data.contractNumber}`,
-            UTI: 'com.adobe.pdf',
-          });
+            UTI: 'com.adobe.pdf'});
         } else {
           Alert.alert(labels.success, `PDF: ${uri}`);
         }
@@ -758,8 +734,7 @@ export default function ContractGeneratorScreen() {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: `Contract ${data.contractNumber}`,
-        });
+          dialogTitle: `Contract ${data.contractNumber}`});
       }
     } catch (error) {
       console.log('[ContractGenerator] Share error:', error);
@@ -942,7 +917,7 @@ export default function ContractGeneratorScreen() {
 
                     {isScanning ? (
                       <Animated.View style={[styles.scanningBox, { opacity: Animated.add(0.5, Animated.multiply(scanPulse, 0.5)) }]}> 
-                        <ActivityIndicator size="small" color="#FFD700" />
+                        <ShimmerIndicator size="small" color="#FFD700" />
                         <Text style={styles.scanningText}>{scanLabels.scanning}</Text>
                       </Animated.View>
                     ) : scannedImageUri ? (
@@ -1242,7 +1217,7 @@ export default function ContractGeneratorScreen() {
                 disabled={isGenerating}
               >
                 {isGenerating ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ShimmerIndicator size="small" color="#fff" />
                 ) : (
                   <Download size={20} color="#fff" />
                 )}
@@ -1302,94 +1277,77 @@ export default function ContractGeneratorScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#080C14',
-  },
+    backgroundColor: '#080C14'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
+    borderBottomColor: 'rgba(255,255,255,0.06)'},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     fontSize: 11,
     color: Colors.primary,
     marginTop: 2,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   heroCard: {
     margin: 16,
     padding: 20,
     backgroundColor: 'rgba(26, 58, 92, 0.25)',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(26, 58, 92, 0.4)',
-  },
+    borderColor: 'rgba(26, 58, 92, 0.4)'},
   heroIconRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   heroTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   featuresGrid: {
-    gap: 8,
-  },
+    gap: 8},
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   featureText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   langToggle: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   langLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   langBtns: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   langBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -1398,20 +1356,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   langBtnActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   langBtnText: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   langBtnTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   formCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -1419,47 +1373,39 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-  },
+    padding: 14},
   sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   sectionIcon: {
     width: 32,
     height: 32,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sectionHeaderTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   sectionContent: {
     paddingHorizontal: 14,
     paddingBottom: 14,
-    gap: 10,
-  },
+    gap: 10},
   inputGroup: {
-    gap: 4,
-  },
+    gap: 4},
   inputLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   input: {
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 10,
@@ -1468,26 +1414,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   inputMultiline: {
     minHeight: 90,
-    textAlignVertical: 'top' as const,
-  },
+    textAlignVertical: 'top' as const},
   rowInputs: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   rowInputHalf: {
-    flex: 2,
-  },
+    flex: 2},
   rowInputSmall: {
-    flex: 1,
-  },
+    flex: 1},
   actionsCard: {
     margin: 16,
-    gap: 10,
-  },
+    gap: 10},
   previewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1497,13 +1437,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
+    borderColor: 'rgba(255,255,255,0.1)'},
   previewBtnText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   exportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1511,8 +1449,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#1a3a5c',
-  },
+    backgroundColor: '#1a3a5c'},
   printBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1520,25 +1457,20 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#2980B9',
-  },
+    backgroundColor: '#2980B9'},
   printBtnText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   btnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   exportBtnText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   shareRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   whatsappBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1547,13 +1479,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#25D366',
-  },
+    backgroundColor: '#25D366'},
   whatsappBtnText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   shareBtn: {
     width: 50,
     alignItems: 'center',
@@ -1561,8 +1491,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
+    borderColor: 'rgba(255,255,255,0.1)'},
   legalFooter: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1570,14 +1499,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
-  },
+    borderTopColor: 'rgba(255,255,255,0.06)'},
   legalFooterText: {
     flex: 1,
     fontSize: 11,
     color: Colors.textTertiary,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   paymentHighlight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1587,19 +1514,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(46, 125, 50, 0.25)',
-  },
+    borderColor: 'rgba(46, 125, 50, 0.25)'},
   paymentHighlightText: {
     flex: 1,
     fontSize: 12,
     color: '#66BB6A',
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   paymentDivider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    marginVertical: 6,
-  },
+    marginVertical: 6},
   attachHintBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1609,19 +1533,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(230, 126, 34, 0.25)',
-  },
+    borderColor: 'rgba(230, 126, 34, 0.25)'},
   attachHintText: {
     flex: 1,
     fontSize: 12,
     color: '#F0A050',
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   attachButtonRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   attachCameraBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1630,13 +1551,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#E67E22',
-  },
+    backgroundColor: '#E67E22'},
   attachCameraBtnText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   attachGalleryBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1645,13 +1564,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#2980B9',
-  },
+    backgroundColor: '#2980B9'},
   attachGalleryBtnText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   noAttachmentsBox: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1660,15 +1577,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
     borderStyle: 'dashed',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   noAttachmentsText: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   attachmentGrid: {
-    gap: 10,
-  },
+    gap: 10},
   attachmentCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1677,17 +1591,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    padding: 8,
-  },
+    padding: 8},
   attachmentThumb: {
     width: 56,
     height: 56,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   attachmentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   attachmentLabelInput: {
     fontSize: 13,
     color: Colors.text,
@@ -1696,22 +1607,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   attachmentRemoveBtn: {
     width: 32,
     height: 32,
     borderRadius: 8,
     backgroundColor: 'rgba(255, 77, 77, 0.12)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   brandingLogoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   brandingLogoBtn: {
     width: 72,
     height: 72,
@@ -1719,57 +1627,46 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: 'rgba(155, 89, 182, 0.3)',
-    borderStyle: 'dashed',
-  },
+    borderStyle: 'dashed'},
   brandingLogoPreview: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   brandingLogoPlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(155, 89, 182, 0.08)',
-    gap: 2,
-  },
+    gap: 2},
   brandingLogoPlaceholderText: {
     fontSize: 9,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   brandingLogoInfo: {
-    flex: 1,
-  },
+    flex: 1},
   brandingLogoInfoTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   brandingLogoInfoSub: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   colorPickerRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   colorPickerItem: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   colorInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   colorSwatch: {
     width: 28,
     height: 28,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
+    borderColor: 'rgba(255,255,255,0.15)'},
   colorInput: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -1779,52 +1676,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   brandingPreviewBox: {
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
-    marginTop: 4,
-  },
+    marginTop: 4},
   brandingPreviewHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   brandingPreviewLogo: {
     width: 28,
     height: 28,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   brandingPreviewName: {
     fontSize: 15,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   brandingPreviewBody: {
     padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.03)'},
   brandingPreviewCompany: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   brandingPreviewTagline: {
     fontSize: 11,
     color: Colors.textTertiary,
     marginTop: 2,
-    fontStyle: 'italic',
-  },
+    fontStyle: 'italic'},
   brandingPreviewWebsite: {
     fontSize: 11,
     fontWeight: '600' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   ndaCard: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1832,8 +1720,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(139, 0, 0, 0.15)',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(139, 0, 0, 0.4)',
-  },
+    borderColor: 'rgba(139, 0, 0, 0.4)'},
   ndaBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1843,67 +1730,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   ndaBadgeText: {
     fontSize: 11,
     fontWeight: '800' as const,
     color: '#fff',
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   ndaGrid: {
-    gap: 10,
-  },
+    gap: 10},
   ndaFeatureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   ndaFeatureText: {
     fontSize: 12,
     color: '#ddd',
     flex: 1,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   scanDocCard: {
     backgroundColor: 'rgba(255, 215, 0, 0.06)',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.18)',
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   scanDocHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   scanDocIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: 'rgba(255, 215, 0, 0.15)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scanDocHeaderText: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   scanDocTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   scanDocHint: {
     fontSize: 11,
     color: Colors.textTertiary,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   docTypeRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   docTypeBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1914,24 +1789,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   docTypeBtnActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
-    borderColor: 'rgba(255, 215, 0, 0.35)',
-  },
+    borderColor: 'rgba(255, 215, 0, 0.35)'},
   docTypeBtnText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   docTypeBtnTextActive: {
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   scanBtnRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   scanCameraBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1940,13 +1810,11 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#C8960C',
-  },
+    backgroundColor: '#C8960C'},
   scanCameraBtnText: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   scanGalleryBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1957,13 +1825,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.25)',
-  },
+    borderColor: 'rgba(255, 215, 0, 0.25)'},
   scanGalleryBtnText: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   scanningBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1973,13 +1839,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255, 215, 0, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.2)',
-  },
+    borderColor: 'rgba(255, 215, 0, 0.2)'},
   scanningText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   scannedPreview: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1988,18 +1852,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(46, 204, 113, 0.2)',
-    padding: 10,
-  },
+    padding: 10},
   scannedImage: {
     width: 60,
     height: 42,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   scannedInfo: {
     flex: 1,
-    gap: 6,
-  },
+    gap: 6},
   scannedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2008,23 +1869,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(46, 204, 113, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   scannedBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: '#2ECC71',
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   rescanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   rescanBtnText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: '#FFD700',
-  },
-});
+    color: '#FFD700'}});

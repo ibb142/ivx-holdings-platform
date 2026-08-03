@@ -60,14 +60,12 @@ type OwnerBootstrapResult = {
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
-  'Cache-Control': 'no-store',
-} as const;
+  'Cache-Control': 'no-store'} as const;
 
 function jsonResponse(payload: JsonRecord, status: number = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: JSON_HEADERS,
-  });
+    headers: JSON_HEADERS});
 }
 
 function readTrimmedString(value: unknown): string {
@@ -176,8 +174,7 @@ function readSupabaseEnvDiagnostics(): OwnerBootstrapDiagnostics & SupabaseEnv {
     warnings,
     url,
     anonKey,
-    serviceRoleKey,
-  };
+    serviceRoleKey};
 }
 
 function getSupabaseEnv(): SupabaseEnv {
@@ -194,8 +191,7 @@ function getSupabaseEnv(): SupabaseEnv {
     anonJwtRole: env.anonJwtRole,
     serviceRoleJwtRole: env.serviceRoleJwtRole,
     serviceRoleStatus: env.serviceRoleStatus,
-    hasRealServiceRole: env.hasRealServiceRole,
-  };
+    hasRealServiceRole: env.hasRealServiceRole};
 }
 
 function createPublicClient(): SupabaseClient {
@@ -203,9 +199,7 @@ function createPublicClient(): SupabaseClient {
   return createClient(env.url, env.anonKey, {
     auth: {
       autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+      persistSession: false}});
 }
 
 function createAdminClient(serviceRoleKey: string): SupabaseClient {
@@ -213,9 +207,7 @@ function createAdminClient(serviceRoleKey: string): SupabaseClient {
   return createClient(env.url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+      persistSession: false}});
 }
 
 function getBootstrapSecret(): string {
@@ -261,9 +253,7 @@ async function assertOwnerBootstrapAccess(request: Request, url: string, service
   const client = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+      persistSession: false}});
   const userResult = await client.auth.getUser(accessToken);
 
   if (userResult.error || !userResult.data.user) {
@@ -285,8 +275,7 @@ function buildOwnerMetadata(firstName: string, lastName: string): Record<string,
     firstName,
     lastName,
     role: 'owner',
-    kycStatus: 'approved',
-  };
+    kycStatus: 'approved'};
 }
 
 function buildOwnerProfilePayload(userId: string, email: string, firstName: string, lastName: string): Record<string, unknown> {
@@ -299,8 +288,7 @@ function buildOwnerProfilePayload(userId: string, email: string, firstName: stri
     last_name: lastName,
     role: 'owner',
     kyc_status: 'approved',
-    updated_at: new Date().toISOString(),
-  };
+    updated_at: new Date().toISOString()};
 }
 
 async function listAdminUsersByEmail(url: string, serviceRoleKey: string, email: string): Promise<AdminUserRecord | null> {
@@ -310,9 +298,7 @@ async function listAdminUsersByEmail(url: string, serviceRoleKey: string, email:
       headers: {
         apikey: serviceRoleKey,
         Authorization: `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
+        'Content-Type': 'application/json'}});
 
     if (!response.ok) {
       const text = await response.text();
@@ -340,15 +326,12 @@ async function createAdminUser(url: string, serviceRoleKey: string, email: strin
     headers: {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-    },
+      'Content-Type': 'application/json'},
     body: JSON.stringify({
       email,
       password,
       email_confirm: true,
-      user_metadata: buildOwnerMetadata(firstName, lastName),
-    }),
-  });
+      user_metadata: buildOwnerMetadata(firstName, lastName)})});
 
   const payload = await response.json() as { user?: AdminUserRecord; msg?: string; message?: string };
   if (!response.ok || !payload.user?.id) {
@@ -364,14 +347,11 @@ async function updateAdminUser(url: string, serviceRoleKey: string, userId: stri
     headers: {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-    },
+      'Content-Type': 'application/json'},
     body: JSON.stringify({
       password,
       email_confirm: true,
-      user_metadata: buildOwnerMetadata(firstName, lastName),
-    }),
-  });
+      user_metadata: buildOwnerMetadata(firstName, lastName)})});
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ message: '' })) as { message?: string; msg?: string };
@@ -416,28 +396,24 @@ async function verifyPasswordSignIn(email: string, password: string): Promise<{ 
   const normalizedPassword = sanitizePasswordForSignIn(password);
   const { data, error } = await client.auth.signInWithPassword({
     email: normalizedEmail,
-    password: normalizedPassword,
-  });
+    password: normalizedPassword});
 
   if (error) {
     return {
       canSignInNow: false,
-      message: error.message || 'Password sign-in verification failed.',
-    };
+      message: error.message || 'Password sign-in verification failed.'};
   }
 
   if (data.session) {
     await client.auth.signOut().catch(() => undefined);
     return {
       canSignInNow: true,
-      message: 'Password sign-in verified successfully.',
-    };
+      message: 'Password sign-in verified successfully.'};
   }
 
   return {
     canSignInNow: false,
-    message: 'No active session returned after password verification.',
-  };
+    message: 'No active session returned after password verification.'};
 }
 
 async function repairWithServiceRole(params: {
@@ -491,8 +467,7 @@ async function repairWithServiceRole(params: {
     warnings,
     blocker: null,
     serviceRoleStatus: params.serviceRoleStatus,
-    serviceRoleJwtRole: params.serviceRoleJwtRole,
-  };
+    serviceRoleJwtRole: params.serviceRoleJwtRole};
 }
 
 async function bootstrapWithPublicSignup(params: {
@@ -512,9 +487,7 @@ async function bootstrapWithPublicSignup(params: {
     email: params.email,
     password: params.password,
     options: {
-      data: buildOwnerMetadata(params.firstName, params.lastName),
-    },
-  });
+      data: buildOwnerMetadata(params.firstName, params.lastName)}});
 
   if (signUpResult.error) {
     const lowerMessage = (signUpResult.error.message || '').toLowerCase();
@@ -536,8 +509,7 @@ async function bootstrapWithPublicSignup(params: {
       warnings: [serviceRoleMessage],
       blocker,
       serviceRoleStatus: params.serviceRoleStatus,
-      serviceRoleJwtRole: params.serviceRoleJwtRole,
-    };
+      serviceRoleJwtRole: params.serviceRoleJwtRole};
   }
 
   const createdUser = signUpResult.data.user;
@@ -555,8 +527,7 @@ async function bootstrapWithPublicSignup(params: {
       warnings: [serviceRoleMessage],
       blocker: 'existing_account_requires_real_service_role',
       serviceRoleStatus: params.serviceRoleStatus,
-      serviceRoleJwtRole: params.serviceRoleJwtRole,
-    };
+      serviceRoleJwtRole: params.serviceRoleJwtRole};
   }
 
   const userId = createdUser?.id ?? null;
@@ -589,8 +560,7 @@ async function bootstrapWithPublicSignup(params: {
     warnings,
     blocker: null,
     serviceRoleStatus: params.serviceRoleStatus,
-    serviceRoleJwtRole: params.serviceRoleJwtRole,
-  };
+    serviceRoleJwtRole: params.serviceRoleJwtRole};
 }
 
 export async function GET(): Promise<Response> {
@@ -604,8 +574,7 @@ export async function GET(): Promise<Response> {
     return jsonResponse({
       success: false,
       message,
-      blocker: 'owner_bootstrap_diagnostics_exception',
-    }, 500);
+      blocker: 'owner_bootstrap_diagnostics_exception'}, 500);
   }
 }
 
@@ -641,16 +610,14 @@ export async function POST(request: Request): Promise<Response> {
           url: env.url,
           serviceRoleKey: env.serviceRoleKey,
           serviceRoleStatus: env.serviceRoleStatus,
-          serviceRoleJwtRole: env.serviceRoleJwtRole,
-        })
+          serviceRoleJwtRole: env.serviceRoleJwtRole})
       : await bootstrapWithPublicSignup({
           email,
           password,
           firstName,
           lastName,
           serviceRoleStatus: env.serviceRoleStatus,
-          serviceRoleJwtRole: env.serviceRoleJwtRole,
-        });
+          serviceRoleJwtRole: env.serviceRoleJwtRole});
 
     const status = result.success ? 200 : result.blocker === 'existing_account_requires_real_service_role' ? 409 : 500;
     return jsonResponse(result as unknown as JsonRecord, status);
@@ -661,7 +628,6 @@ export async function POST(request: Request): Promise<Response> {
     return jsonResponse({
       success: false,
       message,
-      blocker: 'owner_bootstrap_exception',
-    }, status);
+      blocker: 'owner_bootstrap_exception'}, status);
   }
 }

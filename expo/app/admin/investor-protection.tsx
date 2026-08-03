@@ -7,17 +7,14 @@
  * compliance (KYC/AML/accredited), immutable audit log, and owner reports.
  */
 import React, { useMemo, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   RefreshControl,
   Pressable,
   Modal,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+  TextInput} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -41,10 +38,10 @@ import {
   XCircle,
   Clock,
   ScrollText,
-  TrendingUp,
-} from 'lucide-react-native';
+  TrendingUp} from 'lucide-react-native';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { assertOwnerSessionAccessToken } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const GOLD = '#FFD700';
 const BG = '#000000';
@@ -66,8 +63,7 @@ async function ownerGet<T>(path: string): Promise<T> {
   const token = await assertOwnerSessionAccessToken();
   const base = getDirectApiBaseUrl().replace(/\/+$/, '');
   const response = await fetch(`${base}${path}`, {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  });
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }});
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(typeof payload.error === 'string' ? payload.error : `Request failed (${response.status})`);
@@ -81,8 +77,7 @@ async function ownerPost<T>(path: string, body: Record<string, unknown>): Promis
   const response = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
+    body: JSON.stringify(body)});
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(typeof payload.error === 'string' ? payload.error : `Request failed (${response.status})`);
@@ -273,43 +268,36 @@ export default function InvestorProtectionScreen() {
 
   const dashboardQuery = useQuery<ProtectionDashboardResponse>({
     queryKey: ['protection-dashboard'],
-    queryFn: () => ownerGet<ProtectionDashboardResponse>('/api/ivx/protection/dashboard'),
-  });
+    queryFn: () => ownerGet<ProtectionDashboardResponse>('/api/ivx/protection/dashboard')});
 
   const integrityQuery = useQuery<LedgerIntegrityResponse>({
     queryKey: ['protection-ledger-integrity'],
-    queryFn: () => ownerGet<LedgerIntegrityResponse>('/api/ivx/protection/ledger-integrity'),
-  });
+    queryFn: () => ownerGet<LedgerIntegrityResponse>('/api/ivx/protection/ledger-integrity')});
 
   const accountStatesQuery = useQuery<AccountStatesResponse>({
     queryKey: ['protection-account-states'],
     queryFn: () => ownerGet<AccountStatesResponse>('/api/ivx/protection/account-states'),
-    enabled: tab === 'accounts',
-  });
+    enabled: tab === 'accounts'});
 
   const withdrawalsQuery = useQuery<WithdrawalsResponse>({
     queryKey: ['protection-withdrawals'],
     queryFn: () => ownerGet<WithdrawalsResponse>('/api/ivx/protection/withdrawals'),
-    enabled: tab === 'withdrawals',
-  });
+    enabled: tab === 'withdrawals'});
 
   const wireQueueQuery = useQuery<WireQueueResponse>({
     queryKey: ['protection-wire-queue'],
     queryFn: () => ownerGet<WireQueueResponse>('/api/ivx/protection/wire-queue'),
-    enabled: tab === 'wires',
-  });
+    enabled: tab === 'wires'});
 
   const complianceQuery = useQuery<ComplianceListResponse>({
     queryKey: ['protection-compliance'],
     queryFn: () => ownerGet<ComplianceListResponse>('/api/ivx/protection/compliance'),
-    enabled: tab === 'compliance',
-  });
+    enabled: tab === 'compliance'});
 
   const auditQuery = useQuery<AuditLogResponse>({
     queryKey: ['protection-audit-log'],
     queryFn: () => ownerGet<AuditLogResponse>('/api/ivx/protection/audit-log?limit=80'),
-    enabled: tab === 'audit',
-  });
+    enabled: tab === 'audit'});
 
   const summary = dashboardQuery.data?.summary;
   const integrity = integrityQuery.data;
@@ -332,8 +320,7 @@ export default function InvestorProtectionScreen() {
           title: 'Investor Protection',
           headerStyle: { backgroundColor: BG },
           headerTintColor: GOLD,
-          headerTitleStyle: { color: TEXT },
-        }}
+          headerTitleStyle: { color: TEXT }}}
       />
       <ScrollView
         style={styles.scroll}
@@ -435,8 +422,7 @@ function TabBar({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => void 
 function OverviewTab({
   summary,
   integrity,
-  loading,
-}: {
+  loading}: {
   summary: DashboardSummary | undefined;
   integrity: LedgerIntegrityResponse | undefined;
   loading: boolean;
@@ -444,7 +430,7 @@ function OverviewTab({
   if (loading && !summary) {
     return (
       <View style={styles.card}>
-        <ActivityIndicator color={GOLD} />
+        <ShimmerIndicator color={GOLD} />
         <Text style={styles.cardSub}>Loading protection summary…</Text>
       </View>
     );
@@ -708,7 +694,7 @@ function Badge({ label, tone }: { label: string; tone: string }) {
 function LoadingCard({ label }: { label: string }) {
   return (
     <View style={styles.card}>
-      <ActivityIndicator color={GOLD} />
+      <ShimmerIndicator color={GOLD} />
       <Text style={styles.cardSub}>{label}</Text>
     </View>
   );
@@ -748,8 +734,7 @@ const styles = StyleSheet.create({
     borderColor: GOLD,
     borderWidth: 1,
     borderRadius: 16,
-    padding: 16,
-  },
+    padding: 16},
   heroBody: { flex: 1, gap: 4 },
   heroTitle: { color: GOLD, fontSize: 16, fontWeight: '700' as const },
   heroSub: { color: SUB, fontSize: 11, lineHeight: 16 },
@@ -761,8 +746,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 16,
-    gap: 6,
-  },
+    gap: 6},
   heroLabel: { color: SUB, fontSize: 12 },
   heroValue: { color: GOLD, fontSize: 24, fontWeight: '700' as const },
   sectionTitle: { color: TEXT, fontSize: 15, fontWeight: '700' as const, marginTop: 8 },
@@ -774,8 +758,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    gap: 4,
-  },
+    gap: 4},
   statLabel: { color: SUB, fontSize: 11 },
   statValue: { color: TEXT, fontSize: 16, fontWeight: '600' as const },
   statSub: { color: SUB, fontSize: 10 },
@@ -787,8 +770,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 999,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   statePillText: { fontSize: 11, fontWeight: '700' as const, textTransform: 'uppercase' as const },
   statePillCount: { color: TEXT, fontSize: 14, fontWeight: '700' as const },
   card: {
@@ -799,8 +781,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   cardBody: { flex: 1, gap: 3 },
   cardTitle: { color: TEXT, fontSize: 14, fontWeight: '600' as const },
   cardSub: { color: SUB, fontSize: 11 },
@@ -813,15 +794,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginTop: 2,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   badge: {
     borderWidth: 1,
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   badgeText: { fontSize: 10, fontWeight: '700' as const },
   riskList: { gap: 2, marginTop: 4 },
   flowText: { color: SUB, fontSize: 11, fontStyle: 'italic' as const },
@@ -834,9 +813,7 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderWidth: 1,
     borderColor: BORDER,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   tabActive: { borderColor: GOLD, backgroundColor: CARD_ALT },
   tabText: { color: SUB, fontSize: 12, fontWeight: '600' as const },
-  tabTextActive: { color: GOLD },
-});
+  tabTextActive: { color: GOLD }});

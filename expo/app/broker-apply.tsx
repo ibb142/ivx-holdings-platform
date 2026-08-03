@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+  Platform} from "react-native";
 import { Stack, useRouter } from 'expo-router';
 import {
   Handshake,
@@ -33,12 +30,12 @@ import {
   Landmark,
   BadgeDollarSign,
   UserCheck,
-  Building2,
-} from 'lucide-react-native';
+  Building2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { useMutation } from '@tanstack/react-query';
 import { useAnalytics } from '@/lib/analytics-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ExperienceLevelType = 'junior' | 'mid' | 'senior' | 'principal';
 type SpecializationType = 'private_lenders' | 'individual_investors' | 'institutional' | 'family_office' | 'mixed';
@@ -90,8 +87,7 @@ export default function BrokerApplyScreen() {
     avgDealSize: '',
     motivation: '',
     taxAgreement: false,
-    termsAgreement: false,
-  });
+    termsAgreement: false});
 
   const experienceLevels: { id: ExperienceLevelType; label: string; desc: string }[] = [
     { id: 'junior', label: 'Associate Broker', desc: '0-2 years' },
@@ -190,8 +186,7 @@ export default function BrokerApplyScreen() {
       const { error } = await supabase.from('applications').insert(input);
       if (error) console.log('[Broker] Application insert note:', error.message);
       return { success: true };
-    },
-  });
+    }});
   const { trackAction } = useAnalytics();
 
   const handleSubmit = useCallback(async () => {
@@ -213,8 +208,7 @@ export default function BrokerApplyScreen() {
         license_type: formData.licenseType,
         motivation: formData.motivation,
         status: 'pending',
-        created_at: new Date().toISOString(),
-      },
+        created_at: new Date().toISOString()},
       {
         onSuccess: () => {
           setIsSubmitting(false);
@@ -231,8 +225,7 @@ export default function BrokerApplyScreen() {
             'Thank you for applying to the IVXHOLDINGS Investor Broker Program. Our partnerships team will review your application and contact you within 3-5 business days.\n\nYou will receive a confirmation email shortly.',
             [{ text: 'OK', onPress: () => router.back() }]
           );
-        },
-      }
+        }}
     );
   }, [router, formData, submitMutation, trackAction]);
 
@@ -737,8 +730,7 @@ export default function BrokerApplyScreen() {
         options={{
           title: 'Investor Broker Program',
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }}
+          headerTintColor: Colors.text}}
       />
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -831,7 +823,7 @@ export default function BrokerApplyScreen() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
+                  <ShimmerIndicator size="small" color={Colors.white} />
                 ) : (
                   <Text style={styles.submitButtonText}>Submit Application</Text>
                 )}
@@ -975,5 +967,4 @@ const styles = StyleSheet.create({
   contactButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   contactButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

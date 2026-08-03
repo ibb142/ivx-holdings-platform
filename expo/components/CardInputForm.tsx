@@ -4,8 +4,7 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+  TouchableOpacity} from 'react-native';
 import { CreditCard, Lock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -91,8 +90,7 @@ export default function CardInputForm({ onCardChange, disabled }: CardInputFormP
         expYear: year,
         cvc: newCvc,
         name: newName,
-        isValid: true,
-      });
+        isValid: true});
     } else {
       onCardChange(null);
     }
@@ -136,8 +134,7 @@ export default function CardInputForm({ onCardChange, disabled }: CardInputFormP
       expYear: '28',
       cvc: '123',
       name: 'Test User',
-      isValid: true,
-    });
+      isValid: true});
   };
 
   const cardBrand = getCardBrand(cardNumber);
@@ -250,8 +247,7 @@ export default function CardInputForm({ onCardChange, disabled }: CardInputFormP
 
 const styles = StyleSheet.create({
   container: {
-    gap: 12,
-  },
+    gap: 12},
   testCardsToggle: {
     alignSelf: 'flex-start',
     backgroundColor: Colors.warning + '15',
@@ -259,36 +255,30 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: Colors.warning + '30',
-  },
+    borderColor: Colors.warning + '30'},
   testCardsToggleText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   testCardsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   testCardButton: {
     backgroundColor: Colors.backgroundTertiary,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   testCardLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   testCardNumber: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   cardNumberContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -296,41 +286,33 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cardNumberIcon: {
-    marginRight: 10,
-  },
+    marginRight: 10},
   cardNumberInput: {
     flex: 1,
     paddingVertical: 14,
     fontSize: 16,
     color: Colors.text,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   cardBrandBadge: {
     backgroundColor: Colors.primary + '20',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   cardBrandText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   rowInputs: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   inputContainer: {
-    gap: 6,
-  },
+    gap: 6},
   inputLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   input: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
@@ -339,8 +321,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cvcContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -348,18 +329,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   validIndicator: {
     backgroundColor: Colors.success + '15',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   validText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.success,
-  },
-});
+    color: Colors.success}});

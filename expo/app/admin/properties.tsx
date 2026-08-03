@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -10,9 +9,7 @@ import {
   Image,
   Alert,
   Modal,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -23,8 +20,7 @@ import {
   MapPin,
   X,
   Check,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Property } from '@/types';
 import { formatCurrencyWithDecimals, formatAmountInput, parseAmountInput } from '@/lib/formatters';
@@ -36,6 +32,7 @@ import { fetchPropertiesPage, invalidatePropertiesCache } from '@/lib/canonical-
 import { usePropertiesRealtime } from '@/lib/canonical-realtime';
 import { OptimizedImage } from '@/components/OptimizedImage';
 import { logAudit } from '@/lib/audit-trail';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FilterType = 'all' | 'live' | 'coming_soon' | 'funded' | 'closed';
 
@@ -57,8 +54,7 @@ export default function PropertiesScreen() {
     yield: '',
     propertyType: 'residential' as Property['propertyType'],
     status: 'coming_soon' as Property['status'],
-    description: '',
-  });
+    description: ''});
 
   const queryClient = useQueryClient();
   usePropertiesRealtime(null);
@@ -95,11 +91,9 @@ export default function PropertiesScreen() {
         distributions: [],
         priceHistory: [],
         createdAt: p.created_at || new Date().toISOString(),
-        closingDate: '',
-      }));
+        closingDate: ''}));
       return { items, hasMore: result.hasMore };
-    },
-  });
+    }});
 
   const properties = propertiesList.data;
 
@@ -117,8 +111,7 @@ export default function PropertiesScreen() {
       Alert.alert('Success', 'Property added successfully');
       setShowAddModal(false);
     },
-    onError: (err: Error) => Alert.alert('Error', err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', err.message)});
 
   const deletePropertyMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -132,8 +125,7 @@ export default function PropertiesScreen() {
       propertiesList.refresh();
       Alert.alert('Success', 'Property deleted');
     },
-    onError: (err: Error) => Alert.alert('Error', err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', err.message)});
 
   const archivePropertyMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -147,8 +139,7 @@ export default function PropertiesScreen() {
       propertiesList.refresh();
       Alert.alert('Archived', 'Property has been archived.');
     },
-    onError: (err: Error) => Alert.alert('Error', 'Failed to archive: ' + err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', 'Failed to archive: ' + err.message)});
 
   const restorePropertyMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -162,8 +153,7 @@ export default function PropertiesScreen() {
       propertiesList.refresh();
       Alert.alert('Restored', 'Property has been restored.');
     },
-    onError: (err: Error) => Alert.alert('Error', 'Failed to restore: ' + err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', 'Failed to restore: ' + err.message)});
 
   const publishPropertyMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -177,8 +167,7 @@ export default function PropertiesScreen() {
       propertiesList.refresh();
       Alert.alert('Published', 'Property is now live for investors.');
     },
-    onError: (err: Error) => Alert.alert('Error', 'Failed to publish: ' + err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', 'Failed to publish: ' + err.message)});
 
   const unpublishPropertyMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -192,8 +181,7 @@ export default function PropertiesScreen() {
       propertiesList.refresh();
       Alert.alert('Unpublished', 'Property is no longer live.');
     },
-    onError: (err: Error) => Alert.alert('Error', 'Failed to unpublish: ' + err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', 'Failed to unpublish: ' + err.message)});
 
   const filteredProperties = useMemo(() => {
     let result = properties;
@@ -254,8 +242,7 @@ export default function PropertiesScreen() {
       yield: '',
       propertyType: 'residential',
       status: 'coming_soon',
-      description: '',
-    });
+      description: ''});
     setEditingProperty(null);
     setShowAddModal(true);
   };
@@ -271,8 +258,7 @@ export default function PropertiesScreen() {
       yield: property.yield.toString(),
       propertyType: property.propertyType,
       status: property.status,
-      description: property.description,
-    });
+      description: property.description});
     setEditingProperty(property);
     setShowAddModal(true);
   };
@@ -288,8 +274,7 @@ export default function PropertiesScreen() {
           style: 'destructive',
           onPress: () => {
             deletePropertyMutation.mutate(property.id);
-          },
-        },
+          }},
       ]
     );
   }, [deletePropertyMutation]);
@@ -308,8 +293,7 @@ export default function PropertiesScreen() {
         total_shares: parseInt(parseAmountInput(formData.totalShares)) || 1000,
         annual_yield: parseFloat(formData.yield) || 0,
         type: formData.propertyType,
-        status: formData.status === 'live' ? 'active' : formData.status,
-      }).eq('id', editingProperty.id).then(({ error }: { error: any }) => {
+        status: formData.status === 'live' ? 'active' : formData.status}).eq('id', editingProperty.id).then(({ error }: { error: any }) => {
         if (error) { Alert.alert('Error', error.message); return; }
         invalidatePropertiesCache();
         void queryClient.invalidateQueries({ queryKey: ['admin-properties', 'page-1'] });
@@ -326,8 +310,7 @@ export default function PropertiesScreen() {
         total_shares: parseInt(parseAmountInput(formData.totalShares)) || 1000,
         annual_yield: parseFloat(formData.yield) || 0,
         type: formData.propertyType,
-        status: formData.status === 'live' ? 'active' : formData.status,
-      });
+        status: formData.status === 'live' ? 'active' : formData.status});
     }
   }, [formData, editingProperty, addPropertyMutation, queryClient]);
 
@@ -594,7 +577,7 @@ export default function PropertiesScreen() {
         ListEmptyComponent={
           propertiesList.isLoading ? (
             <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={{ color: Colors.textSecondary, marginTop: 12, fontSize: 13 }}>Loading properties...</Text>
             </View>
           ) : propertiesList.isError ? (
@@ -682,8 +665,7 @@ export default function PropertiesScreen() {
                         width: `${Math.min(
                           (property.currentRaise / property.targetRaise) * 100,
                           100
-                        )}%`,
-                      },
+                        )}%`},
                     ]}
                   />
                 </View>
@@ -722,27 +704,23 @@ export default function PropertiesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    gap: 10,
-  },
+    gap: 10},
   backBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: Colors.card, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   title: {
     fontSize: 20,
     fontWeight: '700',
     color: Colors.text,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   subtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -751,17 +729,14 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
     gap: 4,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   addButtonText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   searchContainer: {
     paddingHorizontal: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -769,158 +744,127 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 10,
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterContainer: {
     maxHeight: 44,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   filterContent: {
     paddingHorizontal: 20,
-    gap: 10,
-  },
+    gap: 10},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: '#fff',
-  },
+    color: '#fff'},
   list: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   propertyCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
     marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   propertyImage: {
     width: '100%',
-    height: 140,
-  },
+    height: 140},
   propertyContent: {
-    padding: 16,
-  },
+    padding: 16},
   propertyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   propertyInfo: {
-    flex: 1,
-  },
+    flex: 1},
   propertyName: {
     fontSize: 17,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   propertyLocation: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   statusText: {
     fontSize: 11,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   propertyStats: {
     flexDirection: 'row',
     marginTop: 16,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   propStat: {
-    flex: 1,
-  },
+    flex: 1},
   propStatLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   propStatValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   progressSection: {
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   progressLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   progressPercent: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   progressBar: {
     height: 6,
     backgroundColor: Colors.border,
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressFill: {
     height: '100%',
     backgroundColor: Colors.primary,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   progressAmount: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 6,
-  },
+    marginTop: 6},
   propertyActions: {
     flexDirection: 'row',
     gap: 10,
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   editButton: {
     flex: 1,
     flexDirection: 'row',
@@ -929,13 +873,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     paddingVertical: 10,
     borderRadius: 8,
-    gap: 6,
-  },
+    gap: 6},
   editButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   deleteButton: {
     flex: 1,
     flexDirection: 'row',
@@ -944,20 +886,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.negative + '15',
     paddingVertical: 10,
     borderRadius: 8,
-    gap: 6,
-  },
+    gap: 6},
   deleteButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.negative,
-  },
+    color: Colors.negative},
   bottomPadding: {
-    height: 100,
-  },
+    height: 100},
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -965,26 +903,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   modalContent: {
     flex: 1,
-    padding: 20,
-  },
+    padding: 20},
   formGroup: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   formLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   formInput: {
     backgroundColor: Colors.card,
     borderRadius: 10,
@@ -993,51 +926,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   formTextArea: {
     minHeight: 100,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   formRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   typeSelector: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   typeOption: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   typeOptionActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   typeOptionText: {
     fontSize: 13,
     fontWeight: '500',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   typeOptionTextActive: {
-    color: '#fff',
-  },
+    color: '#fff'},
   saveButton: {
     backgroundColor: Colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
-  },
+    marginTop: 10},
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-  },
-});
+    fontWeight: '600'}});

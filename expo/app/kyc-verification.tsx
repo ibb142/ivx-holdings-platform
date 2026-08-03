@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import logger from '@/lib/logger';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,13 +8,11 @@ import {
   TextInput,
   Alert,
   Image,
-  ActivityIndicator,
   Platform,
   Modal,
   FlatList,
   Animated,
-  KeyboardAvoidingView,
-} from 'react-native';
+  KeyboardAvoidingView} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { File } from 'expo-file-system';
@@ -52,8 +49,7 @@ import {
   Clock,
   Building,
   Hash,
-  ImageIcon,
-} from 'lucide-react-native';
+  ImageIcon} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { COUNTRIES, Country, getCountryByName } from '@/constants/countries';
 import {
@@ -63,9 +59,9 @@ import {
   VerificationCheck,
   LivenessChallenge,
   getRiskColor,
-  getStatusColor,
-} from '@/lib/verification-service';
+  getStatusColor} from '@/lib/verification-service';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type KYCStep = 'personal' | 'documents' | 'selfie' | 'liveness' | 'verification' | 'review';
 type DocumentStatus = 'pending' | 'uploading' | 'uploaded' | 'verified' | 'rejected';
@@ -98,8 +94,7 @@ export default function KYCVerificationScreen() {
     investingAsCompany: false,
     companyName: '',
     companyEin: '',
-    companyTaxId: '',
-  });
+    companyTaxId: ''});
 
   const [showNationalityPicker, setShowNationalityPicker] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -124,8 +119,7 @@ export default function KYCVerificationScreen() {
   }>({
     governmentId: { uri: null, status: 'pending' },
     proofOfAddress: { uri: null, status: 'pending' },
-    selfie: { uri: null, status: 'pending' },
-  });
+    selfie: { uri: null, status: 'pending' }});
 
   const [selectedIdType, setSelectedIdType] = useState<'drivers_license' | 'passport' | 'national_id'>('drivers_license');
 
@@ -144,8 +138,7 @@ export default function KYCVerificationScreen() {
       { type: 'turn_left', completed: false },
     ],
     completed: false,
-    confidence: 0,
-  });
+    confidence: 0});
 
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
   const [verificationProgress, setVerificationProgress] = useState(0);
@@ -219,8 +212,7 @@ export default function KYCVerificationScreen() {
         postal_code: personalInfo.zipCode,
         country: personalInfo.country,
         country_code: personalInfo.countryCode,
-        updated_at: new Date().toISOString(),
-      });
+        updated_at: new Date().toISOString()});
       logger.kyc.log('Personal info + address submitted to backend');
     } catch (error) {
       console.error('[KYC] Backend submit error (non-blocking):', error);
@@ -248,8 +240,7 @@ export default function KYCVerificationScreen() {
             await supabase.storage.createBucket(KYC_BUCKET, {
               public: false,
               fileSizeLimit: 10 * 1024 * 1024,
-              allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-            });
+              allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp']});
             const { error: retryError } = await supabase.storage
               .from(KYC_BUCKET)
               .upload(filePath, blob, { contentType: `image/${ext}`, upsert: true });
@@ -278,8 +269,7 @@ export default function KYCVerificationScreen() {
             await supabase.storage.createBucket(KYC_BUCKET, {
               public: false,
               fileSizeLimit: 10 * 1024 * 1024,
-              allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-            });
+              allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp']});
             const { error: retryError } = await supabase.storage
               .from(KYC_BUCKET)
               .upload(filePath, blob, { contentType: `image/${ext}`, upsert: true });
@@ -312,8 +302,7 @@ export default function KYCVerificationScreen() {
         document_type: type,
         document_url: storageUrl,
         issuing_country: personalInfo.countryCode,
-        created_at: new Date().toISOString(),
-      });
+        created_at: new Date().toISOString()});
       logger.kyc.log(`${type} uploaded to backend (storage URL: ${storageUrl.substring(0, 60)}...)`);
     } catch (error) {
       console.error(`[KYC] Document upload error (non-blocking):`, error);
@@ -332,8 +321,7 @@ export default function KYCVerificationScreen() {
         user_id: user.id,
         document_type: 'selfie',
         document_url: storageUrl,
-        created_at: new Date().toISOString(),
-      });
+        created_at: new Date().toISOString()});
       logger.kyc.log(`Selfie submitted to backend (storage URL: ${storageUrl.substring(0, 60)}...)`);
     } catch (error) {
       console.error('[KYC] Selfie submit error (non-blocking):', error);
@@ -344,8 +332,7 @@ export default function KYCVerificationScreen() {
     setPersonalInfo(prev => ({
       ...prev,
       nationality: country.name,
-      nationalityCode: country.code,
-    }));
+      nationalityCode: country.code}));
     setShowNationalityPicker(false);
     setCountrySearch('');
   };
@@ -354,8 +341,7 @@ export default function KYCVerificationScreen() {
     setPersonalInfo(prev => ({
       ...prev,
       country: country.name,
-      countryCode: country.code,
-    }));
+      countryCode: country.code}));
     setShowCountryPicker(false);
     setCountrySearch('');
   };
@@ -410,8 +396,7 @@ export default function KYCVerificationScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: type === 'selfie' ? [1, 1] : [4, 3],
-      quality: 0.8,
-    };
+      quality: 0.8};
 
     const result = source === 'camera'
       ? await ImagePicker.launchCameraAsync(options)
@@ -421,14 +406,12 @@ export default function KYCVerificationScreen() {
       const assetUri = result.assets[0].uri;
       setDocuments(prev => ({
         ...prev,
-        [type]: { uri: assetUri, status: 'uploading' },
-      }));
+        [type]: { uri: assetUri, status: 'uploading' }}));
 
       const docTypeMap: Record<string, string> = {
         governmentId: selectedIdType,
         proofOfAddress: 'proof_of_address',
-        selfie: 'selfie',
-      };
+        selfie: 'selfie'};
 
       if (type === 'selfie') {
         void submitSelfieToBackend(assetUri);
@@ -439,8 +422,7 @@ export default function KYCVerificationScreen() {
       setTimeout(() => {
         setDocuments(prev => ({
           ...prev,
-          [type]: { uri: assetUri, status: 'uploaded' },
-        }));
+          [type]: { uri: assetUri, status: 'uploaded' }}));
       }, 1500);
     }
   };
@@ -452,8 +434,7 @@ export default function KYCVerificationScreen() {
   const removeDocument = (type: 'governmentId' | 'proofOfAddress' | 'selfie') => {
     setDocuments(prev => ({
       ...prev,
-      [type]: { uri: null, status: 'pending' },
-    }));
+      [type]: { uri: null, status: 'pending' }}));
   };
 
   const handleNextStep = async () => {
@@ -516,12 +497,10 @@ export default function KYCVerificationScreen() {
           verification_score: verificationResult?.score ?? null,
           risk_level: verificationResult?.riskLevel ?? null,
           verification_passed: isApproved ?? false,
-          submitted_at: new Date().toISOString(),
-        }).eq('user_id', user.id);
+          submitted_at: new Date().toISOString()}).eq('user_id', user.id);
 
         await supabase.from('profiles').update({
-          kyc_status: newKycStatus,
-        }).eq('id', user.id);
+          kyc_status: newKycStatus}).eq('id', user.id);
 
         logger.kyc.log('KYC submitted + profile kyc_status synced to:', newKycStatus);
       }
@@ -538,8 +517,7 @@ export default function KYCVerificationScreen() {
       [
         {
           text: 'Done',
-          onPress: () => router.replace('/(tabs)/profile' as any),
-        },
+          onPress: () => router.replace('/(tabs)/profile' as any)},
       ]
     );
   };
@@ -558,13 +536,11 @@ export default function KYCVerificationScreen() {
           Animated.timing(pulseAnim, {
             toValue: 1.1,
             duration: 800,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 800,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
         ])
       ).start();
     } else {
@@ -583,8 +559,7 @@ export default function KYCVerificationScreen() {
         ...prev,
         challenges: prev.challenges.map((c, idx) =>
           idx === i ? { ...c, completed: true } : c
-        ),
-      }));
+        )}));
     }
 
     const result = await performLivenessDetection();
@@ -592,8 +567,7 @@ export default function KYCVerificationScreen() {
       ...prev,
       isRunning: false,
       completed: result.isLive,
-      confidence: result.confidence,
-    }));
+      confidence: result.confidence}));
 
     if (result.isLive) {
       logger.kyc.log('Liveness check passed');
@@ -610,8 +584,7 @@ export default function KYCVerificationScreen() {
     Animated.timing(progressAnim, {
       toValue: 100,
       duration: 10000,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
 
     const progressInterval = setInterval(() => {
       setVerificationProgress(prev => Math.min(prev + 5, 95));
@@ -626,8 +599,7 @@ export default function KYCVerificationScreen() {
         dateOfBirth: personalInfo.dateOfBirth,
         nationality: personalInfo.nationality,
         passportNumber: personalInfo.passportNumber,
-        taxId: personalInfo.taxId,
-      });
+        taxId: personalInfo.taxId});
 
       clearInterval(progressInterval);
       setVerificationProgress(100);
@@ -961,7 +933,7 @@ export default function KYCVerificationScreen() {
               { backgroundColor: doc.status === 'uploaded' ? Colors.success + '20' : Colors.primary + '20' }
             ]}>
               {isUploading ? (
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
               ) : (
                 <CheckCircle size={16} color={Colors.success} />
               )}
@@ -974,7 +946,7 @@ export default function KYCVerificationScreen() {
             <Image source={{ uri: doc.uri }} style={styles.documentPreview} />
             {isUploading && (
               <View style={styles.uploadingOverlay}>
-                <ActivityIndicator size="large" color={Colors.white} />
+                <ShimmerIndicator size="large" color={Colors.white} />
                 <Text style={styles.uploadingText}>Uploading...</Text>
               </View>
             )}
@@ -1195,7 +1167,7 @@ export default function KYCVerificationScreen() {
                 {getChallengeText(challenge.type)}
               </Text>
               {livenessState.currentChallenge === index && livenessState.isRunning && (
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
               )}
             </View>
           ))}
@@ -1216,7 +1188,7 @@ export default function KYCVerificationScreen() {
           </TouchableOpacity>
         ) : (
           <View style={styles.livenessInProgress}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.livenessProgressText}>Verifying liveness...</Text>
           </View>
         )}
@@ -1367,8 +1339,7 @@ export default function KYCVerificationScreen() {
                 styles.overallScoreFill,
                 {
                   width: `${verificationResult.score * 100}%`,
-                  backgroundColor: getRiskColor(verificationResult.riskLevel),
-                },
+                  backgroundColor: getRiskColor(verificationResult.riskLevel)},
               ]}
             />
           </View>
@@ -1628,7 +1599,7 @@ export default function KYCVerificationScreen() {
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color={Colors.background} />
+                <ShimmerIndicator color={Colors.background} />
               ) : (
                 <>
                   <Text style={styles.nextButtonText}>
@@ -1810,5 +1781,4 @@ const styles = StyleSheet.create({
   resultContent: { flex: 1 },
   resultName: { color: Colors.text, fontSize: 14, fontWeight: '600' as const, marginBottom: 2 },
   resultDetails: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16 },
-  resultScore: { fontSize: 14, fontWeight: '700' as const },
-});
+  resultScore: { fontSize: 14, fontWeight: '700' as const }});

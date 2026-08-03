@@ -956,7 +956,7 @@ describe('IVX Autonomous Coder — hardening (Phase 12 + 16 + 17)', () => {
     expect(proof.rollbackTriggered).toBe(true);
     expect(proof.rollbackCommitSha).toBe('revert-sha');
     expect(proof.productionVerified).toBe(false);
-    expect(proof.finalStatus).toBe('COMPLETED');
+    expect(proof.finalStatus).toBe('FAILED');
     expect(proof.error).toContain('rollback');
   });
 

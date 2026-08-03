@@ -9,15 +9,12 @@
  * Auto-refreshes via controlled polling (30s) + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -32,9 +29,9 @@ import {
   ListChecks,
   Lock,
   RefreshCw,
-  ShieldCheck,
-} from 'lucide-react-native';
+  ShieldCheck} from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
@@ -271,8 +268,7 @@ const STATUS_COLORS: Record<string, string> = {
   RUNNING: '#FBBF24',
   QUEUED: '#94A3B8',
   BLOCKED: '#F87171',
-  OWNER_ACTION_REQUIRED: '#F97316',
-};
+  OWNER_ACTION_REQUIRED: '#F97316'};
 
 const STATUS_ORDER: string[] = ['RUNNING', 'BLOCKED', 'OWNER_ACTION_REQUIRED', 'QUEUED', 'VERIFIED', 'DONE'];
 
@@ -320,8 +316,7 @@ export default function AutonomousDashboardScreen() {
       }
       const response = await fetch(LEDGER_URL, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        headers: { Authorization: `Bearer ${token}` }});
       if (response.status === 401 || response.status === 403) {
         setIsUnauthorized(true);
         setErrorMessage('Access denied: this dashboard is restricted to the IVX owner.');
@@ -426,7 +421,7 @@ export default function AutonomousDashboardScreen() {
 
       {isLoading ? (
         <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color="#FBBF24" />
+          <ShimmerIndicator size="large" color="#FBBF24" />
           <Text style={styles.loadingText}>Loading live job ledger…</Text>
         </View>
       ) : isUnauthorized ? (
@@ -704,8 +699,7 @@ export default function AutonomousDashboardScreen() {
                   <View
                     style={[styles.statusDot, {
                       backgroundColor:
-                        row.finalStatus === 'VERIFIED' ? '#34D399' : row.finalStatus === 'PARTIAL' ? '#FBBF24' : '#F87171',
-                    }]}
+                        row.finalStatus === 'VERIFIED' ? '#34D399' : row.finalStatus === 'PARTIAL' ? '#FBBF24' : '#F87171'}]}
                   />
                   <View style={styles.probeTextWrap}>
                     <Text style={styles.probeName}>{row.service} · {row.finalStatus} · {row.worker}</Text>
@@ -818,8 +812,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1E293B',
-  },
+    borderBottomColor: '#1E293B'},
   backButton: { padding: 6, marginRight: 6 },
   headerTitleWrap: { flex: 1 },
   headerTitle: { color: '#F1F5F9', fontSize: 18, fontWeight: '700' as const },
@@ -879,5 +872,4 @@ const styles = StyleSheet.create({
   smsBox: { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingTop: 8, gap: 3 },
   smsHeader: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' as const },
   qaStatusRow: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 14, marginBottom: 6 },
-  qaStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-});
+  qaStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 }});

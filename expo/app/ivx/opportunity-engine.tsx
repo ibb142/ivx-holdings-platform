@@ -2,14 +2,12 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   Bell,
@@ -20,19 +18,18 @@ import {
   ShieldCheck,
   Target,
   TrendingUp,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getOpportunityDashboard,
   runOpportunityScan,
   setOpportunityStatus,
   type Opportunity,
   type OpportunityCategory,
-  type OpportunityDashboard,
-} from '@/src/modules/ivx-developer/opportunityService';
+  type OpportunityDashboard} from '@/src/modules/ivx-developer/opportunityService';
 
 const POLL_INTERVAL_MS = 8000;
 
@@ -43,8 +40,7 @@ const CATEGORY_LABEL: Record<OpportunityCategory, string> = {
   investor: 'Investor',
   arbitrage: 'Arbitrage',
   partnership: 'Partnership',
-  technology_business: 'Tech / business',
-};
+  technology_business: 'Tech / business'};
 
 function formatUsd(value: number | null): string {
   if (value === null) return 'n/a';
@@ -186,8 +182,7 @@ function OpportunityEngineContent() {
   const dashboardQuery = useQuery<OpportunityDashboard | null>({
     queryKey: ['ivx-opportunity', 'dashboard'],
     queryFn: getOpportunityDashboard,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const dashboard = dashboardQuery.data ?? null;
 
@@ -240,7 +235,7 @@ function OpportunityEngineContent() {
           disabled={scanning}
           testID="ivx-opportunity-run-scan"
         >
-          {scanning ? <ActivityIndicator size="small" color={Colors.black} /> : <Zap size={15} color={Colors.black} />}
+          {scanning ? <ShimmerIndicator size="small" color={Colors.black} /> : <Zap size={15} color={Colors.black} />}
           <Text style={styles.primaryButtonText}>{scanning ? 'Scanning…' : "Find today's best opportunities"}</Text>
         </Pressable>
         {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
@@ -302,7 +297,7 @@ function OpportunityEngineContent() {
       ) : (
         <View style={styles.card}>
           {dashboardQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyBody}>{dashboardQuery.error instanceof Error ? dashboardQuery.error.message : 'No opportunity data yet.'}</Text>
           )}
@@ -394,5 +389,4 @@ const styles = StyleSheet.create({
   actBtnGhost: { alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 10, flex: 1, borderWidth: 1, borderColor: Colors.border },
   actBtnGhostText: { fontSize: 12.5, fontWeight: '600' as const, color: Colors.text },
   statusLine: { fontSize: 11, color: Colors.textTertiary, marginTop: 2 },
-  footnote: { fontSize: 11, lineHeight: 16, color: Colors.textTertiary, textAlign: 'center', marginTop: 6 },
-});
+  footnote: { fontSize: 11, lineHeight: 16, color: Colors.textTertiary, textAlign: 'center', marginTop: 6 }});

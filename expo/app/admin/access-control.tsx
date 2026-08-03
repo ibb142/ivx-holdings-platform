@@ -1,18 +1,15 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   TextInput,
   Modal,
   Switch,
   RefreshControl,
-  FlatList,
-} from 'react-native';
+  FlatList} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -37,10 +34,10 @@ import {
   Clock,
   KeyRound,
   Smartphone,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { useAuth } from '@/lib/auth-context';
 import {
   fetchRolesAndAssignments,
@@ -60,8 +57,7 @@ import {
   type IVXRoleDefinition,
   ALL_IVX_ROLES,
   ALL_IVX_SCREENS,
-  IVX_ACCESS_SCOPES,
-} from '@/lib/access-control-service';
+  IVX_ACCESS_SCOPES} from '@/lib/access-control-service';
 
 type Tab = 'users' | 'roles' | 'templates' | 'groups';
 
@@ -78,8 +74,7 @@ export default function AccessControlScreen() {
 
   const rolesQuery = useQuery({
     queryKey: ['ivx-access-control'],
-    queryFn: fetchRolesAndAssignments,
-  });
+    queryFn: fetchRolesAndAssignments});
 
   const invalidateAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['ivx-access-control'] });
@@ -88,59 +83,50 @@ export default function AccessControlScreen() {
   const assignMutation = useMutation({
     mutationFn: assignRoleToUser,
     onSuccess: () => { invalidateAll(); setShowAssignModal(false); },
-    onError: (e: Error) => Alert.alert('Assignment Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Assignment Failed', e.message)});
 
   const revokeMutation = useMutation({
     mutationFn: (userId: string) => revokeRoleFromUser(userId),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('Revoke Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Revoke Failed', e.message)});
 
   const statusMutation = useMutation({
     mutationFn: ({ userId, status }: { userId: string; status: 'active' | 'suspended' }) =>
       setAssignmentStatus(userId, status),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('Status Change Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Status Change Failed', e.message)});
 
   const forceLogoutMutation = useMutation({
     mutationFn: (userId: string) => forceLogoutUser(userId),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('Force Logout Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Force Logout Failed', e.message)});
 
   const clearForceLogoutMutation = useMutation({
     mutationFn: (userId: string) => clearForceLogout(userId),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('Clear Force Logout Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Clear Force Logout Failed', e.message)});
 
   const updateScreensMutation = useMutation({
     mutationFn: ({ userId, screens }: { userId: string; screens: IVXScreenPermission[] }) =>
       updateUserScreens(userId, screens),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('Screen Update Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Screen Update Failed', e.message)});
 
   const mfaMutation = useMutation({
     mutationFn: ({ userId, requireMfa }: { userId: string; requireMfa: boolean }) =>
       setMfaRequirement(userId, requireMfa),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('MFA Update Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('MFA Update Failed', e.message)});
 
   const createTemplateMutation = useMutation({
     mutationFn: createAccessTemplate,
     onSuccess: () => { invalidateAll(); setShowTemplateModal(false); },
-    onError: (e: Error) => Alert.alert('Template Creation Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Template Creation Failed', e.message)});
 
   const deleteTemplateMutation = useMutation({
     mutationFn: (id: string) => deleteAccessTemplate(id),
     onSuccess: () => invalidateAll(),
-    onError: (e: Error) => Alert.alert('Template Deletion Failed', e.message),
-  });
+    onError: (e: Error) => Alert.alert('Template Deletion Failed', e.message)});
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -194,8 +180,7 @@ export default function AccessControlScreen() {
         {
           text: 'Revoke',
           style: 'destructive',
-          onPress: () => revokeMutation.mutate(userId),
-        },
+          onPress: () => revokeMutation.mutate(userId)},
       ],
     );
   }, [revokeMutation]);
@@ -209,8 +194,7 @@ export default function AccessControlScreen() {
         {
           text: 'Force Logout',
           style: 'destructive',
-          onPress: () => forceLogoutMutation.mutate(userId),
-        },
+          onPress: () => forceLogoutMutation.mutate(userId)},
       ],
     );
   }, [forceLogoutMutation]);
@@ -219,7 +203,7 @@ export default function AccessControlScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading access control...</Text>
         </View>
       </SafeAreaView>
@@ -311,14 +295,12 @@ export default function AccessControlScreen() {
                 onToggleStatus={() =>
                   statusMutation.mutate({
                     userId: assignment.userId,
-                    status: assignment.status === 'active' ? 'suspended' : 'active',
-                  })
+                    status: assignment.status === 'active' ? 'suspended' : 'active'})
                 }
                 onToggleMfa={() =>
                   mfaMutation.mutate({
                     userId: assignment.userId,
-                    requireMfa: !assignment.requireMfa,
-                  })
+                    requireMfa: !assignment.requireMfa})
                 }
                 selected={selectedUserId === assignment.userId}
               />
@@ -422,14 +404,12 @@ export default function AccessControlScreen() {
           onToggleStatus={() =>
             statusMutation.mutate({
               userId: selectedAssignment.userId,
-              status: selectedAssignment.status === 'active' ? 'suspended' : 'active',
-            })
+              status: selectedAssignment.status === 'active' ? 'suspended' : 'active'})
           }
           onToggleMfa={() =>
             mfaMutation.mutate({
               userId: selectedAssignment.userId,
-              requireMfa: !selectedAssignment.requireMfa,
-            })
+              requireMfa: !selectedAssignment.requireMfa})
           }
           onRevoke={() => handleRevoke(selectedAssignment.userId, selectedAssignment.userEmail)}
         />
@@ -447,8 +427,7 @@ function AssignmentCard({
   onClearForceLogout,
   onToggleStatus,
   onToggleMfa,
-  selected,
-}: {
+  selected}: {
   assignment: IVXRoleAssignment;
   roleDisplayName: string;
   onSelect: () => void;
@@ -576,8 +555,7 @@ function AssignmentCard({
 
 function RoleDefinitionCard({
   definition,
-  assignmentCount,
-}: {
+  assignmentCount}: {
   definition: IVXRoleDefinition;
   assignmentCount: number;
 }) {
@@ -648,8 +626,7 @@ function RoleDefinitionCard({
 function TemplateCard({
   template,
   roleDisplayName,
-  onDelete,
-}: {
+  onDelete}: {
   template: { id: string; name: string; description: string; role: string; screens: string[]; dataScope: string; permissions: string[]; createdAt: string };
   roleDisplayName: string;
   onDelete: () => void;
@@ -704,8 +681,7 @@ function AssignRoleModal({
   onAssign,
   loading,
   definitions,
-  getRoleScreens,
-}: {
+  getRoleScreens}: {
   visible: boolean;
   onClose: () => void;
   onAssign: (input: {
@@ -753,8 +729,7 @@ function AssignRoleModal({
       dataScope,
       startDate: null,
       expirationDate: null,
-      requireMfa,
-    });
+      requireMfa});
   };
 
   return (
@@ -858,7 +833,7 @@ function AssignRoleModal({
 
           <TouchableOpacity style={styles.submitBtn} onPress={handleAssign} disabled={loading}>
             {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ShimmerIndicator size="small" color="#fff" />
             ) : (
               <Text style={styles.submitBtnText}>Publish Assignment</Text>
             )}
@@ -873,8 +848,7 @@ function CreateTemplateModal({
   visible,
   onClose,
   onCreate,
-  loading,
-}: {
+  loading}: {
   visible: boolean;
   onClose: () => void;
   onCreate: (input: {
@@ -910,8 +884,7 @@ function CreateTemplateModal({
       role,
       screens: selectedScreens,
       dataScope,
-      permissions: [],
-    });
+      permissions: []});
   };
 
   return (
@@ -999,7 +972,7 @@ function CreateTemplateModal({
 
           <TouchableOpacity style={styles.submitBtn} onPress={handleCreate} disabled={loading}>
             {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ShimmerIndicator size="small" color="#fff" />
             ) : (
               <Text style={styles.submitBtnText}>Create Template</Text>
             )}
@@ -1021,8 +994,7 @@ function UserDetailModal({
   onClearForceLogout,
   onToggleStatus,
   onToggleMfa,
-  onRevoke,
-}: {
+  onRevoke}: {
   assignment: IVXRoleAssignment;
   roleDisplayName: string;
   getRoleScreens: (role: string) => IVXScreenPermission[];
@@ -1204,18 +1176,15 @@ function UserDetailModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   loading: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   loadingText: {
     color: Colors.muted,
     fontSize: 14,
-    marginTop: 12,
-  },
+    marginTop: 12},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1223,27 +1192,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
-    padding: 4,
-  },
+    padding: 4},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   addBtn: {
-    padding: 4,
-  },
+    padding: 4},
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   tab: {
     flex: 1,
     flexDirection: 'row',
@@ -1252,19 +1216,15 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: Colors.card,
-  },
+    backgroundColor: Colors.card},
   tabActive: {
-    backgroundColor: Colors.primary + '20',
-  },
+    backgroundColor: Colors.primary + '20'},
   tabLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   tabLabelActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1272,55 +1232,45 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   content: {
     flex: 1,
-    padding: 16,
-  },
+    padding: 16},
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 8,
-  },
+    gap: 8},
   emptyText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   emptySubtext: {
     fontSize: 14,
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   card: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   cardSelected: {
     borderColor: Colors.primary,
-    borderWidth: 2,
-  },
+    borderWidth: 2},
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   cardLeftSection: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1329,30 +1279,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   roleBadgeSuspended: {
-    backgroundColor: Colors.border,
-  },
+    backgroundColor: Colors.border},
   roleBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   roleBadgeTextSuspended: {
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   cardEmail: {
     fontSize: 14,
     color: Colors.text,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   statusRow: {
     flexDirection: 'row',
     gap: 4,
     flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   statusPillGood: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1360,13 +1304,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#00C85320',
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusPillTextGood: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#00C853',
-  },
+    color: '#00C853'},
   statusPillWarn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1374,13 +1316,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFA50020',
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusPillTextWarn: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#FFA500',
-  },
+    color: '#FFA500'},
   statusPillDanger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1388,13 +1328,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF444420',
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusPillTextDanger: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#FF4444',
-  },
+    color: '#FF4444'},
   statusPillInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1402,35 +1340,28 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '20',
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusPillTextInfo: {
     fontSize: 10,
     fontWeight: '600',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   cardMetaRow: {
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   cardMetaText: {
     fontSize: 12,
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   cardMetaSubtext: {
     fontSize: 12,
     color: Colors.muted,
-    marginTop: 2,
-  },
+    marginTop: 2},
   cardDesc: {
     fontSize: 13,
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   cardTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   cardBadge: {
     fontSize: 12,
     fontWeight: '600',
@@ -1438,59 +1369,49 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '20',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   cardActions: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   cardAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   cardActionText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   expandedSection: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   expandedSectionTitle: {
     fontSize: 12,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-  },
+    gap: 6},
   chip: {
     backgroundColor: Colors.primary + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   chipPerm: {
     backgroundColor: Colors.border,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   chipText: {
     fontSize: 11,
-    color: Colors.text,
-  },
+    color: Colors.text},
   addCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1502,17 +1423,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.primary + '40',
-    borderStyle: 'dashed',
-  },
+    borderStyle: 'dashed'},
   addCardText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1520,24 +1438,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   modalContent: {
     flex: 1,
-    padding: 16,
-  },
+    padding: 16},
   inputLabel: {
     fontSize: 13,
     fontWeight: '700',
     color: Colors.text,
     marginBottom: 6,
-    marginTop: 16,
-  },
+    marginTop: 16},
   textInput: {
     backgroundColor: Colors.card,
     borderRadius: 10,
@@ -1546,38 +1460,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   pickerRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-  },
+    gap: 6},
   pickerChip: {
     backgroundColor: Colors.card,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   pickerChipActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   pickerChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   pickerChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   screensGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-  },
+    gap: 6},
   screenChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1587,67 +1494,54 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   screenChipActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   screenChipText: {
     fontSize: 11,
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   screenChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 20,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   switchLabel: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   switchText: {
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   submitBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 20,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   submitBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
-  },
+    color: '#fff'},
   detailSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: Colors.muted,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   detailValue: {
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   detailActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginVertical: 20,
-    gap: 12,
-  },
+    gap: 12},
   detailActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1657,11 +1551,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   detailActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
-  },
-});
+    color: Colors.text}});

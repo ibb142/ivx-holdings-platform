@@ -1,14 +1,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -20,16 +17,15 @@ import {
   XCircle,
   Clock,
   Mail,
-  Phone,
-} from 'lucide-react-native';
+  Phone} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchLandingSubmissions,
   updateSubmissionStatus,
-  type LandingSubmission,
-} from '@/lib/landing-submissions';
+  type LandingSubmission} from '@/lib/landing-submissions';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FilterType = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -41,8 +37,7 @@ export default function LandingSubmissionsScreen() {
   const submissionsQuery = useQuery({
     queryKey: ['landing-submissions'],
     queryFn: () => fetchLandingSubmissions(0, 500),
-    staleTime: 10000,
-  });
+    staleTime: 10000});
 
   const statusMutation = useMutation({
     mutationFn: async (params: { id: string; status: string }) => {
@@ -53,8 +48,7 @@ export default function LandingSubmissionsScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Error', err.message);
-    },
-  });
+    }});
 
   const submissions = useMemo(() => {
     const all = submissionsQuery.data ?? [];
@@ -71,8 +65,7 @@ export default function LandingSubmissionsScreen() {
       registrations: all.filter(s => s.type === 'registration').length,
       totalAmount: all
         .filter(s => s.type === 'investment' && s.status !== 'rejected')
-        .reduce((sum, s) => sum + (s.investment_amount ?? 0), 0),
-    };
+        .reduce((sum, s) => sum + (s.investment_amount ?? 0), 0)};
   }, [submissionsQuery.data]);
 
   const handleAction = useCallback((submission: LandingSubmission, action: 'approve' | 'reject') => {
@@ -89,8 +82,7 @@ export default function LandingSubmissionsScreen() {
             if (submission.id) {
               statusMutation.mutate({ id: submission.id, status: action === 'approve' ? 'approved' : 'rejected' });
             }
-          },
-        },
+          }},
       ]
     );
   }, [statusMutation]);
@@ -107,8 +99,7 @@ export default function LandingSubmissionsScreen() {
         day: 'numeric',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit',
-      });
+        minute: '2-digit'});
     } catch {
       return dateString;
     }
@@ -183,7 +174,7 @@ export default function LandingSubmissionsScreen() {
 
         {submissionsQuery.isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading submissions...</Text>
           </View>
         ) : submissions.length === 0 ? (
@@ -299,8 +290,7 @@ export default function LandingSubmissionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -308,28 +298,24 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   title: {
     fontSize: 18,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingTop: 16,
-    gap: 10,
-  },
+    gap: 10},
   statBox: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -338,24 +324,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 4,
-  },
+    gap: 4},
   statValue: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   filterRow: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   filterBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -363,47 +345,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterBtnActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   filterText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   loadingWrap: {
     alignItems: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     fontSize: 14,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   emptyWrap: {
     alignItems: 'center',
     paddingVertical: 60,
     paddingHorizontal: 32,
-    gap: 8,
-  },
+    gap: 8},
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginTop: 8,
-  },
+    marginTop: 8},
   emptySubtext: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   card: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -411,89 +384,74 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   cardTypeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   cardType: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   statusText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   cardName: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   cardInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   cardInfoText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   investDetails: {
     marginTop: 10,
     backgroundColor: Colors.background,
     borderRadius: 12,
     padding: 12,
-    gap: 6,
-  },
+    gap: 6},
   investRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   investLabel: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   investValue: {
     fontSize: 13,
     color: Colors.text,
     fontWeight: '600' as const,
     maxWidth: '60%',
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   cardDate: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 10,
-  },
+    marginTop: 10},
   cardActions: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -501,16 +459,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 10,
-    gap: 6,
-  },
+    gap: 6},
   approveBtn: {
-    backgroundColor: Colors.positive + '15',
-  },
+    backgroundColor: Colors.positive + '15'},
   rejectBtn: {
-    backgroundColor: Colors.negative + '15',
-  },
+    backgroundColor: Colors.negative + '15'},
   actionBtnText: {
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

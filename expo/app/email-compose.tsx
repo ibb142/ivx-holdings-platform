@@ -10,8 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Image,
-  Modal,
-} from 'react-native';
+  Modal} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
@@ -25,8 +24,7 @@ import {
   FileText,
   File,
   Camera,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -131,8 +129,7 @@ export default function EmailComposeScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
-        quality: 0.8,
-      });
+        quality: 0.8});
       if (!result.canceled && result.assets.length > 0) {
         if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const newAttachments: EmailAttachment[] = result.assets.map((asset, idx) => ({
@@ -141,8 +138,7 @@ export default function EmailComposeScreen() {
           size: asset.fileSize ?? 0,
           type: 'image',
           uri: asset.uri,
-          mimeType: asset.mimeType ?? 'image/jpeg',
-        }));
+          mimeType: asset.mimeType ?? 'image/jpeg'}));
         setAttachments(prev => [...prev, ...newAttachments]);
         console.log('Added image attachments:', newAttachments.length);
       }
@@ -158,8 +154,7 @@ export default function EmailComposeScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos'],
         allowsMultipleSelection: false,
-        quality: 0.8,
-      });
+        quality: 0.8});
       if (!result.canceled && result.assets.length > 0) {
         if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const asset = result.assets[0];
@@ -169,8 +164,7 @@ export default function EmailComposeScreen() {
           size: asset.fileSize ?? 0,
           type: 'video',
           uri: asset.uri,
-          mimeType: asset.mimeType ?? 'video/mp4',
-        };
+          mimeType: asset.mimeType ?? 'video/mp4'};
         setAttachments(prev => [...prev, newAttachment]);
         console.log('Added video attachment:', newAttachment.name);
       }
@@ -186,8 +180,7 @@ export default function EmailComposeScreen() {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain'],
         multiple: true,
-        copyToCacheDirectory: true,
-      });
+        copyToCacheDirectory: true});
       if (!result.canceled && result.assets && result.assets.length > 0) {
         if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const newAttachments: EmailAttachment[] = result.assets.map((asset, idx) => ({
@@ -196,8 +189,7 @@ export default function EmailComposeScreen() {
           size: asset.size ?? 0,
           type: 'document',
           uri: asset.uri,
-          mimeType: asset.mimeType ?? 'application/pdf',
-        }));
+          mimeType: asset.mimeType ?? 'application/pdf'}));
         setAttachments(prev => [...prev, ...newAttachments]);
         console.log('Added document attachments:', newAttachments.length);
       }
@@ -221,8 +213,7 @@ export default function EmailComposeScreen() {
       }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        quality: 0.8,
-      });
+        quality: 0.8});
       if (!result.canceled && result.assets.length > 0) {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const asset = result.assets[0];
@@ -232,8 +223,7 @@ export default function EmailComposeScreen() {
           size: asset.fileSize ?? 0,
           type: 'image',
           uri: asset.uri,
-          mimeType: asset.mimeType ?? 'image/jpeg',
-        };
+          mimeType: asset.mimeType ?? 'image/jpeg'};
         setAttachments(prev => [...prev, newAttachment]);
         console.log('Added camera attachment:', newAttachment.name);
       }
@@ -270,8 +260,7 @@ export default function EmailComposeScreen() {
         body,
         replyToId: replyTo,
         forwardFromId: forwardFrom,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      });
+        attachments: attachments.length > 0 ? attachments : undefined});
 
       setIsSending(false);
 
@@ -307,8 +296,7 @@ export default function EmailComposeScreen() {
       bcc: bcc || undefined,
       subject,
       body,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    });
+      attachments: attachments.length > 0 ? attachments : undefined});
     Alert.alert('Saved', 'Draft saved.', [
       { text: 'OK', onPress: () => router.back() },
     ]);
@@ -662,11 +650,9 @@ export default function EmailComposeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -674,26 +660,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   headerButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     flex: 1,
     fontSize: 17,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   sendButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -701,111 +683,90 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 6,
-  },
+    gap: 6},
   sendButtonDisabled: {
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   sendButtonText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.background,
-  },
+    color: Colors.background},
   sendButtonTextDisabled: {
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   bodyContainer: {
-    flex: 1,
-  },
+    flex: 1},
   formScroll: {
-    flex: 1,
-  },
+    flex: 1},
   fromRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   fieldLabel: {
     fontSize: 14,
     fontWeight: '500' as const,
     color: Colors.textTertiary,
-    width: 52,
-  },
+    width: 52},
   fromValue: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   fromDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   fromText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   fieldInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   ccToggle: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   ccToggleText: {
     fontSize: 13,
     fontWeight: '500' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   attachmentsSection: {
     paddingTop: 12,
     paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   attachmentsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   attachmentsTitle: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   attachmentsSize: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   attachmentsScroll: {
     paddingHorizontal: 16,
     gap: 10,
-    paddingBottom: 4,
-  },
+    paddingBottom: 4},
   attachmentCard: {
     width: 110,
     borderRadius: 12,
     backgroundColor: Colors.surface,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   attachmentRemove: {
     position: 'absolute',
     top: 6,
@@ -816,69 +777,59 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   attachmentThumbnail: {
     width: 110,
     height: 80,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
-    backgroundColor: Colors.backgroundTertiary,
-  },
+    backgroundColor: Colors.backgroundTertiary},
   attachmentIconBox: {
     width: 110,
     height: 80,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   videoPlayOverlay: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   attachmentCardName: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.text,
     paddingHorizontal: 8,
-    paddingTop: 6,
-  },
+    paddingTop: 6},
   attachmentCardSize: {
     fontSize: 10,
     color: Colors.textTertiary,
     paddingHorizontal: 8,
     paddingBottom: 8,
-    paddingTop: 2,
-  },
+    paddingTop: 2},
   bodyFieldContainer: {
     flex: 1,
-    minHeight: 300,
-  },
+    minHeight: 300},
   bodyInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
     lineHeight: 24,
     padding: 16,
-    minHeight: 300,
-  },
+    minHeight: 300},
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   toolbarButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   attachBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
@@ -887,74 +838,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 5,
-    marginLeft: 6,
-  },
+    marginLeft: 6},
   attachBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    color: Colors.background,
-  },
+    color: Colors.background},
   toolbarButtonActive: {
-    backgroundColor: Colors.primary + '15',
-  },
+    backgroundColor: Colors.primary + '15'},
   templateOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end' as const,
-  },
+    justifyContent: 'flex-end' as const},
   templateSheet: {
     backgroundColor: Colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     paddingTop: 12,
-    maxHeight: '75%' as any,
-  },
+    maxHeight: '75%' as any},
   templateSheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.border,
     alignSelf: 'center' as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   templateSheetTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
     color: Colors.text,
     paddingHorizontal: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   templateCategoryScroll: {
     paddingHorizontal: 20,
     gap: 6,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   templateCatChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   templateCatChipActive: {
     backgroundColor: Colors.primary + '15',
-    borderColor: Colors.primary + '50',
-  },
+    borderColor: Colors.primary + '50'},
   templateCatText: {
     fontSize: 12,
     fontWeight: '500' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   templateCatTextActive: {
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   templateListScroll: {
     paddingHorizontal: 16,
-    maxHeight: 400,
-  },
+    maxHeight: 400},
   templateListItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -962,119 +900,97 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   templateListIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   templateListInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   templateListName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   templateListDesc: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   templateListBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   templateListBadgeText: {
     fontSize: 9,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   toolbarSpacer: {
-    flex: 1,
-  },
+    flex: 1},
   toolbarAccount: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   attachOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   attachSheet: {
     backgroundColor: Colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   attachSheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.border,
     alignSelf: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   attachSheetTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
     color: Colors.text,
     paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   attachOption: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    gap: 14,
-  },
+    gap: 14},
   attachOptionIcon: {
     width: 46,
     height: 46,
     borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   attachOptionInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   attachOptionLabel: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   attachOptionDesc: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   attachCancel: {
     marginTop: 8,
     marginHorizontal: 20,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: Colors.surface,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   attachCancelText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   validationError: {
     fontSize: 12,
     color: Colors.error,
     paddingHorizontal: 16,
     paddingTop: 2,
-    paddingBottom: 4,
-  },
-});
+    paddingBottom: 4}});

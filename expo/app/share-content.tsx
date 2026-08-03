@@ -12,8 +12,7 @@ import {
   Alert,
   Linking,
   TextInput,
-  Share,
-} from 'react-native';
+  Share} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -38,8 +37,7 @@ import {
   Code,
   Building2,
   Clock,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
@@ -82,16 +80,14 @@ const ROLE_COLORS: Record<string, string> = {
   investor: '#FFD700',
   advisor: '#00C48C',
   designer: '#E91E63',
-  manager: '#9B59B6',
-};
+  manager: '#9B59B6'};
 
 const ROLE_ICONS: Record<string, React.ReactNode> = {
   developer: <Code size={12} color="#4A90D9" />,
   investor: <Briefcase size={12} color="#FFD700" />,
   advisor: <Globe size={12} color="#00C48C" />,
   designer: <Sparkles size={12} color="#E91E63" />,
-  manager: <Building2 size={12} color="#9B59B6" />,
-};
+  manager: <Building2 size={12} color="#9B59B6" />};
 
 const APP_SHARE_URL = 'https://ivxholding.com';
 
@@ -104,8 +100,7 @@ const SHAREABLE_CONTENT: ShareableContent[] = [
     icon: <Video size={20} color="#FF6B35" />,
     color: '#FF6B35',
     shareUrl: `${APP_SHARE_URL}/presentation`,
-    shareText: '🎬 Check out the IVX HOLDINGS video presentation! The future of real estate investing is here. AI-powered, fractional ownership starting at $10.',
-  },
+    shareText: '🎬 Check out the IVX HOLDINGS video presentation! The future of real estate investing is here. AI-powered, fractional ownership starting at $10.'},
   {
     id: 'gallery',
     type: 'image',
@@ -114,8 +109,7 @@ const SHAREABLE_CONTENT: ShareableContent[] = [
     icon: <ImageIcon size={20} color="#4A90D9" />,
     color: '#4A90D9',
     shareUrl: `${APP_SHARE_URL}/gallery`,
-    shareText: '🏠 See our AI-generated property gallery! IVX HOLDINGS uses cutting-edge AI to showcase investment properties.',
-  },
+    shareText: '🏠 See our AI-generated property gallery! IVX HOLDINGS uses cutting-edge AI to showcase investment properties.'},
   {
     id: 'prospectus',
     type: 'document',
@@ -124,8 +118,7 @@ const SHAREABLE_CONTENT: ShareableContent[] = [
     icon: <FileText size={20} color="#00C48C" />,
     color: '#00C48C',
     shareUrl: `${APP_SHARE_URL}/prospectus`,
-    shareText: '📊 IVX HOLDINGS Investor Prospectus — $326T global real estate market. Fractional investing from $10. AI-managed portfolio. 9.8% avg annual returns.',
-  },
+    shareText: '📊 IVX HOLDINGS Investor Prospectus — $326T global real estate market. Fractional investing from $10. AI-managed portfolio. 9.8% avg annual returns.'},
   {
     id: 'app-demo',
     type: 'link',
@@ -134,8 +127,7 @@ const SHAREABLE_CONTENT: ShareableContent[] = [
     icon: <Zap size={20} color="#FFD700" />,
     color: '#FFD700',
     shareUrl: `${APP_SHARE_URL}/demo`,
-    shareText: '🚀 Try the IVX HOLDINGS live demo! Experience the future of real estate investing — AI-powered, instant KYC, invest from just $10.',
-  },
+    shareText: '🚀 Try the IVX HOLDINGS live demo! Experience the future of real estate investing — AI-powered, instant KYC, invest from just $10.'},
   {
     id: 'app-report',
     type: 'document',
@@ -144,8 +136,7 @@ const SHAREABLE_CONTENT: ShareableContent[] = [
     icon: <FileText size={20} color="#9B59B6" />,
     color: '#9B59B6',
     shareUrl: `${APP_SHARE_URL}/report`,
-    shareText: '📋 IVX HOLDINGS Development Report — Full-stack AI platform with 100+ features. React Native + Expo + Supabase architecture.',
-  },
+    shareText: '📋 IVX HOLDINGS Development Report — Full-stack AI platform with 100+ features. React Native + Expo + Supabase architecture.'},
 ];
 
 export default function ShareContentScreen() {
@@ -266,8 +257,7 @@ export default function ShareContentScreen() {
             const member = selectedMemberObjects[0];
             await openWhatsApp(member.phone, buildMessage(content, member.name.split(' ')[0]));
             logger.shareContent.log('Queue started, member 1:', member.name);
-          },
-        },
+          }},
       ]
     );
   }, [selectedMemberObjects, openWhatsApp, buildMessage]);
@@ -291,15 +281,13 @@ export default function ShareContentScreen() {
         {
           text: 'Skip',
           style: 'cancel',
-          onPress: () => setQueueIndex(nextIndex),
-        },
+          onPress: () => setQueueIndex(nextIndex)},
         {
           text: 'Open WhatsApp',
           onPress: async () => {
             await openWhatsApp(nextMember.phone, buildMessage(queueContent, nextMember.name.split(' ')[0]));
             setQueueIndex(nextIndex);
-          },
-        },
+          }},
       ]
     );
   }, [queueIndex]);
@@ -412,12 +400,10 @@ export default function ShareContentScreen() {
               icon: null,
               color: '#FFD700',
               shareUrl: APP_SHARE_URL,
-              shareText: allText,
-            };
+              shareText: allText};
             setQueueContent(syntheticContent);
             setQueueIndex(0);
-          },
-        },
+          }},
       ]
     );
   }, [selectedMemberObjects, customMessage, openWhatsApp, triggerSuccess]);
@@ -568,8 +554,7 @@ export default function ShareContentScreen() {
                           [
                             ...SHAREABLE_CONTENT.map(c => ({
                               text: c.title,
-                              onPress: () => shareToWhatsAppDirect(member, c),
-                            })),
+                              onPress: () => shareToWhatsAppDirect(member, c)})),
                             { text: 'Cancel', style: 'cancel' as const },
                           ]
                         );
@@ -689,8 +674,7 @@ export default function ShareContentScreen() {
         {showSuccess && (
           <Animated.View style={[styles.successToast, {
             opacity: successAnim,
-            transform: [{ scale: successAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
-          }]}>
+            transform: [{ scale: successAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }]}]}>
             <CheckCircle size={20} color="#00C48C" />
             <Text style={styles.successText}>Shared successfully!</Text>
           </Animated.View>
@@ -703,89 +687,72 @@ export default function ShareContentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#060608',
-  },
+    backgroundColor: '#060608'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   inner: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSub: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   headerRight: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: 'rgba(255,215,0,0.1)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scroll: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 80,
-  },
+    paddingBottom: 80},
   section: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   selectAllBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,215,0,0.1)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.1)'},
   selectAllText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   roleFilter: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   roleChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -796,25 +763,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    marginRight: 8,
-  },
+    marginRight: 8},
   roleChipActive: {
     backgroundColor: 'rgba(255,215,0,0.12)',
-    borderColor: '#FFD700',
-  },
+    borderColor: '#FFD700'},
   roleChipText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   roleChipTextActive: {
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   membersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   memberCard: {
     width: (SW - 32 - 30) / 4,
     alignItems: 'center',
@@ -823,20 +785,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
+    borderColor: 'transparent'},
   memberAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   memberAvatarText: {
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   checkMark: {
     position: 'absolute',
     bottom: -2,
@@ -847,26 +806,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#060608',
-  },
+    borderColor: '#060608'},
   memberName: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.text,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   roleBadge: {
     marginTop: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   roleBadgeText: {
     fontSize: 8,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   selectedBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -877,22 +832,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255,215,0,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.15)',
-  },
+    borderColor: 'rgba(255,215,0,0.15)'},
   selectedBarText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   clearBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   clearBtnText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   messageInput: {
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 12,
@@ -903,46 +854,38 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 14,
     minHeight: 52,
-    textAlignVertical: 'top',
-  },
+    textAlignVertical: 'top'},
   contentCard: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   contentCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   contentIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   contentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   contentTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   contentDesc: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   shareActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -951,27 +894,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     flex: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   whatsappBtn: {
-    backgroundColor: '#25D366',
-  },
+    backgroundColor: '#25D366'},
   emailBtn: {
-    backgroundColor: '#4A90D9',
-  },
+    backgroundColor: '#4A90D9'},
   smsBtn: {
-    backgroundColor: '#FF6B35',
-  },
+    backgroundColor: '#FF6B35'},
   copyBtn: {
     backgroundColor: 'rgba(255,255,255,0.08)',
     flex: 0,
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   shareBtnText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   bulkShareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -979,24 +916,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#25D366',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   bulkShareInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   bulkShareTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   bulkShareSub: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.7)',
-    marginTop: 1,
-  },
+    marginTop: 1},
   copyAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1005,8 +938,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   tipBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1016,14 +948,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255,215,0,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.1)',
-  },
+    borderColor: 'rgba(255,215,0,0.1)'},
   tipText: {
     fontSize: 12,
     color: Colors.textSecondary,
     flex: 1,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   successToast: {
     position: 'absolute',
     bottom: 40,
@@ -1036,11 +966,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,196,140,0.3)',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 24,
-  },
+    borderRadius: 24},
   successText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#00C48C',
-  },
-});
+    color: '#00C48C'}});

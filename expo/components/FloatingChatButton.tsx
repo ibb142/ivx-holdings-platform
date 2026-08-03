@@ -6,8 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -36,13 +35,11 @@ export default function FloatingChatButton(): React.ReactElement | null {
           toValue: 1,
           duration: 1400,
           easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
         Animated.timing(pulse, {
           toValue: 0,
           duration: 0,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
         Animated.delay(1600),
       ])
     );
@@ -63,8 +60,7 @@ export default function FloatingChatButton(): React.ReactElement | null {
       toValue: 0.9,
       useNativeDriver: true,
       speed: 40,
-      bounciness: 0,
-    }).start();
+      bounciness: 0}).start();
   };
 
   const handlePressOut = (): void => {
@@ -72,8 +68,7 @@ export default function FloatingChatButton(): React.ReactElement | null {
       toValue: 1,
       useNativeDriver: true,
       speed: 20,
-      bounciness: 8,
-    }).start();
+      bounciness: 8}).start();
   };
 
   const handlePress = (): void => {
@@ -85,12 +80,10 @@ export default function FloatingChatButton(): React.ReactElement | null {
 
   const pulseScale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 2.4],
-  });
+    outputRange: [1, 2.4]});
   const pulseOpacity = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.45, 0],
-  });
+    outputRange: [0.45, 0]});
 
   const bottomOffset = Math.max(insets.bottom, 12) + 78;
 
@@ -134,22 +127,19 @@ const styles = StyleSheet.create({
     right: 18,
     left: 0,
     alignItems: 'flex-end',
-    paddingRight: 0,
-  },
+    paddingRight: 0},
   anchor: {
     width: 60,
     height: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 18,
-  },
+    marginRight: 18},
   pulse: {
     position: 'absolute',
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   button: {
     width: 60,
     height: 60,
@@ -161,8 +151,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5,
     shadowRadius: 12,
-    elevation: 10,
-  },
+    elevation: 10},
   badge: {
     position: 'absolute',
     top: -2,
@@ -175,11 +164,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   badgeText: {
     color: Colors.primary,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

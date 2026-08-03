@@ -11,8 +11,7 @@ import {
   Switch,
   TextInput,
   Platform,
-  Share,
-} from 'react-native';
+  Share} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -39,8 +38,7 @@ import {
   BarChart3,
   Copy,
   Send,
-  Smartphone,
-} from 'lucide-react-native';
+  Smartphone} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
@@ -83,8 +81,7 @@ const AI_MODULES: AIModule[] = [
       'Copy to clipboard for instant ad use',
       'Category filtering (Properties, Finance, People)',
     ],
-    route: '/ai-gallery',
-  },
+    route: '/ai-gallery'},
   {
     id: 'smart-investing',
     number: 2,
@@ -106,8 +103,7 @@ const AI_MODULES: AIModule[] = [
       'Global market signal monitoring (200+ signals)',
       'Toggle each feature on/off individually',
     ],
-    route: '/smart-investing',
-  },
+    route: '/smart-investing'},
   {
     id: 'auto-reinvest',
     number: 3,
@@ -127,8 +123,7 @@ const AI_MODULES: AIModule[] = [
       'Real-time portfolio reinvestment summary',
       'Animated live status indicators',
     ],
-    route: '/auto-reinvest',
-  },
+    route: '/auto-reinvest'},
   {
     id: 'copy-investing',
     number: 4,
@@ -147,8 +142,7 @@ const AI_MODULES: AIModule[] = [
       'Expand investor card for full details',
       'Sort by 1Y return, followers, or holdings count',
     ],
-    route: '/copy-investing',
-  },
+    route: '/copy-investing'},
   {
     id: 'share-content',
     number: 5,
@@ -168,8 +162,7 @@ const AI_MODULES: AIModule[] = [
       'Copy links to clipboard instantly',
       'Native share sheet integration',
     ],
-    route: '/share-content',
-  },
+    route: '/share-content'},
   {
     id: 'ai-chat',
     number: 6,
@@ -189,8 +182,7 @@ const AI_MODULES: AIModule[] = [
       'Investment strategy guidance',
       'Multilingual support (30 languages)',
     ],
-    route: '/(tabs)/chat',
-  },
+    route: '/(tabs)/chat'},
   {
     id: 'contract-gen',
     number: 7,
@@ -210,8 +202,7 @@ const AI_MODULES: AIModule[] = [
       'Secure signing and document storage',
       'Legal template compliance verification',
     ],
-    route: '/contract-generator',
-  },
+    route: '/contract-generator'},
   {
     id: 'video-presentation',
     number: 8,
@@ -231,8 +222,7 @@ const AI_MODULES: AIModule[] = [
       'Save/load presentation history',
       'Free 5 daily views (unlimited VIP)',
     ],
-    route: '/video-presentation',
-  },
+    route: '/video-presentation'},
   {
     id: 'investor-prospectus',
     number: 9,
@@ -251,8 +241,7 @@ const AI_MODULES: AIModule[] = [
       'Expandable/collapsible projection rows',
       'One-tap contact investor relations',
     ],
-    route: '/investor-prospectus',
-  },
+    route: '/investor-prospectus'},
   {
     id: 'notifications',
     number: 10,
@@ -272,8 +261,7 @@ const AI_MODULES: AIModule[] = [
       'Master on/off switch per channel',
       'WhatsApp report delivery (configurable)',
     ],
-    route: '/notification-settings',
-  },
+    route: '/notification-settings'},
   {
     id: 'influencer',
     number: 11,
@@ -292,8 +280,7 @@ const AI_MODULES: AIModule[] = [
       'Multi-tier commission structure',
       'Content sharing gateway for influencers',
     ],
-    route: '/influencer-apply',
-  },
+    route: '/influencer-apply'},
   {
     id: 'referrals',
     number: 12,
@@ -312,8 +299,7 @@ const AI_MODULES: AIModule[] = [
       'Multi-level commission structure',
       'Agent & broker referral programs',
     ],
-    route: '/referrals',
-  },
+    route: '/referrals'},
   {
     id: 'analytics',
     number: 13,
@@ -333,23 +319,20 @@ const AI_MODULES: AIModule[] = [
       'Export reports as PDF/CSV/WhatsApp',
       'Real-time data refresh',
     ],
-    route: '/app-report',
-  },
+    route: '/app-report'},
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
   ai: '#A855F7',
   automation: '#00C48C',
   advertising: '#FF6B35',
-  analytics: '#4A90D9',
-};
+  analytics: '#4A90D9'};
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai: 'AI',
   automation: 'Automation',
   advertising: 'Advertising',
-  analytics: 'Analytics',
-};
+  analytics: 'Analytics'};
 
 export default function AIAutomationReportScreen() {
   const router = useRouter();
@@ -370,8 +353,7 @@ export default function AIAutomationReportScreen() {
         toValue: 1,
         duration: 400,
         delay: 100 + i * 60,
-        useNativeDriver: true,
-      }).start();
+        useNativeDriver: true}).start();
     });
     const loop = Animated.loop(
       Animated.sequence([
@@ -465,8 +447,7 @@ export default function AIAutomationReportScreen() {
     try {
       await Share.share({
         message: `IVXHOLDINGS AI & Automation: ${AI_MODULES.length} modules, ${totalFunctions} automated functions. Categories: AI, Automation, Advertising, Analytics. — IVX HOLDINGS LLC`,
-        title: 'IVXHOLDINGS AI & Automation Report',
-      });
+        title: 'IVXHOLDINGS AI & Automation Report'});
     } catch (e) {
       console.log('[AIReport] Share error:', e);
     }
@@ -611,8 +592,7 @@ export default function AIAutomationReportScreen() {
                     styles.filterChip,
                     activeFilter === f && {
                       backgroundColor: f === 'all' ? Colors.primary : CATEGORY_COLORS[f],
-                      borderColor: f === 'all' ? Colors.primary : CATEGORY_COLORS[f],
-                    },
+                      borderColor: f === 'all' ? Colors.primary : CATEGORY_COLORS[f]},
                   ]}
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveFilter(f); }}
                 >
@@ -639,8 +619,7 @@ export default function AIAutomationReportScreen() {
                 style={[styles.moduleCard, {
                   opacity: anim,
                   transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-                  borderLeftColor: mod.color,
-                }]}
+                  borderLeftColor: mod.color}]}
               >
                 <TouchableOpacity
                   style={styles.moduleHeader}
@@ -745,8 +724,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 40,
     height: 40,
@@ -755,8 +733,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   headerCenter: { flex: 1 },
   headerTitle: { color: Colors.text, fontSize: 18, fontWeight: '800' as const },
   headerSub: { color: Colors.textTertiary, fontSize: 12, marginTop: 1 },
@@ -766,8 +743,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scroll: { paddingHorizontal: 16, paddingTop: 4 },
 
   heroCard: {
@@ -776,8 +752,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 14 },
   heroBrain: {
     width: 60,
@@ -787,8 +762,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   heroStats: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   heroStat: { alignItems: 'center', gap: 2 },
   heroStatNum: { color: Colors.primary, fontSize: 26, fontWeight: '800' as const },
@@ -802,8 +776,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   heroCatDot: { width: 7, height: 7, borderRadius: 4 },
   heroCatText: { fontSize: 12, fontWeight: '600' as const },
 
@@ -813,8 +786,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#25D36630',
-  },
+    borderColor: '#25D36630'},
   whatsappHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   whatsappLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   waIconWrap: {
@@ -825,8 +797,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#25D36640',
-  },
+    borderColor: '#25D36640'},
   waTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   waSub: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
   waBody: { marginTop: 14 },
@@ -837,8 +808,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   waPhoneLabel: { color: Colors.textSecondary, fontSize: 12 },
   waPhoneNum: { color: Colors.text, fontSize: 13, fontWeight: '700' as const, flex: 1 },
   waVerifiedBadge: {
@@ -848,8 +818,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '20',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   waVerifiedText: { color: Colors.success, fontSize: 11, fontWeight: '600' as const },
   waAlertTypes: { marginBottom: 14 },
   waAlertTitle: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' as const, marginBottom: 8 },
@@ -863,16 +832,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   waBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' as const },
   waCopyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   waCopyText: { color: Colors.textSecondary, fontSize: 12 },
 
   filterRow: { marginBottom: 12 },
@@ -883,8 +850,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   filterChipText: { color: Colors.textSecondary, fontSize: 13 },
 
   sectionLabel: {
@@ -893,8 +859,7 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
 
   moduleCard: {
     backgroundColor: Colors.surface,
@@ -903,14 +868,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderLeftWidth: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   moduleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   moduleNumBadge: {
     width: 28,
     height: 28,
@@ -918,8 +881,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   moduleNum: { fontSize: 12, fontWeight: '800' as const },
   moduleIconWrap: {
     width: 40,
@@ -927,8 +889,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   moduleMeta: { flex: 1, gap: 6, minWidth: 0 },
   moduleTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   moduleTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const, flexShrink: 1 },
@@ -941,8 +902,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusDot: { width: 5, height: 5, borderRadius: 3 },
   statusText: { fontSize: 10, fontWeight: '600' as const },
   funcCount: { color: Colors.textTertiary, fontSize: 10 },
@@ -953,8 +913,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   moduleDesc: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
   funcDivider: { height: 1, backgroundColor: Colors.surfaceBorder, marginBottom: 10 },
   funcListTitle: { color: Colors.textTertiary, fontSize: 11, fontWeight: '700' as const, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
@@ -969,8 +928,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   openModuleBtnText: { fontSize: 13, fontWeight: '700' as const },
 
   summaryCard: {
@@ -979,8 +937,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   summaryTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const, marginBottom: 14 },
   summaryGrid: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 14 },
   summaryItem: { alignItems: 'center', gap: 4 },
@@ -994,8 +951,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     borderWidth: 1,
-    borderColor: Colors.primary + '25',
-  },
+    borderColor: Colors.primary + '25'},
   summaryTotalText: { color: Colors.primary, fontSize: 13, fontWeight: '600' as const, flex: 1 },
-  bottomPad: { height: 50 },
-});
+  bottomPad: { height: 50 }});

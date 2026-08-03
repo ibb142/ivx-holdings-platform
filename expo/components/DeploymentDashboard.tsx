@@ -13,18 +13,16 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   StyleSheet,
   Alert,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { RefreshCw, CheckCircle, XCircle, AlertTriangle, ExternalLink, ChevronRight, Rocket } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -78,106 +76,89 @@ const COLORS = {
   blue: '#4A90D9',
   blueBg: 'rgba(59, 130, 246, 0.1)',
   purple: '#8b5cf6',
-  accent: '#6366f1',
-};
+  accent: '#6366f1'};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
-  },
+    backgroundColor: COLORS.bg},
   header: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: COLORS.text,
-  },
+    color: COLORS.text},
   refreshButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: COLORS.card,
-  },
+    backgroundColor: COLORS.card},
   statusBadge: {
     marginHorizontal: 16,
     marginBottom: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   statusText: {
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   section: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.textSecondary,
     marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   card: {
     backgroundColor: COLORS.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     padding: 16,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   commitRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   commitSource: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   commitSha: {
     fontSize: 14,
     fontFamily: 'monospace',
     color: COLORS.text,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   platformRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.cardBorder,
-  },
+    borderBottomColor: COLORS.cardBorder},
   platformName: {
     fontSize: 13,
     color: COLORS.text,
     fontWeight: '600',
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   platformStatus: {
     fontSize: 12,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   statGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   statCard: {
     flex: 1,
     minWidth: '45%',
@@ -186,32 +167,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     padding: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statValue: {
     fontSize: 28,
     fontWeight: '700',
-    color: COLORS.text,
-  },
+    color: COLORS.text},
   statLabel: {
     fontSize: 11,
     color: COLORS.textSecondary,
     marginTop: 2,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   errorCard: {
     backgroundColor: COLORS.redBg,
     borderRadius: 8,
     padding: 10,
     marginBottom: 6,
     borderLeftWidth: 3,
-    borderLeftColor: COLORS.red,
-  },
+    borderLeftColor: COLORS.red},
   errorText: {
     fontSize: 12,
     color: COLORS.red,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   nextActionCard: {
     backgroundColor: COLORS.blueBg,
     borderRadius: 12,
@@ -219,41 +195,34 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
     borderLeftWidth: 3,
-    borderLeftColor: COLORS.blue,
-  },
+    borderLeftColor: COLORS.blue},
   nextActionText: {
     fontSize: 13,
     color: COLORS.blue,
     fontWeight: '500',
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   endpointRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   endpointName: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   endpointStatus: {
     fontSize: 11,
     color: COLORS.textSecondary,
-    marginRight: 8,
-  },
+    marginRight: 8},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.bg,
-  },
+    backgroundColor: COLORS.bg},
   loadingText: {
     color: COLORS.textSecondary,
     marginTop: 12,
-    fontSize: 14,
-  },
+    fontSize: 14},
   deployProgress: {
     backgroundColor: COLORS.yellowBg,
     borderRadius: 8,
@@ -262,12 +231,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   redeploySection: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   redeployButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,34 +243,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     backgroundColor: COLORS.green,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   redeployButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   redeployButtonText: {
     color: '#0B0B0B',
     fontSize: 15,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   redeployHint: {
     marginTop: 8,
     fontSize: 12,
     color: COLORS.yellow,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   redeployResult: {
     marginTop: 10,
     borderRadius: 8,
     padding: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   redeployResultText: {
     fontSize: 12,
     fontWeight: '600',
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});
 
 // ─── Component ────────────────────────────────────────────────────────
 
@@ -322,8 +282,7 @@ export default function DeploymentDashboard() {
     try {
       const res = await fetch(`${API_BASE}/api/ivx/deploy-tools/dashboard`, {
         headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(30000),
-      });
+        signal: AbortSignal.timeout(30000)});
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json() as { ok: boolean; brain?: unknown; evidence?: unknown; credentials?: unknown } & Record<string, unknown>;
       if (!json.ok) throw new Error('Dashboard returned not-ok');
@@ -382,16 +341,13 @@ export default function DeploymentDashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${bearer}`,
-        },
+          Authorization: `Bearer ${bearer}`},
         body: JSON.stringify({
           action: 'render_trigger_deploy',
           confirm: true,
           confirmText: 'CONFIRM_IVX_RENDER_DEPLOY',
-          input: { clearCache: true },
-        }),
-        signal: AbortSignal.timeout(60000),
-      });
+          input: { clearCache: true }}),
+        signal: AbortSignal.timeout(60000)});
       const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       const ok = res.ok && json.ok !== false;
       const result = (json.result ?? json) as Record<string, unknown>;
@@ -404,8 +360,7 @@ export default function DeploymentDashboard() {
         ok,
         deployId,
         status,
-        error: ok ? null : (typeof json.error === 'string' ? json.error : `HTTP ${res.status}`),
-      });
+        error: ok ? null : (typeof json.error === 'string' ? json.error : `HTTP ${res.status}`)});
       if (ok) void fetchDashboard();
     } catch (err) {
       setRedeployResult({ ok: false, error: err instanceof Error ? err.message : 'Failed to trigger redeploy' });
@@ -421,7 +376,7 @@ export default function DeploymentDashboard() {
   if (loading && !data) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ShimmerIndicator size="large" color={COLORS.accent} />
         <Text style={styles.loadingText}>Loading deployment dashboard...</Text>
       </View>
     );
@@ -448,16 +403,14 @@ export default function DeploymentDashboard() {
     degraded: COLORS.yellow,
     stale: COLORS.yellow,
     broken: COLORS.red,
-    unverified: COLORS.textSecondary,
-  };
+    unverified: COLORS.textSecondary};
 
   const statusLabel: Record<BrainStatus, string> = {
     healthy: 'Healthy',
     degraded: 'Degraded',
     stale: 'Stale — Needs Deploy',
     broken: 'Broken',
-    unverified: 'Unverified',
-  };
+    unverified: 'Unverified'};
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -478,7 +431,7 @@ export default function DeploymentDashboard() {
           testID="deployment-dashboard-redeploy-button"
         >
           {redeploying ? (
-            <ActivityIndicator size="small" color="#0B0B0B" />
+            <ShimmerIndicator size="small" color="#0B0B0B" />
           ) : (
             <Rocket size={18} color="#0B0B0B" />
           )}
@@ -510,7 +463,7 @@ export default function DeploymentDashboard() {
       {/* Deploy In Progress */}
       {brain.deployInProgress && (
         <View style={styles.deployProgress}>
-          <ActivityIndicator size="small" color={COLORS.yellow} />
+          <ShimmerIndicator size="small" color={COLORS.yellow} />
           <Text style={{ color: COLORS.yellow, fontSize: 13, fontWeight: '500' }}>
             Deploy in progress — {brain.latestDeploy.status ?? 'building'}
           </Text>
@@ -646,8 +599,7 @@ export default function DeploymentDashboard() {
         textAlign: 'center',
         color: COLORS.textSecondary,
         fontSize: 11,
-        marginBottom: 24,
-      }}>
+        marginBottom: 24}}>
         Last updated: {data.timestamp ? new Date(data.timestamp).toLocaleString() : 'unknown'}
       </Text>
     </ScrollView>

@@ -2,14 +2,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -18,20 +16,19 @@ import {
   KeyRound,
   RefreshCw,
   ShieldCheck,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getRuntimeVariablesReport,
   syncRuntimeVariable,
   verifyAllRuntimeVariables,
   type RuntimeVariableStatus,
   type RuntimeVariablesReport,
-  type VarStatus,
-} from '@/src/modules/ivx-developer/runtimeVariablesService';
+  type VarStatus} from '@/src/modules/ivx-developer/runtimeVariablesService';
 
 const STATUS_COLOR: Record<VarStatus, string> = {
   VERIFIED: Colors.success,
@@ -39,8 +36,7 @@ const STATUS_COLOR: Record<VarStatus, string> = {
   PRESENT_BUT_INVALID: Colors.error,
   PRESENT_BUT_UNAUTHORIZED: Colors.error,
   PRESENT_IN_RORK_NOT_INJECTED: Colors.warning,
-  MISSING_FROM_RORK: Colors.error,
-};
+  MISSING_FROM_RORK: Colors.error};
 
 const STATUS_LABEL: Record<VarStatus, string> = {
   VERIFIED: 'VERIFIED',
@@ -48,8 +44,7 @@ const STATUS_LABEL: Record<VarStatus, string> = {
   PRESENT_BUT_INVALID: 'PRESENT BUT INVALID',
   PRESENT_BUT_UNAUTHORIZED: 'UNAUTHORIZED',
   PRESENT_IN_RORK_NOT_INJECTED: 'IN RORK · NOT INJECTED',
-  MISSING_FROM_RORK: 'MISSING FROM RORK',
-};
+  MISSING_FROM_RORK: 'MISSING FROM RORK'};
 
 function StatusIcon({ status }: { status: VarStatus }) {
   if (status === 'VERIFIED') return <CheckCircle2 size={16} color={Colors.success} />;
@@ -62,8 +57,7 @@ function StatusIcon({ status }: { status: VarStatus }) {
 function VariableCard({
   variable,
   onSync,
-  syncing,
-}: {
+  syncing}: {
   variable: RuntimeVariableStatus;
   onSync: (name: string) => void;
   syncing: boolean;
@@ -138,7 +132,7 @@ function VariableCard({
           testID={`ivx-rtvar-sync-${variable.name}`}
         >
           {syncing ? (
-            <ActivityIndicator size="small" color={Colors.black} />
+            <ShimmerIndicator size="small" color={Colors.black} />
           ) : (
             <CloudUpload size={13} color={Colors.black} />
           )}
@@ -157,8 +151,7 @@ function RuntimeVariablesContent() {
 
   const query = useQuery<RuntimeVariablesReport>({
     queryKey: ['ivx-runtime-variables'],
-    queryFn: getRuntimeVariablesReport,
-  });
+    queryFn: getRuntimeVariablesReport});
 
   const verifyMutation = useMutation({
     mutationFn: verifyAllRuntimeVariables,
@@ -166,8 +159,7 @@ function RuntimeVariablesContent() {
       queryClient.setQueryData(['ivx-runtime-variables'], report);
       setActionNote(`Verified ${report.variables.length} variables · ${report.variables.filter((v) => v.status === 'VERIFIED').length} VERIFIED.`);
     },
-    onError: (error) => setActionNote(error instanceof Error ? error.message : 'Verification failed.'),
-  });
+    onError: (error) => setActionNote(error instanceof Error ? error.message : 'Verification failed.')});
 
   const syncMutation = useMutation({
     mutationFn: syncRuntimeVariable,
@@ -177,8 +169,7 @@ function RuntimeVariablesContent() {
       setActionNote(result.detail);
       void query.refetch();
     },
-    onError: (error) => setActionNote(error instanceof Error ? error.message : 'Sync failed.'),
-  });
+    onError: (error) => setActionNote(error instanceof Error ? error.message : 'Sync failed.')});
 
   const data = query.data ?? null;
   const onRefresh = useCallback(() => { void query.refetch(); }, [query]);
@@ -190,8 +181,7 @@ function RuntimeVariablesContent() {
       verified: vars.filter((v) => v.status === 'VERIFIED').length,
       present: vars.filter((v) => v.present).length,
       notInjected: vars.filter((v) => v.status === 'PRESENT_IN_RORK_NOT_INJECTED').length,
-      missing: vars.filter((v) => v.status === 'MISSING_FROM_RORK').length,
-    };
+      missing: vars.filter((v) => v.status === 'MISSING_FROM_RORK').length};
   }, [data]);
 
   return (
@@ -237,7 +227,7 @@ function RuntimeVariablesContent() {
             testID="ivx-rtvar-verify-all"
           >
             {verifyMutation.isPending ? (
-              <ActivityIndicator size="small" color={Colors.black} />
+              <ShimmerIndicator size="small" color={Colors.black} />
             ) : (
               <RefreshCw size={14} color={Colors.black} />
             )}
@@ -249,7 +239,7 @@ function RuntimeVariablesContent() {
 
       {query.isLoading && !data ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={Colors.primary} />
+          <ShimmerIndicator color={Colors.primary} />
           <Text style={styles.loadingText}>Loading runtime variables…</Text>
         </View>
       ) : null}
@@ -326,5 +316,4 @@ const styles = StyleSheet.create({
   actionBtnTextDisabled: { color: Colors.textTertiary },
   syncBtn: { backgroundColor: Colors.primary },
   syncBtnText: { color: Colors.black, fontSize: 12.5, fontWeight: '700' as const },
-  footerNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, textAlign: 'center' },
-});
+  footerNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, textAlign: 'center' }});

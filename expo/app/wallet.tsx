@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import logger from '@/lib/logger';
 import { useRouter } from 'expo-router';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -11,9 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import {
   Wallet,
   ArrowUpRight,
@@ -36,8 +33,7 @@ import {
   Clock,
   Timer,
   CircleDollarSign,
-  Star,
-} from 'lucide-react-native';
+  Star} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -51,6 +47,7 @@ import WireTransferForm, { WireInstructionsDisplay } from '@/components/WireTran
 import { useEarn } from '@/lib/earn-context';
 import { Percent, PiggyBank } from 'lucide-react-native';
 import { useAnalytics } from '@/lib/analytics-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function WalletScreen() {
   const router = useRouter();
@@ -73,8 +70,7 @@ export default function WalletScreen() {
     deposit: walletDeposit,
     withdraw: walletWithdraw,
     depositWithdrawTransactions: walletTxHistory,
-    isFromAPI: balanceFromAPI,
-  } = useWallet();
+    isFromAPI: balanceFromAPI} = useWallet();
 
   const currentUser = useMemo(() => {
     logger.wallet.log('Balance source:', balanceFromAPI ? 'supabase' : 'local', walletAvailable);
@@ -88,8 +84,7 @@ export default function WalletScreen() {
       amount: tx.direction === 'debit' ? -tx.amount : tx.amount,
       status: tx.status,
       description: tx.description,
-      createdAt: tx.created_at,
-    }));
+      createdAt: tx.created_at}));
   }, [walletTxHistory]);
 
   const [addFundsModalVisible, setAddFundsModalVisible] = useState(false);
@@ -827,8 +822,7 @@ export default function WalletScreen() {
                       ]}>
                         {React.createElement(getPaymentMethodIcon(selectedPaymentMethod), {
                           size: 32,
-                          color: isInstantMethod(selectedPaymentMethod) ? '#00B4D8' : Colors.primary,
-                        })}
+                          color: isInstantMethod(selectedPaymentMethod) ? '#00B4D8' : Colors.primary})}
                       </View>
                       {isInstantMethod(selectedPaymentMethod) && (
                         <View style={styles.instantTransferBadge}>
@@ -908,7 +902,7 @@ export default function WalletScreen() {
                   >
                     {isProcessing ? (
                       <View style={styles.processingContainer}>
-                        <ActivityIndicator size="small" color={Colors.black} />
+                        <ShimmerIndicator size="small" color={Colors.black} />
                         <Text style={[styles.confirmButtonText, { marginLeft: 8 }]}>Processing...</Text>
                       </View>
                     ) : (
@@ -1126,7 +1120,7 @@ export default function WalletScreen() {
                 >
                   {isWithdrawing ? (
                     <View style={styles.processingContainer}>
-                      <ActivityIndicator size="small" color={Colors.white} />
+                      <ShimmerIndicator size="small" color={Colors.white} />
                       <Text style={[styles.withdrawConfirmText, { marginLeft: 8 }]}>Processing...</Text>
                     </View>
                   ) : (
@@ -1152,8 +1146,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   balanceCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
@@ -1162,39 +1155,32 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   balanceIconRow: {
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   walletIconCircle: {
     width: 56,
     height: 56,
     borderRadius: 18,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   balanceLabel: {
     color: Colors.textSecondary,
     fontSize: 14,
     fontWeight: '500' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   balanceValue: {
     color: Colors.text,
     fontSize: 28,
     fontWeight: '800' as const,
-    marginBottom: 20,
-
-  },
+    marginBottom: 20},
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    width: '100%',
-  },
+    width: '100%'},
   depositButton: {
     flex: 1,
     flexDirection: 'row',
@@ -1203,13 +1189,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   depositButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   withdrawButton: {
     flex: 1,
     flexDirection: 'row',
@@ -1220,27 +1204,22 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   withdrawButtonText: {
     color: Colors.text,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   section: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   lightningTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1248,13 +1227,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   lightningTagText: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   methodCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -1264,47 +1241,38 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   methodCardTop: {
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   methodIconContainer: {
     width: 44,
     height: 44,
     borderRadius: 12,
     backgroundColor: Colors.surfaceLight,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   methodIconInstant: {
-    backgroundColor: '#00B4D8' + '15',
-  },
+    backgroundColor: '#00B4D8' + '15'},
   methodInfo: {
-    flex: 1,
-  },
+    flex: 1},
   methodNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     flexWrap: 'wrap',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   methodName: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   methodDesc: {
     color: Colors.textTertiary,
     fontSize: 12,
     lineHeight: 16,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   methodFeatures: {
     flexDirection: 'row',
-    gap: 6,
-  },
+    gap: 6},
   featureBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1312,25 +1280,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: Colors.surfaceLight,
-  },
+    backgroundColor: Colors.surfaceLight},
   featureBadgeInstant: {
-    backgroundColor: '#00B4D8' + '12',
-  },
+    backgroundColor: '#00B4D8' + '12'},
   featureBadgeFree: {
-    backgroundColor: Colors.success + '12',
-  },
+    backgroundColor: Colors.success + '12'},
   featureText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   featureTextInstant: {
-    color: '#00B4D8',
-  },
+    color: '#00B4D8'},
   featureTextFree: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   recommendedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1338,55 +1300,45 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '20',
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   recommendedBadgeText: {
     color: Colors.primary,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   providerBadge: {
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   providerBadgeText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   txItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   txIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surfaceLight,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   txInfo: {
-    flex: 1,
-  },
+    flex: 1},
   txDescription: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   txDate: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   txAmount: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   securityCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1396,8 +1348,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.success + '20',
-  },
+    borderColor: Colors.success + '20'},
   earnBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1407,36 +1358,30 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   earnBannerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   earnIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   earnBannerInfo: {
-    flex: 1,
-  },
+    flex: 1},
   earnBannerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   earnBannerTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   earnApyTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1444,61 +1389,49 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   earnApyTagText: {
     color: Colors.black,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   earnBannerDesc: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   securityInfo: {
-    flex: 1,
-  },
+    flex: 1},
   securityTitle: {
     color: Colors.success,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   securityText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   modalContent: {
     backgroundColor: Colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '90%',
-  },
+    maxHeight: '90%'},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   modalTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   closeButton: {
-    padding: 8,
-  },
+    padding: 8},
   backIconButton: {
-    padding: 8,
-  },
+    padding: 8},
   testModeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1507,24 +1440,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning + '15',
     borderRadius: 10,
     padding: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   testModeText: {
     color: Colors.warning,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   amountSection: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   inputSectionLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '600' as const,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   amountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1533,26 +1462,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 16,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   currencySymbol: {
     color: Colors.textSecondary,
     fontSize: 24,
     fontWeight: '600' as const,
-    marginRight: 4,
-  },
+    marginRight: 4},
   amountInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 24,
     fontWeight: '700' as const,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   quickAmountsContainer: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   quickAmountButton: {
     flex: 1,
     paddingVertical: 10,
@@ -1560,23 +1485,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   quickAmountButtonActive: {
     backgroundColor: Colors.primary + '15',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   quickAmountText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   quickAmountTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   paymentSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   speedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1586,13 +1506,11 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   speedBannerText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   paymentMethodItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1603,72 +1521,57 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   paymentMethodItemRecommended: {
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   paymentMethodItemActive: {
     backgroundColor: Colors.primary + '10',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   paymentMethodIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surfaceLight,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   paymentMethodIconInstant: {
-    backgroundColor: '#00B4D8' + '15',
-  },
+    backgroundColor: '#00B4D8' + '15'},
   paymentMethodIconActive: {
-    backgroundColor: Colors.primary + '15',
-  },
+    backgroundColor: Colors.primary + '15'},
   paymentMethodInfo: {
-    flex: 1,
-  },
+    flex: 1},
   paymentMethodNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     flexWrap: 'wrap',
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   paymentMethodName: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   paymentMethodNameActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   paymentMethodDesc: {
     color: Colors.textTertiary,
     fontSize: 12,
     lineHeight: 16,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   checkIcon: {
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   paymentInputSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   backButton: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   backButtonText: {
     color: Colors.primary,
     fontWeight: '600' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   selectedMethodHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1678,8 +1581,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   selectedMethodIcon: {
     width: 44,
     height: 44,
@@ -1687,20 +1589,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   selectedMethodTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   selectedMethodSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   confirmMethodCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
@@ -1708,8 +1607,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   confirmMethodIcon: {
     width: 64,
     height: 64,
@@ -1717,11 +1615,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   confirmMethodIconInstant: {
-    backgroundColor: '#00B4D8' + '15',
-  },
+    backgroundColor: '#00B4D8' + '15'},
   instantTransferBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1730,26 +1626,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   instantTransferText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   confirmMethodName: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
     marginBottom: 8,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   confirmMethodDesc: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   feeBreakdown: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -1757,92 +1649,76 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   feeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   feeRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   feeLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   feeValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   feeLabelTotal: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   feeValueTotal: {
     color: Colors.success,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   confirmButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   confirmButtonDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   confirmButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 16,
-  },
+    fontSize: 16},
   withdrawConfirmButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   withdrawConfirmText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 16,
-  },
+    fontSize: 16},
   resultContainer: {
     alignItems: 'center',
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   resultIconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   resultAmount: {
     color: Colors.text,
     fontSize: 32,
     fontWeight: '800' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   resultStatus: {
     fontSize: 15,
     fontWeight: '600' as const,
     marginBottom: 20,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   resultDetails: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1851,26 +1727,22 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   resultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   resultLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   resultValue: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '600' as const,
     flexShrink: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   bankInstructionsContainer: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1879,38 +1751,32 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   bankInstructionsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   bankInstructionsTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bankDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 6,
-    gap: 8,
-  },
+    gap: 8},
   bankDetailLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   bankDetailValue: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '600' as const,
     flexShrink: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   referenceContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1919,18 +1785,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginTop: 4,
-    gap: 8,
-  },
+    gap: 8},
   referenceValue: {
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginTop: 2,
-  },
+    marginTop: 2},
   wireInstructionsWrapper: {
     width: '100%',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   balanceInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1941,31 +1804,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   balanceInfoLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   balanceInfoValue: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   processingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   securityNote: {
     color: Colors.textTertiary,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   scrollView: {
-    backgroundColor: Colors.background,
-  },
-});
+    backgroundColor: Colors.background}});

@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -32,16 +31,14 @@ import {
   Eye,
   Building2,
   Globe,
-  Award,
-} from 'lucide-react-native';
+  Award} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { trustFeatures, ownerProtections, TrustFeature, OwnerProtection } from '@/mocks/competitive-stats';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 
 const iconMap: Record<string, any> = {
   Shield, Scale, Lock, FileCheck, Search, ShieldCheck, Fingerprint, Database,
-  PiggyBank, FileText, Calculator, ArrowRightLeft, Banknote, Eye,
-};
+  PiggyBank, FileText, Calculator, ArrowRightLeft, Banknote, Eye};
 
 type CategoryFilter = 'all' | 'security' | 'legal' | 'financial' | 'insurance';
 
@@ -54,16 +51,14 @@ function TrustFeatureCard({ feature, index }: { feature: TrustFeature; index: nu
       toValue: 1,
       duration: 400,
       delay: index * 80,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, []);
 
   const categoryColors: Record<string, string> = {
     security: '#FF6B6B',
     legal: '#4ECDC4',
     financial: '#FFD700',
-    insurance: '#45B7D1',
-  };
+    insurance: '#45B7D1'};
 
   return (
     <Animated.View style={[styles.trustCard, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
@@ -100,8 +95,7 @@ function OwnerProtectionCard({ protection, index }: { protection: OwnerProtectio
       toValue: 1,
       duration: 400,
       delay: index * 80,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, []);
 
   const toggleExpand = () => {
@@ -109,8 +103,7 @@ function OwnerProtectionCard({ protection, index }: { protection: OwnerProtectio
     Animated.spring(expandAnim, {
       toValue: expanded ? 0 : 1,
       useNativeDriver: false,
-      friction: 8,
-    }).start();
+      friction: 8}).start();
   };
 
   return (
@@ -322,5 +315,4 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   detailText: { color: Colors.textSecondary, fontSize: 13, flex: 1, lineHeight: 18 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

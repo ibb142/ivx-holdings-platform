@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   Animated,
@@ -12,9 +11,7 @@ import {
   Alert,
   Share,
   Image,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+  Linking} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -47,10 +44,10 @@ import {
   Clock,
   Trash2,
   Image as ImageIcon,
-  RefreshCw,
-} from 'lucide-react-native';
+  RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { SCREEN_MOCKUP_MAP } from '@/components/ScreenMockups';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const SPEED_FACTOR = 0.35;
@@ -112,57 +109,49 @@ const PHOTO_TEMPLATES: PhotoTemplate[] = [
     label: 'Luxury Tower 8K',
     prompt:
       'Photorealistic architectural rendering of a modern luxury residential skyscraper, 40 floors, glass and steel facade, rooftop infinity pool, lush landscaped ground level with palm trees, golden hour lighting, drone aerial perspective, 8K ultra-realistic quality, real estate marketing photo',
-    color: '#FFD700',
-  },
+    color: '#FFD700'},
   {
     id: 'beachfront-villa',
     label: 'Beachfront Villa 8K',
     prompt:
       'Stunning photorealistic image of a modern beachfront luxury villa with infinity pool overlooking the ocean, white architecture with large glass windows, tropical landscaping, sunset sky with warm colors reflecting on the water, professional architectural photography, 8K ultra-realistic',
-    color: '#4A90D9',
-  },
+    color: '#4A90D9'},
   {
     id: 'penthouse',
     label: 'Penthouse Interior 8K',
     prompt:
       'Photorealistic interior of an ultra-luxury penthouse apartment, floor-to-ceiling windows with panoramic city skyline view at night, modern minimalist design, marble floors, designer furniture, warm ambient lighting, open concept living space, professional real estate photography, 8K quality',
-    color: '#E91E63',
-  },
+    color: '#E91E63'},
   {
     id: 'construction-site',
     label: 'Under Construction 8K',
     prompt:
       'Ultra-realistic photo of a luxury high-rise residential building under construction, construction cranes, scaffolding, concrete floors being poured, blue sky background, city skyline visible, golden sunlight, professional real estate development photography, 8K quality',
-    color: '#FF6B35',
-  },
+    color: '#FF6B35'},
   {
     id: 'smart-city',
     label: 'Smart City 8K',
     prompt:
       'Futuristic photorealistic rendering of a smart city mixed-use development block, interconnected modern buildings with LED facades, autonomous vehicle lanes, elevated walkways with gardens, holographic signage, sunset lighting, professional architectural visualization, 8K ultra-realistic quality',
-    color: '#7C4DFF',
-  },
+    color: '#7C4DFF'},
   {
     id: 'investment-dash',
     label: 'Investment Dashboard 8K',
     prompt:
       'Photorealistic image of a sleek modern desk with large curved monitor and smartphone both displaying real estate portfolio charts with green profit indicators, dark mode interface with gold accents, ambient LED desk lighting, modern office with city skyline view at golden hour, professional product photography, 8K ultra-realistic',
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   {
     id: 'vip-luxury',
     label: 'VIP Experience 8K',
     prompt:
       'Photorealistic image of a luxury VIP lounge scene with a golden membership card on polished dark marble table, champagne glass nearby, smartphone showing exclusive premium real estate deals, dramatic low-key lighting with gold accents, velvet textures, premium luxury lifestyle photography, 8K ultra-realistic',
-    color: '#C0392B',
-  },
+    color: '#C0392B'},
   {
     id: 'global-skylines',
     label: 'Global Real Estate 8K',
     prompt:
       'Photorealistic aerial view of iconic global city skylines seamlessly blended together - New York, Dubai, London, Singapore, Tokyo - with golden connecting light paths between them, a translucent globe hologram in the center with property pin markers, dramatic sunset sky, ultra-wide cinematic composition, 8K quality',
-    color: '#16A085',
-  },
+    color: '#16A085'},
 ];
 
 const SLIDE_IMAGES: Record<string, string> = {
@@ -183,8 +172,7 @@ const SLIDE_IMAGES: Record<string, string> = {
   stats: 'https://images.unsplash.com/photo-1560185127-6ed189bf02f4?w=800&q=80',
   problem: 'https://images.unsplash.com/photo-1494526585095-c41746248156?w=800&q=80',
   comparison: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-  viral: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80',
-};
+  viral: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80'};
 
 const COMPARISON_DATA = [
   { traditional: 'List property in 30-60 days', ipx: 'List in 2 minutes with AI' },
@@ -496,8 +484,7 @@ export default function VideoPresentationScreen() {
         label: template.label,
         base64: imgResult.base64Data,
         mimeType: imgResult.mimeType,
-        createdAt: new Date().toISOString(),
-      };
+        createdAt: new Date().toISOString()};
       const updated = await incrementDailyView();
       setDailyViews(updated);
       setGeneratedImages(prev => {
@@ -635,8 +622,7 @@ export default function VideoPresentationScreen() {
             saveUploadedFiles(next);
             return next;
           });
-        },
-      },
+        }},
     ]);
   }, [triggerHaptic]);
 
@@ -661,8 +647,7 @@ export default function VideoPresentationScreen() {
               uri: dataUrl,
               mimeType: file.type,
               mediaType: file.type.startsWith('video') ? 'video' : 'image',
-              uploadedAt: new Date().toISOString(),
-            };
+              uploadedAt: new Date().toISOString()};
             setUploadedFiles(prev => {
               const next = [newFile, ...prev];
               saveUploadedFiles(next);
@@ -689,8 +674,7 @@ export default function VideoPresentationScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images', 'videos'],
         quality: 1,
-        base64: false,
-      });
+        base64: false});
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
         const isVideo = asset.type === 'video';
@@ -701,8 +685,7 @@ export default function VideoPresentationScreen() {
           uri: asset.uri,
           mimeType,
           mediaType: isVideo ? 'video' : 'image',
-          uploadedAt: new Date().toISOString(),
-        };
+          uploadedAt: new Date().toISOString()};
         setUploadedFiles(prev => {
           const next = [newFile, ...prev];
           saveUploadedFiles(next);
@@ -731,8 +714,7 @@ export default function VideoPresentationScreen() {
             saveImagesToStorage(next);
             return next;
           });
-        },
-      },
+        }},
     ]);
   }, [triggerHaptic]);
 
@@ -1457,7 +1439,7 @@ export default function VideoPresentationScreen() {
 
             {isGenerating && (
               <View style={styles.generatingBanner}>
-                <ActivityIndicator size="small" color="#FFD700" />
+                <ShimmerIndicator size="small" color="#FFD700" />
                 <Text style={styles.generatingText}>Generating 8K photorealistic render...</Text>
                 <Text style={styles.generatingHint}>Takes 10–30 seconds</Text>
               </View>
@@ -1476,7 +1458,7 @@ export default function VideoPresentationScreen() {
                     testID={`template-${template.id}`}
                   >
                     <View style={[styles.templateIconWrap, { backgroundColor: template.color + '15' }]}>
-                      {isActive ? <ActivityIndicator size="small" color={template.color} /> : <Camera size={18} color={template.color} />}
+                      {isActive ? <ShimmerIndicator size="small" color={template.color} /> : <Camera size={18} color={template.color} />}
                     </View>
                     <View style={styles.templateInfo}>
                       <Text style={styles.templateLabel}>{template.label}</Text>
@@ -1495,7 +1477,7 @@ export default function VideoPresentationScreen() {
 
           <View style={styles.hubUploadDownloadRow}>
             <TouchableOpacity style={styles.hubUploadBtn} onPress={handleUploadVideo} activeOpacity={0.85} testID="hub-upload-btn" disabled={isUploading}>
-              {isUploading ? <ActivityIndicator size="small" color="#4A90D9" /> : <ArrowUpFromLine size={22} color="#4A90D9" />}
+              {isUploading ? <ShimmerIndicator size="small" color="#4A90D9" /> : <ArrowUpFromLine size={22} color="#4A90D9" />}
               <Text style={styles.hubUploadLabel}>{isUploading ? 'Uploading...' : 'Upload File'}</Text>
               <Text style={styles.hubActionHint}>Image or Video</Text>
             </TouchableOpacity>
@@ -1948,5 +1930,4 @@ const styles = StyleSheet.create({
   styleCardIconWrap: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   styleCardTitle: { fontSize: 15, fontWeight: '900' as const, color: '#fff', letterSpacing: 0.2 },
   styleCardSub: { fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 15 },
-  styleCardActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D4A017', marginTop: 4 },
-});
+  styleCardActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D4A017', marginTop: 4 }});

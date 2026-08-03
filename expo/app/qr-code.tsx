@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Share,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -21,8 +20,7 @@ import {
   Check,
   QrCode,
   Smartphone,
-  ExternalLink,
-} from 'lucide-react-native';
+  ExternalLink} from 'lucide-react-native';
 import QRCodeView from '@/components/QRCodeView';
 
 const GOLD = '#FFD700';
@@ -85,8 +83,7 @@ export default function QRCodeScreen() {
       await Share.share({
         title: 'IVX Holdings',
         message: `Scan to access IVX Holdings — ${selectedOption.label}\n\n${selectedOption.url}`,
-        url: selectedOption.url,
-      });
+        url: selectedOption.url});
     } catch (e) {
       console.log('[QR] Share failed:', e);
     }
@@ -122,8 +119,7 @@ export default function QRCodeScreen() {
           title: 'QR Code',
           headerStyle: { backgroundColor: '#000' },
           headerTintColor: GOLD,
-          headerTitleStyle: { fontWeight: '700' as const, color: '#fff' },
-        }}
+          headerTitleStyle: { fontWeight: '700' as const, color: '#fff' }}}
       />
 
       <ScrollView
@@ -259,64 +255,53 @@ export default function QRCodeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-  },
+    paddingTop: 16},
   qrSection: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   qrHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 8,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   qrTitle: {
     color: GOLD,
     fontSize: 13,
     fontWeight: '800' as const,
-    letterSpacing: 3,
-  },
+    letterSpacing: 3},
   qrCard: {
     borderRadius: 24,
     overflow: 'hidden' as const,
     borderWidth: 1,
     borderColor: GOLD + '25',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   qrCardGrad: {
     alignItems: 'center' as const,
     paddingVertical: 32,
-    paddingHorizontal: 24,
-  },
+    paddingHorizontal: 24},
   qrBorder: {
     padding: 12,
     borderRadius: 16,
     borderWidth: 2,
     borderColor: GOLD + '30',
     backgroundColor: '#000',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   qrLabel: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '800' as const,
     letterSpacing: 1,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   qrUrl: {
     color: GOLD + 'AA',
     fontSize: 13,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   targetSelector: {
     flexDirection: 'row' as const,
-    gap: 8,
-  },
+    gap: 8},
   targetBtn: {
     flex: 1,
     flexDirection: 'column' as const,
@@ -328,45 +313,36 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 6,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
-  },
+    borderColor: '#1A1A1A'},
   targetBtnActive: {
     backgroundColor: GOLD,
-    borderColor: GOLD,
-  },
+    borderColor: GOLD},
   targetBtnText: {
     color: '#999',
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   targetBtnTextActive: {
-    color: '#000',
-  },
+    color: '#000'},
   actionsSection: {
     marginBottom: 28,
-    gap: 10,
-  },
+    gap: 10},
   primaryAction: {
     borderRadius: 16,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   primaryActionGrad: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 10,
     paddingVertical: 16,
-    borderRadius: 16,
-  },
+    borderRadius: 16},
   primaryActionText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   secondaryActions: {
     flexDirection: 'row' as const,
-    gap: 10,
-  },
+    gap: 10},
   secondaryAction: {
     flex: 1,
     flexDirection: 'row' as const,
@@ -377,74 +353,60 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
-  },
+    borderColor: '#1A1A1A'},
   secondaryActionText: {
     color: GOLD,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   infoSection: {
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   infoTitle: {
     color: '#555',
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 2,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   infoCard: {
     backgroundColor: SURFACE,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1A1A1A',
     padding: 16,
-    gap: 14,
-  },
+    gap: 14},
   infoRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 14,
-  },
+    gap: 14},
   infoStep: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: GOLD + '15',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   infoStepNum: {
     color: GOLD,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   infoText: {
     flex: 1,
     color: '#999',
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   branding: {
     alignItems: 'center' as const,
     paddingVertical: 20,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A1A',
-  },
+    borderTopColor: '#1A1A1A'},
   brandName: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '800' as const,
     letterSpacing: 2,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   brandTagline: {
     color: GOLD + '80',
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   bottomPad: {
-    height: 40,
-  },
-});
+    height: 40}});

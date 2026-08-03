@@ -1,18 +1,16 @@
 import React, { useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { renderSafeViewChildren } from '@/components/SafeViewChildren';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface AdminScreenWrapperProps {
   title: string;
@@ -35,8 +33,7 @@ function AdminScreenWrapperInner({
   isRefreshing = false,
   onRefresh,
   headerRight,
-  testID,
-}: AdminScreenWrapperProps) {
+  testID}: AdminScreenWrapperProps) {
   const router = useRouter();
 
   const handleBack = useCallback(() => {
@@ -71,7 +68,7 @@ function AdminScreenWrapperInner({
 
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       ) : (
@@ -102,67 +99,52 @@ export const AdminScreenWrapper = React.memo(AdminScreenWrapperInner);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeTop: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.card,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerIcon: {
-    marginRight: 8,
-  },
+    marginRight: 8},
   title: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    flex: 1,
-  },
+    flex: 1},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   headerRightSlot: {
-    marginLeft: 8,
-  },
+    marginLeft: 8},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
-});
+    fontSize: 14}});

@@ -11,8 +11,7 @@ import {
   Modal,
   Platform,
   Dimensions,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -32,8 +31,7 @@ import {
   CheckCheck,
   Menu,
   X,
-  CircleAlert,
-} from 'lucide-react-native';
+  CircleAlert} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useEmail } from '@/lib/email-context';
@@ -84,8 +82,7 @@ const EmailRow = React.memo(function EmailRow({ email, onPress, onStarToggle }: 
       toValue: 0.98,
       useNativeDriver: true,
       speed: 50,
-      bounciness: 0,
-    }).start();
+      bounciness: 0}).start();
   }, [scaleAnim]);
 
   const handlePressOut = useCallback(() => {
@@ -93,8 +90,7 @@ const EmailRow = React.memo(function EmailRow({ email, onPress, onStarToggle }: 
       toValue: 1,
       useNativeDriver: true,
       speed: 50,
-      bounciness: 0,
-    }).start();
+      bounciness: 0}).start();
   }, [scaleAnim]);
 
   const senderInitial = email.from.name.charAt(0).toUpperCase();
@@ -205,8 +201,7 @@ export default function EmailScreen() {
     inboxStatus,
     lastFetchSource,
     backendError,
-    sourceStats: _sourceStats,
-  } = useEmail();
+    sourceStats: _sourceStats} = useEmail();
 
   const [showDrawer, setShowDrawer] = useState(false);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
@@ -288,8 +283,7 @@ export default function EmailScreen() {
 
   const searchHeight = searchBarAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 52],
-  });
+    outputRange: [0, 52]});
 
   const currentFolderLabel = FOLDERS.find(f => f.key === selectedFolder)?.label ?? 'Inbox';
 
@@ -497,8 +491,7 @@ export default function EmailScreen() {
                       onPress={() => handleFolderSelect(folder.key)}
                     >
                       {React.cloneElement(folder.icon as React.ReactElement<any>, {
-                        color: isActive ? Colors.primary : Colors.textSecondary,
-                      })}
+                        color: isActive ? Colors.primary : Colors.textSecondary})}
                       <Text style={[styles.drawerItemText, isActive && styles.drawerItemTextActive]}>
                         {folder.label}
                       </Text>
@@ -577,59 +570,49 @@ export default function EmailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   menuButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 12,
-    gap: 6,
-  },
+    gap: 6},
   headerAccountDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerRight: {
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
   headerIcon: {
     width: 38,
     height: 38,
     borderRadius: 19,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   searchContainer: {
     paddingHorizontal: 16,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -639,23 +622,19 @@ const styles = StyleSheet.create({
     height: 40,
     gap: 8,
     marginTop: 4,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
-    paddingVertical: 0,
-  },
+    paddingVertical: 0},
   accountBar: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   accountBarScroll: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 8,
-  },
+    gap: 8},
   accountChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -665,26 +644,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 6,
     borderWidth: 1,
-    borderColor: 'transparent',
-  },
+    borderColor: 'transparent'},
   accountChipActive: {
     borderColor: Colors.primary,
-    backgroundColor: 'rgba(255,215,0,0.08)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.08)'},
   accountChipDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   accountChipText: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
-    maxWidth: 80,
-  },
+    maxWidth: 80},
   accountChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   accountChipBadge: {
     backgroundColor: Colors.error,
     borderRadius: 8,
@@ -692,114 +666,90 @@ const styles = StyleSheet.create({
     height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   accountChipBadgeText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    color: Colors.white,
-  },
+    color: Colors.white},
   listContent: {
-    paddingBottom: 100,
-  },
+    paddingBottom: 100},
   emailRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   emailRowUnread: {
-    backgroundColor: 'rgba(255,215,0,0.03)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.03)'},
   emailRowLeft: {
-    marginRight: 12,
-  },
+    marginRight: 12},
   avatarCircle: {
     width: 42,
     height: 42,
     borderRadius: 21,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   avatarCircleUnread: {
-    backgroundColor: 'rgba(255,215,0,0.12)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.12)'},
   avatarText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   avatarTextUnread: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   emailRowCenter: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   emailRowTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   senderName: {
     fontSize: 14,
     fontWeight: '500' as const,
     color: Colors.textSecondary,
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   senderNameUnread: {
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   emailRowMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   emailDate: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   emailDateUnread: {
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   emailSubject: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emailSubjectUnread: {
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   emailPreview: {
     fontSize: 13,
     color: Colors.textTertiary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   labelRow: {
     flexDirection: 'row',
     gap: 5,
-    marginTop: 4,
-  },
+    marginTop: 4},
   labelBadge: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   labelText: {
     fontSize: 10,
     fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   starButton: {
     paddingLeft: 8,
-    paddingTop: 2,
-  },
+    paddingTop: 2},
   sesStatusBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -808,33 +758,26 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: 'rgba(255,215,0,0.04)',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   sesStatusDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Colors.textTertiary,
-  },
+    backgroundColor: Colors.textTertiary},
   sesStatusDotActive: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   sesStatusDotError: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   sesStatusDotWarning: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   sesStatusText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   sesQuotaText: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginLeft: 'auto' as const,
-  },
+    marginLeft: 'auto' as const},
   sesRegionText: {
     fontSize: 10,
     color: Colors.textTertiary,
@@ -842,8 +785,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 3,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   fab: {
     position: 'absolute' as const,
     right: 20,
@@ -859,34 +801,27 @@ const styles = StyleSheet.create({
         shadowColor: Colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.35,
-        shadowRadius: 8,
-      },
+        shadowRadius: 8},
       android: { elevation: 8 },
       default: {
         shadowColor: Colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.35,
-        shadowRadius: 8,
-      },
-    }),
-  },
+        shadowRadius: 8}})},
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 100,
-    gap: 12,
-  },
+    gap: 12},
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emptySubtitle: {
     fontSize: 14,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   sourceWarningBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -895,13 +830,11 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: 'rgba(230,126,34,0.08)',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(230,126,34,0.2)',
-  },
+    borderBottomColor: 'rgba(230,126,34,0.2)'},
   sourceWarningText: {
     fontSize: 11,
     fontWeight: '500' as const,
-    color: '#E67E22',
-  },
+    color: '#E67E22'},
   inboxErrorBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -910,17 +843,14 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: 'rgba(231,76,60,0.06)',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(231,76,60,0.15)',
-  },
+    borderBottomColor: 'rgba(231,76,60,0.15)'},
   inboxErrorText: {
     fontSize: 12,
     fontWeight: '500' as const,
-    color: Colors.error,
-  },
+    color: Colors.error},
   drawerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
+    backgroundColor: 'rgba(0,0,0,0.6)'},
   drawer: {
     position: 'absolute',
     top: 0,
@@ -929,52 +859,43 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH * 0.82,
     backgroundColor: Colors.background,
     borderRightWidth: 1,
-    borderRightColor: Colors.border,
-  },
+    borderRightColor: Colors.border},
   drawerSafe: {
-    flex: 1,
-  },
+    flex: 1},
   drawerHeader: {
     padding: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   drawerAccountAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   drawerAccountAvatarText: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.white,
-  },
+    color: Colors.white},
   drawerAccountName: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   drawerAccountEmail: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   drawerBody: {
     flex: 1,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   drawerSectionLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     paddingHorizontal: 20,
     paddingVertical: 6,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   drawerItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -982,21 +903,17 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     gap: 14,
     marginHorizontal: 8,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   drawerItemActive: {
-    backgroundColor: 'rgba(255,215,0,0.08)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.08)'},
   drawerItemText: {
     flex: 1,
     fontSize: 14,
     fontWeight: '500' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   drawerItemTextActive: {
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   drawerBadge: {
     backgroundColor: Colors.error,
     borderRadius: 10,
@@ -1004,86 +921,70 @@ const styles = StyleSheet.create({
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
+    paddingHorizontal: 6},
   drawerBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.white,
-  },
+    color: Colors.white},
   drawerCount: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   drawerDivider: {
     height: 1,
     backgroundColor: Colors.border,
     marginVertical: 12,
-    marginHorizontal: 20,
-  },
+    marginHorizontal: 20},
   drawerAccountDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   drawerAccountInfo: {
     flex: 1,
-    gap: 1,
-  },
+    gap: 1},
   drawerAccountRole: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
-  },
+    paddingHorizontal: 24},
   accountPickerModal: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '80%',
-  },
+    maxHeight: '80%'},
   accountPickerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   accountPickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     borderRadius: 10,
     gap: 12,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   accountPickerItemActive: {
-    backgroundColor: 'rgba(255,215,0,0.08)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.08)'},
   accountPickerDot: {
     width: 12,
     height: 12,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   accountPickerInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   accountPickerName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   accountPickerEmail: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   accountPickerBadge: {
     backgroundColor: Colors.error,
     borderRadius: 10,
@@ -1092,11 +993,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
-    marginRight: 4,
-  },
+    marginRight: 4},
   accountPickerBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.white,
-  },
-});
+    color: Colors.white}});

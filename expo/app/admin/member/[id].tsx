@@ -1,14 +1,11 @@
 import React from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -29,17 +26,16 @@ import {
   Camera,
   AlertTriangle,
   Globe,
-  IdCard,
-} from 'lucide-react-native';
+  IdCard} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchAdminMemberRegistryRecord,
   syncMemberRegistryFromSupabase,
-  upsertStoredMemberRegistryRecord,
-} from '@/lib/member-registry';
+  upsertStoredMemberRegistryRecord} from '@/lib/member-registry';
 
 interface MemberData {
   id: string;
@@ -121,11 +117,9 @@ export default function MemberDetailScreen() {
         total_returns: data.totalReturns,
         created_at: data.createdAt,
         updated_at: data.updatedAt,
-        role: data.role,
-      } as MemberData;
+        role: data.role} as MemberData;
     },
-    enabled: !!id,
-  });
+    enabled: !!id});
 
   const walletQuery = useQuery({
     queryKey: ['admin-member-wallet', id],
@@ -134,8 +128,7 @@ export default function MemberDetailScreen() {
       if (error) return null;
       return data;
     },
-    enabled: !!id,
-  });
+    enabled: !!id});
 
   const holdingsQuery = useQuery({
     queryKey: ['admin-member-holdings', id],
@@ -144,8 +137,7 @@ export default function MemberDetailScreen() {
       if (error) return [];
       return data ?? [];
     },
-    enabled: !!id,
-  });
+    enabled: !!id});
 
   const txQuery = useQuery({
     queryKey: ['admin-member-transactions', id],
@@ -154,8 +146,7 @@ export default function MemberDetailScreen() {
       if (error) return { data: [], count: 0 };
       return { data: data ?? [], count: count ?? 0 };
     },
-    enabled: !!id,
-  });
+    enabled: !!id});
 
   const kycVerificationQuery = useQuery({
     queryKey: ['admin-member-kyc-verification', id],
@@ -165,8 +156,7 @@ export default function MemberDetailScreen() {
       if (error) { console.log('[Member Detail] KYC verification not found:', error.message); return null; }
       return data as KYCVerification;
     },
-    enabled: !!id,
-  });
+    enabled: !!id});
 
   const kycDocumentsQuery = useQuery({
     queryKey: ['admin-member-kyc-documents', id],
@@ -176,8 +166,7 @@ export default function MemberDetailScreen() {
       if (error) { console.log('[Member Detail] KYC documents error:', error.message); return []; }
       return (data ?? []) as KYCDocument[];
     },
-    enabled: !!id,
-  });
+    enabled: !!id});
 
   const kycMutation = useMutation({
     mutationFn: async (input: { status: string }) => {
@@ -188,8 +177,7 @@ export default function MemberDetailScreen() {
       const { error: kycError } = await supabase.from('kyc_verifications').update({
         status: input.status === 'approved' ? 'approved' : 'rejected',
         reviewed_at: new Date().toISOString(),
-        verification_passed: input.status === 'approved',
-      }).eq('user_id', id);
+        verification_passed: input.status === 'approved'}).eq('user_id', id);
       if (kycError) console.log('[Member Detail] KYC verification update error (non-blocking):', kycError.message);
     },
     onSuccess: async () => {
@@ -202,8 +190,7 @@ export default function MemberDetailScreen() {
       void queryClient.invalidateQueries({ queryKey: ['admin-member-kyc-verification', id] });
       Alert.alert('Success', 'KYC status updated');
     },
-    onError: (err: Error) => Alert.alert('Error', err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', err.message)});
 
   const statusMutation = useMutation({
     mutationFn: async (input: { status: string }) => {
@@ -219,8 +206,7 @@ export default function MemberDetailScreen() {
       void queryClient.invalidateQueries({ queryKey: ['admin-member-detail', id] });
       Alert.alert('Success', 'Account status updated');
     },
-    onError: (err: Error) => Alert.alert('Error', err.message),
-  });
+    onError: (err: Error) => Alert.alert('Error', err.message)});
 
   const member = memberQuery.data;
   const wallet = walletQuery.data;
@@ -233,7 +219,7 @@ export default function MemberDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={[styles.errorText, { marginTop: 12 }]}>Loading member...</Text>
         </View>
       </SafeAreaView>
@@ -259,8 +245,7 @@ export default function MemberDetailScreen() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric',
-    });
+      year: 'numeric'});
   };
 
   const formatDateTime = (dateString: string) => {
@@ -269,8 +254,7 @@ export default function MemberDetailScreen() {
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const kycStatus = member.kyc_status || 'pending';
@@ -281,8 +265,7 @@ export default function MemberDetailScreen() {
       approve: 'approve KYC for',
       reject: 'reject KYC for',
       suspend: 'suspend',
-      activate: 'activate',
-    };
+      activate: 'activate'};
 
     Alert.alert(
       `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`,
@@ -297,8 +280,7 @@ export default function MemberDetailScreen() {
             else if (action === 'reject') kycMutation.mutate({ status: 'rejected' });
             else if (action === 'suspend') statusMutation.mutate({ status: 'suspended' });
             else if (action === 'activate') statusMutation.mutate({ status: 'active' });
-          },
-        },
+          }},
       ]
     );
   };
@@ -691,8 +673,7 @@ export default function MemberDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -700,50 +681,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   errorText: {
     fontSize: 16,
     color: Colors.textSecondary,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   backLink: {
     fontSize: 16,
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   profileSection: {
     alignItems: 'center',
     paddingVertical: 24,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   avatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   avatarPlaceholder: {
     width: 100,
     height: 100,
@@ -751,192 +723,154 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   memberName: {
     fontSize: 24,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   kycBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   kycTextStyle: {
     fontSize: 13,
     fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   statusActive: {
-    backgroundColor: Colors.positive + '20',
-  },
+    backgroundColor: Colors.positive + '20'},
   statusSuspended: {
-    backgroundColor: Colors.negative + '20',
-  },
+    backgroundColor: Colors.negative + '20'},
   statusInactive: {
-    backgroundColor: Colors.textTertiary + '20',
-  },
+    backgroundColor: Colors.textTertiary + '20'},
   statusText: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.text,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   section: {
     padding: 20,
-    paddingBottom: 0,
-  },
+    paddingBottom: 0},
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   infoCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    gap: 14,
-  },
+    gap: 14},
   infoContent: {
-    flex: 1,
-  },
+    flex: 1},
   infoLabel: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   infoValue: {
     fontSize: 15,
     fontWeight: '500' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   infoDivider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginLeft: 50,
-  },
+    marginLeft: 50},
   kycScoreCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   kycScoreRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   kycScoreLeft: {
-    gap: 2,
-  },
+    gap: 2},
   kycScoreLabel: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   kycScoreValue: {
     fontSize: 28,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   riskBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   riskBadgeText: {
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   scoreBar: {
     height: 6,
     backgroundColor: Colors.border,
     borderRadius: 3,
     overflow: 'hidden' as const,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   scoreBarFill: {
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   kycMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     flexWrap: 'wrap' as const,
-    gap: 4,
-  },
+    gap: 4},
   kycMetaText: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   docInfo: {
-    flex: 1,
-  },
+    flex: 1},
   docType: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   docMeta: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   docStatusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   docStatusText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   docPreviewContainer: {
     paddingHorizontal: 14,
-    paddingBottom: 10,
-  },
+    paddingBottom: 10},
   docPreview: {
     width: '100%',
     height: 140,
     borderRadius: 10,
-    backgroundColor: Colors.surfaceLight,
-  },
+    backgroundColor: Colors.surfaceLight},
   noKycCard: {
     backgroundColor: Colors.warning + '10',
     borderRadius: 14,
@@ -944,63 +878,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.warning + '25',
-  },
+    borderColor: Colors.warning + '25'},
   noKycTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   noKycText: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
+    gap: 12},
   statCard: {
     width: '47%',
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statValue: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
     marginTop: 10,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   statLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   actionsCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   actionButtonText: {
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   bottomPadding: {
-    height: 100,
-  },
-});
+    height: 100}});

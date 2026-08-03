@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -9,8 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,13 +40,11 @@ import {
   Square,
   Terminal,
   Trash2,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   cancelPendingAIReply,
-  requestAIReply,
-} from '@/src/modules/chat/services/aiReplyService';
+  requestAIReply} from '@/src/modules/chat/services/aiReplyService';
 import { recordIVXOwnerChatAuditEvent } from '@/src/modules/ivx-owner-ai/services';
 import { proposeAction as proposeApprovedAction } from '@/src/modules/ivx-developer/developerApprovedActionsService';
 import {
@@ -56,15 +52,14 @@ import {
   runOwnerApprovedSeniorDeveloperProduction,
   type IVXSeniorDeveloperCredentialAuditResponse,
   type IVXSeniorDeveloperRiskLevel,
-  type IVXSeniorDeveloperRunResponse,
-} from '@/src/modules/ivx-developer/seniorDeveloperApprovalService';
+  type IVXSeniorDeveloperRunResponse} from '@/src/modules/ivx-developer/seniorDeveloperApprovalService';
 import {
   gatherSeniorDeveloperPreflight,
   gatherOwnerProofGate,
   type OwnerProofGate,
-  type SeniorDeveloperPreflight,
-} from '@/src/modules/ivx-developer/seniorDeveloperPreflightService';
+  type SeniorDeveloperPreflight} from '@/src/modules/ivx-developer/seniorDeveloperPreflightService';
 import { getIVXRuntimeInfo, type IVXRuntimeInfo } from '@/lib/runtime-environment';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   BLOCK18_DEVELOPER_WORKSPACE_MARKER,
   PATCH_REPLY_FORMAT_INSTRUCTION,
@@ -83,8 +78,7 @@ import {
   sanitizeForDisplay,
   scanForSafetyIssues,
   tryParseAIPatchReply,
-  updatePatchStatus,
-} from '@/src/modules/ivx-developer/developerWorkspaceService';
+  updatePatchStatus} from '@/src/modules/ivx-developer/developerWorkspaceService';
 
 const WORKSPACE_CONVERSATION_ID = 'ivx-owner-ai-developer-workspace';
 
@@ -146,16 +140,14 @@ const KIND_LABEL: Record<ProjectFileKind, string> = {
   backend: 'Backend',
   migration: 'Migration',
   config: 'Config',
-  doc: 'Doc',
-};
+  doc: 'Doc'};
 
 const PATCH_STATUS_COLOR: Record<PatchStatus, string> = {
   proposed: Colors.warning,
   approved: Colors.blue,
   applied: Colors.green,
   failed: Colors.error,
-  rejected: Colors.textTertiary,
-};
+  rejected: Colors.textTertiary};
 
 type RunState =
   | { kind: 'idle' }
@@ -283,8 +275,7 @@ export default function IVXDeveloperWorkspaceScreen() {
       await logDeveloperAction({
         actor: 'owner',
         action: 'senior_developer_preflight_check',
-        detail: `ready=${preflight.readyToRun} session=${preflight.ownerSessionPresent} segs=${preflight.tokenSegmentCount} jwt=${preflight.tokenLooksLikeSupabaseJwt} allow=${preflight.ownerEmailAllowlisted}`,
-      });
+        detail: `ready=${preflight.readyToRun} session=${preflight.ownerSessionPresent} segs=${preflight.tokenSegmentCount} jwt=${preflight.tokenLooksLikeSupabaseJwt} allow=${preflight.ownerEmailAllowlisted}`});
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(preflight.readyToRun ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
       }
@@ -328,8 +319,7 @@ export default function IVXDeveloperWorkspaceScreen() {
       void logDeveloperAction({
         actor: 'owner',
         action: 'file_inspected',
-        detail: `${file.path} (${file.kind})`,
-      });
+        detail: `${file.path} (${file.kind})`});
     },
     [],
   );
@@ -375,8 +365,7 @@ export default function IVXDeveloperWorkspaceScreen() {
       void logDeveloperAction({
         actor: 'system',
         action: 'safety_block_secret',
-        detail: findings.map((f) => f.name).join(', '),
-      });
+        detail: findings.map((f) => f.name).join(', ')});
       return;
     }
     if (findings.some((f) => f.kind === 'destructive')) {
@@ -397,8 +386,7 @@ export default function IVXDeveloperWorkspaceScreen() {
         void logDeveloperAction({
           actor: 'owner',
           action: 'destructive_canceled',
-          detail: findings.map((f) => f.name).join(', '),
-        });
+          detail: findings.map((f) => f.name).join(', ')});
         return;
       }
     }
@@ -420,9 +408,7 @@ export default function IVXDeveloperWorkspaceScreen() {
         mode: assistantMode,
         block: BLOCK18_DEVELOPER_WORKSPACE_MARKER,
         inputLength: trimmed.length,
-        attachedFile: attachedFile?.path ?? null,
-      },
-    }).catch(() => undefined);
+        attachedFile: attachedFile?.path ?? null}}).catch(() => undefined);
 
     try {
       const result = await requestAIReply(
@@ -437,8 +423,7 @@ export default function IVXDeveloperWorkspaceScreen() {
         model: result.model,
         source: result.source,
         ms: elapsed,
-        mode: assistantMode,
-      });
+        mode: assistantMode});
       void recordIVXOwnerChatAuditEvent({
         action: 'developer_workspace_response',
         conversationId: WORKSPACE_CONVERSATION_ID,
@@ -450,9 +435,7 @@ export default function IVXDeveloperWorkspaceScreen() {
           model: result.model,
           source: result.source,
           ms: elapsed,
-          answerLength: result.answer.length,
-        },
-      }).catch(() => undefined);
+          answerLength: result.answer.length}}).catch(() => undefined);
 
       if (assistantMode === 'propose_patch') {
         const parsed = tryParseAIPatchReply(result.answer);
@@ -476,9 +459,7 @@ export default function IVXDeveloperWorkspaceScreen() {
         metadata: {
           mode: assistantMode,
           block: BLOCK18_DEVELOPER_WORKSPACE_MARKER,
-          error: message.slice(0, 240),
-        },
-      }).catch(() => undefined);
+          error: message.slice(0, 240)}}).catch(() => undefined);
     }
   }, [assistantInput, assistantMode, assistantRun.kind, attachedFile, refreshPatches]);
 
@@ -500,8 +481,7 @@ export default function IVXDeveloperWorkspaceScreen() {
           {
             text: patch.destructive ? 'Approve destructive' : 'Approve',
             style: patch.destructive ? 'destructive' : 'default',
-            onPress: () => resolve(true),
-          },
+            onPress: () => resolve(true)},
         ]);
       });
       if (!ok) return;
@@ -531,16 +511,14 @@ export default function IVXDeveloperWorkspaceScreen() {
             onPress: async () => {
               await updatePatchStatus(patch.id, 'applied');
               await refreshPatches();
-            },
-          },
+            }},
           {
             text: 'Mark failed',
             style: 'destructive',
             onPress: async () => {
               await updatePatchStatus(patch.id, 'failed', { failedReason: 'owner_marked_failed' });
               await refreshPatches();
-            },
-          },
+            }},
         ],
       );
     },
@@ -555,13 +533,11 @@ export default function IVXDeveloperWorkspaceScreen() {
           commitMessage: `chore(ivx): apply approved patch ${patch.filePath}`,
           files: [patch.filePath],
           patchIds: [patch.id],
-          reason: `Promoted from workspace patch ${patch.id} :: ${patch.reason.slice(0, 200)}`,
-        });
+          reason: `Promoted from workspace patch ${patch.id} :: ${patch.reason.slice(0, 200)}`});
         await logDeveloperAction({
           actor: 'owner',
           action: 'promote_patch_to_github_commit',
-          detail: `${patch.filePath} -> approved-action ${action.id} (status=${action.status})`,
-        });
+          detail: `${patch.filePath} -> approved-action ${action.id} (status=${action.status})`});
         Alert.alert(
           'Promoted to Block 21',
           `Proposed GitHub commit action ${action.id} for ${patch.filePath}.\n\nOpen Approved Developer Actions to review and approve. Nothing is committed without explicit owner approval.`,
@@ -569,8 +545,7 @@ export default function IVXDeveloperWorkspaceScreen() {
             { text: 'Stay here', style: 'cancel' },
             {
               text: 'Open Approved Actions',
-              onPress: () => router.push('/admin/ivx-developer-actions' as any),
-            },
+              onPress: () => router.push('/admin/ivx-developer-actions' as any)},
           ],
         );
       } catch (err) {
@@ -590,8 +565,7 @@ export default function IVXDeveloperWorkspaceScreen() {
           onPress: async () => {
             await deletePatch(patch.id);
             await refreshPatches();
-          },
-        },
+          }},
       ]);
     },
     [refreshPatches],
@@ -606,8 +580,7 @@ export default function IVXDeveloperWorkspaceScreen() {
       await logDeveloperAction({
         actor: 'owner',
         action: 'senior_developer_credential_audit',
-        detail: `ok=${audit.ok} github=${audit.audit?.github?.canPush === true} render=${audit.audit?.render?.canDeploy === true}`,
-      });
+        detail: `ok=${audit.ok} github=${audit.audit?.github?.canPush === true} render=${audit.audit?.render?.canDeploy === true}`});
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(audit.ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
       }
@@ -634,8 +607,7 @@ export default function IVXDeveloperWorkspaceScreen() {
       await logDeveloperAction({
         actor: 'owner',
         action: 'owner_proof_gate_check',
-        detail: `status=${gate.status} access=${gate.accessGranted} runtime=${runtimeInfo.kind}`,
-      });
+        detail: `status=${gate.status} access=${gate.accessGranted} runtime=${runtimeInfo.kind}`});
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(gate.accessGranted ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
       }
@@ -695,14 +667,12 @@ export default function IVXDeveloperWorkspaceScreen() {
         filesAffected: seniorFilesAffected,
         riskLevel: seniorRiskLevel,
         rollbackOption,
-        validationMode: 'focused',
-      });
+        validationMode: 'focused'});
       setSeniorRun(result);
       await logDeveloperAction({
         actor: 'owner',
         action: 'senior_developer_owner_approved_run',
-        detail: `ownerVerified=${result.ownerApproval?.ownerVerified === true} commit=${result.proof?.githubCommitHash ?? 'none'} deploy=${result.proof?.renderDeployId ?? 'none'}`,
-      });
+        detail: `ownerVerified=${result.ownerApproval?.ownerVerified === true} commit=${result.proof?.githubCommitHash ?? 'none'} deploy=${result.proof?.renderDeployId ?? 'none'}`});
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(result.ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
       }
@@ -1052,7 +1022,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                 )}
                 {assistantRun.kind === 'running' && (
                   <View style={styles.outputIdle}>
-                    <ActivityIndicator size="small" color={Colors.green} />
+                    <ShimmerIndicator size="small" color={Colors.green} />
                     <Text style={styles.outputRunningText}>IVX IA is thinking…</Text>
                   </View>
                 )}
@@ -1137,7 +1107,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                     disabled={ownerProofGateLoading}
                     testID="ivx-owner-proof-gate-check"
                   >
-                    {ownerProofGateLoading ? <ActivityIndicator size="small" color={Colors.green} /> : <ShieldCheck size={12} color={Colors.green} />}
+                    {ownerProofGateLoading ? <ShimmerIndicator size="small" color={Colors.green} /> : <ShieldCheck size={12} color={Colors.green} />}
                     <Text style={styles.smallBtnText}>{ownerProofGateLoading ? 'Checking…' : 'Check owner-proof gate'}</Text>
                   </Pressable>
                   {ownerProofGate && !ownerProofGate.accessGranted && ownerProofGate.loginPath ? (
@@ -1286,7 +1256,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                     disabled={seniorPreflightLoading || seniorRunLoading}
                     testID="ivx-senior-developer-preflight-check"
                   >
-                    {seniorPreflightLoading ? <ActivityIndicator size="small" color={Colors.green} /> : <ShieldCheck size={12} color={Colors.green} />}
+                    {seniorPreflightLoading ? <ShimmerIndicator size="small" color={Colors.green} /> : <ShieldCheck size={12} color={Colors.green} />}
                     <Text style={styles.smallBtnText}>{seniorPreflightLoading ? 'Checking…' : 'Run preflight check'}</Text>
                   </Pressable>
                 </View>
@@ -1297,7 +1267,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                     disabled={seniorAuditLoading || seniorRunLoading}
                     testID="ivx-senior-developer-audit"
                   >
-                    {seniorAuditLoading ? <ActivityIndicator size="small" color={Colors.green} /> : <ShieldCheck size={12} color={Colors.green} />}
+                    {seniorAuditLoading ? <ShimmerIndicator size="small" color={Colors.green} /> : <ShieldCheck size={12} color={Colors.green} />}
                     <Text style={styles.smallBtnText}>{seniorAuditLoading ? 'Auditing…' : 'Audit owner + credentials'}</Text>
                   </Pressable>
                   <Pressable
@@ -1306,7 +1276,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                     disabled={!seniorGoal.trim() || !seniorProposedPlan.trim() || seniorFilesAffected.length === 0 || !seniorRollbackOption.trim() || !seniorRunGateReady || seniorAuditLoading || seniorRunLoading}
                     testID="ivx-senior-developer-owner-approve-run"
                   >
-                    {seniorRunLoading ? <ActivityIndicator size="small" color={Colors.background} /> : <Rocket size={12} color={Colors.background} />}
+                    {seniorRunLoading ? <ShimmerIndicator size="small" color={Colors.background} /> : <Rocket size={12} color={Colors.background} />}
                     <Text style={styles.smallBtnTextDark}>{seniorRunLoading ? 'Running…' : 'Approve + run commit/deploy'}</Text>
                   </Pressable>
                 </View>
@@ -1332,7 +1302,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                   disabled={!seniorRunGateReady || seniorRunLoading || seniorPreflightLoading}
                   testID="ivx-senior-developer-run-button"
                 >
-                  {seniorRunLoading ? <ActivityIndicator size="small" color={Colors.background} /> : <Rocket size={14} color={Colors.background} />}
+                  {seniorRunLoading ? <ShimmerIndicator size="small" color={Colors.background} /> : <Rocket size={14} color={Colors.background} />}
                   <Text style={styles.runSeniorBtnText}>{seniorRunLoading ? 'Running Senior Developer…' : 'Run Senior Developer'}</Text>
                 </Pressable>
                 {seniorAudit || seniorRun || seniorError ? (
@@ -1380,7 +1350,7 @@ export default function IVXDeveloperWorkspaceScreen() {
                 </Pressable>
               </View>
 
-              {patchesLoading ? <ActivityIndicator size="small" color={Colors.green} /> : null}
+              {patchesLoading ? <ShimmerIndicator size="small" color={Colors.green} /> : null}
 
               {patches.length === 0 && !patchesLoading ? (
                 <View style={styles.emptyCard}>
@@ -1583,8 +1553,7 @@ const styles = StyleSheet.create({
     gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    backgroundColor: '#0A0F0A',
-  },
+    backgroundColor: '#0A0F0A'},
   backBtn: {
     width: 36,
     height: 36,
@@ -1593,8 +1562,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   headerDebugBtn: {
     width: 36,
     height: 36,
@@ -1604,8 +1572,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginRight: 8,
-  },
+    marginRight: 8},
   headerTitleWrap: { flex: 1 },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' as const, letterSpacing: 0.2 },
@@ -1613,8 +1580,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 11,
     marginTop: 2,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1624,8 +1590,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.35)',
-    backgroundColor: 'rgba(34,197,94,0.08)',
-  },
+    backgroundColor: 'rgba(34,197,94,0.08)'},
   headerBadgeText: { color: Colors.green, fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.6 },
   safeDefaultBtn: {
     flexDirection: 'row',
@@ -1637,8 +1602,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.35)',
     backgroundColor: 'rgba(34,197,94,0.08)',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   safeDefaultBtnText: { color: Colors.green, fontSize: 11, fontWeight: '700' as const, flex: 1 },
   tabBar: {
     flexDirection: 'row',
@@ -1648,8 +1612,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    backgroundColor: '#080C08',
-  },
+    backgroundColor: '#080C08'},
   tabItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1659,8 +1622,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   tabItemActive: { backgroundColor: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.4)' },
   tabLabel: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const },
   tabLabelActive: { color: Colors.green },
@@ -1675,8 +1637,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: { flex: 1, color: Colors.text, fontSize: 13, padding: 0 },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   filterScroll: { gap: 6, paddingRight: 16 },
@@ -1686,8 +1647,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.45)' },
   filterChipText: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const },
   filterChipTextActive: { color: Colors.green },
@@ -1698,8 +1658,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginTop: 4,
-  },
+    marginTop: 4},
   fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1709,8 +1668,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   fileRowActive: { borderColor: 'rgba(34,197,94,0.5)', backgroundColor: 'rgba(34,197,94,0.05)' },
   fileRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 78 },
   fileRowMain: { flex: 1, gap: 2 },
@@ -1720,30 +1678,26 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: 'rgba(34,197,94,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-  },
+    borderColor: 'rgba(34,197,94,0.25)'},
   fileKindText: { color: Colors.green, fontSize: 9, fontWeight: '700' as const, letterSpacing: 0.5 },
   fileTitle: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
   filePath: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   detailCard: {
     padding: 14,
     borderRadius: 12,
     backgroundColor: '#0B130C',
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.3)',
-    gap: 8,
-  },
+    gap: 8},
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailHeaderText: {
     flex: 1,
     color: Colors.green,
     fontSize: 11,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   detailTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   detailSummary: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
@@ -1753,8 +1707,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   tagText: { color: Colors.textSecondary, fontSize: 10 },
   askBtn: {
     flexDirection: 'row',
@@ -1764,27 +1717,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: Colors.green,
-    marginTop: 4,
-  },
+    marginTop: 4},
   askBtnText: { color: Colors.background, fontSize: 13, fontWeight: '700' as const },
   heroCard: {
     padding: 14,
     borderRadius: 14,
     backgroundColor: '#0B130C',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-  },
+    borderColor: 'rgba(34,197,94,0.25)'},
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   heroPrompt: {
     color: Colors.green,
     fontSize: 12,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   heroBranch: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   heroText: { color: Colors.text, fontSize: 13, lineHeight: 19 },
   templateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   templateCard: {
@@ -1794,8 +1743,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
+    gap: 6},
   templateCardActive: { backgroundColor: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.55)' },
   templateIcon: {
     width: 24,
@@ -1803,8 +1751,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(34,197,94,0.1)',
-  },
+    backgroundColor: 'rgba(34,197,94,0.1)'},
   templateIconActive: { backgroundColor: Colors.green },
   templateLabel: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
   templateLabelActive: { color: Colors.green },
@@ -1818,16 +1765,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(34,197,94,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-  },
+    borderColor: 'rgba(34,197,94,0.25)'},
   attachedText: { flex: 1, color: Colors.green, fontSize: 11 },
   inputCard: {
     borderRadius: 12,
     backgroundColor: '#0A0F0A',
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   inputHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1836,13 +1781,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    backgroundColor: '#080C08',
-  },
+    backgroundColor: '#080C08'},
   inputHeaderText: {
     color: Colors.green,
     fontSize: 11,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   inputHeaderMeta: { color: Colors.textTertiary, fontSize: 10 },
   inputField: {
     minHeight: 140,
@@ -1852,8 +1795,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     textAlignVertical: 'top',
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   safetyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1862,8 +1804,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(245,158,11,0.08)',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(245,158,11,0.3)',
-  },
+    borderTopColor: 'rgba(245,158,11,0.3)'},
   safetyText: { flex: 1, color: Colors.warning, fontSize: 11 },
   inputActions: {
     flexDirection: 'row',
@@ -1872,8 +1813,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    backgroundColor: '#080C08',
-  },
+    backgroundColor: '#080C08'},
   runBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1881,8 +1821,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: Colors.green,
-  },
+    backgroundColor: Colors.green},
   runBtnDisabled: { backgroundColor: 'rgba(34,197,94,0.35)' },
   cancelBtn: { backgroundColor: Colors.error },
   runBtnText: { color: Colors.text, fontWeight: '700' as const, fontSize: 13 },
@@ -1893,8 +1832,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#0A0F0A',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   outputIdle: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 28, justifyContent: 'center' },
   outputIdleText: { color: Colors.textTertiary, fontSize: 12 },
   outputRunningText: { color: Colors.green, fontSize: 12, fontWeight: '600' as const },
@@ -1908,13 +1846,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   outputMetaPillText: {
     color: Colors.textSecondary,
     fontSize: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   copyBtn: {
     marginLeft: 'auto',
     flexDirection: 'row',
@@ -1925,15 +1861,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(34,197,94,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.3)',
-  },
+    borderColor: 'rgba(34,197,94,0.3)'},
   copyBtnText: { color: Colors.green, fontSize: 11, fontWeight: '600' as const },
   outputBody: {
     color: Colors.text,
     fontSize: 13,
     lineHeight: 20,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   smallBtn: {
     flexDirection: 'row',
@@ -1944,8 +1878,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   smallBtnPrimary: { backgroundColor: Colors.green, borderColor: Colors.green },
   dangerBtn: { backgroundColor: Colors.error, borderColor: Colors.error },
   buttonDisabled: { opacity: 0.55 },
@@ -1957,8 +1890,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#100A0A',
     borderWidth: 1,
     borderColor: 'rgba(239,68,68,0.34)',
-    gap: 10,
-  },
+    gap: 10},
   ownerApprovalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   ownerApprovalIcon: {
     width: 30,
@@ -1966,8 +1898,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   ownerApprovalTitleWrap: { flex: 1, gap: 3 },
   ownerApprovalTitle: { color: Colors.text, fontSize: 14, fontWeight: '800' as const },
   ownerApprovalSubtitle: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16 },
@@ -1977,8 +1908,7 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    marginTop: 2,
-  },
+    marginTop: 2},
   ownerApprovalInput: {
     minHeight: 76,
     paddingHorizontal: 10,
@@ -1990,8 +1920,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     textAlignVertical: 'top',
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   ownerApprovalPlanInput: { minHeight: 120 },
   riskPickerRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   riskPill: {
@@ -2000,8 +1929,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#070707',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   riskPillActive: { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.48)' },
   riskPillText: { color: Colors.textTertiary, fontSize: 11, fontWeight: '700' as const },
   riskPillTextActive: { color: Colors.green },
@@ -2011,8 +1939,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(34,197,94,0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.18)',
-  },
+    borderColor: 'rgba(34,197,94,0.18)'},
   ownerApprovalChecklistRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ownerApprovalChecklistText: { color: Colors.textSecondary, fontSize: 11 },
   ownerProofGrid: {
@@ -2021,13 +1948,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#070707',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   ownerProofText: {
     color: Colors.textSecondary,
     fontSize: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   ownerProofError: { color: Colors.warning, fontSize: 11, lineHeight: 16 },
   ownerApprovalNote: { color: Colors.textTertiary, fontSize: 11, lineHeight: 16 },
   preflightCard: {
@@ -2036,8 +1961,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#070707',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.22)',
-  },
+    borderColor: 'rgba(34,197,94,0.22)'},
   preflightHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   preflightTitle: { color: Colors.text, fontSize: 12, fontWeight: '800' as const, flex: 1 },
   preflightVerdict: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
@@ -2056,8 +1980,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.green,
     borderWidth: 1,
-    borderColor: Colors.green,
-  },
+    borderColor: Colors.green},
   runSeniorBtnText: { color: Colors.background, fontSize: 14, fontWeight: '800' as const, letterSpacing: 0.3 },
   seniorGateBanner: {
     flexDirection: 'row',
@@ -2065,8 +1988,7 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 11,
     borderRadius: 10,
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   seniorGateBannerText: { flex: 1, color: Colors.background, fontSize: 12, fontWeight: '700' as const },
   emptyCard: {
     flexDirection: 'row',
@@ -2077,8 +1999,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emptyText: { color: Colors.textTertiary, fontSize: 12 },
   patchCard: {
     padding: 12,
@@ -2086,8 +2007,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   patchHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   patchStatus: { color: Colors.text, fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5 },
@@ -2102,14 +2022,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: 'rgba(239,68,68,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.4)',
-  },
+    borderColor: 'rgba(239,68,68,0.4)'},
   destructiveText: { color: Colors.error, fontSize: 9, fontWeight: '700' as const },
   patchPath: {
     color: Colors.green,
     fontSize: 12,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   patchReason: { color: Colors.text, fontSize: 13, lineHeight: 18 },
   patchBeforeAfter: { flexDirection: 'row', gap: 8 },
   patchBA: {
@@ -2119,8 +2037,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0F0A',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   patchBALabel: { color: Colors.textTertiary, fontSize: 9, fontWeight: '700' as const, letterSpacing: 0.5 },
   patchBAText: { color: Colors.textSecondary, fontSize: 11, lineHeight: 15 },
   diffBox: {
@@ -2128,14 +2045,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#06090A',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   diffText: {
     color: Colors.text,
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   patchActions: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   logCard: {
     padding: 10,
@@ -2143,8 +2058,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0F0A',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
+    gap: 6},
   logRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   logActor: { color: Colors.textTertiary, fontSize: 10, fontWeight: '700' as const },
   logAction: { color: Colors.green, fontSize: 10, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) },
@@ -2158,8 +2072,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     gap: 4,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   statusDotLarge: { width: 10, height: 10, borderRadius: 5 },
   statusCount: { color: Colors.text, fontSize: 18, fontWeight: '700' as const },
   statusLabel: { color: Colors.textTertiary, fontSize: 10, letterSpacing: 0.5 },
@@ -2170,14 +2083,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: Colors.green,
-  },
+    backgroundColor: Colors.green},
   bigBtnText: { color: Colors.background, fontSize: 13, fontWeight: '700' as const },
   footerNote: {
     color: Colors.textTertiary,
     fontSize: 10,
     textAlign: 'center',
     marginTop: 8,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
-});
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })}});

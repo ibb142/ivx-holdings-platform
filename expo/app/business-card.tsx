@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   Image,
   Animated,
-  Share,
-} from 'react-native';
+  Share} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -22,8 +21,7 @@ import {
   Mail,
   MapPin,
   Globe,
-  QrCode,
-} from 'lucide-react-native';
+  QrCode} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import IVXBrandLogo from '@/components/IVXBrandLogo';
 import QRCodeView from '@/components/QRCodeView';
@@ -84,8 +82,7 @@ export default function BusinessCardScreen() {
       await Share.share({
         title: 'IVX Holdings - Smart Investing Platform',
         message: 'Check out IVX Holdings - Smart Investing Platform\n\nInvest in real estate from $50\n\nInstagram: @IVXInvesting\nWebsite: ivxholding.com\nEmail: investors@ivxholding.com\nLinkedIn: linkedin.com/company/ivxholdings',
-        url: 'https://ivxholding.com',
-      });
+        url: 'https://ivxholding.com'});
     } catch (e) {
       console.log('[BusinessCard] Share failed:', e);
     }
@@ -231,28 +228,23 @@ export default function BusinessCardScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   scrollContent: {
     paddingTop: 16,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   cardContainer: {
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   cardWrapper: {
     position: 'relative' as const,
     borderRadius: 20,
     overflow: 'hidden' as const,
     borderWidth: 1,
     borderColor: GOLD + '20',
-    backgroundColor: '#050505',
-  },
+    backgroundColor: '#050505'},
   cardImage: {
     width: '100%',
     aspectRatio: 1.78,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   scanBadge: {
     position: 'absolute' as const,
     top: 12,
@@ -265,37 +257,31 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: GOLD + '30',
-  },
+    borderColor: GOLD + '30'},
   scanBadgeText: {
     color: GOLD,
     fontSize: 9,
     fontWeight: '700' as const,
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   cardActions: {
     flexDirection: 'row' as const,
     gap: 10,
-    marginTop: 16,
-  },
+    marginTop: 16},
   shareBtn: {
     flex: 1,
     borderRadius: 14,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   shareBtnGrad: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   shareBtnText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   openAppBtn: {
     flex: 1,
     flexDirection: 'row' as const,
@@ -306,26 +292,21 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: GOLD + '25',
-  },
+    borderColor: GOLD + '25'},
   openAppBtnText: {
     color: GOLD,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   socialSection: {
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   sectionLabel: {
     color: '#666',
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 2,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   socialGrid: {
-    gap: 8,
-  },
+    gap: 8},
   socialCard: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -335,39 +316,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#1A1A1A',
-    gap: 12,
-  },
+    gap: 12},
   socialIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 13,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   socialInfo: {
-    flex: 1,
-  },
+    flex: 1},
   socialPlatform: {
     color: '#888',
     fontSize: 11,
     fontWeight: '600' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   socialHandle: {
     color: '#eee',
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   contactSection: {
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   contactList: {
     backgroundColor: SURFACE,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1A1A1A',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   contactRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -375,50 +349,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
-  },
+    borderBottomColor: '#1A1A1A'},
   contactIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   contactText: {
     flex: 1,
     color: '#ccc',
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   companyBranding: {
     alignItems: 'center' as const,
     paddingVertical: 24,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A1A',
-  },
+    borderTopColor: '#1A1A1A'},
   companyLogo: {
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   companyName: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '800' as const,
     letterSpacing: 2,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   companyTagline: {
     color: GOLD,
     fontSize: 12,
     fontWeight: '600' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   companyLegal: {
     color: '#444',
-    fontSize: 10,
-  },
+    fontSize: 10},
   qrPreviewSection: {
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   qrPreviewCard: {
     flexDirection: 'row' as const,
     backgroundColor: SURFACE,
@@ -427,40 +392,31 @@ const styles = StyleSheet.create({
     borderColor: GOLD + '20',
     padding: 16,
     gap: 16,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   qrPreviewLeft: {
     borderRadius: 12,
     overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: GOLD + '25',
-  },
+    borderColor: GOLD + '25'},
   qrPreviewRight: {
-    flex: 1,
-  },
+    flex: 1},
   qrPreviewTitle: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   qrPreviewDesc: {
     color: '#888',
     fontSize: 12,
     lineHeight: 17,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   qrPreviewAction: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 4,
-  },
+    gap: 4},
   qrPreviewActionText: {
     color: GOLD,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bottomPad: {
-    height: 40,
-  },
-});
+    height: 40}});

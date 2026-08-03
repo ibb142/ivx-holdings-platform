@@ -1,15 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
   Animated,
   Alert,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -33,14 +30,13 @@ import {
   ChevronDown,
   Camera,
   Upload,
-  Trash2,
-} from 'lucide-react-native';
+  Trash2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import type {
   IntakeProofOfFundsFile,
   InvestorDocumentType,
-  InvestorEntityType,
-} from '@/lib/investor-intake';
+  InvestorEntityType} from '@/lib/investor-intake';
 import {
   ACCREDITED_STATUS_OPTIONS,
   CALL_TIME_OPTIONS,
@@ -51,8 +47,7 @@ import {
   INVESTOR_MEMBER_AGREEMENT_SECTIONS,
   INVESTOR_MEMBER_AGREEMENT_VERSION,
   INVESTOR_TIMELINE_STEPS,
-  RETURN_EXPECTATION_OPTIONS,
-} from '@/lib/investor-intake';
+  RETURN_EXPECTATION_OPTIONS} from '@/lib/investor-intake';
 import {
   getErrorMessage,
   isFormValid,
@@ -62,8 +57,7 @@ import {
   uploadProofOfFundsFile,
   validateEmail,
   validatePhone,
-  verifyOtp,
-} from '@/lib/waitlist-service';
+  verifyOtp} from '@/lib/waitlist-service';
 
 interface InvestorIntakeFormProps {
   variant: 'landing' | 'screen';
@@ -127,22 +121,19 @@ const MEMBER_ACCESS_ITEMS = [
     title: 'Member sign up',
     description: 'Create a real investor profile with verified contact information before activation.',
     icon: Building2,
-    accent: Colors.primary,
-  },
+    accent: Colors.primary},
   {
     id: 'wallet',
     title: 'Wallet readiness',
     description: 'Funding methods and wallet access are prepared before live allocations begin.',
     icon: Wallet,
-    accent: Colors.info,
-  },
+    accent: Colors.info},
   {
     id: 'records',
     title: 'Transaction records',
     description: 'Statements, transaction records, and timelines are kept visible for each member account.',
     icon: BarChart3,
-    accent: Colors.success,
-  },
+    accent: Colors.success},
 ] as const;
 
 export default function InvestorIntakeForm({ variant, source, pagePath, testIdPrefix }: InvestorIntakeFormProps) {
@@ -170,8 +161,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
     companyTaxId: '',
     companyRegistrationCountry: '',
     beneficialOwnerName: '',
-    signatureName: '',
-  });
+    signatureName: ''});
   const [activeDropdown, setActiveDropdown] = useState<DropdownField | null>(null);
   const [contactConsent, setContactConsent] = useState<boolean>(true);
   const [taxResponsibilityAccepted, setTaxResponsibilityAccepted] = useState<boolean>(false);
@@ -213,8 +203,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
         utm_medium: params.get('utm_medium') || '',
         utm_campaign: params.get('utm_campaign') || '',
         utm_content: params.get('utm_content') || '',
-        utm_term: params.get('utm_term') || '',
-      };
+        utm_term: params.get('utm_term') || ''};
     }
 
     return {
@@ -224,8 +213,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
       utm_medium: '',
       utm_campaign: '',
       utm_content: '',
-      utm_term: '',
-    };
+      utm_term: ''};
   }, [pagePath]);
 
   useEffect(() => {
@@ -255,18 +243,15 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
     if (field === 'accreditedStatus') {
       setForm((prev) => ({
         ...prev,
-        accreditedStatus: value as InvestorFormState['accreditedStatus'],
-      }));
+        accreditedStatus: value as InvestorFormState['accreditedStatus']}));
     } else if (field === 'primaryIdType') {
       setForm((prev) => ({
         ...prev,
-        primaryIdType: value as InvestorDocumentType,
-      }));
+        primaryIdType: value as InvestorDocumentType}));
     } else if (field === 'secondaryIdType') {
       setForm((prev) => ({
         ...prev,
-        secondaryIdType: value as InvestorDocumentType,
-      }));
+        secondaryIdType: value as InvestorDocumentType}));
     } else {
       setForm((prev) => ({ ...prev, [field]: value }));
     }
@@ -352,8 +337,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
         multiple: false,
-        copyToCacheDirectory: true,
-      });
+        copyToCacheDirectory: true});
 
       if (result.canceled) {
         return;
@@ -369,8 +353,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
         name: asset.name || 'proof-of-funds',
         mimeType: asset.mimeType ?? null,
         size: asset.size ?? null,
-        source: 'document_picker',
-      };
+        source: 'document_picker'};
 
       setProofOfFunds(nextFile);
       console.log('[InvestorIntake] Proof of funds selected:', nextFile.name);
@@ -391,8 +374,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
       name: asset.fileName ?? fallbackName,
       mimeType: asset.mimeType ?? 'image/jpeg',
       size: asset.fileSize ?? null,
-      source: sourceType,
-    };
+      source: sourceType};
   }, []);
 
   const pickComplianceImage = useCallback(async (
@@ -422,8 +404,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.85,
-      };
+        quality: 0.85};
 
       const result = sourceType === 'camera'
         ? await ImagePicker.launchCameraAsync(pickerOptions)
@@ -605,8 +586,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
           utm_campaign: attribution.utm_campaign,
           utm_content: attribution.utm_content,
           utm_term: attribution.utm_term,
-          referrer: attribution.referrer,
-        });
+          referrer: attribution.referrer});
 
         if (!result.success || !result.confirmedWrite || !result.persistedId) {
           console.log('[InvestorIntake] Submission was not confirmed by persistence layer:', result);
@@ -631,8 +611,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
       setProofUploadPending(false);
       setIdentityUploadPending(false);
       setFormError(getErrorMessage(err.message as any));
-    },
-  });
+    }});
 
   const handleSubmit = useCallback(() => {
     setFormError('');
@@ -819,7 +798,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
             activeOpacity={0.75}
             testID={`${testIdPrefix}-send-otp`}
           >
-            {otpSending ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.otpActionText}>{otpCooldown > 0 ? `${otpCooldown}s` : otpSent ? 'Resend' : 'Send OTP'}</Text>}
+            {otpSending ? <ShimmerIndicator size="small" color="#000" /> : <Text style={styles.otpActionText}>{otpCooldown > 0 ? `${otpCooldown}s` : otpSent ? 'Resend' : 'Send OTP'}</Text>}
           </TouchableOpacity>
         ) : null}
       </View>
@@ -845,7 +824,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
             activeOpacity={0.75}
             testID={`${testIdPrefix}-verify-otp`}
           >
-            {otpVerifying ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.verifyButtonText}>Verify</Text>}
+            {otpVerifying ? <ShimmerIndicator size="small" color="#000" /> : <Text style={styles.verifyButtonText}>Verify</Text>}
           </TouchableOpacity>
         </View>
       ) : null}
@@ -1219,7 +1198,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
           <Text style={styles.proofButtonText}>{proofOfFunds?.name || 'Select document'}</Text>
           <ArrowRight size={14} color={Colors.primary} />
         </TouchableOpacity>
-        {proofUploadPending ? <ActivityIndicator size="small" color={Colors.primary} style={styles.proofSpinner} /> : null}
+        {proofUploadPending ? <ShimmerIndicator size="small" color={Colors.primary} style={styles.proofSpinner} /> : null}
       </View>
 
       <Text style={styles.sectionLabel}>Member access once approved</Text>
@@ -1313,7 +1292,7 @@ export default function InvestorIntakeForm({ variant, source, pagePath, testIdPr
         testID={`${testIdPrefix}-submit`}
       >
         {submitMutation.isPending || proofUploadPending || identityUploadPending ? (
-          <ActivityIndicator size="small" color="#000" />
+          <ShimmerIndicator size="small" color="#000" />
         ) : (
           <>
             <Text style={styles.primarySubmitText}>Save Investor Waitlist Profile</Text>
@@ -1335,8 +1314,7 @@ function DropdownRow({
   isPlaceholder,
   isOpen,
   onPress,
-  testID,
-}: {
+  testID}: {
   icon: typeof DollarSign;
   label: string;
   isPlaceholder: boolean;
@@ -1356,8 +1334,7 @@ function DropdownRow({
 function DropdownList({
   options,
   selectedValue,
-  onSelect,
-}: {
+  onSelect}: {
   options: string[];
   selectedValue: string;
   onSelect: (value: string) => void;
@@ -1385,8 +1362,7 @@ function DocumentUploadCard({
   onGalleryPress,
   onClearPress,
   pending,
-  testIDPrefix,
-}: {
+  testIDPrefix}: {
   title: string;
   description: string;
   selectedFile: IntakeProofOfFundsFile | null;
@@ -1411,7 +1387,7 @@ function DocumentUploadCard({
           <FileText size={16} color={Colors.primary} />
           <Text style={styles.documentUploadTitle}>{title}</Text>
         </View>
-        {pending ? <ActivityIndicator size="small" color={Colors.primary} /> : null}
+        {pending ? <ShimmerIndicator size="small" color={Colors.primary} /> : null}
       </View>
       <Text style={styles.documentUploadDescription}>{description}</Text>
       <View style={styles.documentUploadButtonsRow}>
@@ -1441,21 +1417,16 @@ function DocumentUploadCard({
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-  },
+    width: '100%'},
   surfaceLanding: {
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   surfaceScreen: {
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   row: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   halfField: {
-    flex: 1,
-  },
+    flex: 1},
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1466,62 +1437,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 52,
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   input: {
     flex: 1,
     height: 52,
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   otpRow: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   otpPhoneWrap: {
-    flex: 1,
-  },
+    flex: 1},
   otpActionButton: {
     height: 52,
     paddingHorizontal: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   otpActionText: {
     color: '#000',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   otpVerifyWrap: {
     flexDirection: 'row',
     gap: 8,
     alignItems: 'flex-start',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   otpInputWrap: {
     flex: 1,
-    marginBottom: 0,
-  },
+    marginBottom: 0},
   verifyButton: {
     height: 52,
     paddingHorizontal: 18,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   verifyButtonText: {
     color: '#000',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   buttonDisabled: {
-    opacity: 0.45,
-  },
+    opacity: 0.45},
   verifiedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1532,13 +1492,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '25',
     paddingHorizontal: 12,
     paddingVertical: 9,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   verifiedBannerText: {
     color: Colors.success,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   sectionLabel: {
     color: Colors.primary,
     fontSize: 11,
@@ -1546,32 +1504,27 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginTop: 12,
     marginBottom: 10,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   complianceIntroCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   complianceIntroTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   complianceIntroText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   entitySwitchRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   entitySwitchButton: {
     flex: 1,
     borderRadius: 14,
@@ -1581,27 +1534,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   entitySwitchButtonActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   entitySwitchText: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '700' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   entitySwitchTextActive: {
-    color: '#000',
-  },
+    color: '#000'},
   subsectionHint: {
     color: Colors.textTertiary,
     fontSize: 12,
     lineHeight: 18,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   dropdownTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1612,17 +1560,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 52,
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   dropdownText: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   dropdownPlaceholder: {
-    color: Colors.inputPlaceholder,
-  },
+    color: Colors.inputPlaceholder},
   dropdownList: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
@@ -1630,8 +1575,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     marginBottom: 10,
-    marginTop: -4,
-  },
+    marginTop: -4},
   dropdownOption: {
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -1639,59 +1583,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   dropdownOptionActive: {
-    backgroundColor: Colors.primary + '12',
-  },
+    backgroundColor: Colors.primary + '12'},
   dropdownOptionText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   dropdownOptionTextActive: {
     color: Colors.primary,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   documentUploadsWrap: {
     gap: 10,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   documentUploadCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 16,
-  },
+    padding: 16},
   documentUploadHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   documentUploadTitleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
-  },
+    flex: 1},
   documentUploadTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   documentUploadDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   documentUploadButtonsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 12,
-  },
+    marginTop: 12},
   documentUploadButton: {
     flex: 1,
     flexDirection: 'row',
@@ -1703,13 +1636,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '30',
     backgroundColor: Colors.primary + '08',
     paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   documentUploadButtonText: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   documentUploadMetaCard: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1720,22 +1651,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '30',
     backgroundColor: Colors.success + '10',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   documentUploadMetaCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   documentUploadFileName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   documentUploadMetaText: {
     color: Colors.success,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   documentUploadClearButton: {
     width: 34,
     height: 34,
@@ -1744,42 +1671,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.error + '10',
     borderWidth: 1,
-    borderColor: Colors.error + '20',
-  },
+    borderColor: Colors.error + '20'},
   proofCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    marginTop: 4,
-  },
+    marginTop: 4},
   proofHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   proofTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   proofTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   proofOptional: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   proofDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   proofButton: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1790,112 +1710,92 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '30',
     backgroundColor: Colors.primary + '08',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   proofButtonText: {
     color: Colors.primary,
     fontSize: 13,
     fontWeight: '700' as const,
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   proofSpinner: {
-    marginTop: 10,
-  },
+    marginTop: 10},
   readinessGrid: {
-    gap: 10,
-  },
+    gap: 10},
   readinessCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 16,
-  },
+    padding: 16},
   readinessIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   readinessTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   readinessDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   timelineCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   timelineRow: {
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   timelineRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   timelineDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
     marginTop: 5,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   timelineCopy: {
-    flex: 1,
-  },
+    flex: 1},
   timelineLabel: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   timelineDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   agreementCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    gap: 12,
-  },
+    gap: 12},
   agreementRow: {
-    gap: 6,
-  },
+    gap: 6},
   agreementTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   agreementText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginTop: 12,
-  },
+    marginTop: 12},
   checkbox: {
     width: 22,
     height: 22,
@@ -1905,31 +1805,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inputBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   checkboxChecked: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   checkboxText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   messageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   messageErrorText: {
     flex: 1,
     color: Colors.error,
     fontSize: 12,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   primarySubmitButton: {
     height: 56,
     borderRadius: 16,
@@ -1938,46 +1833,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 16,
-  },
+    marginTop: 16},
   primarySubmitText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   secondaryLinkButton: {
     alignSelf: 'center',
     marginTop: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   secondaryLinkText: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '600' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   successWrap: {
     alignItems: 'center',
-    paddingVertical: 24,
-  },
+    paddingVertical: 24},
   successIconWrap: {
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   successTitle: {
     color: Colors.text,
     fontSize: 25,
     fontWeight: '900' as const,
     textAlign: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   successSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   successCard: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1986,17 +1873,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   successCardLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   successCardValue: {
     color: Colors.primary,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

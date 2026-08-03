@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   Alert,
   TextInput,
   Modal,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import {
@@ -27,35 +24,31 @@ import {
   AlertTriangle,
   Hash,
   Users,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   titleCompanies as mockCompanies,
   titleCompanyAssignments as mockAssignments,
-  propertyDocumentSubmissions,
-} from '@/mocks/title-company';
+  propertyDocumentSubmissions} from '@/mocks/title-company';
 import {
   TitleCompany,
   TitleCompanyAssignment,
-  TitleCompanyStatus,
-} from '@/types';
+  TitleCompanyStatus} from '@/types';
 
 type TabType = 'companies' | 'assignments';
 
 const STATUS_COLORS: Record<TitleCompanyStatus, string> = {
   active: Colors.success,
   inactive: Colors.textTertiary,
-  pending_verification: Colors.warning,
-};
+  pending_verification: Colors.warning};
 
 const ASSIGNMENT_COLORS: Record<string, string> = {
   assigned: Colors.info,
   in_review: Colors.warning,
   completed: Colors.success,
-  revoked: Colors.error,
-};
+  revoked: Colors.error};
 
 export default function TitleCompaniesScreen() {
   const router = useRouter();
@@ -77,8 +70,7 @@ export default function TitleCompaniesScreen() {
     address: '',
     city: '',
     state: '',
-    licenseNumber: '',
-  });
+    licenseNumber: ''});
 
   const filteredCompanies = companies.filter(
     (c) =>
@@ -123,8 +115,7 @@ export default function TitleCompaniesScreen() {
         titleCompanyName: company.name,
         assignedAt: new Date().toISOString(),
         assignedBy: 'Admin Owner',
-        status: 'assigned',
-      };
+        status: 'assigned'};
 
       setAssignments((prev) => [...prev, newAssignment]);
       setAssigning(false);
@@ -160,8 +151,7 @@ export default function TitleCompaniesScreen() {
             if (Platform.OS !== 'web') {
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             }
-          },
-        },
+          }},
       ]
     );
   }, [assignments]);
@@ -179,8 +169,7 @@ export default function TitleCompaniesScreen() {
       assignedProperties: [],
       completedReviews: 0,
       averageReviewDays: 0,
-      createdAt: new Date().toISOString(),
-    };
+      createdAt: new Date().toISOString()};
 
     setCompanies((prev) => [...prev, company]);
     setShowAddCompanyModal(false);
@@ -474,7 +463,7 @@ export default function TitleCompaniesScreen() {
               disabled={!selectedProperty || !selectedCompany || assigning}
             >
               {assigning ? (
-                <ActivityIndicator size="small" color={Colors.background} />
+                <ShimmerIndicator size="small" color={Colors.background} />
               ) : (
                 <Text style={styles.modalSubmitBtnText}>Assign Title Company</Text>
               )}
@@ -657,5 +646,4 @@ const styles = StyleSheet.create({
   formGroup: { gap: 6, marginBottom: 12 },
   formLabel: { color: Colors.textSecondary, fontSize: 13 },
   formInput: { backgroundColor: Colors.surface, borderRadius: 12, padding: 14, color: Colors.text, fontSize: 16, borderWidth: 1, borderColor: Colors.surfaceBorder },
-  formRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-});
+  formRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }});

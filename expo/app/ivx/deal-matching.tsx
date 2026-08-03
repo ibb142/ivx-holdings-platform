@@ -2,14 +2,12 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Banknote,
   Building,
@@ -19,23 +17,21 @@ import {
   Handshake,
   MapPin,
   ShoppingBag,
-  TrendingUp,
-} from 'lucide-react-native';
+  TrendingUp} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getDealMatching,
   MATCH_ROLES,
   type DealMatch,
   type DealMatchSet,
   type DealMatchingResult,
-  type MatchRole,
-} from '@/src/modules/ivx-developer/dealMatchingService';
+  type MatchRole} from '@/src/modules/ivx-developer/dealMatchingService';
 
 const ROLE_LABEL: Record<MatchRole, string> = {
-  investor: 'Investor', buyer: 'Buyer', lender: 'Lender', partner: 'Partner',
-};
+  investor: 'Investor', buyer: 'Buyer', lender: 'Lender', partner: 'Partner'};
 
 function RoleIcon({ role, size, color }: { role: MatchRole; size: number; color: string }) {
   if (role === 'investor') return <TrendingUp size={size} color={color} />;
@@ -156,8 +152,7 @@ function DealMatchingContent() {
   const insets = useSafeAreaInsets();
   const query = useQuery<DealMatchingResult | null>({
     queryKey: ['ivx-deal-matching'],
-    queryFn: getDealMatching,
-  });
+    queryFn: getDealMatching});
 
   const result = query.data ?? null;
   const deals = useMemo(() => result?.deals ?? [], [result]);
@@ -191,7 +186,7 @@ function DealMatchingContent() {
         ) : null}
 
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : deals.length === 0 ? (
           <View style={styles.emptyCard}>
             <Crosshair size={26} color={Colors.textTertiary} />
@@ -257,5 +252,4 @@ const styles = StyleSheet.create({
   toggleBtnText: { fontSize: 12.5, fontWeight: '600' as const, color: Colors.primary },
   emptyCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 26, gap: 8, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   emptyTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
-  emptyBody: { fontSize: 12.5, lineHeight: 18, color: Colors.textSecondary, textAlign: 'center' },
-});
+  emptyBody: { fontSize: 12.5, lineHeight: 18, color: Colors.textSecondary, textAlign: 'center' }});

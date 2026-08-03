@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -57,8 +56,7 @@ import {
   Server,
   Key,
   Database,
-  Package,
-} from 'lucide-react-native';
+  Package} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 interface GuideStep {
@@ -103,8 +101,7 @@ const LAUNCH_PLAN: LaunchWeek[] = [
       { label: 'Confirm IVX AI Gateway AI wiring — workspace assistant & content generation', hours: '2–4h', priority: 'high', done: false },
       { label: 'Set up KYC provider (Persona/Jumio) production keys', hours: '8–16h', priority: 'critical', done: false },
       { label: 'Configure push notifications (Expo + APNs + FCM)', hours: '4–6h', priority: 'high', done: false },
-    ],
-  },
+    ]},
   {
     week: 2,
     title: 'QA Testing & Content',
@@ -117,8 +114,7 @@ const LAUNCH_PLAN: LaunchWeek[] = [
       { label: 'Test WhatsApp/SMS reports to the configured alert number', hours: '2–3h', priority: 'high', done: false },
       { label: 'Test AI automation & analytics modules', hours: '3–4h', priority: 'medium', done: false },
       { label: 'Cross-platform testing: iOS + Android + Web', hours: '6–8h', priority: 'critical', done: false },
-    ],
-  },
+    ]},
   {
     week: 3,
     title: 'App Store Submission',
@@ -130,8 +126,7 @@ const LAUNCH_PLAN: LaunchWeek[] = [
       { label: 'Submit to Apple App Store (review: 1–3 days)', hours: '2h + wait', priority: 'critical', done: false },
       { label: 'Submit to Google Play Store (review: 1–2 days)', hours: '2h + wait', priority: 'critical', done: false },
       { label: 'Configure production environment variables', hours: '2–3h', priority: 'critical', done: false },
-    ],
-  },
+    ]},
 ];
 
 const PRIORITY_72H: string[] = [
@@ -276,8 +271,7 @@ const devStyles = StyleSheet.create({
   priorityBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   priorityText: { fontSize: 10, fontWeight: '700' as const, textTransform: 'uppercase' as const },
   totalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, backgroundColor: Colors.primary + '10', borderRadius: 10, padding: 10 },
-  totalText: { color: Colors.primary, fontSize: 12, fontWeight: '600' as const, flex: 1 },
-});
+  totalText: { color: Colors.primary, fontSize: 12, fontWeight: '600' as const, flex: 1 }});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DEVELOPER CODE ARCHITECTURE GUIDE
@@ -322,8 +316,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'Package Mgr', value: 'Bun (never use npm or yarn — use bun install/add/remove)' },
       { label: 'Icons', value: 'lucide-react-native — single icon library used throughout app' },
       { label: 'Web Support', value: 'react-native-web — app runs on iOS, Android, and Web browser' },
-    ],
-  },
+    ]},
   {
     // ── PROJECT STRUCTURE ───────────────────────────────────────────────────
     id: 'folders',
@@ -343,8 +336,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'constants/', value: 'colors.ts, translations.ts (30 langs), countries.ts' },
       { label: 'mocks/', value: 'Development mock/seed data — 23 files with sample properties, users' },
       { label: 'types/index.ts', value: 'Global TypeScript interfaces shared across app and backend' },
-    ],
-  },
+    ]},
   {
     // ── CONTEXT PROVIDERS ────────────────────────────────────────────────────
     // All 7 providers wrap the app in app/_layout.tsx (outer to inner order):
@@ -360,40 +352,32 @@ const ARCH_SECTIONS: ArchSection[] = [
       {
         label: 'AuthProvider',
         value: 'lib/auth-context.tsx',
-        note: 'Login, register, logout, JWT token management, 2FA flow, user roles. Hook: useAuth(). Persists token in expo-secure-store.',
-      },
+        note: 'Login, register, logout, JWT token management, 2FA flow, user roles. Hook: useAuth(). Persists token in expo-secure-store.'},
       {
         label: 'IPXProvider',
         value: 'lib/ipx-context.tsx',
-        note: 'Buy/sell fractional property shares. Holdings stored in AsyncStorage (@ipx_holdings) and synced to backend wallet. Hook: useIPX().',
-      },
+        note: 'Buy/sell fractional property shares. Holdings stored in AsyncStorage (@ipx_holdings) and synced to backend wallet. Hook: useIPX().'},
       {
         label: 'EarnProvider',
         value: 'lib/earn-context.tsx',
-        note: 'IVXHOLDINGS Earn savings product. 4 profit tiers (10–15% APY). Daily interest accrual. Stored in AsyncStorage (@ipx_earn_data). Hook: useEarn().',
-      },
+        note: 'IVXHOLDINGS Earn savings product. 4 profit tiers (10–15% APY). Daily interest accrual. Stored in AsyncStorage (@ipx_earn_data). Hook: useEarn().'},
       {
         label: 'LenderProvider',
         value: 'lib/lender-context.tsx',
-        note: 'Connects to external lender APIs for debt acquisition features. Hook: useLender().',
-      },
+        note: 'Connects to external lender APIs for debt acquisition features. Hook: useLender().'},
       {
         label: 'IntroProvider',
         value: 'lib/intro-context.tsx',
-        note: 'Controls the onboarding flow shown to new users. Persists completion status in AsyncStorage. Hook: useIntro(). hasCompletedOnboarding = false → shows OnboardingFlow overlay.',
-      },
+        note: 'Controls the onboarding flow shown to new users. Persists completion status in AsyncStorage. Hook: useIntro(). hasCompletedOnboarding = false → shows OnboardingFlow overlay.'},
       {
         label: 'AnalyticsProvider',
         value: 'lib/analytics-context.tsx',
-        note: 'Tracks: screen views, user actions, transactions, errors, conversions. Auto-tracks app_launch on start, app_background on minimize. Hook: useAnalytics().',
-      },
+        note: 'Tracks: screen views, user actions, transactions, errors, conversions. Auto-tracks app_launch on start, app_background on minimize. Hook: useAnalytics().'},
       {
         label: 'I18nProvider',
         value: 'lib/i18n-context.tsx',
-        note: '30 languages: EN, ES, FR, ZH, AR, PT, RU, JA, DE, KO + 20 more. Language stored in AsyncStorage (ipx_language). Hook: useTranslation() → { t, language, isRTL }.',
-      },
-    ],
-  },
+        note: '30 languages: EN, ES, FR, ZH, AR, PT, RU, JA, DE, KO + 20 more. Language stored in AsyncStorage (ipx_language). Hook: useTranslation() → { t, language, isRTL }.'},
+    ]},
   {
     id: 'api',
     title: 'Backend API — Supabase',
@@ -413,8 +397,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'Edge Functions', value: 'KYC liveness, face match, sanctions check, full verification', badge: 'protected' },
       { label: 'Storage', value: 'Supabase Storage for photos, documents, and file uploads', badge: 'protected' },
       { label: 'Row Level Security', value: 'PostgreSQL RLS policies enforce access control per user/role', badge: 'all' },
-    ],
-  },
+    ]},
   {
     // ── AUTHENTICATION SYSTEM ────────────────────────────────────────────────
     id: 'auth',
@@ -436,8 +419,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'Role: ceo', value: 'Highest access: full financial controls' },
       { label: 'RLS Policies', value: 'Supabase Row Level Security — enforces access per user/role at database level' },
       { label: 'Admin FAB', value: 'components/AdminFAB.tsx — floating button shown only when isAdmin = true' },
-    ],
-  },
+    ]},
   {
     // ── ALL SCREENS MAP ──────────────────────────────────────────────────────
     id: 'screens',
@@ -488,8 +470,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: '/app-report', value: 'APP REPORT — automated marketing performance report (752 LOC)' },
       { label: '/app-demo', value: 'APP DEMO — interactive demo for prospects (modal, 768 LOC)' },
       { label: '/admin/*', value: '33 ADMIN SCREENS — members, properties, analytics, team, settings...' },
-    ],
-  },
+    ]},
   {
     // ── PUSH NOTIFICATIONS ───────────────────────────────────────────────────
     id: 'notifications',
@@ -507,8 +488,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'Badge Reset', value: 'setBadgeCount(0) called when user taps any notification', note: 'lib/push-notifications.ts setBadgeCount()' },
       { label: 'Web', value: 'Disabled on web (Platform.OS === "web" check in registerForPushNotificationsAsync)', badge: 'web-skip' },
       { label: 'Physical Device', value: 'REQUIRED — push tokens only work on real devices, not simulators', badge: 'important' },
-    ],
-  },
+    ]},
   {
     // ── ENVIRONMENT VARIABLES ────────────────────────────────────────────────
     id: 'env',
@@ -534,8 +514,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'ALLOWED_ORIGINS', value: 'CORS: comma-separated production origins, e.g. https://app.ipxholding.com', badge: 'CRITICAL' },
       { label: 'NODE_ENV', value: 'Set to "production" for live deployment (hides error details)', badge: 'CRITICAL' },
       { label: 'Run Check', value: 'Admin: GET /env-check with CEO Bearer token → shows all missing vars' },
-    ],
-  },
+    ]},
   {
     // ── DESIGN SYSTEM ────────────────────────────────────────────────────────
     id: 'design',
@@ -559,8 +538,7 @@ const ARCH_SECTIONS: ArchSection[] = [
       { label: 'Colors.tabBar', value: '#0F0F0F — Bottom tab bar background' },
       { label: 'Colors.overlay', value: 'rgba(0,0,0,0.7) — Modal backdrop, image overlays' },
       { label: 'Rule', value: "Use StyleSheet.create() for ALL styles — never use inline style objects for static values" },
-    ],
-  },
+    ]},
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -706,33 +684,28 @@ const archStyles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   headerIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: '#4ECDC4',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerText: { flex: 1 },
   headerTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   headerSub: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 1,
-  },
+    marginTop: 1},
   tagRow: { gap: 4 },
   tag: {
     flexDirection: 'row',
@@ -741,13 +714,11 @@ const archStyles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   tagText: {
     color: Colors.primary,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   banner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -757,20 +728,17 @@ const archStyles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#4ECDC430',
-  },
+    borderColor: '#4ECDC430'},
   bannerText: {
     flex: 1,
     color: '#4ECDC4',
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   statsBar: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   statBox: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -778,18 +746,15 @@ const archStyles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statVal: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statLbl: {
     color: Colors.textTertiary,
     fontSize: 10,
-    marginTop: 2,
-  },
+    marginTop: 2},
   card: {
     borderLeftWidth: 3,
     borderRadius: 10,
@@ -797,103 +762,87 @@ const archStyles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    padding: 12,
-  },
+    padding: 12},
   cardIcon: {
     width: 38,
     height: 38,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   cardHeaderText: { flex: 1 },
   cardTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   cardSubtitle: {
     color: Colors.textSecondary,
     fontSize: 11,
     marginTop: 2,
-    lineHeight: 15,
-  },
+    lineHeight: 15},
   itemList: {
     paddingHorizontal: 12,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   itemRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingVertical: 9,
-    gap: 8,
-  },
+    gap: 8},
   itemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   itemLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   itemDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
     marginTop: 6,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   itemContent: { flex: 1 },
   itemLabel: {
     color: Colors.text,
     fontSize: 12,
     fontWeight: '600' as const,
     fontFamily: 'monospace' as const,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   itemValue: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
-    marginTop: 1,
-  },
+    marginTop: 1},
   noteRow: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   noteText: {
     color: Colors.textTertiary,
     fontSize: 10,
     lineHeight: 14,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   badge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
     flexShrink: 0,
     alignSelf: 'flex-start',
-    marginTop: 2,
-  },
+    marginTop: 2},
   badgeText: {
     fontSize: 9,
     fontWeight: '800' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   footerNote: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -903,20 +852,16 @@ const archStyles = StyleSheet.create({
     padding: 10,
     marginTop: 4,
     borderWidth: 1,
-    borderColor: Colors.success + '25',
-  },
+    borderColor: Colors.success + '25'},
   footerNoteText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 11,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   footerCode: {
     color: Colors.success,
     fontFamily: 'monospace' as const,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // END DEVELOPER CODE GUIDE
@@ -935,8 +880,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <Wallet size={16} color={Colors.accent} />, text: 'Add funds to your wallet via bank transfer, card, or wire transfer.' },
       { icon: <Home size={16} color={Colors.warning} />, text: 'Browse properties on the Discover tab and tap "Invest Now" to start.' },
     ],
-    proTip: 'Complete KYC early — it takes 1-2 business days and is required before investing.',
-  },
+    proTip: 'Complete KYC early — it takes 1-2 business days and is required before investing.'},
   {
     id: 'discover',
     title: 'Discover Properties',
@@ -951,8 +895,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <FileText size={16} color={Colors.accent} />, text: 'Review documents, expected ROI, rental yield, and appreciation potential.' },
       { icon: <Target size={16} color={Colors.success} />, text: 'Tap "Invest Now", enter amount, review summary, and confirm your purchase.' },
     ],
-    proTip: 'Use "Compare Investments" from property details to side-by-side compare opportunities.',
-  },
+    proTip: 'Use "Compare Investments" from property details to side-by-side compare opportunities.'},
   {
     id: 'portfolio',
     title: 'Portfolio Management',
@@ -965,8 +908,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <CreditCard size={16} color={Colors.primary} />, text: 'Wallet card shows your cash balance with "Add Funds" and "Withdraw" buttons.' },
       { icon: <ArrowUpDown size={16} color={Colors.warning} />, text: 'Activity tab shows all transactions: deposits, trades, withdrawals, and dividends.' },
     ],
-    proTip: 'Each holding card shows your cost basis, current value, and unrealized P&L at a glance.',
-  },
+    proTip: 'Each holding card shows your cost basis, current value, and unrealized P&L at a glance.'},
   {
     id: 'market',
     title: 'Market & Trading',
@@ -980,8 +922,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <TrendingUp size={16} color={Colors.error} />, text: 'To Sell: Tap red "Sell" → enter shares → choose order type → review & confirm.' },
       { icon: <ArrowUpDown size={16} color={Colors.accent} />, text: 'View the Order Book for current bids (buy) and asks (sell) to understand market depth.' },
     ],
-    proTip: 'Markets are open 24/7. Use limit orders to set your desired price and trade automatically.',
-  },
+    proTip: 'Markets are open 24/7. Use limit orders to set your desired price and trade automatically.'},
   {
     id: 'invest-ipx',
     title: 'IVXHOLDINGS Investment Platform',
@@ -995,8 +936,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <Globe size={16} color={Colors.warning} />, text: 'Land Partnership: Tap "Land Partnership" → review terms → submit application.' },
       { icon: <Sparkles size={16} color={Colors.primary} />, text: 'IVXHOLDINGS tokens can be bought/sold, staked for rewards, and used for governance voting.' },
     ],
-    proTip: 'Staking IVXHOLDINGS tokens earns you higher dividend yields and early access to new listings.',
-  },
+    proTip: 'Staking IVXHOLDINGS tokens earns you higher dividend yields and early access to new listings.'},
   {
     id: 'wallet',
     title: 'Wallet & Payments',
@@ -1009,8 +949,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <ArrowUpDown size={16} color={Colors.success} />, text: 'Withdraw: Select ACH (free, 1-3 days) or Wire ($25 fee, same day).' },
       { icon: <Lock size={16} color={Colors.warning} />, text: 'All transactions are encrypted and protected with bank-level security.' },
     ],
-    proTip: 'Bank transfers (ACH) have no fees — best for regular deposits. Cards charge 2.9%.',
-  },
+    proTip: 'Bank transfers (ACH) have no fees — best for regular deposits. Cards charge 2.9%.'},
   {
     id: 'support',
     title: 'Support & AI Chat',
@@ -1022,8 +961,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <MessageCircle size={16} color="#A78BFA" />, text: 'Ask about property recommendations, portfolio analysis, or how features work.' },
       { icon: <Users size={16} color={Colors.accent} />, text: 'Request human support escalation for complex account issues.' },
       { icon: <BookOpen size={16} color={Colors.success} />, text: 'Quick reply suggestions help you ask the right questions fast.' },
-    ],
-  },
+    ]},
   {
     id: 'profile',
     title: 'Profile & Settings',
@@ -1037,8 +975,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <Bell size={16} color={Colors.primary} />, text: 'Notifications: Configure email, push, and SMS alert preferences.' },
       { icon: <Lock size={16} color={Colors.error} />, text: 'Security: Change password, enable 2FA, and review login history.' },
       { icon: <Gift size={16} color={Colors.positive} />, text: 'Referrals: Get your unique link, invite friends, and earn $50 per referral.' },
-    ],
-  },
+    ]},
   {
     id: 'admin',
     title: 'Admin Panel',
@@ -1057,8 +994,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
       { icon: <Star size={16} color={Colors.warning} />, text: 'Influencers: Review applications, set commission rates, track performance and payouts.' },
       { icon: <Globe size={16} color="#4ECDC4" />, text: 'Land Partners: Onboard partners, review property submissions, manage revenue sharing.' },
     ],
-    proTip: 'Use AI Studio to auto-generate professional marketing content for properties and campaigns.',
-  },
+    proTip: 'Use AI Studio to auto-generate professional marketing content for properties and campaigns.'},
 ];
 
 function ExpandableSection({ section }: { section: GuideSection }) {
@@ -1073,32 +1009,27 @@ function ExpandableSection({ section }: { section: GuideSection }) {
         toValue,
         useNativeDriver: false,
         friction: 12,
-        tension: 60,
-      }),
+        tension: 60}),
       Animated.spring(rotateAnim, {
         toValue,
         useNativeDriver: true,
         friction: 12,
-        tension: 60,
-      }),
+        tension: 60}),
     ]).start();
     setExpanded(!expanded);
   }, [expanded, animatedHeight, rotateAnim]);
 
   const rotate = rotateAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '180deg'],
-  });
+    outputRange: ['0deg', '180deg']});
 
   const maxHeight = animatedHeight.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 800],
-  });
+    outputRange: [0, 800]});
 
   const opacity = animatedHeight.interpolate({
     inputRange: [0, 0.3, 1],
-    outputRange: [0, 0, 1],
-  });
+    outputRange: [0, 0, 1]});
 
   return (
     <View style={[sectionStyles.card, { borderLeftColor: section.color }]}>
@@ -1278,84 +1209,69 @@ const sectionStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderLeftWidth: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-  },
+    padding: 16},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 12,
-  },
+    marginRight: 12},
   iconWrap: {
     width: 44,
     height: 44,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   headerText: {
-    flex: 1,
-  },
+    flex: 1},
   title: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   description: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   stepsContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
+    paddingBottom: 16},
   stepRow: {
     flexDirection: 'row',
-    minHeight: 56,
-  },
+    minHeight: 56},
   stepTimeline: {
     width: 36,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   stepDot: {
     width: 32,
     height: 32,
     borderRadius: 16,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   stepLine: {
     width: 2,
     flex: 1,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   stepContent: {
     flex: 1,
     paddingLeft: 10,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   stepNumber: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   stepText: {
     fontSize: 14,
     color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   proTip: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1364,15 +1280,12 @@ const sectionStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   proTipText: {
     flex: 1,
     fontSize: 12,
     fontWeight: '600' as const,
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
@@ -1409,5 +1322,4 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: Colors.surfaceBorder, backgroundColor: Colors.background },
   footerText: { color: Colors.textTertiary, fontSize: 12, textAlign: 'center' },
   footerSubtext: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 4 },
-  scrollViewBg: { backgroundColor: Colors.background },
-});
+  scrollViewBg: { backgroundColor: Colors.background }});

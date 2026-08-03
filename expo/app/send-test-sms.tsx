@@ -1,14 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   Platform,
-  Animated,
-  ActivityIndicator,
-} from 'react-native';
+  Animated} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -22,12 +19,12 @@ import {
   MapPin,
   Shield,
   Smartphone,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const TEST_PHONE = '';
 const TEST_PHONE_DISPLAY = 'No test phone configured';
@@ -63,13 +60,11 @@ export default function SendTestSMSScreen() {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 500,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 500,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start();
   }, [fadeAnim, slideAnim]);
 
@@ -97,8 +92,7 @@ export default function SendTestSMSScreen() {
           return;
         }
         const res = await fetch(`${apiBase}/api/sns-status`, {
-          headers: { 'Content-Type': 'application/json' },
-        });
+          headers: { 'Content-Type': 'application/json' }});
         if (res.ok) {
           const data = await res.json();
           setSnsStatus(data);
@@ -142,14 +136,11 @@ export default function SendTestSMSScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+          ...(token ? { Authorization: `Bearer ${token}` } : {})},
         body: JSON.stringify({
           phoneNumber: TEST_PHONE,
           message: BRANDED_SMS_MESSAGE,
-          senderId: 'IVXHolding',
-        }),
-      });
+          senderId: 'IVXHolding'})});
 
       const data = await res.json();
       console.log('[TestSMS] Response:', JSON.stringify(data));
@@ -311,7 +302,7 @@ export default function SendTestSMSScreen() {
           >
             <Animated.View style={[styles.sendButtonInner, { opacity: status === 'sending' ? pulseAnim : 1 }]}>
               {status === 'sending' ? (
-                <ActivityIndicator color="#000" size="small" />
+                <ShimmerIndicator color="#000" size="small" />
               ) : (
                 <Send size={20} color="#000" strokeWidth={2} />
               )}
@@ -336,11 +327,9 @@ export default function SendTestSMSScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -348,195 +337,156 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   headerTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: Colors.text,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   headerSpacer: {
-    width: 40,
-  },
+    width: 40},
   body: {
-    flex: 1,
-  },
+    flex: 1},
   bodyContent: {
     padding: 20,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   brandCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   brandHeader: {
     alignItems: 'center' as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   logoContainer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   logoIvx: {
     fontSize: 26,
     fontWeight: '800' as const,
     color: Colors.primary,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   logoHoldings: {
     fontSize: 26,
     fontWeight: '300' as const,
     color: Colors.text,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   brandSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
     letterSpacing: 1.5,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   divider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginVertical: 16,
-  },
+    marginVertical: 16},
   detailSection: {
-    gap: 14,
-  },
+    gap: 14},
   detailRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 12,
-  },
+    gap: 12},
   detailInfo: {
-    flex: 1,
-  },
+    flex: 1},
   detailLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   detailValue: {
     fontSize: 14,
     color: Colors.text,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   snsStatusRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   snsIndicator: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   snsStatusText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   messagePreview: {
-    marginTop: 20,
-  },
+    marginTop: 20},
   previewLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     letterSpacing: 1.2,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   messageBubble: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 14,
     borderTopLeftRadius: 4,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   messageText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   resultCard: {
     marginTop: 20,
     borderRadius: 14,
     padding: 20,
     alignItems: 'center' as const,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   resultSuccess: {
     backgroundColor: 'rgba(0, 196, 140, 0.08)',
-    borderColor: 'rgba(0, 196, 140, 0.2)',
-  },
+    borderColor: 'rgba(0, 196, 140, 0.2)'},
   resultError: {
     backgroundColor: 'rgba(255, 184, 0, 0.08)',
-    borderColor: 'rgba(255, 184, 0, 0.2)',
-  },
+    borderColor: 'rgba(255, 184, 0, 0.2)'},
   resultIconRow: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   resultTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   resultDelivery: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   resultMessage: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   sendButton: {
     marginTop: 24,
     borderRadius: 14,
     overflow: 'hidden' as const,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   sendButtonDisabled: {
-    opacity: 0.8,
-  },
+    opacity: 0.8},
   sendButtonInner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     paddingVertical: 16,
-    gap: 10,
-  },
+    gap: 10},
   sendButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: '#000',
-  },
+    color: '#000'},
   footer: {
     marginTop: 20,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   footerText: {
     fontSize: 11,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
-    lineHeight: 16,
-  },
-});
+    lineHeight: 16}});

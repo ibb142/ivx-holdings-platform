@@ -14,7 +14,8 @@ import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { logStartup } from '@/lib/startup-trace';
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import {View, StyleSheet } from "react-native";
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function IndexScreen() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -29,7 +30,7 @@ export default function IndexScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" />
+        <ShimmerIndicator size="large" color="#FFD700" />
       </View>
     );
   }
@@ -54,6 +55,4 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0F',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+    justifyContent: 'center'}});

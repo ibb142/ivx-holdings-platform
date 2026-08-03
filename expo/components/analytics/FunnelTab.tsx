@@ -122,5 +122,4 @@ const s = StyleSheet.create({
   dropoffBarFill: { height: 4, borderRadius: 2 },
   dropoffStats: { alignItems: 'flex-end', width: 44 },
   dropoffValue: { fontSize: 13, fontWeight: '800' as const, color: '#E53935' },
-  dropoffPctText: { fontSize: 9, fontWeight: '600' as const, color: Colors.textTertiary },
-});
+  dropoffPctText: { fontSize: 9, fontWeight: '600' as const, color: Colors.textTertiary }});

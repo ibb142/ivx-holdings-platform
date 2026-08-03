@@ -8,8 +8,7 @@ import {
   Animated,
   Share,
   Platform,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -34,8 +33,7 @@ import {
   MessageCircle,
   Search,
   Play,
-  Briefcase,
-} from 'lucide-react-native';
+  Briefcase} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -47,8 +45,7 @@ import {
   referralTiers,
   projectionData,
   globalReachStats,
-  competitorComparison,
-} from '@/mocks/viral-growth';
+  competitorComparison} from '@/mocks/viral-growth';
 
 const REFERRAL_CODE = 'IVXHOLDINGS-INVITE';
 
@@ -72,8 +69,7 @@ function PulsingDot({ color, size = 8 }: { color: string; size?: number }) {
       height: size,
       borderRadius: size / 2,
       backgroundColor: color,
-      opacity: pulse,
-    }} />
+      opacity: pulse}} />
   );
 }
 
@@ -163,8 +159,7 @@ function GrowthProjectionChart() {
                   height: barH,
                   backgroundColor: isLast ? Colors.primary : Colors.primary + '60',
                   borderTopLeftRadius: 4,
-                  borderTopRightRadius: 4,
-                },
+                  borderTopRightRadius: 4},
               ]} />
               <Text style={s.chartBarLabel}>{projectionData.months[i]}</Text>
             </View>
@@ -235,8 +230,7 @@ function ViralChannelsList() {
     Play: <Play size={14} color="#FF0000" />,
     Twitter: <MessageCircle size={14} color="#1DA1F2" />,
     Briefcase: <Briefcase size={14} color="#0A66C2" />,
-    Mail: <Mail size={14} color="#00C48C" />,
-  };
+    Mail: <Mail size={14} color="#00C48C" />};
 
   return (
     <View style={s.channelSection}>
@@ -466,8 +460,7 @@ export default function ViralGrowthScreen() {
       if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await Share.share({
         title: 'Join IVX Holdings — Get $25 Free',
-        message: `I'm investing in tokenized real estate on IVX Holdings and earning 14.5% annually. Join with my code ${REFERRAL_CODE} and get $25 in free shares!\n\nhttps://ivxholding.com/invite/${REFERRAL_CODE}`,
-      });
+        message: `I'm investing in tokenized real estate on IVX Holdings and earning 14.5% annually. Join with my code ${REFERRAL_CODE} and get $25 in free shares!\n\nhttps://ivxholding.com/invite/${REFERRAL_CODE}`});
       console.log('[ViralGrowth] Share dialog opened');
     } catch (e) {
       console.log('[ViralGrowth] Share failed:', e);
@@ -525,8 +518,7 @@ const s = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   backBtn: { padding: 4 },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
@@ -538,8 +530,7 @@ const s = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   headerLiveText: { color: Colors.success, fontSize: 9, fontWeight: '800' as const, letterSpacing: 1 },
   headerGlow: {
     position: 'absolute',
@@ -547,8 +538,7 @@ const s = StyleSheet.create({
     left: 0,
     right: 0,
     height: 2,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   headerSub: { color: Colors.textTertiary, fontSize: 11, lineHeight: 16 },
 
   liveBar: {
@@ -562,8 +552,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
-  },
+    borderColor: Colors.success + '30'},
   liveBarText: { color: Colors.textSecondary, fontSize: 11, flex: 1 },
 
   metricsGrid: {
@@ -571,16 +560,14 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   metricCard: {
     width: '31%' as any,
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   metricLabel: { color: Colors.textTertiary, fontSize: 9, fontWeight: '600' as const, marginBottom: 4 },
   metricValue: { color: Colors.text, fontSize: 16, fontWeight: '800' as const, marginBottom: 2 },
   metricChangeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -594,8 +581,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   codeLabel: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600' as const, marginBottom: 8 },
   codeRow: {
     flexDirection: 'row',
@@ -605,8 +591,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   codeText: { color: Colors.primary, fontSize: 18, fontWeight: '800' as const, letterSpacing: 2 },
   codeCopyBtn: { padding: 6 },
   codeActions: { flexDirection: 'row', gap: 10 },
@@ -618,8 +603,7 @@ const s = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.surface,
     borderRadius: 10,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   codeActionText: { color: Colors.text, fontSize: 12, fontWeight: '600' as const },
 
   chartSection: {
@@ -629,8 +613,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   chartHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chartTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const },
@@ -641,8 +624,7 @@ const s = StyleSheet.create({
     backgroundColor: '#FF6B6B15',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   chartBadgeText: { color: '#FF6B6B', fontSize: 10, fontWeight: '700' as const },
   chartArea: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   chartBarWrap: { flex: 1, alignItems: 'center' },
@@ -655,8 +637,7 @@ const s = StyleSheet.create({
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   chartLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chartLegendDot: { width: 8, height: 8, borderRadius: 4 },
   chartLegendText: { color: Colors.textSecondary, fontSize: 10 },
@@ -669,8 +650,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   referralHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   referralTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const },
   referralHero: { alignItems: 'center', marginBottom: 16 },
@@ -689,8 +669,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 2,
-    borderColor: 'transparent',
-  },
+    borderColor: 'transparent'},
   tierTabText: { color: Colors.textSecondary, fontSize: 10, fontWeight: '700' as const },
 
   tierDetail: {
@@ -698,14 +677,12 @@ const s = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     backgroundColor: Colors.backgroundSecondary,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   tierDetailHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   tierDetailName: { fontSize: 14, fontWeight: '800' as const },
   tierDetailReq: { color: Colors.textTertiary, fontSize: 10 },
   tierRewards: { flexDirection: 'row', gap: 16, marginBottom: 10 },
@@ -722,8 +699,7 @@ const s = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   shareBtnText: { color: Colors.background, fontSize: 15, fontWeight: '800' as const },
 
   milestoneSection: {
@@ -733,8 +709,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   milestoneHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   milestoneTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const, flex: 1 },
   milestoneCount: { color: Colors.primary, fontSize: 12, fontWeight: '700' as const },
@@ -744,8 +719,7 @@ const s = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 3,
     marginBottom: 14,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressBarFill: { height: 6, backgroundColor: Colors.primary, borderRadius: 3 },
 
   milestoneList: { gap: 6 },
@@ -755,16 +729,14 @@ const s = StyleSheet.create({
     gap: 10,
     paddingVertical: 6,
     paddingHorizontal: 8,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   milestoneReached: { backgroundColor: Colors.primary + '08' },
   milestoneDot: {
     width: 24,
     height: 24,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   milestoneDotReached: { backgroundColor: Colors.primary },
   milestoneDotPending: { backgroundColor: Colors.backgroundSecondary, borderWidth: 1, borderColor: Colors.surfaceBorder },
   milestoneDotText: { color: Colors.textTertiary, fontSize: 9, fontWeight: '700' as const },
@@ -782,8 +754,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   channelHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   channelTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const, flex: 1 },
   channelTotal: { color: Colors.primary, fontSize: 11, fontWeight: '700' as const },
@@ -794,8 +765,7 @@ const s = StyleSheet.create({
     height: 32,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   channelInfo: { flex: 1 },
   channelNameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   channelName: { color: Colors.text, fontSize: 12, fontWeight: '600' as const },
@@ -812,8 +782,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   raceHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   raceTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const },
   raceSub: { color: Colors.textTertiary, fontSize: 11, marginBottom: 12, lineHeight: 16 },
@@ -836,8 +805,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   globalHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   globalTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const, flex: 1 },
   globalLiveBadge: {
@@ -847,8 +815,7 @@ const s = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   globalLiveText: { color: Colors.success, fontSize: 8, fontWeight: '800' as const, letterSpacing: 0.5 },
   globalSub: { color: Colors.textTertiary, fontSize: 11, marginBottom: 12 },
   globalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -858,8 +825,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   globalItemValue: { color: Colors.text, fontSize: 14, fontWeight: '800' as const },
   globalItemLabel: { color: Colors.textTertiary, fontSize: 9 },
 
@@ -871,9 +837,7 @@ const s = StyleSheet.create({
     gap: 10,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   ctaPrimaryText: { color: Colors.background, fontSize: 16, fontWeight: '800' as const },
   ctaSecondary: { alignItems: 'center', paddingVertical: 10 },
-  ctaSecondaryText: { color: Colors.primary, fontSize: 13, fontWeight: '700' as const },
-});
+  ctaSecondaryText: { color: Colors.primary, fontSize: 13, fontWeight: '700' as const }});

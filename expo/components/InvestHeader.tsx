@@ -17,8 +17,7 @@ const InvestHeader = memo(function InvestHeader({
   totalVolume,
   investorsCount,
   onSubmit,
-  t,
-}: InvestHeaderProps) {
+  t}: InvestHeaderProps) {
   return (
     <View style={styles.headerCard}>
       <View style={styles.headerTop}>
@@ -72,29 +71,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    gap: 10,
-  },
+    gap: 10},
   headerTitleWrap: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   headerTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginTop: 4,
-  },
+    marginTop: 4},
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -103,41 +97,32 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   submitButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   statIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   statValue: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statLabel: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: Colors.surfaceBorder,
-  },
-});
+    backgroundColor: Colors.surfaceBorder}});

@@ -1,20 +1,19 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { Stack } from 'expo-router';
 import { CircleX, Filter, Mail, MapPin, Phone, Search } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type LeadCategory =
   | 'buyer'
@@ -77,8 +76,7 @@ const CATEGORY_LABELS: Record<LeadCategory, string> = {
   tokenization_contact: 'Tokenization',
   developer: 'Developer',
   broker: 'Broker',
-  strategic_acquirer: 'Strategic Acquirer',
-};
+  strategic_acquirer: 'Strategic Acquirer'};
 
 const CATEGORY_FILTERS: (LeadCategory | 'all')[] = [
   'all', 'buyer', 'investor', 'jv_partner', 'private_lender', 'family_office',
@@ -150,8 +148,7 @@ function MasterLeadListScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['ivx', 'master-lead-list', category, southFlorida, debounced] as const,
     queryFn: () => fetchMasterList(category, southFlorida, debounced),
-    refetchInterval: 60_000,
-  });
+    refetchInterval: 60_000});
 
   const onRefresh = useCallback(() => { void refetch(); }, [refetch]);
   const leads = data?.leads ?? [];
@@ -218,7 +215,7 @@ function MasterLeadListScreen() {
         </Pressable>
 
         {isLoading ? (
-          <View style={styles.center}><ActivityIndicator color={Colors.text} /></View>
+          <View style={styles.center}><ShimmerIndicator color={Colors.text} /></View>
         ) : isError ? (
           <View style={styles.errorCard}>
             <CircleX size={18} color={Colors.error ?? '#FF4D4D'} />
@@ -302,8 +299,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   statValue: { color: Colors.text, fontSize: 18, fontWeight: '800' as const },
   statLabel: { color: Colors.muted ?? '#94a3b8', fontSize: 10 },
   lastDiscovery: { color: Colors.muted ?? '#94a3b8', fontSize: 12 },
@@ -315,8 +311,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: Colors.border ?? '#1f2937',
-  },
+    borderColor: Colors.border ?? '#1f2937'},
   searchInput: { flex: 1, color: Colors.text, fontSize: 14, paddingVertical: 10 },
   filterRow: { gap: 8, paddingVertical: 2 },
   chip: {
@@ -325,8 +320,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.card ?? '#111827',
     borderWidth: 1,
-    borderColor: Colors.border ?? '#1f2937',
-  },
+    borderColor: Colors.border ?? '#1f2937'},
   chipActive: { backgroundColor: Colors.tint ?? '#2563eb', borderColor: Colors.tint ?? '#2563eb' },
   chipText: { color: Colors.muted ?? '#94a3b8', fontSize: 12, fontWeight: '600' as const },
   chipTextActive: { color: '#fff' },
@@ -340,8 +334,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.card ?? '#111827',
     borderWidth: 1,
-    borderColor: Colors.border ?? '#1f2937',
-  },
+    borderColor: Colors.border ?? '#1f2937'},
   sfToggleActive: { backgroundColor: Colors.tint ?? '#2563eb', borderColor: Colors.tint ?? '#2563eb' },
   sfToggleText: { color: Colors.muted ?? '#94a3b8', fontSize: 12, fontWeight: '600' as const },
   sfToggleTextActive: { color: '#fff' },
@@ -351,8 +344,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 6,
-  },
+    gap: 6},
   leadHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   seq: { color: Colors.muted ?? '#94a3b8', fontSize: 13, fontWeight: '800' as const, minWidth: 34 },
   leadHeaderBody: { flex: 1 },
@@ -379,8 +371,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border ?? '#1f2937',
-  },
+    borderColor: Colors.border ?? '#1f2937'},
   cardBody: { color: Colors.muted ?? '#94a3b8', fontSize: 13, lineHeight: 19 },
   errorCard: {
     flexDirection: 'row',
@@ -390,7 +381,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.error ?? '#FF4D4D',
-  },
-  errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 },
-});
+    borderColor: Colors.error ?? '#FF4D4D'},
+  errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 }});

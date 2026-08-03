@@ -26,8 +26,7 @@ export const COUNTRY_FLAGS: Record<string, string> = {
   'UAE': '🇦🇪', 'United Arab Emirates': '🇦🇪', 'Saudi Arabia': '🇸🇦', 'China': '🇨🇳',
   'South Korea': '🇰🇷', 'Nigeria': '🇳🇬', 'South Africa': '🇿🇦', 'Colombia': '🇨🇴',
   'Argentina': '🇦🇷', 'Portugal': '🇵🇹', 'Ireland': '🇮🇪', 'Poland': '🇵🇱',
-  'Turkey': '🇹🇷', 'Philippines': '🇵🇭', 'Indonesia': '🇮🇩', 'Thailand': '🇹🇭',
-};
+  'Turkey': '🇹🇷', 'Philippines': '🇵🇭', 'Indonesia': '🇮🇩', 'Thailand': '🇹🇭'};
 
 export function getScreenWidth(): number {
   return Dimensions.get('window').width;
@@ -65,8 +64,7 @@ export function AnimatedRing({ percent, size, strokeWidth, color, children }: {
               width: 4,
               height: 4,
               borderRadius: 2,
-              backgroundColor: isFilled ? color : Colors.surfaceBorder,
-            }}
+              backgroundColor: isFilled ? color : Colors.surfaceBorder}}
           />
         );
       })}
@@ -94,8 +92,7 @@ export function MiniSparkBar({ data, color, height = 48 }: { data: number[]; col
               width: barWidth,
               height: h,
               borderRadius: 2,
-              backgroundColor: isLast ? color : color + '60',
-            }}
+              backgroundColor: isLast ? color : color + '60'}}
           />
         );
       })}
@@ -180,5 +177,4 @@ export const shared = StyleSheet.create({
   trendBadgeText: { fontSize: 10, fontWeight: '700' as const },
   sparkLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
   sparkLabel: { fontSize: 10, fontWeight: '600' as const, color: Colors.textTertiary },
-  debugText: { fontSize: 10, color: Colors.textTertiary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-});
+  debugText: { fontSize: 10, color: Colors.textTertiary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }});

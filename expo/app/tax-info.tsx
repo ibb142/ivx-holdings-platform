@@ -7,16 +7,14 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import {
   Globe,
   FileText,
   CheckCircle,
   ChevronDown,
   Shield,
-  Info,
-} from 'lucide-react-native';
+  Info} from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -43,8 +41,7 @@ export default function TaxInfoScreen() {
   const currentUser = {
     firstName: profileData?.firstName || '',
     lastName: profileData?.lastName || '',
-    country: profileData?.country || 'United States',
-  };
+    country: profileData?.country || 'United States'};
   const [taxResidency, setTaxResidency] = useState<TaxResidency>('us');
   const [filingStatus, setFilingStatus] = useState<FilingStatus>('single');
   const [ssn, setSsn] = useState('');
@@ -86,8 +83,7 @@ export default function TaxInfoScreen() {
         .upsert({ id: user.id, first_name: input.firstName, last_name: input.lastName, updated_at: new Date().toISOString() });
       if (error) console.log('[TaxInfo] Profile upsert note:', error.message);
       return { success: true };
-    },
-  });
+    }});
   const { trackAction } = useAnalytics();
 
   const handleSave = useCallback(async () => {
@@ -109,8 +105,7 @@ export default function TaxInfoScreen() {
         filingStatus,
         ssnLast4: ssn.length >= 4 ? ssn.slice(-4) : ssn,
         tinValue: tin,
-        savedAt: new Date().toISOString(),
-      };
+        savedAt: new Date().toISOString()};
       await AsyncStorage.setItem(TAX_DATA_KEY, JSON.stringify(taxData));
       logger.taxInfo.log('Saved to local storage');
     } catch (e) {
@@ -120,8 +115,7 @@ export default function TaxInfoScreen() {
     updateTaxMutation.mutate(
       {
         firstName: currentUser.firstName,
-        lastName: currentUser.lastName,
-      },
+        lastName: currentUser.lastName},
       {
         onSuccess: () => {
           setIsSaving(false);
@@ -135,8 +129,7 @@ export default function TaxInfoScreen() {
           console.error('[TaxInfo] Save error:', error);
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           Alert.alert('Error', 'Failed to save your tax information. Please try again.');
-        },
-      }
+        }}
     );
   }, [taxResidency, filingStatus, ssn, tin, updateTaxMutation, trackAction, currentUser.firstName, currentUser.lastName]);
 
@@ -344,5 +337,4 @@ const styles = StyleSheet.create({
   infoCard: { backgroundColor: Colors.info + '10', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.info + '20' },
   infoText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -25,8 +24,7 @@ import {
   Globe,
   AlertTriangle,
   Server,
-  RefreshCw,
-} from 'lucide-react-native';
+  RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 interface ApiKeyItem {
@@ -50,16 +48,14 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Database': <Database size={18} color={Colors.accent} />,
   'Backend API': <Server size={18} color={Colors.positive} />,
   'AI & Services': <Cpu size={18} color="#A855F7" />,
-  'Platform': <Globe size={18} color={Colors.primary} />,
-};
+  'Platform': <Globe size={18} color={Colors.primary} />};
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Amazon Web Services': '#FF9900',
   'Database': Colors.accent,
   'Backend API': Colors.positive,
   'AI & Services': '#A855F7',
-  'Platform': Colors.primary,
-};
+  'Platform': Colors.primary};
 
 function buildKeys(): ApiKeyItem[] {
   return [
@@ -70,8 +66,7 @@ function buildKeys(): ApiKeyItem[] {
       description: 'Amazon Web Services — S3, SES, and infrastructure access',
       category: 'Amazon Web Services',
       isSensitive: true,
-      status: 'server',
-    },
+      status: 'server'},
     {
       id: 'aws_secret',
       label: 'AWS Secret Access Key',
@@ -79,8 +74,7 @@ function buildKeys(): ApiKeyItem[] {
       description: 'Secret credential paired with the Access Key ID',
       category: 'Amazon Web Services',
       isSensitive: true,
-      status: 'server',
-    },
+      status: 'server'},
     {
       id: 'aws_region',
       label: 'AWS Region',
@@ -88,8 +82,7 @@ function buildKeys(): ApiKeyItem[] {
       description: 'AWS data center region (e.g. us-east-1)',
       category: 'Amazon Web Services',
       isSensitive: true,
-      status: 'server',
-    },
+      status: 'server'},
     {
       id: 'api_base_url',
       label: 'API Base URL',
@@ -97,8 +90,7 @@ function buildKeys(): ApiKeyItem[] {
       description: 'Supabase API base URL',
       category: 'Backend API',
       isSensitive: false,
-      status: 'configured',
-    },
+      status: 'configured'},
     {
       id: 'project_id',
       label: 'Project ID',
@@ -106,8 +98,7 @@ function buildKeys(): ApiKeyItem[] {
       description: 'IVX platform project identifier',
       category: 'Platform',
       isSensitive: false,
-      status: 'system',
-    },
+      status: 'system'},
     {
       id: 'team_id',
       label: 'Team ID',
@@ -115,8 +106,7 @@ function buildKeys(): ApiKeyItem[] {
       description: 'IVX platform team identifier',
       category: 'Platform',
       isSensitive: false,
-      status: 'system',
-    },
+      status: 'system'},
   ];
 }
 
@@ -320,8 +310,7 @@ export default function ApiKeysScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -329,8 +318,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
@@ -339,93 +327,77 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSub: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   shieldWrap: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.primary + '15',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   loadingWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-  },
+    gap: 16},
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   errorWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
-    padding: 32,
-  },
+    padding: 32},
   errorTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: Colors.text,
-    marginTop: 8,
-  },
+    marginTop: 8},
   errorSub: {
     fontSize: 14,
     color: Colors.textSecondary,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retryBtn: {
     marginTop: 12,
     backgroundColor: Colors.primary,
     paddingHorizontal: 28,
     paddingVertical: 12,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   retryBtnText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 14,
-  },
+    fontSize: 14},
   summaryRow: {
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   summaryCard: {
     flex: 1,
     backgroundColor: Colors.card,
     borderRadius: 12,
     borderWidth: 1,
     paddingVertical: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   summaryNum: {
     fontSize: 22,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   summaryLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 2,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -437,103 +409,82 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: Colors.warning + '30',
-  },
+    borderColor: Colors.warning + '30'},
   warningText: {
     flex: 1,
     fontSize: 12,
     color: Colors.warning,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   section: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   categoryIconWrap: {
     width: 34,
     height: 34,
     borderRadius: 9,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   sectionTitle: {
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   sectionCount: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   keyCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   keyCardLast: {
-    marginBottom: 0,
-  },
+    marginBottom: 0},
   keyCardMissing: {
     borderColor: Colors.negative + '30',
-    backgroundColor: Colors.negative + '08',
-  },
+    backgroundColor: Colors.negative + '08'},
   keyTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   keyLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
-  },
+    flex: 1},
   keyLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   statusBadge: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusConfigured: {
-    backgroundColor: Colors.positive + '15',
-  },
+    backgroundColor: Colors.positive + '15'},
   statusMissing: {
-    backgroundColor: Colors.negative + '15',
-  },
+    backgroundColor: Colors.negative + '15'},
   statusSystem: {
-    backgroundColor: Colors.primary + '15',
-  },
+    backgroundColor: Colors.primary + '15'},
   statusText: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   keyActions: {
     flexDirection: 'row',
-    gap: 6,
-  },
+    gap: 6},
   actionBtn: {
     width: 32,
     height: 32,
@@ -542,12 +493,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   actionBtnCopied: {
     borderColor: Colors.positive + '50',
-    backgroundColor: Colors.positive + '10',
-  },
+    backgroundColor: Colors.positive + '10'},
   keyValue: {
     fontSize: 13,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
@@ -558,21 +507,17 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   keyValueMissing: {
     color: Colors.textTertiary,
-    fontStyle: 'italic',
-  },
+    fontStyle: 'italic'},
   keyValueMasked: {
     letterSpacing: 2,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   keyDesc: {
     fontSize: 11,
     color: Colors.textTertiary,
-    lineHeight: 15,
-  },
+    lineHeight: 15},
   securityNote: {
     flexDirection: 'row',
     gap: 10,
@@ -582,15 +527,11 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   securityNoteText: {
     flex: 1,
     fontSize: 12,
     color: Colors.textTertiary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   bottomPad: {
-    height: 60,
-  },
-});
+    height: 60}});

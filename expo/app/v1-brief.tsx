@@ -5,8 +5,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-} from 'react-native';
+  View} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import {
@@ -22,15 +21,13 @@ import {
   Smartphone,
   Upload,
   Users,
-  WandSparkles,
-} from 'lucide-react-native';
+  WandSparkles} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   IVX_OWNER_AI_BRIEF_DEFAULTS,
   IVX_OWNER_AI_FEATURE_LABELS,
   IVX_OWNER_AI_PROFILE,
-  type IVXOwnerAIFeatureId,
-} from '@/constants/ivx-owner-ai';
+  type IVXOwnerAIFeatureId} from '@/constants/ivx-owner-ai';
 
 type BriefPlatform = 'web_only' | 'web_and_mobile';
 type BriefAudience = 'owner_only' | 'team' | 'public';
@@ -49,14 +46,12 @@ const PLATFORM_OPTIONS: Array<{ id: BriefPlatform; title: string; subtitle: stri
     id: 'web_only',
     title: 'Web only',
     subtitle: 'Lean browser-first launch with the shortest path to validation.',
-    icon: Globe,
-  },
+    icon: Globe},
   {
     id: 'web_and_mobile',
     title: 'Web + mobile',
     subtitle: 'One V1 scope that ships cleanly across browser and Expo clients.',
-    icon: Smartphone,
-  },
+    icon: Smartphone},
 ];
 
 const AUDIENCE_OPTIONS: Array<{ id: BriefAudience; title: string; subtitle: string; icon: typeof Users }> = [
@@ -64,20 +59,17 @@ const AUDIENCE_OPTIONS: Array<{ id: BriefAudience; title: string; subtitle: stri
     id: 'owner_only',
     title: 'Owner only',
     subtitle: 'Private ops, direct testing, and founder-controlled rollout.',
-    icon: ShieldCheck,
-  },
+    icon: ShieldCheck},
   {
     id: 'team',
     title: 'Team',
     subtitle: 'Internal collaborators, shared rooms, and guided feedback loops.',
-    icon: Briefcase,
-  },
+    icon: Briefcase},
   {
     id: 'public',
     title: 'Public',
     subtitle: 'Broader launch with onboarding, support, and trust-facing UX.',
-    icon: Users,
-  },
+    icon: Users},
 ];
 
 const STACK_ITEMS = IVX_OWNER_AI_BRIEF_DEFAULTS.stack;
@@ -88,43 +80,37 @@ const FEATURE_OPTIONS: BriefFeature[] = [
     title: IVX_OWNER_AI_FEATURE_LABELS.ai_chat,
     description: 'A named owner assistant for chat, triage, and guided responses across web and mobile.',
     icon: Bot,
-    accent: '#14B8A6',
-  },
+    accent: '#14B8A6'},
   {
     id: 'inbox',
     title: IVX_OWNER_AI_FEATURE_LABELS.inbox,
     description: 'A compact conversation inbox for owner-first review, unread counts, and fast follow-up.',
     icon: Inbox,
-    accent: '#F59E0B',
-  },
+    accent: '#F59E0B'},
   {
     id: 'shared_room',
     title: IVX_OWNER_AI_FEATURE_LABELS.shared_room,
     description: 'A shared owner room with stable slug routing, history, and realtime delivery.',
     icon: MessageSquareMore,
-    accent: '#4A90D9',
-  },
+    accent: '#4A90D9'},
   {
     id: 'file_upload',
     title: IVX_OWNER_AI_FEATURE_LABELS.file_upload,
     description: 'Web-safe and mobile-safe attachment delivery for images, docs, and supporting files.',
     icon: Upload,
-    accent: '#8B5CF6',
-  },
+    accent: '#8B5CF6'},
   {
     id: 'knowledge_base',
     title: IVX_OWNER_AI_FEATURE_LABELS.knowledge_base,
     description: 'A structured knowledge surface the assistant can use for owner-facing answers and summaries.',
     icon: Layers3,
-    accent: '#10B981',
-  },
+    accent: '#10B981'},
   {
     id: 'owner_commands',
     title: IVX_OWNER_AI_FEATURE_LABELS.owner_commands,
     description: 'Operator-style commands for quick owner actions, routing, and operational control.',
     icon: Boxes,
-    accent: '#FF4D4D',
-  },
+    accent: '#FF4D4D'},
 ];
 
 const INITIAL_FEATURES: BriefFeatureId[] = [...IVX_OWNER_AI_BRIEF_DEFAULTS.selectedFeatures];
@@ -306,8 +292,7 @@ export default function V1BriefScreen() {
       completionScore,
       generatedBrief,
       codeAccess: IVX_OWNER_AI_BRIEF_DEFAULTS.codeAccess,
-      stack: STACK_ITEMS,
-    });
+      stack: STACK_ITEMS});
   }, [aiName, allFeatureLabels, audience, completionScore, customFeatureList, generatedBrief, platform, selectedFeatures]);
 
   const toggleFeature = useCallback((featureId: BriefFeatureId) => {
@@ -614,14 +599,12 @@ export default function V1BriefScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 36,
-    gap: 16,
-  },
+    gap: 16},
   heroCard: {
     borderRadius: 28,
     borderWidth: 1,
@@ -629,8 +612,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 22,
     overflow: 'hidden',
-    backgroundColor: '#111111',
-  },
+    backgroundColor: '#111111'},
   heroOrbPrimary: {
     position: 'absolute',
     width: 160,
@@ -638,8 +620,7 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
     top: -40,
-    right: -10,
-  },
+    right: -10},
   heroOrbSecondary: {
     position: 'absolute',
     width: 120,
@@ -647,8 +628,7 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     backgroundColor: 'rgba(59, 130, 246, 0.12)',
     bottom: -18,
-    left: -18,
-  },
+    left: -18},
   heroRing: {
     position: 'absolute',
     width: 140,
@@ -657,8 +637,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: HERO_RING,
     top: 28,
-    right: 24,
-  },
+    right: 24},
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -670,35 +649,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     backgroundColor: 'rgba(0,0,0,0.28)',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   heroBadgeText: {
     color: Colors.text,
     fontSize: 12,
     fontWeight: '700' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   heroTitle: {
     color: Colors.text,
     fontSize: 30,
     lineHeight: 34,
     fontWeight: '900' as const,
     letterSpacing: -0.8,
-    maxWidth: '86%',
-  },
+    maxWidth: '86%'},
   heroDescription: {
     color: Colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 12,
-    maxWidth: '92%',
-  },
+    maxWidth: '92%'},
   heroSummaryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 18,
-  },
+    marginTop: 18},
   heroSummaryChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -708,13 +682,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   heroSummaryText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   signalCard: {
     borderRadius: 24,
     borderWidth: 1,
@@ -722,27 +694,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 12,
-  },
+    gap: 12},
   signalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   signalCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   signalTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   signalSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   scoreBadge: {
     minWidth: 70,
     borderRadius: 999,
@@ -752,38 +719,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.24)',
-  },
+    borderColor: 'rgba(255, 215, 0, 0.24)'},
   scoreBadgeValue: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   progressTrack: {
     height: 10,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   signalDescription: {
     color: Colors.text,
     fontSize: 14,
-    lineHeight: 21,
-  },
+    lineHeight: 21},
   section: {
-    gap: 10,
-  },
+    gap: 10},
   sectionLabel: {
     color: Colors.text,
     fontSize: 17,
     fontWeight: '800' as const,
-    letterSpacing: -0.2,
-  },
+    letterSpacing: -0.2},
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -793,98 +753,80 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   optionCardSelected: {
     borderColor: 'rgba(255, 215, 0, 0.55)',
-    backgroundColor: '#19150B',
-  },
+    backgroundColor: '#19150B'},
   optionIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 215, 0, 0.12)',
-  },
+    backgroundColor: 'rgba(255, 215, 0, 0.12)'},
   optionIconWrapSelected: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   optionCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   optionTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   optionSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   stackWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   stackBadge: {
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: '#111111',
-  },
+    backgroundColor: '#111111'},
   stackBadgeText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   stackHint: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   codeAccessCard: {
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.22)',
     backgroundColor: '#12100A',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   codeAccessHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   codeAccessIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   codeAccessCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   codeAccessTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   codeAccessSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   audienceGrid: {
-    gap: 10,
-  },
+    gap: 10},
   audienceCard: {
     borderRadius: 22,
     borderWidth: 1,
@@ -892,22 +834,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 10,
-  },
+    gap: 10},
   audienceCardSelected: {
     borderColor: 'rgba(255, 215, 0, 0.55)',
-    backgroundColor: '#17130B',
-  },
+    backgroundColor: '#17130B'},
   audienceTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   audienceSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   featureCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -917,34 +855,28 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   featureCardSelected: {
     borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: '#121212',
-  },
+    backgroundColor: '#121212'},
   featureIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 15,
     borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   featureCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   featureTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   featureDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   featureCheck: {
     width: 24,
     height: 24,
@@ -953,12 +885,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     backgroundColor: 'transparent',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   featureCheckSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   customFeatureCard: {
     borderRadius: 24,
     borderWidth: 1,
@@ -966,18 +896,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#101010',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 10,
-  },
+    gap: 10},
   customFeatureTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   customFeatureSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   customFeatureInput: {
     minHeight: 110,
     borderRadius: 18,
@@ -987,19 +914,16 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 15,
     paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   customFeatureFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   customFeatureMeta: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   aiCard: {
     borderRadius: 24,
     borderWidth: 1,
@@ -1007,35 +931,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 14,
-  },
+    gap: 14},
   aiHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   aiIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   aiCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   aiTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   aiSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   aiInput: {
     borderRadius: 18,
     borderWidth: 1,
@@ -1044,8 +962,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 15,
     paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   validationCard: {
     borderRadius: 22,
     borderWidth: 1,
@@ -1053,18 +970,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245, 158, 11, 0.08)',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 6,
-  },
+    gap: 6},
   validationTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   validationBody: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   summaryCard: {
     borderRadius: 28,
     borderWidth: 1,
@@ -1073,46 +987,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 18,
     gap: 14,
-    marginTop: 4,
-  },
+    marginTop: 4},
   summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   summaryIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: 'rgba(255, 215, 0, 0.12)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   summaryCopy: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   summaryTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   summarySubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   readinessCopy: {
     color: Colors.text,
     fontSize: 15,
     lineHeight: 22,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   summaryMetaWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   summaryMetaCard: {
     flex: 1,
     minWidth: 96,
@@ -1122,43 +1028,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 4,
-  },
+    gap: 4},
   summaryMetaLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '600' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   summaryMetaValue: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   selectedFeatureWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   selectedFeatureChip: {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 9,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   selectedFeatureChipText: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptyFeatureText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   generatedBriefCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -1166,18 +1065,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.24)',
     paddingHorizontal: 14,
     paddingVertical: 14,
-    gap: 10,
-  },
+    gap: 10},
   generatedBriefLabel: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   generatedBriefText: {
     color: Colors.text,
     fontSize: 14,
-    lineHeight: 22,
-  },
-});
+    lineHeight: 22}});

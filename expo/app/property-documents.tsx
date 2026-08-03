@@ -1,15 +1,12 @@
 import React, { useState, useCallback, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
   Animated,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as DocumentPicker from 'expo-document-picker';
@@ -29,28 +26,25 @@ import {
   ArrowLeft,
   FileCheck,
   FilePlus,
-  RefreshCw,
-} from 'lucide-react-native';
+  RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   REQUIRED_TITLE_DOCUMENTS,
   propertyDocumentSubmissions,
-  getSubmissionByPropertyId,
-} from '@/mocks/title-company';
+  getSubmissionByPropertyId} from '@/mocks/title-company';
 import {
   TitleDocument,
   TitleDocumentType,
   TitleDocumentStatus,
-  PropertyDocumentSubmission,
-} from '@/types';
+  PropertyDocumentSubmission} from '@/types';
 
 const STATUS_CONFIG: Record<TitleDocumentStatus, { color: string; label: string; icon: typeof CheckCircle }> = {
   not_uploaded: { color: Colors.textTertiary, label: 'Not Uploaded', icon: FilePlus },
   uploaded: { color: Colors.info, label: 'Uploaded', icon: Clock },
   under_review: { color: Colors.warning, label: 'Under Review', icon: Eye },
   approved: { color: Colors.success, label: 'Approved', icon: CheckCircle },
-  rejected: { color: Colors.error, label: 'Rejected', icon: XCircle },
-};
+  rejected: { color: Colors.error, label: 'Rejected', icon: XCircle }};
 
 export default function PropertyDocumentsScreen() {
   const router = useRouter();
@@ -69,8 +63,7 @@ export default function PropertyDocumentsScreen() {
       name: doc.name,
       description: doc.description,
       status: 'not_uploaded' as TitleDocumentStatus,
-      required: true,
-    }))
+      required: true}))
   );
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -89,15 +82,13 @@ export default function PropertyDocumentsScreen() {
       Animated.timing(animatedValues.current[expandedDoc], {
         toValue: 0,
         duration: 200,
-        useNativeDriver: false,
-      }).start();
+        useNativeDriver: false}).start();
     }
     if (isExpanding && animatedValues.current[docId]) {
       Animated.timing(animatedValues.current[docId], {
         toValue: 1,
         duration: 250,
-        useNativeDriver: false,
-      }).start();
+        useNativeDriver: false}).start();
     }
     setExpandedDoc(isExpanding ? docId : null);
     if (Platform.OS !== 'web') {
@@ -110,8 +101,7 @@ export default function PropertyDocumentsScreen() {
       setUploading(docId);
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-      });
+        copyToCacheDirectory: true});
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
@@ -123,8 +113,7 @@ export default function PropertyDocumentsScreen() {
                   fileName: file.name,
                   fileUri: file.uri,
                   status: 'uploaded' as TitleDocumentStatus,
-                  uploadedAt: new Date().toISOString(),
-                }
+                  uploadedAt: new Date().toISOString()}
               : d
           )
         );
@@ -155,8 +144,7 @@ export default function PropertyDocumentsScreen() {
                 : d
             )
           );
-        },
-      },
+        }},
     ]);
   }, []);
 
@@ -192,8 +180,7 @@ export default function PropertyDocumentsScreen() {
                 'Your documents have been submitted for title company review. You will be notified once the review is complete.'
               );
             }, 1500);
-          },
-        },
+          }},
       ]
     );
   }, [canSubmit]);
@@ -237,8 +224,7 @@ export default function PropertyDocumentsScreen() {
     const expandAnim = animatedValues.current[doc.id] || new Animated.Value(0);
     const expandHeight = expandAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, 160],
-    });
+      outputRange: [0, 160]});
 
     return (
       <View key={doc.id} style={[styles.docCard, { borderLeftColor: config.color }]}>
@@ -291,7 +277,7 @@ export default function PropertyDocumentsScreen() {
                   testID={`upload-${doc.type}`}
                 >
                   {isUploading ? (
-                    <ActivityIndicator size="small" color={Colors.background} />
+                    <ShimmerIndicator size="small" color={Colors.background} />
                   ) : (
                     <>
                       <Upload size={16} color={Colors.background} />
@@ -331,8 +317,7 @@ export default function PropertyDocumentsScreen() {
         options={{
           title: 'Document Portal',
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }}
+          headerTintColor: Colors.text}}
       />
       <View style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -392,7 +377,7 @@ export default function PropertyDocumentsScreen() {
               testID="submit-documents"
             >
               {submitting ? (
-                <ActivityIndicator size="small" color={Colors.background} />
+                <ShimmerIndicator size="small" color={Colors.background} />
               ) : (
                 <>
                   <Send size={18} color={canSubmit ? Colors.background : Colors.textTertiary} />
@@ -485,5 +470,4 @@ const styles = StyleSheet.create({
   approvedTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' as const },
   approvedSubtitle: { color: Colors.text, fontSize: 16, fontWeight: '700' as const },
   legalNote: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: Colors.surface, borderRadius: 10, marginTop: 8, borderWidth: 1, borderColor: Colors.surfaceBorder },
-  legalNoteText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  legalNoteText: { color: Colors.textSecondary, fontSize: 13 }});

@@ -2,24 +2,22 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { CheckCircle2, CircleDashed, Play, ShieldCheck, XCircle } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   deriveFinalStatus,
   fetchLatestProofLedger,
   runProofLedgerTask,
   type IVXProofFinalStatus,
-  type IVXProofLedgerEnvelope,
-} from '@/src/modules/ivx-owner-ai/services/ivxProofLedgerService';
+  type IVXProofLedgerEnvelope} from '@/src/modules/ivx-owner-ai/services/ivxProofLedgerService';
 
 const LATEST_QUERY_KEY = ['ivx-owner-ai', 'proof-ledger', 'latest'] as const;
 
@@ -108,8 +106,7 @@ export default function IVXProofLedgerRoute() {
   const latestQuery = useQuery<IVXProofLedgerEnvelope, Error>({
     queryKey: LATEST_QUERY_KEY,
     queryFn: async () => fetchLatestProofLedger(),
-    staleTime: 0,
-  });
+    staleTime: 0});
 
   useEffect(() => {
     if (latestQuery.data && !envelope) {
@@ -119,8 +116,7 @@ export default function IVXProofLedgerRoute() {
 
   const runMutation = useMutation<IVXProofLedgerEnvelope, Error, void>({
     mutationFn: async () => runProofLedgerTask(),
-    onSuccess: (data) => setEnvelope(data),
-  });
+    onSuccess: (data) => setEnvelope(data)});
 
   const handleRun = useCallback((): void => {
     runMutation.mutate();
@@ -151,8 +147,7 @@ export default function IVXProofLedgerRoute() {
           options={{
             title: 'Senior Developer Proof Ledger',
             headerStyle: { backgroundColor: Colors.background },
-            headerTintColor: Colors.text,
-          }}
+            headerTintColor: Colors.text}}
         />
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.headerRow}>
@@ -192,7 +187,7 @@ export default function IVXProofLedgerRoute() {
             testID="proof-ledger-run-button"
           >
             {isRunning ? (
-              <ActivityIndicator color={Colors.black} />
+              <ShimmerIndicator color={Colors.black} />
             ) : (
               <>
                 <Play size={16} color={Colors.black} />
@@ -206,7 +201,7 @@ export default function IVXProofLedgerRoute() {
 
           {isRunning ? (
             <View style={styles.statusBlock} testID="proof-ledger-running">
-              <ActivityIndicator color={Colors.primary} />
+              <ShimmerIndicator color={Colors.primary} />
               <Text style={styles.statusText}>
                 Running on production: building feature → committing → deploying → verifying live (can take a minute)…
               </Text>
@@ -222,7 +217,7 @@ export default function IVXProofLedgerRoute() {
 
           {latestQuery.isLoading && !active ? (
             <View style={styles.statusBlock}>
-              <ActivityIndicator color={Colors.primary} />
+              <ShimmerIndicator color={Colors.primary} />
               <Text style={styles.statusText}>Loading last persisted proof…</Text>
             </View>
           ) : null}
@@ -346,57 +341,47 @@ export default function IVXProofLedgerRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scroll: {
     padding: 16,
     gap: 14,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   headerTitle: {
     color: Colors.text,
     fontSize: 19,
     fontWeight: '800' as const,
-    flex: 1,
-  },
+    flex: 1},
   headerSub: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   verdictCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1.5,
     padding: 16,
-    gap: 4,
-  },
+    gap: 4},
   verdictLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   verdictValue: {
     fontSize: 26,
     fontWeight: '900' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   verdictMeta: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   pipelineWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-  },
+    gap: 6},
   stepPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -406,23 +391,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   stepPillActive: {
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   stepPillDone: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   stepPillText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   stepPillTextDone: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   runButton: {
     flexDirection: 'row',
     gap: 8,
@@ -431,35 +411,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
+    paddingHorizontal: 18},
   runButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   runButtonText: {
     color: Colors.black,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   runHint: {
     color: Colors.textTertiary,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   statusBlock: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    padding: 12,
-  },
+    padding: 12},
   statusText: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   errorBlock: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,81 +442,64 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.error,
-    padding: 12,
-  },
+    padding: 12},
   errorText: {
     color: Colors.text,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   ledgerCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   row: {
     flexDirection: 'row',
     gap: 10,
     paddingVertical: 11,
     paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   rowIndex: {
     color: Colors.textTertiary,
     fontSize: 12,
     fontWeight: '800' as const,
     width: 20,
     textAlign: 'right',
-    paddingTop: 2,
-  },
+    paddingTop: 2},
   rowBody: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   rowLabel: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   rowValue: {
     color: Colors.text,
-    fontSize: 14,
-  },
+    fontSize: 14},
   rowValueMono: {
     fontFamily: 'monospace',
-    fontSize: 12.5,
-  },
+    fontSize: 12.5},
   rowValueYes: {
     color: Colors.success,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   rowValueNo: {
     color: Colors.error,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   rowValuePending: {
     color: Colors.warning,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   rowValueLink: {
     color: Colors.info,
-    textDecorationLine: 'underline',
-  },
+    textDecorationLine: 'underline'},
   divider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   emptyBlock: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    padding: 16,
-  },
+    padding: 16},
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});

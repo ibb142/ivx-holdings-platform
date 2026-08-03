@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,8 +29,7 @@ import {
   Phone,
   Calendar,
   ChevronRight,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { VIP_TIERS, getUserVIPProgress, getTierByLevel, VIPTier, VIPTierLevel } from '@/mocks/vip-tiers';
@@ -44,22 +42,19 @@ const TIER_ICONS: Record<string, React.ComponentType<any>> = {
   shield: Shield,
   award: Award,
   crown: IVXBrandIcon,
-  gem: Gem,
-};
+  gem: Gem};
 
 const TIER_GRADIENTS: Record<VIPTierLevel, [string, string]> = {
   bronze: ['#8B5E3C', '#CD7F32'],
   silver: ['#7A7E82', '#C0C0C0'],
   gold: ['#B8860B', '#FFD700'],
-  platinum: ['#8A8D90', '#E5E4E2'],
-};
+  platinum: ['#8A8D90', '#E5E4E2']};
 
 const TIER_GLOW: Record<VIPTierLevel, string> = {
   bronze: '#CD7F3220',
   silver: '#C0C0C020',
   gold: '#FFD70025',
-  platinum: '#E5E4E220',
-};
+  platinum: '#E5E4E220'};
 
 export default function VIPTiersScreen() {
   const { width: screenWidth } = useWindowDimensions();
@@ -87,47 +82,40 @@ export default function VIPTiersScreen() {
       Animated.timing(fadeIn, {
         toValue: 1,
         duration: 600,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.spring(slideUp, {
         toValue: 0,
         friction: 12,
         tension: 40,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.spring(heroScale, {
         toValue: 1,
         friction: 10,
         tension: 35,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start();
 
     Animated.timing(progressAnim, {
       toValue: progress.progressPercent / 100,
       duration: 1400,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
 
     Animated.loop(
       Animated.timing(shimmerAnim, {
         toValue: 1,
         duration: 3000,
-        useNativeDriver: true,
-      })
+        useNativeDriver: true})
     ).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
+    outputRange: ['0%', '100%']});
 
   const shimmerTranslate = shimmerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-screenWidth, screenWidth],
-  });
+    outputRange: [-screenWidth, screenWidth]});
 
   const renderTierIcon = useCallback((tier: VIPTier, size: number, color: string) => {
     const IconComponent = TIER_ICONS[tier.icon] || Shield;
@@ -185,8 +173,7 @@ export default function VIPTiersScreen() {
             styles.heroCard,
             {
               opacity: fadeIn,
-              transform: [{ translateY: slideUp }, { scale: heroScale }],
-            },
+              transform: [{ translateY: slideUp }, { scale: heroScale }]},
           ]}>
             <LinearGradient
               colors={[TIER_GLOW[progress.currentTier], '#0A0A0A00']}
@@ -317,8 +304,7 @@ export default function VIPTiersScreen() {
                       styles.tierTab,
                       isSelected && {
                         borderColor: tier.color + '50',
-                        backgroundColor: tier.color + '0A',
-                      },
+                        backgroundColor: tier.color + '0A'},
                     ]}
                   >
                     <LinearGradient
@@ -420,8 +406,7 @@ export default function VIPTiersScreen() {
                         {
                           backgroundColor: isActiveTierUnlocked
                             ? activeTier.color + '12'
-                            : Colors.surfaceBorder + '60',
-                        },
+                            : Colors.surfaceBorder + '60'},
                       ]}>
                         <PerkIcon
                           size={13}
@@ -459,8 +444,7 @@ export default function VIPTiersScreen() {
                         styles.unlockProgressFill,
                         {
                           width: `${Math.min((progress.totalInvested / activeTier.minInvestment) * 100, 100)}%`,
-                          backgroundColor: activeTier.color,
-                        },
+                          backgroundColor: activeTier.color},
                       ]} />
                     </View>
                     <View style={styles.unlockRange}>
@@ -505,12 +489,10 @@ export default function VIPTiersScreen() {
                         shadowOpacity: 0.4,
                         shadowRadius: 6,
                         shadowOffset: { width: 0, height: 0 },
-                        elevation: 4,
-                      },
+                        elevation: 4},
                       isCurrent && {
                         borderWidth: 3,
-                        borderColor: tier.color + '40',
-                      },
+                        borderColor: tier.color + '40'},
                     ]}>
                       {isReached ? (
                         renderTierIcon(tier, 12, '#000')
@@ -561,18 +543,15 @@ export default function VIPTiersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
-  },
+    backgroundColor: '#0A0A0A'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   backButton: {
     width: 40,
     height: 40,
@@ -581,139 +560,116 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#222',
-  },
+    borderColor: '#222'},
   headerTitle: {
     color: Colors.text,
     fontSize: 17,
     fontWeight: '600' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   scrollContent: {
     paddingTop: 4,
-    paddingBottom: 140,
-  },
+    paddingBottom: 140},
 
   heroCard: {
     marginHorizontal: 16,
     marginBottom: 28,
-    position: 'relative',
-  },
+    position: 'relative'},
   heroGlow: {
     position: 'absolute',
     top: -40,
     left: -20,
     right: -20,
-    height: 100,
-  },
+    height: 100},
   heroInner: {
     backgroundColor: '#111114',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: '#1E1E22',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   heroCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: 20,
     paddingBottom: 0,
-    gap: 8,
-  },
+    gap: 8},
   heroBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   heroIconBg: {
     width: 44,
     height: 44,
     borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   heroTierName: {
     color: Colors.text,
     fontSize: 17,
     fontWeight: '700' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   heroMemberLabel: {
     color: Colors.textTertiary,
     fontSize: 12,
     marginTop: 2,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   pointsPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
-  },
+    borderRadius: 20},
   pointsPillText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
 
   heroAmountBlock: {
     paddingHorizontal: 20,
-    paddingTop: 22,
-  },
+    paddingTop: 22},
   heroAmountLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '600' as const,
     letterSpacing: 0.8,
     textTransform: 'uppercase' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   heroAmount: {
     color: Colors.text,
     fontSize: 28,
     fontWeight: '800' as const,
-    letterSpacing: -1,
-  },
+    letterSpacing: -1},
 
   heroProgressBlock: {
     paddingHorizontal: 20,
-    paddingTop: 18,
-  },
+    paddingTop: 18},
   heroProgressMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-    gap: 8,
-  },
+    gap: 8},
   heroProgressText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   heroProgressPct: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   heroProgressTrack: {
     height: 5,
     borderRadius: 3,
     backgroundColor: '#1E1E22',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   heroProgressFill: {
     height: 5,
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   shimmer: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    width: 60,
-  },
+    width: 60},
 
   maxTierBanner: {
     flexDirection: 'row',
@@ -723,12 +679,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   maxTierText: {
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   heroStatsRow: {
     flexDirection: 'row',
@@ -737,44 +691,36 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     marginTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A1E',
-  },
+    borderTopColor: '#1A1A1E'},
   heroStatBox: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   heroStatValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   heroStatLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '500' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   heroStatDivider: {
     width: 1,
     height: 28,
-    backgroundColor: '#1E1E22',
-  },
+    backgroundColor: '#1E1E22'},
 
   tierNavSection: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
     paddingHorizontal: 20,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   tierTabsContainer: {
     paddingHorizontal: 16,
-    gap: 8,
-  },
+    gap: 8},
   tierTab: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -784,72 +730,60 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1E1E22',
-    backgroundColor: '#111114',
-  },
+    backgroundColor: '#111114'},
   tierTabIcon: {
     width: 26,
     height: 26,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   tierTabName: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   tierDetailSection: {
     paddingHorizontal: 16,
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   tierDetailCard: {
     backgroundColor: '#111114',
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#1E1E22',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   tierDetailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     padding: 20,
-    paddingBottom: 16,
-  },
+    paddingBottom: 16},
   tierDetailIconBg: {
     width: 52,
     height: 52,
     borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   tierDetailMeta: {
-    flex: 1,
-  },
+    flex: 1},
   tierDetailNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap' as const,
-  },
+    flexWrap: 'wrap' as const},
   tierDetailName: {
     fontSize: 20,
     fontWeight: '800' as const,
     letterSpacing: -0.3,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   activeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   activeBadgeText: {
     color: '#000',
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   lockedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -857,27 +791,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: Colors.surfaceBorder + '80',
-  },
+    backgroundColor: Colors.surfaceBorder + '80'},
   lockedBadgeText: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tierDetailRange: {
     color: Colors.textTertiary,
     fontSize: 13,
     fontWeight: '500' as const,
-    marginTop: 3,
-  },
+    marginTop: 3},
 
   tierMetricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 16,
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   metricCard: {
     width: (SCREEN_WIDTH - 72) / 2,
     backgroundColor: '#0D0D10',
@@ -885,98 +815,81 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#1A1A1E',
-    gap: 6,
-  },
+    gap: 6},
   metricValue: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '800' as const,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   metricLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '500' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
 
   perksBlock: {
     padding: 20,
-    paddingTop: 16,
-  },
+    paddingTop: 16},
   perksTitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
     textTransform: 'uppercase' as const,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   perkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   perkIconCircle: {
     width: 30,
     height: 30,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   perkText: {
     color: Colors.textSecondary,
     fontSize: 14,
     flex: 1,
     fontWeight: '400' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
 
   unlockBlock: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
+    paddingBottom: 20},
   unlockGradient: {
     borderRadius: 16,
-    padding: 18,
-  },
+    padding: 18},
   unlockTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   unlockSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
     fontWeight: '500' as const,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   unlockProgressTrack: {
     height: 4,
     borderRadius: 2,
     backgroundColor: '#1E1E22',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   unlockProgressFill: {
     height: 4,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   unlockRange: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 6,
-  },
+    marginTop: 6},
   unlockRangeText: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
 
   journeySection: {
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   journeyTrack: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -986,21 +899,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#1E1E22',
-  },
+    borderColor: '#1E1E22'},
   journeyStep: {
     flex: 1,
     alignItems: 'center',
-    position: 'relative',
-  },
+    position: 'relative'},
   journeyLine: {
     position: 'absolute',
     left: 0,
     right: '50%',
     top: 15,
     height: 2,
-    backgroundColor: '#1E1E22',
-  },
+    backgroundColor: '#1E1E22'},
   journeyDot: {
     width: 30,
     height: 30,
@@ -1010,25 +920,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1E22',
     borderColor: 'transparent',
     borderWidth: 0,
-    zIndex: 1,
-  },
+    zIndex: 1},
   journeyName: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '600' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   journeyAmount: {
     color: Colors.textTertiary,
     fontSize: 9,
     marginTop: 2,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
 
   ctaSection: {
     paddingHorizontal: 16,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   ctaButton: {
     height: 52,
     borderRadius: 16,
@@ -1036,15 +942,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   ctaText: {
     color: '#000',
     fontSize: 16,
     fontWeight: '800' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   scrollView: {
-    backgroundColor: '#0A0A0A',
-  },
-});
+    backgroundColor: '#0A0A0A'}});

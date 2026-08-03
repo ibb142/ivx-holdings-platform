@@ -7,32 +7,28 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
   StyleSheet,
-  ActivityIndicator,
   Alert,
-  Linking,
-} from 'react-native';
+  Linking} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
   Shield, Database, HardDrive, DollarSign, AlertTriangle,
   CheckCircle, XCircle, Clock, RefreshCw, FileText, Zap,
-  ChevronLeft, Activity, Archive, Lock,
-} from 'lucide-react-native';
+  ChevronLeft, Activity, Archive, Lock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchRecoveryOverview,
   triggerSnapshot,
   runRecoveryDrill,
   generateReport,
-  type RecoveryOverview,
-} from '@/lib/enterprise-recovery-client';
+  type RecoveryOverview} from '@/lib/enterprise-recovery-client';
 
 const GOLD = Colors.gold;
 const GREEN = '#00C48C';
@@ -92,7 +88,7 @@ export default function DataRecoveryScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={GOLD} />
+        <ShimmerIndicator size="large" color={GOLD} />
         <Text style={styles.loadingText}>Loading Recovery Center…</Text>
       </View>
     );
@@ -176,7 +172,7 @@ export default function DataRecoveryScreen() {
             disabled={actionLoading !== null}
           >
             {actionLoading === 'snapshot' ? (
-              <ActivityIndicator size="small" color={GOLD} />
+              <ShimmerIndicator size="small" color={GOLD} />
             ) : (
               <Archive size={22} color={GOLD} />
             )}
@@ -189,7 +185,7 @@ export default function DataRecoveryScreen() {
             disabled={actionLoading !== null}
           >
             {actionLoading === 'drill' ? (
-              <ActivityIndicator size="small" color={GOLD} />
+              <ShimmerIndicator size="small" color={GOLD} />
             ) : (
               <Zap size={22} color={GOLD} />
             )}
@@ -202,7 +198,7 @@ export default function DataRecoveryScreen() {
             disabled={actionLoading !== null}
           >
             {actionLoading === 'report' ? (
-              <ActivityIndicator size="small" color={GOLD} />
+              <ShimmerIndicator size="small" color={GOLD} />
             ) : (
               <FileText size={22} color={GOLD} />
             )}
@@ -442,37 +438,31 @@ function MetricRow({ label, value, valueColor }: { label: string; value: string;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
-  },
+    backgroundColor: '#000000'},
   loadingContainer: {
     flex: 1,
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-  },
+    gap: 16},
   loadingText: {
     color: '#909090',
-    fontSize: 14,
-  },
+    fontSize: 14},
   errorContainer: {
     flex: 1,
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 12,
-  },
+    gap: 12},
   errorTitle: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   errorDetail: {
     color: '#909090',
     fontSize: 13,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -481,13 +471,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
-    marginTop: 12,
-  },
+    marginTop: 12},
   retryButtonText: {
     color: '#000',
     fontWeight: '700',
-    fontSize: 15,
-  },
+    fontSize: 15},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -495,46 +483,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
-  },
+    borderBottomColor: '#2A2A2A'},
   backButton: {
-    padding: 4,
-  },
+    padding: 4},
   headerTitle: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    gap: 16,
-  },
+    gap: 16},
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   bannerText: {
-    flex: 1,
-  },
+    flex: 1},
   bannerTitle: {
     fontSize: 16,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   bannerSubtitle: {
     color: '#909090',
     fontSize: 13,
-    marginTop: 2,
-  },
+    marginTop: 2},
   actionsRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   actionButton: {
     flex: 1,
     backgroundColor: '#141414',
@@ -543,146 +521,118 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-  },
+    borderColor: '#2A2A2A'},
   actionLabel: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   section: {
     backgroundColor: '#141414',
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-  },
+    borderColor: '#2A2A2A'},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
-  },
+    borderBottomColor: '#2A2A2A'},
   sectionTitle: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   sectionBody: {
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   metricRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   metricLabel: {
     color: '#909090',
-    fontSize: 13,
-  },
+    fontSize: 13},
   metricValue: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '600',
-    maxWidth: '60%',
-  },
+    maxWidth: '60%'},
   checkRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   checkContent: {
-    flex: 1,
-  },
+    flex: 1},
   checkService: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   checkDetail: {
     color: '#909090',
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   complianceRow: {
     flexDirection: 'row',
     gap: 24,
     marginTop: 8,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-  },
+    borderTopColor: '#2A2A2A'},
   complianceItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   complianceLabel: {
     color: '#909090',
-    fontSize: 13,
-  },
+    fontSize: 13},
   gapsContainer: {
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   gapItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 6,
-  },
+    gap: 6},
   gapText: {
     color: ORANGE,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   alertBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
     backgroundColor: `${ORANGE}15`,
     padding: 10,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   alertText: {
     color: ORANGE,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   linkButton: {
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   linkText: {
     color: BLUE,
     fontSize: 13,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   noteText: {
     color: '#555',
     fontSize: 11,
-    fontStyle: 'italic',
-  },
+    fontStyle: 'italic'},
   snapshotsList: {
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   snapshotItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   snapshotId: {
     color: '#fff',
     fontSize: 11,
-    flex: 1,
-  },
+    flex: 1},
   snapshotRows: {
     color: GREEN,
     fontSize: 11,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   runbookButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -692,12 +642,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-  },
+    borderColor: '#2A2A2A'},
   runbookText: {
     color: GOLD,
     fontSize: 14,
     fontWeight: '600',
-    flex: 1,
-  },
-});
+    flex: 1}});

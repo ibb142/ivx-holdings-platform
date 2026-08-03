@@ -2,15 +2,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, router } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   FileText,
@@ -19,11 +17,11 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
-  Unplug,
-} from 'lucide-react-native';
+  Unplug} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   connectGmail,
   createGmailDraft,
@@ -36,8 +34,7 @@ import {
   type CreateGmailDraftResult,
   type GmailDraftRecord,
   type GmailProviderStatus,
-  type GmailTestResult,
-} from '@/src/modules/ivx-developer/gmailProviderService';
+  type GmailTestResult} from '@/src/modules/ivx-developer/gmailProviderService';
 
 function StatusRow({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -53,8 +50,7 @@ function ActionButton({
   icon,
   onPress,
   disabled,
-  tone,
-}: {
+  tone}: {
   label: string;
   icon: React.ReactNode;
   onPress: () => void;
@@ -109,8 +105,7 @@ function GmailProviderContent() {
         if (handleSessionError(error)) return null;
         throw error;
       }
-    },
-  });
+    }});
 
   const draftsQuery = useQuery<GmailDraftRecord[]>({
     queryKey: ['ivx-gmail-drafts'],
@@ -121,8 +116,7 @@ function GmailProviderContent() {
         if (handleSessionError(error)) return [];
         throw error;
       }
-    },
-  });
+    }});
 
   const status = statusQuery.data ?? null;
   const connected = status?.connected === true;
@@ -135,23 +129,19 @@ function GmailProviderContent() {
   const connectMutation = useMutation({
     mutationFn: connectGmail,
     onSuccess: (r) => { setActionNote(r.ok ? r.note : r.detail); invalidate(); },
-    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Connect failed.'); },
-  });
+    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Connect failed.'); }});
   const disconnectMutation = useMutation({
     mutationFn: disconnectGmail,
     onSuccess: (r) => { setActionNote(r.ok ? r.note : (r as { detail?: string }).detail ?? 'Disconnected.'); invalidate(); },
-    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Disconnect failed.'); },
-  });
+    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Disconnect failed.'); }});
   const refreshMutation = useMutation({
     mutationFn: refreshGmailToken,
     onSuccess: (r) => { setActionNote(r.ok ? r.note : r.detail); invalidate(); },
-    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Refresh failed.'); },
-  });
+    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Refresh failed.'); }});
   const testMutation = useMutation({
     mutationFn: testGmailDraftAccess,
     onSuccess: (r) => { setTestResult(r); setActionNote(r.note); invalidate(); },
-    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Test failed.'); },
-  });
+    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Test failed.'); }});
   const draftMutation = useMutation({
     mutationFn: () =>
       createGmailDraft({
@@ -161,11 +151,9 @@ function GmailProviderContent() {
         recipientContact: 'prospect@example.com',
         relatedDeal: 'Casa Rosario',
         contactVerified,
-        ownerApproved,
-      }),
+        ownerApproved}),
     onSuccess: (r) => { setDraftResult(r); invalidate(); },
-    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Draft failed.'); },
-  });
+    onError: (e) => { if (!handleSessionError(e)) setActionNote(e instanceof Error ? e.message : 'Draft failed.'); }});
 
   const drafts = useMemo(() => draftsQuery.data ?? [], [draftsQuery.data]);
   const busy = connectMutation.isPending || disconnectMutation.isPending || refreshMutation.isPending || testMutation.isPending;
@@ -205,7 +193,7 @@ function GmailProviderContent() {
         ) : null}
 
         {statusQuery.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : status ? (
           <View style={styles.card}>
             <View style={styles.statusHeader}>
@@ -291,7 +279,7 @@ function GmailProviderContent() {
 
         <Text style={styles.sectionTitle}>{`Gmail drafts (${drafts.length})`}</Text>
         {draftsQuery.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : drafts.length === 0 ? (
           <View style={styles.emptyCard}>
             <Mail size={24} color={Colors.textTertiary} />
@@ -361,5 +349,4 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' as const, lineHeight: 19 },
   draftCard: { backgroundColor: Colors.card, borderRadius: 12, padding: 12, gap: 3, borderWidth: 1, borderColor: Colors.border },
   draftSubject: { fontSize: 14, fontWeight: '600' as const, color: Colors.text },
-  draftMeta: { fontSize: 12, color: Colors.textTertiary },
-});
+  draftMeta: { fontSize: 12, color: Colors.textTertiary }});

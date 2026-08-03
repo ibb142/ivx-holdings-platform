@@ -17,17 +17,14 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Switch,
-  ActivityIndicator,
   Alert,
-  TextInput,
-} from 'react-native';
+  TextInput} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -40,9 +37,9 @@ import {
   RefreshCw,
   Check,
   ChevronRight,
-  Search,
-} from 'lucide-react-native';
+  Search} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   type IanaTimezone,
   type TimeDisplayMode,
@@ -65,8 +62,7 @@ import {
   nowUtc,
   formatTimestamp,
   getDeviceIdentifier,
-  SUPPORTED_TEST_CITIES,
-} from '@/lib/time-service';
+  SUPPORTED_TEST_CITIES} from '@/lib/time-service';
 
 const DISPLAY_MODES: Array<{ mode: TimeDisplayMode; label: string; description: string; icon: typeof Globe }> = [
   { mode: 'utc',       label: 'UTC',           description: 'Coordinated Universal Time — server standard', icon: Globe },
@@ -198,7 +194,7 @@ export default function TimeZoneSettingsScreen() {
           <View style={styles.backButton} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading timezone settings...</Text>
         </View>
       </SafeAreaView>
@@ -215,7 +211,7 @@ export default function TimeZoneSettingsScreen() {
         <Text style={styles.headerTitle}>Time Zone Settings</Text>
         <TouchableOpacity onPress={handleAutoDetect} style={styles.backButton} disabled={saving}>
           {saving ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <RefreshCw size={22} color={Colors.primary} />
           )}
@@ -387,7 +383,7 @@ export default function TimeZoneSettingsScreen() {
         {/* Save Button */}
         <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile} disabled={saving}>
           {saving ? (
-            <ActivityIndicator size="small" color={Colors.black} />
+            <ShimmerIndicator size="small" color={Colors.black} />
           ) : (
             <Text style={styles.saveButtonText}>Save Profile</Text>
           )}
@@ -416,8 +412,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -425,110 +420,89 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   loadingText: {
     fontSize: 14,
     color: Colors.textTertiary,
-    marginTop: 12,
-  },
+    marginTop: 12},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   section: {
-    marginTop: 24,
-  },
+    marginTop: 24},
   sectionTitle: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 1.2,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   sectionDescription: {
     fontSize: 13,
     color: Colors.textTertiary,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   currentTimeCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   timeLabel: {
     fontSize: 14,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   timeValue: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   timeValueMono: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.text,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   dstBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   dstText: {
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   infoCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   infoLabel: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   infoValue: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   modeCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -537,12 +511,10 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   modeCardActive: {
     borderColor: Colors.primary,
-    backgroundColor: 'rgba(0, 196, 140, 0.05)',
-  },
+    backgroundColor: 'rgba(0, 196, 140, 0.05)'},
   modeIconContainer: {
     width: 40,
     height: 40,
@@ -550,24 +522,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   modeContent: {
-    flex: 1,
-  },
+    flex: 1},
   modeLabel: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   modeLabelActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   modeDescription: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   customTzButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -576,12 +543,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   customTzValue: {
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   pickerContainer: {
     marginTop: 8,
     backgroundColor: Colors.surface,
@@ -589,8 +554,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    maxHeight: 350,
-  },
+    maxHeight: 350},
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -599,48 +563,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 8,
-    gap: 8,
-  },
+    gap: 8},
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   pickerList: {
-    maxHeight: 280,
-  },
+    maxHeight: 280},
   pickerRegionLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 1,
     paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   pickerItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   pickerItemActive: {
-    backgroundColor: 'rgba(0, 196, 140, 0.1)',
-  },
+    backgroundColor: 'rgba(0, 196, 140, 0.1)'},
   pickerItemText: {
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   pickerItemTextActive: {
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   pickerItemOffset: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   toggleCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -649,92 +604,73 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   toggleContent: {
-    flex: 1,
-  },
+    flex: 1},
   toggleLabel: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   toggleDescription: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   citiesCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   cityRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   cityLeft: {
-    flex: 1,
-  },
+    flex: 1},
   cityName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   cityTimezone: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   cityRight: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   cityTime: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.text,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   cityOffsetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
-  },
+    marginTop: 2},
   cityOffset: {
     fontSize: 11,
     color: Colors.textTertiary,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   saveButton: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
-  },
+    marginTop: 24},
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   footer: {
     marginTop: 20,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   footerText: {
     fontSize: 12,
     color: Colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});

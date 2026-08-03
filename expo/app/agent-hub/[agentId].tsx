@@ -14,8 +14,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Linking,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -40,8 +39,7 @@ import {
   Eye,
   Code2,
   RefreshCw,
-  Activity,
-} from 'lucide-react-native';
+  Activity} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { getAgentById, type AgentTool } from '@/lib/ivx-agents-data';
 
@@ -55,14 +53,12 @@ const ICON_MAP: Record<string, React.ElementType> = {
   ClipboardCheck,
   Shield,
   DollarSign,
-  Lightbulb,
-};
+  Lightbulb};
 
 const RISK_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
   low: { bg: 'rgba(0,196,140,0.15)', text: Colors.success, label: 'LOW RISK' },
   medium: { bg: 'rgba(245,158,11,0.15)', text: Colors.warning, label: 'MEDIUM RISK' },
-  high: { bg: 'rgba(255,77,77,0.15)', text: Colors.error, label: 'HIGH RISK' },
-};
+  high: { bg: 'rgba(255,77,77,0.15)', text: Colors.error, label: 'HIGH RISK' }};
 
 function ToolCard({ tool, onPressEndpoint }: { tool: AgentTool; onPressEndpoint: (endpoint: string) => void }) {
   return (
@@ -310,113 +306,94 @@ export default function AgentDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backButton: {
     padding: 6,
-    marginRight: 8,
-  },
+    marginRight: 8},
   headerTitleWrap: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     fontSize: 18,
     fontWeight: '800' as const,
     color: Colors.textWhite,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSubtitle: {
     fontSize: 12,
     color: Colors.mutedGray,
-    marginTop: 2,
-  },
+    marginTop: 2},
   refreshButton: {
-    padding: 8,
-  },
+    padding: 8},
   content: {
     paddingVertical: 16,
     paddingBottom: 120,
-    gap: 14,
-  },
+    gap: 14},
   heroCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     padding: 24,
     alignItems: 'center' as const,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   heroIcon: {
     width: 64,
     height: 64,
     borderRadius: 20,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   heroName: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: Colors.textWhite,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   heroRole: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
     marginTop: 6,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   heroMeta: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     justifyContent: 'center' as const,
     gap: 8,
-    marginTop: 14,
-  },
+    marginTop: 14},
   metaPill: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   metaPillText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   sectionCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   sectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.textWhite,
-  },
+    color: Colors.textWhite},
   missionText: {
     fontSize: 14,
     color: Colors.textSecondary,
     lineHeight: 21,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   engineBox: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -424,94 +401,78 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 10,
     padding: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   engineLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.mutedGray,
-  },
+    color: Colors.mutedGray},
   engineValue: {
     fontSize: 12,
     color: Colors.textWhite,
-    flex: 1,
-  },
+    flex: 1},
   producesBox: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
     backgroundColor: 'rgba(0,196,140,0.08)',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   producesLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.mutedGray,
-  },
+    color: Colors.mutedGray},
   producesValue: {
     fontSize: 12,
     color: Colors.success,
-    flex: 1,
-  },
+    flex: 1},
   capRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 10,
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   capDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginTop: 5,
-  },
+    marginTop: 5},
   capTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   capName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textWhite,
-  },
+    color: Colors.textWhite},
   capEvidence: {
     fontSize: 12,
     color: Colors.mutedGray,
     marginTop: 2,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   toolCard: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   toolHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   toolMethodBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   toolMethodText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   toolName: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.textWhite,
-    flex: 1,
-  },
+    flex: 1},
   ownerBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -519,104 +480,85 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,77,77,0.12)',
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   ownerBadgeText: {
     fontSize: 9,
     fontWeight: '800' as const,
     color: Colors.error,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   toolDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 17,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   toolFooter: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.surfaceBorder,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   toolEndpoint: {
     fontSize: 11,
     color: Colors.mutedGray,
     flex: 1,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   destRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   destText: {
     fontSize: 13,
     color: Colors.error,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   statsCard: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statsRow: {
     flexDirection: 'row' as const,
-    justifyContent: 'space-around' as const,
-  },
+    justifyContent: 'space-around' as const},
   statsItem: {
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   statsValue: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: Colors.textWhite,
-    marginTop: 6,
-  },
+    marginTop: 6},
   statsLabel: {
     fontSize: 10,
     color: Colors.mutedGray,
-    marginTop: 2,
-  },
+    marginTop: 2},
   emptyState: {
     flex: 1,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     padding: 32,
-    gap: 12,
-  },
+    gap: 12},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.textWhite,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   retryButton: {
     backgroundColor: Colors.gold,
     borderRadius: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   retryText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   footer: {
     marginTop: 8,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   footerText: {
     fontSize: 11,
     color: Colors.mutedGray,
     textAlign: 'center' as const,
     lineHeight: 17,
-    fontFamily: 'monospace',
-  },
-});
+    fontFamily: 'monospace'}});

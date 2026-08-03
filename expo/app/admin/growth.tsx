@@ -1,16 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   Modal,
-  Share,
-} from 'react-native';
+  Share} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -44,8 +41,7 @@ import {
   Video,
   FileText,
   Hash,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import {
@@ -57,8 +53,7 @@ import {
   mockAIInsights,
   mockGrowthStats,
   getPlatformIcon,
-  getPlatformColor,
-} from '@/mocks/marketing';
+  getPlatformColor} from '@/mocks/marketing';
 import {
   SocialMediaContent,
   SocialPlatform,
@@ -66,9 +61,9 @@ import {
   MarketingCampaign,
   Referral,
   TrendingTopic,
-  AIMarketingInsight,
-} from '@/types';
+  AIMarketingInsight} from '@/types';
 import { generateText } from '@/lib/ai-service';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type TabType = 'overview' | 'content' | 'campaigns' | 'referrals' | 'insights';
 
@@ -105,8 +100,7 @@ export default function GrowthScreen() {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const generateAIContent = useCallback(async () => {
@@ -123,16 +117,14 @@ export default function GrowthScreen() {
         twitter: 'Concise (280 chars), punchy, use hashtags sparingly, thread-friendly',
         linkedin: 'Professional tone, industry insights, thought leadership, longer articles ok',
         google: 'SEO-optimized, keyword-rich, clear value proposition for ads',
-        tiktok: 'Trendy, casual, script-style for video, use trending sounds references',
-      };
+        tiktok: 'Trendy, casual, script-style for video, use trending sounds references'};
 
       const contentTypeGuide: Record<ContentType, string> = {
         post: 'Single image/text post with caption',
         story: 'Quick, ephemeral content, polls/questions encouraged',
         ad: 'Clear CTA, value proposition upfront, compelling hook',
         reel: 'Short video script, hook in first 3 seconds, trending format',
-        article: 'Long-form, educational, well-structured with headers',
-      };
+        article: 'Long-form, educational, well-structured with headers'};
 
       const prompt = `Create a ${selectedContentType} for ${selectedPlatform} about "${contentTopic}" for IVX HOLDINGS, a fractional real estate investment platform.
 
@@ -169,8 +161,7 @@ Respond in this exact JSON format:
           title: contentTopic,
           content: response,
           hashtags: ['RealEstateInvesting', 'IPXHolding', 'FractionalOwnership'],
-          targetAudience: 'Investors interested in real estate',
-        };
+          targetAudience: 'Investors interested in real estate'};
       }
 
       const newContent: SocialMediaContent = {
@@ -183,8 +174,7 @@ Respond in this exact JSON format:
         targetAudience: parsed.targetAudience || 'General investors',
         aiGenerated: true,
         status: 'draft',
-        createdAt: new Date().toISOString(),
-      };
+        createdAt: new Date().toISOString()};
 
       setGeneratedContent(newContent);
     } catch (error) {
@@ -219,8 +209,7 @@ Respond in this exact JSON format:
       const shareMessage = '🏠 Start investing in real estate with just $100! IVX HOLDINGS makes property investment accessible to everyone. Join me and earn rewards! Download now: https://ipxholding.com/app';
       const result = await Share.share({
         message: shareMessage,
-        title: 'Invest in Real Estate with IVX HOLDINGS',
-      });
+        title: 'Invest in Real Estate with IVX HOLDINGS'});
       if (result.action === Share.sharedAction) {
         console.log('App shared successfully');
       }
@@ -278,7 +267,7 @@ Respond in this exact JSON format:
           </TouchableOpacity>
           <TouchableOpacity style={styles.heroButtonSecondary} onPress={searchTrends} disabled={isSearchingTrends}>
             {isSearchingTrends ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ShimmerIndicator size="small" color={Colors.primary} />
             ) : (
               <>
                 <Search size={16} color={Colors.primary} />
@@ -634,7 +623,7 @@ Respond in this exact JSON format:
         </View>
         <TouchableOpacity style={styles.refreshTrends} onPress={searchTrends} disabled={isSearchingTrends}>
           {isSearchingTrends ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <RefreshCw size={18} color={Colors.primary} />
           )}
@@ -776,7 +765,7 @@ Respond in this exact JSON format:
             disabled={!contentTopic.trim() || isGenerating}
           >
             {isGenerating ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ShimmerIndicator size="small" color="#fff" />
             ) : (
               <>
                 <Sparkles size={18} color="#fff" />
@@ -1059,5 +1048,4 @@ const styles = StyleSheet.create({
   previewHashtag: { backgroundColor: Colors.backgroundSecondary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   previewAudience: { gap: 8 },
   saveContentButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  saveContentButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
-});
+  saveContentButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 }});

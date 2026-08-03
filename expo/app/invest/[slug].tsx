@@ -15,8 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
@@ -36,8 +35,7 @@ import {
   Bot,
   User,
   Sparkles,
-  MapPin,
-} from 'lucide-react-native';
+  MapPin} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
@@ -146,9 +144,7 @@ export default function InvestLandingPage() {
           visitor_id: visitorId,
           landing_page_slug: slug,
           pages_viewed: [slug],
-          registration_status: 'anonymous',
-        }),
-      });
+          registration_status: 'anonymous'})});
     } catch {
       // Silent fail — tracking is non-critical
     }
@@ -167,8 +163,7 @@ export default function InvestLandingPage() {
       futureValue: Math.round(futureValue),
       profit: Math.round(profit),
       annualCashFlow: Math.round(annualCashFlow),
-      monthlyCashFlow: Math.round(annualCashFlow / 12),
-    };
+      monthlyCashFlow: Math.round(annualCashFlow / 12)};
   }, [investmentAmount, expectedReturn, years]);
 
   const formatCurrency = (value: number): string => {
@@ -188,8 +183,7 @@ export default function InvestLandingPage() {
       const res = await fetch(`${API_BASE}/api/ivx/intent-engine/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visitor_id: visitorId, landing_page_slug: slug, message }),
-      });
+        body: JSON.stringify({ visitor_id: visitorId, landing_page_slug: slug, message })});
       const json = await res.json() as Record<string, unknown>;
       const result = json.result as { reply: string; intent_detected: string } | undefined;
       const reply = result?.reply ?? 'I apologize — I could not process your request. Please try again or contact IVX directly.';
@@ -198,8 +192,7 @@ export default function InvestLandingPage() {
       setChatMessages((prev) => [...prev, {
         role: 'assistant',
         content: 'I\'m having trouble connecting right now. Please try again or contact IVX directly.',
-        ts: new Date().toISOString(),
-      }]);
+        ts: new Date().toISOString()}]);
     } finally {
       setChatLoading(false);
     }
@@ -218,9 +211,7 @@ export default function InvestLandingPage() {
         body: JSON.stringify({
           visitor_id: visitorId,
           registration_status: 'registered',
-          pages_viewed: [slug],
-        }),
-      });
+          pages_viewed: [slug]})});
       setRegSubmitted(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -547,8 +538,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingSpinner: {
     width: 64, height: 64, borderRadius: 32,
-    backgroundColor: Colors.primary + '20', justifyContent: 'center', alignItems: 'center',
-  },
+    backgroundColor: Colors.primary + '20', justifyContent: 'center', alignItems: 'center'},
   loadingText: { color: Colors.textSecondary, fontSize: 14 },
   scrollView: { flex: 1 },
   backBtn: { padding: 12, marginLeft: 4 },
@@ -557,8 +547,7 @@ const styles = StyleSheet.create({
   heroBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.primary + '15', paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 20, alignSelf: 'flex-start',
-  },
+    borderRadius: 20, alignSelf: 'flex-start'},
   heroBadgeText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
   heroTitle: { color: Colors.white, fontSize: 26, fontWeight: '800', lineHeight: 34 },
   heroDesc: { color: Colors.textSecondary, fontSize: 14, lineHeight: 20 },
@@ -574,14 +563,12 @@ const styles = StyleSheet.create({
   calcLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
   calcInputWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.backgroundSecondary, borderRadius: 10, paddingHorizontal: 12,
-  },
+    backgroundColor: Colors.backgroundSecondary, borderRadius: 10, paddingHorizontal: 12},
   calcInput: { flex: 1, color: Colors.white, fontSize: 16, paddingVertical: 12 },
   calcSuffix: { color: Colors.textTertiary, fontSize: 14 },
   calcButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14,
-  },
+    backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14},
   calcButtonText: { color: Colors.black, fontSize: 15, fontWeight: '700' },
   roiResultCard: { backgroundColor: Colors.backgroundSecondary, borderRadius: 12, padding: 14, gap: 8, marginTop: 4 },
   roiResultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -597,12 +584,10 @@ const styles = StyleSheet.create({
   chatInputRow: { flexDirection: 'row', gap: 8 },
   chatInput: {
     flex: 1, backgroundColor: Colors.backgroundSecondary, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, color: Colors.white, fontSize: 14,
-  },
+    paddingHorizontal: 12, paddingVertical: 10, color: Colors.white, fontSize: 14},
   chatSendBtn: {
     width: 40, height: 40, borderRadius: 10, backgroundColor: Colors.primary,
-    justifyContent: 'center', alignItems: 'center',
-  },
+    justifyContent: 'center', alignItems: 'center'},
   faqItem: { backgroundColor: Colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
   faqHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   faqQuestion: { color: Colors.white, fontSize: 14, fontWeight: '600', flex: 1 },
@@ -611,27 +596,22 @@ const styles = StyleSheet.create({
   regSubtitle: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
   regInput: {
     backgroundColor: Colors.backgroundSecondary, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 12, color: Colors.white, fontSize: 15,
-  },
+    paddingHorizontal: 14, paddingVertical: 12, color: Colors.white, fontSize: 15},
   regButton: {
     backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', marginTop: 4,
-  },
+    alignItems: 'center', marginTop: 4},
   regButtonText: { color: Colors.black, fontSize: 15, fontWeight: '700' },
   regSuccess: { backgroundColor: Colors.surface, borderRadius: 16, padding: 28, alignItems: 'center', gap: 10 },
   regSuccessTitle: { color: Colors.success, fontSize: 18, fontWeight: '700' },
   regSuccessText: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
   meetingCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.surface, borderRadius: 14, padding: 16,
-  },
+    backgroundColor: Colors.surface, borderRadius: 14, padding: 16},
   meetingLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   meetingTitle: { color: Colors.white, fontSize: 15, fontWeight: '700' },
   meetingDesc: { color: Colors.textSecondary, fontSize: 12, marginTop: 2 },
   trustSection: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'center',
-    paddingHorizontal: 16, paddingTop: 32, paddingBottom: 8,
-  },
+    paddingHorizontal: 16, paddingTop: 32, paddingBottom: 8},
   trustRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  trustText: { color: Colors.textSecondary, fontSize: 12 },
-});
+  trustText: { color: Colors.textSecondary, fontSize: 12 }});

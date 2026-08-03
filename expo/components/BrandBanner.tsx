@@ -57,37 +57,31 @@ export default function BrandBanner({ notificationCount = 2 }: BrandBannerProps)
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1A1A1A',
-  },
+    backgroundColor: '#1A1A1A'},
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
+    flex: 1},
   logoContainer: {
-    marginRight: 12,
-  },
+    marginRight: 12},
   brandText: {
     color: Colors.primary,
     fontSize: 18,
     fontWeight: '700' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   notificationButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: '#333333',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   badge: {
     position: 'absolute',
     top: 0,
@@ -98,11 +92,8 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   badgeText: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

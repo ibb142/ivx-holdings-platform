@@ -17,14 +17,12 @@ type AdminUserWithIdentities = {
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
-  'Cache-Control': 'no-store',
-} as const;
+  'Cache-Control': 'no-store'} as const;
 
 function jsonResponse(payload: JsonRecord, status: number = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: JSON_HEADERS,
-  });
+    headers: JSON_HEADERS});
 }
 
 function readTrimmed(value: unknown): string {
@@ -70,9 +68,7 @@ async function assertOwnerLookupAccess(request: Request, url: string, serviceRol
   const client = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+      persistSession: false}});
   const userResult = await client.auth.getUser(accessToken);
 
   if (userResult.error || !userResult.data.user) {
@@ -100,9 +96,7 @@ async function fetchAdminUserByEmail(
       headers: {
         apikey: serviceRoleKey,
         Authorization: `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
+        'Content-Type': 'application/json'}});
 
     if (!response.ok) {
       const text = await response.text();
@@ -164,15 +158,13 @@ export async function POST(request: Request): Promise<Response> {
     if (!url || !serviceRoleKey) {
       return jsonResponse({
         ok: false,
-        message: 'EXPO_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for auth lookup.',
-      }, 503);
+        message: 'EXPO_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for auth lookup.'}, 503);
     }
 
     if (serviceRoleKey === anonKey) {
       return jsonResponse({
         ok: false,
-        message: 'SUPABASE_SERVICE_ROLE_KEY matches the anon key; admin user lookup is not available.',
-      }, 503);
+        message: 'SUPABASE_SERVICE_ROLE_KEY matches the anon key; admin user lookup is not available.'}, 503);
     }
 
     await assertOwnerLookupAccess(request, url, serviceRoleKey);
@@ -189,8 +181,7 @@ export async function POST(request: Request): Promise<Response> {
         ok: true,
         email,
         userFound: false,
-        message: 'No auth user with this email exists in this Supabase project. Wrong EXPO_PUBLIC_SUPABASE_URL/ANON_KEY in dev/preview is a common cause of "invalid password" for accounts that exist elsewhere.',
-      }, 200);
+        message: 'No auth user with this email exists in this Supabase project. Wrong EXPO_PUBLIC_SUPABASE_URL/ANON_KEY in dev/preview is a common cause of "invalid password" for accounts that exist elsewhere.'}, 200);
     }
 
     const { providers, hasEmailPasswordIdentity, oauthOnlyHint } = summarizeIdentities(user);
@@ -207,8 +198,7 @@ export async function POST(request: Request): Promise<Response> {
       message: oauthOnlyHint
         ?? (hasEmailPasswordIdentity
           ? 'User exists with an email/password identity. If sign-in still fails, the password is wrong, email is unconfirmed, or the app is pointed at a different Supabase project.'
-          : 'User exists but identity summary is ambiguous; check authProviders.'),
-    }, 200);
+          : 'User exists but identity summary is ambiguous; check authProviders.')}, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Auth lookup failed.';
     const status = message === 'Owner authorization is required.' || message === 'Invalid owner session.' ? 401 : message === 'Owner access is required.' ? 403 : 500;

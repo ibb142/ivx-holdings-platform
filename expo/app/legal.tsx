@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Platform,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -27,8 +26,7 @@ import {
   BadgeCheck,
   Banknote,
   Globe,
-  Mail,
-} from 'lucide-react-native';
+  Mail} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 interface LegalDocument {
@@ -73,8 +71,7 @@ const LEGAL_DOCUMENTS: LegalDocument[] = [
 
 These Terms constitute a legally binding agreement between you and ${COMPANY_NAME}, a Delaware limited liability company with its principal office at ${COMPANY_ADDRESS} ("Company," "we," "us," or "our").
 
-We reserve the right to modify these Terms at any time. Material changes will be communicated via email or in-app notification at least thirty (30) days before taking effect. Your continued use of the Platform after such changes constitutes acceptance of the modified Terms.`,
-      },
+We reserve the right to modify these Terms at any time. Material changes will be communicated via email or in-app notification at least thirty (30) days before taking effect. Your continued use of the Platform after such changes constitutes acceptance of the modified Terms.`},
       {
         heading: '2. Eligibility Requirements',
         content: `To use the Platform and invest, you must:
@@ -93,8 +90,7 @@ We reserve the right to modify these Terms at any time. Material changes will be
 
 (g) Acknowledge that all investment opportunities on the Platform are open to all eligible users who have completed KYC verification, regardless of accreditation status.
 
-We reserve the right to refuse service, terminate accounts, or restrict access at our sole discretion if we determine that eligibility requirements are not met.`,
-      },
+We reserve the right to refuse service, terminate accounts, or restrict access at our sole discretion if we determine that eligibility requirements are not met.`},
       {
         heading: '3. Account Registration & Security',
         content: `You are responsible for maintaining the confidentiality of your account credentials, including your password, biometric data, and any two-factor authentication codes. You agree to:
@@ -107,8 +103,7 @@ We reserve the right to refuse service, terminate accounts, or restrict access a
 
 You are solely responsible for all activities that occur under your account, whether or not authorized by you. ${COMPANY_NAME} will not be liable for any loss or damage arising from your failure to safeguard your account credentials.
 
-We may suspend or terminate your account immediately if we suspect unauthorized access, fraudulent activity, or violation of these Terms.`,
-      },
+We may suspend or terminate your account immediately if we suspect unauthorized access, fraudulent activity, or violation of these Terms.`},
       {
         heading: '4. Nature of Services',
         content: `${COMPANY_NAME} operates a technology platform that facilitates fractional real estate investment. Through the Platform, Users may:
@@ -121,8 +116,7 @@ We may suspend or terminate your account immediately if we suspect unauthorized 
 
 IMPORTANT: ${COMPANY_NAME} is NOT a registered broker-dealer, investment adviser, or investment company under federal or state securities laws unless and until such registrations are obtained and disclosed. The Platform facilitates the offer and sale of securities issued by special purpose entities ("SPEs") that hold title to underlying real estate properties. Each Offering is made pursuant to an exemption from registration under the Securities Act.
 
-The Platform does not provide personalized investment advice, tax advice, or legal counsel. Any information, projections, or analytics provided through the Platform are for informational purposes only and should not be construed as investment recommendations. You should consult with qualified financial, tax, and legal professionals before making any investment decisions.`,
-      },
+The Platform does not provide personalized investment advice, tax advice, or legal counsel. Any information, projections, or analytics provided through the Platform are for informational purposes only and should not be construed as investment recommendations. You should consult with qualified financial, tax, and legal professionals before making any investment decisions.`},
       {
         heading: '5. Investment Process & Terms',
         content: `(a) Offering Documents: Each investment opportunity will be accompanied by an offering memorandum, subscription agreement, and/or other applicable disclosure documents (collectively, "Offering Documents"). These documents contain material information about the investment, including risk factors, property details, financial projections, and terms. You must carefully review all Offering Documents before investing.
@@ -137,8 +131,7 @@ The Platform does not provide personalized investment advice, tax advice, or leg
 
 (f) Dividends & Distributions: Distributions from rental income or other property proceeds are made at the discretion of the SPE's managing member, typically on a quarterly basis. Distributions are not guaranteed and may vary.
 
-(g) Secondary Market: The Platform may offer a secondary marketplace for trading Shares. Trading is subject to availability of buyers and sellers, applicable transfer restrictions, and Platform rules. ${COMPANY_NAME} does not guarantee liquidity or any particular price for Shares traded on the secondary market.`,
-      },
+(g) Secondary Market: The Platform may offer a secondary marketplace for trading Shares. Trading is subject to availability of buyers and sellers, applicable transfer restrictions, and Platform rules. ${COMPANY_NAME} does not guarantee liquidity or any particular price for Shares traded on the secondary market.`},
       {
         heading: '6. Fees & Charges',
         content: `(a) Platform Fees: ${COMPANY_NAME} charges fees as disclosed in the applicable Offering Documents and on the Platform's fee schedule, which may include:
@@ -151,8 +144,7 @@ The Platform does not provide personalized investment advice, tax advice, or leg
 
 (c) Fee Changes: Fees are subject to change with at least thirty (30) days' prior written notice. Updated fee schedules will be posted on the Platform.
 
-(d) Tax Withholding: We may be required to withhold taxes on distributions to certain investors, including non-U.S. persons, as required by applicable law.`,
-      },
+(d) Tax Withholding: We may be required to withhold taxes on distributions to certain investors, including non-U.S. persons, as required by applicable law.`},
       {
         heading: '7. Intellectual Property',
         content: `All content on the Platform, including but not limited to text, graphics, logos, icons, images, audio clips, software, and data compilations, is the property of ${COMPANY_NAME} or its licensors and is protected by United States and international copyright, trademark, and other intellectual property laws.
@@ -163,8 +155,7 @@ You are granted a limited, non-exclusive, non-transferable, revocable license to
 (b) Reverse engineer or attempt to extract the source code of the Platform;
 (c) Use the Platform for any unlawful purpose or in violation of these Terms;
 (d) Use automated means (bots, scrapers, crawlers) to access the Platform;
-(e) Use the ${COMPANY_NAME} name, logo, or trademarks without prior written consent.`,
-      },
+(e) Use the ${COMPANY_NAME} name, logo, or trademarks without prior written consent.`},
       {
         heading: '8. Limitation of Liability',
         content: `TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, ${COMPANY_NAME.toUpperCase()}, ITS OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AFFILIATES, AND LICENSORS SHALL NOT BE LIABLE FOR:
@@ -179,8 +170,7 @@ You are granted a limited, non-exclusive, non-transferable, revocable license to
 
 (e) ANY DAMAGES RESULTING FROM THIRD-PARTY ACTIONS, INCLUDING BUT NOT LIMITED TO TENANT DEFAULTS, NATURAL DISASTERS, OR MARKET DOWNTURNS.
 
-IN NO EVENT SHALL ${COMPANY_NAME.toUpperCase()}'S TOTAL LIABILITY TO YOU FOR ALL CLAIMS ARISING FROM OR RELATING TO THESE TERMS OR YOUR USE OF THE PLATFORM EXCEED THE GREATER OF (i) THE TOTAL FEES PAID BY YOU TO ${COMPANY_NAME.toUpperCase()} IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM, OR (ii) ONE HUNDRED DOLLARS ($100.00).`,
-      },
+IN NO EVENT SHALL ${COMPANY_NAME.toUpperCase()}'S TOTAL LIABILITY TO YOU FOR ALL CLAIMS ARISING FROM OR RELATING TO THESE TERMS OR YOUR USE OF THE PLATFORM EXCEED THE GREATER OF (i) THE TOTAL FEES PAID BY YOU TO ${COMPANY_NAME.toUpperCase()} IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM, OR (ii) ONE HUNDRED DOLLARS ($100.00).`},
       {
         heading: '9. Dispute Resolution & Arbitration',
         content: `(a) Mandatory Arbitration: Any dispute, claim, or controversy arising out of or relating to these Terms, or the breach, termination, enforcement, interpretation, or validity thereof, including the determination of the scope or applicability of this agreement to arbitrate, shall be determined by binding arbitration administered by the American Arbitration Association ("AAA") in accordance with its Commercial Arbitration Rules.
@@ -193,8 +183,7 @@ IN NO EVENT SHALL ${COMPANY_NAME.toUpperCase()}'S TOTAL LIABILITY TO YOU FOR ALL
 
 (e) Small Claims Exception: Notwithstanding the foregoing, either party may bring an individual action in small claims court for claims within that court's jurisdiction.
 
-(f) Injunctive Relief: Nothing in this Section shall prevent either party from seeking injunctive or other equitable relief in a court of competent jurisdiction.`,
-      },
+(f) Injunctive Relief: Nothing in this Section shall prevent either party from seeking injunctive or other equitable relief in a court of competent jurisdiction.`},
       {
         heading: '10. Termination',
         content: `(a) You may close your account at any time by contacting ${COMPANY_EMAIL_LEGAL}. Account closure does not affect your existing investments, which will continue to be governed by the applicable Offering Documents.
@@ -203,8 +192,7 @@ IN NO EVENT SHALL ${COMPANY_NAME.toUpperCase()}'S TOTAL LIABILITY TO YOU FOR ALL
 
 (c) Upon termination, your right to use the Platform ceases immediately. Provisions that by their nature should survive termination shall survive, including but not limited to Sections 7, 8, 9, and 11.
 
-(d) Liquidation of Holdings: Upon account closure, you may liquidate your holdings through the secondary market (subject to availability) or hold them until maturity/exit events as described in the Offering Documents.`,
-      },
+(d) Liquidation of Holdings: Upon account closure, you may liquidate your holdings through the secondary market (subject to availability) or hold them until maturity/exit events as described in the Offering Documents.`},
       {
         heading: '11. General Provisions',
         content: `(a) Entire Agreement: These Terms, together with the Privacy Policy, Risk Disclosure, and applicable Offering Documents, constitute the entire agreement between you and ${COMPANY_NAME}.
@@ -223,10 +211,8 @@ IN NO EVENT SHALL ${COMPANY_NAME.toUpperCase()}'S TOTAL LIABILITY TO YOU FOR ALL
 ${COMPANY_NAME}
 ${COMPANY_ADDRESS}
 Email: ${COMPANY_EMAIL_LEGAL}
-Phone: ${COMPANY_PHONE}`,
-      },
-    ],
-  },
+Phone: ${COMPANY_PHONE}`},
+    ]},
   {
     id: 'privacy',
     title: 'Privacy Policy',
@@ -249,8 +235,7 @@ This Policy complies with:
 • Other applicable federal and state privacy laws
 
 Data Controller: ${COMPANY_NAME}, ${COMPANY_ADDRESS}
-Data Protection Officer: ${COMPANY_EMAIL_PRIVACY}`,
-      },
+Data Protection Officer: ${COMPANY_EMAIL_PRIVACY}`},
       {
         heading: '2. Information We Collect',
         content: `We collect the following categories of personal information:
@@ -271,8 +256,7 @@ Data Protection Officer: ${COMPANY_EMAIL_PRIVACY}`,
 
 (h) Communications Data: Customer support interactions, chat logs, emails, in-app messages, survey responses, feedback.
 
-(i) Marketing Data: Advertising preferences, referral source, campaign interactions, email open/click rates.`,
-      },
+(i) Marketing Data: Advertising preferences, referral source, campaign interactions, email open/click rates.`},
       {
         heading: '3. How We Collect Information',
         content: `We collect information through:
@@ -296,8 +280,7 @@ Data Protection Officer: ${COMPANY_EMAIL_PRIVACY}`,
   • Performance cookies (to optimize Platform speed)
   We do NOT use third-party advertising or tracking cookies.
 
-You can manage cookie preferences through your browser settings or our in-app privacy controls.`,
-      },
+You can manage cookie preferences through your browser settings or our in-app privacy controls.`},
       {
         heading: '4. How We Use Your Information',
         content: `We use your personal information for the following purposes:
@@ -316,8 +299,7 @@ You can manage cookie preferences through your browser settings or our in-app pr
   • Performance of contract (account management, transactions)
   • Legal obligation (KYC/AML, tax reporting, securities compliance)
   • Legitimate interests (fraud prevention, platform improvement, security)
-  • Consent (marketing communications, non-essential cookies)`,
-      },
+  • Consent (marketing communications, non-essential cookies)`},
       {
         heading: '5. Information Sharing & Disclosure',
         content: `We do NOT sell your personal information. We share information only in the following circumstances:
@@ -342,8 +324,7 @@ All service providers are bound by data processing agreements that limit their u
 
 (d) Business Transfers: In the event of a merger, acquisition, bankruptcy, or sale of assets, your information may be transferred to the acquiring entity, subject to the same privacy protections.
 
-(e) With Your Consent: We may share information with third parties when you have explicitly consented to such sharing.`,
-      },
+(e) With Your Consent: We may share information with third parties when you have explicitly consented to such sharing.`},
       {
         heading: '6. Data Security',
         content: `We implement industry-leading security measures to protect your personal information:
@@ -360,8 +341,7 @@ All service providers are bound by data processing agreements that limit their u
 
 (f) Incident Response: We maintain a comprehensive incident response plan. In the event of a data breach affecting your personal information, we will notify you and applicable regulatory authorities within seventy-two (72) hours as required by applicable law.
 
-No system is 100% secure. While we use commercially reasonable efforts to protect your data, we cannot guarantee absolute security.`,
-      },
+No system is 100% secure. While we use commercially reasonable efforts to protect your data, we cannot guarantee absolute security.`},
       {
         heading: '7. Data Retention',
         content: `We retain your personal information for as long as necessary to fulfill the purposes outlined in this Policy, subject to the following retention periods:
@@ -380,8 +360,7 @@ No system is 100% secure. While we use commercially reasonable efforts to protec
 
 (g) Marketing Preferences: Until you withdraw consent or close your account.
 
-After the applicable retention period, data is securely deleted or anonymized in accordance with our data destruction procedures.`,
-      },
+After the applicable retention period, data is securely deleted or anonymized in accordance with our data destruction procedures.`},
       {
         heading: '8. Your Rights',
         content: `Depending on your jurisdiction, you have the following rights regarding your personal information:
@@ -408,8 +387,7 @@ ADDITIONAL RIGHTS UNDER GDPR (EU/EEA/UK Residents):
 • Right to Withdraw Consent at any time
 • Right to Lodge a Complaint with a supervisory authority
 
-To exercise any of these rights, contact us at ${COMPANY_EMAIL_PRIVACY}. We will respond within thirty (30) days (CCPA) or one (1) month (GDPR). Identity verification is required for all requests.`,
-      },
+To exercise any of these rights, contact us at ${COMPANY_EMAIL_PRIVACY}. We will respond within thirty (30) days (CCPA) or one (1) month (GDPR). Identity verification is required for all requests.`},
       {
         heading: '9. International Data Transfers',
         content: `Your personal information may be transferred to and processed in the United States and other countries where our service providers operate. These countries may have different data protection laws than your country of residence.
@@ -419,12 +397,10 @@ For transfers from the EU/EEA/UK to the United States:
 • Standard Contractual Clauses (SCCs) approved by the European Commission
 • Other appropriate safeguards as required by GDPR
 
-We ensure that all international data transfers are subject to appropriate safeguards and that your data receives an adequate level of protection.`,
-      },
+We ensure that all international data transfers are subject to appropriate safeguards and that your data receives an adequate level of protection.`},
       {
         heading: '10. Children\'s Privacy',
-        content: `The Platform is not intended for individuals under the age of eighteen (18). We do not knowingly collect personal information from children under 18. If we become aware that we have collected personal information from a child under 18, we will take steps to delete such information promptly. If you believe we have collected information from a child under 18, please contact us at ${COMPANY_EMAIL_PRIVACY}.`,
-      },
+        content: `The Platform is not intended for individuals under the age of eighteen (18). We do not knowingly collect personal information from children under 18. If we become aware that we have collected personal information from a child under 18, we will take steps to delete such information promptly. If you believe we have collected information from a child under 18, please contact us at ${COMPANY_EMAIL_PRIVACY}.`},
       {
         heading: '11. Changes to This Policy',
         content: `We may update this Privacy Policy from time to time to reflect changes in our practices, technology, legal requirements, or other factors. When we make material changes:
@@ -433,8 +409,7 @@ We ensure that all international data transfers are subject to appropriate safeg
 • We will notify you via email or in-app notification at least thirty (30) days before material changes take effect
 • We will obtain your consent where required by applicable law
 
-We encourage you to review this Policy periodically to stay informed about our data practices.`,
-      },
+We encourage you to review this Policy periodically to stay informed about our data practices.`},
       {
         heading: '12. Contact Us',
         content: `For questions, concerns, or requests regarding this Privacy Policy or our data practices:
@@ -446,10 +421,8 @@ Phone: ${COMPANY_PHONE}
 
 For GDPR inquiries, you may also contact our EU Representative at: eu-representative@ivxholding.com
 
-If you are unsatisfied with our response, you have the right to lodge a complaint with your local data protection authority.`,
-      },
-    ],
-  },
+If you are unsatisfied with our response, you have the right to lodge a complaint with your local data protection authority.`},
+    ]},
   {
     id: 'risk',
     title: 'Risk Disclosure',
@@ -465,8 +438,7 @@ If you are unsatisfied with our response, you have the right to lodge a complain
 
 INVESTING IN REAL ESTATE SECURITIES INVOLVES A HIGH DEGREE OF RISK. YOU SHOULD INVEST ONLY MONEY THAT YOU CAN AFFORD TO LOSE ENTIRELY.
 
-${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THIS PLATFORM CONSTITUTES A RECOMMENDATION TO BUY, SELL, OR HOLD ANY SECURITY. CONSULT WITH YOUR OWN FINANCIAL, TAX, AND LEGAL ADVISORS BEFORE INVESTING.`,
-      },
+${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THIS PLATFORM CONSTITUTES A RECOMMENDATION TO BUY, SELL, OR HOLD ANY SECURITY. CONSULT WITH YOUR OWN FINANCIAL, TAX, AND LEGAL ADVISORS BEFORE INVESTING.`},
       {
         heading: '1. General Investment Risks',
         content: `(a) Loss of Principal: You may lose some or all of your invested capital. Real estate investments are speculative and there is no guarantee of returns.
@@ -477,8 +449,7 @@ ${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THI
 
 (d) Long-Term Nature: Real estate investments are generally long-term in nature. You should be prepared to hold your investment for an extended period, potentially several years.
 
-(e) Concentration Risk: Investing a significant portion of your portfolio in a single property or asset class increases risk. Diversification across multiple properties and asset classes is recommended.`,
-      },
+(e) Concentration Risk: Investing a significant portion of your portfolio in a single property or asset class increases risk. Diversification across multiple properties and asset classes is recommended.`},
       {
         heading: '2. Real Estate-Specific Risks',
         content: `(a) Market Risk: Real estate values fluctuate based on economic conditions, interest rates, supply and demand, demographic trends, and local market factors. Property values may decrease.
@@ -493,8 +464,7 @@ ${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THI
 
 (f) Interest Rate Risk: Rising interest rates may decrease property values, increase financing costs, and reduce investment returns.
 
-(g) Geographic Concentration: Properties located in specific regions are subject to local economic conditions, natural disaster risk, and regulatory environments.`,
-      },
+(g) Geographic Concentration: Properties located in specific regions are subject to local economic conditions, natural disaster risk, and regulatory environments.`},
       {
         heading: '3. Regulatory & Legal Risks',
         content: `(a) Securities Regulation: Changes in federal or state securities laws, regulations, or enforcement priorities could affect the ability to offer, sell, or trade Shares.
@@ -505,8 +475,7 @@ ${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THI
 
 (d) Litigation Risk: Properties or SPEs may become subject to litigation, including tenant disputes, construction defects, environmental claims, or regulatory actions.
 
-(e) International Regulatory Risk: For properties located outside the United States, additional regulatory risks apply, including foreign ownership restrictions, currency controls, political instability, and varying legal systems.`,
-      },
+(e) International Regulatory Risk: For properties located outside the United States, additional regulatory risks apply, including foreign ownership restrictions, currency controls, political instability, and varying legal systems.`},
       {
         heading: '4. Platform & Technology Risks',
         content: `(a) Platform Risk: The Platform may experience operational disruptions, technical failures, cybersecurity incidents, or other events that could affect your ability to access your account, execute trades, or receive distributions.
@@ -517,8 +486,7 @@ ${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THI
 
 (d) Company Risk: ${COMPANY_NAME} is a relatively new company. There is risk that the Company may face financial difficulties, operational challenges, or may cease operations.
 
-(e) Counterparty Risk: The Platform relies on third-party service providers (payment processors, custodians, property managers). Failure of any such provider could affect Platform operations.`,
-      },
+(e) Counterparty Risk: The Platform relies on third-party service providers (payment processors, custodians, property managers). Failure of any such provider could affect Platform operations.`},
       {
         heading: '5. Tax Risks',
         content: `(a) Tax Complexity: Real estate investments may generate complex tax implications, including passive activity income, depreciation recapture, state and local tax obligations in multiple jurisdictions, and potential UBTI (Unrelated Business Taxable Income) for tax-exempt investors.
@@ -529,8 +497,7 @@ ${COMPANY_NAME.toUpperCase()} DOES NOT PROVIDE INVESTMENT ADVICE. NOTHING ON THI
 
 (d) State Tax Obligations: You may have state tax filing obligations in states where properties are located, even if you do not reside in those states.
 
-You should consult with a qualified tax advisor regarding the tax implications of your investments.`,
-      },
+You should consult with a qualified tax advisor regarding the tax implications of your investments.`},
       {
         heading: '6. Conflicts of Interest',
         content: `(a) ${COMPANY_NAME} and its affiliates, officers, directors, and employees may have interests that conflict with those of investors, including:
@@ -542,10 +509,8 @@ You should consult with a qualified tax advisor regarding the tax implications o
 
 (c) Related Party Transactions: ${COMPANY_NAME} may engage in transactions with related parties, including property management agreements, financing arrangements, or service contracts.
 
-All material conflicts of interest are disclosed in the applicable Offering Documents.`,
-      },
-    ],
-  },
+All material conflicts of interest are disclosed in the applicable Offering Documents.`},
+    ]},
   {
     id: 'compliance',
     title: 'SEC & Regulatory Compliance',
@@ -571,8 +536,7 @@ All material conflicts of interest are disclosed in the applicable Offering Docu
 
 (d) State Securities Laws (Blue Sky Laws): We comply with applicable state securities registration and notice filing requirements in all states where we operate.
 
-The specific regulatory framework applicable to each Offering is disclosed in the Offering Documents.`,
-      },
+The specific regulatory framework applicable to each Offering is disclosed in the Offering Documents.`},
       {
         heading: '2. Know Your Customer (KYC) Program',
         content: `${COMPANY_NAME} maintains a comprehensive KYC program in compliance with the USA PATRIOT Act, the Bank Secrecy Act, and FinCEN regulations.
@@ -601,8 +565,7 @@ Our KYC process includes:
   • Continuous transaction monitoring for suspicious activity
   • Periodic review and refresh of customer information
   • Sanctions screening against updated OFAC, EU, and UN sanctions lists
-  • Adverse media monitoring`,
-      },
+  • Adverse media monitoring`},
       {
         heading: '3. Anti-Money Laundering (AML) Compliance',
         content: `${COMPANY_NAME} maintains a robust AML compliance program that includes:
@@ -628,8 +591,7 @@ Our KYC process includes:
   • Record-keeping requirements
   • Sanctions compliance
 
-(g) Independent Testing: Our AML program is subject to independent testing by qualified third parties on an annual basis.`,
-      },
+(g) Independent Testing: Our AML program is subject to independent testing by qualified third parties on an annual basis.`},
       {
         heading: '4. Investor Eligibility — Open to Everyone',
         content: `${COMPANY_NAME} is committed to making real estate investment accessible to all people. Unlike traditional platforms that restrict access to accredited investors only, our platform operates under regulatory frameworks that allow ALL verified users to invest.
@@ -646,8 +608,7 @@ Eligibility Requirements:
 
 There is NO minimum income requirement, NO net worth threshold, and NO accredited investor verification needed. Anyone who completes KYC verification can purchase shares in any property on our platform — just like buying everyday items at a store.
 
-This open access model is what makes ${COMPANY_NAME} unique in the real estate investment space.`,
-      },
+This open access model is what makes ${COMPANY_NAME} unique in the real estate investment space.`},
       {
         heading: '5. Tax Reporting & Compliance',
         content: `${COMPANY_NAME} provides the following tax documents and reporting:
@@ -667,8 +628,7 @@ This open access model is what makes ${COMPANY_NAME} unique in the real estate i
 
 (f) State Tax Reporting: We provide applicable state tax information for properties located in various states.
 
-Tax documents are typically available by March 15th of each year for the prior tax year.`,
-      },
+Tax documents are typically available by March 15th of each year for the prior tax year.`},
       {
         heading: '6. Investor Protection Measures',
         content: `(a) Escrow Accounts: All investor funds are held in FDIC-insured escrow accounts at major banking institutions until an Offering closes. If an Offering does not reach its minimum target, funds are returned to investors.
@@ -683,8 +643,7 @@ Tax documents are typically available by March 15th of each year for the prior t
 
 (f) Quarterly Reporting: Investors receive quarterly reports detailing property performance, financials, occupancy, and distribution information.
 
-(g) FDIC Notice: INVESTMENTS IN SECURITIES OFFERED THROUGH THE PLATFORM ARE NOT FDIC INSURED, NOT BANK GUARANTEED, AND MAY LOSE VALUE. Cash held in FDIC-insured custody accounts is protected up to applicable FDIC limits ($250,000 per depositor, per institution).`,
-      },
+(g) FDIC Notice: INVESTMENTS IN SECURITIES OFFERED THROUGH THE PLATFORM ARE NOT FDIC INSURED, NOT BANK GUARANTEED, AND MAY LOSE VALUE. Cash held in FDIC-insured custody accounts is protected up to applicable FDIC limits ($250,000 per depositor, per institution).`},
       {
         heading: '7. Regulatory Filings & Disclosures',
         content: `${COMPANY_NAME} makes the following regulatory filings as applicable:
@@ -698,10 +657,8 @@ Tax documents are typically available by March 15th of each year for the prior t
 • State Filings: Blue Sky notice filings in applicable states
 • EDGAR: All SEC filings are publicly available on the SEC's EDGAR database
 
-Investors may request copies of applicable regulatory filings by contacting ${COMPANY_EMAIL_COMPLIANCE}.`,
-      },
-    ],
-  },
+Investors may request copies of applicable regulatory filings by contacting ${COMPANY_EMAIL_COMPLIANCE}.`},
+    ]},
   {
     id: 'aml',
     title: 'AML & Sanctions Policy',
@@ -723,8 +680,7 @@ ${COMPANY_NAME} complies with:
 • FinCEN regulations (31 CFR Chapter X)
 • OFAC sanctions programs
 • Applicable state money transmission laws
-• International AML/CTF standards (FATF Recommendations)`,
-      },
+• International AML/CTF standards (FATF Recommendations)`},
       {
         heading: '2. Prohibited Activities',
         content: `The following activities are strictly prohibited on the Platform:
@@ -738,8 +694,7 @@ ${COMPANY_NAME} complies with:
 (g) Using the Platform to process proceeds of illegal activity;
 (h) Circumventing or attempting to circumvent the Platform's AML controls.
 
-Violations will result in immediate account suspension, reporting to appropriate law enforcement and regulatory authorities, and potential criminal prosecution.`,
-      },
+Violations will result in immediate account suspension, reporting to appropriate law enforcement and regulatory authorities, and potential criminal prosecution.`},
       {
         heading: '3. Transaction Monitoring',
         content: `${COMPANY_NAME} employs automated and manual transaction monitoring systems to detect potentially suspicious activity, including:
@@ -753,8 +708,7 @@ Violations will result in immediate account suspension, reporting to appropriate
 
 Alerts generated by monitoring systems are reviewed by trained compliance personnel. When suspicious activity is identified, a Suspicious Activity Report (SAR) is filed with FinCEN within thirty (30) days.
 
-${COMPANY_NAME} is prohibited by law from disclosing to any person that a SAR has been filed (the "tipping off" prohibition).`,
-      },
+${COMPANY_NAME} is prohibited by law from disclosing to any person that a SAR has been filed (the "tipping off" prohibition).`},
       {
         heading: '4. Record Retention',
         content: `In compliance with BSA requirements, ${COMPANY_NAME} retains the following records:
@@ -766,10 +720,8 @@ ${COMPANY_NAME} is prohibited by law from disclosing to any person that a SAR ha
 (e) AML training records: Duration of employment plus two (2) years;
 (f) Independent testing reports: Minimum five (5) years.
 
-Records are maintained in a manner that allows timely retrieval in response to regulatory requests.`,
-      },
-    ],
-  },
+Records are maintained in a manner that allows timely retrieval in response to regulatory requests.`},
+    ]},
   {
     id: 'econsent',
     title: 'E-Sign & Electronic Consent',
@@ -792,8 +744,7 @@ Records are maintained in a manner that allows timely retrieval in response to r
 • Customer support communications
 • Marketing communications (with separate opt-in)
 
-This consent is provided pursuant to the Electronic Signatures in Global and National Commerce Act ("E-SIGN Act"), 15 U.S.C. §§ 7001-7006.`,
-      },
+This consent is provided pursuant to the Electronic Signatures in Global and National Commerce Act ("E-SIGN Act"), 15 U.S.C. §§ 7001-7006.`},
       {
         heading: '2. Hardware & Software Requirements',
         content: `To receive and retain electronic Communications, you need:
@@ -804,8 +755,7 @@ This consent is provided pursuant to the Electronic Signatures in Global and Nat
 • Sufficient storage space to save Communications or an installed printer to print them
 • The ability to view PDF documents (Adobe Acrobat Reader or equivalent)
 
-You are responsible for ensuring that your hardware and software meet these requirements and that your email address is current.`,
-      },
+You are responsible for ensuring that your hardware and software meet these requirements and that your email address is current.`},
       {
         heading: '3. Withdrawing Consent',
         content: `You have the right to withdraw your consent to receive electronic Communications at any time by contacting us at ${COMPANY_EMAIL_LEGAL}. However, please note that:
@@ -814,8 +764,7 @@ You are responsible for ensuring that your hardware and software meet these requ
 (b) Withdrawal does not affect the legal validity or enforceability of Communications previously provided electronically;
 (c) Certain regulatory Communications may still be sent electronically as permitted by law.
 
-If you withdraw consent, we will provide paper copies of Communications upon request, and may charge a reasonable fee for printing and mailing costs.`,
-      },
+If you withdraw consent, we will provide paper copies of Communications upon request, and may charge a reasonable fee for printing and mailing costs.`},
       {
         heading: '4. Electronic Signatures',
         content: `By using the Platform, you agree that your electronic signatures on subscription agreements, account applications, and other documents are legally binding and have the same force and effect as handwritten signatures.
@@ -826,10 +775,8 @@ Electronic signatures include:
 • Using biometric authentication to confirm transactions
 • Any other electronic method of indicating acceptance
 
-You agree not to contest the validity or enforceability of any electronically signed document solely on the basis that it was signed electronically.`,
-      },
-    ],
-  },
+You agree not to contest the validity or enforceability of any electronically signed document solely on the basis that it was signed electronically.`},
+    ]},
   {
     id: 'cookies',
     title: 'Cookie Policy',
@@ -841,30 +788,23 @@ You agree not to contest the validity or enforceability of any electronically si
     sections: [
       {
         heading: '1. What Are Cookies',
-        content: `Cookies are small text files placed on your device when you visit the ${COMPANY_NAME} Platform. They help us provide a better experience by remembering your preferences, understanding usage patterns, and improving our services.\n\nThis Cookie Policy explains what cookies are, how we use them, the types of cookies we use, and how you can control your cookie preferences. This Policy should be read together with our Privacy Policy.\n\nThis Policy complies with:\n• The EU ePrivacy Directive (Cookie Law)\n• The General Data Protection Regulation (GDPR)\n• The California Consumer Privacy Act (CCPA/CPRA)\n• Other applicable federal and state privacy regulations`,
-      },
+        content: `Cookies are small text files placed on your device when you visit the ${COMPANY_NAME} Platform. They help us provide a better experience by remembering your preferences, understanding usage patterns, and improving our services.\n\nThis Cookie Policy explains what cookies are, how we use them, the types of cookies we use, and how you can control your cookie preferences. This Policy should be read together with our Privacy Policy.\n\nThis Policy complies with:\n• The EU ePrivacy Directive (Cookie Law)\n• The General Data Protection Regulation (GDPR)\n• The California Consumer Privacy Act (CCPA/CPRA)\n• Other applicable federal and state privacy regulations`},
       {
         heading: '2. Types of Cookies We Use',
-        content: `(a) Strictly Necessary Cookies: Essential for Platform functionality. These cannot be disabled.\n  • User authentication and session management\n  • Security features (CSRF protection, fraud detection)\n  • Load balancing and server routing\n  • Transaction processing and payment security\n\n(b) Functional Cookies: Enable enhanced functionality and personalization:\n  • Language and region preferences\n  • User interface customization (dark/light mode)\n  • Remember login status and display preferences\n\n(c) Analytics Cookies: Help us understand Platform usage:\n  • Page view tracking and navigation patterns\n  • Feature usage analytics (anonymized)\n  • Performance monitoring and error tracking\n  We use only anonymized and aggregated data from analytics cookies.\n\n(d) Performance Cookies: Optimize Platform speed:\n  • Page load time monitoring\n  • API response time tracking\n  • Resource optimization\n\nIMPORTANT: We do NOT use third-party advertising cookies, retargeting cookies, or cross-site tracking cookies.`,
-      },
+        content: `(a) Strictly Necessary Cookies: Essential for Platform functionality. These cannot be disabled.\n  • User authentication and session management\n  • Security features (CSRF protection, fraud detection)\n  • Load balancing and server routing\n  • Transaction processing and payment security\n\n(b) Functional Cookies: Enable enhanced functionality and personalization:\n  • Language and region preferences\n  • User interface customization (dark/light mode)\n  • Remember login status and display preferences\n\n(c) Analytics Cookies: Help us understand Platform usage:\n  • Page view tracking and navigation patterns\n  • Feature usage analytics (anonymized)\n  • Performance monitoring and error tracking\n  We use only anonymized and aggregated data from analytics cookies.\n\n(d) Performance Cookies: Optimize Platform speed:\n  • Page load time monitoring\n  • API response time tracking\n  • Resource optimization\n\nIMPORTANT: We do NOT use third-party advertising cookies, retargeting cookies, or cross-site tracking cookies.`},
       {
         heading: '3. Cookie Duration & Storage',
-        content: `Cookies used on our Platform have varying durations:\n\n(a) Session Cookies: Temporary cookies that expire when you close your browser or app:\n  • Session management and authentication\n  • Temporary form data storage\n  • Security tokens\n\n(b) Persistent Cookies: Remain on your device for a set period:\n  • Authentication tokens: Up to 30 days\n  • Preference cookies: Up to 12 months\n  • Analytics cookies: Up to 24 months\n  • Security cookies: Up to 6 months\n\nAll persistent cookies can be deleted through your browser or device settings at any time.`,
-      },
+        content: `Cookies used on our Platform have varying durations:\n\n(a) Session Cookies: Temporary cookies that expire when you close your browser or app:\n  • Session management and authentication\n  • Temporary form data storage\n  • Security tokens\n\n(b) Persistent Cookies: Remain on your device for a set period:\n  • Authentication tokens: Up to 30 days\n  • Preference cookies: Up to 12 months\n  • Analytics cookies: Up to 24 months\n  • Security cookies: Up to 6 months\n\nAll persistent cookies can be deleted through your browser or device settings at any time.`},
       {
         heading: '4. Third-Party Cookies',
-        content: `Our Platform may include limited third-party cookies from trusted service providers:\n\n(a) Analytics Providers: Anonymized usage data collection for Platform improvement.\n\n(b) Payment Processors: Essential cookies for secure transaction processing (PCI-DSS compliant).\n\n(c) Identity Verification: Cookies used during the KYC verification process.\n\n(d) CDN Providers: Performance cookies for content delivery optimization.\n\nAll third-party cookie providers are bound by data processing agreements and are required to comply with applicable privacy laws. We regularly audit third-party cookies to ensure compliance with our privacy standards.`,
-      },
+        content: `Our Platform may include limited third-party cookies from trusted service providers:\n\n(a) Analytics Providers: Anonymized usage data collection for Platform improvement.\n\n(b) Payment Processors: Essential cookies for secure transaction processing (PCI-DSS compliant).\n\n(c) Identity Verification: Cookies used during the KYC verification process.\n\n(d) CDN Providers: Performance cookies for content delivery optimization.\n\nAll third-party cookie providers are bound by data processing agreements and are required to comply with applicable privacy laws. We regularly audit third-party cookies to ensure compliance with our privacy standards.`},
       {
         heading: '5. Managing Your Cookie Preferences',
-        content: `You can manage your cookie preferences through:\n\n(a) In-App Settings: Navigate to Settings > Privacy > Cookie Preferences to customize which optional cookies are enabled.\n\n(b) Browser Settings: Most browsers allow you to block all cookies, block third-party cookies, delete existing cookies, or set preferences for specific websites.\n\n(c) Device Settings: Mobile devices typically offer cookie controls in their privacy settings.\n\nPlease note that disabling certain cookies may affect Platform functionality. Strictly necessary cookies cannot be disabled as the Platform requires them to function.\n\nFor more information about managing cookies, consult your browser or device documentation.`,
-      },
+        content: `You can manage your cookie preferences through:\n\n(a) In-App Settings: Navigate to Settings > Privacy > Cookie Preferences to customize which optional cookies are enabled.\n\n(b) Browser Settings: Most browsers allow you to block all cookies, block third-party cookies, delete existing cookies, or set preferences for specific websites.\n\n(c) Device Settings: Mobile devices typically offer cookie controls in their privacy settings.\n\nPlease note that disabling certain cookies may affect Platform functionality. Strictly necessary cookies cannot be disabled as the Platform requires them to function.\n\nFor more information about managing cookies, consult your browser or device documentation.`},
       {
         heading: '6. Updates to This Policy',
-        content: `We may update this Cookie Policy to reflect changes in the cookies we use or for operational, legal, or regulatory reasons. When we make material changes, we will notify you through:\n\n• An updated "Last Updated" date on this Policy\n• A notification banner on the Platform\n• Email notification for significant changes\n\nWe encourage you to review this Policy periodically.\n\nFor questions about our use of cookies, contact us at ${COMPANY_EMAIL_PRIVACY}.`,
-      },
-    ],
-  },
+        content: `We may update this Cookie Policy to reflect changes in the cookies we use or for operational, legal, or regulatory reasons. When we make material changes, we will notify you through:\n\n• An updated "Last Updated" date on this Policy\n• A notification banner on the Platform\n• Email notification for significant changes\n\nWe encourage you to review this Policy periodically.\n\nFor questions about our use of cookies, contact us at ${COMPANY_EMAIL_PRIVACY}.`},
+    ]},
   {
     id: 'investment-disclosure',
     title: 'Investment Disclosure',
@@ -888,8 +828,7 @@ Offerings may be conducted under one or more of the following regulatory framewo
 
 Our platform is designed so that any verified user can invest in any property — no accredited investor status required.
 
-The specific exemption applicable to each Offering is disclosed in the Offering Documents. Shares have not been, and will not be, registered under the Securities Act of 1933, as amended, and may not be resold except in compliance with applicable securities laws.`,
-      },
+The specific exemption applicable to each Offering is disclosed in the Offering Documents. Shares have not been, and will not be, registered under the Securities Act of 1933, as amended, and may not be resold except in compliance with applicable securities laws.`},
       {
         heading: '2. Fee Disclosure',
         content: `${COMPANY_NAME} charges the following fees in connection with investments made through the Platform. All fees are disclosed prior to each investment and are detailed in the applicable Offering Documents.
@@ -919,8 +858,7 @@ The specific exemption applicable to each Offering is disclosed in the Offering 
   • Redemption between 12–24 months: 1.5% penalty
   • Redemption after 24 months: No penalty (subject to liquidity availability)
 
-Fees are subject to change with 30 days' written notice. The fee schedule applicable at the time of your investment governs your investment.`,
-      },
+Fees are subject to change with 30 days' written notice. The fee schedule applicable at the time of your investment governs your investment.`},
       {
         heading: '3. Conflicts of Interest',
         content: `${COMPANY_NAME} and its affiliates, officers, directors, and employees may have interests that conflict with those of investors. Material conflicts include:
@@ -947,8 +885,7 @@ MITIGATION MEASURES:
   • Quarterly reporting to investors
   • Independent board oversight
   • Written conflict of interest policies
-  • Disclosure of all material conflicts in Offering Documents`,
-      },
+  • Disclosure of all material conflicts in Offering Documents`},
       {
         heading: '4. Forward-Looking Statements',
         content: `THE PLATFORM AND OFFERING DOCUMENTS MAY CONTAIN FORWARD-LOOKING STATEMENTS, INCLUDING PROJECTIONS OF RENTAL INCOME, PROPERTY APPRECIATION, OCCUPANCY RATES, CAP RATES, INTERNAL RATES OF RETURN (IRR), AND OTHER FINANCIAL METRICS.
@@ -970,8 +907,7 @@ THESE STATEMENTS ARE BASED ON CURRENT EXPECTATIONS AND ASSUMPTIONS THAT ARE SUBJ
 
 ${COMPANY_NAME.toUpperCase()} DOES NOT UNDERTAKE ANY OBLIGATION TO UPDATE OR REVISE FORWARD-LOOKING STATEMENTS, WHETHER AS A RESULT OF NEW INFORMATION, FUTURE EVENTS, OR OTHERWISE.
 
-PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS. ANY HISTORICAL RETURNS, EXPECTED RETURNS, OR PROBABILITY PROJECTIONS MAY NOT REFLECT ACTUAL FUTURE PERFORMANCE.`,
-      },
+PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS. ANY HISTORICAL RETURNS, EXPECTED RETURNS, OR PROBABILITY PROJECTIONS MAY NOT REFLECT ACTUAL FUTURE PERFORMANCE.`},
       {
         heading: '5. Investor Suitability',
         content: `Investing in real estate securities through the Platform may not be suitable for all investors. Before investing, you should consider:
@@ -999,8 +935,7 @@ PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS. ANY HISTORICAL RETURNS, EX
 
 ${COMPANY_NAME} does not provide personalized investment advice. The availability of an investment on the Platform does not constitute a recommendation. You should consult with your own financial, tax, and legal advisors before making any investment decision.
 
-Contact: ${COMPANY_EMAIL_COMPLIANCE}`,
-      },
+Contact: ${COMPANY_EMAIL_COMPLIANCE}`},
       {
         heading: '6. FINRA & Broker-Dealer Disclosures',
         content: `${COMPANY_NAME} is not currently registered as a broker-dealer with the U.S. Securities and Exchange Commission ("SEC") or the Financial Industry Regulatory Authority ("FINRA").
@@ -1028,10 +963,8 @@ Phone: ${COMPANY_PHONE}
 
 You may also contact:
 SEC Office of Investor Education and Advocacy: (800) 732-0330
-FINRA Investor Complaint Center: www.finra.org/investors/have-problem`,
-      },
-    ],
-  },
+FINRA Investor Complaint Center: www.finra.org/investors/have-problem`},
+    ]},
   {
     id: 'acceptable-use',
     title: 'Acceptable Use Policy',
@@ -1043,37 +976,29 @@ FINRA Investor Complaint Center: www.finra.org/investors/have-problem`,
     sections: [
       {
         heading: '1. Purpose & Scope',
-        content: `This Acceptable Use Policy ("AUP") sets forth the rules and guidelines for using the ${COMPANY_NAME} Platform. This AUP is incorporated into and forms part of the Terms of Service.\n\nBy accessing or using the Platform, you agree to comply with this AUP. Violations may result in immediate suspension or termination of your account, forfeiture of any pending transactions, and reporting to law enforcement or regulatory authorities where applicable.\n\n${COMPANY_NAME} reserves the right to investigate suspected violations and take appropriate action, including removing content, suspending accounts, and cooperating with law enforcement.`,
-      },
+        content: `This Acceptable Use Policy ("AUP") sets forth the rules and guidelines for using the ${COMPANY_NAME} Platform. This AUP is incorporated into and forms part of the Terms of Service.\n\nBy accessing or using the Platform, you agree to comply with this AUP. Violations may result in immediate suspension or termination of your account, forfeiture of any pending transactions, and reporting to law enforcement or regulatory authorities where applicable.\n\n${COMPANY_NAME} reserves the right to investigate suspected violations and take appropriate action, including removing content, suspending accounts, and cooperating with law enforcement.`},
       {
         heading: '2. Permitted Uses',
-        content: `The Platform may only be used for the following lawful purposes:\n\n(a) Browsing and researching real estate investment opportunities offered through the Platform;\n\n(b) Creating and maintaining one personal investment account;\n\n(c) Purchasing, holding, and selling fractional ownership interests ("Shares") in properties offered on the Platform;\n\n(d) Receiving and reinvesting dividend distributions;\n\n(e) Participating in the secondary marketplace for trading Shares;\n\n(f) Accessing portfolio analytics, property data, and investment tools;\n\n(g) Communicating with ${COMPANY_NAME} customer support;\n\n(h) Referring friends and family through the official referral program;\n\n(i) Accessing educational content and resources provided on the Platform.`,
-      },
+        content: `The Platform may only be used for the following lawful purposes:\n\n(a) Browsing and researching real estate investment opportunities offered through the Platform;\n\n(b) Creating and maintaining one personal investment account;\n\n(c) Purchasing, holding, and selling fractional ownership interests ("Shares") in properties offered on the Platform;\n\n(d) Receiving and reinvesting dividend distributions;\n\n(e) Participating in the secondary marketplace for trading Shares;\n\n(f) Accessing portfolio analytics, property data, and investment tools;\n\n(g) Communicating with ${COMPANY_NAME} customer support;\n\n(h) Referring friends and family through the official referral program;\n\n(i) Accessing educational content and resources provided on the Platform.`},
       {
         heading: '3. Prohibited Activities',
-        content: `You may NOT use the Platform to:\n\n(a) Financial Misconduct:\n  • Engage in money laundering, terrorist financing, or any financial crime\n  • Structure transactions to avoid reporting thresholds\n  • Use the Platform to process proceeds of illegal activity\n  • Engage in market manipulation, wash trading, or artificial price inflation\n  • Front-running or trading on material non-public information\n\n(b) Identity & Account Violations:\n  • Create multiple accounts or use false identities\n  • Share, sell, or transfer your account credentials\n  • Access another user's account without authorization\n  • Impersonate any person, entity, or ${COMPANY_NAME} employee\n  • Provide false, inaccurate, or misleading information\n\n(c) Technical Abuse:\n  • Use automated systems (bots, scrapers, crawlers) to access the Platform\n  • Attempt to bypass security measures or access controls\n  • Exploit bugs, vulnerabilities, or glitches in the Platform\n  • Interfere with or disrupt the Platform's infrastructure\n  • Attempt to reverse engineer, decompile, or extract source code\n  • Introduce malware, viruses, or other malicious software\n\n(d) Content & Communication Violations:\n  • Post or transmit abusive, threatening, or harassing content\n  • Distribute spam, unsolicited advertising, or promotional material\n  • Infringe on intellectual property rights of ${COMPANY_NAME} or third parties\n  • Publish false or misleading information about properties or the Platform`,
-      },
+        content: `You may NOT use the Platform to:\n\n(a) Financial Misconduct:\n  • Engage in money laundering, terrorist financing, or any financial crime\n  • Structure transactions to avoid reporting thresholds\n  • Use the Platform to process proceeds of illegal activity\n  • Engage in market manipulation, wash trading, or artificial price inflation\n  • Front-running or trading on material non-public information\n\n(b) Identity & Account Violations:\n  • Create multiple accounts or use false identities\n  • Share, sell, or transfer your account credentials\n  • Access another user's account without authorization\n  • Impersonate any person, entity, or ${COMPANY_NAME} employee\n  • Provide false, inaccurate, or misleading information\n\n(c) Technical Abuse:\n  • Use automated systems (bots, scrapers, crawlers) to access the Platform\n  • Attempt to bypass security measures or access controls\n  • Exploit bugs, vulnerabilities, or glitches in the Platform\n  • Interfere with or disrupt the Platform's infrastructure\n  • Attempt to reverse engineer, decompile, or extract source code\n  • Introduce malware, viruses, or other malicious software\n\n(d) Content & Communication Violations:\n  • Post or transmit abusive, threatening, or harassing content\n  • Distribute spam, unsolicited advertising, or promotional material\n  • Infringe on intellectual property rights of ${COMPANY_NAME} or third parties\n  • Publish false or misleading information about properties or the Platform`},
       {
         heading: '4. Transaction Rules',
-        content: `When executing transactions on the Platform, you must:\n\n(a) Use only your own funds from verified funding sources;\n\n(b) Ensure sufficient funds are available before initiating transactions;\n\n(c) Not engage in rapid-fire trading designed to manipulate market prices;\n\n(d) Comply with all applicable holding period restrictions;\n\n(e) Not attempt to circumvent minimum or maximum investment limits;\n\n(f) Report any transaction errors or discrepancies promptly to ${COMPANY_EMAIL_COMPLIANCE};\n\n(g) Not use the Platform to facilitate transactions on behalf of undisclosed third parties;\n\n(h) Comply with all applicable tax obligations arising from Platform transactions.`,
-      },
+        content: `When executing transactions on the Platform, you must:\n\n(a) Use only your own funds from verified funding sources;\n\n(b) Ensure sufficient funds are available before initiating transactions;\n\n(c) Not engage in rapid-fire trading designed to manipulate market prices;\n\n(d) Comply with all applicable holding period restrictions;\n\n(e) Not attempt to circumvent minimum or maximum investment limits;\n\n(f) Report any transaction errors or discrepancies promptly to ${COMPANY_EMAIL_COMPLIANCE};\n\n(g) Not use the Platform to facilitate transactions on behalf of undisclosed third parties;\n\n(h) Comply with all applicable tax obligations arising from Platform transactions.`},
       {
         heading: '5. Reporting Violations',
-        content: `If you become aware of any violation of this AUP, please report it immediately to:\n\nEmail: ${COMPANY_EMAIL_COMPLIANCE}\nPhone: ${COMPANY_PHONE}\n\nYou may also report violations through the in-app reporting feature under Settings > Report an Issue.\n\n${COMPANY_NAME} investigates all reported violations promptly. We may, at our sole discretion:\n\n(a) Issue a warning to the violating user;\n(b) Temporarily suspend the user's account;\n(c) Permanently terminate the user's account;\n(d) Freeze or reverse transactions related to the violation;\n(e) Report the violation to law enforcement or regulatory authorities;\n(f) Pursue legal action to recover damages.\n\nWe will not retaliate against any user who reports a violation in good faith.`,
-      },
+        content: `If you become aware of any violation of this AUP, please report it immediately to:\n\nEmail: ${COMPANY_EMAIL_COMPLIANCE}\nPhone: ${COMPANY_PHONE}\n\nYou may also report violations through the in-app reporting feature under Settings > Report an Issue.\n\n${COMPANY_NAME} investigates all reported violations promptly. We may, at our sole discretion:\n\n(a) Issue a warning to the violating user;\n(b) Temporarily suspend the user's account;\n(c) Permanently terminate the user's account;\n(d) Freeze or reverse transactions related to the violation;\n(e) Report the violation to law enforcement or regulatory authorities;\n(f) Pursue legal action to recover damages.\n\nWe will not retaliate against any user who reports a violation in good faith.`},
       {
         heading: '6. Consequences of Violation',
-        content: `Violations of this AUP may result in one or more of the following consequences:\n\n(a) First Offense (Minor): Written warning and education about the violated policy.\n\n(b) Second Offense or Serious Violation: Temporary account suspension (7-30 days) and mandatory policy review.\n\n(c) Severe or Repeated Violations: Permanent account termination, forfeiture of any referral bonuses or rewards, and potential reporting to regulatory authorities.\n\n(d) Criminal Activity: Immediate account freeze, preservation of evidence, and referral to law enforcement.\n\n${COMPANY_NAME} reserves the right to determine the severity of any violation and the appropriate response. Users whose accounts are terminated for AUP violations may be prohibited from creating new accounts.\n\nFor questions regarding this Acceptable Use Policy, contact:\n${COMPANY_NAME}\n${COMPANY_ADDRESS}\nEmail: ${COMPANY_EMAIL_COMPLIANCE}\nPhone: ${COMPANY_PHONE}`,
-      },
-    ],
-  },
+        content: `Violations of this AUP may result in one or more of the following consequences:\n\n(a) First Offense (Minor): Written warning and education about the violated policy.\n\n(b) Second Offense or Serious Violation: Temporary account suspension (7-30 days) and mandatory policy review.\n\n(c) Severe or Repeated Violations: Permanent account termination, forfeiture of any referral bonuses or rewards, and potential reporting to regulatory authorities.\n\n(d) Criminal Activity: Immediate account freeze, preservation of evidence, and referral to law enforcement.\n\n${COMPANY_NAME} reserves the right to determine the severity of any violation and the appropriate response. Users whose accounts are terminated for AUP violations may be prohibited from creating new accounts.\n\nFor questions regarding this Acceptable Use Policy, contact:\n${COMPANY_NAME}\n${COMPANY_ADDRESS}\nEmail: ${COMPANY_EMAIL_COMPLIANCE}\nPhone: ${COMPANY_PHONE}`},
+    ]},
 ];
 
 function DocumentCard({
   document,
   isExpanded,
-  onToggle,
-}: {
+  onToggle}: {
   document: LegalDocument;
   isExpanded: boolean;
   onToggle: () => void;
@@ -1085,8 +1010,7 @@ function DocumentCard({
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 350,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [fadeAnim]);
 
   const toggleSection = useCallback((index: number) => {
@@ -1368,5 +1292,4 @@ const styles = StyleSheet.create({
   footerCopyright: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 8 },
   footerVersion: { color: Colors.textTertiary, fontSize: 10, textAlign: 'center', marginTop: 2 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

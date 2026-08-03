@@ -5,16 +5,13 @@
  * top opportunities, and 5-hour executive reports.
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -35,9 +32,9 @@ import {
   Users,
   Zap,
   AlertTriangle,
-  CheckCircle,
-} from 'lucide-react-native';
+  CheckCircle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -92,8 +89,7 @@ const API_BASE = process.env.EXPO_PUBLIC_IVX_API_BASE_URL ?? 'https://api.ivxhol
 
 async function fetchWithAuth<T>(url: string): Promise<T> {
   const resp = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    headers: { 'Content-Type': 'application/json' }});
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${resp.status}`);
@@ -105,8 +101,7 @@ async function postWithAuth<T>(url: string, body?: Record<string, unknown>): Pro
   const resp = await fetch(`${API_BASE}${url}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+    body: body ? JSON.stringify(body) : undefined});
   const data = await resp.json();
   if (!resp.ok) {
     throw new Error((data as { error?: string }).error ?? `HTTP ${resp.status}`);
@@ -123,16 +118,14 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   zip_code_buyer: <MapPin size={20} color={Colors.accent} />,
   corporate_capital: <Building2 size={20} color={Colors.accent} />,
   market_intelligence: <Lightbulb size={20} color={Colors.accent} />,
-  jv_match: <Handshake size={20} color={Colors.accent} />,
-};
+  jv_match: <Handshake size={20} color={Colors.accent} />};
 
 const CONFIDENCE_COLORS: Record<string, string> = {
   'A+': '#00C48C',
   'A': '#16A34A',
   'B': '#EAB308',
   'C': '#F97316',
-  'UNVERIFIED': '#6B7280',
-};
+  'UNVERIFIED': '#6B7280'};
 
 // ── Progress Bar ───────────────────────────────────────────────────────────
 
@@ -156,8 +149,7 @@ export default function OpportunityIntelligenceScreen() {
     engines: [],
     topRecords: [],
     totalFoundToday: 0,
-    lastReportTime: null,
-  });
+    lastReportTime: null});
   const [runningEngine, setRunningEngine] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
 
@@ -180,15 +172,13 @@ export default function OpportunityIntelligenceScreen() {
         engines: enginesRes.engines ?? [],
         topRecords: topRes.top20 ?? [],
         totalFoundToday: targetsRes.totalFoundToday ?? 0,
-        lastReportTime: null,
-      });
+        lastReportTime: null});
     } catch (err) {
       setState((s) => ({
         ...s,
         loading: false,
         refreshing: false,
-        error: (err as Error).message,
-      }));
+        error: (err as Error).message}));
     }
   }, []);
 
@@ -233,7 +223,7 @@ export default function OpportunityIntelligenceScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ShimmerIndicator size="large" color={Colors.accent} />
           <Text style={styles.loadingText}>Loading Intelligence Engine...</Text>
         </View>
       </SafeAreaView>
@@ -261,7 +251,7 @@ export default function OpportunityIntelligenceScreen() {
           disabled={runningAll}
         >
           {runningAll ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ShimmerIndicator size="small" color="#fff" />
           ) : (
             <Zap size={18} color="#fff" />
           )}
@@ -361,7 +351,7 @@ export default function OpportunityIntelligenceScreen() {
                 </Text>
               </View>
               {runningEngine === engine.engineId ? (
-                <ActivityIndicator size="small" color={Colors.accent} />
+                <ShimmerIndicator size="small" color={Colors.accent} />
               ) : (
                 <RefreshCw size={16} color={Colors.textSecondary} />
               )}
@@ -435,43 +425,35 @@ export default function OpportunityIntelligenceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
-  },
+    backgroundColor: '#0A0A0A'},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
-  },
+    borderBottomColor: '#1A1A1A'},
   backBtn: {
-    padding: 4,
-  },
+    padding: 4},
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSub: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   runAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -479,23 +461,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   btnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   runAllText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -503,39 +480,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF4D4D20',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   errorText: {
     color: '#FF4D4D',
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   section: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   badge: {
     backgroundColor: Colors.accent + '20',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   badgeText: {
     color: Colors.accent,
     fontSize: 11,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   targetRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -543,57 +513,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
     borderRadius: 10,
     padding: 12,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   targetIcon: {
     width: 36,
     height: 36,
     borderRadius: 8,
     backgroundColor: Colors.accent + '15',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   targetInfo: {
-    flex: 1,
-  },
+    flex: 1},
   targetNameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   targetName: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusBadgeText: {
     fontSize: 10,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   progressTrack: {
     height: 4,
     backgroundColor: '#1F1F1F',
     borderRadius: 2,
     marginBottom: 4,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressFill: {
     height: '100%',
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   targetNumbers: {
     fontSize: 11,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   engineRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -601,29 +561,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
     borderRadius: 10,
     padding: 12,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   engineIcon: {
     width: 36,
     height: 36,
     borderRadius: 8,
     backgroundColor: Colors.accent + '15',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   engineInfo: {
-    flex: 1,
-  },
+    flex: 1},
   engineName: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   engineMeta: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   recordRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -631,79 +586,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
     borderRadius: 10,
     padding: 12,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   recordRank: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: Colors.accent + '20',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   recordRankText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.accent,
-  },
+    color: Colors.accent},
   recordInfo: {
-    flex: 1,
-  },
+    flex: 1},
   recordName: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   recordMeta: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   confidenceBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   confidenceText: {
     fontSize: 11,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 32,
-    gap: 8,
-  },
+    gap: 8},
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   emptySub: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   statCard: {
     flex: 1,
     minWidth: '45%',
     backgroundColor: '#141414',
     borderRadius: 10,
     padding: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statValue: {
     fontSize: 22,
     fontWeight: '700',
-    color: Colors.accent,
-  },
+    color: Colors.accent},
   statLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 4,
-    textAlign: 'center',
-  },
-});
+    textAlign: 'center'}});

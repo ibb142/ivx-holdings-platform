@@ -13,15 +13,12 @@
  * Access requires authenticated session + owner/admin role (enforced by admin/_layout.tsx).
  */
 import React, { useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -39,14 +36,14 @@ import {
   Server,
   HardDrive,
   ArrowLeft,
-  ChevronRight,
-} from 'lucide-react-native';
+  ChevronRight} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const REFRESH_MS = 1000 * 60 * 2;
@@ -76,8 +73,7 @@ function MetricTile({
   label,
   value,
   tint = Colors.primary,
-  isLoading,
-}: {
+  isLoading}: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
@@ -90,7 +86,7 @@ function MetricTile({
         {icon}
       </View>
       {isLoading ? (
-        <ActivityIndicator size="small" color={tint} style={styles.tileLoader} />
+        <ShimmerIndicator size="small" color={tint} style={styles.tileLoader} />
       ) : (
         <Text style={[styles.tileValue, { color: tint }]}>{value}</Text>
       )}
@@ -103,8 +99,7 @@ function HealthBadge({ status }: { status: 'healthy' | 'degraded' | 'down' }) {
   const colors = {
     healthy: Colors.success ?? '#22c55e',
     degraded: '#f59e0b',
-    down: Colors.error ?? '#ef4444',
-  };
+    down: Colors.error ?? '#ef4444'};
   const labels = { healthy: 'Healthy', degraded: 'Degraded', down: 'Down' };
   return (
     <View style={[styles.healthBadge, { backgroundColor: colors[status] + '20' }]}>
@@ -233,13 +228,11 @@ export default function BusinessOverviewScreen() {
         failedUploads,
         systemHealth: apiHealth === 'healthy' ? 'healthy' : apiHealth === 'degraded' ? 'degraded' : 'down',
         apiHealth,
-        storageUsage,
-      };
+        storageUsage};
     },
     staleTime: REFRESH_MS,
     refetchInterval: isScreenFocused ? REFRESH_MS : false,
-    retry: 1,
-  });
+    retry: 1});
 
   const onRefresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['admin-business-overview'] });
@@ -457,64 +450,54 @@ export default function BusinessOverviewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   title: {
     flex: 1,
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success ?? '#22c55e',
-  },
+    backgroundColor: Colors.success ?? '#22c55e'},
   liveText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   sectionTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 10,
-  },
+    paddingBottom: 10},
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   tile: {
     flex: 1,
     minWidth: '46%',
@@ -523,53 +506,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 6,
-  },
+    gap: 6},
   tileIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   tileValue: {
     fontSize: 24,
     fontWeight: '800' as const,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   tileLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tileLoader: {
-    marginVertical: 6,
-  },
+    marginVertical: 6},
   healthRow: {
     flexDirection: 'row',
     gap: 12,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   healthCard: {
     flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   healthCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   healthCardLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   healthBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -577,22 +551,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   healthDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   healthText: {
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   healthCardValue: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ctaTile: {
     flex: 1,
     minWidth: '46%',
@@ -601,29 +571,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 6,
-  },
+    gap: 6},
   ctaTileIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   ctaTileTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ctaTileSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ctaTileArrow: {
     position: 'absolute',
     right: 12,
-    top: 14,
-  },
-});
+    top: 14}});

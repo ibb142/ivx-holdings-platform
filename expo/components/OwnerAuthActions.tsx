@@ -22,8 +22,7 @@ export function OwnerAuthActions(): React.ReactElement | null {
           onPress: () => {
             void logout();
             router.replace('/landing' as never);
-          },
-        },
+          }},
       ],
     );
   };
@@ -79,38 +78,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(255, 215, 0, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.25)',
-  },
+    borderColor: 'rgba(255, 215, 0, 0.25)'},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   title: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   label: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   value: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   buttonRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 12,
-  },
+    marginTop: 12},
   button: {
     flex: 1,
     flexDirection: 'row',
@@ -118,22 +110,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   primaryButton: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   secondaryButton: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.08)'},
   primaryButtonText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   secondaryButtonText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700',
-  },
-});
+    fontWeight: '700'}});

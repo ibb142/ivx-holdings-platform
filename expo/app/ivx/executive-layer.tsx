@@ -2,13 +2,11 @@ import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   Banknote,
@@ -21,20 +19,19 @@ import {
   Target,
   TrendingUp,
   Users,
-  Wallet,
-} from 'lucide-react-native';
+  Wallet} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getExecutiveLayer,
   type ExecutiveLayer,
   type ExecutiveMetric,
   type ExecutiveScorecard,
   type RiskLevel,
-  type StrategicGoal,
-} from '@/src/modules/ivx-developer/executiveLayerService';
+  type StrategicGoal} from '@/src/modules/ivx-developer/executiveLayerService';
 
 const POLL_INTERVAL_MS = 20000;
 
@@ -43,14 +40,12 @@ const GRADE_COLORS: Record<string, string> = {
   B: Colors.success,
   C: Colors.warning,
   D: Colors.warning,
-  F: Colors.error,
-};
+  F: Colors.error};
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   low: Colors.success,
   medium: Colors.warning,
-  high: Colors.error,
-};
+  high: Colors.error};
 
 function MetricRow({ icon, metric }: { icon: React.ReactNode; metric: ExecutiveMetric }) {
   return (
@@ -110,8 +105,7 @@ function ExecutiveLayerContent() {
   const executiveQuery = useQuery<ExecutiveLayer | null>({
     queryKey: ['ivx-executive-layer'],
     queryFn: getExecutiveLayer,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const data = executiveQuery.data ?? null;
   const onRefresh = useCallback(() => { void executiveQuery.refetch(); }, [executiveQuery]);
@@ -368,7 +362,7 @@ function ExecutiveLayerContent() {
       ) : (
         <View style={styles.card}>
           {executiveQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyBody}>{executiveQuery.error instanceof Error ? executiveQuery.error.message : 'No executive data yet.'}</Text>
           )}
@@ -444,5 +438,4 @@ const styles = StyleSheet.create({
   execMeta: { fontSize: 11, color: Colors.textSecondary },
   footnote: { fontSize: 11.5, color: Colors.textSecondary, lineHeight: 16, fontStyle: 'italic' as const },
   riskLeadIcon: { marginTop: 2 },
-  disclaimer: { fontSize: 11, color: Colors.textSecondary, lineHeight: 16, fontStyle: 'italic' as const, paddingHorizontal: 4 },
-});
+  disclaimer: { fontSize: 11, color: Colors.textSecondary, lineHeight: 16, fontStyle: 'italic' as const, paddingHorizontal: 4 }});

@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -19,11 +17,11 @@ import {
   ShieldCheck,
   Sparkles,
   AlertTriangle,
-  CheckCircle2,
-} from 'lucide-react-native';
+  CheckCircle2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { getIVXOwnerAIResolvedEndpoint } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 /**
  * IVX Private Lender Network — Admin UI (Module 3 of the Autonomous Business
@@ -94,16 +92,14 @@ const CATEGORY_LABELS: Record<LenderCategory, string> = {
   private: 'Private',
   bridge: 'Bridge',
   construction: 'Construction',
-  commercial: 'Commercial',
-};
+  commercial: 'Commercial'};
 
 const CATEGORY_ICONS: Record<LenderCategory, React.ComponentType<{ size?: number; color?: string }>> = {
   hard_money: Hammer,
   private: Building2,
   bridge: Building2,
   construction: TrendingUp,
-  commercial: Landmark,
-};
+  commercial: Landmark};
 
 const CATEGORY_ORDER: readonly LenderCategory[] = ['hard_money', 'private', 'bridge', 'construction', 'commercial'];
 
@@ -149,8 +145,7 @@ export default function LenderNetworkScreen() {
         return;
       }
       const res = await fetch(`${apiBase}/api/ivx/owner-signup-audit?email=${encodeURIComponent('iperez4242@gmail.com')}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        headers: { Authorization: `Bearer ${token}` }});
       const json = (await res.json()) as Record<string, unknown>;
       setOwnerProof({
         ownerEmail: (json.ownerEmail as string) ?? (json.requestedEmail as string) ?? null,
@@ -159,8 +154,7 @@ export default function LenderNetworkScreen() {
         allowlisted: json.ownerAllowlist && typeof json.ownerAllowlist === 'object'
           ? ((json.ownerAllowlist as Record<string, unknown>).allowed as boolean) ?? null
           : null,
-        error: res.ok ? null : `HTTP ${res.status}`,
-      });
+        error: res.ok ? null : `HTTP ${res.status}`});
     } catch (err) {
       setOwnerProof({ ownerEmail: null, ownerRole: null, kycStatus: null, allowlisted: null, error: err instanceof Error ? err.message : 'network_error' });
     } finally {
@@ -179,8 +173,7 @@ export default function LenderNetworkScreen() {
         return;
       }
       const res = await fetch(`${apiBase}/api/ivx/lender-network/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        headers: { Authorization: `Bearer ${token}` }});
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         setError(`Dashboard HTTP ${res.status}: ${(json.error as string) ?? 'failed'}`);
@@ -206,8 +199,7 @@ export default function LenderNetworkScreen() {
         return;
       }
       const res = await fetch(`${apiBase}/api/ivx/lender-network/lenders`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        headers: { Authorization: `Bearer ${token}` }});
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         setError(`Lenders HTTP ${res.status}: ${(json.error as string) ?? 'failed'}`);
@@ -234,8 +226,7 @@ export default function LenderNetworkScreen() {
       }
       const res = await fetch(`${apiBase}/api/ivx/lender-network/scan`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }});
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         setError(`Scan HTTP ${res.status}: ${(json.error as string) ?? 'failed'}`);
@@ -289,7 +280,7 @@ export default function LenderNetworkScreen() {
           hitSlop={12}
         >
           {loading === 'scan' ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <RefreshCw size={18} color={Colors.primary} />
           )}
@@ -304,7 +295,7 @@ export default function LenderNetworkScreen() {
             <Text style={styles.cardTitle}>Owner Access</Text>
           </View>
           {loading === 'owner' && !ownerProof ? (
-            <ActivityIndicator size="small" color={Colors.primary} style={styles.rowSpacing} />
+            <ShimmerIndicator size="small" color={Colors.primary} style={styles.rowSpacing} />
           ) : ownerProof?.error ? (
             <View style={styles.row}>
               <AlertTriangle size={14} color={Colors.error} />
@@ -353,7 +344,7 @@ export default function LenderNetworkScreen() {
           <View style={styles.cardHeader}>
             <Sparkles size={16} color={Colors.primary} />
             <Text style={styles.cardTitle}>Dashboard</Text>
-            {loading === 'dashboard' ? <ActivityIndicator size="small" color={Colors.primary} /> : null}
+            {loading === 'dashboard' ? <ShimmerIndicator size="small" color={Colors.primary} /> : null}
           </View>
           {counts ? (
             <View style={styles.countsGrid}>
@@ -420,7 +411,7 @@ export default function LenderNetworkScreen() {
         <View style={styles.listSection}>
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>Lender List ({filteredLenders.length})</Text>
-            {loading === 'lenders' ? <ActivityIndicator size="small" color={Colors.primary} /> : null}
+            {loading === 'lenders' ? <ShimmerIndicator size="small" color={Colors.primary} /> : null}
           </View>
 
           {filteredLenders.length === 0 && loading !== 'lenders' ? (
@@ -544,8 +535,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: { padding: 4 },
   headerTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
@@ -559,8 +549,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -577,8 +566,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.warning + '40',
-  },
+    borderColor: Colors.warning + '40'},
   warnText: { color: Colors.warning, fontSize: 13, flex: 1, lineHeight: 18 },
   countsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   countChip: {
@@ -588,8 +576,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   countChipLabel: { color: Colors.textTertiary, fontSize: 12 },
   countChipValue: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
   totalText: { color: Colors.textTertiary, fontSize: 12 },
@@ -599,8 +586,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   topMatchName: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   topMatchCompany: { color: Colors.textTertiary, fontSize: 12 },
   fitScoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -618,8 +604,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: { backgroundColor: Colors.primary + '22', borderColor: Colors.primary },
   filterChipText: { color: Colors.textTertiary, fontSize: 12, fontWeight: '600' },
   filterChipTextActive: { color: Colors.text },
@@ -633,8 +618,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   lenderCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   lenderNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   lenderName: { color: Colors.text, fontSize: 14, fontWeight: '700', flex: 1 },
@@ -645,8 +629,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 11,
     fontWeight: '700',
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   fieldGrid: { gap: 6 },
   fieldRow: { flexDirection: 'row', gap: 8 },
   fieldLabel: { color: Colors.textTertiary, fontSize: 12, minWidth: 110 },
@@ -656,5 +639,4 @@ const styles = StyleSheet.create({
   complianceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   complianceText: { color: Colors.textTertiary, fontSize: 10, flex: 1, lineHeight: 15 },
   scanText: { color: Colors.text, fontSize: 12 },
-  scanReason: { color: Colors.textTertiary, fontSize: 11, fontStyle: 'italic' },
-});
+  scanReason: { color: Colors.textTertiary, fontSize: 11, fontStyle: 'italic' }});

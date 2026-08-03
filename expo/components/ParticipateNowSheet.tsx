@@ -16,8 +16,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
-  ScrollView,
-} from 'react-native';
+  ScrollView} from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
   X,
@@ -25,8 +24,7 @@ import {
   Handshake,
   Home,
   ChevronRight,
-  Shield,
-} from 'lucide-react-native';
+  Shield} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 export interface ParticipateNowOption {
@@ -131,18 +129,15 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   overlayTouch: {
-    flex: 1,
-  },
+    flex: 1},
   sheet: {
     backgroundColor: '#0A0A0A',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 32,
-    maxHeight: '80%',
-  },
+    maxHeight: '80%'},
   handle: {
     width: 40,
     height: 4,
@@ -150,32 +145,26 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   title: {
     color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   closeButton: {
-    padding: 8,
-  },
+    padding: 8},
   subtitle: {
     color: '#909090',
     fontSize: 14,
     paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   optionsList: {
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -184,8 +173,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-  },
+    borderColor: '#2A2A2A'},
   optionIconWrap: {
     width: 48,
     height: 48,
@@ -193,47 +181,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(230,194,0,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
-  },
+    marginRight: 14},
   optionInfo: {
-    flex: 1,
-  },
+    flex: 1},
   optionLabel: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   optionSubtitle: {
     color: '#909090',
     fontSize: 13,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   optionMinAmount: {
     color: '#E6C200',
     fontSize: 14,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
-  },
+    paddingVertical: 32},
   emptyText: {
     color: '#666',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 12,
-  },
+    marginTop: 12},
   footer: {
     paddingHorizontal: 20,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#1A1A1A',
-    marginTop: 8,
-  },
+    marginTop: 8},
   footerText: {
     color: '#555',
     fontSize: 11,
-    textAlign: 'center',
-  },
-});
+    textAlign: 'center'}});

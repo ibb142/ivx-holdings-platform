@@ -8,8 +8,7 @@ import {
   TextInput,
   Modal,
   Switch,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -31,8 +30,7 @@ import {
   PiggyBank,
   LogOut,
   LogIn,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { FeeConfiguration, FeeTransaction, FeeType } from '@/types';
 import { useQuery } from '@tanstack/react-query';
@@ -78,8 +76,7 @@ export default function FeesScreen() {
           feePercentage: 2.5,
           status: t.status === 'completed' ? 'collected' as const : 'pending' as const,
           propertyName: t.property_name || '',
-          createdAt: t.created_at || new Date().toISOString(),
-        })),
+          createdAt: t.created_at || new Date().toISOString()})),
         stats: {
           totalFeesCollected: totalFees,
           feesThisMonth: totalFees * 0.3,
@@ -88,13 +85,9 @@ export default function FeesScreen() {
             buy: totalFees * 0.4,
             sell: totalFees * 0.25,
             withdrawal: totalFees * 0.2,
-            deposit: totalFees * 0.15,
-          },
-        },
-      };
+            deposit: totalFees * 0.15}}};
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const transactions: FeeTransaction[] = useMemo(() => feeQuery.data?.transactions ?? [], [feeQuery.data]);
   const stats: { totalFeesCollected: number; feesThisMonth: number; feesLastMonth: number; feeGrowthPercent: number; totalTransactionsWithFees: number; averageFeeAmount: number; feesByType: { buy: number; sell: number; withdrawal: number; deposit: number } } = {
@@ -104,8 +97,7 @@ export default function FeesScreen() {
     feeGrowthPercent: 17.6,
     totalTransactionsWithFees: transactions.length,
     averageFeeAmount: feeQuery.data?.stats?.averageFeeAmount ?? 0,
-    feesByType: feeQuery.data?.stats?.feesByType ?? { buy: 0, sell: 0, withdrawal: 0, deposit: 0 },
-  };
+    feesByType: feeQuery.data?.stats?.feesByType ?? { buy: 0, sell: 0, withdrawal: 0, deposit: 0 }};
   const { configurations } = useFeeConfigurations();
   const upsertFee = useUpsertFeeConfiguration();
 
@@ -142,8 +134,7 @@ export default function FeesScreen() {
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const getTypeIcon = (type: FeeType) => {
@@ -222,8 +213,7 @@ export default function FeesScreen() {
         percentage,
         minFee,
         maxFee,
-        isActive: editedActive,
-      });
+        isActive: editedActive});
       setEditModalVisible(false);
       Alert.alert('Success', 'Fee configuration saved to database');
     } catch (e: any) {
@@ -827,5 +817,4 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   switchLabel: { color: Colors.text, fontSize: 14, fontWeight: '600' as const, flex: 1 },
   saveButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  saveButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
-});
+  saveButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 }});

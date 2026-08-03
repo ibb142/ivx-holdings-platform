@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import {
-  ActivityIndicator,
   type DimensionValue,
   Pressable,
   RefreshControl,
@@ -10,8 +9,7 @@ import {
   StyleSheet,
   Text,
   useWindowDimensions,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Briefcase,
   CalendarDays,
@@ -21,11 +19,11 @@ import {
   Target,
   TrendingUp,
   Trophy,
-  Users,
-} from 'lucide-react-native';
+  Users} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getCampaignReport,
   type CampaignAudience,
@@ -33,8 +31,7 @@ import {
   type CampaignDailyReport,
   type CampaignLeadStatus,
   type CampaignLeadView,
-  type CampaignReport,
-} from '@/src/modules/ivx-developer/campaignReportService';
+  type CampaignReport} from '@/src/modules/ivx-developer/campaignReportService';
 
 const STATUS_META: Record<CampaignLeadStatus, { label: string; color: string }> = {
   new: { label: 'New', color: Colors.info },
@@ -42,15 +39,13 @@ const STATUS_META: Record<CampaignLeadStatus, { label: string; color: string }> 
   qualified: { label: 'Qualified', color: Colors.success },
   follow_up: { label: 'Follow-up', color: Colors.warning },
   closed: { label: 'Closed', color: Colors.primary },
-  rejected: { label: 'Rejected', color: Colors.textTertiary },
-};
+  rejected: { label: 'Rejected', color: Colors.textTertiary }};
 
 const AUDIENCE_META: Record<CampaignAudience, { label: string; color: string }> = {
   investor: { label: 'Investor', color: '#A78BFA' },
   buyer: { label: 'Buyer', color: '#38BDF8' },
   jv: { label: 'JV / Capital', color: '#F59E0B' },
-  other: { label: 'Other', color: Colors.textTertiary },
-};
+  other: { label: 'Other', color: Colors.textTertiary }};
 
 function MetricTile({ label, value, tone, flexBasis }: { label: string; value: string | number; tone?: string; flexBasis: DimensionValue }) {
   return (
@@ -159,8 +154,7 @@ function CampaignContent() {
 
   const query = useQuery<CampaignReport | null>({
     queryKey: ['ivx-campaign-report'],
-    queryFn: () => getCampaignReport(10),
-  });
+    queryFn: () => getCampaignReport(10)});
 
   const report = query.data ?? null;
   const openProfile = useCallback((id: string) => {
@@ -217,7 +211,7 @@ function CampaignContent() {
         ) : null}
 
         {query.isLoading && !report ? (
-          <View style={styles.loadingCard}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.loadingCard}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : null}
 
         {report ? (
@@ -392,5 +386,4 @@ const styles = StyleSheet.create({
   emptyCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 26, gap: 8, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   emptyTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
   emptyBody: { fontSize: 12, lineHeight: 17, color: Colors.textSecondary, textAlign: 'center' },
-  footnote: { fontSize: 10.5, color: Colors.textTertiary, marginTop: 6 },
-});
+  footnote: { fontSize: 10.5, color: Colors.textTertiary, marginTop: 6 }});

@@ -1,13 +1,10 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -24,8 +21,7 @@ import {
   Zap,
   Activity,
   BarChart3,
-  Image as ImageIcon,
-} from 'lucide-react-native';
+  Image as ImageIcon} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
@@ -35,21 +31,20 @@ import {
   CANONICAL_MIN_INVESTMENT,
   CANONICAL_DISTRIBUTION_LABEL,
   CANONICAL_CLAIMS,
-  validatePublicClaim,
-} from '@/lib/published-deal-card-model';
+  validatePublicClaim} from '@/lib/published-deal-card-model';
 import { getDeployStatus } from '@/lib/landing-deploy';
 import { fetchCanonicalDeals, getCanonicalCacheStats } from '@/lib/canonical-deals';
 import {
   diagnoseDealsPhotos,
   getPhotoHealthPresentation,
   getPhotoSourcePresentation,
-  type DealPhotoDiagnostic,
-} from '@/lib/deal-photo-health';
+  type DealPhotoDiagnostic} from '@/lib/deal-photo-health';
 import { performanceMonitor } from '@/lib/performance-monitor';
 import { getAutoDeployStatus } from '@/lib/auto-deploy';
 import { getAdminMemberRegistrySnapshot, type AdminMemberRegistrySnapshot } from '@/lib/member-registry';
 import { getDeployAccessDiagnostic } from '@/lib/landing-deploy';
 import { runLandingReadinessAudit, type ReadinessAuditResult } from '@/lib/landing-readiness-audit';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 
 type StatusLevel = 'green' | 'yellow' | 'red';
@@ -84,8 +79,7 @@ export default function SyncDiagnosticsScreen() {
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    refetchInterval: false,
-  });
+    refetchInterval: false});
 
   const imageAuditQuery = useQuery<DealPhotoDiagnostic[]>({
     queryKey: ['sync-diagnostics-image-audit'],
@@ -96,8 +90,7 @@ export default function SyncDiagnosticsScreen() {
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    refetchInterval: false,
-  });
+    refetchInterval: false});
 
   const forceSyncMutation = useMutation({
     mutationFn: () => syncToLandingPage(),
@@ -105,8 +98,7 @@ export default function SyncDiagnosticsScreen() {
       console.log('[SyncDiag] Force sync result:', result.success, 'deals:', result.syncedDeals);
       void queryClient.invalidateQueries({ queryKey: ['sync-diagnostics-status'] });
       void queryClient.invalidateQueries({ queryKey: ['auto-deploy-status'] });
-    },
-  });
+    }});
 
   const autoDeployQuery = useQuery({
     queryKey: ['auto-deploy-status'],
@@ -114,8 +106,7 @@ export default function SyncDiagnosticsScreen() {
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    refetchInterval: false,
-  });
+    refetchInterval: false});
 
   const memberRegistryQuery = useQuery<AdminMemberRegistrySnapshot>({
     queryKey: ['sync-diagnostics-member-registry'],
@@ -123,8 +114,7 @@ export default function SyncDiagnosticsScreen() {
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    refetchInterval: false,
-  });
+    refetchInterval: false});
 
   const deployAccessQuery = useQuery({
     queryKey: ['sync-diagnostics-deploy-access'],
@@ -132,8 +122,7 @@ export default function SyncDiagnosticsScreen() {
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    refetchInterval: false,
-  });
+    refetchInterval: false});
 
   const readinessAuditQuery = useQuery<ReadinessAuditResult>({
     queryKey: ['sync-diagnostics-readiness-audit'],
@@ -141,8 +130,7 @@ export default function SyncDiagnosticsScreen() {
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    refetchInterval: false,
-  });
+    refetchInterval: false});
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -179,8 +167,7 @@ export default function SyncDiagnosticsScreen() {
     ];
     return testClaims.map(claim => ({
       claim,
-      ...validatePublicClaim(claim),
-    }));
+      ...validatePublicClaim(claim)}));
   }, []);
 
   const imageAuditSummary = useMemo(() => {
@@ -203,8 +190,7 @@ export default function SyncDiagnosticsScreen() {
       db: 0,
       storage: 0,
       fallback: 0,
-      missing: 0,
-    });
+      missing: 0});
   }, [imageDiagnostics]);
 
   const diagnostics: DiagnosticItem[] = [];
@@ -214,32 +200,28 @@ export default function SyncDiagnosticsScreen() {
     label: 'Published JV Deals (Supabase)',
     value: status ? String(status.publishedDealsCount) : '...',
     status: status?.publishedDealsCount != null && status.publishedDealsCount > 0 ? 'green' : 'yellow',
-    detail: 'jv_deals table — single source of truth',
-  });
+    detail: 'jv_deals table — single source of truth'});
 
   diagnostics.push({
     id: 'landing-deals-count',
     label: 'Landing Deals (Derived)',
     value: status ? String(status.landingDealsCount) : '...',
     status: status ? (status.inSync ? 'green' : 'red') : 'yellow',
-    detail: 'landing_deals table — auto-generated, read-only',
-  });
+    detail: 'landing_deals table — auto-generated, read-only'});
 
   diagnostics.push({
     id: 'canonical-api-count',
     label: 'Canonical API Count',
     value: status ? String(status.canonicalApiCount) : '...',
     status: status?.canonicalApiCount != null && status.canonicalApiCount > 0 ? 'green' : 'yellow',
-    detail: 'Same as published jv_deals — canonical endpoint',
-  });
+    detail: 'Same as published jv_deals — canonical endpoint'});
 
   diagnostics.push({
     id: 'app-visible-count',
     label: 'App Visible Deals',
     value: String(appVisibleCount),
     status: appVisibleCount > 0 ? 'green' : 'yellow',
-    detail: 'Deals visible in app Invest screen right now',
-  });
+    detail: 'Deals visible in app Invest screen right now'});
 
   diagnostics.push({
     id: 'sync-status',
@@ -248,45 +230,39 @@ export default function SyncDiagnosticsScreen() {
     status: status?.inSync ? 'green' : 'red',
     detail: status?.inSync
       ? 'jv_deals and landing_deals counts match'
-      : `Mismatch: ${status?.publishedDealsCount ?? '?'} published vs ${status?.landingDealsCount ?? '?'} landing`,
-  });
+      : `Mismatch: ${status?.publishedDealsCount ?? '?'} published vs ${status?.landingDealsCount ?? '?'} landing`});
 
   diagnostics.push({
     id: 'last-sync',
     label: 'Last Sync Time',
     value: status?.lastSync ? new Date(status.lastSync).toLocaleString() : 'Never',
-    status: status?.lastSync ? 'green' : 'yellow',
-  });
+    status: status?.lastSync ? 'green' : 'yellow'});
 
   diagnostics.push({
     id: 'last-deploy',
     label: 'Last Deploy Time',
     value: status?.lastDeployTime ? new Date(status.lastDeployTime).toLocaleString() : 'Never',
-    status: status?.lastDeployTime ? 'green' : 'yellow',
-  });
+    status: status?.lastDeployTime ? 'green' : 'yellow'});
 
   diagnostics.push({
     id: 'last-deploy-error',
     label: 'Last Deploy Error',
     value: status?.lastDeployError || 'None',
-    status: status?.lastDeployError ? 'red' : 'green',
-  });
+    status: status?.lastDeployError ? 'red' : 'green'});
 
   diagnostics.push({
     id: 'min-investment',
     label: 'Canonical Min Investment',
     value: `${CANONICAL_MIN_INVESTMENT}`,
     status: 'green',
-    detail: 'Shared across app and landing page',
-  });
+    detail: 'Shared across app and landing page'});
 
   diagnostics.push({
     id: 'distribution-freq',
     label: 'Canonical Distribution',
     value: CANONICAL_DISTRIBUTION_LABEL,
     status: 'green',
-    detail: 'Shared across app and landing page',
-  });
+    detail: 'Shared across app and landing page'});
 
   const deployStatus = getDeployStatus();
   diagnostics.push({
@@ -298,16 +274,14 @@ export default function SyncDiagnosticsScreen() {
       ? 'Landing sync runs in-app and the public website pipeline is configured end-to-end.'
       : deployStatus.missingRequirements.length > 0
         ? `Missing: ${deployStatus.missingRequirements.join(', ')}`
-        : 'Landing sync runs in-app. GitHub Actions and AWS deliver the public landing when configured.',
-  });
+        : 'Landing sync runs in-app. GitHub Actions and AWS deliver the public landing when configured.'});
 
   diagnostics.push({
     id: 'compliance-note',
     label: 'Compliance Disclaimer',
     value: CANONICAL_CLAIMS.complianceNote ? 'Active' : 'Missing',
     status: CANONICAL_CLAIMS.complianceNote ? 'green' : 'red',
-    detail: CANONICAL_CLAIMS.complianceNote,
-  });
+    detail: CANONICAL_CLAIMS.complianceNote});
 
   const countMismatch = status && !status.inSync;
   const appVsApiMismatch = status && appVisibleCount !== status.publishedDealsCount;
@@ -325,24 +299,20 @@ export default function SyncDiagnosticsScreen() {
             label: '30K audit',
             value: readiness30k ? (readiness30k.status === 'pass' ? 'Passed' : readiness30k.status === 'warn' ? 'Needs review' : 'Blocked') : readinessAuditQuery.isPending ? 'Loading' : 'Unavailable',
             status: readiness30k ? (readiness30k.status === 'pass' ? 'green' : readiness30k.status === 'warn' ? 'yellow' : 'red') : readinessAuditQuery.isPending ? 'yellow' : 'red',
-            detail: readiness30k ? `${readiness30k.summary} Evidence: ${readiness30k.evidence}.` : '30K launch-path audit has not returned yet.',
-          },
+            detail: readiness30k ? `${readiness30k.summary} Evidence: ${readiness30k.evidence}.` : '30K launch-path audit has not returned yet.'},
           {
             id: 'scale-readiness-1m',
             label: '1M audit',
             value: readiness1M ? (readiness1M.status === 'pass' ? 'Passed' : readiness1M.status === 'warn' ? 'Needs review' : 'Blocked') : readinessAuditQuery.isPending ? 'Loading' : 'Unavailable',
             status: readiness1M ? (readiness1M.status === 'pass' ? 'green' : readiness1M.status === 'warn' ? 'yellow' : 'red') : readinessAuditQuery.isPending ? 'yellow' : 'red',
-            detail: readiness1M ? `${readiness1M.summary} Evidence: ${readiness1M.evidence}.` : '1M audit has not returned yet.',
-          },
+            detail: readiness1M ? `${readiness1M.summary} Evidence: ${readiness1M.evidence}.` : '1M audit has not returned yet.'},
           {
             id: 'scale-readiness-summary',
             label: 'Audit summary',
             value: readinessAudit ? `${readinessAudit.blockerCount} blockers · ${readinessAudit.warningCount} warnings` : readinessAuditQuery.isPending ? 'Running' : 'Unavailable',
             status: readinessAudit ? (readinessAudit.overallStatus === 'pass' ? 'green' : readinessAudit.overallStatus === 'warn' ? 'yellow' : 'red') : readinessAuditQuery.isPending ? 'yellow' : 'red',
-            detail: readinessAudit?.summary ?? 'Readiness audit summary is not available yet.',
-          },
-        ],
-      },
+            detail: readinessAudit?.summary ?? 'Readiness audit summary is not available yet.'},
+        ]},
       {
         id: 'owner-access',
         title: 'Owner Access',
@@ -351,23 +321,19 @@ export default function SyncDiagnosticsScreen() {
             id: 'owner-authenticated',
             label: 'Authenticated session',
             value: auth.isAuthenticated ? 'Live' : 'Missing',
-            status: auth.isAuthenticated ? 'green' : 'red',
-          },
+            status: auth.isAuthenticated ? 'green' : 'red'},
           {
             id: 'owner-role',
             label: 'Resolved role',
             value: deployAccess?.role ?? auth.userRole ?? 'unknown',
-            status: (deployAccess?.role ?? auth.userRole) && (deployAccess?.role ?? auth.userRole) !== 'investor' ? 'green' : 'yellow',
-          },
+            status: (deployAccess?.role ?? auth.userRole) && (deployAccess?.role ?? auth.userRole) !== 'investor' ? 'green' : 'yellow'},
           {
             id: 'owner-trusted',
             label: 'Trusted owner route',
             value: auth.isOwnerIPAccess ? 'Restored' : 'Normal session',
             status: auth.isOwnerIPAccess ? 'green' : 'yellow',
-            detail: auth.detectedIP ? `Detected IP ${auth.detectedIP}` : 'Network identity not currently resolved',
-          },
-        ],
-      },
+            detail: auth.detectedIP ? `Detected IP ${auth.detectedIP}` : 'Network identity not currently resolved'},
+        ]},
       {
         id: 'member-retention',
         title: 'Member Retention',
@@ -376,23 +342,19 @@ export default function SyncDiagnosticsScreen() {
             id: 'member-merged-count',
             label: 'Durable member registry',
             value: memberSnapshot ? String(memberSnapshot.mergedCount) : '...',
-            status: memberSnapshot && memberSnapshot.mergedCount > 0 ? 'green' : 'yellow',
-          },
+            status: memberSnapshot && memberSnapshot.mergedCount > 0 ? 'green' : 'yellow'},
           {
             id: 'member-remote-profiles',
             label: 'Remote profiles',
             value: memberSnapshot ? String(memberSnapshot.remoteProfileCount) : '...',
-            status: memberSnapshot && memberSnapshot.remoteProfileCount > 0 ? 'green' : 'yellow',
-          },
+            status: memberSnapshot && memberSnapshot.remoteProfileCount > 0 ? 'green' : 'yellow'},
           {
             id: 'member-local-recovery',
             label: 'Local-only safety net',
             value: memberSnapshot ? String(memberSnapshot.staleLocalOnlyCount) : '...',
             status: memberSnapshot && memberSnapshot.staleLocalOnlyCount === 0 ? 'green' : 'yellow',
-            detail: memberSnapshot ? `Waitlist shadows ${memberSnapshot.remoteWaitlistShadowCount}` : undefined,
-          },
-        ],
-      },
+            detail: memberSnapshot ? `Waitlist shadows ${memberSnapshot.remoteWaitlistShadowCount}` : undefined},
+        ]},
       {
         id: 'write-paths',
         title: 'Backend + Write Paths',
@@ -402,14 +364,12 @@ export default function SyncDiagnosticsScreen() {
             label: 'Deploy access guard',
             value: deployAccess?.allowed ? 'Verified' : 'Blocked',
             status: deployAccess?.allowed ? 'green' : 'red',
-            detail: deployAccess?.reason,
-          },
+            detail: deployAccess?.reason},
           {
             id: 'deploy-token',
             label: 'Fresh auth token',
             value: deployAccess?.tokenAvailable ? 'Ready' : 'Missing',
-            status: deployAccess?.tokenAvailable ? 'green' : 'red',
-          },
+            status: deployAccess?.tokenAvailable ? 'green' : 'red'},
           {
             id: 'auto-deploy-live',
             label: 'Auto-deploy pipeline',
@@ -417,10 +377,8 @@ export default function SyncDiagnosticsScreen() {
             status: autoDeployQuery.data?.config.enabled ? 'green' : 'yellow',
             detail: autoDeployQuery.data?.lastDeploy?.timestamp
               ? `Last run ${new Date(autoDeployQuery.data.lastDeploy.timestamp).toLocaleString()}`
-              : 'No deploy run recorded yet',
-          },
-        ],
-      },
+              : 'No deploy run recorded yet'},
+        ]},
     ];
 
     return cards;
@@ -555,7 +513,7 @@ export default function SyncDiagnosticsScreen() {
             activeOpacity={0.85}
           >
             {forceSyncMutation.isPending ? (
-              <ActivityIndicator size="small" color="#000" />
+              <ShimmerIndicator size="small" color="#000" />
             ) : (
               <Zap size={18} color="#000" />
             )}
@@ -603,7 +561,7 @@ export default function SyncDiagnosticsScreen() {
 
         {imageAuditQuery.isPending ? (
           <View style={styles.imageAuditEmptyCard}>
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
             <Text style={styles.imageAuditEmptyTitle}>Scanning published deal media</Text>
             <Text style={styles.imageAuditEmptyText}>Checking each live deal for DB, Storage, and Fallback image paths.</Text>
           </View>
@@ -657,8 +615,7 @@ export default function SyncDiagnosticsScreen() {
                         styles.imageBadge,
                         {
                           backgroundColor: sourcePresentation.backgroundColor,
-                          borderColor: sourcePresentation.borderColor,
-                        },
+                          borderColor: sourcePresentation.borderColor},
                       ]}>
                         <Text style={[styles.imageBadgeText, { color: sourcePresentation.textColor }]}>{sourcePresentation.label}</Text>
                       </View>
@@ -666,8 +623,7 @@ export default function SyncDiagnosticsScreen() {
                         styles.imageBadge,
                         {
                           backgroundColor: healthPresentation.backgroundColor,
-                          borderColor: healthPresentation.borderColor,
-                        },
+                          borderColor: healthPresentation.borderColor},
                       ]}>
                         <Text style={[styles.imageBadgeText, { color: healthPresentation.textColor }]}>{healthPresentation.label}</Text>
                       </View>
@@ -934,8 +890,7 @@ export default function SyncDiagnosticsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
-  },
+    backgroundColor: '#0A0A0A'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -943,66 +898,54 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '800' as const,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSub: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   refreshBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: 'rgba(255,215,0,0.08)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   overallCard: {
     margin: 16,
     borderRadius: 16,
     borderWidth: 1,
-    padding: 18,
-  },
+    padding: 18},
   overallRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 14,
-  },
+    gap: 14},
   overallTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   overallTitle: {
     color: Colors.text,
     fontSize: 17,
     fontWeight: '800' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   overallSub: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   syncBtn: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1012,13 +955,11 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   syncBtnText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   auditPanelCard: {
     marginHorizontal: 16,
     marginBottom: 8,
@@ -1026,61 +967,51 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(96,165,250,0.24)',
-  },
+    borderColor: 'rgba(96,165,250,0.24)'},
   auditPanelTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '800' as const,
-    letterSpacing: -0.2,
-  },
+    letterSpacing: -0.2},
   auditPanelSubtext: {
     color: '#9DB0C9',
     fontSize: 12,
     lineHeight: 18,
     marginTop: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   auditGroupCard: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   auditGroupTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   auditItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   auditItemTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   auditItemLabel: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   auditItemDetail: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   auditItemValue: {
     maxWidth: '44%' as const,
     fontSize: 12,
     fontWeight: '800' as const,
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   syncResult: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1091,28 +1022,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,196,140,0.2)',
-  },
+    borderColor: 'rgba(0,196,140,0.2)'},
   syncResultText: {
     color: '#00C48C',
     fontSize: 13,
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginHorizontal: 16,
     marginTop: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    letterSpacing: -0.2,
-  },
+    letterSpacing: -0.2},
   diagRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1123,33 +1050,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
+    borderColor: 'rgba(255,255,255,0.05)'},
   diagLeft: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    flex: 1,
-  },
+    flex: 1},
   diagTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   diagLabel: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   diagDetail: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   diagValue: {
     fontSize: 14,
     fontWeight: '800' as const,
     marginLeft: 10,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   imageAuditSummaryCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -1158,12 +1079,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    gap: 12,
-  },
+    gap: 12},
   imageAuditSummaryRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   imageAuditStat: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.025)',
@@ -1171,23 +1090,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
-  },
+    borderColor: 'rgba(255,255,255,0.04)'},
   imageAuditStatValue: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   imageAuditStatLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 4,
-  },
+    marginTop: 4},
   imageAuditSummaryText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   imageAuditEmptyCard: {
     marginHorizontal: 16,
     backgroundColor: 'rgba(255,255,255,0.03)',
@@ -1196,20 +1111,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
     gap: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   imageAuditEmptyTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   imageAuditEmptyText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   imageDealCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -1218,61 +1130,49 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    gap: 10,
-  },
+    gap: 10},
   imageDealTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   imageDealTitleWrap: {
-    flex: 1,
-  },
+    flex: 1},
   imageDealTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   imageDealSubtitle: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 4,
-  },
+    marginTop: 4},
   imageBadgeRow: {
     alignItems: 'flex-end',
-    gap: 8,
-  },
+    gap: 8},
   imageBadge: {
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   imageBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.7,
-  },
+    letterSpacing: 0.7},
   imageDealDescription: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   imageIssueList: {
-    gap: 8,
-  },
+    gap: 8},
   imageIssueRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   imageIssueText: {
     color: Colors.textSecondary,
     fontSize: 12,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   perfCard: {
     marginHorizontal: 16,
     backgroundColor: 'rgba(255,255,255,0.03)',
@@ -1280,26 +1180,22 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    gap: 10,
-  },
+    gap: 10},
   perfRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   perfLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   perfValue: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
     textAlign: 'right' as const,
     flexShrink: 0,
-    maxWidth: '50%',
-  },
+    maxWidth: '50%'},
   claimCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -1308,42 +1204,34 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    gap: 10,
-  },
+    gap: 10},
   claimCardTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   claimRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   claimRemovedText: {
     color: '#FF4D4D',
     fontSize: 12,
     flex: 1,
-    textDecorationLine: 'line-through',
-  },
+    textDecorationLine: 'line-through'},
   claimApprovedText: {
     color: '#00C48C',
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   claimTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   claimCheckText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   claimReasonText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   pipelineCard: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1352,8 +1240,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    gap: 10,
-  },
+    gap: 10},
   pipelineErrorBox: {
     marginTop: 6,
     backgroundColor: 'rgba(255,77,77,0.08)',
@@ -1361,18 +1248,15 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,77,77,0.16)',
     borderRadius: 12,
     padding: 12,
-    gap: 6,
-  },
+    gap: 6},
   pipelineErrorTitle: {
     color: '#FF7D7D',
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   pipelineErrorText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   archCard: {
     marginHorizontal: 16,
     backgroundColor: 'rgba(255,255,255,0.03)',
@@ -1380,44 +1264,35 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
-    gap: 14,
-  },
+    gap: 14},
   archTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   archFlow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   archNode: {
     backgroundColor: 'rgba(255,215,0,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.12)',
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   archNodeTitle: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   archNodeSub: {
     color: Colors.textTertiary,
     fontSize: 10,
-    marginTop: 1,
-  },
+    marginTop: 1},
   archArrow: {
     color: Colors.textTertiary,
     fontSize: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   bottomPad: {
-    height: 100,
-  },
-});
+    height: 100}});

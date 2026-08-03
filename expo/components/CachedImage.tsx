@@ -1,15 +1,13 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  Image,
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import {Image,
   View,
   StyleSheet,
   Animated,
   Platform,
-  ActivityIndicator,
   ImageStyle,
   ViewStyle,
-  ImageResizeMode,
-} from 'react-native';
+  ImageResizeMode} from "react-native";
 
 const _memoryCache = new Map<string, boolean>();
 const _prefetchQueue: string[] = [];
@@ -64,8 +62,7 @@ const CachedImage = React.memo(function CachedImage({
   fadeDuration = 250,
   showLoader = true,
   placeholderColor = '#1a1a2e',
-  testID,
-}: CachedImageProps) {
+  testID}: CachedImageProps) {
   const isCached = _memoryCache.has(uri);
   const fadeAnim = useRef(new Animated.Value(isCached ? 1 : 0)).current;
   const [loading, setLoading] = useState(!isCached);
@@ -85,8 +82,7 @@ const CachedImage = React.memo(function CachedImage({
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: fadeDuration,
-        useNativeDriver: Platform.OS !== 'web',
-      }).start();
+        useNativeDriver: Platform.OS !== 'web'}).start();
     }
   }, [uri, isCached, fadeAnim, fadeDuration]);
 
@@ -112,7 +108,7 @@ const CachedImage = React.memo(function CachedImage({
     <View style={[styles.container, containerStyle]} testID={testID}>
       {loading && showLoader && (
         <View style={[styles.loaderWrap, { backgroundColor: placeholderColor }]}>
-          <ActivityIndicator size="small" color="#ffffff40" />
+          <ShimmerIndicator size="small" color="#ffffff40" />
         </View>
       )}
       <Animated.Image
@@ -129,35 +125,28 @@ const CachedImage = React.memo(function CachedImage({
 
 const styles = StyleSheet.create({
   container: {
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   placeholder: {
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   loaderWrap: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
-  },
+    zIndex: 1},
   errorIcon: {
     width: 24,
     height: 24,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   errorLine: {
     position: 'absolute' as const,
     width: 20,
     height: 2,
     backgroundColor: '#ffffff30',
     borderRadius: 1,
-    transform: [{ rotate: '45deg' }],
-  },
+    transform: [{ rotate: '45deg' }]},
   errorLineRotated: {
-    transform: [{ rotate: '-45deg' }],
-  },
-});
+    transform: [{ rotate: '-45deg' }]}});
 
 export default CachedImage;

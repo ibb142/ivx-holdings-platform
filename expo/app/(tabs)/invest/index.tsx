@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,9 +8,7 @@ import {
   Modal,
   Share,
   useWindowDimensions,
-  ActivityIndicator,
-  Animated,
-} from 'react-native';
+  Animated} from "react-native";
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
 import {
@@ -32,8 +29,7 @@ import {
   FileText,
   Eye,
   Star,
-  Scale,
-} from 'lucide-react-native';
+  Scale} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency } from '@/lib/formatters';
 const IPX_HOLDING_NAME = 'IVX HOLDINGS LLC';
@@ -44,8 +40,7 @@ const ipxFeeConfigs = [
 ] as const;
 const ipxProfitStats = {
   totalProfit: 0, profitThisMonth: 0, profitLastMonth: 0, growthPercent: 0, totalTransactions: 0,
-  profitByType: { transaction: 0, listing: 0, management: 0, performance: 0, verification: 0 },
-};
+  profitByType: { transaction: 0, listing: 0, management: 0, performance: 0, verification: 0 }};
 import { useIPX } from '@/lib/ipx-context';
 import { useTranslation } from '@/lib/i18n-context';
 import { useJVRealtime } from '@/lib/jv-realtime';
@@ -55,9 +50,9 @@ import { getFallbackPhotosForDeal, sanitizeDealPhotosForDeal } from '@/constants
 import QuickBuyModal from '@/components/QuickBuyModal';
 import CanonicalInvestmentReelCard, {
   parsedDealToReelData,
-  type CanonicalReelData,
-} from '@/components/CanonicalInvestmentReelCard';
+  type CanonicalReelData} from '@/components/CanonicalInvestmentReelCard';
 import { CANONICAL_MIN_INVESTMENT } from '@/lib/published-deal-card-model';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 
 
@@ -127,16 +122,14 @@ export default function InvestScreen() {
       timelineMin: trustMarket?.timelineMin,
       timelineMax: trustMarket?.timelineMax,
       priceChange1h: trustMarket?.priceChange1h,
-      priceChange2h: trustMarket?.priceChange2h,
-    });
+      priceChange2h: trustMarket?.priceChange2h});
     setQuickBuyVisible(true);
   }, []);
 
   const publishedDealsData = {
     data: { deals: publishedJV.deals },
     isLoading: publishedJV.isLoading,
-    refetch: publishedJV.refetch,
-  };
+    refetch: publishedJV.refetch};
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -185,7 +178,7 @@ export default function InvestScreen() {
 
       {publishedDealsData.isLoading && opportunitiesCount === 0 ? (
         <View style={styles.jvLoadingWrap}>
-          <ActivityIndicator size="small" color={Colors.primary} />
+          <ShimmerIndicator size="small" color={Colors.primary} />
           <Text style={styles.jvLoadingText}>Loading investment opportunities…</Text>
         </View>
       ) : opportunitiesCount === 0 ? (
@@ -523,41 +516,34 @@ export default function InvestScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   headerCard: {
     margin: 20,
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    gap: 10,
-  },
+    gap: 10},
   headerTitleWrap: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   headerTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginTop: 4,
-  },
+    marginTop: 4},
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -566,43 +552,35 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   submitButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   statIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   statValue: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statLabel: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   feeInfoCard: {
     marginHorizontal: 20,
     marginBottom: 16,
@@ -613,35 +591,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   feeInfoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   ipxBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   ipxBadgeText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   feeInfoTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   feeInfoSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   profitToolsCard: {
     marginHorizontal: 20,
     marginBottom: 16,
@@ -649,54 +621,44 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.info + '30',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   profitToolsInner: {
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   profitToolsLeft: {
-    flex: 1,
-  },
+    flex: 1},
   profitToolsIconRow: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   profitToolsMiniIcon: {
     width: 28,
     height: 28,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   profitToolsTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '900' as const,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   profitToolsSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 3,
-  },
+    marginTop: 3},
   profitToolsRight: {
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   profitToolsReturn: {
     color: Colors.primary,
     fontSize: 22,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   profitToolsReturnLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   profitToolsCta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,40 +667,34 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    marginTop: 6,
-  },
+    marginTop: 6},
   profitToolsCtaText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   debtAcquisitionCard: {
     marginHorizontal: 20,
     marginBottom: 16,
     borderRadius: 18,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   debtAcquisitionGradient: {
     backgroundColor: Colors.backgroundSecondary,
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
-  },
+    borderColor: Colors.success + '30'},
   debtAcquisitionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   debtAcquisitionIconContainer: {
     width: 52,
     height: 52,
     borderRadius: 16,
     backgroundColor: Colors.success + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   debtAcquisitionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -746,40 +702,33 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '30',
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   debtAcquisitionBadgeText: {
     color: Colors.success,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   debtAcquisitionTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   debtAcquisitionSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   debtAcquisitionTerms: {
     flexDirection: 'row',
     gap: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   debtAcquisitionTermItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   debtAcquisitionTermText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   debtAcquisitionCta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -787,78 +736,65 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.success,
     borderRadius: 12,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   debtAcquisitionCtaText: {
     color: Colors.white,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   landPartnerCard: {
     marginHorizontal: 20,
     marginBottom: 16,
     borderRadius: 18,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   landPartnerGradient: {
     backgroundColor: Colors.backgroundSecondary,
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   landPartnerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   landPartnerIconContainer: {
     width: 52,
     height: 52,
     borderRadius: 16,
     backgroundColor: Colors.primary + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   landPartnerBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   landPartnerBadgeText: {
     color: Colors.black,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   landPartnerTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   landPartnerSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   landPartnerTerms: {
     flexDirection: 'row',
     gap: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   landPartnerTermItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   landPartnerTermText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   landPartnerCta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -866,72 +802,59 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   landPartnerCtaText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   bottomPadding: {
-    height: 120,
-  },
+    height: 120},
   modalOverlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
     justifyContent: 'center',
-    padding: 20,
-  },
+    padding: 20},
   feeModalContent: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 24,
-    maxHeight: '80%',
-  },
+    maxHeight: '80%'},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   feeModalDesc: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   feeItem: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 14,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   feeItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   feeItemName: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   feeItemPercent: {
     color: Colors.primary,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   feeItemDesc: {
     color: Colors.textTertiary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   ownerGuaranteeCard: {
     marginHorizontal: 20,
     backgroundColor: Colors.surface,
@@ -939,50 +862,41 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   guaranteeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   guaranteeIconContainer: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: Colors.success + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   guaranteeMeta: {
-    flex: 1,
-  },
+    flex: 1},
   guaranteeTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   guaranteeSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   guaranteeList: {
     gap: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   guaranteeItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   guaranteeItemText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   guaranteeCta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -990,27 +904,22 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   guaranteeCtaText: {
     color: Colors.primary,
     fontWeight: '600' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   jvLoadingWrap: {
     alignItems: 'center',
     paddingVertical: 24,
     gap: 10,
-    marginHorizontal: 20,
-  },
+    marginHorizontal: 20},
   jvLoadingText: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   liveJvSection: {
     marginHorizontal: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   oppEmptyCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
@@ -1018,48 +927,40 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     padding: 24,
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   oppEmptyTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '800' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   oppEmptyBody: {
     color: Colors.textTertiary,
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   oppEmptyBtn: {
     marginTop: 8,
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingHorizontal: 20,
-    paddingVertical: 9,
-  },
+    paddingVertical: 9},
   oppEmptyBtnText: {
     color: Colors.black,
     fontWeight: '800' as const,
-    fontSize: 13,
-  },
+    fontSize: 13},
   liveJvHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   liveJvTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   liveJvSectionTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   liveJvBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1067,24 +968,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '20',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   liveJvPulse: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   liveJvGallery: {
     position: 'relative' as const,
     height: 200,
     overflow: 'hidden',
-    width: '100%',
-  },
+    width: '100%'},
   liveJvGalleryScroll: {
     height: 200,
-    width: '100%',
-  },
+    width: '100%'},
   liveJvPhotoDots: {
     position: 'absolute' as const,
     bottom: 10,
@@ -1092,19 +989,16 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 5,
-  },
+    gap: 5},
   liveJvPhotoDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.overlay,
-  },
+    backgroundColor: Colors.overlay},
   liveJvPhotoDotActive: {
     width: 18,
     backgroundColor: Colors.primary,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   liveJvPhotoCount: {
     position: 'absolute' as const,
     top: 10,
@@ -1115,13 +1009,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.overlay,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   liveJvPhotoCountText: {
     color: Colors.white,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   liveJvLiveBadgeOverlay: {
     position: 'absolute' as const,
     top: 10,
@@ -1134,36 +1026,30 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '40',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   liveJvLiveDotAnim: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   liveJvLiveBadgeOverlayText: {
     color: Colors.success,
     fontSize: 9,
     fontWeight: '900' as const,
-    letterSpacing: 1.5,
-  },
+    letterSpacing: 1.5},
   liveJvNoPhoto: {
     height: 120,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.backgroundSecondary,
-    gap: 6,
-  },
+    gap: 6},
   liveJvNoPhotoText: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   liveJvPoolRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   liveJvPoolOption: {
     flex: 1,
     flexDirection: 'row',
@@ -1173,71 +1059,58 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   liveJvPoolIcon: {
     width: 32,
     height: 32,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   liveJvPoolTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   liveJvPoolTitle: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   liveJvPoolDesc: {
     color: Colors.textTertiary,
-    fontSize: 10,
-  },
+    fontSize: 10},
   liveJvBadgeText: {
     color: Colors.success,
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   liveJvSubtitle: {
     color: Colors.textTertiary,
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   liveJvCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     overflow: 'hidden',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   liveJvImage: {
     height: 200,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   liveJvContent: {
-    padding: 16,
-  },
+    padding: 16},
   liveJvTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   liveJvTypeBadge: {
     backgroundColor: Colors.gold + '15',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   liveJvTypeText: {
     color: Colors.gold,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   liveJvRoiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1245,66 +1118,54 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   liveJvRoiText: {
     color: Colors.success,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   liveJvTitle: {
     color: Colors.text,
     fontSize: 17,
     fontWeight: '800' as const,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   liveJvProject: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   liveJvLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   liveJvLocation: {
     color: Colors.textTertiary,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   liveJvMetrics: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   liveJvMetric: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   liveJvMetricValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   liveJvMetricLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
-    marginTop: 3,
-  },
+    marginTop: 3},
   liveJvMetricDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   liveJvActions: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   liveJvViewBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1315,13 +1176,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   liveJvViewBtnText: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   liveJvInvestBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1330,13 +1189,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   liveJvInvestBtnText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   liveJvQuickBuyBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1345,13 +1202,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   liveJvQuickBuyBtnText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   liveJvAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1362,11 +1217,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.primary + '40',
     borderStyle: 'dashed',
-    marginTop: 4,
-  },
+    marginTop: 4},
   liveJvAllBtnText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

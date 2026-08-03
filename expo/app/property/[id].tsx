@@ -12,8 +12,7 @@ import {
   Share,
   KeyboardAvoidingView,
   Keyboard,
-  TouchableWithoutFeedback,
-} from 'react-native';
+  TouchableWithoutFeedback} from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -45,8 +44,7 @@ import {
   Landmark,
   ChevronRight,
   Copy,
-  ExternalLink,
-} from 'lucide-react-native';
+  ExternalLink} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { PropertyDocument, TimeRange } from '@/types';
 import Colors from '@/constants/colors';
@@ -101,8 +99,7 @@ export default function PropertyDetailScreen() {
         entityId: property.id,
         uploadedBy: currentUser?.id || '',
         allowsMultiple: true,
-        quality: 0.9,
-      },
+        quality: 0.9},
       (storedImages) => {
         console.log('[PropertyDetail] Uploaded', storedImages.length, 'images for property', property.id);
         Alert.alert(
@@ -126,8 +123,7 @@ export default function PropertyDetailScreen() {
       improvementsValue: baseValue * 0.10,
       marketComparison: {
         areaAverage: baseValue * 0.92,
-        premium: 8.7,
-      },
+        premium: 8.7},
       valuationHistory: [
         { date: '2024-01', value: baseValue * 0.88 },
         { date: '2024-06', value: baseValue * 0.94 },
@@ -135,8 +131,7 @@ export default function PropertyDetailScreen() {
       ],
       appraiser: 'IVXHOLDINGS Certified Valuations LLC',
       appraisalMethod: 'Income Capitalization + Sales Comparison',
-      confidence: 94,
-    };
+      confidence: 94};
   }, [property]);
 
   const titleData = useMemo(() => {
@@ -156,9 +151,7 @@ export default function PropertyDetailScreen() {
       verification: {
         status: 'verified',
         verifiedBy: 'First American Title Insurance',
-        verifiedDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    };
+        verifiedDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()}};
   }, [property]);
 
   const fundedPercent = useMemo(() => {
@@ -184,8 +177,7 @@ export default function PropertyDetailScreen() {
       propertyValue: property.pricePerShare * property.totalShares,
       expectedROI: property.irr || property.yield,
       minInvestment: property.minInvestment,
-      totalInvestment: property.targetRaise || property.pricePerShare * property.totalShares,
-    });
+      totalInvestment: property.targetRaise || property.pricePerShare * property.totalShares});
   }, [property]);
 
   const timelineMilestones = useMemo(() => {
@@ -196,23 +188,19 @@ export default function PropertyDetailScreen() {
       {
         id: 'funding',
         title: 'Funding window',
-        detail: fundedPercent >= 100 ? 'Funding target reached' : `${fundedPercent}% of the target raise is currently funded.`,
-      },
+        detail: fundedPercent >= 100 ? 'Funding target reached' : `${fundedPercent}% of the target raise is currently funded.`},
       {
         id: 'wallet',
         title: INVESTOR_TIMELINE_STEPS[2]?.label ?? 'Wallet + funding',
-        detail: 'Wallet balance, transaction records, and payment source review are completed before final allocation.',
-      },
+        detail: 'Wallet balance, transaction records, and payment source review are completed before final allocation.'},
       {
         id: 'hold',
         title: 'Projected hold period',
-        detail: `Current timeline modeling uses ${modeledReturn.toFixed(1)}% as the expected exit return basis for this property.`,
-      },
+        detail: `Current timeline modeling uses ${modeledReturn.toFixed(1)}% as the expected exit return basis for this property.`},
       {
         id: 'exit',
         title: INVESTOR_TIMELINE_STEPS[4]?.label ?? 'Distributions + exit',
-        detail: 'Final investor proceeds depend on real performance, fees, distributions, and the actual sale or refinance outcome.',
-      },
+        detail: 'Final investor proceeds depend on real performance, fees, distributions, and the actual sale or refinance outcome.'},
     ];
   }, [fundedPercent, property]);
 
@@ -350,11 +338,9 @@ export default function PropertyDetailScreen() {
         Platform.OS === 'ios'
           ? {
               message: shareMessage,
-              url: webLink,
-            }
+              url: webLink}
           : {
-              message: shareMessage,
-            }
+              message: shareMessage}
       );
       
       if (result.action === Share.sharedAction) {
@@ -396,8 +382,7 @@ export default function PropertyDetailScreen() {
             { label: 'Ownership Type', value: 'Fractional (Developed by LLC)' },
             { label: 'Total Shares', value: formatNumber(property.totalShares) },
           ],
-          status: 'verified',
-        };
+          status: 'verified'};
       case 'appraisal':
         return {
           icon: BarChart3,
@@ -413,8 +398,7 @@ export default function PropertyDetailScreen() {
             { label: 'Cap Rate', value: `${property.capRate}%` },
             { label: 'Confidence Score', value: `${appraisalData?.confidence || 0}%` },
           ],
-          status: 'verified',
-        };
+          status: 'verified'};
       case 'insurance':
         return {
           icon: Shield,
@@ -430,8 +414,7 @@ export default function PropertyDetailScreen() {
             { label: 'Deductible', value: '$25,000' },
             { label: 'Status', value: 'Active' },
           ],
-          status: 'active',
-        };
+          status: 'active'};
       default:
         return {
           icon: FileText,
@@ -441,8 +424,7 @@ export default function PropertyDetailScreen() {
             { label: 'Document Type', value: doc.type },
             { label: 'Status', value: 'Available' },
           ],
-          status: 'available',
-        };
+          status: 'available'};
     }
   };
 
@@ -1069,8 +1051,7 @@ export default function PropertyDetailScreen() {
                   <View style={styles.documentModalIconContainer}>
                     {React.createElement(getDocumentDetails(selectedDocument)!.icon, {
                       size: 32,
-                      color: Colors.primary,
-                    })}
+                      color: Colors.primary})}
                   </View>
                   <View style={styles.documentModalHeaderText}>
                     <Text style={styles.documentModalSubtitle}>
@@ -1124,8 +1105,7 @@ export default function PropertyDetailScreen() {
                         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         try {
                           await Share.share({
-                            message: `${selectedDocument?.name} - ${property?.name}\n\nView on IVXHOLDINGS: https://ipx.app/property/${property?.id}`,
-                          });
+                            message: `${selectedDocument?.name} - ${property?.name}\n\nView on IVXHOLDINGS: https://ipx.app/property/${property?.id}`});
                         } catch (error) {
                           console.log('Error sharing document:', error);
                         }
@@ -1470,8 +1450,7 @@ export default function PropertyDetailScreen() {
                     onPress={async () => {
                       try {
                         await Share.share({
-                          message: `Property Title: ${titleData.titleNumber}\n${property.name}\n${property.location}, ${property.city}\n\nView on IVXHOLDINGS: https://ipx.app/property/${property.id}`,
-                        });
+                          message: `Property Title: ${titleData.titleNumber}\n${property.name}\n${property.location}, ${property.city}\n\nView on IVXHOLDINGS: https://ipx.app/property/${property.id}`});
                       } catch (error) {
                         console.log('Error sharing:', error);
                       }
@@ -1762,5 +1741,4 @@ const styles = StyleSheet.create({
   titleDownloadButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   titleDownloadText: { color: Colors.textSecondary, fontSize: 13 },
   titleShareButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
-  titleShareText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  titleShareText: { color: Colors.textSecondary, fontSize: 13 }});

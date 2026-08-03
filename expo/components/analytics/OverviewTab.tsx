@@ -3,16 +3,14 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-nati
 import {
   Eye, Users, TrendingUp, Clock, Globe, Smartphone,
   Zap, ArrowUpRight, LogIn, Activity, Building2,
-  Search, MousePointerClick, UserPlus,
-} from 'lucide-react-native';
+  Search, MousePointerClick, UserPlus} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import type { TrendDelta } from '@/lib/analytics-compute';
 import type { LivePresenceState } from '@/lib/realtime-presence';
 import {
   ACCENT, BLUE, GREEN, TEAL, ORANGE, PURPLE, CHART_COLORS,
   AnimatedRing, MiniSparkBar, AnimatedCounter, PulseIndicator,
-  renderTrendBadge, shared,
-} from './analytics-shared';
+  renderTrendBadge, shared} from './analytics-shared';
 
 interface AnalyticsData {
   pageViews: number;
@@ -334,8 +332,7 @@ export function OverviewTab({ data, presenceState, onSwitchToLive }: OverviewTab
               <View style={[s.ctaBar, { backgroundColor: cta.color + '15' }]}>
                 <View style={[s.ctaBarFill, {
                   width: `${Math.max(Math.min((cta.count / Math.max(data.cta.getStarted, 1)) * 100, 100), 5)}%` as any,
-                  backgroundColor: cta.color,
-                }]} />
+                  backgroundColor: cta.color}]} />
               </View>
             </View>
           ))}
@@ -378,8 +375,7 @@ const s = StyleSheet.create({
   livePresenceBanner: {
     flexDirection: 'row' as const, alignItems: 'center' as const,
     backgroundColor: '#00C48C10', borderWidth: 1, borderColor: '#00C48C25',
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12, gap: 6,
-  },
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12, gap: 6},
   livePresenceBannerCount: { fontSize: 18, fontWeight: '900' as const, color: '#00C48C', marginRight: 2 },
   livePresenceBannerLabel: { fontSize: 12, fontWeight: '600' as const, color: '#00C48C', marginRight: 4 },
   livePresenceBannerBreak: { width: 1, height: 14, backgroundColor: '#00C48C30', marginHorizontal: 4 },
@@ -433,5 +429,4 @@ const s = StyleSheet.create({
   eventName: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary, textTransform: 'capitalize' as const },
   eventBarBg: { height: 4, backgroundColor: Colors.backgroundSecondary, borderRadius: 2, overflow: 'hidden' },
   eventBar: { height: 4, borderRadius: 2 },
-  eventCount: { width: 40, fontSize: 13, fontWeight: '800' as const, color: Colors.text, textAlign: 'right' as const },
-});
+  eventCount: { width: 40, fontSize: 13, fontWeight: '800' as const, color: Colors.text, textAlign: 'right' as const }});

@@ -66,8 +66,7 @@ export function AnalyticsDiagnostics({ hasNoRealData, period, isConnected }: Dia
             exists: !notExist,
             rowCount: null,
             error: error.message,
-            rlsBlocked: rlsBlock,
-          });
+            rlsBlocked: rlsBlock});
         } else {
           const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
           const supabaseKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
@@ -84,9 +83,7 @@ export function AnalyticsDiagnostics({ hasNoRealData, period, isConnected }: Dia
                     'apikey': supabaseKey,
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
-                    'Prefer': 'count=exact',
-                  },
-                }
+                    'Prefer': 'count=exact'}}
               );
               const countHeader = resp.headers.get('content-range');
               if (countHeader) {
@@ -109,8 +106,7 @@ export function AnalyticsDiagnostics({ hasNoRealData, period, isConnected }: Dia
             exists: true,
             rowCount: effectiveCount,
             error: null,
-            rlsBlocked,
-          });
+            rlsBlocked});
 
           if (rlsBlocked) {
             console.error(`[Diagnostics] RLS CONFIRMED: ${table} has ${realCount} rows but Supabase client returns 0. Fix RLS SELECT policy.`);
@@ -122,8 +118,7 @@ export function AnalyticsDiagnostics({ hasNoRealData, period, isConnected }: Dia
           exists: false,
           rowCount: null,
           error: (err as Error)?.message ?? 'Unknown',
-          rlsBlocked: false,
-        });
+          rlsBlocked: false});
       }
     }
 
@@ -207,8 +202,7 @@ export function AnalyticsDiagnostics({ hasNoRealData, period, isConnected }: Dia
                 <Text style={s.tableItemName} numberOfLines={1}>{diag.table}</Text>
               </View>
               <Text style={[s.tableItemStatus, {
-                color: diag.rlsBlocked ? RED : !diag.exists ? ORANGE : GREEN,
-              }]}>
+                color: diag.rlsBlocked ? RED : !diag.exists ? ORANGE : GREEN}]}>
                 {diag.rlsBlocked ? 'RLS BLOCKED' : !diag.exists ? 'MISSING' : diag.rowCount !== null ? `${diag.rowCount} rows` : 'OK'}
               </Text>
               {diag.error && (
@@ -275,14 +269,12 @@ const s = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#FFB80030',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   diagnosticHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   diagnosticTitle: { fontSize: 15, fontWeight: '700' as const, color: '#FFB800' },
   diagnosticDesc: { fontSize: 12, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 },
   diagnosticGrid: { gap: 8 },
@@ -292,8 +284,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   diagnosticLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' as const },
   diagnosticValue: { fontSize: 13, color: Colors.text, fontWeight: '700' as const },
   diagnosticBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
@@ -307,22 +298,19 @@ const s = StyleSheet.create({
     padding: 10,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: RED + '20',
-  },
+    borderColor: RED + '20'},
   warningText: { flex: 1, fontSize: 11, color: RED, lineHeight: 16 },
   healthGrid: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
-  },
+    marginTop: 12},
   healthItem: {
     flex: 1,
     backgroundColor: BLUE + '08',
     borderRadius: 8,
     padding: 10,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   healthValue: { fontSize: 16, fontWeight: '900' as const, color: Colors.text },
   healthLabel: { fontSize: 9, fontWeight: '600' as const, color: Colors.textTertiary, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   tableGrid: { flexDirection: 'row' as const, gap: 8, marginTop: 12, marginBottom: 4 },
@@ -332,5 +320,4 @@ const s = StyleSheet.create({
   tableItemStatus: { fontSize: 11, fontWeight: '800' as const },
   tableItemError: { fontSize: 9, color: Colors.textTertiary, lineHeight: 13 },
   rerunBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, marginTop: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: BLUE + '10', borderWidth: 1, borderColor: BLUE + '25' },
-  rerunBtnText: { fontSize: 11, fontWeight: '700' as const, color: BLUE },
-});
+  rerunBtnText: { fontSize: 11, fontWeight: '700' as const, color: BLUE }});

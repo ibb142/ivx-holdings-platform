@@ -2,21 +2,18 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Beaker,
   FlaskConical,
   Lightbulb,
-  Plus,
-} from 'lucide-react-native';
+  Plus} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -30,22 +27,19 @@ import {
   type ExperimentStatus,
   type HypothesisStatus,
   type ResearchExperiment,
-  type ResearchHypothesis,
-} from '@/src/modules/ivx-developer/innovationService';
+  type ResearchHypothesis} from '@/src/modules/ivx-developer/innovationService';
 
 const HYPOTHESIS_FLOW: Record<HypothesisStatus, HypothesisStatus> = {
   open: 'testing',
   testing: 'validated',
   validated: 'invalidated',
-  invalidated: 'open',
-};
+  invalidated: 'open'};
 
 const EXPERIMENT_FLOW: Record<ExperimentStatus, ExperimentStatus> = {
   planned: 'running',
   running: 'completed',
   completed: 'abandoned',
-  abandoned: 'planned',
-};
+  abandoned: 'planned'};
 
 function statusTone(status: HypothesisStatus | ExperimentStatus): string {
   switch (status) {
@@ -75,12 +69,10 @@ function ResearchLabContent() {
 
   const hypothesesQuery = useQuery<ResearchHypothesis[]>({
     queryKey: ['ivx-innovation', 'hypotheses'],
-    queryFn: listHypotheses,
-  });
+    queryFn: listHypotheses});
   const experimentsQuery = useQuery<ResearchExperiment[]>({
     queryKey: ['ivx-innovation', 'experiments'],
-    queryFn: listExperiments,
-  });
+    queryFn: listExperiments});
 
   const hypotheses = hypothesesQuery.data ?? [];
   const experiments = experimentsQuery.data ?? [];
@@ -109,8 +101,7 @@ function ResearchLabContent() {
       await createExperiment({
         title: experimentTitle.trim(),
         method: experimentMethod.trim(),
-        metric: experimentMetric.trim(),
-      });
+        metric: experimentMetric.trim()});
       setExperimentTitle('');
       setExperimentMethod('');
       setExperimentMetric('');
@@ -318,8 +309,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: Colors.text,
     fontSize: 13.5,
-    minHeight: 44,
-  },
+    minHeight: 44},
   addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.primary, paddingVertical: 11, borderRadius: 10 },
   addButtonText: { fontSize: 14, fontWeight: '700' as const, color: Colors.black },
   buttonDisabled: { opacity: 0.5 },
@@ -329,5 +319,4 @@ const styles = StyleSheet.create({
   itemBody: { fontSize: 12, color: Colors.textSecondary, lineHeight: 17 },
   itemHint: { fontSize: 10.5, color: Colors.textTertiary, fontStyle: 'italic' as const },
   statusTag: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3, borderWidth: 1 },
-  statusTagText: { fontSize: 10.5, fontWeight: '700' as const, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
-});
+  statusTagText: { fontSize: 10.5, fontWeight: '700' as const, textTransform: 'uppercase' as const, letterSpacing: 0.5 }});

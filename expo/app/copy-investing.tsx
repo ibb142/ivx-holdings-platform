@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -18,8 +17,7 @@ import {
   Flame,
   Eye,
   BarChart3,
-  Building2,
-} from 'lucide-react-native';
+  Building2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { topInvestors, TopInvestor } from '@/mocks/social-portfolios';
 import { formatCurrencyWithDecimals, formatNumber } from '@/lib/formatters';
@@ -30,8 +28,7 @@ type RiskFilter = 'all' | 'conservative' | 'moderate' | 'aggressive';
 const RISK_COLORS: Record<string, string> = {
   conservative: Colors.info,
   moderate: Colors.warning,
-  aggressive: Colors.error,
-};
+  aggressive: Colors.error};
 
 export default function CopyInvestingScreen() {
   const router = useRouter();
@@ -46,8 +43,7 @@ export default function CopyInvestingScreen() {
         toValue: 1,
         duration: 400,
         delay: 150 + index * 100,
-        useNativeDriver: true,
-      }).start();
+        useNativeDriver: true}).start();
     });
   }, [fadeAnims]);
 
@@ -349,5 +345,4 @@ const styles = StyleSheet.create({
   copyButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   disclaimerBox: { marginHorizontal: 20, padding: 16, backgroundColor: Colors.surface, borderRadius: 12, borderWidth: 1, borderColor: Colors.surfaceBorder },
   disclaimerText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' as const },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

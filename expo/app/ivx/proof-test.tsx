@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Stack } from 'expo-router';
 import { AlertTriangle, CheckCircle2, FlaskConical, RefreshCw } from 'lucide-react-native';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ProofTestPayload = {
   status?: string;
@@ -35,8 +36,7 @@ const INITIAL_STATE: LoadState = {
   httpStatus: null,
   endpoint: PROOF_TEST_ENDPOINT,
   payload: null,
-  fetchedAt: null,
-};
+  fetchedAt: null};
 
 export default function IVXProofTestRoute() {
   const [state, setState] = useState<LoadState>(INITIAL_STATE);
@@ -46,8 +46,7 @@ export default function IVXProofTestRoute() {
     try {
       const response = await fetch(PROOF_TEST_ENDPOINT, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
+        headers: { 'Content-Type': 'application/json' }});
       const text = await response.text();
       let payload: ProofTestPayload | null = null;
       try {
@@ -61,8 +60,7 @@ export default function IVXProofTestRoute() {
         httpStatus: response.status,
         endpoint: PROOF_TEST_ENDPOINT,
         payload,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
     } catch (error) {
       setState({
         loading: false,
@@ -70,8 +68,7 @@ export default function IVXProofTestRoute() {
         httpStatus: null,
         endpoint: PROOF_TEST_ENDPOINT,
         payload: null,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
     }
   }, []);
 
@@ -100,7 +97,7 @@ export default function IVXProofTestRoute() {
           onPress={runFetch}
           disabled={state.loading}
         >
-          {state.loading ? <ActivityIndicator color="#0B0B0B" /> : <RefreshCw color="#0B0B0B" size={18} />}
+          {state.loading ? <ShimmerIndicator color="#0B0B0B" /> : <RefreshCw color="#0B0B0B" size={18} />}
           <Text style={styles.primaryButtonText}>{state.loading ? 'Fetching…' : 'Fetch /api/proof-test'}</Text>
         </TouchableOpacity>
 
@@ -150,8 +147,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   primaryButtonText: { color: '#0B0B0B', fontWeight: '700' as const, fontSize: 15 },
   card: {
     backgroundColor: '#141414',
@@ -159,12 +155,10 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#222222',
-    gap: 6,
-  },
+    gap: 6},
   errorCard: { borderColor: '#7F1D1D' },
   errorText: { color: '#FF6B6B', flex: 1 },
   cardLabel: { color: '#9A9A9A', fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginTop: 4 },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   mono: { color: '#E6E6E6', fontSize: 12, fontFamily: 'Courier' },
-  code: { color: '#7DD3FC', fontSize: 13, fontFamily: 'Courier', lineHeight: 20 },
-});
+  code: { color: '#7DD3FC', fontSize: 13, fontFamily: 'Courier', lineHeight: 20 }});

@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   Share,
   Platform,
   Alert,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+  Linking} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -45,13 +42,13 @@ import {
   ShieldCheck,
   LineChart,
   FileSpreadsheet,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Clipboard from 'expo-clipboard';
 import * as Print from 'expo-print';
 
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   FUNCTIONALITY_REGISTRY,
   APP_INFO,
@@ -61,8 +58,7 @@ import {
   getBetaFeatures,
   generateTextReport,
   generateCSVReport,
-  generateExcelHTML,
-} from '@/mocks/functionality-registry';
+  generateExcelHTML} from '@/mocks/functionality-registry';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   Lock: <Lock size={20} color="#6366F1" />,
@@ -83,8 +79,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Palette: <Palette size={20} color="#D946EF" />,
   LineChart: <LineChart size={20} color="#0EA5E9" />,
   FileCheck: <FileCheck size={20} color="#78716C" />,
-  Plug: <Plug size={20} color="#00C48C" />,
-};
+  Plug: <Plug size={20} color="#00C48C" />};
 
 export default function AppDocsScreen() {
   const router = useRouter();
@@ -156,13 +151,11 @@ export default function AppDocsScreen() {
       } else {
         const { uri } = await Print.printToFileAsync({
           html,
-          base64: false,
-        });
+          base64: false});
         console.log('PDF generated at:', uri);
         await Share.share({
           title: 'IVXHOLDINGS App Documentation',
-          url: uri,
-        });
+          url: uri});
       }
     } catch (error) {
       console.error('PDF generation error:', error);
@@ -211,8 +204,7 @@ export default function AppDocsScreen() {
         } else {
           await Share.share({
             title: subject,
-            message: content,
-          });
+            message: content});
         }
       }
     } catch (error) {
@@ -238,8 +230,7 @@ export default function AppDocsScreen() {
     } else {
       void Share.share({
         title: 'IVXHOLDINGS App Documentation',
-        message: content,
-      });
+        message: content});
     }
   }, []);
 
@@ -263,8 +254,7 @@ export default function AppDocsScreen() {
         const csvContent = generateCSVReport();
         await Share.share({
           title: 'IVXHOLDINGS App Functionality - Excel/CSV',
-          message: csvContent,
-        });
+          message: csvContent});
       }
     } catch (error) {
       console.log('Excel export error:', error);
@@ -278,8 +268,7 @@ export default function AppDocsScreen() {
     try {
       await Share.share({
         title: 'IVXHOLDINGS App - Functionality Documentation',
-        message: content,
-      });
+        message: content});
     } catch (error) {
       console.log('Share error:', error);
     }
@@ -355,7 +344,7 @@ export default function AppDocsScreen() {
               disabled={isGeneratingPDF}
             >
               {isGeneratingPDF ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ShimmerIndicator size="small" color="#fff" />
               ) : (
                 <Printer size={18} color="#fff" />
               )}
@@ -655,5 +644,4 @@ const styles = StyleSheet.create({
   infoText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   footer: { paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: Colors.surfaceBorder, backgroundColor: Colors.background },
   footerText: { color: Colors.textTertiary, fontSize: 12, textAlign: 'center' },
-  footerDate: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 4 },
-});
+  footerDate: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 4 }});

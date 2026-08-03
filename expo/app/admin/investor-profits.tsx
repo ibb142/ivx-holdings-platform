@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -10,9 +9,7 @@ import {
   Alert,
   Platform,
   Modal,
-  Linking,
-  ActivityIndicator,
-} from 'react-native';
+  Linking} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -38,14 +35,14 @@ import {
   Share2,
   CheckCircle,
   Copy,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { formatCurrencyWithDecimals as _fmtCurrDec } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface InvestorProfit {
   id: string;
@@ -101,8 +98,7 @@ export default function InvestorProfitsScreen() {
     phone: '+1 (305) 555-0123',
     email: 'investors@ipxholding.com',
     website: 'www.ipxholding.com',
-    logo: 'https://r2-pub.ivx.com/attachments/1y2v16crdz546mo2tbt14',
-  };
+    logo: 'https://r2-pub.ivx.com/attachments/1y2v16crdz546mo2tbt14'};
 
   const profilesQuery = useQuery({
     queryKey: ['admin-investor-profiles'],
@@ -112,8 +108,7 @@ export default function InvestorProfitsScreen() {
       if (error) { console.log('[Investor Profits] profiles error:', error.message); return []; }
       return data ?? [];
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const propertiesQuery = useQuery({
     queryKey: ['admin-investor-properties'],
@@ -123,8 +118,7 @@ export default function InvestorProfitsScreen() {
       if (error) { console.log('[Investor Profits] properties error:', error.message); return []; }
       return data ?? [];
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const investorProfits: InvestorProfit[] = useMemo(() => {
     const profiles = profilesQuery.data ?? [];
@@ -165,8 +159,7 @@ export default function InvestorProfitsScreen() {
         yearlyProjection: yearlyProfit,
         lastPayout: lastPayout.toISOString(),
         nextPayout: nextPayout.toISOString(),
-        holdings: 0,
-      };
+        holdings: 0};
     });
   }, [profilesQuery.data]);
 
@@ -188,8 +181,7 @@ export default function InvestorProfitsScreen() {
         totalProfitGenerated: totalProfit,
         rentalYield: rentalYield * 100,
         appreciationRate: appreciationRate * 100,
-        monthlyRental,
-      };
+        monthlyRental};
     });
   }, [propertiesQuery.data]);
 
@@ -220,8 +212,7 @@ export default function InvestorProfitsScreen() {
       dailyTotal,
       weeklyTotal,
       monthlyTotal,
-      yearlyTotal,
-    };
+      yearlyTotal};
   }, [investorProfits, propertyProfits]);
 
   const filteredInvestors = useMemo(() => {
@@ -245,8 +236,7 @@ export default function InvestorProfitsScreen() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-    });
+      year: 'numeric'});
   }, []);
 
   const getProfitByTimeFilter = useCallback((investor: InvestorProfit) => {
@@ -282,8 +272,7 @@ export default function InvestorProfitsScreen() {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
-      day: 'numeric',
-    });
+      day: 'numeric'});
 
     const divider = '═'.repeat(40);
     const subDivider = '─'.repeat(40);
@@ -378,8 +367,7 @@ ${divider}
       weekday: 'long',
       year: 'numeric',
       month: 'long',
-      day: 'numeric',
-    });
+      day: 'numeric'});
 
     return `
 <!DOCTYPE html>
@@ -628,8 +616,7 @@ ${divider}
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(filePath, {
             mimeType: 'text/html',
-            dialogTitle: 'Export Investor Profits Report',
-          });
+            dialogTitle: 'Export Investor Profits Report'});
         }
       }
       setShowExportModal(false);
@@ -667,8 +654,7 @@ ${divider}
         if (navigator.share) {
           await navigator.share({
             title: 'IVX HOLDINGS LLC - Investor Profits Report',
-            text: reportText,
-          });
+            text: reportText});
         } else {
           await navigator.clipboard.writeText(reportText);
           setCopiedToClipboard(true);
@@ -759,7 +745,7 @@ ${divider}
               disabled={exportLoading !== null}
             >
               {exportLoading === 'whatsapp' ? (
-                <ActivityIndicator color="#fff" />
+                <ShimmerIndicator color="#fff" />
               ) : (
                 <MessageCircle size={24} color="#fff" />
               )}
@@ -772,7 +758,7 @@ ${divider}
               disabled={exportLoading !== null}
             >
               {exportLoading === 'pdf' ? (
-                <ActivityIndicator color="#fff" />
+                <ShimmerIndicator color="#fff" />
               ) : (
                 <FileText size={24} color="#fff" />
               )}
@@ -785,7 +771,7 @@ ${divider}
               disabled={exportLoading !== null}
             >
               {exportLoading === 'email' ? (
-                <ActivityIndicator color="#fff" />
+                <ShimmerIndicator color="#fff" />
               ) : (
                 <Mail size={24} color="#fff" />
               )}
@@ -798,7 +784,7 @@ ${divider}
               disabled={exportLoading !== null}
             >
               {exportLoading === 'share' ? (
-                <ActivityIndicator color="#fff" />
+                <ShimmerIndicator color="#fff" />
               ) : (
                 <Share2 size={24} color="#fff" />
               )}
@@ -1306,5 +1292,4 @@ const styles = StyleSheet.create({
   copyButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   copyButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   exportModalFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  exportModalFooterText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  exportModalFooterText: { color: Colors.textSecondary, fontSize: 13 }});

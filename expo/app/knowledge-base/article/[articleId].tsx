@@ -12,8 +12,7 @@ import {
   ScrollView,
   TouchableOpacity,
   useWindowDimensions,
-  Share,
-} from 'react-native';
+  Share} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -27,16 +26,14 @@ import {
   XCircle,
   CheckCircle2,
   ChevronRight,
-  BookOpen,
-} from 'lucide-react-native';
+  BookOpen} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   getArticleById,
   getCategoryById,
   getArticlesByCategory,
   type KBBlock,
-  type KBArticle,
-} from '@/lib/knowledge-base-data';
+  type KBArticle} from '@/lib/knowledge-base-data';
 import { getResponsiveSize, isExtraSmallScreen } from '@/lib/responsive';
 
 // ─── Block Renderers ────────────────────────────────────────────────────
@@ -83,8 +80,7 @@ function CalloutBlock({ variant, text }: { variant: 'info' | 'warning' | 'danger
     info: { bg: '#4A90D915', border: '#4A90D940', icon: Info, iconColor: '#4A90D9' },
     warning: { bg: '#F59E0B15', border: '#F59E0B40', icon: AlertTriangle, iconColor: '#F59E0B' },
     danger: { bg: '#FF4D4D15', border: '#FF4D4D40', icon: XCircle, iconColor: '#FF4D4D' },
-    success: { bg: '#00C48C15', border: '#00C48C40', icon: CheckCircle2, iconColor: '#00C48C' },
-  };
+    success: { bg: '#00C48C15', border: '#00C48C40', icon: CheckCircle2, iconColor: '#00C48C' }};
   const cfg = config[variant];
   const Icon = cfg.icon;
   return (
@@ -187,8 +183,7 @@ export default function KnowledgeBaseArticleScreen() {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${article.title}\n\n${article.summary}\n\n— IVX Knowledge Base`,
-      });
+        message: `${article.title}\n\n${article.summary}\n\n— IVX Knowledge Base`});
     } catch {
       // Silently ignore share errors
     }
@@ -304,84 +299,68 @@ export default function KnowledgeBaseArticleScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   backButton: {
     width: 44,
     height: 44,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    marginLeft: -4,
-  },
+    marginLeft: -4},
   headerTitle: {
     flex: 1,
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerTitleWrap: {
     flex: 1,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   headerCategoryTag: {
     alignSelf: 'flex-start' as const,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   headerCategoryText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
-    paddingBottom: 16,
-  },
+    paddingBottom: 16},
   articleTitle: {
     fontSize: 24,
     fontWeight: '800' as const,
     color: Colors.text,
-    lineHeight: 32,
-  },
+    lineHeight: 32},
   articleSummary: {
     fontSize: 15,
     color: Colors.textSecondary,
     marginTop: 12,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   metaRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
     gap: 12,
-    marginTop: 16,
-  },
+    marginTop: 16},
   metaItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 5,
-  },
+    gap: 5},
   metaText: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   tagsRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 8,
-    marginTop: 14,
-  },
+    marginTop: 14},
   tagPill: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -389,90 +368,74 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   tagText: {
     fontSize: 11,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   articleDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 20,
-  },
+    marginVertical: 20},
   blocksContainer: {
-    gap: 14,
-  },
+    gap: 14},
   relatedSection: {
-    marginTop: 32,
-  },
+    marginTop: 32},
   relatedLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 1,
     marginBottom: 12,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   relatedContainer: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   relatedRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 0.5,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   relatedTitle: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginRight: 8,
-  },
+    marginRight: 8},
   bottomBar: {
     backgroundColor: Colors.background,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   shareButton: {
     backgroundColor: Colors.gold,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   shareButtonText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   emptyState: {
     flex: 1,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginTop: 16,
-  },
+    marginTop: 16},
   emptyText: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
-    marginTop: 8,
-  },
-});
+    marginTop: 8}});
 
 // ─── Block Styles ───────────────────────────────────────────────────────
 
@@ -481,97 +444,80 @@ const blockStyles = StyleSheet.create({
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     marginTop: 8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   headingAccent: {
     width: 4,
     height: 22,
     borderRadius: 2,
     backgroundColor: Colors.gold,
     marginRight: 10,
-    marginTop: 2,
-  },
+    marginTop: 2},
   heading: {
     flex: 1,
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    lineHeight: 24,
-  },
+    lineHeight: 24},
   paragraph: {
     fontSize: 15,
     color: Colors.text,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   listWrap: {
     gap: 8,
-    paddingLeft: 4,
-  },
+    paddingLeft: 4},
   listItem: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
-  },
+    alignItems: 'flex-start' as const},
   listBullet: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.gold,
     marginTop: 8,
-    marginRight: 10,
-  },
+    marginRight: 10},
   listText: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   codeWrap: {
     backgroundColor: '#0D0D0D',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   codeHeader: {
     backgroundColor: '#1A1A1A',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   codeLang: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   codeText: {
     fontFamily: 'monospace' as const,
     fontSize: 13,
     color: '#E0E0E0',
     lineHeight: 20,
-    padding: 14,
-  },
+    padding: 14},
   calloutWrap: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
-  },
+    padding: 14},
   calloutHeader: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   calloutText: {
     flex: 1,
     fontSize: 14,
     fontWeight: '500' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   divider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 4,
-  },
-});
+    marginVertical: 4}});

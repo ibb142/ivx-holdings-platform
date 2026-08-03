@@ -2,15 +2,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Activity,
   AlertTriangle,
@@ -44,11 +42,11 @@ import {
   TrendingUp,
   Users,
   XCircle,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getAutonomousOpsDashboard,
   type AgentStatus,
@@ -59,14 +57,12 @@ import {
   type LiveFeedEntry,
   type OwnerActionEntry,
   type UnifiedAgent,
-  type ActivityItem,
-} from '@/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService';
+  type ActivityItem} from '@/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService';
 import {
   exportDashboard,
   EXPORT_REPORT_LABELS,
   type ExportFormat,
-  type ExportReportType,
-} from '@/src/modules/ivx-owner-ai/services/ivxDashboardExport';
+  type ExportReportType} from '@/src/modules/ivx-owner-ai/services/ivxDashboardExport';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -81,8 +77,7 @@ const STATUS_COLORS: Record<AgentStatus, string> = {
   BLOCKED: Colors.warning,
   OWNER_ACTION_REQUIRED: Colors.warning,
   FAILED: Colors.error,
-  COMPLETED: Colors.success,
-};
+  COMPLETED: Colors.success};
 
 const CATEGORY_ICONS: Record<ActivityCategory, React.ReactNode> = {
   DEVELOPMENT: <FileCode2 size={15} color={Colors.primary} />,
@@ -92,8 +87,7 @@ const CATEGORY_ICONS: Record<ActivityCategory, React.ReactNode> = {
   PROPERTIES_DEALS: <Building2 size={15} color={Colors.primary} />,
   MARKETING: <Megaphone size={15} color={Colors.primary} />,
   FINANCIAL: <Banknote size={15} color={Colors.primary} />,
-  AUTONOMOUS_SYSTEM: <Bot size={15} color={Colors.primary} />,
-};
+  AUTONOMOUS_SYSTEM: <Bot size={15} color={Colors.primary} />};
 
 const CATEGORY_LABELS: Record<ActivityCategory, string> = {
   DEVELOPMENT: 'Development',
@@ -103,8 +97,7 @@ const CATEGORY_LABELS: Record<ActivityCategory, string> = {
   PROPERTIES_DEALS: 'Properties & Deals',
   MARKETING: 'Marketing',
   FINANCIAL: 'Financial',
-  AUTONOMOUS_SYSTEM: 'Autonomous System',
-};
+  AUTONOMOUS_SYSTEM: 'Autonomous System'};
 
 const RANGE_TABS: { key: DateRange; label: string }[] = [
   { key: 'today', label: 'Today' },
@@ -272,8 +265,7 @@ function AutonomousOpsContent() {
   const dashboardQuery = useQuery<AutonomousOpsDashboard>({
     queryKey: ['ivx-autonomous-ops-dashboard', range, agentFilter, categoryFilter],
     queryFn: () => getAutonomousOpsDashboard({ range, agent: agentFilter, category: categoryFilter }),
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const data = dashboardQuery.data ?? null;
   const onRefresh = useCallback(() => { void dashboardQuery.refetch(); }, [dashboardQuery]);
@@ -393,7 +385,7 @@ function AutonomousOpsContent() {
       {/* Loading */}
       {dashboardQuery.isLoading && !data ? (
         <View style={styles.loadingCard}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading autonomous operations…</Text>
         </View>
       ) : null}
@@ -816,7 +808,7 @@ function AutonomousOpsContent() {
             testID="export-execute-btn"
           >
             {exporting ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ShimmerIndicator size="small" color={Colors.primary} />
             ) : (
               <Download size={16} color={Colors.primary} />
             )}
@@ -1024,5 +1016,4 @@ const styles = StyleSheet.create({
   exportResultRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   exportResultText: { flex: 1, fontSize: 12, lineHeight: 17 },
   exportInfoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: Colors.background, borderRadius: 8, padding: 10, marginTop: 4 },
-  exportInfoText: { flex: 1, fontSize: 10, color: Colors.textTertiary, lineHeight: 15 },
-});
+  exportInfoText: { flex: 1, fontSize: 10, color: Colors.textTertiary, lineHeight: 15 }});

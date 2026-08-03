@@ -2,20 +2,19 @@ import React, { useCallback, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import * as Haptics from 'expo-haptics';
 import { CheckCircle2, PlayCircle, RefreshCw, Server, ShieldCheck, XCircle } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { buildSeniorDeveloperJobDraft } from '@/src/modules/ivx-developer/seniorDeveloperBuildIntent';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getSeniorDeveloperWorkerLastProof,
   getSeniorDeveloperWorkerStatus,
@@ -27,8 +26,7 @@ import {
   type WorkerJobView,
   type WorkerLastProof,
   type WorkerLedgerEntry,
-  type WorkerStatus,
-} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
+  type WorkerStatus} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
 
 const ONE_TAP_PROOF_REQUEST =
   'Build module IVX Worker Proof: create a new route, screen, backend endpoint, service helper, and test, then deploy live and return proof.';
@@ -56,8 +54,7 @@ function buildFinalProofDraft(): ReturnType<typeof buildSeniorDeveloperJobDraft>
       '5. Commit, push to GitHub, trigger a Render deploy, then verify /health (200) and /version commit match.',
     ].join('\n'),
     rollbackPlan:
-      'Revert the worker commit on GitHub and trigger a redeploy of the previous commit; the worker records the prior commit hash in the proof ledger.',
-  };
+      'Revert the worker commit on GitHub and trigger a redeploy of the previous commit; the worker records the prior commit hash in the proof ledger.'};
 }
 
 type WorkerProofData = {
@@ -119,8 +116,7 @@ export default function IVXWorkerProofRoute() {
   const query = useQuery<WorkerProofData, Error>({
     queryKey: PROOF_QUERY_KEY,
     queryFn: fetchWorkerProof,
-    staleTime: 0,
-  });
+    staleTime: 0});
 
   const handleRefresh = useCallback((): void => {
     void query.refetch();
@@ -154,8 +150,7 @@ export default function IVXWorkerProofRoute() {
     onError: (error) => {
       setJobStatus(error.message);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-  });
+    }});
 
   const handleRunOneTapJob = useCallback((): void => {
     if (oneTapJob.isPending) return;
@@ -205,8 +200,7 @@ export default function IVXWorkerProofRoute() {
     onError: (error) => {
       setJobStatus(error.message);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-  });
+    }});
 
   const handleRunFinalProof = useCallback((): void => {
     if (finalProofJob.isPending) return;
@@ -232,8 +226,7 @@ export default function IVXWorkerProofRoute() {
           options={{
             title: 'Senior Developer Worker',
             headerStyle: { backgroundColor: Colors.background },
-            headerTintColor: Colors.text,
-          }}
+            headerTintColor: Colors.text}}
         />
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -259,7 +252,7 @@ export default function IVXWorkerProofRoute() {
             testID="worker-proof-refresh"
           >
             {query.isFetching ? (
-              <ActivityIndicator color={Colors.black} />
+              <ShimmerIndicator color={Colors.black} />
             ) : (
               <>
                 <RefreshCw size={16} color={Colors.black} />
@@ -277,7 +270,7 @@ export default function IVXWorkerProofRoute() {
             testID="worker-proof-final-proof"
           >
             {finalProofJob.isPending ? (
-              <ActivityIndicator color={Colors.black} />
+              <ShimmerIndicator color={Colors.black} />
             ) : (
               <ShieldCheck size={18} color={Colors.black} />
             )}
@@ -295,7 +288,7 @@ export default function IVXWorkerProofRoute() {
             testID="worker-proof-one-tap-job"
           >
             {oneTapJob.isPending ? (
-              <ActivityIndicator color={Colors.primary} />
+              <ShimmerIndicator color={Colors.primary} />
             ) : (
               <PlayCircle size={18} color={Colors.primary} />
             )}
@@ -319,7 +312,7 @@ export default function IVXWorkerProofRoute() {
 
           {query.isLoading && !data ? (
             <View style={styles.statusBlock}>
-              <ActivityIndicator color={Colors.primary} />
+              <ShimmerIndicator color={Colors.primary} />
               <Text style={styles.statusText}>Loading worker status…</Text>
             </View>
           ) : null}
@@ -460,29 +453,24 @@ export default function IVXWorkerProofRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scroll: {
     padding: 16,
     gap: 14,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   headerTitle: {
     color: Colors.text,
     fontSize: 19,
     fontWeight: '800' as const,
-    flex: 1,
-  },
+    flex: 1},
   headerSub: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   refreshButton: {
     flexDirection: 'row',
     gap: 8,
@@ -491,13 +479,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
+    paddingHorizontal: 18},
   refreshButtonText: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   finalProofButton: {
     flexDirection: 'row',
     gap: 8,
@@ -506,14 +492,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
+    paddingHorizontal: 18},
   finalProofButtonText: {
     color: Colors.black,
     fontSize: 15,
     fontWeight: '800' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   oneTapButton: {
     flexDirection: 'row',
     gap: 8,
@@ -524,43 +508,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   oneTapButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   oneTapButtonText: {
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '800' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   jobStatusBlock: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.surfaceBorder,
-    padding: 12,
-  },
+    padding: 12},
   jobStatusText: {
     color: Colors.text,
     fontSize: 13,
     fontFamily: 'monospace',
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   statusBlock: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    padding: 12,
-  },
+    padding: 12},
   statusText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   errorBlock: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -569,90 +546,72 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.error,
-    padding: 12,
-  },
+    padding: 12},
   errorText: {
     color: Colors.text,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   card: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 8,
-  },
+    gap: 8},
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   cardTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   statLabel: {
     color: Colors.textTertiary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   statValue: {
     color: Colors.text,
     fontSize: 13,
     fontFamily: 'monospace',
     flexShrink: 1,
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   ledgerEntry: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 8,
-    gap: 3,
-  },
+    gap: 3},
   ledgerEntryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   ledgerStatus: {
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ledgerDate: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   ledgerJobId: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   ledgerGoal: {
     color: Colors.text,
-    fontSize: 13,
-  },
+    fontSize: 13},
   ledgerMeta: {
     color: Colors.textTertiary,
     fontSize: 11.5,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   ledgerError: {
     color: Colors.error,
-    fontSize: 12,
-  },
+    fontSize: 12},
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});

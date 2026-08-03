@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   KeyboardAvoidingView,
@@ -13,8 +12,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   CircleAlert,
@@ -31,11 +29,11 @@ import {
   Server,
   ShieldCheck,
   Sparkles,
-  Trash2,
-} from 'lucide-react-native';
+  Trash2} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   deleteIVXOwnerVariable,
   getIVXOwnerVariablesStatus,
@@ -49,13 +47,11 @@ import {
   type IVXOwnerVariableRow,
   type IVXOwnerVariablesSelfSyncResponse,
   type IVXOwnerVariablesStatus,
-  type IVXRenderDeployTriggerResult,
-} from '@/src/modules/ivx-owner-ai/services/ivxVariablesToolService';
+  type IVXRenderDeployTriggerResult} from '@/src/modules/ivx-owner-ai/services/ivxVariablesToolService';
 import {
   detectPublicVariablePresence,
   IVX_TRACKED_VARIABLE_METADATA,
-  type IVXTrackedVariableMetadata,
-} from '@/src/modules/ivx-owner-ai/services/ivxVariablesMetadata';
+  type IVXTrackedVariableMetadata} from '@/src/modules/ivx-owner-ai/services/ivxVariablesMetadata';
 
 type IVXMergedVariableRow = {
   metadata: IVXTrackedVariableMetadata;
@@ -175,8 +171,7 @@ function VariableRow({
   onReverify,
   onDelete,
   busyAction,
-  anyBusy,
-}: {
+  anyBusy}: {
   variable: IVXOwnerVariableRow;
   draftValue: string;
   onChangeDraft: (name: IVXOwnerVariableName, value: string) => void;
@@ -228,7 +223,7 @@ function VariableRow({
           accessibilityLabel={`Save ${variable.name}`}
           testID={`ivx-owner-variable-save-${variable.name}`}
         >
-          {rowAction === 'save' ? <ActivityIndicator size="small" color={Colors.black} /> : <Save size={17} color={Colors.black} />}
+          {rowAction === 'save' ? <ShimmerIndicator size="small" color={Colors.black} /> : <Save size={17} color={Colors.black} />}
         </Pressable>
       </View>
 
@@ -240,7 +235,7 @@ function VariableRow({
           accessibilityLabel={`Test ${variable.name}`}
           testID={`ivx-owner-variable-test-${variable.name}`}
         >
-          {rowAction === 'test' ? <ActivityIndicator size="small" color={Colors.text} /> : <ShieldCheck size={14} color={Colors.text} />}
+          {rowAction === 'test' ? <ShimmerIndicator size="small" color={Colors.text} /> : <ShieldCheck size={14} color={Colors.text} />}
           <Text style={styles.secondaryButtonText}>Test</Text>
         </Pressable>
         <Pressable
@@ -250,7 +245,7 @@ function VariableRow({
           accessibilityLabel={`Reverify ${variable.name}`}
           testID={`ivx-owner-variable-reverify-${variable.name}`}
         >
-          {rowAction === 'reverify' ? <ActivityIndicator size="small" color={Colors.primary} /> : <RefreshCw size={14} color={Colors.primary} />}
+          {rowAction === 'reverify' ? <ShimmerIndicator size="small" color={Colors.primary} /> : <RefreshCw size={14} color={Colors.primary} />}
           <Text style={styles.reverifyButtonText}>Reverify</Text>
         </Pressable>
         <Pressable
@@ -260,7 +255,7 @@ function VariableRow({
           accessibilityLabel={`Delete ${variable.name}`}
           testID={`ivx-owner-variable-delete-${variable.name}`}
         >
-          {rowAction === 'delete' ? <ActivityIndicator size="small" color={Colors.error} /> : <Trash2 size={14} color={Colors.error} />}
+          {rowAction === 'delete' ? <ShimmerIndicator size="small" color={Colors.error} /> : <Trash2 size={14} color={Colors.error} />}
           <Text style={styles.dangerButtonText}>Delete</Text>
         </Pressable>
       </View>
@@ -369,8 +364,7 @@ export default function IVXVariablesToolRoute() {
   const statusQuery = useQuery<IVXOwnerVariablesStatus, Error>({
     queryKey: IVX_OWNER_VARIABLES_QUERY_KEY,
     queryFn: getIVXOwnerVariablesStatus,
-    refetchInterval: 45_000,
-  });
+    refetchInterval: 45_000});
 
   const saveMutation = useMutation({
     mutationFn: async (input: { name: IVXOwnerVariableName; value: string }) => await saveIVXOwnerVariable(input),
@@ -385,8 +379,7 @@ export default function IVXVariablesToolRoute() {
       showToast(`${input.name} saved securely · ${response.saved?.maskedPreview ?? 'masked'}`, 'success');
     },
     onError: (error) => showToast(error instanceof Error ? error.message : 'Owner Variables save failed.', 'error'),
-    onSettled: () => setBusyAction(null),
-  });
+    onSettled: () => setBusyAction(null)});
 
   const testMutation = useMutation({
     mutationFn: async (input: { name?: IVXOwnerVariableName; provider?: IVXOwnerVariableProvider }) => await testIVXOwnerVariable(input),
@@ -399,8 +392,7 @@ export default function IVXVariablesToolRoute() {
       );
     },
     onError: (error) => showToast(error instanceof Error ? error.message : 'Owner Variables test failed.', 'error'),
-    onSettled: () => setBusyAction(null),
-  });
+    onSettled: () => setBusyAction(null)});
 
   const [lastSelfSync, setLastSelfSync] = useState<IVXOwnerVariablesSelfSyncResponse | null>(null);
   const selfSyncMutation = useMutation<IVXOwnerVariablesSelfSyncResponse, Error, { overwriteExisting: boolean }>({
@@ -417,8 +409,7 @@ export default function IVXVariablesToolRoute() {
     onError: (error) => {
       setLastSelfSync(null);
       Alert.alert('Sync from external source failed', error instanceof Error ? error.message : 'Owner Variables self-sync failed.');
-    },
-  });
+    }});
 
   const handleSelfSync = useCallback((overwriteExisting: boolean) => {
     Alert.alert(
@@ -448,8 +439,7 @@ export default function IVXVariablesToolRoute() {
     onError: (error) => {
       setLastDeploy(null);
       Alert.alert('Render deploy failed', error instanceof Error ? error.message : 'Could not reach backend deploy action.');
-    },
-  });
+    }});
 
   const handleTriggerDeploy = useCallback((clearCache: boolean) => {
     Alert.alert(
@@ -470,8 +460,7 @@ export default function IVXVariablesToolRoute() {
       showToast(`${name} deleted`, 'success');
     },
     onError: (error) => showToast(error instanceof Error ? error.message : 'Owner Variables delete failed.', 'error'),
-    onSettled: () => setBusyAction(null),
-  });
+    onSettled: () => setBusyAction(null)});
 
   const status = statusQuery.data ?? null;
   const variables = useMemo<IVXOwnerVariableRow[]>(() => {
@@ -498,8 +487,7 @@ export default function IVXVariablesToolRoute() {
         runtimeReadable,
         verified,
         lastVerifiedAt: backend?.lastTestedAt ?? null,
-        status,
-      };
+        status};
     });
   }, [status?.variables]);
 
@@ -626,7 +614,7 @@ export default function IVXVariablesToolRoute() {
             </View>
             {statusQuery.isLoading ? (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color={Colors.primary} size="small" />
+                <ShimmerIndicator color={Colors.primary} size="small" />
                 <Text style={styles.mutedText}>Checking encrypted credential statuses only…</Text>
               </View>
             ) : statusQuery.error ? (
@@ -656,7 +644,7 @@ export default function IVXVariablesToolRoute() {
                 onPress={() => handleSelfSync(true)}
                 testID="ivx-owner-variables-self-sync-overwrite"
               >
-                {selfSyncMutation.isPending ? <ActivityIndicator size="small" color={Colors.black} /> : <DownloadCloud size={15} color={Colors.black} />}
+                {selfSyncMutation.isPending ? <ShimmerIndicator size="small" color={Colors.black} /> : <DownloadCloud size={15} color={Colors.black} />}
                 <Text style={styles.deployButtonPrimaryText}>{selfSyncMutation.isPending ? 'Syncing…' : 'Sync ALL credentials now'}</Text>
               </Pressable>
               <Pressable
@@ -702,7 +690,7 @@ export default function IVXVariablesToolRoute() {
                 onPress={() => handleTriggerDeploy(false)}
                 testID="ivx-owner-render-deploy-trigger"
               >
-                {deployMutation.isPending ? <ActivityIndicator size="small" color={Colors.black} /> : <Rocket size={15} color={Colors.black} />}
+                {deployMutation.isPending ? <ShimmerIndicator size="small" color={Colors.black} /> : <Rocket size={15} color={Colors.black} />}
                 <Text style={styles.deployButtonPrimaryText}>{deployMutation.isPending ? 'Triggering deploy…' : 'Deploy backend now'}</Text>
               </Pressable>
               <Pressable
@@ -816,20 +804,17 @@ export default function IVXVariablesToolRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     padding: 16,
-    gap: 14,
-  },
+    gap: 14},
   heroCard: {
     padding: 20,
     borderRadius: 30,
     backgroundColor: '#071019',
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.28)',
-    gap: 12,
-  },
+    gap: 12},
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row' as const,
@@ -838,32 +823,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   heroBadgeText: {
     color: Colors.black,
     fontSize: 11,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   heroTitle: {
     color: Colors.text,
     fontSize: 28,
     lineHeight: 33,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   heroPills: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 8,
-  },
+    gap: 8},
   securityPill: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -871,48 +851,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   securityPillPass: {
     backgroundColor: 'rgba(34,197,94,0.12)',
-    borderColor: 'rgba(34,197,94,0.3)',
-  },
+    borderColor: 'rgba(34,197,94,0.3)'},
   securityPillWarn: {
     backgroundColor: 'rgba(245,158,11,0.12)',
-    borderColor: 'rgba(245,158,11,0.3)',
-  },
+    borderColor: 'rgba(245,158,11,0.3)'},
   securityPillText: {
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   card: {
     padding: 16,
     borderRadius: 24,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 14,
-  },
+    gap: 14},
   cardHeaderRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   cardHeaderCopy: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   cardTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   cardSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   refreshButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -920,78 +891,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   refreshButtonText: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   loadingRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   mutedText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   errorText: {
     color: Colors.error,
     fontSize: 13,
     lineHeight: 19,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   proofGrid: {
     gap: 8,
     padding: 12,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.035)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   proofText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   providerGrid: {
-    gap: 10,
-  },
+    gap: 10},
   providerWrapper: {
-    gap: 8,
-  },
+    gap: 8},
   providerCard: {
     padding: 12,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.035)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    gap: 7,
-  },
+    gap: 7},
   providerHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   providerTitle: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   providerDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   providerMuted: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   providerTestButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -999,68 +956,55 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,215,0,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.28)',
-  },
+    borderColor: 'rgba(255,215,0,0.28)'},
   providerTestButtonText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   inputList: {
-    gap: 12,
-  },
+    gap: 12},
   variableCard: {
     gap: 10,
     padding: 12,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.035)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   variableTopRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   variableNameBlock: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   variableName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   variableDescription: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   statusBadge: {
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   statusBadgeText: {
     fontSize: 10,
     fontWeight: '900' as const,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   variableMetaGrid: {
-    gap: 4,
-  },
+    gap: 4},
   metaText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   inputRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   input: {
     flex: 1,
     minHeight: 46,
@@ -1071,8 +1015,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingHorizontal: 12,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   iconButton: {
     width: 46,
     height: 46,
@@ -1081,15 +1024,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     backgroundColor: Colors.primary,
     borderWidth: 1,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   buttonDisabled: {
-    opacity: 0.44,
-  },
+    opacity: 0.44},
   rowActions: {
     flexDirection: 'row' as const,
-    gap: 8,
-  },
+    gap: 8},
   secondaryButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1099,13 +1039,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   secondaryButtonText: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   dangerButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1115,17 +1053,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(239,68,68,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.24)',
-  },
+    borderColor: 'rgba(239,68,68,0.24)'},
   dangerButtonText: {
     color: Colors.error,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   actionFlex: {
     flex: 1,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   reverifyButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1135,13 +1070,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,215,0,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.28)',
-  },
+    borderColor: 'rgba(255,215,0,0.28)'},
   reverifyButtonText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   toast: {
     position: 'absolute' as const,
     left: 16,
@@ -1154,24 +1087,19 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     borderRadius: 16,
     borderWidth: 1,
-    backgroundColor: '#0b1016',
-  },
+    backgroundColor: '#0b1016'},
   toastSuccess: {
-    borderColor: 'rgba(34,197,94,0.45)',
-  },
+    borderColor: 'rgba(34,197,94,0.45)'},
   toastError: {
-    borderColor: 'rgba(239,68,68,0.45)',
-  },
+    borderColor: 'rgba(239,68,68,0.45)'},
   toastText: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   deployButtonRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 10,
-  },
+    gap: 10},
   deployButtonPrimary: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1179,13 +1107,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   deployButtonPrimaryText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   deployButtonSecondary: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1195,24 +1121,20 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,215,0,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.32)',
-  },
+    borderColor: 'rgba(255,215,0,0.32)'},
   deployButtonSecondaryText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   securityNote: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   summaryGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 8,
-  },
+    gap: 8},
   summaryStat: {
     minWidth: 96,
     flexGrow: 1,
@@ -1222,50 +1144,40 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     backgroundColor: 'rgba(255,255,255,0.035)',
-    gap: 4,
-  },
+    gap: 4},
   summaryStatValue: {
     fontSize: 18,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   summaryStatLabel: {
     color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   trackedList: {
-    gap: 10,
-  },
+    gap: 10},
   trackedCard: {
     gap: 8,
     padding: 12,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.025)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-  },
+    borderColor: 'rgba(255,255,255,0.07)'},
   metadataPillRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 6,
-  },
+    gap: 6},
   metadataPill: {
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   metadataPillText: {
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   metadataNoteRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 6,
-  },
-});
+    gap: 6}});

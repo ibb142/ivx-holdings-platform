@@ -11,11 +11,12 @@
  *    returns the verified commit hash + GitHub commit URL as proof.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Stack } from 'expo-router';
 import { CheckCircle2, ChevronRight, Eye, GitBranch, Github, Rocket, ShieldAlert, UploadCloud } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = ((process.env.EXPO_PUBLIC_IVX_API_BASE_URL ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.ivxholding.com') as string).replace(/\/$/, '');
 
@@ -157,16 +158,13 @@ export default function IVXGithubSyncScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${bearer}`,
-        },
+          Authorization: `Bearer ${bearer}`},
         body: JSON.stringify({
           apply,
           message: apply
             ? `sync: owner push from IVX app ${new Date().toISOString()}`
             : undefined,
-          timeoutMs: 5 * 60_000,
-        }),
-      });
+          timeoutMs: 5 * 60_000})});
       const json = await response.json().catch(() => ({})) as GithubSyncResponse;
       setResult(json);
 
@@ -208,8 +206,7 @@ export default function IVXGithubSyncScreen() {
         FINAL_STATUS: 'FAILED',
         FAILED_AT: 'owner_session',
         RAW_ERROR: 'No signed-in owner session detected. Sign in with the owner account, then try again.',
-        NEXT_OWNER_ACTION: 'Sign in with the owner account and retry.',
-      });
+        NEXT_OWNER_ACTION: 'Sign in with the owner account and retry.'});
       return;
     }
 
@@ -218,13 +215,10 @@ export default function IVXGithubSyncScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${bearer}`,
-        },
+          Authorization: `Bearer ${bearer}`},
         body: JSON.stringify({
           message: `sync: owner-approved full sync + deploy proof from IVX app ${new Date().toISOString()}`,
-          timeoutMs: 5 * 60_000,
-        }),
-      });
+          timeoutMs: 5 * 60_000})});
       const json = await response.json().catch(() => ({})) as DeployProofResponse;
       setDeployResult(json);
       const final = (json.FINAL_STATUS ?? '').toUpperCase();
@@ -237,8 +231,7 @@ export default function IVXGithubSyncScreen() {
         FINAL_STATUS: 'FAILED',
         FAILED_AT: 'request',
         RAW_ERROR: err instanceof Error ? err.message : 'network_error',
-        NEXT_OWNER_ACTION: 'Check connectivity to the IVX backend and retry.',
-      });
+        NEXT_OWNER_ACTION: 'Check connectivity to the IVX backend and retry.'});
     }
   }, []);
 
@@ -293,7 +286,7 @@ export default function IVXGithubSyncScreen() {
           style={[styles.secondaryButton, busy ? styles.secondaryButtonDisabled : null]}
           testID="ivx-github-sync-preview-button"
         >
-          {stage === 'previewing' ? <ActivityIndicator color={Colors.text} /> : <Eye size={16} color={Colors.text} />}
+          {stage === 'previewing' ? <ShimmerIndicator color={Colors.text} /> : <Eye size={16} color={Colors.text} />}
           <Text style={styles.secondaryButtonText}>Preview changes (dry-run)</Text>
         </Pressable>
 
@@ -303,7 +296,7 @@ export default function IVXGithubSyncScreen() {
           style={[styles.primaryButton, busy ? styles.primaryButtonDisabled : null]}
           testID="ivx-github-sync-push-button"
         >
-          {stage === 'pushing' ? <ActivityIndicator color="#0B0B0B" /> : <UploadCloud size={18} color="#0B0B0B" />}
+          {stage === 'pushing' ? <ShimmerIndicator color="#0B0B0B" /> : <UploadCloud size={18} color="#0B0B0B" />}
           <Text style={styles.primaryButtonText}>
             {stage === 'pushing' ? 'Pushing…' : 'Push to GitHub now'}
           </Text>
@@ -315,7 +308,7 @@ export default function IVXGithubSyncScreen() {
           style={[styles.deployButton, (deployBusy || busy) ? styles.primaryButtonDisabled : null]}
           testID="ivx-github-sync-deploy-proof-button"
         >
-          {deployStage === 'running' ? <ActivityIndicator color="#FFFFFF" /> : <Rocket size={18} color="#FFFFFF" />}
+          {deployStage === 'running' ? <ShimmerIndicator color="#FFFFFF" /> : <Rocket size={18} color="#FFFFFF" />}
           <Text style={styles.deployButtonText}>
             {deployStage === 'running' ? 'Running full proof…' : 'Run Full Sync + Deploy Proof'}
           </Text>
@@ -455,28 +448,24 @@ const styles = StyleSheet.create({
   header: { gap: 8, marginTop: 8 },
   iconBadge: {
     width: 44, height: 44, borderRadius: 12, borderWidth: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   title: { fontSize: 22, fontWeight: '700' as const, color: Colors.text },
   subtitle: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19 },
   primaryButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 14, paddingHorizontal: 20,
-    backgroundColor: Colors.success, borderRadius: 14,
-  },
+    backgroundColor: Colors.success, borderRadius: 14},
   primaryButtonDisabled: { opacity: 0.6 },
   primaryButtonText: { color: '#0B0B0B', fontSize: 15, fontWeight: '700' as const },
   deployButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 14, paddingHorizontal: 20,
-    backgroundColor: Colors.info, borderRadius: 14,
-  },
+    backgroundColor: Colors.info, borderRadius: 14},
   deployButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' as const },
   nextActionText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
   statusCard: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: 14,
-    padding: 14, backgroundColor: Colors.card, gap: 10,
-  },
+    padding: 14, backgroundColor: Colors.card, gap: 10},
   statusHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   statusLabel: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
@@ -484,8 +473,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     padding: 10, borderRadius: 10,
     backgroundColor: `${Colors.error}14`,
-    borderWidth: 1, borderColor: `${Colors.error}55`,
-  },
+    borderWidth: 1, borderColor: `${Colors.error}55`},
   errorText: { color: Colors.error, fontSize: 12, flex: 1 },
   proofBlock: { gap: 6, marginTop: 4 },
   proofTitle: { color: Colors.textSecondary, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
@@ -495,28 +483,23 @@ const styles = StyleSheet.create({
   linkButton: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10,
-    backgroundColor: `${Colors.info}14`, borderWidth: 1, borderColor: `${Colors.info}55`,
-  },
+    backgroundColor: `${Colors.info}14`, borderWidth: 1, borderColor: `${Colors.info}55`},
   linkText: { color: Colors.info, fontSize: 13, fontWeight: '600' as const, flex: 1 },
   logBox: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
-    padding: 10, backgroundColor: Colors.background, gap: 6,
-  },
+    padding: 10, backgroundColor: Colors.background, gap: 6},
   logTitle: { color: Colors.textSecondary, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   logText: { color: Colors.textSecondary, fontSize: 11, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }), lineHeight: 16 },
   secondaryButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 12,
     borderWidth: 1, borderColor: Colors.border, borderRadius: 14,
-    backgroundColor: Colors.card,
-  },
+    backgroundColor: Colors.card},
   secondaryButtonDisabled: { opacity: 0.5 },
   secondaryButtonText: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
   policyCard: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: 14,
-    padding: 14, backgroundColor: Colors.card, gap: 8,
-  },
+    padding: 14, backgroundColor: Colors.card, gap: 8},
   policyTitle: { color: Colors.textSecondary, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 4 },
   policyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  policyText: { color: Colors.text, fontSize: 12, flex: 1, lineHeight: 17 },
-});
+  policyText: { color: Colors.text, fontSize: 12, flex: 1, lineHeight: 17 }});

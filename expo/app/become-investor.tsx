@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TextInput,
   Alert,
   KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
@@ -25,10 +22,10 @@ import {
   Sparkles,
   BadgeCheck,
   Clock,
-  FileCheck2,
-} from 'lucide-react-native';
+  FileCheck2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import * as MemberService from '@/lib/member-service';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const STEP_TITLES = ['Personal', 'Investment', 'Interests', 'Locations', 'Goals', 'Verification'] as const;
 
@@ -165,8 +162,7 @@ export default function BecomeInvestorScreen() {
         governmentIdProvided: govIdProvided,
         kycConsent,
         amlConsent,
-        entityDocsProvided: entityDocs,
-      });
+        entityDocsProvided: entityDocs});
       if (result.success && result.application) {
         setApplication(result.application);
       } else {
@@ -422,7 +418,7 @@ export default function BecomeInvestorScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: 'Become an Investor', headerShown: true }} />
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={Colors.gold} size="large" />
+          <ShimmerIndicator color={Colors.gold} size="large" />
         </View>
       </SafeAreaView>
     );
@@ -472,7 +468,7 @@ export default function BecomeInvestorScreen() {
                     testID="submit-application"
                   >
                     {isSubmitting ? (
-                      <ActivityIndicator color="#000000" size="small" />
+                      <ShimmerIndicator color="#000000" size="small" />
                     ) : (
                       <>
                         <Shield size={18} color="#000000" />
@@ -512,8 +508,7 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     paddingHorizontal: 20,
     paddingTop: 10,
-    paddingBottom: 6,
-  },
+    paddingBottom: 6},
 
   stepHeading: { fontSize: 24, fontWeight: '800' as const, color: Colors.text, marginTop: 12, marginBottom: 4 },
   stepSub: { fontSize: 13, color: Colors.textSecondary, marginBottom: 8, lineHeight: 18 },
@@ -527,8 +522,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
-    height: 50,
-  },
+    height: 50},
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 15, color: Colors.text },
 
@@ -542,8 +536,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   chipActive: { borderColor: Colors.gold },
   chipText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' as const },
   chipTextActive: { color: Colors.gold },
@@ -555,8 +548,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkboxChecked: { backgroundColor: Colors.gold, borderColor: Colors.gold },
 
   toggleRow: {
@@ -568,8 +560,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   toggleTextBox: { flex: 1 },
   toggleLabel: { fontSize: 14, fontWeight: '700' as const, color: Colors.text },
   toggleSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2, lineHeight: 16 },
@@ -584,8 +575,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 4,
-  },
+    gap: 4},
   backButtonText: { color: Colors.text, fontSize: 15, fontWeight: '600' as const },
   nextButton: {
     flex: 1,
@@ -595,8 +585,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 12,
     backgroundColor: Colors.gold,
-    gap: 8,
-  },
+    gap: 8},
   nextButtonDisabled: { opacity: 0.4 },
   nextButtonText: { color: '#000000', fontSize: 15, fontWeight: '800' as const },
 
@@ -610,8 +599,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 24,
-    marginTop: 20,
-  },
+    marginTop: 20},
   statusTitle: { fontSize: 20, fontWeight: '800' as const, color: Colors.text, marginTop: 12, letterSpacing: 1 },
   statusSub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 19 },
 
@@ -622,8 +610,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    marginTop: 16,
-  },
+    marginTop: 16},
   reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   reviewTitle: { fontSize: 13, fontWeight: '700' as const, color: Colors.gold },
   reviewReason: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18 },
@@ -634,8 +621,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    marginTop: 16,
-  },
+    marginTop: 16},
   sectionTitle: { fontSize: 16, fontWeight: '800' as const, color: Colors.text, marginBottom: 12 },
 
   matchRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
@@ -647,8 +633,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gold,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   matchScoreText: { color: Colors.gold, fontSize: 13, fontWeight: '800' as const },
   matchInfo: { flex: 1 },
   matchName: { fontSize: 14, fontWeight: '700' as const, color: Colors.text },
@@ -661,8 +646,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   alertChipText: { fontSize: 11, color: Colors.textSecondary, textTransform: 'capitalize' as const },
 
   submitButton: {
@@ -671,8 +655,7 @@ const styles = StyleSheet.create({
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
-  },
+    marginTop: 20},
   submitButtonText: { color: '#000000', fontSize: 16, fontWeight: '800' as const },
   outlineButton: {
     borderRadius: 12,
@@ -681,7 +664,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.gold,
-    marginTop: 20,
-  },
-  outlineButtonText: { color: Colors.gold, fontSize: 15, fontWeight: '700' as const },
-});
+    marginTop: 20},
+  outlineButtonText: { color: Colors.gold, fontSize: 15, fontWeight: '700' as const }});

@@ -5,8 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -34,8 +33,7 @@ import {
   Tablet,
   Star,
   Activity,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   lenderEngagements,
@@ -49,8 +47,7 @@ import {
   getFollowUpQueue,
   getOverallStats,
   type EngagementLevel,
-  type FollowUpPriority,
-} from '@/mocks/outreach-analytics';
+  type FollowUpPriority} from '@/mocks/outreach-analytics';
 import { formatCurrencyCompact } from '@/lib/formatters';
 
 
@@ -70,8 +67,7 @@ const ENGAGEMENT_COLORS: Record<EngagementLevel, string> = {
   hot: '#FF4D4D',
   warm: '#F59E0B',
   cold: '#60A5FA',
-  unresponsive: '#6B7280',
-};
+  unresponsive: '#6B7280'};
 
 
 
@@ -79,8 +75,7 @@ const PRIORITY_COLORS: Record<FollowUpPriority, string> = {
   urgent: '#FF4D4D',
   high: '#F59E0B',
   medium: '#4A90D9',
-  low: '#6B7280',
-};
+  low: '#6B7280'};
 
 type TabType = 'overview' | 'engagement' | 'campaigns' | 'smart' | 'costs';
 
@@ -201,8 +196,7 @@ export default function OutreachAnalyticsScreen() {
                   styles.funnelBarInner,
                   {
                     width: `${Math.max(8, stage.percentage)}%`,
-                    backgroundColor: stage.color,
-                  },
+                    backgroundColor: stage.color},
                 ]}
               />
             </View>
@@ -865,5 +859,4 @@ const styles = StyleSheet.create({
   costROILabel: { color: Colors.textSecondary, fontSize: 13 },
   costROIValue: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
   costROISaving: { gap: 4 },
-  costROISavingText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  costROISavingText: { color: Colors.textSecondary, fontSize: 13 }});

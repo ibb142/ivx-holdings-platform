@@ -1,17 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Animated,
   Dimensions,
   Platform,
   Alert,
-  Share,
-} from 'react-native';
+  Share} from "react-native";
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
@@ -46,9 +43,9 @@ import {
   WifiOff,
   SignalHigh,
   SignalLow,
-  SignalZero,
-} from 'lucide-react-native';
+  SignalZero} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   runFullEvidenceCheck,
   runSingleEvidenceCheck,
@@ -69,8 +66,7 @@ import {
   type ChatEvidenceResult,
   type SupabaseEvidenceResult,
   type FrontendEvidenceResult,
-  type EvidenceHistoryEntry,
-} from '@/lib/live-evidence';
+  type EvidenceHistoryEntry} from '@/lib/live-evidence';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -85,21 +81,18 @@ const STATUS_CONFIG: Record<EvidenceStatus, { icon: typeof CheckCircle; color: s
   ok: { icon: CheckCircle, color: '#00C48C', label: 'OK' },
   fail: { icon: XCircle, color: '#FF4D4D', label: 'FAIL' },
   checking: { icon: Activity, color: '#F59E0B', label: 'CHECKING' },
-  skipped: { icon: AlertTriangle, color: '#6366F1', label: 'SKIPPED' },
-};
+  skipped: { icon: AlertTriangle, color: '#6366F1', label: 'SKIPPED' }};
 
 const FINAL_STATUS_CONFIG: Record<EvidenceFinalStatus, { color: string; bg: string }> = {
   COMPLETE: { color: '#00C48C', bg: 'rgba(34,197,94,0.12)' },
   BLOCKED: { color: '#FF4D4D', bg: 'rgba(239,68,68,0.12)' },
   'LOCAL ONLY': { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' },
-  UNVERIFIED: { color: '#6366F1', bg: 'rgba(99,102,241,0.12)' },
-};
+  UNVERIFIED: { color: '#6366F1', bg: 'rgba(99,102,241,0.12)' }};
 
 const FRESHNESS_CONFIG: Record<DataFreshness, { icon: typeof SignalHigh; color: string; label: string; bg: string }> = {
   LIVE: { icon: SignalHigh, color: '#00C48C', label: 'LIVE', bg: 'rgba(34,197,94,0.12)' },
   STALE: { icon: SignalLow, color: '#F59E0B', label: 'STALE', bg: 'rgba(245,158,11,0.12)' },
-  FAILED: { icon: SignalZero, color: '#FF4D4D', label: 'FAILED', bg: 'rgba(239,68,68,0.12)' },
-};
+  FAILED: { icon: SignalZero, color: '#FF4D4D', label: 'FAILED', bg: 'rgba(239,68,68,0.12)' }};
 
 const TOOL_ICONS: Record<string, typeof Activity> = {
   GitHub: GitBranch,
@@ -107,8 +100,7 @@ const TOOL_ICONS: Record<string, typeof Activity> = {
   Health: Activity,
   Chat: MessageCircle,
   Supabase: Database,
-  Frontend: Monitor,
-};
+  Frontend: Monitor};
 
 const TOOL_COLORS: Record<string, string> = {
   GitHub: '#F0F6FC',
@@ -116,8 +108,7 @@ const TOOL_COLORS: Record<string, string> = {
   Health: '#00C48C',
   Chat: '#4A90D9',
   Supabase: '#00C48C',
-  Frontend: '#06B6D4',
-};
+  Frontend: '#06B6D4'};
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -141,15 +132,12 @@ const statusBadgeStyles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   label: {
     fontSize: 10,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-  },
-});
+    textTransform: 'uppercase' as const}});
 
 function FreshnessBadge({ freshness }: { freshness: DataFreshness }) {
   const cfg = FRESHNESS_CONFIG[freshness];
@@ -169,23 +157,19 @@ const freshnessBadgeStyles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   label: {
     fontSize: 11,
     fontWeight: '800' as const,
     letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-  },
-});
+    textTransform: 'uppercase' as const}});
 
 function ToolCard({
   tool,
   icon,
   color,
   status,
-  children,
-}: {
+  children}: {
   tool: string;
   icon: typeof Activity;
   color: string;
@@ -232,32 +216,26 @@ const toolCardStyles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.surfaceBorder,
     padding: CARD_PADDING,
-    marginBottom: CARD_GAP,
-  },
+    marginBottom: CARD_GAP},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   iconBox: {
     width: 32,
     height: 32,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   toolName: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
-});
+    color: Colors.text}});
 
 function EvidenceRow({ label, value, mono, color }: { label: string; value: string; mono?: boolean; color?: string }) {
   if (!value && value !== '0') return null;
@@ -283,26 +261,21 @@ const evidenceRowStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   label: {
     fontSize: 12,
     color: Colors.textTertiary,
-    flex: 1,
-  },
+    flex: 1},
   value: {
     fontSize: 12,
     color: Colors.textSecondary,
     fontWeight: '600' as const,
     flex: 1.5,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   mono: {
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
     fontSize: 11,
-    color: Colors.gold,
-  },
-});
+    color: Colors.gold}});
 
 function MatchBadge({ matches }: { matches: boolean }) {
   return (
@@ -337,14 +310,11 @@ const matchBadgeStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   text: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.4,
-  },
-});
+    letterSpacing: 0.4}});
 
 function StreamLogItem({ event }: { event: StreamEvent }) {
   const iconColor =
@@ -383,34 +353,27 @@ const streamLogStyles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 2,
     borderBottomWidth: 0.5,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    marginTop: 5,
-  },
+    marginTop: 5},
   textCol: {
-    flex: 1,
-  },
+    flex: 1},
   message: {
     fontSize: 11,
     color: Colors.textSecondary,
-    lineHeight: 15,
-  },
+    lineHeight: 15},
   detail: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    marginTop: 1,
-  },
+    marginTop: 1},
   time: {
     fontSize: 9,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
-});
+    marginTop: 1}});
 
 function HistoryEntryRow({ entry }: { entry: EvidenceHistoryEntry }) {
   const cfg = FINAL_STATUS_CONFIG[entry.finalStatus];
@@ -456,54 +419,43 @@ const historyRowStyles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 2,
     borderBottomWidth: 0.5,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   statusDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   time: {
     fontSize: 11,
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   commit: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    marginTop: 2,
-  },
+    marginTop: 2},
   results: {
     flexDirection: 'row',
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   miniBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   miniText: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   finalBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   finalText: {
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});
 
 function DeployHistoryRow({ entry }: { entry: RenderDeployHistoryEntry }) {
   const statusColor = entry.status === 'live' || entry.status === 'successful' ? '#00C48C'
@@ -531,27 +483,23 @@ const deployRowStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   content: { flex: 1 },
   deployId: {
     fontSize: 11,
     color: Colors.textSecondary,
-    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' })},
   meta: { fontSize: 9, color: Colors.textTertiary, marginTop: 1 },
   status: { fontSize: 10, fontWeight: '700' as const },
-  time: { fontSize: 9, color: Colors.textTertiary },
-});
+  time: { fontSize: 9, color: Colors.textTertiary }});
 
 function ActionButton({
   label,
   icon,
   onPress,
   disabled,
-  variant,
-}: {
+  variant}: {
   label: string;
   icon: typeof RefreshCw;
   onPress: () => void;
@@ -595,22 +543,18 @@ const actionButtonStyles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     flex: 1,
-    minHeight: 44,
-  },
+    minHeight: 44},
   primary: { backgroundColor: Colors.gold },
   secondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: Colors.gold + '50',
-  },
+    borderColor: Colors.gold + '50'},
   export: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#00C48C50',
-  },
+    borderColor: '#00C48C50'},
   disabled: { opacity: 0.4 },
-  label: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.3 },
-});
+  label: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.3 }});
 
 function SectionHeader({ icon: Icon, title }: { icon: typeof Shield; title: string }) {
   return (
@@ -628,9 +572,7 @@ const sectionHeaderStyles = StyleSheet.create({
     fontWeight: '800' as const,
     color: Colors.gold,
     letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
-  },
-});
+    textTransform: 'uppercase' as const}});
 
 // ---------------------------------------------------------------------------
 // Main Screen
@@ -1176,7 +1118,7 @@ export default function LiveEvidenceDashboard() {
 
       {checking && (
         <View style={liveWorkStyles.checkingBanner}>
-          <ActivityIndicator size="small" color={Colors.gold} />
+          <ShimmerIndicator size="small" color={Colors.gold} />
           <Text style={liveWorkStyles.checkingText}>
             {checkingTool ? `Checking ${checkingTool}...` : 'Running full evidence check...'}
           </Text>
@@ -1241,16 +1183,14 @@ const screenStyles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 0.5,
     borderBottomColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceElevated,
-  },
+    backgroundColor: Colors.surfaceElevated},
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700' as const, color: Colors.text },
   headerSubtitle: { fontSize: 11, color: Colors.textTertiary, marginTop: 1 },
@@ -1260,12 +1200,10 @@ const screenStyles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceElevated,
-  },
+    backgroundColor: Colors.surfaceElevated},
   scroll: { flex: 1 },
   scrollContent: { padding: CARD_PADDING, paddingTop: 12 },
-  footer: { height: 40 },
-});
+  footer: { height: 40 }});
 
 const commitMatchStyles = StyleSheet.create({
   section: { marginBottom: 16 },
@@ -1274,47 +1212,38 @@ const commitMatchStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 0.5,
     borderColor: Colors.surfaceBorder,
-    padding: CARD_PADDING,
-  },
+    padding: CARD_PADDING},
   shaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   shaBlock: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   shaLabel: { fontSize: 9, color: Colors.textTertiary, marginBottom: 4, letterSpacing: 0.5 },
   shaValue: {
     fontSize: 11,
     color: Colors.gold,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   arrowCol: {
     width: 30,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   arrowLine: {
     width: 16,
     height: 1.5,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   matchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   matchHint: {
     fontSize: 10,
     color: Colors.textTertiary,
     flex: 1,
-    lineHeight: 14,
-  },
-});
+    lineHeight: 14}});
 
 const monitorStyles = StyleSheet.create({
   section: { marginBottom: 20 },
@@ -1324,16 +1253,14 @@ const monitorStyles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   titleGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '800' as const,
     color: Colors.gold,
     letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   finalBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
   finalBadgeText: { fontSize: 11, fontWeight: '800' as const, letterSpacing: 0.5 },
@@ -1342,57 +1269,49 @@ const monitorStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginBottom: 12,
-    paddingLeft: 26,
-  },
+    paddingLeft: 26},
   lastCheck: { fontSize: 11, color: Colors.textTertiary },
   autoRefreshLabel: { fontSize: 10, color: '#00C48C', fontWeight: '600' as const },
   matchLabel: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   errorText: {
     fontSize: 11,
     color: '#FF4D4D',
     marginTop: 4,
-    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' })},
   deployHistoryContainer: { marginTop: 8, borderTopWidth: 0.5, borderTopColor: Colors.surfaceBorder, paddingTop: 8 },
   deployHistoryToggle: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   deployHistoryTitle: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' as const },
   responseBodyBox: {
     marginTop: 6,
     padding: 8,
     backgroundColor: Colors.background,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   responseBodyText: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    lineHeight: 14,
-  },
+    lineHeight: 14},
   proofMsgs: { marginTop: 6, padding: 8, backgroundColor: Colors.background, borderRadius: 6 },
   proofMsg: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
     lineHeight: 14,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   tablesList: {
     fontSize: 10,
     color: Colors.textTertiary,
     marginTop: 4,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    lineHeight: 14,
-  },
+    lineHeight: 14},
   alertBox: {
     flexDirection: 'row',
     gap: 10,
@@ -1401,31 +1320,26 @@ const monitorStyles = StyleSheet.create({
     borderColor: '#FF4D4D40',
     borderRadius: 10,
     padding: 12,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   alertTitle: { fontSize: 11, fontWeight: '700' as const, color: '#FF4D4D', marginBottom: 4 },
   alertText: {
     fontSize: 10,
     color: Colors.textSecondary,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    lineHeight: 14,
-  },
-});
+    lineHeight: 14}});
 
 const historySectionStyles = StyleSheet.create({
   section: { marginBottom: 20 },
   toggle: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   countBadge: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 3,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   countText: { fontSize: 11, fontWeight: '700' as const, color: Colors.gold },
   container: {
     backgroundColor: Colors.surface,
@@ -1433,11 +1347,9 @@ const historySectionStyles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.surfaceBorder,
     padding: 10,
-    maxHeight: 280,
-  },
+    maxHeight: 280},
   empty: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
-  emptyText: { fontSize: 12, color: Colors.textTertiary },
-});
+  emptyText: { fontSize: 12, color: Colors.textTertiary }});
 
 const streamSectionStyles = StyleSheet.create({
   section: { marginBottom: 20 },
@@ -1445,22 +1357,19 @@ const streamSectionStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   titleGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '800' as const,
     color: Colors.gold,
     letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   streamCount: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   countText: { fontSize: 11, fontWeight: '700' as const, color: Colors.gold },
   logContainer: {
     backgroundColor: Colors.surface,
@@ -1468,11 +1377,9 @@ const streamSectionStyles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.surfaceBorder,
     padding: 10,
-    maxHeight: 300,
-  },
+    maxHeight: 300},
   emptyState: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
-  emptyText: { fontSize: 12, color: Colors.textTertiary },
-});
+  emptyText: { fontSize: 12, color: Colors.textTertiary }});
 
 const liveWorkStyles = StyleSheet.create({
   section: { marginBottom: 20 },
@@ -1486,7 +1393,5 @@ const liveWorkStyles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 10,
-    marginTop: 8,
-  },
-  checkingText: { fontSize: 13, color: Colors.gold, fontWeight: '600' as const },
-});
+    marginTop: 8},
+  checkingText: { fontSize: 13, color: Colors.gold, fontWeight: '600' as const }});

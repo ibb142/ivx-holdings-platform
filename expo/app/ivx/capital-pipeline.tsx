@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,8 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Building2,
   Check,
@@ -23,11 +21,11 @@ import {
   TrendingUp,
   Trash2,
   Wallet,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   createPipelineEntry,
   deletePipelineEntry,
@@ -40,8 +38,7 @@ import {
   type PipelineListResult,
   type PipelinePartyType,
   type PipelineSource,
-  type PipelineStage,
-} from '@/src/modules/ivx-developer/capitalPipelineService';
+  type PipelineStage} from '@/src/modules/ivx-developer/capitalPipelineService';
 
 const STAGE_LABEL: Record<PipelineStage, string> = {
   lead: 'Lead',
@@ -52,8 +49,7 @@ const STAGE_LABEL: Record<PipelineStage, string> = {
   due_diligence: 'Due Diligence',
   soft_commit: 'Soft Commit',
   hard_commit: 'Hard Commit',
-  closed: 'Closed',
-};
+  closed: 'Closed'};
 
 const STAGE_TONE: Record<PipelineStage, string> = {
   lead: Colors.textTertiary,
@@ -64,8 +60,7 @@ const STAGE_TONE: Record<PipelineStage, string> = {
   due_diligence: Colors.orange,
   soft_commit: Colors.primary,
   hard_commit: Colors.primary,
-  closed: Colors.success,
-};
+  closed: Colors.success};
 
 const SOURCE_OPTIONS: { value: PipelineSource; label: string }[] = [
   { value: 'owner_entered', label: 'Owner entered' },
@@ -99,8 +94,7 @@ function emptyForm(): FormState {
   return {
     name: '', company: '', partyType: 'investor', dealName: '', stage: 'lead',
     capitalRequested: '', capitalCommitted: '', closeProbability: '', expectedCloseDate: '',
-    notes: '', source: 'owner_entered', sourceDetail: '',
-  };
+    notes: '', source: 'owner_entered', sourceDetail: ''};
 }
 
 function formFromEntry(e: PipelineEntry): FormState {
@@ -116,8 +110,7 @@ function formFromEntry(e: PipelineEntry): FormState {
     expectedCloseDate: e.expectedCloseDate ? e.expectedCloseDate.slice(0, 10) : '',
     notes: e.notes,
     source: e.source,
-    sourceDetail: e.sourceDetail,
-  };
+    sourceDetail: e.sourceDetail};
 }
 
 function formToInput(form: FormState): PipelineInput {
@@ -133,8 +126,7 @@ function formToInput(form: FormState): PipelineInput {
     capitalCommitted: form.capitalCommitted.trim() ? Number(form.capitalCommitted.replace(/[$,\s]/g, '')) : null,
     closeProbability: form.closeProbability.trim() ? Number(form.closeProbability) : undefined,
     expectedCloseDate: form.expectedCloseDate.trim() || null,
-    notes: form.notes.trim(),
-  };
+    notes: form.notes.trim()};
 }
 
 function formatMoney(value: number | null): string {
@@ -292,8 +284,7 @@ function CapitalPipelineContent() {
 
   const query = useQuery<PipelineListResult>({
     queryKey: ['ivx-capital-pipeline', 'list'],
-    queryFn: listPipelineEntries,
-  });
+    queryFn: listPipelineEntries});
 
   const entries = useMemo(() => query.data?.entries ?? [], [query.data]);
   const summary = query.data?.summary ?? null;
@@ -424,7 +415,7 @@ function CapitalPipelineContent() {
         {error && !modalOpen ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyCard}>
             <Wallet size={26} color={Colors.textTertiary} />
@@ -487,7 +478,7 @@ function CapitalPipelineContent() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </ScrollView>
             <Pressable style={[styles.saveBtn, saving ? styles.btnDisabled : null]} onPress={() => { void handleSave(); }} disabled={saving} testID="ivx-pipeline-save">
-              {saving ? <ActivityIndicator size="small" color={Colors.black} /> : <Check size={16} color={Colors.black} />}
+              {saving ? <ShimmerIndicator size="small" color={Colors.black} /> : <Check size={16} color={Colors.black} />}
               <Text style={styles.saveBtnText}>{editingId ? 'Save changes' : 'Add to pipeline'}</Text>
             </Pressable>
           </View>
@@ -567,5 +558,4 @@ const styles = StyleSheet.create({
   dualItem: { flex: 1 },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, marginHorizontal: 18, marginTop: 8, paddingVertical: 14, borderRadius: 12 },
   saveBtnText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
-  btnDisabled: { opacity: 0.6 },
-});
+  btnDisabled: { opacity: 0.6 }});

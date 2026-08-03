@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -51,8 +50,7 @@ import {
   Network,
   ZoomIn,
   ZoomOut,
-  Maximize2,
-} from 'lucide-react-native';
+  Maximize2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { runFullHealthCheck, type HealthStatus } from '@/lib/system-health-checker';
 
@@ -189,8 +187,7 @@ const DATA_FLOWS: DataFlowDefinition[] = [
       { id: 'admin-publish-4', text: 'jv-realtime.ts → invalidateAllJVQueries()', severity: 'healthy' },
       { id: 'admin-publish-5', text: 'BroadcastChannel → cross-tab notification', severity: 'warning', reason: 'Use yellow when browser cross-tab sync looks delayed.' },
       { id: 'admin-publish-6', text: 'Landing + Home → refetch → re-render', severity: 'healthy' },
-    ],
-  },
+    ]},
   {
     id: 'user-invest',
     name: 'User Invests in Deal',
@@ -202,8 +199,7 @@ const DATA_FLOWS: DataFlowDefinition[] = [
       { id: 'user-invest-4', text: 'investment-service.ts → Update holdings', severity: 'healthy' },
       { id: 'user-invest-5', text: 'Analytics → Track conversion event', severity: 'warning', reason: 'Yellow means money flow worked but analytics visibility needs attention.' },
       { id: 'user-invest-6', text: 'Profile → Updated portfolio', severity: 'healthy' },
-    ],
-  },
+    ]},
   {
     id: 'realtime-sync',
     name: 'Realtime Sync (4 Layers)',
@@ -215,8 +211,7 @@ const DATA_FLOWS: DataFlowDefinition[] = [
       { id: 'realtime-sync-4', text: 'Layer 4: Visibility reconnect (tab focus)', severity: 'healthy' },
       { id: 'realtime-sync-5', text: 'Any layer triggers → React Query invalidation', severity: 'healthy' },
       { id: 'realtime-sync-6', text: 'All subscribed pages re-render with fresh data', severity: 'healthy' },
-    ],
-  },
+    ]},
   {
     id: 'photo-protect',
     name: 'Photo Protection Flow',
@@ -228,8 +223,7 @@ const DATA_FLOWS: DataFlowDefinition[] = [
       { id: 'photo-protect-4', text: 'If empty → fetch existing from DB → preserve', severity: 'critical', reason: 'Red when preservation fallback fails because photos can be lost.' },
       { id: 'photo-protect-5', text: 'Admin can override with adminOverride: true', severity: 'healthy' },
       { id: 'photo-protect-6', text: 'Audit log records every protection event', severity: 'warning', reason: 'Yellow if audit coverage is partial but no data is lost.' },
-    ],
-  },
+    ]},
   {
     id: 'trash-flow',
     name: 'Trash & Recovery Flow',
@@ -241,8 +235,7 @@ const DATA_FLOWS: DataFlowDefinition[] = [
       { id: 'trash-flow-4', text: 'Admin Trash Bin shows all trashed items', severity: 'healthy' },
       { id: 'trash-flow-5', text: 'Restore → status back to active', severity: 'healthy' },
       { id: 'trash-flow-6', text: 'Permanent delete requires typing project name', severity: 'healthy' },
-    ],
-  },
+    ]},
   {
     id: 'project-isolation',
     name: 'Project Storage Isolation',
@@ -254,8 +247,7 @@ const DATA_FLOWS: DataFlowDefinition[] = [
       { id: 'project-isolation-4', text: 'Startup: runStorageIntegrityCheck()', severity: 'warning', reason: 'Yellow when integrity audit has not run recently.' },
       { id: 'project-isolation-5', text: 'auditStorageKeys() detects foreign data', severity: 'healthy' },
       { id: 'project-isolation-6', text: 'cleanForeignKeys() auto-removes leaks', severity: 'healthy' },
-    ],
-  },
+    ]},
 ];
 
 function getSeverityPalette(severity: SeverityLevel) {
@@ -265,22 +257,19 @@ function getSeverityPalette(severity: SeverityLevel) {
         color: '#FF4D4D',
         backgroundColor: 'rgba(255,77,77,0.14)',
         borderColor: 'rgba(255,77,77,0.3)',
-        label: 'Critical',
-      };
+        label: 'Critical'};
     case 'warning':
       return {
         color: '#FFD700',
         backgroundColor: 'rgba(255,215,0,0.14)',
         borderColor: 'rgba(255,215,0,0.3)',
-        label: 'Warning',
-      };
+        label: 'Warning'};
     default:
       return {
         color: '#00C48C',
         backgroundColor: 'rgba(34,197,94,0.14)',
         borderColor: 'rgba(34,197,94,0.3)',
-        label: 'Healthy',
-      };
+        label: 'Healthy'};
   }
 }
 
@@ -302,8 +291,7 @@ function StatusBadge({ status }: { status: ModuleStatus }) {
     live: { color: '#00C48C', label: 'LIVE', Icon: CheckCircle },
     degraded: { color: '#FFB800', label: 'DEGRADED', Icon: AlertCircle },
     offline: { color: '#FF4D4D', label: 'OFFLINE', Icon: XCircle },
-    stub: { color: '#6A6A6A', label: 'STUB', Icon: Clock },
-  };
+    stub: { color: '#6A6A6A', label: 'STUB', Icon: Clock }};
   const { color, label, Icon } = config[status];
   return (
     <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
@@ -344,8 +332,7 @@ function ModuleCard({ module, index }: { module: SystemModule; index: number }) 
       delay: index * 40,
       useNativeDriver: true,
       tension: 80,
-      friction: 12,
-    }).start();
+      friction: 12}).start();
   }, [slideAnim, index]);
 
   const Icon = module.icon;
@@ -353,8 +340,7 @@ function ModuleCard({ module, index }: { module: SystemModule; index: number }) 
   return (
     <Animated.View style={[styles.moduleCard, {
       opacity: slideAnim,
-      transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-    }]}>
+      transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }]}]}>
       <TouchableOpacity
         onPress={() => setExpanded(!expanded)}
         activeOpacity={0.7}
@@ -374,8 +360,7 @@ function ModuleCard({ module, index }: { module: SystemModule; index: number }) 
               styles.severityBadge,
               {
                 backgroundColor: severityPalette.backgroundColor,
-                borderColor: severityPalette.borderColor,
-              },
+                borderColor: severityPalette.borderColor},
             ]}>
               <View style={[styles.severityBadgeDot, { backgroundColor: severityPalette.color }]} />
               <Text style={[styles.severityBadgeText, { color: severityPalette.color }]}>{severityPalette.label}</Text>
@@ -478,15 +463,13 @@ function DataFlowCard({ flow, index }: { flow: DataFlowDefinition; index: number
       delay: index * 60,
       useNativeDriver: true,
       tension: 80,
-      friction: 12,
-    }).start();
+      friction: 12}).start();
   }, [slideAnim, index]);
 
   return (
     <Animated.View style={[styles.flowCard, {
       opacity: slideAnim,
-      transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }],
-    }]}>
+      transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }]}]}>
       <TouchableOpacity
         onPress={() => setExpanded(!expanded)}
         activeOpacity={0.7}
@@ -523,8 +506,7 @@ function DataFlowCard({ flow, index }: { flow: DataFlowDefinition; index: number
                       styles.flowStepDot,
                       {
                         backgroundColor: severityPalette.color,
-                        shadowColor: severityPalette.color,
-                      },
+                        shadowColor: severityPalette.color},
                     ]} />
                     {i < flow.steps.length - 1 && (
                       <View style={[
@@ -540,8 +522,7 @@ function DataFlowCard({ flow, index }: { flow: DataFlowDefinition; index: number
                         styles.flowSeverityPill,
                         {
                           backgroundColor: severityPalette.backgroundColor,
-                          borderColor: severityPalette.borderColor,
-                        },
+                          borderColor: severityPalette.borderColor},
                       ]}>
                         <Text style={[styles.flowSeverityPillText, { color: severityPalette.color }]}>{severityPalette.label}</Text>
                       </View>
@@ -749,8 +730,7 @@ function buildDiagramNodes(): DiagramNode[] {
         icon: mod.icon,
         x: startX + col * NODE_GAP_X,
         y: DIAGRAM_PAD + yAccum + row * 80,
-        dependencies: mod.dependencies,
-      });
+        dependencies: mod.dependencies});
     });
   });
 
@@ -775,8 +755,7 @@ function DiagramConnectionLines({ nodes, offsetX, offsetY, scale }: { nodes: Dia
           fromY: node.y + NODE_H,
           toX: dep.x + NODE_W / 2,
           toY: dep.y,
-          color: node.layerColor,
-        });
+          color: node.layerColor});
       });
     });
     return lines;
@@ -803,8 +782,7 @@ function DiagramConnectionLines({ nodes, offsetX, offsetY, scale }: { nodes: Dia
               height: 2,
               backgroundColor: line.color + '35',
               transform: [{ rotate: `${angle}deg` }],
-              transformOrigin: '0 0',
-            }}
+              transformOrigin: '0 0'}}
           />
         );
       })}
@@ -831,8 +809,7 @@ function DiagramNodeView({ node, offsetX, offsetY, scale, onSelect, isSelected }
     dependencies: node.dependencies,
     dataFlow: '',
     icon: node.icon,
-    linesOfCode: 0,
-  });
+    linesOfCode: 0});
   const severityPalette = getSeverityPalette(severity);
   const pulseAnim = useRef(new Animated.Value(0.6)).current;
 
@@ -865,8 +842,7 @@ function DiagramNodeView({ node, offsetX, offsetY, scale, onSelect, isSelected }
           height: nh,
           borderColor: isSelected ? node.layerColor : node.layerColor + '50',
           borderWidth: isSelected ? 2 : 1,
-          backgroundColor: isSelected ? node.layerColor + '20' : Colors.surface,
-        },
+          backgroundColor: isSelected ? node.layerColor + '20' : Colors.surface},
       ]}
     >
       <View style={diagramStyles.nodeInner}>
@@ -909,8 +885,7 @@ function SystemDiagramMap() {
 
       const nextOffset = {
         x: lastOffset.current.x + event.translationX,
-        y: lastOffset.current.y + event.translationY,
-      };
+        y: lastOffset.current.y + event.translationY};
 
       offsetRef.current = nextOffset;
       setOffset(nextOffset);
@@ -1003,8 +978,7 @@ function SystemDiagramMap() {
                 diagramStyles.severityLegendItem,
                 {
                   backgroundColor: palette.backgroundColor,
-                  borderColor: palette.borderColor,
-                },
+                  borderColor: palette.borderColor},
               ]}
             >
               <View style={[diagramStyles.severityLegendDot, { backgroundColor: palette.color }]} />
@@ -1024,8 +998,7 @@ function SystemDiagramMap() {
                 diagramStyles.layerLabel,
                 {
                   top: label.y * scale + offset.y - 20,
-                  left: offset.x,
-                },
+                  left: offset.x},
               ]}
             >
               <View style={[diagramStyles.layerLabelDot, { backgroundColor: label.color }]} />
@@ -1175,52 +1148,44 @@ export default function SystemMapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   viewToggle: {
     flexDirection: 'row',
     marginHorizontal: 16,
     marginTop: 12,
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    padding: 4,
-  },
+    padding: 4},
   toggleBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1228,53 +1193,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 10,
-    gap: 6,
-  },
+    gap: 6},
   toggleBtnActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   toggleText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   toggleTextActive: {
-    color: Colors.background,
-  },
+    color: Colors.background},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   healthPanel: {
     margin: 16,
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   healthHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   healthTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   refreshBtn: {
-    padding: 6,
-  },
+    padding: 6},
   healthGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   healthItem: {
     flex: 1,
     minWidth: (SCREEN_WIDTH - 64) / 2 - 4,
@@ -1285,30 +1239,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     gap: 8,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   healthLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   healthDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   healthTimestamp: {
     fontSize: 10,
     color: Colors.textTertiary,
     marginTop: 10,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   statsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   statCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1316,41 +1265,34 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statNumber: {
     fontSize: 22,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
     marginTop: 20,
     marginBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   sectionSubtitle: {
     fontSize: 11,
     color: Colors.textTertiary,
     flex: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   layerSection: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   layerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1360,136 +1302,111 @@ const styles = StyleSheet.create({
     padding: 14,
     borderLeftWidth: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   layerHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   layerIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   layerName: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   layerCount: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   layerHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   layerBar: {
     width: 60,
     height: 4,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 2,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   layerBarFill: {
     height: '100%',
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   layerModules: {
     marginTop: 8,
-    gap: 6,
-  },
+    gap: 6},
   moduleCard: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   moduleCardInner: {
-    padding: 12,
-  },
+    padding: 12},
   moduleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   moduleHeaderBadges: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   moduleIconWrap: {
     width: 32,
     height: 32,
     borderRadius: 8,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   moduleInfo: {
-    flex: 1,
-  },
+    flex: 1},
   moduleName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   moduleFile: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginTop: 1,
-  },
+    marginTop: 1},
   moduleDetails: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   moduleDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   detailRow: {
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   detailLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   detailValue: {
     fontSize: 12,
     color: Colors.text,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'},
   depTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
-  },
+    gap: 4},
   depTag: {
     backgroundColor: Colors.primary + '15',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   depTagText: {
     fontSize: 10,
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   flowCard: {
     marginHorizontal: 16,
     marginBottom: 10,
@@ -1497,67 +1414,53 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   flowCardInner: {
-    padding: 14,
-  },
+    padding: 14},
   flowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   flowDot: {
     width: 12,
     height: 12,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   flowName: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   flowHeaderMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   flowCountBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   flowCountBadgeWarning: {
     backgroundColor: 'rgba(255,215,0,0.12)',
-    borderColor: 'rgba(255,215,0,0.28)',
-  },
+    borderColor: 'rgba(255,215,0,0.28)'},
   flowCountBadgeCritical: {
     backgroundColor: 'rgba(255,77,77,0.12)',
-    borderColor: 'rgba(255,77,77,0.28)',
-  },
+    borderColor: 'rgba(255,77,77,0.28)'},
   flowCountBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   flowStepCount: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   flowSteps: {
     marginTop: 14,
-    marginLeft: 6,
-  },
+    marginLeft: 6},
   flowStep: {
     flexDirection: 'row',
-    minHeight: 48,
-  },
+    minHeight: 48},
   flowStepLine: {
     width: 24,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   flowStepDot: {
     width: 10,
     height: 10,
@@ -1565,56 +1468,47 @@ const styles = StyleSheet.create({
     marginTop: 4,
     shadowOpacity: 0.35,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
-  },
+    shadowOffset: { width: 0, height: 0 }},
   flowStepConnector: {
     width: 2,
     flex: 1,
     marginTop: 2,
-    marginBottom: -2,
-  },
+    marginBottom: -2},
   flowStepContent: {
     flex: 1,
     paddingLeft: 8,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   flowStepTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-  },
+    gap: 8},
   flowStepNumber: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   flowStepText: {
     fontSize: 12,
     color: Colors.text,
     marginTop: 2,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   flowStepReason: {
     fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 6,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   flowSeverityPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   flowSeverityPillText: {
     fontSize: 9,
     fontWeight: '700' as const,
     letterSpacing: 0.3,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   severityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1622,53 +1516,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   severityBadgeDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   severityBadgeText: {
     fontSize: 9,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   pulsingDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   footer: {
     alignItems: 'center',
     paddingVertical: 24,
-    gap: 4,
-  },
+    gap: 4},
   footerText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
-});
+    color: Colors.textTertiary}});
 
 const diagramStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1677,8 +1561,7 @@ const diagramStyles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   toolBtn: {
     width: 36,
     height: 36,
@@ -1687,21 +1570,18 @@ const diagramStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   zoomLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
     minWidth: 40,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   toolDivider: {
     width: 1,
     height: 20,
     backgroundColor: Colors.border,
-    marginHorizontal: 4,
-  },
+    marginHorizontal: 4},
   legend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1711,8 +1591,7 @@ const diagramStyles = StyleSheet.create({
     gap: 8,
     justifyContent: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   severityLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1721,8 +1600,7 @@ const diagramStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   severityLegendItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1730,89 +1608,73 @@ const diagramStyles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   severityLegendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   severityLegendText: {
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   legendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   legendText: {
     fontSize: 9,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   canvasWrap: {
     flex: 1,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   canvas: {
     position: 'relative' as const,
     minWidth: '100%',
-    minHeight: '100%',
-  },
+    minHeight: '100%'},
   layerLabel: {
     position: 'absolute' as const,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    zIndex: 1,
-  },
+    zIndex: 1},
   layerLabelDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   layerLabelText: {
     fontSize: 9,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   node: {
     position: 'absolute' as const,
     borderRadius: 10,
     padding: 6,
-    zIndex: 10,
-  },
+    zIndex: 10},
   nodeInner: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   nodeTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   nodeStatusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   nodeLabel: {
     color: Colors.text,
     fontWeight: '600' as const,
     textAlign: 'center' as const,
-    lineHeight: 13,
-  },
+    lineHeight: 13},
   infoPanel: {
     position: 'absolute' as const,
     bottom: 0,
@@ -1824,68 +1686,55 @@ const diagramStyles = StyleSheet.create({
     borderLeftWidth: 4,
     padding: 16,
     paddingBottom: 24,
-    zIndex: 100,
-  },
+    zIndex: 100},
   infoPanelClose: {
     position: 'absolute' as const,
     top: 12,
     right: 12,
     zIndex: 10,
-    padding: 4,
-  },
+    padding: 4},
   infoPanelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   infoPanelTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   infoPanelLayer: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   infoPanelDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   infoPanelFile: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   infoPanelDeps: {
-    marginTop: 4,
-  },
+    marginTop: 4},
   infoPanelDepsLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   infoPanelDepTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
-  },
+    gap: 4},
   infoPanelDepTag: {
     backgroundColor: Colors.primary + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   infoPanelDepTagText: {
     fontSize: 10,
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,9 +8,7 @@ import {
   RefreshControl,
   Alert,
   Animated,
-  Switch,
-  ActivityIndicator,
-} from 'react-native';
+  Switch} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -34,11 +31,11 @@ import {
   Building2,
   Key,
   BarChart3,
-  Send,
-} from 'lucide-react-native';
+  Send} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const formatNumber = (n: number): string => {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
@@ -63,16 +60,14 @@ const SOURCE_ICONS: Record<string, { icon: typeof Globe; color: string }> = {
   sec_edgar: { icon: Shield, color: '#4A90D9' },
   google_places: { icon: Globe, color: '#00C48C' },
   opencorporates: { icon: Building2, color: '#F59E0B' },
-  crunchbase: { icon: Database, color: '#8B5CF6' },
-};
+  crunchbase: { icon: Database, color: '#8B5CF6' }};
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   new: { bg: '#1E3A5F', text: '#60A5FA', label: 'New' },
   verified: { bg: '#064E3B', text: '#34D399', label: 'Verified' },
   contacted: { bg: '#4C1D95', text: '#C4B5FD', label: 'Contacted' },
   invalid: { bg: '#7F1D1D', text: '#FCA5A5', label: 'Invalid' },
-  duplicate: { bg: '#78350F', text: '#FDE68A', label: 'Duplicate' },
-};
+  duplicate: { bg: '#78350F', text: '#FDE68A', label: 'Duplicate' }};
 
 type SyncTab = 'dashboard' | 'sources' | 'lenders' | 'jobs';
 
@@ -95,32 +90,28 @@ export default function LenderSyncScreen() {
       const { data, error } = await supabase.from('lender_sync_stats').select('*').limit(50);
       if (error) { console.log('[Supabase] lender_sync_stats error:', error.message); return null; }
       return data;
-    },
-  });
+    }});
   const configQuery = useQuery<any>({
     queryKey: ['lenderSync.getSyncConfig'],
     queryFn: async () => {
       const { data, error } = await supabase.from('lender_sync_config').select('*').limit(50);
       if (error) { console.log('[Supabase] lender_sync_config error:', error.message); return null; }
       return data;
-    },
-  });
+    }});
   const lendersQuery = useQuery<any>({
     queryKey: ['lenderSync.getSyncedLenders', { source: selectedSource, search: searchQuery }],
     queryFn: async () => {
       const { data, error } = await supabase.from('synced_lenders').select('*').limit(50);
       if (error) { console.log('[Supabase] synced_lenders error:', error.message); return null; }
       return data;
-    },
-  });
+    }});
   const jobsQuery = useQuery<any>({
     queryKey: ['lenderSync.getSyncJobs'],
     queryFn: async () => {
       const { data, error } = await supabase.from('lender_sync_jobs').select('*').limit(20);
       if (error) { console.log('[Supabase] lender_sync_jobs error:', error.message); return null; }
       return data;
-    },
-  });
+    }});
 
   const triggerSyncMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -142,8 +133,7 @@ export default function LenderSyncScreen() {
     onError: (err: Error) => {
       setSyncing(false);
       Alert.alert('Sync Failed', err.message);
-    },
-  });
+    }});
 
   const updateConfigMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -151,8 +141,7 @@ export default function LenderSyncScreen() {
       if (error) throw new Error(error.message);
       return { success: true };
     },
-    onSuccess: () => void configQuery.refetch(),
-  });
+    onSuccess: () => void configQuery.refetch()});
 
   const updateSourceMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -160,8 +149,7 @@ export default function LenderSyncScreen() {
       if (error) throw new Error(error.message);
       return { success: true };
     },
-    onSuccess: () => void configQuery.refetch(),
-  });
+    onSuccess: () => void configQuery.refetch()});
 
   const addQueryMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -169,8 +157,7 @@ export default function LenderSyncScreen() {
       if (error) throw new Error(error.message);
       return { success: true };
     },
-    onSuccess: () => { void configQuery.refetch(); setNewQuery(''); setShowAddQuery(false); },
-  });
+    onSuccess: () => { void configQuery.refetch(); setNewQuery(''); setShowAddQuery(false); }});
 
   const removeQueryMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -178,8 +165,7 @@ export default function LenderSyncScreen() {
       if (error) throw new Error(error.message);
       return { success: true };
     },
-    onSuccess: () => void configQuery.refetch(),
-  });
+    onSuccess: () => void configQuery.refetch()});
 
   const exportMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -188,8 +174,7 @@ export default function LenderSyncScreen() {
     },
     onSuccess: (data: any) => {
       Alert.alert('Export Complete', `${data.exported} lenders exported to email engine`);
-    },
-  });
+    }});
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (input: any) => {
@@ -202,8 +187,7 @@ export default function LenderSyncScreen() {
       Alert.alert('Deleted', `${data.deleted} records removed`);
       void lendersQuery.refetch();
       void statsQuery.refetch();
-    },
-  });
+    }});
 
   useEffect(() => {
     if (syncing) {
@@ -284,7 +268,7 @@ export default function LenderSyncScreen() {
       >
         <Animated.View style={[styles.syncButtonInner, { opacity: pulseAnim }]}>
           {syncing ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ShimmerIndicator color="#fff" size="small" />
           ) : (
             <RefreshCw size={22} color="#fff" />
           )}
@@ -564,7 +548,7 @@ export default function LenderSyncScreen() {
       </View>
 
       {lendersQuery.isLoading ? (
-        <ActivityIndicator color="#60A5FA" style={{ marginTop: 40 }} />
+        <ShimmerIndicator color="#60A5FA" style={{ marginTop: 40 }} />
       ) : (
         (lenders?.lenders || []).map((lender: any) => {
           const statusStyle = STATUS_STYLES[lender.status] || STATUS_STYLES.new;
@@ -630,7 +614,7 @@ export default function LenderSyncScreen() {
             <View key={job.id} style={styles.jobCard}>
               <View style={styles.jobHeader}>
                 {isRunning ? (
-                  <ActivityIndicator size="small" color="#60A5FA" />
+                  <ShimmerIndicator size="small" color="#60A5FA" />
                 ) : isFailed ? (
                   <XCircle size={18} color="#FF4D4D" />
                 ) : (
@@ -689,7 +673,7 @@ export default function LenderSyncScreen() {
             <Text style={styles.headerTitle}>Lender Auto-Sync</Text>
             <Text style={styles.headerSub}>Collect emails from APIs to database</Text>
           </View>
-          {syncing && <ActivityIndicator color="#60A5FA" />}
+          {syncing && <ShimmerIndicator color="#60A5FA" />}
         </View>
 
         <View style={styles.tabBar}>
@@ -819,5 +803,4 @@ const styles = StyleSheet.create({
   jobStatValue: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
   jobStatLabel: { color: Colors.textSecondary, fontSize: 13 },
   jobError: { gap: 4 },
-  jobErrorText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  jobErrorText: { color: Colors.textSecondary, fontSize: 13 }});

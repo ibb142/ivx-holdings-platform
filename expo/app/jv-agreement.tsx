@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -15,9 +14,7 @@ import {
   Dimensions,
   Modal,
   NativeScrollEvent,
-  NativeSyntheticEvent,
-  ActivityIndicator,
-} from 'react-native';
+  NativeSyntheticEvent} from "react-native";
 import { Platform as _FSPlatform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -50,8 +47,7 @@ import {
   ImageIcon,
   Camera,
   X,
-  Edit3,
-} from 'lucide-react-native';
+  Edit3} from 'lucide-react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Globe } from 'lucide-react-native';
@@ -65,6 +61,7 @@ import { syncToLandingPage } from '@/lib/landing-sync';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import type { JVAgreement, JVPartner, PoolTier } from '@/types/jv';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const JV_AGREEMENT_TYPES = [
   { id: 'equity_split', label: 'Equity Split', icon: '📊', desc: 'Partners share ownership proportional to contribution', color: '#4A90D9' },
@@ -91,8 +88,7 @@ const JV_CLAUSES: Record<string, { title: string; description: string }> = {
   deadlock: { title: 'Deadlock Resolution', description: 'In case of deadlock, parties shall engage mediator before arbitration.' },
   force_majeure: { title: 'Force Majeure', description: 'Neither party liable for delays caused by events beyond reasonable control.' },
   anti_dilution: { title: 'Anti-Dilution Protection', description: 'Partners protected against equity dilution from future capital raises.' },
-  waterfall: { title: 'Waterfall Distribution', description: 'Returns distributed in priority: 1) Return of capital, 2) Preferred return, 3) Promote split.' },
-};
+  waterfall: { title: 'Waterfall Distribution', description: 'Returns distributed in priority: 1) Return of capital, 2) Preferred return, 3) Promote split.' }};
 import {
   safePartners,
   safeProfitSplit,
@@ -101,8 +97,7 @@ import {
   formatJVCurrency as formatCurrency,
   calculateDefaultEndDate,
   generateJVNumber,
-  isExistingBackendId,
-} from '@/lib/jv-utils';
+  isExistingBackendId} from '@/lib/jv-utils';
 
 type ScreenMode = 'list' | 'create' | 'detail' | 'preview' | 'edit';
 
@@ -110,16 +105,14 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   active: { label: 'Live', color: '#00C48C', bg: '#00C48C20' },
   pending_review: { label: 'Pending Review', color: '#FFB800', bg: '#FFB80020' },
   completed: { label: 'Completed', color: '#4A90D9', bg: '#4A90D920' },
-  expired: { label: 'Expired', color: '#FF4D4D', bg: '#FF4D4D20' },
-};
+  expired: { label: 'Expired', color: '#FF4D4D', bg: '#FF4D4D20' }};
 
 const DEFAULT_STATUS = STATUS_CONFIG.active;
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; description: string }> = {
   lp: { label: 'LP (Limited Partner)', color: '#4A90D9', description: 'Contributes capital, limited liability, no management authority' },
   silent: { label: 'Silent Partner', color: '#9A9A9A', description: 'Invests capital only, no involvement in operations or decisions' },
-  co_investor: { label: 'Co-Investor', color: '#E879F9', description: 'Co-invests alongside lead, no management authority, shares returns' },
-};
+  co_investor: { label: 'Co-Investor', color: '#E879F9', description: 'Co-invests alongside lead, no management authority, shares returns' }};
 
 
 const POOL_TIER_TYPES: { id: PoolTier['type']; label: string; icon: string; color: string }[] = [
@@ -344,8 +337,7 @@ export default function JVAgreementScreen() {
     refetchOnMount: 'always' as const,
     staleTime: 1000 * 60,
     gcTime: 1000 * 60 * 60,
-    placeholderData: (previousData: { deals: any[]; total: number } | undefined) => previousData,
-  });
+    placeholderData: (previousData: { deals: any[]; total: number } | undefined) => previousData});
 
   useEffect(() => {
     if (backendDealsQuery.data) {
@@ -380,8 +372,7 @@ export default function JVAgreementScreen() {
           description: d.description || '',
           photos: safePhotos(d.photos).length > 0 ? safePhotos(d.photos) : undefined,
           published: d.published ?? false,
-          publishedAt: d.publishedAt ?? null,
-        }));
+          publishedAt: d.publishedAt ?? null}));
         const seenIds = new Set<string>();
         const dedupedDeals = backendDeals.filter(d => {
           if (seenIds.has(d.id)) {
@@ -430,8 +421,7 @@ export default function JVAgreementScreen() {
     legal: false,
     clauses: false,
     photos_section: true,
-    pool_tiers: true,
-  });
+    pool_tiers: true});
 
   const [formTitle, setFormTitle] = useState<string>('');
   const [formProjectName, setFormProjectName] = useState<string>('');
@@ -523,8 +513,7 @@ export default function JVAgreementScreen() {
       contribution: 0,
       equityShare: 0,
       location: '',
-      verified: false,
-    }]);
+      verified: false}]);
   }, [partners.length]);
 
   const removePartner = useCallback((index: number) => {
@@ -549,8 +538,7 @@ export default function JVAgreementScreen() {
       minInvestment: 0,
       currentRaised: 0,
       investorCount: 0,
-      status: 'open' as const,
-    }]);
+      status: 'open' as const}]);
   }, [formPoolTiers.length]);
 
   const removePoolTier = useCallback((index: number) => {
@@ -588,8 +576,7 @@ export default function JVAgreementScreen() {
       contribution: 0,
       equityShare: 50,
       location: 'New York, USA',
-      verified: true,
-    }]);
+      verified: true}]);
     setFormPoolTiers([
       { id: 'pool-jv', label: 'JV Investment', type: 'jv_direct', targetAmount: 1000000, minInvestment: 100, currentRaised: 0, investorCount: 0, status: 'open' },
 
@@ -651,8 +638,7 @@ export default function JVAgreementScreen() {
         allowsMultipleSelection: true,
         selectionLimit: remaining,
         quality: 0.85,
-        exif: false,
-      });
+        exif: false});
       if (!result.canceled && result.assets) {
         const newUris = result.assets.map(a => a.uri);
         setFormPhotos(prev => {
@@ -681,8 +667,7 @@ export default function JVAgreementScreen() {
       const result = await ImagePicker.launchCameraAsync({
         quality: 0.85,
         allowsEditing: false,
-        exif: false,
-      });
+        exif: false});
       if (!result.canceled && result.assets) {
         const firstAsset = result.assets[0];
         if (firstAsset) setFormPhotos(prev => [...prev, firstAsset.uri].slice(0, 8));
@@ -885,16 +870,14 @@ export default function JVAgreementScreen() {
       const { data, error } = await upsertJVDeal({
         ...payload,
         published: true,
-        publishedAt: new Date().toISOString(),
-      });
+        publishedAt: new Date().toISOString()});
       if (error) {
         console.error('[JV] saveAndPublish ERROR:', error.message);
         throw error;
       }
       console.log('[JV] saveAndPublish success — id:', (data as Record<string, unknown>)?.id);
       return data as Record<string, unknown>;
-    },
-  });
+    }});
 
   const saveMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
@@ -906,8 +889,7 @@ export default function JVAgreementScreen() {
       }
       console.log('[JV] Saved to backend:', (data as Record<string, unknown>)?.id);
       return data as Record<string, unknown>;
-    },
-  });
+    }});
 
   const buildJVPayload = useCallback((agreement: JVAgreement, skipLocalPhotos = false) => {
     const payloadPartners = safePartners(agreement.partners);
@@ -942,12 +924,10 @@ export default function JVAgreementScreen() {
         contribution: Number(p?.contribution) || 0,
         equityShare: Number(p?.equityShare) || 0,
         location: String(p?.location || ''),
-        verified: Boolean(p?.verified),
-      })),
+        verified: Boolean(p?.verified)})),
       profitSplit: payloadProfitSplit.map((ps: { partnerId: string; percentage: number }) => ({
         partnerId: String(ps?.partnerId || ''),
-        percentage: Number(ps?.percentage) || 0,
-      })),
+        percentage: Number(ps?.percentage) || 0})),
       startDate: agreement.startDate || today,
       endDate: agreement.endDate || threeYearsLater,
       propertyAddress: agreement.propertyAddress || undefined,
@@ -961,8 +941,7 @@ export default function JVAgreementScreen() {
       managementFee: Number(agreement.managementFee) || 2,
       performanceFee: Number(agreement.performanceFee) || 20,
       minimumHoldPeriod: Number(agreement.minimumHoldPeriod) || 12,
-      description: String(agreement.description || ''),
-    };
+      description: String(agreement.description || '')};
 
     if (filteredPhotos.length > 0) {
       payload.photos = filteredPhotos;
@@ -979,8 +958,7 @@ export default function JVAgreementScreen() {
         maxInvestors: t?.maxInvestors ? Number(t.maxInvestors) : undefined,
         currentRaised: Number(t?.currentRaised) || 0,
         investorCount: Number(t?.investorCount) || 0,
-        status: (validTierStatuses.includes(t?.status as any) ? t.status : 'open') as 'open' | 'closed' | 'filled',
-      }));
+        status: (validTierStatuses.includes(t?.status as any) ? t.status : 'open') as 'open' | 'closed' | 'filled'}));
     }
 
     return payload;
@@ -1031,8 +1009,7 @@ export default function JVAgreementScreen() {
         const { data: updateData, error: updateErr } = await updateJVDeal(idToUpdate, {
           ...payload,
           published: true,
-          publishedAt: new Date().toISOString(),
-        });
+          publishedAt: new Date().toISOString()});
         if (updateErr) {
           console.error('[JV] Combined update+publish ERROR:', updateErr.message);
           throw updateErr;
@@ -1075,8 +1052,7 @@ export default function JVAgreementScreen() {
               id: backendId || agreement.id,
               ...(didPublish
                 ? { status: 'active' as JVAgreement['status'], published: true, publishedAt: new Date().toISOString() }
-                : {}),
-            }
+                : {})}
           : a
       );
       return updated;
@@ -1120,8 +1096,7 @@ export default function JVAgreementScreen() {
         photos: finalPhotos,
         partners: safePartners(agreement.partners),
         profitSplit: safeProfitSplit(agreement.profitSplit) as any,
-        poolTiers: safePoolTiers(agreement.poolTiers),
-      });
+        poolTiers: safePoolTiers(agreement.poolTiers)});
     }
 
     setIsPublishing(false);
@@ -1146,8 +1121,7 @@ export default function JVAgreementScreen() {
           {
             text: 'Go to Invest',
             style: 'default',
-            onPress: () => router.push('/(tabs)/invest' as any),
-          },
+            onPress: () => router.push('/(tabs)/invest' as any)},
           { text: 'Stay Here', style: 'cancel' },
         ]
       );
@@ -1235,8 +1209,7 @@ export default function JVAgreementScreen() {
       managementFee: parseFloat(formManagementFee) || 2,
       performanceFee: parseFloat(formPerformanceFee) || 20,
       minimumHoldPeriod: parseInt(formMinHold) || 12,
-      description: formDescription.trim(),
-    };
+      description: formDescription.trim()};
   }, [formTitle, formProjectName, formTotalInvestment, formCurrency, formType, formDescription, formPropertyAddress, formExpectedROI, formDistribution, formExitStrategy, formGoverningLaw, formDisputeResolution, formConfidentiality, formNonCompete, formManagementFee, formPerformanceFee, formMinHold, formStartDate, formEndDate, partners, formPhotos, formPoolTiers, editingAgreementId]);
 
   const publishLockRef = useRef<boolean>(false);
@@ -1476,8 +1449,7 @@ export default function JVAgreementScreen() {
             partners: safePartners(agreement.partners),
             profitSplit: safeProfitSplit(agreement.profitSplit) as any,
             poolTiers: safePoolTiers(agreement.poolTiers),
-            photos: safePhotos(agreement.photos).length > 0 ? safePhotos(agreement.photos) : undefined,
-          };
+            photos: safePhotos(agreement.photos).length > 0 ? safePhotos(agreement.photos) : undefined};
           setSelectedAgreement(safeAg);
           setMode('detail');
         }}
@@ -1661,7 +1633,7 @@ export default function JVAgreementScreen() {
         <View style={st.emptyState}>
           {backendDealsQuery.isLoading || backendDealsQuery.isFetching ? (
             <>
-              <ActivityIndicator size="large" color="#FFD700" />
+              <ShimmerIndicator size="large" color="#FFD700" />
               <Text style={st.emptyTitle}>Loading Deals...</Text>
               <Text style={st.emptySubtitle}>Connecting to server{Platform.OS !== 'web' ? ' (mobile)' : ''}...</Text>
             </>
@@ -2407,7 +2379,7 @@ export default function JVAgreementScreen() {
 
       {isUploadingPhotos && (
         <View style={st.uploadProgressBar}>
-          <ActivityIndicator size="small" color={Colors.primary} />
+          <ShimmerIndicator size="small" color={Colors.primary} />
           <Text style={st.uploadProgressText}>{uploadProgress || 'Uploading photos...'}</Text>
         </View>
       )}
@@ -2762,6 +2734,5 @@ const st = StyleSheet.create({
   poolFormSummaryLabel: { color: Colors.textTertiary, fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 3 },
   poolFormSummaryValue: { color: '#FFD700', fontSize: 18, fontWeight: '900' as const },
   poolFormSummaryDivider: { width: 1, height: 32, backgroundColor: Colors.surfaceBorder },
-  poolTierFormCard: { backgroundColor: Colors.backgroundSecondary, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: Colors.surfaceBorder, borderLeftWidth: 3 },
-});
+  poolTierFormCard: { backgroundColor: Colors.backgroundSecondary, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: Colors.surfaceBorder, borderLeftWidth: 3 }});
 

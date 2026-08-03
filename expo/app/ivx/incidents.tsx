@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -10,8 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
-  type ListRenderItem,
-} from 'react-native';
+  type ListRenderItem} from "react-native";
 import { Stack } from 'expo-router';
 import {
   AlertTriangle,
@@ -25,12 +23,12 @@ import {
   Rocket,
   ShieldAlert,
   ShieldCheck,
-  Undo2,
-} from 'lucide-react-native';
+  Undo2} from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { renderSafeViewChildren } from '@/components/SafeViewChildren';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type IncidentStatus =
   | 'open'
@@ -139,8 +137,7 @@ async function postIncidentAction(id: string, action: 'diagnose' | 'stage' | 're
   const res = await fetch(`${base}/api/ivx/incidents/${id}/${action}`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify(body ?? {}),
-  });
+    body: JSON.stringify(body ?? {})});
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
   if (!res.ok || json.ok === false) throw new Error(json.error ?? `HTTP ${res.status}`);
   return json;
@@ -152,8 +149,7 @@ async function triggerRollback(): Promise<void> {
   const res = await fetch(`${base}/api/ivx/production-guard/rollback`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ reason: 'Manual owner trigger from Incidents screen.' }),
-  });
+    body: JSON.stringify({ reason: 'Manual owner trigger from Incidents screen.' })});
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
   if (!res.ok || json.ok === false) throw new Error(json.error ?? `HTTP ${res.status}`);
 }
@@ -350,7 +346,7 @@ function ActionButton({ icon, label, onPress, loading, variant }: ActionButtonPr
       style={[styles.actionBtn, variant === 'primary' && styles.actionBtnPrimary, loading && styles.actionBtnDisabled]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={variant === 'primary' ? Colors.background : Colors.text} />
+        <ShimmerIndicator size="small" color={variant === 'primary' ? Colors.background : Colors.text} />
       ) : (
         <View style={styles.actionBtnInner}>
           {safeIcon}
@@ -379,7 +375,7 @@ function HealthBanner({ health, onRollback, rolling }: { health: ProductionHealt
       </View>
       {(critical || degraded) && (
         <Pressable onPress={onRollback} disabled={rolling} style={styles.rollbackBtn}>
-          {rolling ? <ActivityIndicator size="small" color={Colors.text} /> : <Undo2 size={14} color={Colors.text} />}
+          {rolling ? <ShimmerIndicator size="small" color={Colors.text} /> : <Undo2 size={14} color={Colors.text} />}
           <Text style={styles.rollbackBtnText}>Rollback</Text>
         </Pressable>
       )}
@@ -395,14 +391,12 @@ function IncidentsScreen() {
   const { data: incidents = [], isLoading, isRefetching, refetch, error } = useQuery<Incident[]>({
     queryKey: ['ivx-incidents'],
     queryFn: fetchIncidents,
-    refetchInterval: 15_000,
-  });
+    refetchInterval: 15_000});
 
   const { data: health = null } = useQuery<ProductionHealth | null>({
     queryKey: ['ivx-production-health'],
     queryFn: fetchHealth,
-    refetchInterval: 20_000,
-  });
+    refetchInterval: 20_000});
 
   const rollbackMutation = useMutation({
     mutationFn: triggerRollback,
@@ -411,8 +405,7 @@ function IncidentsScreen() {
       void qc.invalidateQueries({ queryKey: ['ivx-incidents'] });
       void qc.invalidateQueries({ queryKey: ['ivx-production-health'] });
     },
-    onError: (err: Error) => Alert.alert('Rollback failed', err.message),
-  });
+    onError: (err: Error) => Alert.alert('Rollback failed', err.message)});
 
   const handleToggle = useCallback((id: string) => {
     setExpanded((prev) => (prev === id ? null : id));
@@ -485,7 +478,7 @@ function IncidentsScreen() {
       <Stack.Screen options={SCREEN_OPTIONS} />
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading incidents…</Text>
         </View>
       ) : incidents.length === 0 ? (
@@ -594,5 +587,4 @@ const styles = StyleSheet.create({
   lifecycleRow: { gap: 2 },
   lifecycleTime: { color: Colors.subtitle ?? '#94a3b8', fontSize: 10 },
   lifecycleEvent: { color: Colors.text, fontSize: 12, fontWeight: '600' as const },
-  lifecycleDetail: { color: Colors.subtitle ?? '#94a3b8', fontSize: 11 },
-});
+  lifecycleDetail: { color: Colors.subtitle ?? '#94a3b8', fontSize: 11 }});

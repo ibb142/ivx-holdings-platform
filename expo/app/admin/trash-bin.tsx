@@ -1,16 +1,13 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
   RefreshControl,
-  ActivityIndicator,
   TextInput,
-  Modal,
-} from 'react-native';
+  Modal} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -23,12 +20,12 @@ import {
   DollarSign,
   Clock,
   AlertTriangle,
-  Inbox,
-} from 'lucide-react-native';
+  Inbox} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchTrashDeals, restoreFromTrash, permanentlyDeleteJVDeal } from '@/lib/jv-storage';
 import { formatCurrency } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface TrashedDeal {
   id: string;
@@ -63,8 +60,7 @@ export default function TrashBinScreen() {
       console.log('[Trash Bin] Found', result.deals.length, 'trashed deals');
       return { deals: result.deals as TrashedDeal[], total: result.total };
     },
-    staleTime: 1000 * 10,
-  });
+    staleTime: 1000 * 10});
 
   const restoreMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -81,8 +77,7 @@ export default function TrashBinScreen() {
     onError: (err: Error) => {
       console.error('[Trash Bin] Restore error:', err);
       Alert.alert('Error', 'Failed to restore deal: ' + err.message);
-    },
-  });
+    }});
 
   const permanentDeleteMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -102,8 +97,7 @@ export default function TrashBinScreen() {
     onError: (err: Error) => {
       console.error('[Trash Bin] Permanent delete error:', err);
       Alert.alert('Error', 'Failed to delete deal: ' + err.message);
-    },
-  });
+    }});
 
   const invalidateAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['jv-trash-bin'] });
@@ -137,8 +131,7 @@ export default function TrashBinScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Restore',
-          onPress: () => restoreMutation.mutate({ id: deal.id }),
-        },
+          onPress: () => restoreMutation.mutate({ id: deal.id })},
       ]
     );
   }, [restoreMutation]);
@@ -213,7 +206,7 @@ export default function TrashBinScreen() {
 
           {trashQuery.isLoading ? (
             <View style={styles.centerWrap}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.centerText}>Loading trash...</Text>
             </View>
           ) : filteredDeals.length === 0 ? (
@@ -335,7 +328,7 @@ export default function TrashBinScreen() {
                 disabled={permanentDeleteMutation.isPending || deleteConfirmText.trim().toUpperCase() !== (deleteTarget?.projectName || deleteTarget?.title || '').trim().toUpperCase()}
               >
                 {permanentDeleteMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ShimmerIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.deleteModalConfirmText}>Delete Forever</Text>
                 )}
@@ -351,11 +344,9 @@ export default function TrashBinScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -363,39 +354,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerRight: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: '#FF4D4D15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCount: {
     color: '#FF4D4D',
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -406,18 +391,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFB80010',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FFB80025',
-  },
+    borderColor: '#FFB80025'},
   warningText: {
     flex: 1,
     color: '#FFB800',
     fontSize: 12,
     fontWeight: '500' as const,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -428,24 +410,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   centerWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   centerText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   emptyIcon: {
     width: 100,
     height: 100,
@@ -453,19 +431,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   emptyTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptySubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     textAlign: 'center',
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   dealCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
@@ -475,28 +450,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FF4D4D20',
     borderLeftWidth: 3,
-    borderLeftColor: '#FF4D4D40',
-  },
+    borderLeftColor: '#FF4D4D40'},
   dealHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   dealTitleWrap: {
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   dealProjectName: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dealTitle: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   trashedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -504,46 +474,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: '#FF4D4D18',
-  },
+    backgroundColor: '#FF4D4D18'},
   trashedBadgeText: {
     color: '#FF4D4D',
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   infoText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    flex: 1,
-  },
+    flex: 1},
   metricsRow: {
     flexDirection: 'row',
     gap: 16,
     marginBottom: 12,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   metric: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   metricValue: {
     color: Colors.text,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dealActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   restoreBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -554,13 +516,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#00C48C15',
     borderWidth: 1,
-    borderColor: '#00C48C30',
-  },
+    borderColor: '#00C48C30'},
   restoreBtnText: {
     color: '#00C48C',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   permDeleteBtn: {
     width: 44,
     alignItems: 'center',
@@ -568,15 +528,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#FF4D4D10',
     borderWidth: 1,
-    borderColor: '#FF4D4D25',
-  },
+    borderColor: '#FF4D4D25'},
   deleteOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-  },
+    padding: 24},
   deleteModal: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
@@ -584,8 +542,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     borderWidth: 1,
-    borderColor: '#FF4D4D30',
-  },
+    borderColor: '#FF4D4D30'},
   deleteIconWrap: {
     alignSelf: 'center',
     width: 64,
@@ -594,30 +551,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF4D4D15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   deleteModalTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
     textAlign: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   deleteModalSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   deleteModalDealName: {
     color: '#FF4D4D',
     fontSize: 16,
     fontWeight: '800' as const,
     textAlign: 'center',
     marginBottom: 16,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   deleteConfirmInput: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
@@ -627,37 +580,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FF4D4D40',
     textAlign: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   deleteModalActions: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   deleteModalCancel: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: Colors.backgroundSecondary,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deleteModalCancelText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   deleteModalConfirm: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: '#FF4D4D',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deleteModalConfirmDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   deleteModalConfirmText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
@@ -11,8 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Bug,
   Wrench,
@@ -31,8 +29,7 @@ import {
   History,
   ListPlus,
   Send,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -43,9 +40,9 @@ import {
   REPORT_SECTION_ORDER,
   type DailyExecutiveReport,
   type ReportSection,
-  type ReportHistoryEntry,
-} from '@/src/modules/ivx-developer/dailyReportService';
+  type ReportHistoryEntry} from '@/src/modules/ivx-developer/dailyReportService';
 import { convertIdeaToTask } from '@/src/modules/ivx-developer/ideaTaskService';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -66,16 +63,14 @@ const SECTION_ICONS: Record<string, React.ReactNode> = {
   landingRecommendations: <Globe size={15} color={Colors.info} />,
   competitorObservations: <Telescope size={15} color={Colors.warning} />,
   revenueOpportunities: <TrendingUp size={15} color={Colors.success} />,
-  nextBestActions: <ListChecks size={15} color={Colors.primary} />,
-};
+  nextBestActions: <ListChecks size={15} color={Colors.primary} />};
 
 function SectionCard({
   icon,
   section,
   reportDate,
   onConvert,
-  onSend,
-}: {
+  onSend}: {
   icon: React.ReactNode;
   section: ReportSection;
   reportDate: string;
@@ -140,22 +135,19 @@ function DailyReportContent() {
   const reportQuery = useQuery<DailyExecutiveReport | null>({
     queryKey: ['ivx-daily-report'],
     queryFn: getDailyReport,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const historyQuery = useQuery<ReportHistoryEntry[]>({
     queryKey: ['ivx-daily-report-history'],
     queryFn: getDailyReportHistory,
-    enabled: historyOpen,
-  });
+    enabled: historyOpen});
 
   const regenerate = useMutation({
     mutationFn: generateDailyReport,
     onSuccess: (data) => {
       queryClient.setQueryData(['ivx-daily-report'], data);
       void queryClient.invalidateQueries({ queryKey: ['ivx-daily-report-history'] });
-    },
-  });
+    }});
 
   const data = reportQuery.data ?? null;
   const onRefresh = useCallback(() => { void reportQuery.refetch(); }, [reportQuery]);
@@ -169,8 +161,7 @@ function DailyReportContent() {
         sectionTitle: section.title,
         findingTitle: finding.title,
         findingDetail: finding.detail,
-        reportDate: data?.reportDate ?? new Date().toISOString().slice(0, 10),
-      }).then(() => {
+        reportDate: data?.reportDate ?? new Date().toISOString().slice(0, 10)}).then(() => {
         setConvertNote(`Saved as task: ${finding.title}`);
       }).catch((err: unknown) => {
         setConvertNote(err instanceof Error ? err.message : 'Could not save task.');
@@ -192,8 +183,7 @@ function DailyReportContent() {
       ].join('\n');
       router.push({
         pathname: '/admin/ivx-developer-workspace',
-        params: { seniorGoal: goal, seniorPlan: plan, seniorSource: section.title },
-      } as never);
+        params: { seniorGoal: goal, seniorPlan: plan, seniorSource: section.title }} as never);
     },
     [router],
   );
@@ -241,7 +231,7 @@ function DailyReportContent() {
           disabled={regenerate.isPending}
         >
           {regenerate.isPending ? (
-            <ActivityIndicator size="small" color={Colors.black} />
+            <ShimmerIndicator size="small" color={Colors.black} />
           ) : (
             <>
               <RefreshCw size={15} color={Colors.black} />
@@ -263,7 +253,7 @@ function DailyReportContent() {
       {historyOpen ? (
         <View style={styles.card}>
           {historyQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (historyQuery.data?.length ?? 0) > 0 ? (
             historyQuery.data!.map((entry) => (
               <View key={entry.reportId} style={styles.historyRow}>
@@ -335,7 +325,7 @@ function DailyReportContent() {
       ) : (
         <View style={styles.card}>
           {reportQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyNote}>
               {reportQuery.error instanceof Error ? reportQuery.error.message : 'No report yet — generate today&apos;s report.'}
@@ -396,5 +386,4 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4, borderWidth: 1, borderColor: Colors.border },
   searchInput: { flex: 1, fontSize: 14, color: Colors.text, paddingVertical: 10 },
   toast: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.card, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: Colors.success },
-  toastText: { flex: 1, fontSize: 12.5, fontWeight: '600' as const, color: Colors.text },
-});
+  toastText: { flex: 1, fontSize: 12.5, fontWeight: '600' as const, color: Colors.text }});

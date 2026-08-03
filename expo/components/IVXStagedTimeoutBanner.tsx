@@ -61,8 +61,7 @@ export function IVXStagedTimeoutBanner({
   lastSuccessfulCheckpoint,
   onRetry,
   onCancel,
-  onQueryBackendStatus,
-}: IVXStagedTimeoutBannerProps): React.JSX.Element | null {
+  onQueryBackendStatus}: IVXStagedTimeoutBannerProps): React.JSX.Element | null {
   const [stage, setStage] = useState<TimeoutStage>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
@@ -166,8 +165,7 @@ export function IVXStagedTimeoutBanner({
     appVersion,
     buildNumber,
     commitSha,
-    elapsedMs,
-  };
+    elapsedMs};
 
   // Stage-specific styling
   const stageConfig: Record<TimeoutStage, { color: string; bg: string; icon: typeof Clock; label: string }> = {
@@ -176,8 +174,7 @@ export function IVXStagedTimeoutBanner({
     retrying: { color: Colors.blue, bg: '#001a2a', icon: RefreshCw, label: `Retrying… (${retryCount})` },
     checking_status: { color: Colors.blue, bg: '#001a2a', icon: Activity, label: 'Checking backend status…' },
     failed: { color: Colors.red, bg: '#2a0000', icon: AlertTriangle, label: 'Request timed out' },
-    cancelled: { color: '#888', bg: '#1a1a1a', icon: X, label: 'Cancelled' },
-  };
+    cancelled: { color: '#888', bg: '#1a1a1a', icon: X, label: 'Cancelled' }};
 
   const cfg = stageConfig[stage];
 
@@ -240,75 +237,59 @@ const styles = StyleSheet.create({
     padding: 14,
     marginHorizontal: 16,
     marginBottom: 8,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   headerText: {
     fontSize: 14,
     fontWeight: '700' as const,
     marginLeft: 8,
-    flex: 1,
-  },
+    flex: 1},
   closeButton: {
-    padding: 4,
-  },
+    padding: 4},
   evidenceContainer: {
     marginTop: 10,
     padding: 10,
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   evidenceTitle: {
     color: '#ccc',
     fontSize: 12,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   evidenceLine: {
     color: '#999',
     fontSize: 11,
     fontFamily: 'monospace',
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   actionsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 10,
-  },
+    marginTop: 10},
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
-    gap: 6,
-  },
+    gap: 6},
   cancelButton: {
-    backgroundColor: 'rgba(255,77,77,0.15)',
-  },
+    backgroundColor: 'rgba(255,77,77,0.15)'},
   retryButton: {
-    backgroundColor: 'rgba(255,215,0,0.15)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.15)'},
   dismissButton: {
-    backgroundColor: 'rgba(136,136,136,0.15)',
-  },
+    backgroundColor: 'rgba(136,136,136,0.15)'},
   cancelText: {
     color: Colors.red,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   retryText: {
     color: Colors.gold,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dismissText: {
     color: '#888',
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

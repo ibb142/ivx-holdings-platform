@@ -8,8 +8,7 @@ import {
   Share,
   Platform,
   Animated,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -41,8 +40,7 @@ import {
   AlertCircle,
   Circle,
   Clipboard as ClipboardIcon,
-  ClipboardCopy,
-} from 'lucide-react-native';
+  ClipboardCopy} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
@@ -51,8 +49,7 @@ import {
   FUNCTIONALITY_REGISTRY,
   getTotalFeatures,
   getTotalModules,
-  getActiveFeatures,
-} from '@/mocks/functionality-registry';
+  getActiveFeatures} from '@/mocks/functionality-registry';
 
 const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string }>> = {
   Lock,
@@ -72,8 +69,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string
   Palette,
   LineChart,
   FileCheck,
-  Plug,
-};
+  Plug};
 
 interface IntegrationItem {
   id: string;
@@ -98,8 +94,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'critical',
     status: 'mock',
-    notes: 'Sign up at stripe.com. Use test keys first, then switch to live.',
-  },
+    notes: 'Sign up at stripe.com. Use test keys first, then switch to live.'},
   {
     id: 'plaid',
     service: 'Plaid (Bank Linking)',
@@ -112,8 +107,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'critical',
     status: 'mock',
-    notes: 'Sign up at plaid.com/dashboard. Start with sandbox for testing.',
-  },
+    notes: 'Sign up at plaid.com/dashboard. Start with sandbox for testing.'},
   {
     id: 'paypal',
     service: 'PayPal (Payments)',
@@ -125,8 +119,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'high',
     status: 'mock',
-    notes: 'Sign up at developer.paypal.com. Create REST API app.',
-  },
+    notes: 'Sign up at developer.paypal.com. Create REST API app.'},
   {
     id: 'apple_pay',
     service: 'Apple Pay',
@@ -137,8 +130,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'medium',
     status: 'mock',
-    notes: 'Requires Apple Developer Account. Configure in Xcode & Stripe dashboard.',
-  },
+    notes: 'Requires Apple Developer Account. Configure in Xcode & Stripe dashboard.'},
   {
     id: 'google_pay',
     service: 'Google Pay',
@@ -150,8 +142,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'medium',
     status: 'mock',
-    notes: 'Register at pay.google.com/business/console.',
-  },
+    notes: 'Register at pay.google.com/business/console.'},
   {
     id: 'firebase',
     service: 'Firebase (Auth + Push Notifications)',
@@ -164,8 +155,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'high',
     status: 'mock',
-    notes: 'Create project at console.firebase.google.com.',
-  },
+    notes: 'Create project at console.firebase.google.com.'},
   {
     id: 'kyc_provider',
     service: 'KYC Provider (Jumio / Onfido / Sumsub)',
@@ -177,8 +167,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'critical',
     status: 'mock',
-    notes: 'Choose Jumio, Onfido, or Sumsub. All three are supported. Currently using simulated verification.',
-  },
+    notes: 'Choose Jumio, Onfido, or Sumsub. All three are supported. Currently using simulated verification.'},
   {
     id: 'smtp',
     service: 'SMTP / Email Service (SendGrid / SES)',
@@ -192,8 +181,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'high',
     status: 'mock',
-    notes: 'SendGrid, AWS SES, or Mailgun. Email engine supports SMTP rotation.',
-  },
+    notes: 'SendGrid, AWS SES, or Mailgun. Email engine supports SMTP rotation.'},
   {
     id: 'sms',
     service: 'Twilio (SMS / Phone Verification)',
@@ -206,8 +194,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'high',
     status: 'mock',
-    notes: 'Sign up at twilio.com. Create Verify service for OTP.',
-  },
+    notes: 'Sign up at twilio.com. Create Verify service for OTP.'},
   {
     id: 'analytics_ext',
     service: 'Analytics (Mixpanel / Amplitude)',
@@ -217,8 +204,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'optional',
     status: 'partial',
-    notes: 'Built-in analytics is functional. External service optional for advanced insights.',
-  },
+    notes: 'Built-in analytics is functional. External service optional for advanced insights.'},
   {
     id: 'ivx_gateway',
     service: 'IVX AI Gateway (AI Assistant)',
@@ -230,8 +216,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'medium',
     status: 'ready',
-    notes: 'Already configured. Used for AI chat, admin content generation, and structured AI flows.',
-  },
+    notes: 'Already configured. Used for AI chat, admin content generation, and structured AI flows.'},
   {
     id: 'blockchain',
     service: 'Blockchain / Token Provider',
@@ -243,8 +228,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     ],
     priority: 'medium',
     status: 'mock',
-    notes: 'Deploy smart contract on Ethereum/Polygon. Use Infura or Alchemy for RPC.',
-  },
+    notes: 'Deploy smart contract on Ethereum/Polygon. Use Infura or Alchemy for RPC.'},
   {
     id: 'sec_edgar',
     service: 'SEC EDGAR (Public API)',
@@ -252,8 +236,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     keys: [],
     priority: 'optional',
     status: 'ready',
-    notes: 'Already integrated. Uses free SEC EDGAR public API. No keys needed.',
-  },
+    notes: 'Already integrated. Uses free SEC EDGAR public API. No keys needed.'},
 ];
 
 type TabType = 'features' | 'integrations';
@@ -272,8 +255,7 @@ export default function AppReportScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [fadeAnim]);
 
   const toggleModule = useCallback((moduleId: string) => {
@@ -315,8 +297,7 @@ export default function AppReportScreen() {
     try {
       await Share.share({
         title: 'IVXHOLDINGS App - Full Functionality & Integration Report',
-        message: report,
-      });
+        message: report});
     } catch (err) {
       console.log('Share error:', err);
     }
@@ -810,5 +791,4 @@ const styles = StyleSheet.create({
   instructionNote: { gap: 4 },
   footer: { paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: Colors.surfaceBorder, backgroundColor: Colors.background },
   footerText: { color: Colors.textTertiary, fontSize: 12, textAlign: 'center' },
-  footerDate: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 4 },
-});
+  footerDate: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 4 }});

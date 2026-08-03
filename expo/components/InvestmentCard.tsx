@@ -32,8 +32,7 @@ import {
   ScrollView,
   useWindowDimensions,
   LayoutAnimation,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import {
@@ -55,8 +54,7 @@ import {
   ChevronDown,
   CheckCircle2,
   AlertCircle,
-  Circle,
-} from 'lucide-react-native';
+  Circle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCount, compactCurrency } from '@/lib/reel-formatters';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
@@ -65,8 +63,7 @@ import {
   type TimelineStage,
   type TimelineStageStatus,
   getTimelineStatusColor,
-  formatTimelineDate,
-} from '@/lib/timeline-stages';
+  formatTimelineDate} from '@/lib/timeline-stages';
 import { getPathwayBadges, getPrimaryCTALabel, type PathwayBadge, type DealPathwayConfig } from '@/lib/deal-pathways';
 
 export interface InvestmentCardData {
@@ -137,8 +134,7 @@ function usePathwayChips(data: InvestmentCardData): CategoryChip[] {
     jv_enabled: data.jvEnabled ?? true,
     jv_status: (data.jvStatus as any) ?? 'JV_OPEN',
     buyer_enabled: data.buyerEnabled ?? true,
-    buyer_status: (data.buyerStatus as any) ?? 'BUYER_OPEN',
-  };
+    buyer_status: (data.buyerStatus as any) ?? 'BUYER_OPEN'};
   const badges = getPathwayBadges(config);
   return badges.map((badge: PathwayBadge) => {
     const icon = badge.id === 'tokenized'
@@ -176,8 +172,7 @@ const InvestmentCard = memo(function InvestmentCard({
   onComment,
   onSave,
   onShare,
-  testIDPrefix = 'investment-card',
-}: InvestmentCardProps) {
+  testIDPrefix = 'investment-card'}: InvestmentCardProps) {
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = Math.min(screenWidth - 32, 520);
 
@@ -200,8 +195,7 @@ const InvestmentCard = memo(function InvestmentCard({
     jv_enabled: data.jvEnabled ?? true,
     jv_status: (data.jvStatus as any) ?? 'JV_OPEN',
     buyer_enabled: data.buyerEnabled ?? true,
-    buyer_status: (data.buyerStatus as any) ?? 'BUYER_OPEN',
-  });
+    buyer_status: (data.buyerStatus as any) ?? 'BUYER_OPEN'});
   const isActiveStatus = (data.status ?? 'published') === 'published';
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { x: number }; layoutMeasurement: { width: number } } }) => {
@@ -646,35 +640,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   carouselContainer: {
     position: 'relative',
     height: CAROUSEL_HEIGHT,
-    backgroundColor: '#0a0a0a',
-  },
+    backgroundColor: '#0a0a0a'},
   carousel: {
-    flex: 1,
-  },
+    flex: 1},
   imageFrame: {
     height: CAROUSEL_HEIGHT,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   image: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   noImage: {
     height: CAROUSEL_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   noImageText: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   statusBadge: {
     position: 'absolute',
     top: 12,
@@ -685,19 +672,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   statusDot: {
     width: 7,
     height: 7,
-    borderRadius: 3.5,
-  },
+    borderRadius: 3.5},
   statusText: {
     color: '#fff',
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   counterPill: {
     position: 'absolute',
     top: 12,
@@ -705,13 +689,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   counterText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dotsRow: {
     position: 'absolute',
     bottom: 10,
@@ -719,124 +701,102 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 4,
-  },
+    gap: 4},
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.35)'},
   dotActive: {
     width: 18,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   body: {
-    padding: 14,
-  },
+    padding: 14},
   title: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '800' as const,
     letterSpacing: -0.2,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   locationText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   // ── Investment summary panel ──
   summaryPanel: {
     flexDirection: 'row',
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 12,
     paddingVertical: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   summaryItem: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   summaryItemBorder: {
     borderRightWidth: 1,
-    borderRightColor: Colors.surfaceBorder,
-  },
+    borderRightColor: Colors.surfaceBorder},
   summaryIconRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   summaryLabel: {
     color: Colors.textTertiary,
     fontSize: 8,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   summaryValue: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   // ── Timeline summary ──
   timelineSummaryBox: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   timelineSummaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   timelineSummaryTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   timelineSummaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   timelineSummaryItem: {
-    flex: 1,
-  },
+    flex: 1},
   timelineSummaryLabel: {
     color: Colors.textTertiary,
     fontSize: 9,
     fontWeight: '600' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   timelineSummaryValue: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   progressBarContainer: {
     height: 4,
     backgroundColor: Colors.surfaceBorder,
     borderRadius: 2,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressBarFill: {
     height: '100%',
     backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   // ── Minimum investment row ──
   minInvestRow: {
     flexDirection: 'row',
@@ -845,36 +805,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   minInvestItem: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   minInvestDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   minInvestLabel: {
     color: Colors.textTertiary,
     fontSize: 9,
     fontWeight: '600' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.4,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   minInvestValue: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   // ── Category chips ──
   chipsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -883,28 +837,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.03)'},
   chipLabel: {
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   // ── Developer ──
   developerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   developerText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   developerBold: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   // ── Details button ──
   detailsBtn: {
     flexDirection: 'row',
@@ -916,142 +865,117 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     marginBottom: 10,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   detailsBtnText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   chevronRotated: {
-    transform: [{ rotate: '180deg' }],
-  },
+    transform: [{ rotate: '180deg' }]},
   // ── Details section ──
   detailsSection: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 14,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   detailsText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   // ── Details sub-sections ──
   detailsSubSection: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   detailsSubTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   detailsRow: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   detailsRisk: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 16,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   // ── Timeline stages ──
   stagesContainer: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   stagesTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   stageRow: {
     flexDirection: 'row',
-    minHeight: 60,
-  },
+    minHeight: 60},
   stageIconCol: {
     alignItems: 'center',
     marginRight: 12,
-    width: 20,
-  },
+    width: 20},
   stageConnector: {
     position: 'absolute',
     top: 20,
     bottom: -4,
     left: 8,
     width: 1.5,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   stageContent: {
     flex: 1,
-    paddingBottom: 16,
-  },
+    paddingBottom: 16},
   stageName: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   stageStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   stageStatusBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   stageStatusText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   stagePercent: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   stageDate: {
     color: Colors.textSecondary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   stageDatePending: {
     color: Colors.textTertiary,
     fontSize: 11,
     marginTop: 2,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   stageDateActual: {
     color: Colors.success,
     fontSize: 11,
     marginTop: 2,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   stageNote: {
     color: Colors.textTertiary,
     fontSize: 11,
     marginTop: 4,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   // ── CTA buttons ──
   ctaRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   viewDealBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -1061,40 +985,32 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   viewDealText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   investNowBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   investNowText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   // ── Action row ──
   actionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   actionCount: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

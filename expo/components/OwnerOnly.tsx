@@ -50,26 +50,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    gap: 12,
-  },
+    gap: 12},
   iconWrap: {
     width: 64,
     height: 64,
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.warning + '22',
-  },
+    backgroundColor: Colors.warning + '22'},
   title: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   reason: {
     fontSize: 14,
     color: Colors.textSecondary,
-    textAlign: 'center' as const,
-  },
-});
+    textAlign: 'center' as const}});
 
 export default OwnerOnly;

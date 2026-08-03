@@ -17,18 +17,15 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   useWindowDimensions,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -46,8 +43,7 @@ import {
   FileText,
   Loader2,
   Receipt,
-  Briefcase,
-} from 'lucide-react-native';
+  Briefcase} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -56,10 +52,10 @@ import {
   getPaymentStatus,
   formatCents,
   generateIdempotencyKey,
-  type PaymentConfigResponse,
-} from '@/lib/payment-api-client';
+  type PaymentConfigResponse} from '@/lib/payment-api-client';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
 import { useQuery } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface DealPathwayData {
   id: string;
@@ -109,15 +105,13 @@ export default function TokenizedParticipationPage() {
       const data = await res.json();
       return data.deal as DealPathwayData;
     },
-    enabled: !!slug,
-  });
+    enabled: !!slug});
 
   // Fetch payment config
   const { data: paymentConfig } = useQuery<PaymentConfigResponse>({
     queryKey: ['payment-config'],
     queryFn: fetchPaymentConfig,
-    staleTime: 60000,
-  });
+    staleTime: 60000});
 
   const sharePrice = dealData?.share_price || 50;
   const maxShares = useMemo(() => {
@@ -177,8 +171,7 @@ export default function TokenizedParticipationPage() {
         paymentMethod,
         shareCount,
         acceptedTerms: true,
-        idempotencyKey: generateIdempotencyKey(user.id, dealData.id),
-      });
+        idempotencyKey: generateIdempotencyKey(user.id, dealData.id)});
 
       if (result.ok && result.paymentId) {
         setPaymentId(result.paymentId);
@@ -209,7 +202,7 @@ export default function TokenizedParticipationPage() {
   if (dealLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading deal...</Text>
       </View>
     );
@@ -240,8 +233,7 @@ export default function TokenizedParticipationPage() {
       TOKENIZED_PAUSED: 'Temporarily Paused',
       TOKENIZED_FULLY_ALLOCATED: 'Fully Allocated',
       TOKENIZED_CLOSED: 'Closed',
-      TOKENIZED_NOT_AVAILABLE: 'Not Available',
-    };
+      TOKENIZED_NOT_AVAILABLE: 'Not Available'};
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -578,15 +570,13 @@ const styles = StyleSheet.create({
   loadingText: { color: '#909090', marginTop: 12, fontSize: 14 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A',
-  },
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A'},
   backButton: { padding: 4 },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   scrollContent: { padding: 16, paddingBottom: 40 },
   dealCard: {
     backgroundColor: '#141414', borderRadius: 16, padding: 20, marginBottom: 16,
-    borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    borderWidth: 1, borderColor: '#2A2A2A'},
   dealTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginBottom: 4 },
   dealLocation: { color: '#909090', fontSize: 14, marginBottom: 16 },
   dealMetrics: { flexDirection: 'row', alignItems: 'center' },
@@ -596,31 +586,27 @@ const styles = StyleSheet.create({
   metricDivider: { width: 1, height: 32, backgroundColor: '#2A2A2A' },
   sectionCard: {
     backgroundColor: '#141414', borderRadius: 16, padding: 20, marginBottom: 16,
-    borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    borderWidth: 1, borderColor: '#2A2A2A'},
   sectionTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 4 },
   sectionSubtitle: { color: '#909090', fontSize: 13, marginBottom: 16 },
   shareSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   shareButton: {
     width: 44, height: 44, borderRadius: 12, backgroundColor: '#1A1A1A',
-    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#2A2A2A'},
   shareCountBox: { flex: 1, alignItems: 'center', marginHorizontal: 16 },
   shareCountText: { color: '#FFFFFF', fontSize: 32, fontWeight: '700' },
   shareCountLabel: { color: '#909090', fontSize: 12, marginTop: 2 },
   quickAmounts: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 12 },
   quickAmountButton: {
     width: 48, height: 36, borderRadius: 8, backgroundColor: '#1A1A1A',
-    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#2A2A2A'},
   quickAmountActive: { borderColor: '#E6C200', backgroundColor: 'rgba(230,194,0,0.1)' },
   quickAmountText: { color: '#909090', fontSize: 14, fontWeight: '600' },
   quickAmountTextActive: { color: '#E6C200' },
   maxSharesInfo: { color: '#666666', fontSize: 12, textAlign: 'center' },
   totalCard: {
     backgroundColor: '#141414', borderRadius: 16, padding: 20, marginBottom: 16,
-    borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    borderWidth: 1, borderColor: '#2A2A2A'},
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { color: '#909090', fontSize: 14 },
   totalValue: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
@@ -629,8 +615,7 @@ const styles = StyleSheet.create({
   totalAmountValue: { color: '#E6C200', fontSize: 20, fontWeight: '700' },
   methodButton: {
     flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12,
-    backgroundColor: '#1A1A1A', marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    backgroundColor: '#1A1A1A', marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A'},
   methodActive: { borderColor: '#E6C200', backgroundColor: 'rgba(230,194,0,0.05)' },
   methodInfo: { flex: 1, marginLeft: 12 },
   methodTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
@@ -639,20 +624,17 @@ const styles = StyleSheet.create({
   termsContainer: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, marginBottom: 8 },
   checkbox: {
     width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#2A2A2A',
-    marginRight: 12, marginTop: 2, justifyContent: 'center', alignItems: 'center',
-  },
+    marginRight: 12, marginTop: 2, justifyContent: 'center', alignItems: 'center'},
   checkboxActive: { backgroundColor: '#E6C200', borderColor: '#E6C200' },
   termsText: { color: '#909090', fontSize: 13, flex: 1, lineHeight: 18 },
   termsLink: { color: '#E6C200', fontWeight: '600' },
   testModeBadge: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: 8, padding: 10, marginBottom: 16, gap: 6,
-  },
+    backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: 8, padding: 10, marginBottom: 16, gap: 6},
   testModeText: { color: '#F59E0B', fontSize: 12, fontWeight: '600' },
   submitButton: {
     backgroundColor: '#E6C200', borderRadius: 16, paddingVertical: 18,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-  },
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16},
   submitButtonDisabled: { backgroundColor: '#333333' },
   submitButtonText: { color: '#000000', fontSize: 18, fontWeight: '700' },
   riskDisclosure: { padding: 16, backgroundColor: '#0A0A0A', borderRadius: 12, marginBottom: 16 },
@@ -662,8 +644,7 @@ const styles = StyleSheet.create({
   unavailableTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginTop: 16, marginBottom: 8 },
   unavailableText: { color: '#909090', fontSize: 14, textAlign: 'center' },
   waitlistButton: {
-    marginTop: 24, backgroundColor: '#E6C200', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32,
-  },
+    marginTop: 24, backgroundColor: '#E6C200', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32},
   waitlistButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
   processingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   processingIconWrap: { marginBottom: 24 },
@@ -687,8 +668,7 @@ const styles = StyleSheet.create({
   successActions: { width: '100%', marginTop: 24 },
   successButton: {
     flexDirection: 'row', backgroundColor: '#E6C200', borderRadius: 16, paddingVertical: 16,
-    alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12,
-  },
+    alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12},
   successButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
   successSecondaryButton: { paddingVertical: 12, alignItems: 'center' },
   successSecondaryText: { color: '#909090', fontSize: 14 },
@@ -699,5 +679,4 @@ const styles = StyleSheet.create({
   retryButton: { backgroundColor: '#E6C200', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32, marginBottom: 12 },
   retryButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
   failedBackButton: { paddingVertical: 12 },
-  failedBackText: { color: '#909090', fontSize: 14 },
-});
+  failedBackText: { color: '#909090', fontSize: 14 }});

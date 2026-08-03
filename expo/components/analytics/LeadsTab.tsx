@@ -3,14 +3,12 @@ import { View, Text, StyleSheet } from 'react-native';
 import {
   Users, UserCheck, Clock, Flame, Eye, TrendingUp,
   Globe, MapPin, Fingerprint, Monitor, Smartphone,
-  Share2, Network,
-} from 'lucide-react-native';
+  Share2, Network} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import type { AcquisitionChannel } from '@/lib/analytics-compute';
 import {
   BLUE, GREEN, RED, ORANGE, PURPLE, CHART_COLORS, COUNTRY_FLAGS,
-  formatSeconds, shared,
-} from './analytics-shared';
+  formatSeconds, shared} from './analytics-shared';
 
 interface LeadsTabProps {
   totalLeads: number;
@@ -39,8 +37,7 @@ interface LeadsTabProps {
 
 export function LeadsTab({
   totalLeads, registeredUsers, waitlistLeads, uniqueSessions,
-  visitorIntent, geoZones, sessions, acquisition,
-}: LeadsTabProps) {
+  visitorIntent, geoZones, sessions, acquisition}: LeadsTabProps) {
   const highIntent = visitorIntent.highIntent;
   const warmIntent = visitorIntent.mediumIntent;
   const browsing = Math.max(uniqueSessions - highIntent - warmIntent, 0);
@@ -302,5 +299,4 @@ const s = StyleSheet.create({
   leadAcqBarFill: { height: 5, borderRadius: 3 },
   leadAcqCountWrap: { alignItems: 'flex-end', minWidth: 42 },
   leadAcqCount: { fontSize: 16, fontWeight: '900' as const, color: Colors.text },
-  leadAcqCountLabel: { fontSize: 8, fontWeight: '600' as const, color: Colors.textTertiary, textTransform: 'uppercase' as const },
-});
+  leadAcqCountLabel: { fontSize: 8, fontWeight: '600' as const, color: Colors.textTertiary, textTransform: 'uppercase' as const }});

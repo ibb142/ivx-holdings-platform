@@ -8,8 +8,7 @@ import {
   TextInput,
   Modal,
   Switch,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -62,8 +61,7 @@ import {
   Briefcase,
   User as UserIcon,
   LayoutDashboard,
-  Code,
-} from 'lucide-react-native';
+  Code} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -144,8 +142,7 @@ function OwnerIPAccessCard() {
           await clearOwnerIP();
           setStoredIP(null);
           Alert.alert('Deactivated', 'Trusted owner auto-access disabled. You will need to sign in next time.');
-        },
-      },
+        }},
     ]);
   };
 
@@ -212,30 +209,25 @@ const ipCardStyles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#4A90D930',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   iconWrap: {
     width: 42,
     height: 42,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   title: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   sub: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -243,23 +235,19 @@ const ipCardStyles = StyleSheet.create({
     backgroundColor: '#00C48C18',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00C48C',
-  },
+    backgroundColor: '#00C48C'},
   liveText: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: '#00C48C',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   actions: {
-    marginTop: 12,
-  },
+    marginTop: 12},
   activateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -267,17 +255,14 @@ const ipCardStyles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 10,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   activateBtnText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#000',
-  },
+    color: '#000'},
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   refreshBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -286,13 +271,11 @@ const ipCardStyles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.primary + '18',
     borderRadius: 10,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   refreshBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   deactivateBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -301,14 +284,11 @@ const ipCardStyles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.negative + '15',
     borderRadius: 10,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   deactivateBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.negative,
-  },
-});
+    color: Colors.negative}});
 
 export default function OwnerControlsScreen() {
   const router = useRouter();
@@ -367,8 +347,7 @@ export default function OwnerControlsScreen() {
     autoReinvestEnabled: true,
     maintenanceMode: false,
     newSignupsEnabled: true,
-    tradingEnabled: true,
-  });
+    tradingEnabled: true});
 
   useEffect(() => {
     const rows = platformSettingsQuery.data ?? [];
@@ -394,14 +373,12 @@ export default function OwnerControlsScreen() {
     percentage: '',
     minFee: '',
     maxFee: '',
-    isActive: true,
-  });
+    isActive: true});
 
   const [editedProperty, setEditedProperty] = useState({
     tradingPaused: false,
     priceAdjustment: '',
-    ownerShare: '',
-  });
+    ownerShare: ''});
 
   const propertiesQuery = useQuery<any[]>({
     queryKey: ['admin-owner-properties'],
@@ -411,8 +388,7 @@ export default function OwnerControlsScreen() {
       if (error) { console.log('[Owner Controls] properties error:', error.message); return []; }
       return data ?? [];
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const statsQuery = useQuery({
     queryKey: ['admin-owner-stats'],
@@ -432,14 +408,11 @@ export default function OwnerControlsScreen() {
           buy: totalFees * 0.4,
           sell: totalFees * 0.25,
           withdrawal: totalFees * 0.2,
-          deposit: totalFees * 0.15,
-        },
+          deposit: totalFees * 0.15},
         totalMembers: registryMembers.length,
-        totalTransactions: txData.length,
-      };
+        totalTransactions: txData.length};
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const feeStats = useMemo(() => statsQuery.data ?? { totalFeesCollected: 0, feesThisMonth: 0, feesByType: { buy: 0, sell: 0, withdrawal: 0, deposit: 0 }, totalMembers: 0, totalTransactions: 0, averageFeeAmount: 0 }, [statsQuery.data]);
 
@@ -474,8 +447,7 @@ export default function OwnerControlsScreen() {
       closingDate: '',
       tradingPaused: index === 2,
       priceAdjustment: 0,
-      ownerShare: 15 + (index * 2),
-    }));
+      ownerShare: 15 + (index * 2)}));
   }, [propertiesQuery.data]);
 
   const jvQuery = useQuery<any>({
@@ -486,8 +458,7 @@ export default function OwnerControlsScreen() {
       return { deals: result.deals ?? [] };
     },
     refetchOnWindowFocus: true,
-    staleTime: 0,
-  });
+    staleTime: 0});
 
   const jvDealControls: JVDealControl[] = useMemo(() => {
     const deals = (jvQuery.data?.deals ?? []) as Array<{
@@ -516,8 +487,7 @@ export default function OwnerControlsScreen() {
         expectedROI: jv.expectedROI,
         status: jv.status,
         ownerShare: jv.partners?.[0]?.equityShare ?? 0,
-        tradingPaused: false,
-      };
+        tradingPaused: false};
     });
   }, [jvQuery.data]);
 
@@ -554,8 +524,7 @@ export default function OwnerControlsScreen() {
       percentage: fee.percentage.toString(),
       minFee: fee.minFee.toString(),
       maxFee: fee.maxFee.toString(),
-      isActive: fee.isActive,
-    });
+      isActive: fee.isActive});
     setEditFeeModalVisible(true);
   };
 
@@ -564,8 +533,7 @@ export default function OwnerControlsScreen() {
     setEditedProperty({
       tradingPaused: property.tradingPaused,
       priceAdjustment: property.priceAdjustment.toString(),
-      ownerShare: property.ownerShare.toString(),
-    });
+      ownerShare: property.ownerShare.toString()});
     setEditPropertyModalVisible(true);
   };
 
@@ -586,8 +554,7 @@ export default function OwnerControlsScreen() {
         percentage,
         minFee: isNaN(minFee) ? 0 : minFee,
         maxFee: isNaN(maxFee) ? 0 : maxFee,
-        isActive: editedFee.isActive,
-      });
+        isActive: editedFee.isActive});
       Alert.alert('Success', 'Fee configuration saved to database');
       setEditFeeModalVisible(false);
     } catch (e: any) {
@@ -608,8 +575,7 @@ export default function OwnerControlsScreen() {
         propertyId: selectedProperty.id,
         isLocked: editedProperty.tradingPaused,
         overridePrice: isNaN(priceAdjustment) ? null : priceAdjustment,
-        metadata: { ownerShare, priceAdjustmentPercent: isNaN(priceAdjustment) ? 0 : priceAdjustment },
-      });
+        metadata: { ownerShare, priceAdjustmentPercent: isNaN(priceAdjustment) ? 0 : priceAdjustment }});
       Alert.alert('Success', 'Property controls saved to database');
       setEditPropertyModalVisible(false);
     } catch (e: any) {
@@ -628,8 +594,7 @@ export default function OwnerControlsScreen() {
           text: 'Confirm',
           onPress: () => {
             Alert.alert('Success', `Trading ${action}d for ${property.name}`);
-          },
-        },
+          }},
       ]
     );
   };
@@ -863,8 +828,7 @@ export default function OwnerControlsScreen() {
     onError: (err: Error) => {
       console.error('[Owner Controls] Archive JV error:', err);
       Alert.alert('Error', 'Failed to archive deal: ' + (err.message || 'Unknown error'));
-    },
-  });
+    }});
 
 
 
@@ -880,8 +844,7 @@ export default function OwnerControlsScreen() {
           onPress: () => {
             console.log('[Owner Controls] Archiving JV deal:', deal.id, deal.name);
             archiveJVMutation.mutate({ id: deal.id });
-          },
-        },
+          }},
       ]
     );
   };
@@ -897,8 +860,7 @@ export default function OwnerControlsScreen() {
           text: 'Confirm',
           onPress: () => {
             Alert.alert('Success', `Investing ${action}d for ${deal.name}`);
-          },
-        },
+          }},
       ]
     );
   };
@@ -1904,5 +1866,4 @@ const styles = StyleSheet.create({
   moduleCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.surface, borderRadius: 12, padding: 12, borderWidth: 1 },
   moduleIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   moduleName: { color: Colors.text, fontSize: 14, fontWeight: '700' as const },
-  moduleDesc: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
-});
+  moduleDesc: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 }});

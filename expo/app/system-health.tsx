@@ -8,8 +8,7 @@ import {
   RefreshControl,
   Animated,
   Dimensions,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
@@ -39,16 +38,14 @@ import {
   Bell,
   Cloud,
   Filter,
-  BarChart3,
-} from 'lucide-react-native';
+  BarChart3} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   runFullHealthCheck,
   type SystemHealthSnapshot,
   type HealthCheck,
   type HealthStatus,
-  type ConnectionFlow,
-} from '@/lib/system-health-checker';
+  type ConnectionFlow} from '@/lib/system-health-checker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const AUTO_REFRESH_INTERVAL_MS = 90_000;
@@ -59,14 +56,12 @@ const AUTO_REFRESH_INTERVAL_TEXT = `${AUTO_REFRESH_INTERVAL_SECONDS} seconds`;
 const STATUS_COLORS: Record<HealthStatus, string> = {
   green: '#00E676',
   yellow: '#FFD600',
-  red: '#FF1744',
-};
+  red: '#FF1744'};
 
 const STATUS_LABELS: Record<HealthStatus, string> = {
   green: 'HEALTHY',
   yellow: 'REVIEW',
-  red: 'FIX NOW',
-};
+  red: 'FIX NOW'};
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Activity; color: string; label: string }> = {
   frontend: { icon: Monitor, color: '#00BCD4', label: 'Frontend' },
@@ -74,8 +69,7 @@ const CATEGORY_CONFIG: Record<string, { icon: typeof Activity; color: string; la
   database: { icon: Database, color: '#FF6D00', label: 'Database' },
   infrastructure: { icon: Cpu, color: '#E91E63', label: 'Infrastructure' },
   realtime: { icon: Radio, color: '#00E676', label: 'Realtime' },
-  services: { icon: Zap, color: '#FFD600', label: 'Services' },
-};
+  services: { icon: Zap, color: '#FFD600', label: 'Services' }};
 
 const CHECK_ICONS: Record<string, typeof Activity> = {
   'landing-page': Globe,
@@ -91,8 +85,7 @@ const CHECK_ICONS: Record<string, typeof Activity> = {
   'react-query': Zap,
   'email-service': Mail,
   'push-notifications': Bell,
-  'aws-infra': Cloud,
-};
+  'aws-infra': Cloud};
 
 type FilterMode = 'all' | 'green' | 'yellow' | 'red';
 
@@ -117,8 +110,7 @@ function PulsingRing({ color, size = 80 }: { color: string; size?: number }) {
 
   const scale = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.15],
-  });
+    outputRange: [1, 1.15]});
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -131,8 +123,7 @@ function PulsingRing({ color, size = 80 }: { color: string; size?: number }) {
           borderWidth: 3,
           borderColor: color,
           opacity: glowAnim,
-          transform: [{ scale }],
-        }}
+          transform: [{ scale }]}}
       />
       <View
         style={{
@@ -143,8 +134,7 @@ function PulsingRing({ color, size = 80 }: { color: string; size?: number }) {
           borderWidth: 2,
           borderColor: color + '60',
           alignItems: 'center',
-          justifyContent: 'center',
-        }}
+          justifyContent: 'center'}}
       />
     </View>
   );
@@ -173,12 +163,10 @@ function ScanBar() {
 
   const left = scanAnim.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: ['0%', '70%', '0%'],
-  });
+    outputRange: ['0%', '70%', '0%']});
   const width = scanAnim.interpolate({
     inputRange: [0, 0.3, 0.7, 1],
-    outputRange: ['10%', '30%', '30%', '10%'],
-  });
+    outputRange: ['10%', '30%', '30%', '10%']});
 
   return (
     <View style={styles.scanBarTrack}>
@@ -617,95 +605,79 @@ export default function SystemHealthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#060609',
-  },
+    backgroundColor: '#060609'},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    gap: 16,
-  },
+    gap: 16},
   loadingText: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginTop: 12,
-  },
+    marginTop: 12},
   loadingSubtext: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#151518',
-  },
+    borderBottomColor: '#151518'},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 12,
     backgroundColor: '#12121A',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSubtitle: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   refreshBtn: {
     width: 38,
     height: 38,
     borderRadius: 12,
     backgroundColor: '#12121A',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   liveDot: {
     width: 9,
     height: 9,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   scanBarTrack: {
     height: 3,
     backgroundColor: '#12121A',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   scanBarFill: {
     position: 'absolute' as const,
     height: '100%',
     backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   overallCard: {
     flexDirection: 'row',
     backgroundColor: '#0D0D14',
@@ -714,37 +686,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A22',
     marginBottom: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   overallLeft: {
     position: 'relative' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 18,
-  },
+    marginRight: 18},
   overallScoreOverlay: {
     position: 'absolute' as const,
     flexDirection: 'row',
-    alignItems: 'baseline',
-  },
+    alignItems: 'baseline'},
   overallScore: {
     fontSize: 30,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   overallScoreLabel: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   overallRight: {
     flex: 1,
-    gap: 8,
-  },
+    gap: 8},
   overallTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   overallBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -752,77 +717,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    alignSelf: 'flex-start' as const,
-  },
+    alignSelf: 'flex-start' as const},
   overallBadgeText: {
     fontSize: 12,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   overallCountsRow: {
     flexDirection: 'row',
-    gap: 14,
-  },
+    gap: 14},
   overallCount: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   countDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   countNum: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   countLabel: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   overallTimestamp: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   stackCard: {
     backgroundColor: '#0D0D14',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   stackHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   stackTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   stackGrid: {
-    gap: 14,
-  },
+    gap: 14},
   stackRow: {
-    gap: 6,
-  },
+    gap: 6},
   stackRowLabel: {
     fontSize: 9,
     fontWeight: '800' as const,
     color: Colors.textTertiary,
     letterSpacing: 1.5,
     marginBottom: 4,
-    marginLeft: 2,
-  },
+    marginLeft: 2},
   stackNodeRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   stackNode: {
     borderRadius: 14,
     backgroundColor: '#0A0A10',
@@ -830,111 +780,91 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
     gap: 5,
-    position: 'relative' as const,
-  },
+    position: 'relative' as const},
   stackNodeDot: {
     position: 'absolute' as const,
     top: 8,
     right: 8,
     width: 7,
     height: 7,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   stackNodeIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   stackNodeLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   stackNodeStatus: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   connectionsCard: {
     backgroundColor: '#0D0D14',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   connectionsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   connectionsTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   connectionsCount: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   connectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#12121A',
-  },
+    borderBottomColor: '#12121A'},
   connectionDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 10,
-  },
+    marginRight: 10},
   connectionInfo: {
-    flex: 1,
-  },
+    flex: 1},
   connectionLabel: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   connectionPath: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   connectionRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   connectionLatency: {
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   filterSection: {
     marginBottom: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   filterHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   filterTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterRow: {
     flexDirection: 'row',
-    gap: 6,
-  },
+    gap: 6},
   filterBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -945,18 +875,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D0D12',
     borderWidth: 1,
     borderColor: '#1A1A22',
-    gap: 4,
-  },
+    gap: 4},
   filterDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   filterBtnText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   checkCard: {
     backgroundColor: '#0D0D14',
     borderRadius: 14,
@@ -964,125 +891,101 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A22',
     borderLeftWidth: 4,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   checkCardInner: {
-    padding: 14,
-  },
+    padding: 14},
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   checkIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkInfo: {
-    flex: 1,
-  },
+    flex: 1},
   checkName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   checkMessage: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   checkRight: {
     alignItems: 'flex-end',
-    gap: 4,
-  },
+    gap: 4},
   checkStatusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   checkStatusText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   checkDetails: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#1A1A22',
-    gap: 8,
-  },
+    gap: 8},
   checkDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   checkDetailLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   checkDetailValue: {
     fontSize: 12,
     color: Colors.text,
     flex: 1,
     textAlign: 'right' as const,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   checkCatBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   checkCatText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   mono: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 10,
-  },
+    fontSize: 10},
   legend: {
     backgroundColor: '#0D0D14',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginTop: 12,
-  },
+    marginTop: 12},
   legendTitle: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   legendRow: {
-    gap: 10,
-  },
+    gap: 10},
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   legendDot: {
     width: 14,
     height: 14,
-    borderRadius: 7,
-  },
+    borderRadius: 7},
   legendLabel: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   legendDesc: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   blueprintBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1092,21 +995,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(0, 230, 118, 0.3)',
-    backgroundColor: 'rgba(0, 230, 118, 0.08)',
-  },
+    backgroundColor: 'rgba(0, 230, 118, 0.08)'},
   blueprintBtnText: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: '#00E676',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   footer: {
     alignItems: 'center',
     paddingVertical: 28,
-    gap: 4,
-  },
+    gap: 4},
   footerText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
-});
+    color: Colors.textTertiary}});

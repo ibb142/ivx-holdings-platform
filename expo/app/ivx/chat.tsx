@@ -7,8 +7,7 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
-  useAudioRecorderState,
-} from 'expo-audio';
+  useAudioRecorderState} from 'expo-audio';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
@@ -30,8 +29,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from 'react-native';
 import { MessageBubble } from '@/src/modules/chat/components/MessageBubble';
 import { ExecutionConsoleBubble } from '@/src/modules/ivx-owner-ai/components/ExecutionConsoleBubble';
 import { coerceExecutionStatusFromPayload } from '@/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll';
@@ -74,8 +72,7 @@ import {
   collectChatQaMetrics,
   generateQaTraceId,
   IVX_CHAT_QA_PANEL_ENABLED,
-  type ChatQaMetrics,
-} from '@/src/modules/chat/services/chatQaDiagnostics';
+  type ChatQaMetrics} from '@/src/modules/chat/services/chatQaDiagnostics';
 import {
   getActiveRuntimeSource,
   getRuntimeSourceLabel,
@@ -87,8 +84,7 @@ import {
   isExpectedAssistantSource,
   normalizeRuntimeSource,
   shouldPreserveRequestScopedRuntime,
-  shouldShowFallbackUI,
-} from '@/src/modules/chat/chatRuntimeState';
+  shouldShowFallbackUI} from '@/src/modules/chat/chatRuntimeState';
 import {
   buildIVXChatAuditReport,
   buildIVXFunctionalityProofList,
@@ -112,19 +108,18 @@ import {
   type IVXOwnerRealtimeSubscriptionAudit,
   type IVXOwnerSendAudit,
   type IVXProofRecord,
-  type IVXRoomRuntimeSnapshot,
-} from '@/src/modules/ivx-owner-ai/services';
+  type IVXRoomRuntimeSnapshot} from '@/src/modules/ivx-owner-ai/services';
 import { isIVXLocalFirstChatEnabled } from '@/src/modules/ivx-owner-ai/services/ivxLocalFirstRuntime';
 import type { IVXOwnerFileInsight } from '@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService';
 import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
 import { executeReliably, type ReliabilityTrace } from '@/src/modules/chat/services/aiReliability';
 import { useChatSendQueue } from '@/src/modules/chat/services/useChatSendQueue';
+import { shouldStartAssistantBeforePersistence } from '@/src/modules/chat/services/ivxSendTriggerPolicy';
 import {
   isExplicitSensitiveActionConfirmation,
   resolveOwnerTrustContext,
   stripSensitiveActionConfirmationPrefix,
-  type OwnerRequestClass,
-} from '@/src/modules/ivx-owner-ai/services/ownerTrust';
+  type OwnerRequestClass} from '@/src/modules/ivx-owner-ai/services/ownerTrust';
 import type { ChatMessage, ChatReplyContext, ChatRoomRuntimeSignals, ChatRoomStatus, ServiceRuntimeHealth } from '@/src/modules/chat/types/chat';
 import { resolveRoomCapabilityState, type RoomCapabilityResolution } from '@/src/modules/chat/services/roomCapabilityResolver';
 import { sanitizeUserFacingChatText } from '@/src/modules/chat/services/visibleTextSanitizer';
@@ -147,8 +142,7 @@ import {
   parseReplyBody,
   normalizeComposerText,
   sortMessagesByCanonicalOrder,
-  type ParsedReplyBody,
-} from '@/src/modules/chat/services/chatMessageUtils';
+  type ParsedReplyBody} from '@/src/modules/chat/services/chatMessageUtils';
 import {
   controlTowerAggregator,
   executeOperatorAction,
@@ -157,8 +151,7 @@ import {
   type CTEvidenceRecord,
   type CTRiskAssessment,
   type CTOperatorActionRun,
-  type CTSystemNode,
-} from '@/lib/control-tower';
+  type CTSystemNode} from '@/lib/control-tower';
 import { liveIntelligenceService } from '@/lib/control-tower/live-intelligence';
 import { useLiveIntelligenceSnapshot } from '@/lib/control-tower/use-live-intelligence';
 import { getIVXControlRoomStatus, type IVXControlRoomItem, type IVXControlRoomItemStatus, type IVXControlRoomStatus } from '@/src/modules/ivx-owner-ai/services/ivxControlRoomService';
@@ -168,25 +161,21 @@ import {
   buildSeniorDeveloperJobDraft,
   buildSeniorDeveloperSubmitStatusCard,
   isSeniorDeveloperBuildRequest,
-  type SeniorDeveloperJobDraft,
-} from '@/src/modules/ivx-developer/seniorDeveloperBuildIntent';
+  type SeniorDeveloperJobDraft} from '@/src/modules/ivx-developer/seniorDeveloperBuildIntent';
 import {
-  classifyOwnerIntent,
-} from '@/src/modules/ivx-owner-ai/services/ivxOwnerIntentClassifier';
+  classifyOwnerIntent} from '@/src/modules/ivx-owner-ai/services/ivxOwnerIntentClassifier';
 import {
   runChatDiagnostic,
   formatDiagnosticResultCard,
   formatDiagnosticProgressCard,
   type DiagnosticStage,
-  type DiagnosticFinding,
-} from '@/src/modules/ivx-owner-ai/services/ivxChatDiagnosticEngine';
+  type DiagnosticFinding} from '@/src/modules/ivx-owner-ai/services/ivxChatDiagnosticEngine';
 import {
   getSeniorDeveloperWorkerLastProof,
   isWorkerJobComplete,
   pollSeniorDeveloperWorkerJob,
   submitSeniorDeveloperWorkerJob,
-  type WorkerJobView,
-} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
+  type WorkerJobView} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
 
 type PickerAsset = {
   uri: string;
@@ -283,20 +272,17 @@ const OWNER_PROMPT_TEMPLATES: readonly OwnerPromptTemplate[] = [
     id: 'deal_review',
     label: 'Deal review',
     prompt: 'Review this real estate deal like a senior IVX analyst. Summarize upside, risks, missing diligence, required documents, investor suitability notes, and the exact next action list.',
-    testID: 'ivx-owner-template-deal-review',
-  },
+    testID: 'ivx-owner-template-deal-review'},
   {
     id: 'investor_reply',
     label: 'Investor reply',
     prompt: 'Draft a compliant investor-support reply. Keep it clear, warm, non-promissory, and include what the investor should review before requesting allocation access.',
-    testID: 'ivx-owner-template-investor-reply',
-  },
+    testID: 'ivx-owner-template-investor-reply'},
   {
     id: 'document_summary',
     label: 'Doc summary',
     prompt: 'Summarize the attached document or pasted text. Extract the key financial terms, obligations, deadlines, risk disclosures, missing signatures, and follow-up questions.',
-    testID: 'ivx-owner-template-document-summary',
-  },
+    testID: 'ivx-owner-template-document-summary'},
 ];
 
 type BackendAuditSummary = {
@@ -431,28 +417,24 @@ function getRuntimeProofHeadline(runtime: RuntimeDebugSnapshot): { title: string
   if (hasRuntimeFailure(runtime)) {
     return {
       title: 'Assistant path needs attention',
-      detail: 'The last reply did not complete cleanly. Your message remains saved.',
-    };
+      detail: 'The last reply did not complete cleanly. Your message remains saved.'};
   }
 
   if (runtime.hasVisibleResponseText) {
     return {
       title: 'Assistant response captured',
-      detail: 'Reply delivered cleanly.',
-    };
+      detail: 'Reply delivered cleanly.'};
   }
 
   if (isPendingRequestState(runtime)) {
     return {
       title: 'Message sent',
-      detail: 'Reply will appear when ready.',
-    };
+      detail: 'Reply will appear when ready.'};
   }
 
   return {
     title: 'Assistant ready',
-    detail: 'Conversation is available.',
-  };
+    detail: 'Conversation is available.'};
 }
 
 type AuditInfoRowProps = {
@@ -578,8 +560,7 @@ function createInitialAIProxyStatus(): AIProxyStatusSnapshot {
     gateway: null,
     configured: false,
     deploymentMarker: null,
-    error: null,
-  };
+    error: null};
 }
 
 function buildOwnerAIProxyStatusUrl(audit: IVXOwnerAIConfigAudit): string | null {
@@ -593,8 +574,7 @@ async function fetchOwnerAIProxyStatus(audit: IVXOwnerAIConfigAudit): Promise<AI
     return {
       ...createInitialAIProxyStatus(),
       status: 'error',
-      error: audit.configurationError ?? 'Owner AI proxy status URL is not configured.',
-    };
+      error: audit.configurationError ?? 'Owner AI proxy status URL is not configured.'};
   }
 
   const accessToken = await getIVXAccessToken();
@@ -604,8 +584,7 @@ async function fetchOwnerAIProxyStatus(audit: IVXOwnerAIConfigAudit): Promise<AI
       status: 'blocked',
       observedAt: new Date().toISOString(),
       url,
-      error: 'Owner session token is not hydrated yet.',
-    };
+      error: 'Owner session token is not hydrated yet.'};
   }
 
   const controller = new AbortController();
@@ -618,10 +597,8 @@ async function fetchOwnerAIProxyStatus(audit: IVXOwnerAIConfigAudit): Promise<AI
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      signal: controller.signal,
-    });
+        Authorization: `Bearer ${accessToken}`},
+      signal: controller.signal});
     const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
     const runtime = isRecord(payload?.runtime) ? payload.runtime : {};
     const runtimeConfigured = runtime.configured === true;
@@ -639,8 +616,7 @@ async function fetchOwnerAIProxyStatus(audit: IVXOwnerAIConfigAudit): Promise<AI
         gateway,
         configured: false,
         deploymentMarker,
-        error: error ?? `Proxy status returned HTTP ${response.status}.`,
-      };
+        error: error ?? `Proxy status returned HTTP ${response.status}.`};
     }
 
     return {
@@ -651,16 +627,14 @@ async function fetchOwnerAIProxyStatus(audit: IVXOwnerAIConfigAudit): Promise<AI
       gateway,
       configured: runtimeConfigured,
       deploymentMarker,
-      error: runtimeConfigured ? null : 'Proxy route is live, but AI gateway configuration is not ready.',
-    };
+      error: runtimeConfigured ? null : 'Proxy route is live, but AI gateway configuration is not ready.'};
   } catch (error) {
     return {
       ...createInitialAIProxyStatus(),
       status: 'error',
       observedAt: new Date().toISOString(),
       url,
-      error: error instanceof Error ? error.message : 'Unable to reach Owner AI proxy status.',
-    };
+      error: error instanceof Error ? error.message : 'Unable to reach Owner AI proxy status.'};
   } finally {
     clearTimeout(timer);
   }
@@ -686,73 +660,57 @@ const OWNER_COMMANDS: Record<string, { description: string; handler: (args: stri
     handler: () => {
       const lines = Object.entries(OWNER_COMMANDS).map(([cmd, info]) => `/${cmd} — ${info.description}`);
       return `Available owner commands:\n${lines.join('\n')}`;
-    },
-  },
+    }},
   status: {
     description: 'Show current room and AI backend status',
-    handler: () => 'Room status: check the header card for live backend status, storage mode, delivery method, and AI health.',
-  },
+    handler: () => 'Room status: check the header card for live backend status, storage mode, delivery method, and AI health.'},
   clear: {
     description: 'Clear local message cache (does not delete server messages)',
-    handler: () => 'Local cache cleared. Pull to refresh to reload from server.',
-  },
+    handler: () => 'Local cache cleared. Pull to refresh to reload from server.'},
   reconnect: {
     description: 'Force reconnect to the shared room backend',
-    handler: () => 'Reconnect triggered. Room status will be re-detected.',
-  },
+    handler: () => 'Reconnect triggered. Room status will be re-detected.'},
   probe: {
     description: 'Run a health probe on the AI backend',
-    handler: () => 'AI health probe triggered. Check the AI indicator for updated status.',
-  },
+    handler: () => 'AI health probe triggered. Check the AI indicator for updated status.'},
   broadcast: {
     description: 'Send a broadcast notification to all participants',
     handler: (args: string) => {
       if (!safeTrim(args)) return 'Usage: /broadcast <message>';
       return `Broadcast queued: "${safeTrim(args)}". Participants will be notified on next sync.`;
-    },
-  },
+    }},
   knowledge: {
     description: 'Ask a knowledge-base question',
-    handler: () => 'Knowledge query routed to AI. Response will appear as an assistant reply.',
-  },
+    handler: () => 'Knowledge query routed to AI. Response will appear as an assistant reply.'},
   proof: {
     description: 'Show the latest live room proof summary',
-    handler: () => 'Compiling the latest room proof summary.',
-  },
+    handler: () => 'Compiling the latest room proof summary.'},
   risk: {
     description: 'Show the highest live chat/runtime risks',
-    handler: () => 'Compiling the current risk envelope for chat/runtime.',
-  },
+    handler: () => 'Compiling the current risk envelope for chat/runtime.'},
   incident: {
     description: 'Show the latest live incident summary',
-    handler: () => 'Compiling the latest incident summary for the owner room.',
-  },
+    handler: () => 'Compiling the latest incident summary for the owner room.'},
   deps: {
     description: 'Inspect the active dependency chain for the owner room',
-    handler: () => 'Compiling the current dependency chain for the owner room.',
-  },
+    handler: () => 'Compiling the current dependency chain for the owner room.'},
   heal: {
     description: 'Run an allowed intervention, e.g. /heal rerun-proof or /heal clear-stuck',
-    handler: (args: string) => safeTrim(args) ? `Preparing allowed intervention: ${safeTrim(args)}` : 'Usage: /heal <rerun-proof|clear-stuck|provider-probe|shared-sync|inbox-sync|transcript>',
-  },
+    handler: (args: string) => safeTrim(args) ? `Preparing allowed intervention: ${safeTrim(args)}` : 'Usage: /heal <rerun-proof|clear-stuck|provider-probe|shared-sync|inbox-sync|transcript>'},
   replay: {
     description: 'Replay the latest safe operator intervention',
-    handler: () => 'Preparing the latest safe operator intervention for replay.',
-  },
+    handler: () => 'Preparing the latest safe operator intervention for replay.'},
   brain: {
     description: 'List the Command Brain commands that run owner surfaces inline',
-    handler: () => listCommandBrainCommands(),
-  },
+    handler: () => listCommandBrainCommands()},
   ...Object.fromEntries(
     Object.values(IVX_COMMAND_BRAIN).map((entry) => [
       entry.command,
       {
         description: `${entry.description} (usage: ${entry.usage})`,
-        handler: () => getCommandBrainPending(entry.command) ?? `Running /${entry.command}…`,
-      },
+        handler: () => getCommandBrainPending(entry.command) ?? `Running /${entry.command}…`},
     ]),
-  ),
-};
+  )};
 
 function parseOwnerCommand(text: string): OwnerCommandResult | null {
   const trimmed = safeTrim(text);
@@ -827,8 +785,7 @@ function getDeliveryBranchStatus(audit: IVXOwnerSendAudit | null): DeliveryBranc
       branch: 'not_observed',
       title: 'send path pending proof',
       detail: 'No completed owner-room send has been captured in this session yet.',
-      evidence: 'Send one message now to capture DB/local/auth branch evidence.',
-    };
+      evidence: 'Send one message now to capture DB/local/auth branch evidence.'};
   }
 
   if (audit.transport === 'remote_db_insert') {
@@ -836,8 +793,7 @@ function getDeliveryBranchStatus(audit: IVXOwnerSendAudit | null): DeliveryBranc
       branch: 'remote_db_insert',
       title: 'remote db insert',
       detail: 'The last owner-room write reached shared Supabase persistence.',
-      evidence: `${audit.messageId} · ${audit.reason}`,
-    };
+      evidence: `${audit.messageId} · ${audit.reason}`};
   }
 
   if (audit.transport === 'auth_session_failure') {
@@ -845,16 +801,14 @@ function getDeliveryBranchStatus(audit: IVXOwnerSendAudit | null): DeliveryBranc
       branch: 'auth_session_failure',
       title: 'auth/session failure',
       detail: 'The last owner-room write could not use shared persistence because owner auth/session was unavailable.',
-      evidence: `${audit.messageId} · ${audit.reason}`,
-    };
+      evidence: `${audit.messageId} · ${audit.reason}`};
   }
 
   return {
     branch: 'local_fallback',
     title: 'local fallback',
     detail: 'The last owner-room write fell back to local-only persistence after the shared path failed.',
-    evidence: `${audit.messageId} · ${audit.reason}`,
-  };
+    evidence: `${audit.messageId} · ${audit.reason}`};
 }
 
 function getReceiveBranchStatus(audit: IVXOwnerReceiveAudit | null): ReceiveBranchStatus {
@@ -863,8 +817,7 @@ function getReceiveBranchStatus(audit: IVXOwnerReceiveAudit | null): ReceiveBran
       branch: 'not_observed',
       title: 'receive path pending proof',
       detail: 'No owner-room receive event has been captured in this session yet.',
-      evidence: 'Wait for a fresh inbound message or realtime echo to capture receive-branch proof.',
-    };
+      evidence: 'Wait for a fresh inbound message or realtime echo to capture receive-branch proof.'};
   }
 
   if (audit.transport === 'realtime_event') {
@@ -872,16 +825,14 @@ function getReceiveBranchStatus(audit: IVXOwnerReceiveAudit | null): ReceiveBran
       branch: 'realtime_event',
       title: 'realtime event',
       detail: 'The last inbound owner-room message was delivered through the realtime subscription.',
-      evidence: `${audit.messageId} · ${audit.reason}`,
-    };
+      evidence: `${audit.messageId} · ${audit.reason}`};
   }
 
   return {
     branch: 'local_listener',
     title: 'local listener',
     detail: 'The last inbound owner-room message was delivered through the local fallback listener.',
-    evidence: `${audit.messageId} · ${audit.reason}`,
-  };
+    evidence: `${audit.messageId} · ${audit.reason}`};
 }
 
 const DateSeparator = React.memo(function DateSeparator({ value }: { value: string }) {
@@ -1013,8 +964,7 @@ export default function IVXOwnerChatRoute() {
         buildVisibleAssistantTransient({
           id: restoredId,
           conversationId: 'ivx-owner-room',
-          body: `${task.answer}\n\n♻️ Restored from durable task ${task.taskId} after app restart.`,
-        }),
+          body: `${task.answer}\n\n♻️ Restored from durable task ${task.taskId} after app restart.`}),
       ]);
     }).catch((restoreErr) => {
       console.log('[IVXOwnerChatRoute] durable_restore_failed_safely:', restoreErr instanceof Error ? restoreErr.message : 'unknown');
@@ -1064,13 +1014,11 @@ export default function IVXOwnerChatRoute() {
           storageMode: 'local_device_only',
           visibility: 'local_only',
           deliveryMethod: 'local_only',
-          warning: 'Open-access development mode is active. The owner room stays usable locally while live room detection recovers.',
-        };
+          warning: 'Open-access development mode is active. The owner room stays usable locally while live room detection recovers.'};
       }
     },
     staleTime: 25_000,
-    refetchInterval: 60_000,
-  });
+    refetchInterval: 60_000});
 
   const ivxRoomStatus: ChatRoomStatus | null = roomStatusQuery.data ?? null;
 
@@ -1097,14 +1045,12 @@ export default function IVXOwnerChatRoute() {
           sessionId: ownerSessionIdRef.current,
           hydratedMessageCount: loaded.length,
           localFirstChatMode,
-          platform: Platform.OS,
-        });
+          platform: Platform.OS});
         return loaded;
       } catch (error) {
         console.log('[IVXChatStateProof] hydration_failed', {
           reason: error instanceof Error ? error.message : 'unknown',
-          isOpenAccessBuild,
-        });
+          isOpenAccessBuild});
         if (!isOpenAccessBuild) {
           throw error instanceof Error ? error : new Error('Unable to load owner messages.');
         }
@@ -1131,13 +1077,11 @@ export default function IVXOwnerChatRoute() {
       }
       if (lastNonEmptyMessagesRef.current && lastNonEmptyMessagesRef.current.length > 0) {
         console.log('[IVXChatStateProof] preserving cached messages over empty refetch', {
-          cachedCount: lastNonEmptyMessagesRef.current.length,
-        });
+          cachedCount: lastNonEmptyMessagesRef.current.length});
         return lastNonEmptyMessagesRef.current;
       }
       return data;
-    },
-  });
+    }});
   const conversationQuery = useQuery({
     queryKey: IVX_OWNER_CONVERSATION_QUERY_KEY,
     queryFn: async () => {
@@ -1153,8 +1097,7 @@ export default function IVXOwnerChatRoute() {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             lastMessageText: null,
-            lastMessageAt: null,
-          }),
+            lastMessageAt: null}),
         );
       } catch (error) {
         console.log('[IVXOwnerChatRoute] Owner conversation bootstrap failed:', error instanceof Error ? error.message : 'unknown');
@@ -1170,11 +1113,9 @@ export default function IVXOwnerChatRoute() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           lastMessageText: null,
-          lastMessageAt: null,
-        };
+          lastMessageAt: null};
       }
-    },
-  });
+    }});
   const messages = messagesQuery.data ?? [];
   // CONVERSATION-ID FIX (2026-06-10): the backend-returned conversation id,
   // adopted as canonical after every owner-ai response and persisted durably.
@@ -1209,8 +1150,7 @@ export default function IVXOwnerChatRoute() {
           setAdoptedConversationId((current) => current ?? stored);
           setConversationIdProof((current) => ({
             ...current,
-            usedForRestore: current.usedForRestore ?? stored,
-          }));
+            usedForRestore: current.usedForRestore ?? stored}));
           console.log('[IVXConversationId] Restored canonical conversation id on mount:', stored);
         }
       } catch (error) {
@@ -1231,15 +1171,13 @@ export default function IVXOwnerChatRoute() {
       void ivxChatService.setCanonicalConversationId(trimmedBackend);
       console.log('[IVXConversationId] Adopted backend conversation id as canonical:', {
         clientBeforeSend,
-        backendReturned: trimmedBackend,
-      });
+        backendReturned: trimmedBackend});
     }
     setConversationIdProof({
       clientBeforeSend,
       backendReturned: trimmedBackend || null,
       usedForSave: nextCanonical,
-      usedForRestore: nextCanonical,
-    });
+      usedForRestore: nextCanonical});
     return nextCanonical;
   }, []);
   const transcribeVoiceMutation = useMutation<string, Error, string>({
@@ -1249,13 +1187,11 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: 'started',
         summary: 'Owner voice transcription started.',
-        metadata: { platform: Platform.OS, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { platform: Platform.OS, sessionId: ownerSessionIdRef.current }});
       const result = await transcribeAudioRecording({
         uri,
         fileName: Platform.OS === 'web' ? 'ivx-owner-voice.webm' : 'ivx-owner-voice.m4a',
-        mimeType: Platform.OS === 'web' ? 'audio/webm' : 'audio/m4a',
-      });
+        mimeType: Platform.OS === 'web' ? 'audio/webm' : 'audio/m4a'});
       return result.text;
     },
     onSuccess: (transcript) => {
@@ -1267,8 +1203,7 @@ export default function IVXOwnerChatRoute() {
           conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
           status: 'failed',
           summary: 'Voice transcription completed without usable speech.',
-          metadata: { sessionId: ownerSessionIdRef.current },
-        });
+          metadata: { sessionId: ownerSessionIdRef.current }});
         return;
       }
 
@@ -1283,8 +1218,7 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: 'success',
         summary: 'Voice transcription inserted into the IVX Owner AI composer.',
-        metadata: { transcriptLength: normalizedTranscript.length, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { transcriptLength: normalizedTranscript.length, sessionId: ownerSessionIdRef.current }});
     },
     onError: (error) => {
       console.log('[IVXOwnerChatRoute] Voice transcription error:', error.message);
@@ -1293,11 +1227,9 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: 'failed',
         summary: 'Voice transcription failed.',
-        metadata: { error: error.message, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { error: error.message, sessionId: ownerSessionIdRef.current }});
       Alert.alert('Voice transcription unavailable', error.message || 'We could not transcribe that recording. Please try again.');
-    },
-  });
+    }});
   type OwnerAIAuthState = 'AUTH_INITIALIZING' | 'SIGNED_OUT' | 'SESSION_REFRESHING' | 'SIGNED_IN_MEMBER' | 'SIGNED_IN_OWNER' | 'AUTH_ERROR';
   const ownerAIAuthState = useMemo<OwnerAIAuthState>(() => {
     if (isLoading) return 'AUTH_INITIALIZING';
@@ -1324,8 +1256,7 @@ export default function IVXOwnerChatRoute() {
     queryFn: getIVXControlRoomStatus,
     enabled: ownerRoomAuthenticated,
     staleTime: 60_000,
-    refetchInterval: 120_000,
-  });
+    refetchInterval: 120_000});
 
   const [transientAssistantMessages, setTransientAssistantMessages] = useState<IVXMessage[]>([]);
   // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): side-channel
@@ -1432,8 +1363,7 @@ export default function IVXOwnerChatRoute() {
         createdAt: pendingMessage.createdAt,
         updatedAt: pendingMessage.createdAt,
         sendStatus: pendingMessage.status,
-        replyTo: pendingMessage.replyTo ?? null,
-      } as IVXMessage & { sendStatus: PendingOwnerMessage['status']; replyTo?: ChatReplyContext | null });
+        replyTo: pendingMessage.replyTo ?? null} as IVXMessage & { sendStatus: PendingOwnerMessage['status']; replyTo?: ChatReplyContext | null });
     }
 
     // GUARANTEE-BUBBLE DEDUP:
@@ -1598,8 +1528,7 @@ export default function IVXOwnerChatRoute() {
           const draft: OwnerConversationDraft = {
             text: draftText,
             attachmentDrafts,
-            updatedAt: new Date().toISOString(),
-          };
+            updatedAt: new Date().toISOString()};
           await AsyncStorage.setItem(IVX_OWNER_DRAFT_STORAGE_KEY, JSON.stringify(draft));
           console.log('[IVXOwnerChatRoute] Saved owner draft:', { textLength: draftText.length, attachmentDraftCount: attachmentDrafts.length });
         } catch (error) {
@@ -1858,8 +1787,7 @@ export default function IVXOwnerChatRoute() {
       senderRole: role,
       senderLabel: role === 'assistant' ? IVX_OWNER_AI_PROFILE.name : 'System',
       attachmentKind: role === 'assistant' ? 'text' : 'system',
-      requireRemote: false,
-    });
+      requireRemote: false});
     console.log('[IVXOwnerChatRoute] Support message persisted:', role, trimmedText.slice(0, 60));
   }, []);
 
@@ -1877,8 +1805,7 @@ export default function IVXOwnerChatRoute() {
     source: 'unknown',
     endpoint: null,
     deploymentMarker: null,
-    lastFailureReason: null,
-  });
+    lastFailureReason: null});
   const [aiProxyStatus, setAiProxyStatus] = useState<AIProxyStatusSnapshot>(() => createInitialAIProxyStatus());
   const [lastToolOutputs, setLastToolOutputs] = useState<IVXOwnerAIToolOutput[]>([]);
   const [runtimeDebugSnapshot, setRuntimeDebugSnapshot] = useState<RuntimeDebugSnapshot>({
@@ -1898,8 +1825,7 @@ export default function IVXOwnerChatRoute() {
     failureDetail: 'No live send attempted yet.',
     lastAttemptAt: null,
     lastVerifiedAt: null,
-    hasVisibleResponseText: false,
-  });
+    hasVisibleResponseText: false});
   const [lastSendAt, setLastSendAt] = useState<string | null>(null);
   const [lastReplyAt, setLastReplyAt] = useState<string | null>(null);
   const [replyFailures, setReplyFailures] = useState<number>(0);
@@ -1933,8 +1859,7 @@ export default function IVXOwnerChatRoute() {
     failureClass: runtimeDebugSnapshot.failureClass,
     isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
     isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-  }), [runtimeDebugSnapshot]);
+    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText}), [runtimeDebugSnapshot]);
   const fallbackChatOnlyActive = useMemo<boolean>(() => {
     if (devTestMode.testModeActive) {
       return false;
@@ -1964,8 +1889,7 @@ export default function IVXOwnerChatRoute() {
     ownerRoomAuthenticated,
     backendAdminVerified,
     fallbackModeActive: fallbackChatOnlyActive,
-    devTestModeActive: devTestMode.testModeActive,
-  }), [backendAdminVerified, devTestMode.testModeActive, fallbackChatOnlyActive, normalizedComposerValue, ownerRoomAuthenticated]);
+    devTestModeActive: devTestMode.testModeActive}), [backendAdminVerified, devTestMode.testModeActive, fallbackChatOnlyActive, normalizedComposerValue, ownerRoomAuthenticated]);
 
   useEffect(() => {
     aiReachableRef.current = effectiveAiBackendReachable;
@@ -1992,8 +1916,7 @@ export default function IVXOwnerChatRoute() {
         model: 'ivx-local-app-brain',
         gateway: 'local_app_brain',
         configured: true,
-        error: null,
-      }));
+        error: null}));
       return undefined;
     }
 
@@ -2003,8 +1926,7 @@ export default function IVXOwnerChatRoute() {
         status: 'blocked',
         observedAt: new Date().toISOString(),
         url: buildOwnerAIProxyStatusUrl(ownerAIConfigAudit),
-        error: ownerAIConfigAudit.configurationError ?? 'Owner AI routing is blocked by configuration.',
-      });
+        error: ownerAIConfigAudit.configurationError ?? 'Owner AI routing is blocked by configuration.'});
       return undefined;
     }
 
@@ -2014,8 +1936,7 @@ export default function IVXOwnerChatRoute() {
         ...current,
         status: current.status === 'connected' ? 'connected' : 'checking',
         url: buildOwnerAIProxyStatusUrl(ownerAIConfigAudit) ?? current.url,
-        error: null,
-      }));
+        error: null}));
       const result = await fetchOwnerAIProxyStatus(ownerAIConfigAudit);
       if (cancelled) {
         return;
@@ -2028,8 +1949,7 @@ export default function IVXOwnerChatRoute() {
         model: result.model,
         gateway: result.gateway,
         deploymentMarker: result.deploymentMarker,
-        url: result.url,
-      });
+        url: result.url});
 
       if (result.status === 'connected') {
         setAiBackendReachable(true);
@@ -2039,8 +1959,7 @@ export default function IVXOwnerChatRoute() {
           source: 'remote_api',
           endpoint: ownerAIConfigAudit.activeEndpoint ?? current.endpoint,
           deploymentMarker: result.deploymentMarker ?? current.deploymentMarker,
-          lastFailureReason: null,
-        }));
+          lastFailureReason: null}));
         setRuntimeDebugSnapshot((current) => ({
           ...current,
           source: shouldPreserveRequestScopedRuntime(current) ? current.source : 'remote_api',
@@ -2051,8 +1970,7 @@ export default function IVXOwnerChatRoute() {
           failureDetail: current.failureDetail === 'No live send attempted yet.'
             ? 'Fast proxy status connected. Full capability probe continues in the background.'
             : current.failureDetail,
-          lastVerifiedAt: result.observedAt ?? current.lastVerifiedAt,
-        }));
+          lastVerifiedAt: result.observedAt ?? current.lastVerifiedAt}));
       }
     };
 
@@ -2077,8 +1995,7 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? null,
         endpoint: aiProbeMetadata.endpoint ?? ownerAIConfigAudit.activeEndpoint ?? current.endpoint,
         deploymentMarker: aiProbeMetadata.deploymentMarker ?? current.deploymentMarker,
-        source: shouldPreserveActiveRequest ? current.source : 'unknown',
-      };
+        source: shouldPreserveActiveRequest ? current.source : 'unknown'};
     });
   }, [aiProbeMetadata.deploymentMarker, aiProbeMetadata.endpoint, aiProbeMetadata.source, conversationQuery.data?.id, isOpenAccessBuild, ownerAIConfigAudit.activeEndpoint, user, userId]);
 
@@ -2090,8 +2007,7 @@ export default function IVXOwnerChatRoute() {
         configuredBaseUrl: ownerAIConfigAudit.configuredBaseUrl,
         activeBaseUrl: ownerAIConfigAudit.activeBaseUrl,
         configurationError: ownerAIConfigAudit.configurationError,
-        pointsToDevHost: ownerAIConfigAudit.pointsToDevHost,
-      });
+        pointsToDevHost: ownerAIConfigAudit.pointsToDevHost});
       return;
     }
 
@@ -2099,8 +2015,7 @@ export default function IVXOwnerChatRoute() {
       environment: ownerAIConfigAudit.currentEnvironment,
       routingPolicy: ownerAIConfigAudit.routingPolicy,
       activeBaseUrl: ownerAIConfigAudit.activeBaseUrl,
-      fallbackUsed: ownerAIConfigAudit.fallbackUsed,
-    });
+      fallbackUsed: ownerAIConfigAudit.fallbackUsed});
   }, [
     ownerAIConfigAudit.activeBaseUrl,
     ownerAIConfigAudit.configuredBaseUrl,
@@ -2138,8 +2053,7 @@ export default function IVXOwnerChatRoute() {
     const baseMetadata = {
       roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
       route: '/ivx/chat',
-      sender: ownerLabel,
-    };
+      sender: ownerLabel};
 
     liveIntelligenceService.captureEvent({
       eventName: 'session_start',
@@ -2148,8 +2062,7 @@ export default function IVXOwnerChatRoute() {
       sessionId,
       userId: ownerId || null,
       anonId: ownerId || sessionId,
-      metadata: baseMetadata,
-    });
+      metadata: baseMetadata});
     liveIntelligenceService.captureEvent({
       eventName: 'page_view',
       screen: '/ivx/chat',
@@ -2157,8 +2070,7 @@ export default function IVXOwnerChatRoute() {
       sessionId,
       userId: ownerId || null,
       anonId: ownerId || sessionId,
-      metadata: baseMetadata,
-    });
+      metadata: baseMetadata});
     liveIntelligenceService.captureEvent({
       eventName: 'chat_open',
       screen: '/ivx/chat',
@@ -2166,15 +2078,13 @@ export default function IVXOwnerChatRoute() {
       sessionId,
       userId: ownerId || null,
       anonId: ownerId || sessionId,
-      metadata: baseMetadata,
-    });
+      metadata: baseMetadata});
     void recordIVXOwnerChatAuditEvent({
       action: 'room_open',
       conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
       status: 'success',
       summary: 'IVX Owner AI room opened locally with runtime and persistence checks active.',
-      metadata: { sessionId, localFirstChatMode, ownerRoomAuthenticated },
-    });
+      metadata: { sessionId, localFirstChatMode, ownerRoomAuthenticated }});
 
     return () => {
       liveIntelligenceService.captureEvent({
@@ -2186,9 +2096,7 @@ export default function IVXOwnerChatRoute() {
         anonId: ownerId || sessionId,
         metadata: {
           ...baseMetadata,
-          reason: 'route_unmount',
-        },
-      });
+          reason: 'route_unmount'}});
     };
   }, [conversationQuery.data?.id, localFirstChatMode, ownerId, ownerLabel, ownerRoomAuthenticated]);
 
@@ -2227,8 +2135,7 @@ export default function IVXOwnerChatRoute() {
         responsePreview: sanitizeUserFacingChatText(safeTrim(text)).slice(0, 160) || current.responsePreview,
         failureDetail: 'Awaiting AI response from live runtime.',
         lastAttemptAt: startedAtIso,
-        hasVisibleResponseText: false,
-      }));
+        hasVisibleResponseText: false}));
       setAiReplyPending(true);
       // Watchdog: force-clear typing indicator after a hard ceiling so it can never get stuck.
       const watchdogTimer = setTimeout(() => {
@@ -2254,8 +2161,7 @@ export default function IVXOwnerChatRoute() {
               mode: 'chat',
               persistUserMessage: false,
               persistAssistantMessage: true,
-              devTestModeActive: devTestMode.testModeActive,
-            },
+              devTestModeActive: devTestMode.testModeActive},
             {
               // Forward the reliability wrapper's combined AbortSignal so a
               // total-timeout abort (45s budget) actually cancels the in-flight
@@ -2277,8 +2183,7 @@ export default function IVXOwnerChatRoute() {
                 } else if (event.type === 'final') {
                   trace.heartbeat(`sse_final:${event.status}`);
                 }
-              },
-            },
+              }},
           ),
           // ROOT-CAUSE FIX (2026-06-10): heavy audit/fix prompts run the
           // tool-grounded server-side agent for 60–90s+, which exceeds the host's
@@ -2301,8 +2206,7 @@ export default function IVXOwnerChatRoute() {
         console.log('[IVXConversationId] turn_resolved', {
           clientBeforeSend: reliableConversationId,
           backendReturned: aiResult.conversationId ?? null,
-          usedForSaveAndRestore: canonicalIdForThisTurn,
-        });
+          usedForSaveAndRestore: canonicalIdForThisTurn});
         // The user still gets a live answer here, but if it came from the
         // /public/chat fallback, the privileged /api/ivx/owner-ai route FAILED
         // (auth/network/backend). Record that real failure on the watchdog so
@@ -2356,13 +2260,11 @@ export default function IVXOwnerChatRoute() {
               degradedRoute: primaryRouteFailure.endpoint,
               degradedReason: primaryRouteFailure.reason,
               statusCode: primaryRouteFailure.statusCode,
-              classification: primaryRouteFailure.classification,
-            });
+              classification: primaryRouteFailure.classification});
             console.log('[IVX_TRACE] BACKEND_POST_FINISHED_PASS_RECOVERED_VIA_FALLBACK', {
               statusCode: primaryRouteFailure.statusCode,
               classification: primaryRouteFailure.classification,
-              answerLength: recoveredAnswerText.length,
-            });
+              answerLength: recoveredAnswerText.length});
           } else {
             // No recovered answer — a genuine round-trip failure (synthetic
             // OWNER_AUTH_FAILED / OWNER_AI_NETWORK_FAILED, recoveredViaFallback:false).
@@ -2374,20 +2276,17 @@ export default function IVXOwnerChatRoute() {
               classification: primaryRouteFailure.classification,
               stage: primaryRouteFailure.stage,
               endpoint: primaryRouteFailure.endpoint,
-              recoveredViaFallback: primaryRouteFailure.recoveredViaFallback,
-            });
+              recoveredViaFallback: primaryRouteFailure.recoveredViaFallback});
             console.log('[IVX_TRACE] BACKEND_ROUTE_FAILED_NO_RECOVERED_ANSWER', {
               statusCode: primaryRouteFailure.statusCode,
-              classification: primaryRouteFailure.classification,
-            });
+              classification: primaryRouteFailure.classification});
           }
         } else {
           // Privileged route succeeded — clear any stale auth-failure banner.
           setOwnerAuthFailureBanner(null);
           trace?.pass('BACKEND_POST_FINISHED', `attempts=${reliabilityTraceAttempts} outcome=${reliabilityFinalOutcome}`, {
             requestId: aiResult.requestId,
-            assistantPersisted: aiResult.assistantPersisted,
-          });
+            assistantPersisted: aiResult.assistantPersisted});
           setStagedTimeoutLastCheckpoint('BACKEND_POST_FINISHED');
         }
         setLastReliabilityTrace(reliabilityTrace);
@@ -2396,8 +2295,7 @@ export default function IVXOwnerChatRoute() {
           conversationId: reliableConversationId,
           status: 'started',
           summary: 'IVX Owner AI assistant request completed reliability wrapper and entered response validation.',
-          metadata: { attempts: reliabilityTraceAttempts, finalOutcome: reliabilityFinalOutcome, elapsedMs: reliabilityTotalMs, sessionId: ownerSessionIdRef.current },
-        });
+          metadata: { attempts: reliabilityTraceAttempts, finalOutcome: reliabilityFinalOutcome, elapsedMs: reliabilityTotalMs, sessionId: ownerSessionIdRef.current }});
         const runtimeProof = getLastIVXOwnerAIRuntimeProof();
         const normalizedSource = normalizeRuntimeSource(runtimeProof?.source ?? aiResult.source);
         const normalizedAnswer = assertCleanOwnerAIResponseText(aiResult.answer);
@@ -2439,8 +2337,7 @@ export default function IVXOwnerChatRoute() {
             status: executionStatusPayload.status,
             stage: executionStatusPayload.stage,
             liveProgress: executionStatusPayload.liveProgress,
-            httpStatus: executionStatusPayload.httpStatus,
-          });
+            httpStatus: executionStatusPayload.httpStatus});
         }
 
         console.log('[IVX_TRACE] 4_BACKEND_RESPONSE', { mutationRunId, source: normalizedSource, answerLength: normalizedAnswer.length, requestId: aiResult.requestId, assistantPersisted: aiResult.assistantPersisted });
@@ -2460,8 +2357,7 @@ export default function IVXOwnerChatRoute() {
             normalizedSource,
             rawSource: runtimeProof?.source ?? aiResult.source ?? null,
             requestId: aiResult.requestId,
-            acceptable: assistantSourceAcceptable,
-          });
+            acceptable: assistantSourceAcceptable});
         }
         const visibleAnswerWithBadge = assistantSourceExpected
           ? visibleAnswer
@@ -2481,8 +2377,7 @@ export default function IVXOwnerChatRoute() {
               id: transientReplyId,
               conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
               body: visibleAnswerWithBadge,
-              taskId: executionStatusPayload?.taskId ?? null,
-            });
+              taskId: executionStatusPayload?.taskId ?? null});
             return [...current.filter((message) => message.id !== transientReplyId), replyMessage];
           });
         } catch (setErr) {
@@ -2502,8 +2397,7 @@ export default function IVXOwnerChatRoute() {
           responsePreview: visibleAnswer.slice(0, 160) || current.responsePreview,
           failureDetail: 'Reply delivered and saved.',
           lastVerifiedAt: new Date().toISOString(),
-          hasVisibleResponseText: true,
-        }));
+          hasVisibleResponseText: true}));
 
         setAiBackendReachable(true);
         setAiHealthDetail('active');
@@ -2512,8 +2406,7 @@ export default function IVXOwnerChatRoute() {
           source: normalizedSource,
           endpoint: aiResult.endpoint ?? runtimeProof?.endpoint ?? null,
           deploymentMarker: aiResult.deploymentMarker ?? runtimeProof?.deploymentMarker ?? null,
-          lastFailureReason: null,
-        });
+          lastFailureReason: null});
         setRuntimeDebugSnapshot((current) => {
           const nextRequestStage = (runtimeProof?.failureClass === 'none' && (runtimeProof?.source === 'remote_api' || runtimeProof?.source === 'local_app_brain') ? runtimeProof?.requestStage : null)
             ?? 'response_ok';
@@ -2534,8 +2427,7 @@ export default function IVXOwnerChatRoute() {
             responsePreview: visibleAnswer.slice(0, 160) || current.responsePreview,
             failureDetail: 'Reply delivered and saved.',
             lastVerifiedAt: new Date().toISOString(),
-            hasVisibleResponseText: true,
-          };
+            hasVisibleResponseText: true};
         });
         setLastReplyAt(new Date().toISOString());
         setLatencySamplesMs((samples) => [...samples.slice(-9), Date.now() - startedAt]);
@@ -2544,8 +2436,7 @@ export default function IVXOwnerChatRoute() {
           source: normalizedSource,
           endpoint: aiResult.endpoint ?? null,
           deploymentMarker: aiResult.deploymentMarker ?? null,
-          model: aiResult.model,
-        });
+          model: aiResult.model});
 
         // --- Report Continuation Auto-Continue ---
         let currentResult = aiResult;
@@ -2558,8 +2449,7 @@ export default function IVXOwnerChatRoute() {
             const message = buildVisibleAssistantTransient({
               id: continuationTransientId,
               conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-              body: partMessage,
-            });
+              body: partMessage});
             return [...current, message];
           });
 
@@ -2575,16 +2465,14 @@ export default function IVXOwnerChatRoute() {
               persistUserMessage: false,
               persistAssistantMessage: true,
               devTestModeActive: devTestMode.testModeActive,
-              continuationToken: currentResult.continuationToken,
-            });
+              continuationToken: currentResult.continuationToken});
             const nextNormalizedAnswer = assertCleanOwnerAIResponseText(nextResult.answer);
             const nextReplyId = createTransientMessageId('ivx-owner-ai-reply');
             setTransientAssistantMessages((current) => {
               const replyMessage = buildVisibleAssistantTransient({
                 id: nextReplyId,
                 conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                body: nextNormalizedAnswer,
-              });
+                body: nextNormalizedAnswer});
               return [...current.filter((message) => message.id !== nextReplyId), replyMessage];
             });
             currentResult = nextResult;
@@ -2597,8 +2485,7 @@ export default function IVXOwnerChatRoute() {
               const message = buildVisibleAssistantTransient({
                 id: fallbackTransientId,
                 conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                body: fallbackPrompt,
-              });
+                body: fallbackPrompt});
               return [...current.filter((m) => m.id !== continuationTransientId), message];
             });
             break;
@@ -2625,9 +2512,7 @@ export default function IVXOwnerChatRoute() {
               model: aiResult.model,
               answerLength: visibleAnswer.length,
               reliabilityAttempts: reliabilityTraceAttempts,
-              sessionId: ownerSessionIdRef.current,
-            },
-          });
+              sessionId: ownerSessionIdRef.current}});
           // Refetch (not just invalidate) so the persisted assistant message is in the
           // query cache BEFORE we remove the transient bubble. Using invalidateQueries
           // alone created a race where the transient was filtered before the refetch
@@ -2651,8 +2536,7 @@ export default function IVXOwnerChatRoute() {
           setRuntimeDebugSnapshot((current) => ({
             ...current,
             failureDetail: 'Reply delivered locally. Save will retry on refresh.',
-            hasVisibleResponseText: true,
-          }));
+            hasVisibleResponseText: true}));
         }
         if (!localFirstChatMode) {
           try {
@@ -2668,9 +2552,7 @@ export default function IVXOwnerChatRoute() {
                 roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
                 source: normalizedSource,
                 requestId: aiResult.requestId ?? null,
-                message: sanitizeUserFacingChatText(visibleAnswer).slice(0, 240),
-              },
-            });
+                message: sanitizeUserFacingChatText(visibleAnswer).slice(0, 240)}});
           } catch (eventErr) {
             console.log('[IVXOwnerChatRoute] Post-processing event capture failed (response still delivered):', eventErr instanceof Error ? eventErr.message : 'unknown');
           }
@@ -2693,8 +2575,7 @@ export default function IVXOwnerChatRoute() {
           serviceUnavailable,
           blockedByRoutingGuard: ownerAIRoutingBlocked,
           activeEndpoint: ownerAIConfigAudit.activeEndpoint,
-          routingPolicy: ownerAIConfigAudit.routingPolicy,
-        });
+          routingPolicy: ownerAIConfigAudit.routingPolicy});
 
         // Flip bubbleEmitted=true and mark BACKEND_POST_FINISHED failed FIRST,
         // so even if the setState updater throws later the watchdog already
@@ -2758,8 +2639,7 @@ export default function IVXOwnerChatRoute() {
               conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
               body: serviceUnavailable
                 ? `Service temporarily unavailable. Please try again in a moment.\n\n${diagnosticsCardLine}`
-                : `I was unable to generate a reply right now.${failureReasonSuffix}\n\n${diagnosticsCardLine}`,
-            }),
+                : `I was unable to generate a reply right now.${failureReasonSuffix}\n\n${diagnosticsCardLine}`}),
           ]);
         } catch (setErr) {
           console.log('[IVXOwnerChatRoute] error_bubble_setState_threw_safely_continuing:', setErr instanceof Error ? setErr.message : 'unknown');
@@ -2783,9 +2663,7 @@ export default function IVXOwnerChatRoute() {
             serviceUnavailable,
             reliabilityAttempts: failedTrace?.attempts.length ?? null,
             finalOutcome: failedTrace?.finalOutcome ?? null,
-            sessionId: ownerSessionIdRef.current,
-          },
-        });
+            sessionId: ownerSessionIdRef.current}});
         setRuntimeDebugSnapshot((current) => ({
           ...current,
           conversationId: conversationQuery.data?.id ?? current.conversationId,
@@ -2796,21 +2674,18 @@ export default function IVXOwnerChatRoute() {
           httpStatus: diagnostics?.statusCode !== null && diagnostics?.statusCode !== undefined ? String(diagnostics.statusCode) : 'unavailable',
           responsePreview: '',
           failureDetail: 'The message was sent. Send another prompt when you are ready.',
-          hasVisibleResponseText: false,
-        }));
+          hasVisibleResponseText: false}));
         setAiBackendReachable(false);
         setAiHealthDetail('inactive');
         setAiProbeMetadata((current) => ({
           ...current,
           observedAt: new Date().toISOString(),
           endpoint: diagnostics?.endpoint ?? current.endpoint ?? ownerAIConfigAudit.activeEndpoint,
-          lastFailureReason: serviceUnavailable ? 'temporarily_unavailable' : 'provider_exhausted',
-        }));
+          lastFailureReason: serviceUnavailable ? 'temporarily_unavailable' : 'provider_exhausted'}));
         console.log('[IVXOwnerChatRoute] assistant provider and local guard paths exhausted; no fake assistant text inserted:', {
           originalFailureMessage: failureMessage,
           diagnostics,
-          serviceUnavailable,
-        });
+          serviceUnavailable});
         // P0 DURABLE FALLBACK (503-recovery mandate): a transient 5xx/timeout/
         // network failure must never lose the owner request. Hand the message
         // to the persisted server-side task queue and poll it to completion —
@@ -2825,8 +2700,7 @@ export default function IVXOwnerChatRoute() {
                 buildVisibleAssistantTransient({
                   id: durableBubbleId,
                   conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                  body,
-                }),
+                  body}),
               ]);
             } catch (bubbleErr) {
               console.log('[IVXOwnerChatRoute] durable_bubble_set_threw_safely_continuing:', bubbleErr instanceof Error ? bubbleErr.message : 'unknown');
@@ -2841,8 +2715,7 @@ export default function IVXOwnerChatRoute() {
               onStatus: (task) => {
                 if (task.terminal || task.status === 'COMPLETED') return;
                 updateDurableBubble(`♻️ Auto-recovery in progress — Task ${task.taskId}\nStatus: ${task.status} · Checkpoint: ${task.checkpoint} · Retries: ${task.retryCount}\nYour message is safe; no need to retype it.`);
-              },
-            });
+              }});
             if (durableResult.ok && durableResult.answer) {
               updateDurableBubble(durableResult.answer);
               setRuntimeDebugSnapshot((current) => ({
@@ -2853,8 +2726,7 @@ export default function IVXOwnerChatRoute() {
                 responsePreview: (durableResult.answer ?? '').slice(0, 160),
                 failureDetail: `Recovered automatically via durable task ${durableResult.taskId}.`,
                 hasVisibleResponseText: true,
-                lastVerifiedAt: new Date().toISOString(),
-              }));
+                lastVerifiedAt: new Date().toISOString()}));
               setAiBackendReachable(true);
               setAiHealthDetail('active');
             } else if (durableResult.taskId) {
@@ -2877,13 +2749,11 @@ export default function IVXOwnerChatRoute() {
         console.log('[IVX_TRACE] 7_FINALLY_ENTER', {
           mutationRunId,
           bubbleEmittedFlag: bubbleEmitted,
-          emittedBubbleIds: Array.from(emittedBubbleIds),
-        });
+          emittedBubbleIds: Array.from(emittedBubbleIds)});
         console.log('[IVXOwnerChatRoute] assistant_mutation_finally_entry', {
           mutationRunId,
           bubbleEmittedFlag: bubbleEmitted,
-          emittedBubbleIds: Array.from(emittedBubbleIds),
-        });
+          emittedBubbleIds: Array.from(emittedBubbleIds)});
         setTransientAssistantMessages((current) => {
           const currentIds = new Set(current.map((message) => message.id));
           const anyEmittedPresent = Array.from(emittedBubbleIds).some((id) => currentIds.has(id));
@@ -2892,13 +2762,11 @@ export default function IVXOwnerChatRoute() {
             currentTransientCount: current.length,
             currentTransientIds: Array.from(currentIds),
             emittedBubbleIds: Array.from(emittedBubbleIds),
-            anyEmittedPresent,
-          });
+            anyEmittedPresent});
           if (anyEmittedPresent) {
             console.log('[IVXOwnerChatRoute] assistant_invariant_satisfied', {
               mutationRunId,
-              presentIds: Array.from(emittedBubbleIds).filter((id) => currentIds.has(id)),
-            });
+              presentIds: Array.from(emittedBubbleIds).filter((id) => currentIds.has(id))});
             return current;
           }
           console.log('[IVXOwnerChatRoute] assistant_invariant_fallback_emitted — committed state has none of this mutation\'s bubbles. Forcing fallback.', {
@@ -2906,16 +2774,14 @@ export default function IVXOwnerChatRoute() {
             transientReplyId,
             emittedBubbleIds: Array.from(emittedBubbleIds),
             currentTransientCount: current.length,
-            bubbleEmittedFlag: bubbleEmitted,
-          });
+            bubbleEmittedFlag: bubbleEmitted});
           trace?.bindTransient(invariantFallbackId);
           return [
             ...current.filter((message) => message.id !== transientReplyId && !emittedBubbleIds.has(message.id)),
             buildVisibleAssistantTransient({
               id: invariantFallbackId,
               conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-              body: 'No assistant reply was received for that message. Tap to try again.',
-            }),
+              body: 'No assistant reply was received for that message. Tap to try again.'}),
           ];
         });
         // Watchdog finalization: BLOCKED if the invariant fallback fired,
@@ -2964,8 +2830,7 @@ export default function IVXOwnerChatRoute() {
     },
     onSettled: () => {
       setAiReplyPending(false);
-    },
-  });
+    }});
 
   // Pending owner-approval build-job draft (set when a build request is detected,
   // executed when the owner replies /confirm). Routes to the self-hosted worker.
@@ -2994,8 +2859,7 @@ export default function IVXOwnerChatRoute() {
     const jobId = submit.jobId;
     const finished: WorkerJobView | null = await pollSeniorDeveloperWorkerJob(jobId, {
       intervalMs: 4000,
-      timeoutMs: 180000,
-    });
+      timeoutMs: 180000});
     const lastProof = await getSeniorDeveloperWorkerLastProof();
     const result = finished?.result ?? null;
     const complete = isWorkerJobComplete(result);
@@ -3120,8 +2984,7 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: result.success ? 'success' : 'failed',
         summary: `Owner control action ${getActionLabel(action)} completed.`,
-        metadata: { action, resultMessage: result.message, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { action, resultMessage: result.message, sessionId: ownerSessionIdRef.current }});
       invalidateIVXRoomProbeCache();
       await queryClient.invalidateQueries({ queryKey: IVX_ROOM_STATUS_QUERY_KEY });
       setAiHealthDetail('inactive');
@@ -3187,8 +3050,7 @@ export default function IVXOwnerChatRoute() {
         ownerRoomAuthenticated,
         backendAdminVerified,
         fallbackModeActive: fallbackChatOnlyActive,
-        devTestModeActive: devTestMode.testModeActive,
-      });
+        devTestModeActive: devTestMode.testModeActive});
       const confirmedSensitiveAction = hasConfirmationPrefix && strippedTrustContext.requiresElevatedConfirmation;
       const effectiveText = confirmedSensitiveAction ? strippedConfirmedText : text;
       const trustContext = confirmedSensitiveAction
@@ -3198,8 +3060,7 @@ export default function IVXOwnerChatRoute() {
           ownerRoomAuthenticated,
           backendAdminVerified,
           fallbackModeActive: fallbackChatOnlyActive,
-          devTestModeActive: devTestMode.testModeActive,
-        });
+          devTestModeActive: devTestMode.testModeActive});
 
       // ====================================================================
       // INTENT CLASSIFICATION (owner directive 2026-07-25) — runs BEFORE the
@@ -3222,8 +3083,7 @@ export default function IVXOwnerChatRoute() {
         console.log('[IVXOwnerChatRoute] Diagnostic intent detected — running chat diagnostic engine', {
           intent: ownerIntent.intent,
           subject: ownerIntent.diagnosticSubject,
-          reason: ownerIntent.reason,
-        });
+          reason: ownerIntent.reason});
         // Persist the owner's message first
         await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
         setLastSendAt(new Date().toISOString());
@@ -3323,8 +3183,7 @@ export default function IVXOwnerChatRoute() {
       // (do NOT route to the worker — explanations are not code changes)
       if (ownerIntent.intent === 'explanation' && !isConfirmReply && !isSeniorDeveloperBuildRequest(effectiveText)) {
         console.log('[IVXOwnerChatRoute] Explanation intent detected — routing to conversational AI', {
-          reason: ownerIntent.reason,
-        });
+          reason: ownerIntent.reason});
         // Fall through to the normal AI reply path below — do NOT route to worker
       }
 
@@ -3362,31 +3221,48 @@ export default function IVXOwnerChatRoute() {
 
       if (localFirstChatMode) {
         const wdLF = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        try {
-          await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-          setLastSendAt(new Date().toISOString());
-          if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
-            wdLF?.pass('AI_TRIGGER_DECISION', 'branch=local_first_elevated_confirmation');
-            await persistSupportMessage(buildLocalSafeActionConfirmationMessage({
-              normalizedText: effectiveText,
-              requestClass: trustContext.requestClass,
-            }), 'assistant');
-            wdLF?.complete('SUCCESS');
-            return;
+        const startAssistantImmediately = shouldStartAssistantBeforePersistence({ localFirstChatMode, mode });
+        const persistencePromise = sendQueue.mutateAsync({
+          text: persistedOwnerText,
+          mode,
+          clientId,
+          replyTo,
+          senderLabel: ownerLabel,
+          capturedText});
+
+        if (startAssistantImmediately) {
+          // The local queue can retry persistence for minutes. The optimistic row is
+          // already visible, so it must not block a valid Owner AI request.
+          void persistencePromise
+            .then(() => setLastSendAt(new Date().toISOString()))
+            .catch((sendError: unknown) => {
+              console.log('[IVXOwnerChatRoute] local-first persistence continues in the retry queue:', sendError instanceof Error ? sendError.message : String(sendError));
+            });
+        } else {
+          try {
+            await persistencePromise;
+            setLastSendAt(new Date().toISOString());
+          } catch (sendError) {
+            wdLF?.fail('AI_TRIGGER_DECISION', `sendQueue failed in localFirst: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
+            throw sendError instanceof Error ? sendError : new Error(String(sendError));
           }
-        } catch (sendError) {
-          wdLF?.fail('AI_TRIGGER_DECISION', `sendQueue failed in localFirst: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
-          throw sendError instanceof Error ? sendError : new Error(String(sendError));
+        }
+
+        if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
+          wdLF?.pass('AI_TRIGGER_DECISION', 'branch=local_first_elevated_confirmation');
+          await persistSupportMessage(buildLocalSafeActionConfirmationMessage({
+            normalizedText: effectiveText,
+            requestClass: trustContext.requestClass}), 'assistant');
+          wdLF?.complete('SUCCESS');
+          return;
         }
 
         if (mode === 'send_and_ai' || mode === 'ai_only') {
-          console.log('[IVX_TRACE] 2.2_AI_TRIGGER_LOCAL_FIRST', { clientId, mode });
-          wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first mode=${mode}`);
-          // Synchronously mark the assistant mutation as started so the watchdog
-          // never reports a phantom stall at AI_TRIGGER_DECISION if the async
-          // call is delayed or queued behind an earlier mutation.
+          console.log('[IVX_TRACE] 2.2_AI_TRIGGER_LOCAL_FIRST', { clientId, mode, startAssistantImmediately });
+          wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first mode=${mode} persistence=${startAssistantImmediately ? 'background' : 'confirmed'}`);
+          // Mark the handoff before invoking the mutation so a blocked persistence
+          // queue can never strand this trace at USER_ROW_INSERTED.
           wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
-          // Retry-once guard: catch the first rejection, log it, and retry once
           try {
             await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId });
           } catch (aiErr) {
@@ -3418,9 +3294,7 @@ export default function IVXOwnerChatRoute() {
             args: commandResult.args,
             confirmedSensitiveAction,
             requestClass: trustContext.requestClass,
-            trustStates: trustContext.namedStates,
-          },
-        });
+            trustStates: trustContext.namedStates}});
         const wdCmd = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
         try {
           await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
@@ -3428,8 +3302,7 @@ export default function IVXOwnerChatRoute() {
           if (trustContext.conversationAccessState === 'fallback_chat_only' && trustContext.requiresElevatedConfirmation) {
             await persistSupportMessage(buildFallbackChatOnlyExecutionMessage({
               normalizedText: effectiveText,
-              requestClass: trustContext.requestClass,
-            }), 'system');
+              requestClass: trustContext.requestClass}), 'system');
             return;
           }
           if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
@@ -3438,8 +3311,7 @@ export default function IVXOwnerChatRoute() {
               normalizedText: effectiveText,
               requestClass: trustContext.requestClass,
               conversationAccessState: trustContext.conversationAccessState,
-              backendAdminVerified: trustContext.backendAdminState === 'backend_admin_verified',
-            }), 'system');
+              backendAdminVerified: trustContext.backendAdminState === 'backend_admin_verified'}), 'system');
             wdCmd?.complete('SUCCESS');
             return;
           }
@@ -3482,9 +3354,7 @@ export default function IVXOwnerChatRoute() {
           message: sanitizeUserFacingChatText(text),
           confirmedSensitiveAction,
           requestClass: trustContext.requestClass,
-          trustStates: trustContext.namedStates,
-        },
-      });
+          trustStates: trustContext.namedStates}});
       try {
         const queueResult = await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
         setLastSendAt(new Date().toISOString());
@@ -3494,8 +3364,7 @@ export default function IVXOwnerChatRoute() {
           messageId: queueResult.messageId,
           status: 'success',
           summary: 'Owner message saved through the IVX chat send path.',
-          metadata: { mode, requestClass: trustContext.requestClass, confirmedSensitiveAction, trustStates: trustContext.namedStates, sessionId: ownerSessionIdRef.current },
-        });
+          metadata: { mode, requestClass: trustContext.requestClass, confirmedSensitiveAction, trustStates: trustContext.namedStates, sessionId: ownerSessionIdRef.current }});
         console.log('[IVXOwnerChatRoute] Owner message sent to Supabase. trust:', trustContext.namedStates, 'confirmed:', confirmedSensitiveAction);
       } catch (sendError) {
         console.log('[IVX_TRACE] 2.X_SEND_QUEUE_THREW_NO_AI_TRIGGER', { clientId, errorMessage: sendError instanceof Error ? sendError.message : String(sendError) });
@@ -3513,8 +3382,7 @@ export default function IVXOwnerChatRoute() {
           normalizedText: effectiveText,
           requestClass: trustContext.requestClass,
           conversationAccessState: trustContext.conversationAccessState,
-          backendAdminVerified: trustContext.backendAdminState === 'backend_admin_verified',
-        }), 'system');
+          backendAdminVerified: trustContext.backendAdminState === 'backend_admin_verified'}), 'system');
         watchdogTrace?.complete('SUCCESS');
         return;
       }
@@ -3595,12 +3463,9 @@ export default function IVXOwnerChatRoute() {
         messageId: variables.clientId,
         status: 'failed',
         summary: 'Owner message send failed.',
-        metadata: { error: error.message, mode: variables.mode, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { error: error.message, mode: variables.mode, sessionId: ownerSessionIdRef.current }});
       Alert.alert('Message not sent', error.message);
-    },
-
-  });
+    }});
 
   useEffect(() => {
     let cancelled = false;
@@ -3628,15 +3493,13 @@ export default function IVXOwnerChatRoute() {
         source: result.source,
         endpoint: result.endpoint,
         deploymentMarker: result.deploymentMarker,
-        lastFailureReason: result.health === 'inactive' ? current.lastFailureReason : null,
-      }));
+        lastFailureReason: result.health === 'inactive' ? current.lastFailureReason : null}));
       setRuntimeDebugSnapshot((current) => ({
         ...current,
         conversationId: conversationQuery.data?.id ?? current.conversationId,
         source: shouldPreserveRequestScopedRuntime(current) ? current.source : 'unknown',
         endpoint: result.endpoint ?? current.endpoint,
-        deploymentMarker: result.deploymentMarker ?? current.deploymentMarker,
-      }));
+        deploymentMarker: result.deploymentMarker ?? current.deploymentMarker}));
       if (result.roomStatus) {
         setRoomProbeAt(new Date().toISOString());
         queryClient.setQueryData<ChatRoomStatus>(IVX_ROOM_STATUS_QUERY_KEY, result.roomStatus);
@@ -3646,8 +3509,7 @@ export default function IVXOwnerChatRoute() {
         source: result.source,
         endpoint: result.endpoint,
         deploymentMarker: result.deploymentMarker,
-        storageMode: result.roomStatus?.storageMode ?? ivxRoomStatus?.storageMode ?? 'unknown',
-      });
+        storageMode: result.roomStatus?.storageMode ?? ivxRoomStatus?.storageMode ?? 'unknown'});
       return result;
     };
 
@@ -3658,8 +3520,7 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: result.health === 'active' ? 'success' : 'failed',
         summary: 'IVX Owner AI backend capability probe completed.',
-        metadata: { health: result.health, source: result.source, endpoint: result.endpoint, deploymentMarker: result.deploymentMarker, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { health: result.health, source: result.source, endpoint: result.endpoint, deploymentMarker: result.deploymentMarker, sessionId: ownerSessionIdRef.current }});
       if (cancelled) return;
 
       if (result.health === 'active') {
@@ -3717,8 +3578,7 @@ export default function IVXOwnerChatRoute() {
         fileUploadAvailability: 'inactive',
         knowledgeBackendHealth: 'inactive',
         ownerCommandAvailability: 'inactive',
-        codeAwareServiceAvailability: 'inactive',
-      };
+        codeAwareServiceAvailability: 'inactive'};
     }
 
     const normalizedRuntimeState = {
@@ -3727,8 +3587,7 @@ export default function IVXOwnerChatRoute() {
       failureClass: runtimeDebugSnapshot.failureClass,
       isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
       isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-    };
+      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText};
     const activeRuntimeSource = getActiveRuntimeSource(normalizedRuntimeState);
     const hasFailure = hasRuntimeFailure(normalizedRuntimeState);
     const proxyConnected = aiProxyStatus.status === 'connected';
@@ -3748,8 +3607,7 @@ export default function IVXOwnerChatRoute() {
       fileUploadAvailability: fileUploadActive ? 'active' : 'inactive',
       knowledgeBackendHealth: knowledgeActive ? 'active' : 'inactive',
       ownerCommandAvailability: ownerCommandsActive ? 'active' : 'inactive',
-      codeAwareServiceAvailability: codeAwareActive ? 'active' : 'inactive',
-    };
+      codeAwareServiceAvailability: codeAwareActive ? 'active' : 'inactive'};
   }, [aiHealthDetail, aiProxyStatus.status, aiReplyPending, codeAwareActive, devTestMode.testModeActive, fileUploadActive, knowledgeActive, localFirstChatMode, ownerCommandsActive, runtimeDebugSnapshot]);
 
   const resolution = useMemo<RoomCapabilityResolution>(() => {
@@ -3761,8 +3619,7 @@ export default function IVXOwnerChatRoute() {
       knowledgeActive,
       ownerCommandsActive,
       codeAwareActive,
-      fileUploadActive,
-    });
+      fileUploadActive});
     return resolveRoomCapabilityState(ivxRoomStatus, runtimeSignals);
   }, [effectiveAiBackendReachable, effectiveAiHealthDetail, ivxRoomStatus, runtimeSignals, knowledgeActive, ownerCommandsActive, codeAwareActive, fileUploadActive]);
 
@@ -3802,8 +3659,7 @@ export default function IVXOwnerChatRoute() {
       return ivxChatService.sendOwnerAttachmentMessage({
         upload,
         body: persistedAttachmentBody,
-        senderLabel: ownerLabel,
-      });
+        senderLabel: ownerLabel});
     },
     onSuccess: async (_message, variables) => {
       clearUploadProgressTimer(variables.clientId);
@@ -3827,9 +3683,7 @@ export default function IVXOwnerChatRoute() {
           fileType: variables.upload.type ?? null,
           size: variables.upload.size ?? null,
           attachmentKind: _message.attachmentKind,
-          sessionId: ownerSessionIdRef.current,
-        },
-      });
+          sessionId: ownerSessionIdRef.current}});
       await queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
       setTimeout(() => {
         setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
@@ -3848,11 +3702,9 @@ export default function IVXOwnerChatRoute() {
         messageId: variables.clientId,
         status: 'failed',
         summary: 'Owner attachment upload failed.',
-        metadata: { error: error.message, fileName: variables.upload.name, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { error: error.message, fileName: variables.upload.name, sessionId: ownerSessionIdRef.current }});
       Alert.alert('Upload failed', error.message);
-    },
-  });
+    }});
 
   const handleComposerChange = useCallback((value: string) => {
     composerValueRef.current = value;
@@ -3890,8 +3742,7 @@ export default function IVXOwnerChatRoute() {
       conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
       status: 'success',
       summary: `Owner prompt template applied: ${template.label}.`,
-      metadata: { templateId: template.id, sessionId: ownerSessionIdRef.current },
-    });
+      metadata: { templateId: template.id, sessionId: ownerSessionIdRef.current }});
   }, [conversationQuery.data?.id]);
 
   const stopVoiceRecording = useCallback(async () => {
@@ -3925,8 +3776,7 @@ export default function IVXOwnerChatRoute() {
 
       await setAudioModeAsync({
         allowsRecording: true,
-        playsInSilentMode: true,
-      });
+        playsInSilentMode: true});
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record({ forDuration: 120 });
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -3935,8 +3785,7 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: 'started',
         summary: 'Owner voice recording started.',
-        metadata: { sessionId: ownerSessionIdRef.current, platform: Platform.OS },
-      });
+        metadata: { sessionId: ownerSessionIdRef.current, platform: Platform.OS }});
     } catch (error) {
       console.log('[IVXOwnerChatRoute] Start voice recording error:', error instanceof Error ? error.message : 'unknown');
       Alert.alert('Voice recording unavailable', 'We could not start recording. Please try again.');
@@ -3960,8 +3809,7 @@ export default function IVXOwnerChatRoute() {
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
         status: 'success',
         summary: 'Owner searched the IVX Owner AI conversation.',
-        metadata: { queryLength: trimmed.length, resultCount: displayedMessages.length, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { queryLength: trimmed.length, resultCount: displayedMessages.length, sessionId: ownerSessionIdRef.current }});
     }
   }, [conversationQuery.data?.id, displayedMessages.length]);
 
@@ -4036,8 +3884,7 @@ export default function IVXOwnerChatRoute() {
       mode: pendingMessage.mode as 'send_only' | 'send_and_ai' | 'ai_only',
       clientId: pendingMessage.clientId,
       capturedText: normalizedText,
-      replyTo: pendingMessage.replyTo ?? null,
-    });
+      replyTo: pendingMessage.replyTo ?? null});
   }, [attachmentMutation, sendMessageMutation.isPending, pendingOwnerMessages, sendMessageMutation, startUploadProgressTimer]);
 
   /**
@@ -4061,8 +3908,7 @@ export default function IVXOwnerChatRoute() {
           console.log('[IVXOwnerChatRoute] Auto-retrying failed Owner AI message after session refresh:', lastFailed.clientId);
           handleRetryMessage({
             id: lastFailed.clientId,
-            text: lastFailed.text,
-          } as ChatMessage);
+            text: lastFailed.text} as ChatMessage);
           Alert.alert('Owner session refreshed', 'ownerDetected: YES. Retrying your last message…');
         } else {
           Alert.alert('Owner session refreshed', 'ownerDetected: YES. Your owner session is active again.');
@@ -4119,8 +3965,7 @@ export default function IVXOwnerChatRoute() {
       const pickerResult = await DocumentPicker.getDocumentAsync({
         copyToCacheDirectory: true,
         multiple: true,
-        type: '*/*',
-      });
+        type: '*/*'});
 
       if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
         console.log('[IVXOwnerChatRoute] Attachment picker canceled');
@@ -4141,8 +3986,7 @@ export default function IVXOwnerChatRoute() {
             ? asset.size
             : typeof asset.file?.size === 'number'
               ? asset.file.size
-              : null,
-        };
+              : null};
         const mime = (upload.type ?? '').toLowerCase();
         const nameLower = upload.name.toLowerCase();
         const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp)$/.test(nameLower);
@@ -4221,8 +4065,7 @@ export default function IVXOwnerChatRoute() {
           name: upload.name,
           mimeType: upload.type ?? null,
           size: upload.size ?? null,
-          file: upload.file ?? null,
-        });
+          file: upload.file ?? null});
         await ivxOwnerMemoryService.recordFileUpload(fileInsight);
         fileInsights.push(fileInsight);
 
@@ -4235,8 +4078,7 @@ export default function IVXOwnerChatRoute() {
           errorMessage: null,
           upload,
           uploadProgress: 8,
-          replyTo: i === 0 ? replyTo : null,
-        }]);
+          replyTo: i === 0 ? replyTo : null}]);
         startUploadProgressTimer(clientId);
 
         await attachmentMutation.mutateAsync({ upload, clientId, capturedBody: itemCaption, replyTo: i === 0 ? replyTo : null });
@@ -4265,8 +4107,7 @@ export default function IVXOwnerChatRoute() {
       // retry wrapper below. A failure is logged but does not block the user.
       await assistantReplyMutation.mutateAsync({
         text: analysisPrompt,
-        nonBlocking: true,
-      });
+        nonBlocking: true});
     } catch (error) {
       console.log('[IVXOwnerChatRoute] Multi-attachment AI analysis failed:', error instanceof Error ? error.message : 'unknown');
     }
@@ -4310,8 +4151,7 @@ export default function IVXOwnerChatRoute() {
     const watchdogTrace = ivxAIWatchdog.createTrace({
       userMessageId: clientId,
       userText: text,
-      conversationId: conversationQuery.data?.id ?? null,
-    });
+      conversationId: conversationQuery.data?.id ?? null});
     activeWatchdogTracesRef.current.set(watchdogTrace.traceId, watchdogTrace);
     // Activate staged timeout banner for AI-bearing modes
     if (mode !== 'send_only') {
@@ -4340,8 +4180,7 @@ export default function IVXOwnerChatRoute() {
     const replyContext: ChatReplyContext = {
       messageId: message.id,
       senderLabel: safeTrim(message.senderLabel) || 'Message',
-      previewText: previewText.length > 140 ? `${previewText.slice(0, 137)}...` : previewText,
-    };
+      previewText: previewText.length > 140 ? `${previewText.slice(0, 137)}...` : previewText};
     setSelectedReplyContext(replyContext);
     composerInputRef.current?.focus();
     console.log('[IVXOwnerChatRoute] Reply context selected:', replyContext.messageId);
@@ -4351,8 +4190,7 @@ export default function IVXOwnerChatRoute() {
       messageId: replyContext.messageId,
       status: 'success',
       summary: 'Owner selected a reply context in IVX Owner AI.',
-      metadata: { senderLabel: replyContext.senderLabel, sessionId: ownerSessionIdRef.current },
-    });
+      metadata: { senderLabel: replyContext.senderLabel, sessionId: ownerSessionIdRef.current }});
   }, [conversationQuery.data?.id]);
 
   const handleJumpToMessage = useCallback((messageId: string) => {
@@ -4412,8 +4250,7 @@ export default function IVXOwnerChatRoute() {
           messageId: message.id,
           status: 'success',
           summary: 'Owner unpinned a message in IVX Owner AI.',
-          metadata: { pinned: false, sessionId: ownerSessionIdRef.current },
-        });
+          metadata: { pinned: false, sessionId: ownerSessionIdRef.current }});
         return current.filter((messageId) => messageId !== message.id);
       }
 
@@ -4424,8 +4261,7 @@ export default function IVXOwnerChatRoute() {
         messageId: message.id,
         status: 'success',
         summary: 'Owner pinned a message in IVX Owner AI.',
-        metadata: { pinned: true, sessionId: ownerSessionIdRef.current },
-      });
+        metadata: { pinned: true, sessionId: ownerSessionIdRef.current }});
       return [...current, message.id].filter((messageId, index, messageIds) => messageIds.indexOf(messageId) === index);
     });
   }, [conversationQuery.data?.id]);
@@ -4479,8 +4315,7 @@ export default function IVXOwnerChatRoute() {
         createdAt: item.createdAt,
         sendStatus: 'failed' as const,
         optimistic: false,
-        localOnly: false,
-      } satisfies ChatMessage;
+        localOnly: false} satisfies ChatMessage;
       return (
         <>
           {shouldShowDateSeparator ? <DateSeparator value={item.createdAt} /> : null}
@@ -4595,8 +4430,7 @@ export default function IVXOwnerChatRoute() {
             ? 'pdf'
             : item.attachmentUrl
               ? 'file'
-              : undefined,
-    } satisfies ChatMessage;
+              : undefined} satisfies ChatMessage;
 
     return (
       <>
@@ -4681,8 +4515,7 @@ export default function IVXOwnerChatRoute() {
       requestStage: runtimeDebugSnapshot.requestStage,
       source: runtimeDebugSnapshot.source,
       failureClass: runtimeDebugSnapshot.failureClass,
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-    });
+      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText});
   }, [aiReplyPending, attachmentMutation.isPending, sendMessageMutation.isPending, runtimeDebugSnapshot.requestStage, runtimeDebugSnapshot.source, runtimeDebugSnapshot.failureClass, runtimeDebugSnapshot.hasVisibleResponseText]);
   const aiWorkingMessage = useMemo<string>(() => {
     return formatAIExecutionStage(aiExecutionStage);
@@ -4697,8 +4530,7 @@ export default function IVXOwnerChatRoute() {
     failureClass: runtimeDebugSnapshot.failureClass,
     isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
     isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-  });
+    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText});
   // Loading state is fully removed: the room renders immediately as 'ready',
   // backed by the durable local mirror + cached query placeholder data so the
   // thread never blanks while the network refetch lands.
@@ -4715,8 +4547,7 @@ export default function IVXOwnerChatRoute() {
 
     return {
       ownerMessages,
-      assistantMessages,
-    };
+      assistantMessages};
   }, [allMessages, ownerId]);
   const lastSendAudit = useMemo<IVXOwnerSendAudit | null>(() => {
     return ivxChatService.getLastOwnerSendAudit();
@@ -4766,9 +4597,7 @@ export default function IVXOwnerChatRoute() {
         receiveTitle: receiveBranchStatus.title,
         receiveDetail: receiveBranchStatus.detail,
         receiveEvidence: receiveBranchStatus.evidence,
-        receiveObservedAt: lastReceiveAudit?.observedAt ?? null,
-      },
-    });
+        receiveObservedAt: lastReceiveAudit?.observedAt ?? null}});
   }, [
     effectiveAiHealthDetail,
     aiProbeMetadata.deploymentMarker,
@@ -4890,8 +4719,7 @@ export default function IVXOwnerChatRoute() {
           ? 'When the configured production backend is unreachable, the UI remains interactive, the thread stays mounted, a safe audit fallback message is persisted in-chat, and health stays inactive instead of silently switching to a development-style runtime fallback.'
           : 'When the owner AI backend is unreachable, the UI remains interactive, the thread stays mounted, and a safe audit fallback response can keep development moving while routing is audited.',
       workflowTrace: ownerAIConfigAudit.workflowTrace,
-      mismatchWarnings: ownerAIConfigAudit.mismatchWarnings,
-    };
+      mismatchWarnings: ownerAIConfigAudit.mismatchWarnings};
   }, [aiProbeMetadata.endpoint, aiProbeMetadata.lastFailureReason, effectiveAiHealthDetail, ownerAIConfigAudit, ownerAIRoutingBlocked]);
 
   const auditReport = useMemo(() => {
@@ -4914,8 +4742,7 @@ export default function IVXOwnerChatRoute() {
       realtimeEventsObserved,
       realtimeSubscriptionState,
       messageCount: allMessages.length,
-      assistantMessageCount: messageAudit.assistantMessages,
-    });
+      assistantMessageCount: messageAudit.assistantMessages});
   }, [
     aiProbeMetadata.lastFailureReason,
     allMessages.length,
@@ -4954,8 +4781,7 @@ export default function IVXOwnerChatRoute() {
         title: 'local IVX brain ready',
         detail: 'The IVX chat room is running from the app first. Normal messages, assistant replies, attachments, and reloads stay available on this device.',
         evidence: 'local_device_only · local_app_brain · optional_backend_later',
-        testID: 'ivx-owner-proof-local-app-brain-ready',
-      };
+        testID: 'ivx-owner-proof-local-app-brain-ready'};
     }
 
     if (devTestMode.testModeActive) {
@@ -4965,8 +4791,7 @@ export default function IVXOwnerChatRoute() {
         title: 'owner test mode active',
         detail: 'Verified owner session is active. Owner actions can use the live response path.',
         evidence: 'owner_room_authenticated · backend_admin_verified · full_backend_execution',
-        testID: 'ivx-owner-proof-test-mode-active',
-      };
+        testID: 'ivx-owner-proof-test-mode-active'};
     }
 
     const normalizedRuntimeState = {
@@ -4975,8 +4800,7 @@ export default function IVXOwnerChatRoute() {
       failureClass: runtimeDebugSnapshot.failureClass,
       isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
       isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-    };
+      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText};
     const requestIsPending = isPendingRequestState(normalizedRuntimeState);
     const activeFallback = shouldShowFallbackUI(normalizedRuntimeState);
     const missingOwnerAuth = !ownerRoomAuthenticated;
@@ -4991,8 +4815,7 @@ export default function IVXOwnerChatRoute() {
         title: 'remote_api verified',
         detail: 'The deployed IVX endpoint answered the room probe and remote reply proof is verified in this runtime snapshot.',
         evidence: `${runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint} · deployment ${runtimeSnapshot.provider.deploymentMarker ?? 'missing'} · source ${runtimeSnapshot.provider.source}`,
-        testID: 'ivx-owner-proof-remote-api-verified',
-      };
+        testID: 'ivx-owner-proof-remote-api-verified'};
     }
 
     if (missingOwnerAuth) {
@@ -5002,8 +4825,7 @@ export default function IVXOwnerChatRoute() {
         title: 'blocked by auth',
         detail: 'Remote admin proof is blocked because owner-room trust is not established in this runtime yet. Normal owner chat should only require room trust, not repeated backend re-verification.',
         evidence: `${backendAuditSummary.currentEnvironment} runtime · source ${runtimeSnapshot.provider.source} · endpoint ${runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint}`,
-        testID: 'ivx-owner-proof-blocked-by-auth',
-      };
+        testID: 'ivx-owner-proof-blocked-by-auth'};
     }
 
     if (activeFallback && !requestIsPending) {
@@ -5016,8 +4838,7 @@ export default function IVXOwnerChatRoute() {
           ? 'Reply delivered cleanly.'
           : 'Normal conversation stays available while the reply path recovers.',
         evidence: runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint,
-        testID: fallbackHasVisibleReply ? 'ivx-owner-proof-assistant-ready' : 'ivx-owner-proof-assistant-pending',
-      };
+        testID: fallbackHasVisibleReply ? 'ivx-owner-proof-assistant-ready' : 'ivx-owner-proof-assistant-pending'};
     }
 
     return {
@@ -5026,8 +4847,7 @@ export default function IVXOwnerChatRoute() {
       title: 'remote_api pending proof',
       detail: 'Remote routing is configured, but a fresh verified remote reply proof has not landed yet in this room snapshot.',
       evidence: `${runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint} · runtime ${runtimeSnapshot.runtimeStatus} · stream ${runtimeSnapshot.streamStatus}`,
-      testID: 'ivx-owner-proof-remote-api-pending',
-    };
+      testID: 'ivx-owner-proof-remote-api-pending'};
   }, [auditReport.remoteReplyVerified, backendAuditSummary.activeEndpoint, backendAuditSummary.activeFallbackBaseUrl, backendAuditSummary.currentEnvironment, backendAuditSummary.fallbackUsed, devTestMode.testModeActive, localFirstChatMode, ownerRoomAuthenticated, runtimeDebugSnapshot, runtimeSnapshot.provider.deploymentMarker, runtimeSnapshot.provider.endpoint, runtimeSnapshot.provider.source, runtimeSnapshot.runtimeStatus, runtimeSnapshot.streamStatus]);
   const qaChecklist = useMemo<QAProofItem[]>(() => {
     const canUseComposer = primaryState === 'ready';
@@ -5043,16 +4863,14 @@ export default function IVXOwnerChatRoute() {
         passed: ownerRoomAuthenticated,
         detail: ownerRoomAuthenticated
           ? `Room trust active as ${isOpenAccessBuild ? 'open_access_dev_bypass' : 'owner_room_authenticated'}.`
-          : 'Owner room trust is not established yet.',
-      },
+          : 'Owner room trust is not established yet.'},
       {
         id: 'room-bootstrap',
         label: 'Room bootstrap',
         passed: hasRoom,
         detail: hasRoom
           ? `Room ready: ${conversationQuery.data?.title ?? IVX_OWNER_AI_PROFILE.sharedRoom.title}.`
-          : conversationQuery.error?.message ?? 'Owner room is still bootstrapping.',
-      },
+          : conversationQuery.error?.message ?? 'Owner room is still bootstrapping.'},
       {
         id: 'thread-load',
         label: 'Thread load',
@@ -5061,16 +4879,14 @@ export default function IVXOwnerChatRoute() {
           ? messagesQuery.error.message
           : allMessages.length > 0
             ? `${allMessages.length} message(s) loaded in the thread.`
-            : 'Thread is open and ready for the first message.',
-      },
+            : 'Thread is open and ready for the first message.'},
       {
         id: 'composer-dock',
         label: 'Composer dock',
         passed: canUseComposer,
         detail: canUseComposer
           ? 'Input and send controls stay docked above the bottom inset.'
-          : 'Composer is intentionally hidden while the room is recovering.',
-      },
+          : 'Composer is intentionally hidden while the room is recovering.'},
       {
         id: 'send-path',
         label: 'Send path',
@@ -5079,22 +4895,19 @@ export default function IVXOwnerChatRoute() {
           ? sendingDisabled
             ? 'Send button is visible. Enter text to enable sending.'
             : 'Send button is visible and ready to deliver the next message.'
-          : 'Send path is temporarily busy with an active send or upload.',
-      },
+          : 'Send path is temporarily busy with an active send or upload.'},
       {
         id: 'assistant-path',
         label: 'Assistant path',
         passed: assistantReady,
         detail: ownerAIRoutingBlocked
           ? `Blocked by routing guard. ${ownerAIConfigAudit.configurationError ?? 'Owner AI production configuration is invalid.'}`
-          : `${resolution.aiIndicator.label}. ${resolution.aiIndicator.detail} Source: ${runtimeSnapshot.provider.source}. Endpoint: ${backendAuditSummary.activeEndpoint}.`,
-      },
+          : `${resolution.aiIndicator.label}. ${resolution.aiIndicator.detail} Source: ${runtimeSnapshot.provider.source}. Endpoint: ${backendAuditSummary.activeEndpoint}.`},
       {
         id: 'provider-proof-mode',
         label: 'Provider proof mode',
         passed: ownerAIProofStatus.id === 'remote_api_verified',
-        detail: `${ownerAIProofStatus.title}. ${ownerAIProofStatus.detail} Evidence: ${ownerAIProofStatus.evidence}.`,
-      },
+        detail: `${ownerAIProofStatus.title}. ${ownerAIProofStatus.detail} Evidence: ${ownerAIProofStatus.evidence}.`},
       {
         id: 'transcript-proof',
         label: 'Transcript proof',
@@ -5105,8 +4918,7 @@ export default function IVXOwnerChatRoute() {
             ? `${messageAudit.ownerMessages} owner message(s) and ${messageAudit.assistantMessages} assistant reply/replies detected with ordered transcript audit.`
             : messageAudit.ownerMessages > 0
               ? `${messageAudit.ownerMessages} owner message(s) detected. Awaiting an assistant reply proof in this loaded thread.`
-              : 'No persisted proof messages yet in this session.',
-      },
+              : 'No persisted proof messages yet in this session.'},
     ];
   }, [
     allMessages.length,
@@ -5237,8 +5049,7 @@ export default function IVXOwnerChatRoute() {
         `Action: ${getActionLabel(action)}`,
         'Rollback: not executed',
       ].join('\n'), 'system');
-    },
-  });
+    }});
   useEffect(() => {
     roomRuntimeRef.current = runtimeSnapshot;
   }, [runtimeSnapshot]);
@@ -5280,8 +5091,7 @@ export default function IVXOwnerChatRoute() {
     if (fallbackChatOnlyActive || !backendAdminVerified) {
       void persistSupportMessage(buildFallbackChatOnlyExecutionMessage({
         normalizedText: `/${action === 'rerun_health_probe' ? 'heal rerun-proof' : 'heal clear-stuck'}`,
-        requestClass: 'admin_execution',
-      }), 'system');
+        requestClass: 'admin_execution'}), 'system');
       return;
     }
 
@@ -5294,8 +5104,7 @@ export default function IVXOwnerChatRoute() {
           text: 'Continue',
           onPress: () => {
             roomControlMutation.mutate(action);
-          },
-        },
+          }},
       ],
     );
   }, [backendAdminVerified, devTestMode.testModeActive, fallbackChatOnlyActive, persistSupportMessage, roomControlMutation]);
@@ -5346,8 +5155,7 @@ export default function IVXOwnerChatRoute() {
   const keyboardAvoidingBehavior = Platform.select<'height' | 'padding' | undefined>({
     ios: 'padding',
     android: 'height',
-    default: undefined,
-  });
+    default: undefined});
   const { keyboardHeight: webKeyboardHeight } = useWebKeyboard();
   const keyboardVerticalOffset = useMemo<number>(() => {
     if (Platform.OS !== 'ios') {
@@ -5452,8 +5260,7 @@ export default function IVXOwnerChatRoute() {
       lastAIStatus,
       parserResult,
       storageSource,
-      watchdogStatus,
-    };
+      watchdogStatus};
   }, [aiProbeMetadata.deploymentMarker, allMessages.length, backendAuditSummary.activeEndpoint, conversationQuery.data?.id, isOpenAccessBuild, localFirstChatMode, lastSendAudit?.messageId, messages.length, runtimeDebugSnapshot]);
   const runtimeStatusCopy = useMemo(() => getRuntimeStatusCopy({
     source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
@@ -5461,8 +5268,7 @@ export default function IVXOwnerChatRoute() {
     failureClass: runtimeDebugSnapshot.failureClass,
     isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
     isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-  }), [runtimeDebugSnapshot]);
+    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText}), [runtimeDebugSnapshot]);
   const runtimeProofPrimaryRows = useMemo<Array<{ label: string; value: string }>>(() => {
     return [
       { label: 'Request stage', value: runtimeDebugSnapshot.requestStage },
@@ -5488,8 +5294,7 @@ export default function IVXOwnerChatRoute() {
       failureClass: runtimeDebugSnapshot.failureClass,
       isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
       isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-    });
+      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText});
     const proxyConnected = aiProxyStatus.status === 'connected';
     const aiReady = activeSource === 'remote_api' || activeSource === 'local_app_brain' || effectiveAiHealthDetail === 'active' || proxyConnected;
     const aiStatusValue = aiReady
@@ -5586,8 +5391,7 @@ export default function IVXOwnerChatRoute() {
       duplicateMessageCount: duplicateMessageCountRef.current,
       realtimeSubscriptionCount: realtimeSubscriptionState ? 1 : 0,
       lastReconnectTime: lastReconnectTimeRef.current,
-      traceId: qaTraceId,
-    });
+      traceId: qaTraceId});
   }, [canonicalConversationId, invertedData, displayedMessages, firstContentOffsetRecorded, initialScrollPending, showScrollToLatest, realtimeSubscriptionState, qaTraceId]);
 
   const handleSubmitQaEvidence = useCallback(async (report: string) => {
@@ -5600,10 +5404,8 @@ export default function IVXOwnerChatRoute() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: report,
-      });
+          ...(token ? { Authorization: `Bearer ${token}` } : {})},
+        body: report});
       if (res.ok) {
         setQaSubmitResult('success');
         console.log('[IVXChatQA] Evidence submitted successfully, traceId:', qaTraceId);
@@ -5706,8 +5508,7 @@ export default function IVXOwnerChatRoute() {
         ivxChatService
           .listOlderOwnerMessages({
             cursor: { createdAt: oldest.createdAt, id: oldest.id },
-            currentMessages: messagesQuery.data ?? [],
-          })
+            currentMessages: messagesQuery.data ?? []})
           .then((result) => {
             hasMoreOlderMessagesRef.current = result.hasMore;
             if (result.addedCount > 0) {
@@ -5971,8 +5772,7 @@ export default function IVXOwnerChatRoute() {
                     mode: lastPending.mode === 'ai_only' ? 'ai_only' : 'send_and_ai',
                     clientId: createTransientMessageId('ivx-owner-staged-retry'),
                     capturedText: lastPending.text,
-                    replyTo: lastPending.replyTo ?? null,
-                  });
+                    replyTo: lastPending.replyTo ?? null});
                 }
               }}
               onCancel={() => {
@@ -5985,8 +5785,7 @@ export default function IVXOwnerChatRoute() {
                   const baseUrl = 'https://api.ivxholding.com';
                   const token = await getIVXAccessToken();
                   const res = await fetch(`${baseUrl}/api/ivx/owner-ai/request/${traceId}/status`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
+                    headers: { Authorization: `Bearer ${token}` }});
                   if (!res.ok) return null;
                   const data = await res.json() as Record<string, unknown>;
                   return {
@@ -6003,8 +5802,7 @@ export default function IVXOwnerChatRoute() {
                     appVersion: getIVXBuildInfo().appVersion,
                     buildNumber: String(Constants.expoConfig?.android?.versionCode ?? 'unknown'),
                     commitSha: getIVXBuildInfo().commitShort,
-                    elapsedMs: Date.now() - (stagedTimeoutStartRef.current ?? Date.now()),
-                  };
+                    elapsedMs: Date.now() - (stagedTimeoutStartRef.current ?? Date.now())};
                 } catch (err) {
                   console.log('[IVXStagedTimeout] Backend status query failed:', err instanceof Error ? err.message : 'unknown');
                   return null;
@@ -6524,8 +6322,7 @@ export default function IVXOwnerChatRoute() {
                     failureClass: runtimeDebugSnapshot.failureClass,
                     isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
                     isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-                    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText,
-                  }))}
+                    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText}))}
                 />
                 <AuditInfoRow label="Degraded state" value={getRuntimeDegradedState(runtimeSnapshot.runtimeStatus)} />
                 <AuditInfoRow label="Last attempt" value={formatRuntimeTimestamp(runtimeDebugSnapshot.lastAttemptAt)} />
@@ -6882,8 +6679,7 @@ export default function IVXOwnerChatRoute() {
               styles.composerDock,
               {
                 paddingBottom: effectiveComposerBottom,
-                transform: [{ translateY: -manualKeyboardLift }],
-              },
+                transform: [{ translateY: -manualKeyboardLift }]},
             ]}
             testID="ivx-owner-chat-composer-dock"
           >
@@ -7206,23 +7002,18 @@ export default function IVXOwnerChatRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     flex: 1,
     minHeight: 0,
-    paddingTop: 0,
-  },
+    paddingTop: 0},
   developerToolsScroll: {
     flex: 1,
-    minHeight: 0,
-  },
+    minHeight: 0},
   developerToolsScrollContent: {
-    paddingTop: 4,
-  },
+    paddingTop: 4},
   androidStatusSpacer: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   devBanner: {
     marginHorizontal: 8,
     marginBottom: 3,
@@ -7233,14 +7024,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 14,
     minHeight: 84,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   devBannerText: {
     color: Colors.info,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   degradedBanner: {
     marginHorizontal: 8,
     marginBottom: 3,
@@ -7251,14 +7040,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 14,
     minHeight: 84,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   degradedBannerText: {
     color: Colors.warning,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   blockedBanner: {
     marginHorizontal: 8,
     marginBottom: 3,
@@ -7269,14 +7056,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 14,
     minHeight: 84,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   blockedBannerText: {
     color: Colors.error,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerAuthFailureBanner: {
     marginHorizontal: 8,
     marginBottom: 3,
@@ -7286,13 +7071,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.12)',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 6,
-  },
+    gap: 6},
   ownerAuthFailureBannerHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   refreshOwnerSessionButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -7303,30 +7086,25 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 14,
     borderRadius: 10,
-    marginTop: 2,
-  },
+    marginTop: 2},
   refreshOwnerSessionButtonText: {
     color: Colors.black,
     fontSize: 12.5,
     fontWeight: '800' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   ownerAuthFailureBannerTitle: {
     color: Colors.error,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerAuthFailureBannerText: {
     color: Colors.text,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ownerAuthFailureBannerAction: {
     color: Colors.error,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerSignInBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -7338,45 +7116,38 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239,68,68,0.32)',
     backgroundColor: 'rgba(239,68,68,0.12)',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   ownerSignInBannerText: {
     color: Colors.text,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   topSearchRail: {
     paddingHorizontal: 8,
     paddingTop: 2,
     paddingBottom: 8,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   brandRow: {
     minHeight: 46,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    paddingLeft: 6,
-  },
+    paddingLeft: 6},
   brandLeft: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 10,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   brandLeftCompact: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   brandTitleCompact: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   brandInlineSearch: {
     flex: 1,
     minHeight: 40,
@@ -7388,42 +7159,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   brandInlineSearchPlaceholder: {
     flex: 1,
     color: '#7C8797',
     fontSize: 14,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   brandMark: {
     width: 30,
     height: 30,
     borderRadius: 9,
     backgroundColor: Colors.primary,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   brandTextWrap: {
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   brandTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   brandSubtitle: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '600' as const,
-    marginTop: 1,
-  },
+    marginTop: 1},
   brandActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   brandIconButton: {
     width: 38,
     height: 38,
@@ -7432,8 +7196,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: '#0F1521',
-  },
+    backgroundColor: '#0F1521'},
   searchBarWrap: {
     minHeight: 46,
     borderRadius: 23,
@@ -7443,36 +7206,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 14,
-    gap: 10,
-  },
+    gap: 10},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
     minHeight: 40,
-    paddingVertical: 7,
-  },
+    paddingVertical: 7},
   searchClearButton: {
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   searchResultText: {
     marginHorizontal: 20,
     marginBottom: 4,
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   threadViewport: {
     flex: 1,
     minHeight: 0,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   scrollToLatestButton: {
     position: 'absolute' as const,
     right: 16,
@@ -7490,8 +7248,7 @@ const styles = StyleSheet.create({
     elevation: 8,
     zIndex: 50,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-  },
+    borderColor: 'rgba(0,0,0,0.08)'},
   scrollToLatestBadge: {
     position: 'absolute' as const,
     top: -4,
@@ -7504,13 +7261,11 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     borderWidth: 2,
-    borderColor: Colors.background,
-  },
+    borderColor: Colors.background},
   scrollToLatestBadgeText: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   pinnedSection: {
     marginHorizontal: 14,
     marginBottom: 6,
@@ -7520,29 +7275,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(246,200,95,0.08)',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 9,
-  },
+    gap: 9},
   pinnedSectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 7,
-  },
+    gap: 7},
   pinnedSectionTitle: {
     flex: 1,
     color: '#F6C85F',
     fontSize: 12,
     fontWeight: '800' as const,
     letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   pinnedSectionCount: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   pinnedMessageList: {
-    gap: 8,
-  },
+    gap: 8},
   pinnedMessageCard: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -7550,29 +7300,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(17,23,34,0.92)',
     paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
+    paddingVertical: 9},
   pinnedMessageTextStack: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   pinnedMessageSender: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   pinnedMessageText: {
     color: Colors.text,
     fontSize: 13,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   pinnedMessageMeta: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   pinnedUnpinButton: {
     minHeight: 32,
     borderRadius: 16,
@@ -7581,13 +7326,11 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 5,
-    backgroundColor: 'rgba(246,200,95,0.12)',
-  },
+    backgroundColor: 'rgba(246,200,95,0.12)'},
   pinnedUnpinText: {
     color: '#F6C85F',
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   productionGuardCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -7597,49 +7340,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.08)',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 12,
-  },
+    gap: 12},
   productionGuardEyebrow: {
     color: Colors.error,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   productionGuardTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   productionGuardBody: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   productionGuardList: {
-    gap: 10,
-  },
+    gap: 10},
   productionGuardItem: {
     gap: 4,
     padding: 12,
     borderRadius: 14,
     backgroundColor: 'rgba(9,11,15,0.24)',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.16)',
-  },
+    borderColor: 'rgba(239,68,68,0.16)'},
   productionGuardLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   productionGuardValue: {
     color: Colors.text,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   developerToolsCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -7648,37 +7383,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#08111f',
     borderWidth: 1,
     borderColor: 'rgba(56,189,248,0.28)',
-    gap: 14,
-  },
+    gap: 14},
   developerToolsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   developerToolsIconWrap: {
     width: 34,
     height: 34,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.info,
-  },
+    backgroundColor: Colors.info},
   developerToolsCopy: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   developerToolsEyebrow: {
     color: Colors.info,
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.7,
-  },
+    letterSpacing: 0.7},
   developerToolsTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   controlRoomToggle: {
     minHeight: 32,
     borderRadius: 16,
@@ -7687,16 +7416,13 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 5,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   controlRoomToggleText: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   controlRoomToggleTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   controlRoomCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -7705,42 +7431,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#071017',
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.22)',
-    gap: 14,
-  },
+    gap: 14},
   controlRoomHeaderRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     justifyContent: 'space-between' as const,
-    gap: 12,
-  },
+    gap: 12},
   controlRoomHeaderCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   controlRoomActions: {
     alignItems: 'flex-end' as const,
-    gap: 8,
-  },
+    gap: 8},
   controlRoomTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   controlRoomSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   controlRoomError: {
     color: Colors.error,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   controlRoomList: {
-    gap: 10,
-  },
+    gap: 10},
   controlRoomRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -7749,139 +7467,108 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.035)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.035)'},
   controlRoomIndex: {
     width: 24,
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '900' as const,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   controlRoomRowCopy: {
     flex: 1,
-    gap: 6,
-  },
+    gap: 6},
   controlRoomRowTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: 10,
-  },
+    gap: 10},
   controlRoomLabel: {
     flex: 1,
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   controlRoomStatusBadge: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   controlRoomStatusBadgePass: {
     backgroundColor: 'rgba(34,197,94,0.12)',
-    borderColor: 'rgba(34,197,94,0.24)',
-  },
+    borderColor: 'rgba(34,197,94,0.24)'},
   controlRoomStatusBadgeWarn: {
     backgroundColor: 'rgba(245,158,11,0.12)',
-    borderColor: 'rgba(245,158,11,0.24)',
-  },
+    borderColor: 'rgba(245,158,11,0.24)'},
   controlRoomStatusBadgeError: {
     backgroundColor: 'rgba(239,68,68,0.12)',
-    borderColor: 'rgba(239,68,68,0.24)',
-  },
+    borderColor: 'rgba(239,68,68,0.24)'},
   controlRoomStatusBadgePending: {
     backgroundColor: 'rgba(59,130,246,0.12)',
-    borderColor: 'rgba(59,130,246,0.24)',
-  },
+    borderColor: 'rgba(59,130,246,0.24)'},
   controlRoomStatusText: {
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   controlRoomStatusTextPass: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   controlRoomStatusTextWarn: {
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   controlRoomStatusTextError: {
-    color: Colors.error,
-  },
+    color: Colors.error},
   controlRoomStatusTextPending: {
-    color: Colors.info,
-  },
+    color: Colors.info},
   controlRoomDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   controlRoomMissing: {
     color: Colors.warning,
     fontSize: 11,
     lineHeight: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   developerStatusGrid: {
-    gap: 10,
-  },
+    gap: 10},
   developerStatusTile: {
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
-    gap: 5,
-  },
+    gap: 5},
   developerStatusTilePass: {
     backgroundColor: 'rgba(34,197,94,0.10)',
-    borderColor: 'rgba(34,197,94,0.24)',
-  },
+    borderColor: 'rgba(34,197,94,0.24)'},
   developerStatusTileWarn: {
     backgroundColor: 'rgba(245,158,11,0.10)',
-    borderColor: 'rgba(245,158,11,0.24)',
-  },
+    borderColor: 'rgba(245,158,11,0.24)'},
   developerStatusTileError: {
     backgroundColor: 'rgba(239,68,68,0.10)',
-    borderColor: 'rgba(239,68,68,0.24)',
-  },
+    borderColor: 'rgba(239,68,68,0.24)'},
   developerStatusTilePending: {
     backgroundColor: 'rgba(59,130,246,0.10)',
-    borderColor: 'rgba(59,130,246,0.24)',
-  },
+    borderColor: 'rgba(59,130,246,0.24)'},
   developerStatusDot: {
     width: 8,
     height: 8,
-    borderRadius: 99,
-  },
+    borderRadius: 99},
   developerStatusDotPass: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   developerStatusDotWarn: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   developerStatusDotError: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   developerStatusDotPending: {
-    backgroundColor: Colors.info,
-  },
+    backgroundColor: Colors.info},
   developerStatusLabel: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   developerStatusValue: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   developerToolsFootnote: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   sendBranchProofRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -7893,39 +7580,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
     backgroundColor: 'rgba(255,255,255,0.03)',
-    gap: 6,
-  },
+    gap: 6},
   sendBranchProofLabel: {
     color: 'rgba(255,255,255,0.36)',
     fontSize: 9,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   sendBranchProofValue: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   sendBranchProofValuePass: {
-    color: '#34D399',
-  },
+    color: '#34D399'},
   sendBranchProofValueWarn: {
-    color: '#FBBF24',
-  },
+    color: '#FBBF24'},
   sendBranchProofValueDegraded: {
-    color: '#F87171',
-  },
+    color: '#F87171'},
   sendBranchProofValuePending: {
-    color: 'rgba(255,255,255,0.40)',
-  },
+    color: 'rgba(255,255,255,0.40)'},
   sendBranchProofContext: {
     flex: 1,
     color: 'rgba(255,255,255,0.30)',
     fontSize: 9,
     fontWeight: '600' as const,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   providerProofCard: {
     marginHorizontal: 8,
     marginBottom: 3,
@@ -7934,58 +7613,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     minHeight: 0,
-    gap: 2,
-  },
+    gap: 2},
   providerProofCardPass: {
     borderColor: 'rgba(34,197,94,0.24)',
-    backgroundColor: 'rgba(34,197,94,0.08)',
-  },
+    backgroundColor: 'rgba(34,197,94,0.08)'},
   providerProofCardBlocked: {
     borderColor: 'rgba(239,68,68,0.24)',
-    backgroundColor: 'rgba(239,68,68,0.08)',
-  },
+    backgroundColor: 'rgba(239,68,68,0.08)'},
   providerProofCardPending: {
     borderColor: 'rgba(59,130,246,0.24)',
-    backgroundColor: 'rgba(59,130,246,0.08)',
-  },
+    backgroundColor: 'rgba(59,130,246,0.08)'},
   providerProofCardWarn: {
     borderColor: 'rgba(245,158,11,0.24)',
-    backgroundColor: 'rgba(245,158,11,0.08)',
-  },
+    backgroundColor: 'rgba(245,158,11,0.08)'},
   providerProofHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-  },
+    gap: 10},
   providerProofCopy: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   providerProofTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   detailsToggle: {
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   detailsToggleText: {
     color: '#D0D0D0',
     fontSize: 8,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   providerProofDetail: {
     color: '#E8EDF5',
     fontSize: 11,
     lineHeight: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   qaCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -7995,104 +7663,81 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 14,
-  },
+    gap: 14},
   qaHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   qaEyebrow: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   qaTitle: {
     marginTop: 6,
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   qaBadge: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   qaBadgePass: {
     backgroundColor: 'rgba(34,197,94,0.12)',
-    borderColor: 'rgba(34,197,94,0.24)',
-  },
+    borderColor: 'rgba(34,197,94,0.24)'},
   qaBadgeWarn: {
     backgroundColor: 'rgba(245,158,11,0.12)',
-    borderColor: 'rgba(245,158,11,0.24)',
-  },
+    borderColor: 'rgba(245,158,11,0.24)'},
   qaBadgeBlocked: {
     backgroundColor: 'rgba(239,68,68,0.12)',
-    borderColor: 'rgba(239,68,68,0.24)',
-  },
+    borderColor: 'rgba(239,68,68,0.24)'},
   qaBadgePending: {
     backgroundColor: 'rgba(59,130,246,0.12)',
-    borderColor: 'rgba(59,130,246,0.24)',
-  },
+    borderColor: 'rgba(59,130,246,0.24)'},
   qaBadgeText: {
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   qaBadgeTextPass: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   qaBadgeTextWarn: {
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   qaBadgeTextBlocked: {
-    color: Colors.error,
-  },
+    color: Colors.error},
   qaBadgeTextPending: {
-    color: Colors.info,
-  },
+    color: Colors.info},
   qaChecklist: {
-    gap: 12,
-  },
+    gap: 12},
   qaItemRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   qaDot: {
     width: 10,
     height: 10,
     borderRadius: 999,
-    marginTop: 5,
-  },
+    marginTop: 5},
   qaDotPass: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   qaDotWarn: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   qaCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   qaItemLabel: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   qaItemDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   proofRail: {
-    gap: 10,
-  },
+    gap: 10},
   proofRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -8101,64 +7746,50 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.backgroundTertiary,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   proofDot: {
     width: 10,
     height: 10,
     borderRadius: 999,
-    marginTop: 5,
-  },
+    marginTop: 5},
   proofDotPass: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   proofDotWarn: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   proofDotBlocked: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   proofDotPending: {
-    backgroundColor: Colors.info,
-  },
+    backgroundColor: Colors.info},
   proofCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   proofTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   proofDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   proofMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   qaScopeText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   functionalitySummary: {
     alignItems: 'flex-end',
-    gap: 4,
-  },
+    gap: 4},
   functionalitySummaryText: {
     color: Colors.text,
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   functionalityLedgerList: {
-    gap: 10,
-  },
+    gap: 10},
   functionalityLedgerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -8167,74 +7798,59 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.backgroundTertiary,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   functionalityLedgerIndex: {
     width: 28,
     color: Colors.textTertiary,
     fontSize: 12,
     fontWeight: '800' as const,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   functionalityLedgerCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   functionalityLedgerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-  },
+    gap: 10},
   functionalityLedgerTitle: {
     flex: 1,
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   functionalityLedgerBadge: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   functionalityLedgerBadgeLive: {
     backgroundColor: 'rgba(34,197,94,0.12)',
-    borderColor: 'rgba(34,197,94,0.24)',
-  },
+    borderColor: 'rgba(34,197,94,0.24)'},
   functionalityLedgerBadgePass: {
     backgroundColor: 'rgba(59,130,246,0.12)',
-    borderColor: 'rgba(59,130,246,0.24)',
-  },
+    borderColor: 'rgba(59,130,246,0.24)'},
   functionalityLedgerBadgeFail: {
     backgroundColor: 'rgba(239,68,68,0.12)',
-    borderColor: 'rgba(239,68,68,0.24)',
-  },
+    borderColor: 'rgba(239,68,68,0.24)'},
   functionalityLedgerBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   functionalityLedgerBadgeTextLive: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   functionalityLedgerBadgeTextPass: {
-    color: Colors.info,
-  },
+    color: Colors.info},
   functionalityLedgerBadgeTextFail: {
-    color: Colors.error,
-  },
+    color: Colors.error},
   functionalityLedgerDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   functionalityLedgerEvidence: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   backendAuditCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -8244,83 +7860,67 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(59,130,246,0.08)',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 10,
-  },
+    gap: 10},
   backendAuditEyebrow: {
     color: Colors.info,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   backendAuditTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   backendAuditBadge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   backendAuditBadgePass: {
     backgroundColor: 'rgba(34,197,94,0.12)',
-    borderColor: 'rgba(34,197,94,0.24)',
-  },
+    borderColor: 'rgba(34,197,94,0.24)'},
   backendAuditBadgeBlocked: {
     backgroundColor: 'rgba(239,68,68,0.12)',
-    borderColor: 'rgba(239,68,68,0.24)',
-  },
+    borderColor: 'rgba(239,68,68,0.24)'},
   backendAuditBadgeText: {
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   backendAuditBadgeTextPass: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   backendAuditBadgeTextBlocked: {
-    color: Colors.error,
-  },
+    color: Colors.error},
   backendAuditRow: {
-    gap: 2,
-  },
+    gap: 2},
   backendAuditLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   backendAuditValue: {
     color: Colors.text,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   backendAuditBody: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   backendAuditFootnote: {
     color: Colors.info,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   backendAuditList: {
     gap: 6,
-    marginTop: 2,
-  },
+    marginTop: 2},
   backendAuditListItem: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   runtimeProofBanner: {
     borderRadius: 16,
     borderWidth: 1,
@@ -8328,18 +7928,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(9,11,15,0.26)',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 4,
-  },
+    gap: 4},
   runtimeProofBannerTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   runtimeProofBannerDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   graphCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -8349,86 +7946,68 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 14,
-  },
+    gap: 14},
   graphHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   graphEyebrow: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   graphTitle: {
     marginTop: 6,
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   graphActionRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   graphActionButton: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.backgroundTertiary,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   graphActionButtonText: {
     color: Colors.text,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   graphNodeList: {
-    gap: 10,
-  },
+    gap: 10},
   graphNodeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   graphNodeDot: {
     width: 10,
     height: 10,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   graphNodeDotPass: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   graphNodeDotWarn: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   graphNodeDotBlocked: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   graphNodeDotPending: {
-    backgroundColor: Colors.info,
-  },
+    backgroundColor: Colors.info},
   graphNodeCopy: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   graphNodeTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   graphNodeMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   graphRiskList: {
-    gap: 10,
-  },
+    gap: 10},
   graphRiskRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8437,49 +8016,40 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.backgroundTertiary,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   graphRiskCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   graphRiskTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   graphRiskMeta: {
     color: Colors.textSecondary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   graphRiskValue: {
     color: Colors.warning,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   graphProofList: {
-    gap: 10,
-  },
+    gap: 10},
   graphProofRow: {
     padding: 12,
     borderRadius: 16,
     backgroundColor: Colors.backgroundTertiary,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 4,
-  },
+    gap: 4},
   graphProofClaim: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   graphProofMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   errorState: {
     flex: 1,
     marginHorizontal: 16,
@@ -8489,46 +8059,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   errorTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   retryButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   retryButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   messageList: {
     flex: 1,
-    minHeight: 0,
-  },
+    minHeight: 0},
   listContent: {
     flexGrow: 1,
     paddingHorizontal: 10,
     paddingTop: 0,
-    gap: 3,
-  },
+    gap: 3},
   emptyListContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   emptyState: {
     alignItems: 'center',
     gap: 10,
@@ -8536,20 +8098,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   emptyTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   emptyTriggerHints: {
     alignSelf: 'stretch',
     marginTop: 8,
@@ -8558,55 +8117,45 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 6,
-  },
+    gap: 6},
   emptyTriggerTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   emptyTriggerPhrase: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   emptyTriggerNote: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 16,
-    marginTop: 4,
-  },
+    marginTop: 4},
   dateSeparatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginHorizontal: 18,
     marginTop: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   dateSeparatorLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   dateSeparatorText: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   messageRowOwn: {
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   messageRowOther: {
-    justifyContent: 'flex-start',
-  },
+    justifyContent: 'flex-start'},
   messageRowHighlighted: {
     borderRadius: 24,
     backgroundColor: 'rgba(246,200,95,0.24)',
@@ -8616,8 +8165,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.34,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
+    elevation: 3},
   missingReplyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8629,69 +8177,56 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(246,200,95,0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(246,200,95,0.28)',
-  },
+    borderColor: 'rgba(246,200,95,0.28)'},
   missingReplyText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '700' as const,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   messageBubble: {
     maxWidth: '86%',
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    gap: 8,
-  },
+    gap: 8},
   messageBubbleOwn: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   messageBubbleOther: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   messageLabel: {
     color: Colors.background,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   messageLabelOther: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   assistantLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   messageText: {
     color: Colors.background,
     fontSize: 15,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   messageTextOther: {
     color: Colors.text,
     fontSize: 15,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   messageMeta: {
     color: 'rgba(0,0,0,0.65)',
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   messageMetaOther: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   systemMessageRow: {
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   systemBubble: {
     maxWidth: '90%',
     borderRadius: 16,
@@ -8700,54 +8235,45 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: 'rgba(59,130,246,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.18)',
-  },
+    borderColor: 'rgba(59,130,246,0.18)'},
   systemLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   systemLabel: {
     color: Colors.info,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   systemText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   commandCard: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.backgroundTertiary,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   commandRow: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 4,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   commandLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   commandValue: {
     color: Colors.text,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   systemMeta: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   approveRunButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8757,13 +8283,11 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 12,
     paddingHorizontal: 16,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   approveRunButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   attachmentChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8772,18 +8296,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(0,0,0,0.12)',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   attachmentText: {
     color: Colors.background,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   attachmentTextOther: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   liveWorkOverlay: {
     position: 'absolute' as const,
     top: 0,
@@ -8791,16 +8312,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end' as const,
-  },
+    justifyContent: 'flex-end' as const},
   liveWorkSheet: {
     maxHeight: '85%' as const,
     backgroundColor: Colors.background,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 12,
-    paddingBottom: 24,
-  },
+    paddingBottom: 24},
   liveWorkHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -8808,13 +8327,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
+    borderBottomColor: 'rgba(255,255,255,0.08)'},
   liveWorkTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   chatLiveWorkBar: {
     marginHorizontal: 8,
     marginBottom: 6,
@@ -8824,45 +8341,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 8,
-  },
+    gap: 8},
   chatLiveWorkBarActive: {
     borderColor: 'rgba(34,197,94,0.45)',
-    backgroundColor: 'rgba(34,197,94,0.10)',
-  },
+    backgroundColor: 'rgba(34,197,94,0.10)'},
   chatLiveWorkMain: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 10,
-  },
+    gap: 10},
   chatLiveWorkDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.textTertiary,
-  },
+    backgroundColor: Colors.textTertiary},
   chatLiveWorkDotActive: {
-    backgroundColor: '#00C48C',
-  },
+    backgroundColor: '#00C48C'},
   chatLiveWorkCopy: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   chatLiveWorkTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   chatLiveWorkSub: {
     color: Colors.textSecondary,
     fontSize: 11,
-    marginTop: 1,
-  },
+    marginTop: 1},
   chatLiveWorkActions: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 6,
-  },
+    gap: 6},
   chatLiveWorkAction: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -8872,13 +8380,11 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.05)'},
   chatLiveWorkActionText: {
     color: Colors.text,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   liveWorkFab: {
     position: 'absolute' as const,
     right: 12,
@@ -8891,8 +8397,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(34,197,94,0.45)',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    zIndex: 100,
-  },
+    zIndex: 100},
   typingIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8905,30 +8410,25 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(246,200,95,0.28)',
     marginBottom: 4,
     alignSelf: 'flex-start',
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   typingHeaderContainer: {
     paddingHorizontal: 12,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   typingDot: {
     width: 5,
     height: 5,
     borderRadius: 999,
     backgroundColor: '#F6C85F',
-    opacity: 0.55,
-  },
+    opacity: 0.55},
   typingDotMid: {
-    opacity: 0.85,
-  },
+    opacity: 0.85},
   typingText: {
     flex: 1,
     color: '#F6C85F',
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.2,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   draftAttachmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8938,57 +8438,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(246,200,95,0.30)',
     backgroundColor: 'rgba(246,200,95,0.06)',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   draftAttachmentThumb: {
     width: 44,
     height: 44,
     borderRadius: 10,
     backgroundColor: '#12161C',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   draftAttachmentFileIcon: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(246,200,95,0.28)',
-  },
+    borderColor: 'rgba(246,200,95,0.28)'},
   draftAttachmentMeta: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
-  },
+    gap: 2},
   draftAttachmentName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   draftAttachmentHint: {
     color: '#B8C0CC',
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   draftAttachmentClose: {
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   draftAttachmentList: {
     gap: 8,
     paddingHorizontal: 2,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   draftAttachmentTile: {
     width: 56,
     height: 56,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#12161C',
-    position: 'relative' as const,
-  },
+    position: 'relative' as const},
   draftAttachmentTileRemove: {
     position: 'absolute' as const,
     top: 2,
@@ -8998,8 +8489,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: 'rgba(0,0,0,0.72)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   composerDock: {
     paddingHorizontal: 10,
     paddingTop: 6,
@@ -9007,8 +8497,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.surfaceBorder,
     zIndex: 20,
-    elevation: 20,
-  },
+    elevation: 20},
   composerCard: {
     paddingTop: 8,
     paddingHorizontal: 10,
@@ -9022,8 +8511,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: -3 },
-    elevation: 6,
-  },
+    elevation: 6},
   replyComposerPreview: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -9033,64 +8521,54 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(246,200,95,0.24)',
     backgroundColor: 'rgba(246,200,95,0.08)',
     paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   replyComposerAccent: {
     width: 3,
     alignSelf: 'stretch',
     borderRadius: 999,
-    backgroundColor: '#F6C85F',
-  },
+    backgroundColor: '#F6C85F'},
   replyComposerCopy: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   replyComposerLabel: {
     color: '#F6C85F',
     fontSize: 11,
     fontWeight: '900' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   replyComposerText: {
     color: Colors.text,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   replyComposerClose: {
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   templateRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
-    paddingBottom: 4,
-  },
+    paddingBottom: 4},
   templateChip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(246,200,95,0.26)',
     backgroundColor: 'rgba(246,200,95,0.08)',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   templateChipText: {
     color: '#F6C85F',
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   composerPrimaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   composerInput: {
     flex: 1,
     minHeight: 46,
@@ -9113,23 +8591,19 @@ const styles = StyleSheet.create({
           touchAction: 'manipulation',
           userSelect: 'text',
           WebkitUserSelect: 'text',
-          outlineStyle: 'none',
-        } as any)
-      : {}),
-  },
+          outlineStyle: 'none'} as any)
+      : {})},
   composerSecondaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    minHeight: 26,
-  },
+    minHeight: 26},
   composerHintText: {
     flex: 1,
     color: '#D2DAE6',
     fontSize: 9,
     lineHeight: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   iconButton: {
     width: 48,
     height: 48,
@@ -9139,12 +8613,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   voiceButtonActive: {
     borderColor: 'rgba(239,68,68,0.42)',
-    backgroundColor: 'rgba(239,68,68,0.14)',
-  },
+    backgroundColor: 'rgba(239,68,68,0.14)'},
   sendIconButton: {
     width: 48,
     height: 48,
@@ -9155,8 +8627,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.primary,
     flexShrink: 0,
-    alignSelf: 'flex-end',
-  },
+    alignSelf: 'flex-end'},
   aiButton: {
     minWidth: 58,
     height: 34,
@@ -9169,16 +8640,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 10,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   actionButtonDisabled: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   aiButtonText: {
     color: Colors.text,
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerSessionGate: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -9189,31 +8657,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   ownerSessionGateText: {
     flex: 1,
     color: Colors.text,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ownerSessionGateButton: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   ownerSessionGateButtonText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   listFooterSpacer: {
-    height: 2,
-  },
+    height: 2},
   listFooterContainer: {
-    paddingTop: 4,
-  },
-});
+    paddingTop: 4}});

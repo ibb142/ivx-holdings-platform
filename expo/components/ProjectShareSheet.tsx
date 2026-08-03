@@ -13,8 +13,7 @@ import {
   useWindowDimensions,
   Alert,
   Share as RNShare,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import {
   X,
   Link,
@@ -24,8 +23,7 @@ import {
   Share2,
   Users,
   Copy,
-  Check,
-} from 'lucide-react-native';
+  Check} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -58,8 +56,7 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
   projectUrl,
   visible,
   onClose,
-  onShareTrack,
-}: ShareSheetProps) {
+  onShareTrack}: ShareSheetProps) {
   const { height: windowHeight } = useWindowDimensions();
   const slideAnim = useRef(new Animated.Value(windowHeight)).current;
   const [copied, setCopied] = useState(false);
@@ -69,8 +66,7 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
       toValue: visible ? 0 : windowHeight,
       tension: 80,
       friction: 12,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [visible, slideAnim, windowHeight]);
 
   useEffect(() => {
@@ -97,10 +93,8 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
       await RNShare.share({
         message: `Check out this investment opportunity on IVX: ${projectTitle}\n${projectUrl}`,
         url: projectUrl,
-        title: projectTitle,
-      }, {
-        dialogTitle: `Share ${projectTitle}`,
-      });
+        title: projectTitle}, {
+        dialogTitle: `Share ${projectTitle}`});
     } catch {}
   }, [projectTitle, projectUrl]);
 
@@ -110,8 +104,7 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
       label: 'Copy Link',
       icon: copied ? Check : Link,
       color: Colors.blue,
-      action: () => trackAndExecute('copy_link', handleCopyLink),
-    },
+      action: () => trackAndExecute('copy_link', handleCopyLink)},
     {
       id: 'whatsapp',
       label: 'WhatsApp',
@@ -123,8 +116,7 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
         const url = `whatsapp://send?text=${text}`;
         // Falls back to native share if WhatsApp not installed
         RNShare.share({ message: `Check out ${projectTitle}: ${projectUrl}`, url: projectUrl }).catch(() => {});
-      }),
-    },
+      })},
     {
       id: 'sms',
       label: 'SMS',
@@ -135,8 +127,7 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
         Platform.OS === 'web'
           ? handleCopyLink()
           : RNShare.share({ message: `Check out ${projectTitle}: ${projectUrl}`, url: projectUrl }).catch(() => {});
-      }),
-    },
+      })},
     {
       id: 'email',
       label: 'Email',
@@ -148,22 +139,19 @@ const ProjectShareSheet = memo(function ProjectShareSheet({
         Platform.OS === 'web'
           ? window.open(`mailto:?subject=${subject}&body=${body}`, '_blank')
           : RNShare.share({ message: `Check out ${projectTitle}: ${projectUrl}`, url: projectUrl }).catch(() => {});
-      }),
-    },
+      })},
     {
       id: 'social',
       label: 'Share',
       icon: Share2,
       color: '#E1306C',
-      action: () => trackAndExecute('social', handleNativeShare),
-    },
+      action: () => trackAndExecute('social', handleNativeShare)},
     {
       id: 'referral',
       label: 'Referral Link',
       icon: Users,
       color: GOLD,
-      action: () => trackAndExecute('referral', handleCopyLink),
-    },
+      action: () => trackAndExecute('referral', handleCopyLink)},
   ];
 
   if (!visible) return null;
@@ -227,16 +215,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
-    zIndex: 100,
-  },
+    zIndex: 100},
   sheet: {
     backgroundColor: SURFACE,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderColor: BORDER,
-  },
+    borderColor: BORDER},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -244,53 +230,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
+    borderBottomColor: BORDER},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   projectInfo: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   projectTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   projectUrl: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   optionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 12,
-    gap: 4,
-  },
+    gap: 4},
   optionItem: {
     width: '33%',
     alignItems: 'center',
     paddingVertical: 14,
-    gap: 8,
-  },
+    gap: 8},
   optionIconWrap: {
     width: 56,
     height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   optionLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '600' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   cancelBtn: {
     marginHorizontal: 20,
     marginTop: 12,
@@ -299,11 +276,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: BORDER,
-  },
+    borderColor: BORDER},
   cancelText: {
     color: Colors.textSecondary,
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

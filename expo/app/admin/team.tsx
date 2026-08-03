@@ -9,8 +9,7 @@ import {
   TextInput,
   Modal,
   Alert,
-  Image,
-} from 'react-native';
+  Image} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -28,8 +27,7 @@ import {
   Settings,
   HeadphonesIcon,
   BarChart3,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { TeamMember, AdminRole } from '@/types';
@@ -52,8 +50,7 @@ const CURRENT_ADMIN = {
   roleId: 'role-ceo',
   role: DEFAULT_ROLES[0],
   status: 'active' as const,
-  createdAt: '2024-01-01T00:00:00Z',
-};
+  createdAt: '2024-01-01T00:00:00Z'};
 
 export default function TeamManagement() {
   const router = useRouter();
@@ -76,11 +73,9 @@ export default function TeamManagement() {
         roleId: `role-${p.role || 'viewer'}`,
         role: DEFAULT_ROLES.find(r => r.type === (p.role || 'viewer')) || DEFAULT_ROLES[4],
         status: p.status === 'active' ? 'active' : 'suspended',
-        createdAt: p.created_at || new Date().toISOString(),
-      }));
+        createdAt: p.created_at || new Date().toISOString()}));
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -110,8 +105,7 @@ export default function TeamManagement() {
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const getRoleIcon = (roleType: string) => {
@@ -158,8 +152,7 @@ export default function TeamManagement() {
       status: 'invited',
       invitedBy: currentAdmin.id,
       invitedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
+      createdAt: new Date().toISOString()};
 
     setTeamMembers([...teamMembers, newMember]);
     setShowInviteModal(false);
@@ -188,8 +181,7 @@ export default function TeamManagement() {
         return {
           ...m,
           roleId: selectedRoleId,
-          role: roles.find(r => r.id === selectedRoleId) || m.role,
-        };
+          role: roles.find(r => r.id === selectedRoleId) || m.role};
       }
       return m;
     });
@@ -217,8 +209,7 @@ export default function TeamManagement() {
           onPress: () => {
             setTeamMembers(teamMembers.filter(m => m.id !== member.id));
             Alert.alert('Success', 'Team member removed');
-          },
-        },
+          }},
       ]
     );
   };
@@ -689,5 +680,4 @@ const styles = StyleSheet.create({
   roleListItemName: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   roleListItemDesc: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   saveRoleButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  saveRoleText: { color: '#000000', fontSize: 15, fontWeight: '700' as const },
-});
+  saveRoleText: { color: '#000000', fontSize: 15, fontWeight: '700' as const }});

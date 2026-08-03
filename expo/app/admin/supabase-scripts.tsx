@@ -1,15 +1,12 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Platform,
-  ActivityIndicator,
   Animated,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -31,8 +28,7 @@ import {
   ChevronUp,
   Rocket,
   Users,
-  Copy,
-} from 'lucide-react-native';
+  Copy} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import Colors from '@/constants/colors';
@@ -42,6 +38,7 @@ import { IVX_SECURITY_HOTFIX_SQL } from '@/constants/ivx-security-hotfix-sql';
 import { safeSetString } from '@/lib/safe-clipboard';
 import { executeSupabaseSqlScript, isSupabaseSqlExecMissing } from '@/lib/supabase-sql-executor';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 console.log('[Supabase Status] Live dashboard loaded');
 
@@ -599,8 +596,7 @@ export default function SupabaseStatusPage() {
     storage: false,
     realtime: false,
     config: false,
-    deploy: true,
-  });
+    deploy: true});
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const deployScale = useRef(new Animated.Value(0)).current;
 
@@ -761,8 +757,7 @@ export default function SupabaseStatusPage() {
       tablesOk,
       totalTables: IVX_OWNER_AI_DEPLOY_TABLES.length,
       bucketOk,
-      functionOk,
-    };
+      functionOk};
   }, [tables, buckets, functions]);
 
   const ownerModuleBadge = useMemo(() => {
@@ -1089,7 +1084,7 @@ export default function SupabaseStatusPage() {
       case 'ok': return <CheckCircle size={size} color="#00E676" />;
       case 'missing': return <XCircle size={size} color="#FF5252" />;
       case 'error': return <AlertTriangle size={size} color="#FF9800" />;
-      case 'checking': return <ActivityIndicator size="small" color={Colors.primary} />;
+      case 'checking': return <ShimmerIndicator size="small" color={Colors.primary} />;
       default: return <Clock size={size} color={Colors.textTertiary} />;
     }
   };
@@ -1207,7 +1202,7 @@ export default function SupabaseStatusPage() {
             ))}
             {tables.length === 0 && scanning && (
               <View style={styles.scanningRow}>
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
                 <Text style={styles.scanningText}>Scanning tables...</Text>
               </View>
             )}
@@ -1237,7 +1232,7 @@ export default function SupabaseStatusPage() {
             ))}
             {functions.length === 0 && scanning && (
               <View style={styles.scanningRow}>
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
                 <Text style={styles.scanningText}>Checking functions...</Text>
               </View>
             )}
@@ -1373,7 +1368,7 @@ export default function SupabaseStatusPage() {
                 >
                   {deployAction === 'deploying' ? (
                     <View style={styles.deployButtonInner}>
-                      <ActivityIndicator color="#000" size="small" />
+                      <ShimmerIndicator color="#000" size="small" />
                       <Text style={styles.deployButtonText}>Deploying...</Text>
                     </View>
                   ) : (
@@ -1470,7 +1465,7 @@ export default function SupabaseStatusPage() {
                 >
                   {ownerModuleDeploying ? (
                     <View style={styles.deployButtonInner}>
-                      <ActivityIndicator color="#04110A" size="small" />
+                      <ShimmerIndicator color="#04110A" size="small" />
                       <Text style={[styles.deployButtonText, { color: '#04110A' }]}>Deploying...</Text>
                     </View>
                   ) : (
@@ -1530,7 +1525,7 @@ export default function SupabaseStatusPage() {
                 >
                   {fullSchemaDeploying ? (
                     <View style={styles.deployButtonInner}>
-                      <ActivityIndicator color="#fff" size="small" />
+                      <ShimmerIndicator color="#fff" size="small" />
                       <Text style={[styles.deployButtonText, { color: '#fff' }]}>Deploying...</Text>
                     </View>
                   ) : (
@@ -1618,7 +1613,7 @@ export default function SupabaseStatusPage() {
                 >
                   {securityHotfixDeploying ? (
                     <View style={styles.deployButtonInner}>
-                      <ActivityIndicator color="#fff" size="small" />
+                      <ShimmerIndicator color="#fff" size="small" />
                       <Text style={[styles.deployButtonText, { color: '#fff' }]}>Applying...</Text>
                     </View>
                   ) : (
@@ -1711,8 +1706,7 @@ export default function SupabaseStatusPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1720,27 +1714,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.card,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   refreshHeaderBtn: {
     width: 38,
     height: 38,
@@ -1749,28 +1739,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   refreshHeaderBtnActive: {
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   healthCard: {
     margin: 16,
     padding: 18,
     backgroundColor: Colors.card,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   healthTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   healthRing: {
     width: 68,
     height: 68,
@@ -1778,52 +1763,42 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   healthPercent: {
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   healthInfo: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   healthLabel: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   healthStatus: {
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   healthTimestamp: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   healthGrid: {
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingTop: 14,
-  },
+    paddingTop: 14},
   healthStat: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   healthStatValue: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   healthStatLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   allGoodBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1835,14 +1810,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D2818',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#00E67630',
-  },
+    borderColor: '#00E67630'},
   allGoodText: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
-    color: '#00E676',
-  },
+    color: '#00E676'},
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1853,22 +1826,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A0E00',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FF980040',
-  },
+    borderColor: '#FF980040'},
   warningContent: {
-    flex: 1,
-  },
+    flex: 1},
   warningTitle: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: '#FF9800',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   warningText: {
     fontSize: 12,
     color: '#B87A3D',
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1876,132 +1845,109 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   sectionIconWrap: {
     width: 32,
     height: 32,
     borderRadius: 8,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   sectionTitle: {
     flex: 1,
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.text,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   sectionBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: Colors.card,
-  },
+    backgroundColor: Colors.card},
   sectionBadgeText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sectionContent: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: Colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 7,
-  },
+    paddingVertical: 7},
   checkName: {
     flex: 1,
     fontSize: 13,
     color: Colors.text,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'},
   checkNameMissing: {
-    color: '#FF5252',
-  },
+    color: '#FF5252'},
   checkMeta: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   scanningRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 12,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scanningText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 24,
-  },
+    paddingVertical: 24},
   footerText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   deploySection: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: Colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   deployCard: {
     backgroundColor: Colors.background,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#FFD70030',
-  },
+    borderColor: '#FFD70030'},
   deployCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   deployCardIcon: {
     width: 40,
     height: 40,
     borderRadius: 11,
     backgroundColor: '#FFD70018',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deployCardInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   deployCardTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   deployCardSub: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   deployCardBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   deployCardBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   deploySuccessBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2012,14 +1958,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#00E67630',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   deploySuccessText: {
     flex: 1,
     fontSize: 12,
     fontWeight: '600' as const,
-    color: '#00E676',
-  },
+    color: '#00E676'},
   deployErrorBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -2029,45 +1973,37 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#FF525240',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   deployErrorText: {
     flex: 1,
     fontSize: 11,
     color: '#FF8A80',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   deployActions: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deployButton: {
     flex: 1,
     backgroundColor: '#FFD700',
     borderRadius: 12,
     height: 44,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deployButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   deployButtonUpdate: {
     backgroundColor: '#1A3D1A',
     borderWidth: 1.5,
-    borderColor: '#00E676',
-  },
+    borderColor: '#00E676'},
   deployButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   deployButtonText: {
     fontSize: 14,
     fontWeight: '800' as const,
-    color: '#000',
-  },
+    color: '#000'},
   copySqlButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2076,46 +2012,38 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: Colors.primary + '15',
-    height: 44,
-  },
+    height: 44},
   copySqlText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   ownerSecurityList: {
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   ownerSecurityRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   ownerSecurityText: {
     flex: 1,
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   ownerSecurityStrong: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerModuleMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   ownerModuleMetaText: {
     fontSize: 11,
     color: Colors.textTertiary,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: Colors.card,
-  },
+    backgroundColor: Colors.card},
   deployInfoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -2125,14 +2053,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1400',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#FFD70020',
-  },
+    borderColor: '#FFD70020'},
   deployInfoText: {
     flex: 1,
     fontSize: 11,
     color: '#B8A040',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   deployResultBanner: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -2140,24 +2066,18 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   deployResultSuccess: {
     backgroundColor: '#0D2818',
-    borderColor: '#00E67630',
-  },
+    borderColor: '#00E67630'},
   deployResultError: {
     backgroundColor: '#1A0808',
-    borderColor: '#FF525240',
-  },
+    borderColor: '#FF525240'},
   deployResultManual: {
     backgroundColor: '#1A1400',
-    borderColor: '#FFB80040',
-  },
+    borderColor: '#FFB80040'},
   deployResultText: {
     flex: 1,
     fontSize: 12,
     fontWeight: '600' as const,
-    lineHeight: 17,
-  },
-});
+    lineHeight: 17}});

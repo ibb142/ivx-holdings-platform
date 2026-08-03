@@ -19,9 +19,7 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
+  TouchableOpacity} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -34,9 +32,9 @@ import {
   TrendingUp,
   Zap,
   Lock,
-  ChevronRight,
-} from 'lucide-react-native';
+  ChevronRight} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { AuraSkeleton } from '@/components/InstantSkeleton';
 import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
@@ -77,8 +75,7 @@ async function loadAuraPulse(): Promise<AuraPulse> {
     qa: unwrap<{ ok: boolean; schedulerRunning?: boolean; totalRuns?: number; healthOk?: boolean; authOk?: boolean }>(qa, { ok: false }),
     credentials: unwrap<{ ok: boolean; certification?: string; verifiedCount?: number; blockedRequiredCount?: number }>(credentials, { ok: false }),
     runs: unwrap<{ ok: boolean; totalRuns?: number; runsWithEvidence?: number; failedRuns?: number }>(runs, { ok: false }),
-    executive: unwrap<{ ok: boolean; summary?: string; status?: string }>(executive, { ok: false }),
-  };
+    executive: unwrap<{ ok: boolean; summary?: string; status?: string }>(executive, { ok: false })};
 }
 
 function PulseCard({
@@ -87,8 +84,7 @@ function PulseCard({
   value,
   sub,
   tone,
-  onPress,
-}: {
+  onPress}: {
   icon: React.ElementType;
   label: string;
   value: string;
@@ -100,8 +96,7 @@ function PulseCard({
     gold: { bg: 'rgba(230,194,0,0.12)', text: Colors.officialGold },
     green: { bg: 'rgba(0,196,140,0.12)', text: Colors.success },
     red: { bg: 'rgba(255,77,77,0.12)', text: Colors.error },
-    blue: { bg: 'rgba(74,144,217,0.12)', text: Colors.info },
-  };
+    blue: { bg: 'rgba(74,144,217,0.12)', text: Colors.info }};
   const t = toneMap[tone];
   const content = (
     <View style={[styles.card, { backgroundColor: t.bg }]}>
@@ -134,8 +129,7 @@ export default function AuraScreen() {
     queryFn: loadAuraPulse,
     enabled: isOwner,
     staleTime: 1000 * 30,
-    refetchOnWindowFocus: true,
-  });
+    refetchOnWindowFocus: true});
 
   const data = pulseQuery.data;
   const isReady = pulseQuery.isSuccess && data;
@@ -176,10 +170,7 @@ export default function AuraScreen() {
         </View>
 
         {pulseQuery.isLoading && !isReady && (
-          <View style={styles.loading}>
-            <ActivityIndicator size="large" color={Colors.gold} />
-            <Text style={styles.loadingText}>Loading Aura pulse…</Text>
-          </View>
+          <AuraSkeleton />
         )}
 
         {pulseQuery.isError && (
@@ -265,17 +256,14 @@ export default function AuraScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     padding: 20,
-    paddingBottom: 120,
-  },
+    paddingBottom: 120},
   hero: {
     alignItems: 'center',
     marginTop: 12,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   heroIcon: {
     width: 64,
     height: 64,
@@ -283,110 +271,90 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(230,194,0,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   heroTitle: {
     fontSize: 28,
     fontWeight: '800' as const,
     color: Colors.textWhite,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   heroSubtitle: {
     fontSize: 14,
     color: Colors.mutedGray,
-    marginTop: 4,
-  },
+    marginTop: 4},
   loading: {
     alignItems: 'center',
-    marginTop: 40,
-  },
+    marginTop: 40},
   loadingText: {
     color: Colors.mutedGray,
     marginTop: 12,
-    fontSize: 14,
-  },
+    fontSize: 14},
   errorCard: {
     backgroundColor: 'rgba(255,77,77,0.12)',
     borderRadius: 16,
     padding: 20,
-    marginTop: 12,
-  },
+    marginTop: 12},
   errorTitle: {
     color: Colors.error,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorBody: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginTop: 6,
-  },
+    marginTop: 6},
   grid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     justifyContent: 'space-between' as const,
     gap: 12,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   card: {
     width: '48%',
     borderRadius: 16,
     padding: 16,
-    minHeight: 130,
-  },
+    minHeight: 130},
   cardHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   cardIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-  },
+    marginRight: 10},
   cardLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   cardValue: {
     fontSize: 22,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   cardSub: {
-    fontSize: 12,
-  },
+    fontSize: 12},
   section: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.textWhite,
-    marginLeft: 8,
-  },
+    marginLeft: 8},
   summaryCard: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   summaryText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   statusBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -395,14 +363,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,196,140,0.15)',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 20,
-  },
+    borderRadius: 20},
   statusBadgeText: {
     color: Colors.success,
     fontSize: 12,
     fontWeight: '700' as const,
-    marginLeft: 6,
-  },
+    marginLeft: 6},
   actionButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -411,21 +377,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    marginTop: 8,
-  },
+    marginTop: 8},
   actionButtonText: {
     color: Colors.black,
     fontSize: 15,
     fontWeight: '700' as const,
     flex: 1,
-    marginLeft: 10,
-  },
+    marginLeft: 10},
   restricted: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-  },
+    padding: 32},
   restrictedIcon: {
     width: 64,
     height: 64,
@@ -433,17 +396,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(230,194,0,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   restrictedTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: Colors.textWhite,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   restrictedBody: {
     fontSize: 14,
     color: Colors.mutedGray,
-    textAlign: 'center' as const,
-  },
-});
+    textAlign: 'center' as const}});

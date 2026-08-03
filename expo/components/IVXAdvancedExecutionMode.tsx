@@ -11,9 +11,10 @@
  * incidents). Polls every 3s with `sinceSeq` long-poll style.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, type AppStateStatus, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, type AppStateStatus, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useQuery } from '@tanstack/react-query';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // Module-level singleton guard — prevents duplicate mounts across fast-refresh,
 // nested routes, or accidental double mounts. Only the first mount renders;
@@ -97,8 +98,7 @@ async function fetchSnapshot(): Promise<ExecutionSnapshot | null> {
   if (!token) return null;
   const response = await fetch(`${base}/api/ivx/senior-dev/execution-stream?limit=160`, {
     method: 'GET',
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  });
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }});
   if (!response.ok) return null;
   return (await response.json().catch(() => null)) as ExecutionSnapshot | null;
 }
@@ -146,8 +146,7 @@ export function IVXAdvancedExecutionMode(): React.ReactElement | null {
     refetchOnWindowFocus: pollingEnabled,
     refetchOnReconnect: pollingEnabled,
     staleTime: POLL_STALE_MS,
-    enabled: isPrimary,
-  });
+    enabled: isPrimary});
 
   const onRefresh = useCallback(() => {
     void query.refetch();
@@ -162,7 +161,7 @@ export function IVXAdvancedExecutionMode(): React.ReactElement | null {
   if (query.isLoading && !data) {
     return (
       <View style={styles.loading} testID="ivx-advanced-exec-loading">
-        <ActivityIndicator color="#1f6feb" />
+        <ShimmerIndicator color="#1f6feb" />
         <Text style={styles.muted}>Connecting to execution stream…</Text>
       </View>
     );
@@ -465,7 +464,6 @@ const styles = StyleSheet.create({
   statusFail: { color: '#ff7a90' },
   statusRunning: { color: '#7fb6ff' },
   statusBlocked: { color: '#f0c060' },
-  statusInfo: { color: '#a4adc2' },
-});
+  statusInfo: { color: '#a4adc2' }});
 
 export default IVXAdvancedExecutionMode;

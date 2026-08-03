@@ -240,6 +240,9 @@ export type IVXWorkerJob = {
   ownerId: string;
   createdAt: string;
   startedAt: string | null;
+  /** Updated by every persisted stage change; prevents active work from being
+   * misclassified as stale simply because it has been running for a while. */
+  lastHeartbeatAt?: string | null;
   finishedAt: string | null;
   cancelledAt: string | null;
   attempts: number;
@@ -284,6 +287,9 @@ export type IVXWorkerJobResult = {
   healthOk: boolean;
   healthStatus: number | null;
   versionEndpoint: string | null;
+  /** Captured deployment certification receipts; contain only endpoint, HTTP status, and SHA. */
+  healthResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;
+  versionResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;
   generatedFeatureSlug: string | null;
   auditFiles: { json: string; jsonl: string };
   finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED';
@@ -773,7 +779,11 @@ function autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): stri
   if (!proof.commitSha) return 'Code-change job produced no commit SHA; stale evidence is not accepted.';
   if (proof.startingSha && proof.commitSha === proof.startingSha) return 'Code-change job reused its starting commit SHA; stale evidence is not accepted.';
   if (proof.executionMode === 'deploy') {
-    if (!proof.deployId) return 'Deploy job produced no deployment ID.';
+    if (proof.branch !== 'main') return `Production deployment commit was rejected because it landed on ${proof.branch ?? 'no branch'}, not the approved production branch main.`;
+    if (!proof.deployId) return 'Deploy job produced no Render deployment ID.';
+    if (proof.deployStatus !== 'live') return `Deploy job did not reach Render live status (status=${proof.deployStatus ?? 'missing'}).`;
+    if (!proof.healthOk || !proof.healthResponse?.ok || proof.healthResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a healthy production /health response with the requested commit.';
+    if (!proof.versionResponse?.ok || proof.versionResponse.commitSha !== proof.commitSha) return 'Deploy job did not verify a production /version response with the requested commit.';
     if (!proof.productionVerified || proof.liveCommit !== proof.commitSha) return 'Deploy job did not verify its new commit in production.';
   }
   return null;
@@ -813,8 +823,10 @@ export function summarizeAutonomousCoderProof(
     liveCommit: proof.liveCommit,
     commitMatch: completed && proof.productionVerified && proof.liveCommit === proof.commitSha,
     healthOk: completed && proof.healthOk,
-    healthStatus: null,
-    versionEndpoint: null,
+    healthStatus: proof.healthResponse?.httpStatus ?? null,
+    versionEndpoint: proof.versionResponse?.endpoint ?? null,
+    healthResponse: proof.healthResponse,
+    versionResponse: proof.versionResponse,
     generatedFeatureSlug: null,
     auditFiles: { json: '', jsonl: '' },
     finalStatus,
@@ -897,8 +909,9 @@ const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set([
 ]);
 
 /**
- * Expire stale jobs whose `startedAt` is older than `STALE_JOB_TIMEOUT_MS`.
- * Stale jobs are marked FAILED with an honest reason. This frees the queue so
+ * Expire active jobs whose last heartbeat is older than `STALE_JOB_TIMEOUT_MS`.
+ * Jobs created before heartbeat tracking fall back to `startedAt`. Stale jobs are
+ * marked FAILED with an honest reason. This frees the queue so
  * a new job can start for the same owner.
  *
  * @returns array of expired job IDs
@@ -910,15 +923,16 @@ export async function expireStaleJobs(): Promise<string[]> {
 
   for (const job of queue.jobs) {
     if (!ACTIVE_STATUSES.has(job.status)) continue;
-    if (!job.startedAt) continue;
-    const startedAtMs = new Date(job.startedAt).getTime();
-    if (Number.isNaN(startedAtMs)) continue;
-    if (now - startedAtMs > STALE_JOB_TIMEOUT_MS) {
+    const activityAt = job.lastHeartbeatAt ?? job.startedAt;
+    if (!activityAt) continue;
+    const activityAtMs = new Date(activityAt).getTime();
+    if (Number.isNaN(activityAtMs)) continue;
+    if (now - activityAtMs > STALE_JOB_TIMEOUT_MS) {
       job.status = 'failed';
       job.stage = 'FAILED';
-      job.stageDetail = `Job expired after ${Math.round(STALE_JOB_TIMEOUT_MS / 1000)}s of inactivity.`;
+      job.stageDetail = `Job expired after ${Math.round(STALE_JOB_TIMEOUT_MS / 1000)}s without a worker heartbeat.`;
       job.finishedAt = nowIso();
-      job.error = `Stale job expired (timeout: ${STALE_JOB_TIMEOUT_MS}ms).`;
+      job.error = `Stale job expired after heartbeat timeout (${STALE_JOB_TIMEOUT_MS}ms).`;
       expired.push(job.jobId);
     }
   }
@@ -1020,7 +1034,25 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
     if (Number.isNaN(startedMs) || Number.isNaN(commitMs)) continue;
     if (commitMs < startedMs - 60_000 || commitMs > startedMs + COMMITTING_RECOVERY_WINDOW_MS) continue;
 
-    // GitHub evidence confirms the commit landed for this job → recover.
+    // A deploy task is never complete from GitHub evidence alone. It must resume
+    // at verification with its real Render deployment ID and live endpoint proof.
+    if (job.input.approveGitDeploy) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.progressPercent = STAGE_PROGRESS['FAILED'];
+      job.stageDetail = `Commit ${branchHeadSha.slice(0, 7)} landed on ${branch}, but no completed production verification chain exists.`;
+      job.finishedAt = nowIso();
+      job.error = 'Deployment task failed: a GitHub commit alone is not production verification.';
+      if (job.result) {
+        job.result.ok = false;
+        job.result.endToEndProductionComplete = false;
+        job.result.finalStatus = 'FAILED';
+        job.result.error = job.error;
+      }
+      recovered = true;
+      continue;
+    }
+    // GitHub evidence confirms the commit landed for this non-deploy job → recover.
     const commitUrl = `https://github.com/${owner}/${repo}/commit/${branchHeadSha}`;
     job.status = 'completed';
     job.stage = 'COMPLETED';
@@ -1167,15 +1199,35 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
       continue; // no GitHub credentials → can't verify ancestry
     }
 
-    // Production is serving our commit → complete the job with verified evidence.
-    // Set a synthetic deployId when auto-deploy-on-commit was used (no Render
-    // REST deploy ID was returned, but the deploy clearly happened since the
-    // commit is live on production). The state machine guard requires a
-    // deployId for deploy-requested tasks — without it the guard would
-    // downgrade the result to FAILED even though the deploy is verified.
+    // A deploy-mode task requires the atomic evidence captured by the active
+    // worker: real Render ID + live status + /health + /version + SHA parity.
+    // A restart cannot recreate that chain from a later health check, so fail closed.
+    if (job.input.executionMode === 'deploy' || job.input.approveGitDeploy) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.progressPercent = STAGE_PROGRESS['FAILED'];
+      job.stageDetail = 'Deployment task interrupted before its complete Render, /health, and /version evidence chain was persisted.';
+      job.finishedAt = nowIso();
+      job.error = 'Deployment task failed: incomplete production certification evidence after restart.';
+      job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };
+      recovered = true;
+      continue;
+    }
+    // A non-deploy job may be recovered from a commit/health match.
+    if (!job.result!.deployId) {
+      job.status = 'failed';
+      job.stage = 'FAILED';
+      job.progressPercent = STAGE_PROGRESS['FAILED'];
+      job.stageDetail = 'Production commit appeared live, but the task has no auditable Render deployment ID.';
+      job.finishedAt = nowIso();
+      job.error = 'Deployment task failed: Render deployment ID is missing.';
+      job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };
+      recovered = true;
+      continue;
+    }
     const result: IVXWorkerJobResult = {
       ...(job.result!),
-      deployId: job.result!.deployId ?? 'auto_deploy_on_commit',
+      deployId: job.result!.deployId,
       deployStatus: job.result!.deployStatus ?? 'live',
       deployVerified: true,
       deployRequested: job.input.approveGitDeploy,
@@ -1336,6 +1388,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     ownerId,
     createdAt: nowIso(),
     startedAt: null,
+    lastHeartbeatAt: null,
     finishedAt: null,
     cancelledAt: null,
     attempts: 0,
@@ -1484,7 +1537,15 @@ async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<v
   const queue = await loadQueue();
   const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
   if (idx < 0) return;
-  queue.jobs[idx] = { ...queue.jobs[idx], ...patch };
+  const existing = queue.jobs[idx];
+  const isActive = ACTIVE_STATUSES.has(patch.status ?? existing.status);
+  queue.jobs[idx] = {
+    ...existing,
+    ...patch,
+    // Every active write is evidence that the worker is alive. Terminal jobs
+    // retain their final heartbeat as the last observed execution signal.
+    lastHeartbeatAt: patch.lastHeartbeatAt ?? (isActive ? nowIso() : existing.lastHeartbeatAt),
+  };
   await saveQueue(queue);
 }
 
@@ -1670,6 +1731,10 @@ function finalizeResultWithStateRecord(
  * worker as the runtime progresses through phases.
  */
 async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: string): Promise<void> {
+  const current = await getSeniorDeveloperJob(jobId);
+  if (current && !ACTIVE_STATUSES.has(current.status)) {
+    return;
+  }
   const statusMap: Record<IVXWorkerJobStage, IVXWorkerJobStatus> = {
     QUEUED: 'queued',
     RUNNING: 'running',
@@ -1803,6 +1868,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     progressPercent: STAGE_PROGRESS.RUNNING,
     stageDetail: 'Job started.',
     startedAt: nowIso(),
+    lastHeartbeatAt: nowIso(),
     attempts: job.attempts + 1,
   });
 
@@ -2370,6 +2436,13 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
     externalRequiredAsExecutor: false,
     durableQueue: isDurableStoreConfigured(),
     perOwnerSingleFlight: true,
+    concurrency: {
+      globalExecutionSlots: 1,
+      independentRuntimeCount: 0,
+      classification: 'SHARED_WORKER_WITH_ROLE',
+      note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.',
+    },
+    heartbeatTracking: true,
     staleJobTimeoutMs: STALE_JOB_TIMEOUT_MS,
     staleCheckIntervalMs: STALE_CHECK_INTERVAL_MS,
     granularStages: ['QUEUED', 'RUNNING', 'PATCHING', 'TESTING', 'COMMITTING', 'DEPLOYING', 'VERIFYING', 'COMPLETED', 'FAILED'],

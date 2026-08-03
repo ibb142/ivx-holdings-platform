@@ -5,8 +5,7 @@ import {
   StyleSheet,
   Animated,
   TouchableOpacity,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { Wifi, WifiOff, Database, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNetwork } from '@/lib/network-context';
 import type { BackendStatus } from '@/lib/api-resilience';
@@ -15,23 +14,20 @@ const STATUS_COLORS: Record<BackendStatus, string> = {
   online: '#00C48C',
   degraded: '#F59E0B',
   offline: '#FF4D4D',
-  unknown: '#909090',
-};
+  unknown: '#909090'};
 
 const STATUS_LABELS: Record<BackendStatus, string> = {
   online: 'Connected',
   degraded: 'Slow',
   offline: 'Down',
-  unknown: 'Checking...',
-};
+  unknown: 'Checking...'};
 
 export default function ConnectionStatusBanner() {
   const {
     isOffline,
     supabaseStatus,
     isFullyOperational,
-    refresh,
-  } = useNetwork();
+    refresh} = useNetwork();
 
   const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -47,14 +43,12 @@ export default function ConnectionStatusBanner() {
         toValue: 0,
         tension: 80,
         friction: 12,
-        useNativeDriver: true,
-      }).start();
+        useNativeDriver: true}).start();
     } else if (!shouldShow && visible) {
       Animated.timing(slideAnim, {
         toValue: -80,
         duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
+        useNativeDriver: true}).start(() => {
         setVisible(false);
         setExpanded(false);
       });
@@ -66,8 +60,7 @@ export default function ConnectionStatusBanner() {
       Animated.timing(refreshSpin, {
         toValue: 1,
         duration: 800,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       { iterations: 1 }
     ).start(() => refreshSpin.setValue(0));
 
@@ -81,8 +74,7 @@ export default function ConnectionStatusBanner() {
 
   const spin = refreshSpin.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+    outputRange: ['0deg', '360deg']});
 
   const getMessage = (): string => {
     if (isOffline) return 'No internet connection';
@@ -168,83 +160,65 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
-        shadowRadius: 8,
-      },
+        shadowRadius: 8},
       android: { elevation: 4 },
       web: {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-      } as any,
-    }),
-  },
+        boxShadow: '0 2px 8px rgba(0,0,0,0.25)'} as any})},
   mainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 8,
-  },
+    gap: 8},
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   message: {
     fontSize: 13,
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   detailsContainer: {
     paddingHorizontal: 14,
     paddingBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   detailLabel: {
     fontSize: 12,
     color: '#909090',
-    flex: 1,
-  },
+    flex: 1},
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    gap: 5,
-  },
+    gap: 5},
   statusDot: {
     width: 5,
     height: 5,
-    borderRadius: 2.5,
-  },
+    borderRadius: 2.5},
   statusText: {
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   fallbackNotice: {
     marginTop: 4,
     backgroundColor: '#A78BFA15',
     borderRadius: 8,
-    padding: 10,
-  },
+    padding: 10},
   fallbackText: {
     fontSize: 11,
     color: '#A78BFA',
-    lineHeight: 16,
-  },
-});
+    lineHeight: 16}});

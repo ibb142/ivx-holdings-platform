@@ -5,17 +5,14 @@
  * Accessible from Profile tab → "Knowledge Base".
  */
 import React, { useMemo, useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   useWindowDimensions,
-  FlatList,
-  ActivityIndicator,
-} from 'react-native';
+  FlatList} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -34,8 +31,7 @@ import {
   Shield,
   ChevronRight,
   Clock,
-  BookOpen,
-} from 'lucide-react-native';
+  BookOpen} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   KB_CATEGORIES,
@@ -44,8 +40,7 @@ import {
   KB_TOTAL_CATEGORIES,
   searchArticles,
   getCategoryById,
-  type KBCategory,
-} from '@/lib/knowledge-base-data';
+  type KBCategory} from '@/lib/knowledge-base-data';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 
 // Icon mapping — maps string names from data to lucide components
@@ -59,14 +54,12 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; color?: stri
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
-  Shield,
-};
+  Shield};
 
 function CategoryCard({
   category,
   onPress,
-  isCompact,
-}: {
+  isCompact}: {
   category: KBCategory;
   onPress: () => void;
   isCompact: boolean;
@@ -111,8 +104,7 @@ function SearchArticleRow({
   summary,
   categoryId,
   readTimeMin,
-  onPress,
-}: {
+  onPress}: {
   articleId: string;
   title: string;
   summary: string;
@@ -345,42 +337,34 @@ export default function KnowledgeBaseScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   backButton: {
     width: 44,
     height: 44,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    marginLeft: -4,
-  },
+    marginLeft: -4},
   headerTitleWrap: {
     flex: 1,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   headerTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   searchWrap: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   searchInputWrap: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -389,21 +373,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: Colors.text,
     marginLeft: 10,
-    padding: 0,
-  },
+    padding: 0},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
-    paddingBottom: 32,
-  },
+    paddingBottom: 32},
   statsBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -413,39 +393,32 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statItem: {
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   statNumber: {
     fontSize: 24,
     fontWeight: '800' as const,
-    color: Colors.gold,
-  },
+    color: Colors.gold},
   statLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 4,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 1,
     marginBottom: 12,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   categoriesContainer: {
-    gap: 10,
-  },
+    gap: 10},
   categoryCard: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -453,86 +426,70 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   categoryCardCompact: {
-    padding: 12,
-  },
+    padding: 12},
   categoryIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 12,
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   categoryContent: {
     flex: 1,
     marginLeft: 14,
-    marginRight: 8,
-  },
+    marginRight: 8},
   categoryTitle: {
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   categorySubtitle: {
     color: Colors.textSecondary,
     marginTop: 3,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   categoryMetaRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   articleCountBadge: {
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   articleCountText: {
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   recentContainer: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   recentRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 0.5,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   recentDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   recentContent: {
     flex: 1,
     marginLeft: 12,
-    marginRight: 8,
-  },
+    marginRight: 8},
   recentTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   recentMeta: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 3,
-  },
+    marginTop: 3},
   searchList: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 32,
-  },
+    paddingBottom: 32},
   searchResultRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -541,64 +498,51 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchResultContent: {
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   searchResultHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     marginBottom: 6,
-    gap: 8,
-  },
+    gap: 8},
   searchCategoryTag: {
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   searchCategoryText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   searchReadTime: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 3,
-  },
+    gap: 3},
   searchReadTimeText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   searchResultTitle: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   searchResultSummary: {
     fontSize: 13,
     color: Colors.textSecondary,
     marginTop: 4,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   emptyState: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     paddingTop: 80,
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginTop: 16,
-  },
+    marginTop: 16},
   emptyText: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
     marginTop: 8,
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});

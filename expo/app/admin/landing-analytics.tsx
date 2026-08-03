@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Dimensions,
-} from 'react-native';
+  Dimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { renderSafeViewChildren } from '@/components/SafeViewChildren';
@@ -50,8 +49,7 @@ import {
   Handshake,
   Landmark,
   UserCheck,
-  ShieldCheck,
-} from 'lucide-react-native';
+  ShieldCheck} from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -185,8 +183,7 @@ function buildFallbackAnalytics(events: RawEvent[], period: string): ComputedAna
     conversionRate: pageViews > 0 ? parseFloat(((formSubmits / pageViews) * 100).toFixed(1)) : 0,
     scrollEngagement: 0, byEvent, byPlatform: [], byReferrer: [], dailyViews, hourlyActivity,
     geoZones: { byCountry, byCity: [], byRegion: [], byTimezone: [], totalWithGeo },
-    smartInsights: null, liveData: null,
-  };
+    smartInsights: null, liveData: null};
 }
 
 async function directSupabaseFetch(period: string): Promise<{ events: RawEvent[]; landingCount: number; appCount: number }> {
@@ -256,8 +253,7 @@ async function directSupabaseFetch(period: string): Promise<{ events: RawEvent[]
           properties: { ...(ae.properties || {}), source: ae.source, platform: ae.platform, ip_address: ae.ip_address },
           geo: ae.geo as RawEvent['geo'],
           created_at: ae.created_at,
-          _source: (ae.source === 'landing' ? 'landing' : 'app') as EventSource,
-        }));
+          _source: (ae.source === 'landing' ? 'landing' : 'app') as EventSource}));
         const awsLanding = awsConverted.filter(e => e._source === 'landing').length;
         const awsApp = awsConverted.filter(e => e._source === 'app').length;
         return { events: awsConverted, landingCount: awsLanding, appCount: awsApp };
@@ -330,16 +326,14 @@ const IMPACT_STYLES: Record<string, { bg: string; text: string; label: string }>
   critical: { bg: '#FF4D4D18', text: '#FF4D4D', label: 'CRITICAL' },
   high: { bg: '#FFB80018', text: '#FFB800', label: 'HIGH' },
   medium: { bg: '#4A90D918', text: '#4A90D9', label: 'MEDIUM' },
-  low: { bg: '#00C48C18', text: '#00C48C', label: 'LOW' },
-};
+  low: { bg: '#00C48C18', text: '#00C48C', label: 'LOW' }};
 
 const TYPE_ICONS: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
   pattern: { icon: <Activity size={14} color="#7B68EE" />, color: '#7B68EE', label: 'Pattern' },
   anomaly: { icon: <AlertTriangle size={14} color="#FF4D4D" />, color: '#FF4D4D', label: 'Anomaly' },
   prediction: { icon: <TrendingUp size={14} color="#00C48C" />, color: '#00C48C', label: 'Prediction' },
   recommendation: { icon: <Lightbulb size={14} color="#FFB800" />, color: '#FFB800', label: 'Recommendation' },
-  trend: { icon: <TrendingDown size={14} color="#4A90D9" />, color: '#4A90D9', label: 'Trend' },
-};
+  trend: { icon: <TrendingDown size={14} color="#4A90D9" />, color: '#4A90D9', label: 'Trend' }};
 
 const COUNTRY_FLAGS: Record<string, string> = {
   'United States': '🇺🇸', 'United Kingdom': '🇬🇧', 'Canada': '🇨🇦', 'Germany': '🇩🇪',
@@ -349,8 +343,7 @@ const COUNTRY_FLAGS: Record<string, string> = {
   'UAE': '🇦🇪', 'United Arab Emirates': '🇦🇪', 'Saudi Arabia': '🇸🇦', 'China': '🇨🇳',
   'South Korea': '🇰🇷', 'Nigeria': '🇳🇬', 'South Africa': '🇿🇦', 'Colombia': '🇨🇴',
   'Argentina': '🇦🇷', 'Portugal': '🇵🇹', 'Ireland': '🇮🇪', 'Poland': '🇵🇱',
-  'Turkey': '🇹🇷', 'Philippines': '🇵🇭', 'Indonesia': '🇮🇩', 'Thailand': '🇹🇭',
-};
+  'Turkey': '🇹🇷', 'Philippines': '🇵🇭', 'Indonesia': '🇮🇩', 'Thailand': '🇹🇭'};
 
 
 const SS_BLUE = '#0073EA';
@@ -545,8 +538,7 @@ function AnimatedRing({ percent, size, strokeWidth, color, children }: {
               width: 4,
               height: 4,
               borderRadius: 2,
-              backgroundColor: isFilled ? color : '#1E1E22',
-            }}
+              backgroundColor: isFilled ? color : '#1E1E22'}}
           />
         );
       })}
@@ -573,8 +565,7 @@ function MiniSparkBar({ data, color, height = 48 }: { data: number[]; color: str
               width: barWidth,
               height: h,
               borderRadius: 2,
-              backgroundColor: isLast ? color : color + '60',
-            }}
+              backgroundColor: isLast ? color : color + '60'}}
           />
         );
       })}
@@ -765,8 +756,7 @@ export default function LandingAnalyticsScreen() {
         landingCount,
         appCount,
         error: isRealError ? fetchError : null,
-        lastFetch: new Date().toISOString(),
-      });
+        lastFetch: new Date().toISOString()});
 
       console.log('[Admin Analytics] Final:', computed.pageViews, 'views,', computed.uniqueSessions, 'sessions, leads:', computed.totalLeads);
       setDirectData(computed);
@@ -780,8 +770,7 @@ export default function LandingAnalyticsScreen() {
     retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 10000),
     gcTime: 60000,
     refetchOnMount: true,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const [manualRefreshing, setManualRefreshing] = useState<boolean>(false);
   const queryClient = useQueryClient();
@@ -825,8 +814,7 @@ export default function LandingAnalyticsScreen() {
         byCountry: rawData.geoZones.byCountry ?? [],
         byCity: rawData.geoZones.byCity ?? [],
         byTimezone: rawData.geoZones.byTimezone ?? [],
-        totalWithGeo: rawData.geoZones.totalWithGeo ?? 0,
-      } : { byCountry: [] as ComputedAnalytics['geoZones']['byCountry'], byCity: [] as ComputedAnalytics['geoZones']['byCity'], byTimezone: [] as ComputedAnalytics['geoZones']['byTimezone'], totalWithGeo: 0, byRegion: [] as ComputedAnalytics['geoZones']['byRegion'] },
+        totalWithGeo: rawData.geoZones.totalWithGeo ?? 0} : { byCountry: [] as ComputedAnalytics['geoZones']['byCountry'], byCity: [] as ComputedAnalytics['geoZones']['byCity'], byTimezone: [] as ComputedAnalytics['geoZones']['byTimezone'], totalWithGeo: 0, byRegion: [] as ComputedAnalytics['geoZones']['byRegion'] },
       smartInsights: rawData.smartInsights ? {
         ...rawData.smartInsights,
         engagementScore: rawData.smartInsights.engagementScore ?? 0,
@@ -834,13 +822,10 @@ export default function LandingAnalyticsScreen() {
         bounceRate: rawData.smartInsights.bounceRate ?? 0,
         peakHour: rawData.smartInsights.peakHour ?? 0,
         visitorIntent: rawData.smartInsights.visitorIntent ?? {
-          highIntent: 0, highIntentPct: 0, mediumIntent: 0, mediumIntentPct: 0, lowIntent: 0, lowIntentPct: 0,
-        },
+          highIntent: 0, highIntentPct: 0, mediumIntent: 0, mediumIntentPct: 0, lowIntent: 0, lowIntentPct: 0},
         deviceBreakdown: rawData.smartInsights.deviceBreakdown ?? [],
-        topInterests: rawData.smartInsights.topInterests ?? [],
-      } : null,
-      liveData: rawData.liveData ?? null,
-    };
+        topInterests: rawData.smartInsights.topInterests ?? []} : null,
+      liveData: rawData.liveData ?? null};
   }, [rawData]);
 
   const investorIntel = useMemo<InvestorIntel | null>(() => {
@@ -1063,10 +1048,8 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify({ sql: rpcSql }),
-            });
+                'Authorization': `Bearer ${token}`},
+              body: JSON.stringify({ sql: rpcSql })});
             if (resp.ok) {
               console.log('[Analytics] RPC functions deployed successfully via API');
               setRpcDeployResult('success');
@@ -1134,8 +1117,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
                   paddingHorizontal: 16,
                   marginTop: 8,
                   alignItems: 'center',
-                  opacity: rpcDeploying ? 0.6 : 1,
-                }}
+                  opacity: rpcDeploying ? 0.6 : 1}}
               >
                 <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' as const }}>
                   {rpcDeploying ? 'Deploying...' : rpcDeployResult === 'success' ? 'Deployed! Refreshing...' : rpcDeployResult === 'copied' ? 'SQL Copied! Paste in Supabase SQL Editor' : 'Deploy Analytics Fix'}
@@ -1335,8 +1317,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
                 <View style={[s.ctaBar, { backgroundColor: cta.color + '15' }]}>
                   <View style={[s.ctaBarFill, {
                     width: `${Math.max(Math.min((cta.count / Math.max(data.cta.getStarted, 1)) * 100, 100), 5)}%` as any,
-                    backgroundColor: cta.color,
-                  }]} />
+                    backgroundColor: cta.color}]} />
                 </View>
               </View>
             ))}
@@ -1437,8 +1418,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
                 how_it_works: SS_PURPLE,
                 trust_section: '#00C48C',
                 waitlist_form: SS_PINK,
-                unknown: '#97A0AF',
-              };
+                unknown: '#97A0AF'};
               const locColor = locationColors[link.location] || CHART_COLORS[i % CHART_COLORS.length];
               const timeAgo = (() => {
                 const diff = Math.round((Date.now() - new Date(link.lastClicked).getTime()) / 1000);
@@ -1489,8 +1469,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
                 how_it_works: 'How It Works',
                 trust_security: 'Trust & Security',
                 waitlist_form: 'Waitlist Form',
-                footer: 'Footer',
-              };
+                footer: 'Footer'};
               return (
                 <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: i < (data.sectionViews ?? []).length - 1 ? 1 : 0, borderBottomColor: '#F0F3F8', gap: 10 }}>
                   <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + '15', alignItems: 'center', justifyContent: 'center' }}>
@@ -1648,8 +1627,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
                 paddingVertical: 12,
                 paddingHorizontal: 20,
                 marginTop: 16,
-                opacity: rpcDeploying ? 0.6 : 1,
-              }}
+                opacity: rpcDeploying ? 0.6 : 1}}
             >
               <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' as const }}>
                 {rpcDeploying ? 'Deploying...' : rpcDeployResult === 'success' ? 'Deployed! Pull to refresh' : rpcDeployResult === 'copied' ? 'SQL Copied — Paste in Supabase' : 'Deploy Analytics Functions'}
@@ -1884,8 +1862,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
       const defaultBrain = {
         status: 'active',
         memory: { learningCycles: 1, totalDataPointsProcessed: 0 },
-        stats: { activeLearnings: 0, avgConfidence: 0, byType: {} },
-      };
+        stats: { activeLearnings: 0, avgConfidence: 0, byType: {} }};
       try {
         const { data, error } = await supabase.from('ai_brain_status').select('*').limit(50);
         if (error) { console.log('[Supabase] ai_brain_status error:', error.message); return defaultBrain; }
@@ -1897,8 +1874,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
     },
     enabled: activeTab === 'brain',
     staleTime: 30000,
-    refetchInterval: activeTab === 'brain' ? 30000 : false,
-  });
+    refetchInterval: activeTab === 'brain' ? 30000 : false});
 
   const learnMutation = useMutation({
     mutationFn: async (input: { period: string }) => {
@@ -1909,8 +1885,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['aiLearning.getAIBrainStatus'] });
-    },
-  });
+    }});
 
   const renderInvestorIntelligence = () => {
     if (!data || !investorIntel) return null;
@@ -2176,8 +2151,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
                     <View style={s.brainTypeBarBg}>
                       <View style={[s.brainTypeBarFill, {
                         width: `${Math.max(((count as number) / maxCount) * 100, 5)}%` as any,
-                        backgroundColor: typeInfo.color,
-                      }]} />
+                        backgroundColor: typeInfo.color}]} />
                     </View>
                   </View>
                   <Text style={[s.brainTypeCount, { color: typeInfo.color }]}>{count as number}</Text>
@@ -2378,8 +2352,7 @@ GRANT EXECUTE ON FUNCTION public.analytics_live_count TO anon, authenticated;
       lastSeen: u.lastSeen,
       startedAt: u.startedAt,
       isActive: true,
-      source: u.source,
-    })) : eventSessions;
+      source: u.source})) : eventSessions;
     const breakdown = hasPresence ? eventBreakdown : eventBreakdown;
 
     const getStepLabel = (step: number) => {
@@ -2678,8 +2651,7 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E5EC',
-    backgroundColor: '#FFFFFF',
-  },
+    backgroundColor: '#FFFFFF'},
   backBtn: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F3F8' },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
   headerTitle: { fontSize: 20, fontWeight: '800' as const, color: '#1B2A3D', letterSpacing: -0.3 },
@@ -2931,5 +2903,4 @@ const s = StyleSheet.create({
 
   presenceStatusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginTop: 6 },
   presenceStatusText: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.3 },
-  presenceSyncText: { fontSize: 10, fontWeight: '500' as const, color: '#97A0AF', marginTop: 4 },
-});
+  presenceSyncText: { fontSize: 10, fontWeight: '500' as const, color: '#97A0AF', marginTop: 4 }});

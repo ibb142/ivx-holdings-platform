@@ -6,8 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import {
   FileText,
   Download,
@@ -19,8 +18,7 @@ import {
   DollarSign,
   Percent,
   ArrowDownLeft,
-  ArrowUpRight,
-} from 'lucide-react-native';
+  ArrowUpRight} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -93,21 +91,17 @@ const ROLE_CONFIG = {
     label: 'Investor',
     icon: TrendingUp,
     color: Colors.primary,
-    description: 'Portfolio & Returns',
-  },
+    description: 'Portfolio & Returns'},
   private_lender: {
     label: 'Private Lender',
     icon: Landmark,
     color: Colors.info,
-    description: 'Lending & Interest',
-  },
+    description: 'Lending & Interest'},
   property_owner: {
     label: 'Property Owner',
     icon: Building2,
     color: Colors.success,
-    description: 'Rental Income',
-  },
-};
+    description: 'Rental Income'}};
 
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 
@@ -260,8 +254,7 @@ export default function StatementsScreen() {
     const map: Record<UserRole, Statement[]> = {
       investor: INVESTOR_STATEMENTS,
       private_lender: LENDER_STATEMENTS,
-      property_owner: OWNER_STATEMENTS,
-    };
+      property_owner: OWNER_STATEMENTS};
     const all = map[activeRole];
     return filterType === 'all' ? all : all.filter(s => s.type === filterType);
   }, [activeRole, filterType]);
@@ -397,8 +390,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   roleTabText: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const, textAlign: 'center' },
 
   summaryBanner: {
@@ -410,8 +402,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 12,
     marginBottom: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   summaryItem: { flex: 1, alignItems: 'center', gap: 4 },
   summaryDivider: { width: 1, height: 36, backgroundColor: Colors.surfaceBorder },
   summaryIconBox: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
@@ -426,8 +417,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   filterPillText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '500' as const },
   filterPillTextActive: { color: '#000', fontWeight: '600' as const },
@@ -443,8 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
   cardIconBox: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   cardMain: { flex: 1 },
@@ -464,8 +453,7 @@ const styles = StyleSheet.create({
     width: '47%',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   detailLabel: { color: Colors.textTertiary, fontSize: 11, marginBottom: 4 },
   detailValue: { color: Colors.text, fontSize: 14, fontWeight: '700' as const },
 
@@ -478,8 +466,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '50',
     borderRadius: 10,
     paddingVertical: 9,
-    backgroundColor: Colors.primary + '10',
-  },
+    backgroundColor: Colors.primary + '10'},
   downloadBtnText: { color: Colors.primary, fontSize: 13, fontWeight: '600' as const },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

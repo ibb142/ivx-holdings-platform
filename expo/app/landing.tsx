@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
@@ -8,13 +7,11 @@ import {
   Animated,
   ScrollView,
   Platform,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Alert,
   Share,
   useWindowDimensions,
-  type LayoutChangeEvent,
-} from 'react-native';
+  type LayoutChangeEvent} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -45,8 +42,7 @@ import {
   Linkedin,
   ExternalLink,
   ScanLine,
-  Play,
-} from 'lucide-react-native';
+  Play} from 'lucide-react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { landingTracker } from '@/lib/landing-tracker';
 
@@ -67,17 +63,16 @@ import { canonicalCardToParsedDeal } from '@/lib/canonical-deals';
 import InvestorSupportChat, { type HumanSupportRequestResult } from '@/components/InvestorSupportChat';
 import {
   diagnoseDealPhotos,
-  type DealPhotoDiagnostic,
-} from '@/lib/deal-photo-health';
+  type DealPhotoDiagnostic} from '@/lib/deal-photo-health';
 import { useAuth, type OwnerDirectAccessAuditResult } from '@/lib/auth-context';
 import type { ChatMessage } from '@/types';
 import {
   type CreateSupportTicketParams,
   type SupportTicketRow,
   buildLiveSupportTicketDraft,
-  createSupportTicket,
-} from '@/lib/support-chat';
+  createSupportTicket} from '@/lib/support-chat';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const IVX_BUSINESS_CARD_URL = require('@/assets/images/ivx-logo-stacked.png');
 
@@ -105,26 +100,22 @@ const FEATURES = [
     icon: Coins,
     gradient: ['#00C48C', '#00A376'] as const,
     title: 'Start from $50',
-    desc: 'Own fractional shares in premium real estate projects worldwide',
-  },
+    desc: 'Own fractional shares in premium real estate projects worldwide'},
   {
     icon: Shield,
     gradient: ['#4A90D9', '#357ABD'] as const,
     title: 'Escrow Protected',
-    desc: 'Funds held in escrow until deal milestones are verified and met',
-  },
+    desc: 'Funds held in escrow until deal milestones are verified and met'},
   {
     icon: TrendingUp,
     gradient: [GOLD, GOLD_DIM] as const,
     title: 'Target 25%+ ROI',
-    desc: 'Curated deals with strong projected returns and transparent financials',
-  },
+    desc: 'Curated deals with strong projected returns and transparent financials'},
   {
     icon: Lock,
     gradient: ['#E040FB', '#AA00FF'] as const,
     title: 'LLC Structure',
-    desc: 'Each deal backed by a dedicated LLC entity for maximum protection',
-  },
+    desc: 'Each deal backed by a dedicated LLC entity for maximum protection'},
 ];
 
 const TRUST_ITEMS = [
@@ -139,20 +130,17 @@ const HOW_IT_WORKS = [
     step: '01',
     title: 'Create Your Account',
     desc: 'Request investor access, complete onboarding, and review the active offering terms before participating.',
-    accent: ACCENT_GREEN,
-  },
+    accent: ACCENT_GREEN},
   {
     step: '02',
     title: 'Review Live Real Estate Deals',
     desc: 'Explore curated properties with photos, financials, entity details, and deal-specific disclosures.',
-    accent: ACCENT_BLUE,
-  },
+    accent: ACCENT_BLUE},
   {
     step: '03',
     title: 'Commit When Terms Fit',
     desc: 'Eligible investors can participate from $50 on supported offerings, subject to each deal’s terms.',
-    accent: GOLD,
-  },
+    accent: GOLD},
 ];
 
 const COMPANY_FACTS = [
@@ -162,55 +150,47 @@ const COMPANY_FACTS = [
     value: 'IVX Holdings LLC',
     detail: 'Deal disclosures, offering terms, and investor communications are issued under the IVX entity.',
     icon: Building2,
-    accent: GOLD,
-  },
+    accent: GOLD},
   {
     id: 'contact',
     label: 'Investor relations',
     value: 'investors@ivxholding.com',
     detail: 'Response target within 24 hours for inbound investor questions.',
     icon: Mail,
-    accent: ACCENT_GREEN,
-  },
+    accent: ACCENT_GREEN},
   {
     id: 'address',
     label: 'Business address',
     value: '1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131',
     detail: 'Primary investor correspondence and diligence support location.',
     icon: MapPin,
-    accent: ACCENT_BLUE,
-  },
+    accent: ACCENT_BLUE},
   {
     id: 'team',
     label: 'Founder / team diligence',
     value: 'Leadership introductions available during active diligence',
     detail: 'Prospective investors can request a live call with management and deal operations before committing.',
     icon: Users,
-    accent: GOLD_DIM,
-  },
+    accent: GOLD_DIM},
 ];
 
 const INVESTOR_DISCLOSURES = [
   {
     id: 'risk',
     title: 'Risk disclaimer',
-    text: 'All investments involve risk, including partial or total loss of capital. Past performance does not predict future results.',
-  },
+    text: 'All investments involve risk, including partial or total loss of capital. Past performance does not predict future results.'},
   {
     id: 'fees',
     title: 'Fees',
-    text: 'Fees, operating expenses, and sponsor compensation vary by offering and should be reviewed in the deal terms before participating.',
-  },
+    text: 'Fees, operating expenses, and sponsor compensation vary by offering and should be reviewed in the deal terms before participating.'},
   {
     id: 'liquidity',
     title: 'Liquidity / exit terms',
-    text: 'Real estate offerings are typically illiquid. Exit timing, hold periods, and repayment waterfalls are defined per deal.',
-  },
+    text: 'Real estate offerings are typically illiquid. Exit timing, hold periods, and repayment waterfalls are defined per deal.'},
   {
     id: 'returns',
     title: 'No guaranteed returns',
-    text: 'Projected ROI, distributions, and timelines are underwriting estimates only. They can change based on project performance.',
-  },
+    text: 'Projected ROI, distributions, and timelines are underwriting estimates only. They can change based on project performance.'},
 ];
 
 const MEMBER_READY_ITEMS = [
@@ -219,52 +199,44 @@ const MEMBER_READY_ITEMS = [
     title: 'Member registration',
     text: 'Approved applicants move from public intake into a verified member account before live allocation access is opened.',
     icon: Users,
-    accent: ACCENT_GREEN,
-  },
+    accent: ACCENT_GREEN},
   {
     id: 'profile',
     title: 'Investor profiles',
     text: 'Member profiles store verified contact data, onboarding status, and deal access readiness for each investor.',
     icon: ShieldCheck,
-    accent: ACCENT_BLUE,
-  },
+    accent: ACCENT_BLUE},
   {
     id: 'wallet',
     title: 'Wallet readiness',
     text: 'Funding methods and wallet access are prepared inside the platform before a member moves into live deal execution.',
     icon: Landmark,
-    accent: GOLD,
-  },
+    accent: GOLD},
   {
     id: 'records',
     title: 'Transaction records',
     text: 'Statements, transaction history, and investment status records remain visible inside approved member accounts.',
     icon: BarChart3,
-    accent: GOLD_DIM,
-  },
+    accent: GOLD_DIM},
 ];
 
 const INVESTOR_FAQS = [
   {
     id: 'registration',
     question: 'Do you have member registration already?',
-    answer: 'Yes. Qualified applicants can move from the public intake into verified member registration once investor review is complete.',
-  },
+    answer: 'Yes. Qualified applicants can move from the public intake into verified member registration once investor review is complete.'},
   {
     id: 'profiles-wallets',
     question: 'Do approved members get profiles and wallet access?',
-    answer: 'Yes. The platform supports member profiles, onboarding status, and wallet readiness before funding is enabled for a live deal.',
-  },
+    answer: 'Yes. The platform supports member profiles, onboarding status, and wallet readiness before funding is enabled for a live deal.'},
   {
     id: 'records',
     question: 'Are transaction records and statements tracked?',
-    answer: 'Yes. Member accounts are designed to surface transaction records, statements, and investment status visibility after approval.',
-  },
+    answer: 'Yes. Member accounts are designed to surface transaction records, statements, and investment status visibility after approval.'},
   {
     id: 'management',
     question: 'Can investors speak with management before committing?',
-    answer: 'Yes. Qualified prospects can request a management diligence call during active review before moving into final commitment steps.',
-  },
+    answer: 'Yes. Qualified prospects can request a management diligence call during active review before moving into final commitment steps.'},
 ];
 
 const LANDING_CHAT_QUICK_REPLIES = [
@@ -361,13 +333,11 @@ function buildLandingShowcaseDeal(deal: LandingShowcaseDeal): ParsedJVDeal {
       timelineUnit: trustInfo?.timelineUnit ?? 'months',
       priceChange1h: trustInfo?.priceChange1h ?? 10,
       priceChange2h: trustInfo?.priceChange2h ?? 18,
-      ownershipLabel: deal.ownershipText || trustInfo?.ownershipLabel,
-    },
+      ownershipLabel: deal.ownershipText || trustInfo?.ownershipLabel},
     city: deal.city,
     state: deal.state,
     country: deal.country,
-    developerName: deal.developerName,
-  };
+    developerName: deal.developerName};
 }
 
 function LandingDealsShowcase({ scrollToForm }: { scrollToForm: () => void }) {
@@ -413,8 +383,7 @@ function LandingDealsShowcase({ scrollToForm }: { scrollToForm: () => void }) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: 1000 * 60 * 5,
-    refetchIntervalInBackground: false,
-  });
+    refetchIntervalInBackground: false});
 
   const deals = dealsQuery.data ?? [];
   const isLoading = dealsQuery.isPending;
@@ -433,7 +402,7 @@ function LandingDealsShowcase({ scrollToForm }: { scrollToForm: () => void }) {
 
         {isLoading ? (
           <View style={[dealStyles.statusCard, dealStyles.statusCardLoading]}>
-            <ActivityIndicator size="small" color={GOLD} />
+            <ShimmerIndicator size="small" color={GOLD} />
             <Text style={dealStyles.statusTitle}>Loading live deals</Text>
             <Text style={dealStyles.statusText}>Fetching the same published deals used by the app.</Text>
           </View>
@@ -502,8 +471,7 @@ function LandingDealsShowcase({ scrollToForm }: { scrollToForm: () => void }) {
                 developerName: identity.developerName ?? deal.developerName ?? null,
                 developerLogo: null,
                 investmentDetails: deal.descriptionShort ?? null,
-                timelineSummary,
-              };
+                timelineSummary};
 
               return (
                 <View key={deal.id || `deal-${idx}`} style={{ width: cardWidth, marginRight: idx < deals.length - 1 ? 14 : 0 }} testID={`landing-deal-card-${deal.id || idx}`}>
@@ -540,52 +508,43 @@ function LandingDealsShowcase({ scrollToForm }: { scrollToForm: () => void }) {
 const dealStyles = StyleSheet.create({
   section: {
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   sectionHeader: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   sectionLabel: {
     color: ACCENT_GREEN,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 1.8,
-  },
+    letterSpacing: 1.8},
   sectionTitle: {
     color: '#fff',
     fontSize: 26,
     fontWeight: '800' as const,
     marginBottom: 6,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   sectionSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 21,
-  },
+    lineHeight: 21},
   card: {
     backgroundColor: SURFACE_ELEVATED,
     borderRadius: 18,
     overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: '#252525',
-  },
+    borderColor: '#252525'},
   cardContent: {
-    padding: 18,
-  },
+    padding: 18},
   liveBadgeRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   liveBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -593,47 +552,39 @@ const dealStyles = StyleSheet.create({
     backgroundColor: ACCENT_GREEN + '15',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: ACCENT_GREEN,
-  },
+    backgroundColor: ACCENT_GREEN},
   liveBadgeText: {
     color: ACCENT_GREEN,
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   sourceBadge: {
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   sourceBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   dealTitle: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   locationRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 4,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   locationText: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   metricsRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -642,39 +593,32 @@ const dealStyles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#1E1E1E',
-  },
+    borderColor: '#1E1E1E'},
   metric: {
     flex: 1,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   metricValue: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '800' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   metricLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   metricDivider: {
     width: 1,
     height: 28,
-    backgroundColor: '#252525',
-  },
+    backgroundColor: '#252525'},
   proofGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   marketStrip: {
     flexDirection: 'row' as const,
     gap: 10,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   marketPill: {
     flex: 1,
     backgroundColor: '#0E0E0E',
@@ -682,21 +626,18 @@ const dealStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E1E1E',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   marketPillLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
     marginBottom: 6,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   marketPillValue: {
     color: '#F5F5F5',
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofCard: {
     width: '47%',
     backgroundColor: '#101010',
@@ -704,80 +645,68 @@ const dealStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
     padding: 12,
-    minHeight: 74,
-  },
+    minHeight: 74},
   proofLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     letterSpacing: 0.6,
     textTransform: 'uppercase' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   proofValue: {
     color: '#F5F5F5',
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   exitProjectionCard: {
     backgroundColor: '#0D1310',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: ACCENT_GREEN + '20',
     padding: 14,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   exitProjectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   exitProjectionTitle: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '800' as const,
-    flex: 1,
-  },
+    flex: 1},
   exitProjectionTimeline: {
     color: ACCENT_GREEN,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   exitProjectionGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 10,
-  },
+    gap: 10},
   exitProjectionItem: {
     width: '47%',
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   exitProjectionLabel: {
     color: '#6E8B78',
     fontSize: 10,
     fontWeight: '700' as const,
     letterSpacing: 0.6,
     textTransform: 'uppercase' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   exitProjectionValue: {
     color: '#F5F5F5',
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   cardDisclosure: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 17,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   investBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -785,21 +714,18 @@ const dealStyles = StyleSheet.create({
     gap: 8,
     backgroundColor: GOLD,
     borderRadius: 14,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   investBtnText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   disclaimer: {
     color: Colors.textTertiary,
     fontSize: 10,
     textAlign: 'center' as const,
     marginTop: 16,
     lineHeight: 15,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   statusCard: {
     backgroundColor: SURFACE_ELEVATED,
     borderRadius: 18,
@@ -808,36 +734,30 @@ const dealStyles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 22,
     alignItems: 'center' as const,
-    gap: 10,
-  },
+    gap: 10},
   statusCardLoading: {
     minHeight: 180,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   statusTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '800' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   statusText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center' as const,
     maxWidth: 320,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   photoFallback: {
     backgroundColor: '#0E0E0E',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   photoFallbackText: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   photoLoading: {
     position: 'absolute' as const,
     top: 0,
@@ -847,15 +767,13 @@ const dealStyles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     zIndex: 1,
-    backgroundColor: '#0A0A0A',
-  },
+    backgroundColor: '#0A0A0A'},
   photoGradient: {
     position: 'absolute' as const,
     bottom: 0,
     left: 0,
     right: 0,
-    height: 60,
-  },
+    height: 60},
   counterBadge: {
     position: 'absolute' as const,
     top: 12,
@@ -864,13 +782,11 @@ const dealStyles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    zIndex: 2,
-  },
+    zIndex: 2},
   counterText: {
     color: '#fff',
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dotsRow: {
     position: 'absolute' as const,
     bottom: 14,
@@ -880,21 +796,16 @@ const dealStyles = StyleSheet.create({
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     gap: 5,
-    zIndex: 2,
-  },
+    zIndex: 2},
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   dotActive: {
     backgroundColor: '#fff',
-    width: 20,
-  },
+    width: 20},
   dotInactive: {
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
-});
+    backgroundColor: 'rgba(255,255,255,0.35)'}});
 
 
 function LandingWaitlistForm() {
@@ -920,8 +831,7 @@ export default function LandingScreen() {
     isLoading: authLoading,
     auditOwnerDirectAccess,
     ownerDirectAccess,
-    ownerAccessLoading,
-  } = useAuth();
+    ownerAccessLoading} = useAuth();
   const heroFade = useRef(new Animated.Value(0)).current;
   const heroSlide = useRef(new Animated.Value(50)).current;
   const logoScale = useRef(new Animated.Value(0.6)).current;
@@ -935,8 +845,7 @@ export default function LandingScreen() {
   const [formSectionY, setFormSectionY] = useState<number>(0);
   const [ownerAccessAudit, setOwnerAccessAudit] = useState<OwnerDirectAccessAuditResult | null>(null);
   const landingSupportMutation = useMutation<SupportTicketRow, Error, CreateSupportTicketParams>({
-    mutationFn: createSupportTicket,
-  });
+    mutationFn: createSupportTicket});
 
   useEffect(() => {
     try {
@@ -1076,18 +985,15 @@ export default function LandingScreen() {
           subject: draft.subject,
           category: draft.category,
           message: draft.message,
-          priority: draft.priority,
-        });
+          priority: draft.priority});
         return {
           ok: true,
-          message: `Your request has been submitted (Ticket #${data.id.slice(-6)}). Investor support will follow up shortly by email with the right team for this issue.`,
-        };
+          message: `Your request has been submitted (Ticket #${data.id.slice(-6)}). Investor support will follow up shortly by email with the right team for this issue.`};
       } catch (error) {
         console.error('[Landing] Live support request failed:', error);
         return {
           ok: false,
-          message: 'We could not create your live support request right now. Please email investors@ivxholding.com.',
-        };
+          message: 'We could not create your live support request right now. Please email investors@ivxholding.com.'};
       }
     },
     [landingSupportMutation]
@@ -1197,7 +1103,7 @@ export default function LandingScreen() {
                         testID="landing-owner-entry"
                       >
                         {ownerAccessLoading ? (
-                          <ActivityIndicator size="small" color={GOLD} />
+                          <ShimmerIndicator size="small" color={GOLD} />
                         ) : (
                           <ShieldCheck size={14} color={GOLD} />
                         )}
@@ -1248,8 +1154,7 @@ export default function LandingScreen() {
           {/* HERO */}
           <Animated.View style={[styles.heroSection, {
             opacity: heroFade,
-            transform: [{ translateY: heroSlide }],
-          }]}>
+            transform: [{ translateY: heroSlide }]}]}>
             {!openAccessMode && ownerAccessAudit?.eligible ? (
               <TouchableOpacity
                 style={[styles.ownerVerifiedPill, ownerAccessLoading && styles.ownerVerifiedPillDisabled]}
@@ -1259,7 +1164,7 @@ export default function LandingScreen() {
                 testID="landing-owner-entry-pill"
               >
                 {ownerAccessLoading ? (
-                  <ActivityIndicator size="small" color={GOLD} />
+                  <ShimmerIndicator size="small" color={GOLD} />
                 ) : (
                   <ShieldCheck size={13} color={GOLD} />
                 )}
@@ -1315,8 +1220,7 @@ export default function LandingScreen() {
           {/* CTA BUTTONS */}
           <Animated.View style={[styles.ctaSection, {
             opacity: ctaFade,
-            transform: [{ translateY: ctaSlide }],
-          }]}>
+            transform: [{ translateY: ctaSlide }]}]}>
             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
               <TouchableOpacity
                 style={styles.primaryBtn}
@@ -1777,8 +1681,7 @@ export default function LandingScreen() {
 const _formStyles = StyleSheet.create({
   container: {
     width: '100%',
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1789,80 +1692,65 @@ const _formStyles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 52,
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   input: {
     flex: 1,
     color: '#fff',
     fontSize: 15,
     fontWeight: '500' as const,
-    height: 52,
-  },
+    height: 52},
   phoneRow: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   phoneInput: {
-    flex: 1,
-  },
+    flex: 1},
   otpSendBtn: {
     backgroundColor: GOLD,
     borderRadius: 14,
     height: 52,
     paddingHorizontal: 18,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   otpSendBtnDisabled: {
-    backgroundColor: '#222',
-  },
+    backgroundColor: '#222'},
   otpSendBtnText: {
     color: '#000',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   otpSection: {
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   otpInputRow: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   otpInput: {
-    flex: 1,
-  },
+    flex: 1},
   otpVerifyBtn: {
     backgroundColor: ACCENT_GREEN,
     borderRadius: 14,
     height: 52,
     paddingHorizontal: 22,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   otpVerifyBtnDisabled: {
-    backgroundColor: '#222',
-  },
+    backgroundColor: '#222'},
   otpVerifyBtnText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 6,
     marginBottom: 6,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   errorText: {
     color: Colors.error,
     fontSize: 12,
     fontWeight: '500' as const,
-    flex: 1,
-  },
+    flex: 1},
   verifiedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1873,20 +1761,17 @@ const _formStyles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: ACCENT_GREEN + '25',
-  },
+    borderColor: ACCENT_GREEN + '25'},
   verifiedText: {
     color: ACCENT_GREEN,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   consentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     marginBottom: 14,
-    paddingHorizontal: 2,
-  },
+    paddingHorizontal: 2},
   checkbox: {
     width: 22,
     height: 22,
@@ -1896,18 +1781,15 @@ const _formStyles = StyleSheet.create({
     backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   checkboxChecked: {
     backgroundColor: GOLD,
-    borderColor: GOLD,
-  },
+    borderColor: GOLD},
   consentText: {
     flex: 1,
     color: '#777',
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   formErrorRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1916,14 +1798,12 @@ const _formStyles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   formErrorText: {
     color: Colors.error,
     fontSize: 13,
     fontWeight: '500' as const,
-    flex: 1,
-  },
+    flex: 1},
   submitBtn: {
     backgroundColor: ACCENT_GREEN,
     borderRadius: 16,
@@ -1932,114 +1812,94 @@ const _formStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 2,
-  },
+    marginTop: 2},
   submitBtnDisabled: {
-    opacity: 0.35,
-  },
+    opacity: 0.35},
   submitBtnText: {
     color: '#000',
     fontSize: 17,
     fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   privacyText: {
     color: '#555',
     fontSize: 11,
     textAlign: 'center',
     marginTop: 12,
     lineHeight: 16,
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   successWrap: {
     alignItems: 'center',
-    paddingVertical: 24,
-  },
+    paddingVertical: 24},
   successIconWrap: {
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   successTitle: {
     color: '#fff',
     fontSize: 26,
     fontWeight: '900' as const,
     textAlign: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   successSubtitle: {
     color: '#999',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 21,
     marginBottom: 24,
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   returnBtn: {
     backgroundColor: SURFACE_ELEVATED,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#252525',
     paddingHorizontal: 32,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   returnBtnText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   scrollContent: {
-    flexGrow: 1,
-  },
+    flexGrow: 1},
   safeTop: {
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   topBarActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap' as const,
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   topBarBrand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   topBarLogo: {
     width: 42,
     height: 42,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2D2B1E',
-    backgroundColor: '#090909',
-  },
+    backgroundColor: '#090909'},
   topBarName: {
     color: '#fff',
     fontSize: 22,
     fontWeight: '900' as const,
     letterSpacing: 3,
-    lineHeight: 24,
-  },
+    lineHeight: 24},
   topBarTagline: {
     color: GOLD,
     fontSize: 8,
     fontWeight: '700' as const,
     letterSpacing: 3,
-    marginTop: -1,
-  },
+    marginTop: -1},
   ownerConsoleLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2049,20 +1909,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2B2B2B',
-    backgroundColor: '#101010',
-  },
+    backgroundColor: '#101010'},
   ownerConsoleLinkReady: {
     borderColor: GOLD + '35',
-    backgroundColor: '#11160D',
-  },
+    backgroundColor: '#11160D'},
   ownerConsoleLinkText: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerConsoleLinkTextReady: {
-    color: GOLD,
-  },
+    color: GOLD},
   ownerSignupLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2072,14 +1928,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: GOLD + '35',
-    backgroundColor: '#1A1507',
-  },
+    backgroundColor: '#1A1507'},
   ownerSignupLinkText: {
     color: GOLD,
     fontSize: 12,
     fontWeight: '800' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   ownerEntryLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2089,17 +1943,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: GOLD + '45',
-    backgroundColor: '#11160D',
-  },
+    backgroundColor: '#11160D'},
   ownerEntryLinkDisabled: {
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   ownerEntryLinkText: {
     color: GOLD,
     fontSize: 12,
     fontWeight: '800' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   loginLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2109,30 +1960,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: GOLD + '30',
-    backgroundColor: GOLD + '08',
-  },
+    backgroundColor: GOLD + '08'},
   loginLinkText: {
     color: GOLD,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   memberRegisterButton: {
     backgroundColor: GOLD,
     borderRadius: 12,
     paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   memberRegisterButtonText: {
     color: '#000000',
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   heroSection: {
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingTop: 28,
-    paddingBottom: 36,
-  },
+    paddingBottom: 36},
   ownerVerifiedPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2143,20 +1989,16 @@ const styles = StyleSheet.create({
     borderColor: GOLD + '30',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   ownerVerifiedPillDisabled: {
-    opacity: 0.72,
-  },
+    opacity: 0.72},
   ownerVerifiedPillText: {
     color: GOLD,
     fontSize: 12,
     fontWeight: '700' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   heroLogoWrap: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   heroLogoCard: {
     backgroundColor: '#090909',
     borderRadius: 32,
@@ -2167,14 +2009,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.32,
     shadowRadius: 22,
-    elevation: 10,
-  },
+    elevation: 10},
   heroLogo: {
     width: 124,
     height: 124,
     borderRadius: 24,
-    backgroundColor: '#090909',
-  },
+    backgroundColor: '#090909'},
   comingSoonBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2185,33 +2025,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   comingSoonText: {
     color: ACCENT_GREEN,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 1.8,
-  },
+    letterSpacing: 1.8},
   heroTitle: {
     color: '#fff',
     fontSize: 38,
     fontWeight: '900' as const,
     textAlign: 'center',
     lineHeight: 46,
-    letterSpacing: -0.8,
-  },
+    letterSpacing: -0.8},
   heroTitleGold: {
-    color: GOLD,
-  },
+    color: GOLD},
   heroSubtitle: {
     color: '#888',
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
     marginTop: 16,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   openAccessPill: {
     width: '100%',
     flexDirection: 'row',
@@ -2223,22 +2058,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: ACCENT_GREEN + '30',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   openAccessCopy: {
-    flex: 1,
-  },
+    flex: 1},
   openAccessTitle: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '800' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   openAccessText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   statsRow: {
     flexDirection: 'row',
     marginTop: 32,
@@ -2247,37 +2078,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252525',
     overflow: 'hidden',
-    width: '100%',
-  },
+    width: '100%'},
   statBlock: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 20,
-  },
+    paddingVertical: 20},
   statBlockBorder: {
     borderRightWidth: 1,
-    borderRightColor: '#252525',
-  },
+    borderRightColor: '#252525'},
   statValue: {
     color: '#fff',
     fontSize: 24,
     fontWeight: '900' as const,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   statLabel: {
     color: '#666',
     fontSize: 10,
     fontWeight: '600' as const,
     marginTop: 4,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   statsDisclaimer: {
     color: '#444',
     fontSize: 9,
     textAlign: 'center',
     marginTop: 8,
-    fontStyle: 'italic',
-  },
+    fontStyle: 'italic'},
   openOwnerLoginBtn: {
     marginTop: 14,
     flexDirection: 'row',
@@ -2289,75 +2114,62 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: GOLD,
-    backgroundColor: 'rgba(255,215,0,0.08)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.08)'},
   openOwnerLoginBtnText: {
     color: GOLD,
     fontSize: 15,
     fontWeight: '700' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   ctaSection: {
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   primaryBtn: {
     borderRadius: 18,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   primaryBtnGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     height: 60,
-    borderRadius: 18,
-  },
+    borderRadius: 18},
   primaryBtnText: {
     color: '#000',
     fontSize: 18,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   secondaryBtn: {
     marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   secondaryBtnText: {
     color: '#666',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   sectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 1.8,
-  },
+    letterSpacing: 1.8},
   sectionTitle: {
     color: '#fff',
     fontSize: 26,
     fontWeight: '800' as const,
     marginBottom: 20,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   featuresSection: {
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   featuresGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
+    gap: 12},
   featureCard: {
     backgroundColor: SURFACE_ELEVATED,
     borderRadius: 18,
@@ -2367,31 +2179,26 @@ const styles = StyleSheet.create({
     minWidth: 150,
     flexGrow: 1,
     flexShrink: 1,
-    flexBasis: '45%' as any,
-  },
+    flexBasis: '45%' as any},
   featureIconWrap: {
     width: 46,
     height: 46,
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   featureTitle: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   featureDesc: {
     color: '#777',
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   investTypesSection: {
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   investTypeCard: {
     flexDirection: 'row',
     backgroundColor: SURFACE_ELEVATED,
@@ -2400,61 +2207,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
     marginBottom: 12,
-    gap: 14,
-  },
+    gap: 14},
   investTypeIcon: {
     width: 54,
     height: 54,
     borderRadius: 17,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   investTypeContent: {
-    flex: 1,
-  },
+    flex: 1},
   previewLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   investTypeTitle: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   previewBadge: {
     backgroundColor: '#FFD70020',
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   previewBadgeText: {
     color: '#FFD700',
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   investTypeDesc: {
     color: '#888',
     fontSize: 13,
     lineHeight: 19,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   investTypeCta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   investTypeCtaText: {
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   howItWorksSection: {
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   stepCard: {
     flexDirection: 'row' as const,
     backgroundColor: SURFACE_ELEVATED,
@@ -2464,46 +2260,38 @@ const styles = StyleSheet.create({
     borderColor: '#222',
     marginBottom: 12,
     gap: 14,
-    position: 'relative' as const,
-  },
+    position: 'relative' as const},
   stepNumber: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   stepNumberText: {
     fontSize: 16,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   stepContent: {
-    flex: 1,
-  },
+    flex: 1},
   stepTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   stepDesc: {
     color: '#888',
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   stepConnector: {
     position: 'absolute' as const,
     bottom: -12,
     left: 38,
     width: 2,
     height: 12,
-    backgroundColor: '#252525',
-  },
+    backgroundColor: '#252525'},
   trustSection: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   trustShield: {
     width: 64,
     height: 64,
@@ -2512,25 +2300,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: GOLD + '25',
-  },
+    borderColor: GOLD + '25'},
   trustTitle: {
     color: '#fff',
     fontSize: 24,
     fontWeight: '800' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   trustSubtitle: {
     color: '#888',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 21,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   trustGrid: {
     width: '100%',
-    gap: 10,
-  },
+    gap: 10},
   trustItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2540,37 +2324,30 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 18,
     borderWidth: 1,
-    borderColor: '#222',
-  },
+    borderColor: '#222'},
   trustItemText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   credibilitySection: {
     paddingHorizontal: 24,
-    marginBottom: 48,
-  },
+    marginBottom: 48},
   credibilityIntro: {
     color: '#888',
     fontSize: 14,
     lineHeight: 21,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   credibilityGrid: {
-    gap: 12,
-  },
+    gap: 12},
   credibilityCard: {
     backgroundColor: SURFACE_ELEVATED,
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#222',
-  },
+    borderColor: '#222'},
   credibilityActions: {
     gap: 10,
-    marginTop: 16,
-  },
+    marginTop: 16},
   credibilityActionButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2582,169 +2359,139 @@ const styles = StyleSheet.create({
     borderColor: GOLD + '22',
     backgroundColor: '#101010',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   credibilityActionPrimary: {
     backgroundColor: GOLD,
-    borderColor: GOLD,
-  },
+    borderColor: GOLD},
   credibilityActionText: {
     color: '#F5D97A',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   credibilityActionPrimaryText: {
     color: '#000',
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   credibilityIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   credibilityLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 1,
     textTransform: 'uppercase' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   credibilityValue: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700' as const,
     lineHeight: 22,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   credibilityDetail: {
     color: '#888',
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   disclosureSection: {
     paddingHorizontal: 24,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   disclosureCard: {
     backgroundColor: '#0E0E0E',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: GOLD + '20',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   disclosureRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 12,
     paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   disclosureRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
+    borderBottomColor: 'rgba(255,255,255,0.06)'},
   disclosureBullet: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: GOLD,
-    marginTop: 6,
-  },
+    marginTop: 6},
   disclosureTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   disclosureTitle: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '700' as const,
     marginBottom: 4,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   disclosureText: {
     color: '#888',
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   memberAccessSection: {
     paddingHorizontal: 24,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   memberAccessIntro: {
     color: '#888',
     fontSize: 14,
     lineHeight: 21,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   memberAccessGrid: {
-    gap: 12,
-  },
+    gap: 12},
   memberAccessCard: {
     backgroundColor: '#0F1211',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: ACCENT_GREEN + '16',
-    padding: 18,
-  },
+    padding: 18},
   memberAccessIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   memberAccessTitle: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   memberAccessText: {
     color: '#888',
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   chatSection: {
     paddingHorizontal: 24,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   chatIntro: {
     color: '#888',
     fontSize: 14,
     lineHeight: 21,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   chatHighlights: {
     gap: 10,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   chatHighlightCard: {
     backgroundColor: '#0D1216',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: ACCENT_BLUE + '20',
-    padding: 16,
-  },
+    padding: 16},
   chatHighlightTitle: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   chatHighlightText: {
     color: '#888',
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   chatShell: {
     minHeight: 680,
-    flex: 0,
-  },
+    flex: 0},
   waitlistFormSection: {
     marginHorizontal: 24,
     marginBottom: 32,
@@ -2755,15 +2502,13 @@ const styles = StyleSheet.create({
     padding: 24,
     position: 'relative',
     overflow: 'hidden',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   waitlistFormGlow: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 120,
-  },
+    height: 120},
   waitlistFormBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2772,63 +2517,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   waitlistFormBadgeText: {
     color: GOLD,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 1.5,
-  },
+    letterSpacing: 1.5},
   waitlistFormTitle: {
     color: '#fff',
     fontSize: 26,
     fontWeight: '900' as const,
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   waitlistFormSubtitle: {
     color: '#888',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 21,
     marginBottom: 20,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   faqSection: {
     paddingHorizontal: 24,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   faqGrid: {
-    gap: 12,
-  },
+    gap: 12},
   faqCard: {
     backgroundColor: '#0E0E0E',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#1F1F1F',
-    padding: 18,
-  },
+    padding: 18},
   faqQuestion: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700' as const,
     lineHeight: 21,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   faqAnswer: {
     color: '#888',
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   footer: {
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 24,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A1A',
-  },
+    borderTopColor: '#1A1A1A'},
   footerLogo: {
     width: 52,
     height: 52,
@@ -2836,56 +2571,47 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#2D2B1E',
-    backgroundColor: '#090909',
-  },
+    backgroundColor: '#090909'},
   footerBrand: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '800' as const,
     letterSpacing: 2,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   footerText: {
     color: '#555',
     fontSize: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   footerContactRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     flexWrap: 'wrap' as const,
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   footerContactText: {
     color: '#B8B8B8',
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   footerContactDot: {
     color: '#555',
-    fontSize: 12,
-  },
+    fontSize: 12},
   footerAddress: {
     color: '#6D6D6D',
     fontSize: 11,
     textAlign: 'center' as const,
     lineHeight: 17,
     marginBottom: 16,
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   footerDivider: {
     width: 40,
     height: 1,
     backgroundColor: '#252525',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   footerLegal: {
     color: '#555',
     fontSize: 11,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   footerDisclaimer: {
     color: '#444',
     fontSize: 9,
@@ -2893,33 +2619,27 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     marginTop: 14,
     paddingHorizontal: 12,
-    opacity: 0.8,
-  },
-});
+    opacity: 0.8}});
 
 const cardStyles = StyleSheet.create({
   section: {
     paddingHorizontal: 24,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   wrap: {
     backgroundColor: '#050505',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.18)',
     padding: 20,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   imageWrap: {
     position: 'relative' as const,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   cardImage: {
     width: '100%',
     aspectRatio: 1.78,
     borderRadius: 18,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   scanBadge: {
     position: 'absolute' as const,
     top: 12,
@@ -2932,46 +2652,38 @@ const cardStyles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: GOLD + '30',
-  },
+    borderColor: GOLD + '30'},
   scanBadgeText: {
     color: GOLD,
     fontSize: 9,
     fontWeight: '700' as const,
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   copyWrap: {
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   eyebrow: {
     fontSize: 11,
     letterSpacing: 2,
     color: '#caa94e',
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   title: {
     fontSize: 24,
     fontWeight: '800' as const,
     color: '#f3d36b',
     lineHeight: 28,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   desc: {
     color: 'rgba(255, 236, 170, 0.82)',
     fontSize: 14,
     lineHeight: 22,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   actions: {
     flexDirection: 'row' as const,
     gap: 10,
-    flexWrap: 'wrap' as const,
-  },
+    flexWrap: 'wrap' as const},
   primaryBtn: {
     borderRadius: 999,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   primaryBtnGrad: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2979,16 +2691,13 @@ const cardStyles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 24,
     height: 46,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   primaryBtnText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   socialSection: {
-    marginTop: 20,
-  },
+    marginTop: 20},
   socialTitle: {
     color: '#888',
     fontSize: 12,
@@ -2996,11 +2705,9 @@ const cardStyles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase' as const,
     marginBottom: 12,
-    paddingHorizontal: 2,
-  },
+    paddingHorizontal: 2},
   socialGrid: {
-    gap: 8,
-  },
+    gap: 8},
   socialCard: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -3010,19 +2717,15 @@ const cardStyles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#1E1E1E',
-    gap: 12,
-  },
+    gap: 12},
   socialIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   socialLabel: {
     flex: 1,
     color: '#ddd',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

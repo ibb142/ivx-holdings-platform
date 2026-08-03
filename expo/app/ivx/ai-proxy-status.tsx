@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Stack } from 'expo-router';
 import { Bot, RefreshCw, ShieldCheck, AlertTriangle } from 'lucide-react-native';
 import { getIVXAccessToken, getIVXOwnerAIEndpoint } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ProxyStatusPayload = {
   ok?: boolean;
@@ -46,8 +47,7 @@ const INITIAL_STATE: LoadState = {
   status: null,
   endpoint: null,
   payload: null,
-  fetchedAt: null,
-};
+  fetchedAt: null};
 
 function deriveProxyStatusEndpoint(): string | null {
   const ownerAIEndpoint = getIVXOwnerAIEndpoint();
@@ -74,8 +74,7 @@ export default function IVXAIProxyStatusScreen() {
         status: null,
         endpoint: null,
         payload: null,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
       return;
     }
 
@@ -85,9 +84,7 @@ export default function IVXAIProxyStatusScreen() {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})}});
       const text = await response.text();
       let payload: ProxyStatusPayload | null = null;
       try {
@@ -101,8 +98,7 @@ export default function IVXAIProxyStatusScreen() {
         status: response.status,
         endpoint,
         payload,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
     } catch (error) {
       setState({
         loading: false,
@@ -110,8 +106,7 @@ export default function IVXAIProxyStatusScreen() {
         status: null,
         endpoint,
         payload: null,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
     }
   }, []);
 
@@ -137,7 +132,7 @@ export default function IVXAIProxyStatusScreen() {
           onPress={runCheck}
           disabled={state.loading}
         >
-          {state.loading ? <ActivityIndicator color="#0B0B0B" /> : <RefreshCw color="#0B0B0B" size={18} />}
+          {state.loading ? <ShimmerIndicator color="#0B0B0B" /> : <RefreshCw color="#0B0B0B" size={18} />}
           <Text style={styles.primaryButtonText}>{state.loading ? 'Checking…' : 'Run runtime proof'}</Text>
         </TouchableOpacity>
 
@@ -235,8 +230,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   primaryButtonText: { color: '#0B0B0B', fontWeight: '700' as const, fontSize: 15 },
   card: {
     backgroundColor: '#141414',
@@ -244,8 +238,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#222222',
-    gap: 6,
-  },
+    gap: 6},
   errorCard: { borderColor: '#7F1D1D' },
   errorText: { color: '#FF6B6B', flex: 1 },
   cardLabel: { color: '#9A9A9A', fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginTop: 4 },
@@ -254,5 +247,4 @@ const styles = StyleSheet.create({
   rowValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' as const },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   mono: { color: '#E6E6E6', fontSize: 12, fontFamily: 'Courier' },
-  note: { color: '#9A9A9A', fontSize: 12, marginTop: 4, lineHeight: 18 },
-});
+  note: { color: '#9A9A9A', fontSize: 12, marginTop: 4, lineHeight: 18 }});

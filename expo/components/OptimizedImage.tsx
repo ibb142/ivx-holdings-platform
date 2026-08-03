@@ -12,7 +12,7 @@
  * - No full-resolution image in list views (use thumbnail prop)
  */
 import React, { useState, memo, useCallback, useRef, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image as RNImage, Animated, Platform } from 'react-native';
+import {View, Text, StyleSheet, Image as RNImage, Animated, Platform } from "react-native";
 import Colors from '@/constants/colors';
 
 type OptimizedImageProps = {
@@ -58,8 +58,7 @@ function OptimizedImageImpl({
   priority = 'normal',
   cachePolicy = 'memory-disk',
   maxRetries = 3,
-  testID,
-}: OptimizedImageProps) {
+  testID}: OptimizedImageProps) {
   const [loaded, setLoaded] = useState<boolean>(false);
   const [failed, setFailed] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
@@ -96,8 +95,7 @@ function OptimizedImageImpl({
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 200,
-        useNativeDriver: Platform.OS !== 'web',
-      }).start();
+        useNativeDriver: Platform.OS !== 'web'}).start();
     }
   }, [currentUri, showThumbnail, thumbnailUri, uri, fadeAnim]);
 
@@ -142,14 +140,13 @@ function OptimizedImageImpl({
     <View style={containerStyle} testID={testID}>
       {!loaded && (
         <View style={[styles.loadingOverlay, { width, height, borderRadius }]}>
-          <ActivityIndicator size="small" color={Colors.primary} />
+          {/* Instagram-style: subtle shimmer surface, no spinner */}
         </View>
       )}
       <Animated.Image
         source={{
           uri: currentUri,
-          cache: cachePolicy === 'memory-disk' ? 'force-cache' : 'reload',
-        }}
+          cache: cachePolicy === 'memory-disk' ? 'force-cache' : 'reload'}}
         style={[StyleSheet.absoluteFill, { borderRadius, opacity: loaded ? fadeAnim : 0 }]}
         resizeMode={resizeMode}
         onLoad={handleLoad}
@@ -166,13 +163,11 @@ const styles = StyleSheet.create({
   placeholder: {
     backgroundColor: Colors.surface,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   placeholderText: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   loadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -182,9 +177,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
-  },
-});
+    zIndex: 1}});
 
 export const OptimizedImage = memo(OptimizedImageImpl);
 export default OptimizedImage;

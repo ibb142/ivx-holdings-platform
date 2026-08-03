@@ -1,14 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   Animated,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -21,11 +18,11 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
-  Send,
-} from 'lucide-react-native';
+  Send} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface SMSMessage {
   id: string;
@@ -45,24 +42,21 @@ const TYPE_COLORS: Record<string, string> = {
   emergency: Colors.error,
   manual: Colors.primary,
   daily_summary: Colors.success,
-  smart_update: '#00C9A7',
-};
+  smart_update: '#00C9A7'};
 
 const TYPE_LABELS: Record<string, string> = {
   hourly: 'Hourly',
   emergency: 'Emergency',
   manual: 'Manual',
   daily_summary: 'Daily',
-  smart_update: 'AI Smart',
-};
+  smart_update: 'AI Smart'};
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   sent: { color: Colors.success, label: 'Sent' },
   delivered: { color: Colors.success, label: 'Delivered' },
   failed: { color: Colors.error, label: 'Failed' },
   simulated: { color: Colors.warning, label: 'Simulated' },
-  pending: { color: Colors.accent, label: 'Pending' },
-};
+  pending: { color: Colors.accent, label: 'Pending' }};
 
 type FilterType = 'all' | 'hourly' | 'emergency' | 'manual' | 'daily_summary' | 'smart_update';
 
@@ -79,8 +73,7 @@ export default function SMSHistoryScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [fadeAnim]);
 
   const messagesQuery = useQuery<{ items: SMSMessage[]; total: number; totalPages: number }>({
@@ -109,12 +102,10 @@ export default function SMSHistoryScreen() {
       return {
         items: (data ?? []) as SMSMessage[],
         total,
-        totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-      };
+        totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE))};
     },
     staleTime: 5000,
-    retry: 2,
-  });
+    retry: 2});
 
   const onRefresh = useCallback(() => {
     void messagesQuery.refetch();
@@ -250,7 +241,7 @@ export default function SMSHistoryScreen() {
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           {messagesQuery.isLoading && !messagesQuery.data ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.loadingText}>Loading messages...</Text>
             </View>
           ) : messagesQuery.data?.items.length === 0 ? (
@@ -309,11 +300,9 @@ export default function SMSHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -321,40 +310,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   headerCenter: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: Colors.text,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   headerBadge: {
     backgroundColor: Colors.primary + '20',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
     minWidth: 40,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   headerBadgeText: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   filterContainer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -362,174 +345,140 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   filterList: {
     gap: 6,
-    paddingRight: 16,
-  },
+    paddingRight: 16},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary + '18',
-    borderColor: Colors.primary + '60',
-  },
+    borderColor: Colors.primary + '60'},
   filterText: {
     fontSize: 12,
     fontWeight: '500' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterTextActive: {
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   listContent: {
     padding: 16,
     gap: 10,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   messageCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   messageHeader: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   messageHeaderLeft: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   typeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   typeBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   statusBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 4,
-  },
+    gap: 4},
   statusText: {
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   messageHeaderRight: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   timeText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   messagePreview: {
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   expandedDetails: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   detailRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   detailText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   messageIdText: {
     fontSize: 10,
     color: Colors.textTertiary,
     marginTop: 4,
-    fontFamily: 'monospace' as const,
-  },
+    fontFamily: 'monospace' as const},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emptyContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 40,
-    gap: 12,
-  },
+    gap: 12},
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   emptySubtext: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   pagination: {
     flexDirection: 'row' as const,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     gap: 16,
-    paddingVertical: 20,
-  },
+    paddingVertical: 20},
   pageBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   pageBtnDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   pageBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   pageBtnTextDisabled: {
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   pageInfo: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-});
+    fontWeight: '500' as const}});

@@ -1,14 +1,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -21,8 +18,7 @@ import {
   Clock,
   Shield,
   AlertCircle,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrencyWithDecimals, formatNumber } from '@/lib/formatters';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +26,7 @@ import { supabase } from '@/lib/supabase';
 import { buyResaleListing, cancelResaleListing } from '@/lib/investment-service';
 import type { ResaleListing } from '@/lib/investment-service';
 import { useAuth } from '@/lib/auth-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function ResaleMarketplaceScreen() {
   const router = useRouter();
@@ -52,8 +49,7 @@ export default function ResaleMarketplaceScreen() {
       }
       return (data || []) as ResaleListing[];
     },
-    staleTime: 1000 * 15,
-  });
+    staleTime: 1000 * 15});
 
   const myListingsQuery = useQuery({
     queryKey: ['resale-listings', 'mine'],
@@ -70,8 +66,7 @@ export default function ResaleMarketplaceScreen() {
       return (data || []) as ResaleListing[];
     },
     enabled: isAuthenticated,
-    staleTime: 1000 * 15,
-  });
+    staleTime: 1000 * 15});
 
   const currentUserId = useQuery({
     queryKey: ['current-user-id'],
@@ -79,8 +74,7 @@ export default function ResaleMarketplaceScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       return user?.id ?? null;
     },
-    staleTime: 1000 * 60 * 10,
-  });
+    staleTime: 1000 * 60 * 10});
 
   const listings = listingsQuery.data ?? [];
   const myListings = myListingsQuery.data ?? [];
@@ -109,8 +103,7 @@ export default function ResaleMarketplaceScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Error', err.message);
-    },
-  });
+    }});
 
   const cancelMutation = useMutation({
     mutationFn: async (listingId: string) => {
@@ -124,8 +117,7 @@ export default function ResaleMarketplaceScreen() {
       } else {
         Alert.alert('Error', result.message);
       }
-    },
-  });
+    }});
 
   const handleBuy = useCallback((listing: ResaleListing) => {
     if (listing.seller_id === userId) {
@@ -142,8 +134,7 @@ export default function ResaleMarketplaceScreen() {
           onPress: () => {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
             buyMutation.mutate(listing.id);
-          },
-        },
+          }},
       ]
     );
   }, [userId, buyMutation]);
@@ -157,8 +148,7 @@ export default function ResaleMarketplaceScreen() {
         {
           text: 'Cancel Listing',
           style: 'destructive',
-          onPress: () => cancelMutation.mutate(listingId),
-        },
+          onPress: () => cancelMutation.mutate(listingId)},
       ]
     );
   }, [cancelMutation]);
@@ -256,7 +246,7 @@ export default function ResaleMarketplaceScreen() {
 
           {listingsQuery.isLoading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
             </View>
           ) : otherListings.length === 0 ? (
             <View style={styles.emptyState}>
@@ -328,7 +318,7 @@ export default function ResaleMarketplaceScreen() {
                       activeOpacity={0.8}
                     >
                       {buyMutation.isPending ? (
-                        <ActivityIndicator size="small" color={Colors.black} />
+                        <ShimmerIndicator size="small" color={Colors.black} />
                       ) : (
                         <>
                           <ShoppingCart size={14} color={Colors.black} />
@@ -363,8 +353,7 @@ export default function ResaleMarketplaceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -373,27 +362,22 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   headerBackBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerRight: {
-    width: 40,
-  },
+    width: 40},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   banner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -403,28 +387,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.primary + '25',
-    gap: 12,
-  },
+    gap: 12},
   bannerInfo: {
-    flex: 1,
-  },
+    flex: 1},
   bannerTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   bannerSubtext: {
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   statsRow: {
     flexDirection: 'row',
     gap: 10,
     marginHorizontal: 16,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   statCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -433,27 +412,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 4,
-  },
+    gap: 4},
   statValue: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   section: {
     marginHorizontal: 16,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   myListingCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -463,21 +437,17 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.primary + '25',
-  },
+    borderColor: Colors.primary + '25'},
   myListingInfo: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   myListingActions: {
     alignItems: 'flex-end',
-    gap: 6,
-  },
+    gap: 6},
   myListingTotal: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   cancelListingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -485,110 +455,90 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.error + '15',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   cancelListingText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.error,
-  },
+    color: Colors.error},
   listingCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   listingHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   listingHeaderLeft: {
-    flex: 1,
-  },
+    flex: 1},
   listingPropertyName: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   listingBadgesRow: {
     flexDirection: 'row',
-    gap: 6,
-  },
+    gap: 6},
   priceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   priceBadgeText: {
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   listingMeta: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   listingDateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   listingDate: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   listingDetails: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   listingDetailItem: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   listingDetailDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   listingDetailLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   listingDetailValue: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   listingFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   listingExpiryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   listingExpiry: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   buyListingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -596,37 +546,30 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   buyListingBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   buyListingBtnText: {
     fontSize: 14,
     fontWeight: '800' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   loadingWrap: {
     paddingVertical: 40,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 8,
-  },
+    gap: 8},
   emptyText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   emptySubtext: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center',
     lineHeight: 18,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   disclaimerCard: {
     marginHorizontal: 16,
     backgroundColor: Colors.surface,
@@ -634,17 +577,13 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   disclaimerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   disclaimerText: {
     flex: 1,
     fontSize: 12,
     color: Colors.textTertiary,
-    lineHeight: 17,
-  },
-});
+    lineHeight: 17}});

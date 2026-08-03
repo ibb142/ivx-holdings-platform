@@ -1,13 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { Bell, TrendingUp, Shield, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
@@ -15,6 +12,7 @@ import { useNotifications as useNotificationHook } from '@/lib/data-hooks';
 import { supabase } from '@/lib/supabase';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EmptyState, ListFooter } from '@/components/ProgressiveStates';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const PAGE_SIZE = 20;
 
@@ -34,8 +32,7 @@ export default function NotificationsScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
-  });
+    }});
 
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
@@ -50,8 +47,7 @@ export default function NotificationsScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
-  });
+    }});
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -168,7 +164,7 @@ export default function NotificationsScreen() {
         ListEmptyComponent={
           isLoading ? (
             <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={{ color: Colors.textSecondary, marginTop: 12, fontSize: 13 }}>Loading notifications…</Text>
             </View>
           ) : (
@@ -188,8 +184,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -197,34 +192,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   headerLeft: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   unreadCount: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   markAllText: {
     fontSize: 14,
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   listContent: {
-    flexGrow: 1,
-  },
+    flexGrow: 1},
   notificationItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   notificationItemUnread: {
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   notificationIcon: {
     width: 44,
     height: 44,
@@ -232,36 +220,28 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundTertiary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   notificationContent: {
-    flex: 1,
-  },
+    flex: 1},
   notificationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   notificationTitle: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   notificationMessage: {
     fontSize: 14,
     color: Colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   notificationTime: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
-});
+    color: Colors.textTertiary}});

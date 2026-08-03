@@ -8,8 +8,7 @@ import {
   RefreshControl,
   Image,
   useWindowDimensions,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { TrendingUp, TrendingDown, Activity, BarChart3, Clock, Zap, Globe, ArrowUpRight, ArrowDownRight, ChevronRight, Tag, ShoppingCart } from 'lucide-react-native';
@@ -172,129 +171,105 @@ const gmStyles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   sentimentBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   sentimentText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   viewAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   viewAllText: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   grid: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   section: {
-    flex: 1,
-  },
+    flex: 1},
   sectionLabel: {
     color: Colors.textTertiary,
     fontSize: 9,
     fontWeight: '800' as const,
     letterSpacing: 1.2,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   rowFlag: {
-    fontSize: 13,
-  },
+    fontSize: 13},
   rowSymbol: {
     color: Colors.textSecondary,
     fontSize: 9,
     fontWeight: '700' as const,
-    flex: 1,
-  },
+    flex: 1},
   rowRate: {
     color: Colors.text,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   changePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 1,
     paddingHorizontal: 4,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   changeVal: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   divider: {
     width: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   commodityRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   commodityCard: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
     padding: 10,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   commodityDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   commodityName: {
     color: Colors.textTertiary,
     fontSize: 9,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   commodityPrice: {
     color: Colors.text,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   commodityChange: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   intelligenceBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
@@ -302,14 +277,11 @@ const gmStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   intelligenceBtnText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});
 
 function ResaleMarketplaceSection({ router }: { router: ReturnType<typeof useRouter> }) {
   const resaleQuery = useQuery({
@@ -327,8 +299,7 @@ function ResaleMarketplaceSection({ router }: { router: ReturnType<typeof useRou
       }
       return (data || []) as ResaleListing[];
     },
-    staleTime: 1000 * 30,
-  });
+    staleTime: 1000 * 30});
 
   const listings = resaleQuery.data ?? [];
   if (listings.length === 0) return null;
@@ -401,100 +372,81 @@ const rsStyles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   countBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   countText: {
     color: Colors.black,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   viewAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   viewAllText: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   subtext: {
     color: Colors.textTertiary,
     fontSize: 11,
     marginBottom: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   listingCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   listingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   listingInfo: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   listingName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   listingMeta: {
     color: Colors.textTertiary,
     fontSize: 10,
-    marginTop: 2,
-  },
+    marginTop: 2},
   listingRight: {
     alignItems: 'flex-end',
-    gap: 3,
-  },
+    gap: 3},
   listingTotal: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   premiumBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   premiumText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});
 
 export default function MarketScreen() {
   const router = useRouter();
@@ -518,8 +470,7 @@ export default function MarketScreen() {
     totalProperties: 0,
     avgYield: 0,
     countriesActive: 12,
-    totalInvestors: 5000,
-  }), []);
+    totalInvestors: 5000}), []);
   const { t } = useTranslation();
   const { trackScreen, trackAction: _trackAction, trackTransaction } = useAnalytics();
 
@@ -534,8 +485,7 @@ export default function MarketScreen() {
       if (error) throw error;
       return { properties: data || [] };
     },
-    staleTime: 1000 * 60 * 2,
-  });
+    staleTime: 1000 * 60 * 2});
   const properties: Property[] = useMemo(() => {
     const raw = (propertiesQuery.data?.properties as Property[] | undefined) ?? [];
     return Array.isArray(raw) ? raw : [];
@@ -567,8 +517,7 @@ export default function MarketScreen() {
             ...updated[key],
             lastPrice: Math.round(newPrice * 100) / 100,
             change24h: Math.round(priceChange * 100) / 100,
-            changePercent24h: Math.round((priceChange / denominator) * 10000) / 100,
-          };
+            changePercent24h: Math.round((priceChange / denominator) * 10000) / 100};
         });
         return updated;
       });
@@ -603,16 +552,14 @@ export default function MarketScreen() {
     volumeText: isXs ? 11 : isCompact ? 12 : 13,
     rowPadding: isXs ? 8 : isCompact ? 10 : 12,
     cellMinWidth: isXs ? 42 : isCompact ? 50 : 60,
-    volumeCellWidth: isXs ? 45 : 55,
-  }), [isCompact, isXs]);
+    volumeCellWidth: isXs ? 45 : 55}), [isCompact, isXs]);
 
   const { gainers, losers } = useMemo(() => {
     const allData = Object.values(liveMarketData) as MarketData[];
     const sorted = [...allData].sort((a: MarketData, b: MarketData) => b.changePercent24h - a.changePercent24h);
     return {
       gainers: sorted.filter((d: MarketData) => d.changePercent24h > 0).slice(0, 3),
-      losers: sorted.filter((d: MarketData) => d.changePercent24h < 0).slice(0, 3),
-    };
+      losers: sorted.filter((d: MarketData) => d.changePercent24h < 0).slice(0, 3)};
   }, [liveMarketData]);
 
   const marketList = useMemo(() => {
@@ -620,8 +567,7 @@ export default function MarketScreen() {
       .filter((p: Property) => p.status !== 'coming_soon')
       .map((property: Property) => ({
         property,
-        market: liveMarketData[property.id],
-      }))
+        market: liveMarketData[property.id]}))
       .filter((item: { property: Property; market: MarketData | undefined }) => item.market);
 
     switch (activeTab) {
@@ -648,22 +594,19 @@ export default function MarketScreen() {
     queryFn: async () => {
       const { data } = await supabase.from('market_data').select('*');
       return data || null;
-    },
-  });
+    }});
   const globalIndexQuery = useQuery({
     queryKey: ['market', 'global-index'],
     queryFn: async () => {
       const { data } = await supabase.from('market_index').select('*').single();
       return data || null;
-    },
-  });
+    }});
   const topMoversQuery = useQuery({
     queryKey: ['market', 'top-movers'],
     queryFn: async () => {
       const { data } = await supabase.from('market_data').select('*').order('change_percent_24h', { ascending: false }).limit(10);
       return data || null;
-    },
-  });
+    }});
   const balanceQuery = useQuery({
     queryKey: ['wallet-balance', 'market'],
     queryFn: async () => {
@@ -672,8 +615,7 @@ export default function MarketScreen() {
       const { data } = await supabase.from('wallets').select('*').eq('user_id', user.id).single();
       return data || null;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
 
   const userWalletBalance = balanceQuery.data?.available ?? 0;
 
@@ -736,8 +678,7 @@ export default function MarketScreen() {
     onSuccess: () => {
       void allMarketQuery.refetch();
       void balanceQuery.refetch();
-    },
-  });
+    }});
 
   const handleTradeComplete = (order: Order) => {
     console.log('[Market] Trade completed:', order);
@@ -747,8 +688,7 @@ export default function MarketScreen() {
       type: order.type,
       orderType: order.orderType,
       shares: order.shares,
-      price: order.price,
-    });
+      price: order.price});
   };
 
   const getUserShares = (_propertyId: string): number => {
@@ -925,8 +865,7 @@ export default function MarketScreen() {
                       { 
                         backgroundColor: isPositive ? Colors.success + '20' : Colors.error + '20',
                         paddingHorizontal: isXs ? 4 : isCompact ? 5 : 8,
-                        paddingVertical: isXs ? 2 : isCompact ? 3 : 4,
-                      }
+                        paddingVertical: isXs ? 2 : isCompact ? 3 : 4}
                     ]}>
                       <Text style={[styles.changeText, { fontSize: responsiveStyles.changeText, color: isPositive ? Colors.success : Colors.error }]}>
                         {isPositive ? '+' : ''}{market.changePercent24h.toFixed(isNarrow ? 1 : 2)}%
@@ -1023,48 +962,39 @@ export default function MarketScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   headerTitle: {
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   marketStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   liveIndicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   marketStatusText: {
     color: Colors.success,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   headerButton: {
-    padding: 8,
-  },
+    padding: 8},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     gap: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   statCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1072,91 +1002,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statValue: {
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     color: Colors.textTertiary,
     fontWeight: '500' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   chartSection: {
     paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   chartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   chartTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    flex: 1,
-  },
+    flex: 1},
   closeChart: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabsContainer: {
     flexDirection: 'row',
     marginHorizontal: 20,
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   tab: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   tabActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   tabText: {
     color: Colors.textSecondary,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   tabTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   tableHeaderText: {
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   marketRowContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   marketRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   tradeButtonsRow: {
     flexDirection: 'row',
     gap: 8,
     paddingBottom: 10,
-    paddingTop: 4,
-  },
+    paddingTop: 4},
   buyButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1164,117 +1077,90 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
     borderRadius: 8,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   buyButtonText: {
     color: Colors.white,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sellButton: {
     backgroundColor: Colors.error + '20',
     borderRadius: 8,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   sellButtonText: {
     color: Colors.error,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   cellRight: {
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   propertyCell: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   propertyImage: {
-    backgroundColor: Colors.surfaceLight,
-  },
+    backgroundColor: Colors.surfaceLight},
   propertyInfo: {
-    flex: 1,
-  },
+    flex: 1},
   propertyName: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   propertyCity: {
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   priceCell: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   priceText: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   changeCell: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   changeBadge: {
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   changeText: {
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   volumeCell: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   volumeText: {
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   orderBookSection: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   sectionTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   orderBookContainer: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   orderBookSide: {
-    flex: 1,
-  },
+    flex: 1},
   orderBookDivider: {
     width: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginHorizontal: 12,
-  },
+    marginHorizontal: 12},
   orderBookHeader: {
     color: Colors.textTertiary,
     fontSize: 12,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   orderBookRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   orderBookPrice: {
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   orderBookShares: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   bottomPadding: {
-    height: 120,
-  },
+    height: 120},
   indexBanner: {
     marginHorizontal: 20,
     backgroundColor: Colors.surface,
@@ -1282,63 +1168,52 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   indexBannerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   indexTickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginBottom: 6,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   indexLiveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   indexTickerText: {
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   indexSubLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   indexBigValue: {
     color: Colors.text,
     fontSize: 28,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   indexBannerRight: {
     alignItems: 'flex-end',
-    gap: 6,
-  },
+    gap: 6},
   indexBannerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   indexBannerChangeText: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   indexBannerAth: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   indexBannerStats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1347,42 +1222,33 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 14,
-    gap: 8,
-  },
+    gap: 8},
   indexBannerStat: {
     flex: 1,
     minWidth: 70,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   indexBannerStatDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   indexBannerStatValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   indexBannerStatLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     marginTop: 2,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   scrollView: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   propertyImagePlaceholder: {
     backgroundColor: Colors.backgroundTertiary,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   propertyImagePlaceholderText: {
     color: Colors.textTertiary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

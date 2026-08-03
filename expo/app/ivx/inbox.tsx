@@ -2,15 +2,13 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { ChevronRight, ClipboardCheck, FlaskConical, Github, Inbox, LayoutDashboard, MessageSquare, Radio, Search, Server, ShieldCheck, Sparkles } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -20,6 +18,7 @@ import type { IVXInboxItem, IVXMessage } from '@/shared/ivx';
 import { detectIVXRoomStatus, ivxChatService, ivxInboxService } from '@/src/modules/ivx-owner-ai/services';
 import { sanitizeUserFacingChatText } from '@/src/modules/chat/services/visibleTextSanitizer';
 import type { ChatRoomStatus } from '@/src/modules/chat/types/chat';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const IVX_OWNER_INBOX_QUERY_KEY = ['ivx-owner-ai', 'inbox'] as const;
 const IVX_OWNER_INBOX_PROOF_QUERY_KEY = ['ivx-owner-ai', 'inbox-proof'] as const;
@@ -49,8 +48,7 @@ function formatInboxTime(value: string | null): string {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
-    minute: '2-digit',
-  });
+    minute: '2-digit'});
 }
 
 function formatRoomMode(status: ChatRoomStatus): string {
@@ -100,8 +98,7 @@ async function loadInboxRuntimeProof(ownerLabel: string, ownerSessionReady: bool
     roomStatus,
     activeRealtimeChannels: realtimeAudit.activeChannelCount,
     localListenerCount: realtimeAudit.localListenerCount,
-    observedAt: new Date().toISOString(),
-  };
+    observedAt: new Date().toISOString()};
 }
 
 export default function IVXOwnerInboxRoute() {
@@ -114,12 +111,10 @@ export default function IVXOwnerInboxRoute() {
     queryFn: async () => {
       console.log('[IVXOwnerInboxRoute] Loading owner inbox');
       return ivxInboxService.loadOwnerInbox();
-    },
-  });
+    }});
   const inboxProofQuery = useQuery<InboxRuntimeProof, Error>({
     queryKey: IVX_OWNER_INBOX_PROOF_QUERY_KEY,
-    queryFn: () => loadInboxRuntimeProof(ownerEmail, !!user),
-  });
+    queryFn: () => loadInboxRuntimeProof(ownerEmail, !!user)});
   const inboxItems = inboxQuery.data ?? [];
   const inboxProof = inboxProofQuery.data ?? null;
   const unreadTotal = useMemo<number>(() => inboxItems.reduce((total, item) => total + item.unreadCount, 0), [inboxItems]);
@@ -200,8 +195,7 @@ export default function IVXOwnerInboxRoute() {
       console.log('[IVXOwnerInboxRoute] Loading owner inbox thread preview');
       const messages = await ivxChatService.listOwnerMessages();
       return messages.slice(-INBOX_THREAD_PREVIEW_LIMIT);
-    },
-  });
+    }});
 
   const handleOpenRoom = useCallback(async (item: IVXInboxItem) => {
     try {
@@ -429,7 +423,7 @@ export default function IVXOwnerInboxRoute() {
 
         {inboxQuery.isLoading ? (
           <View style={styles.loadingState} testID="ivx-owner-inbox-loading">
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
             <Text style={styles.loadingText}>Loading IVX inbox…</Text>
           </View>
         ) : inboxQuery.error ? (
@@ -503,7 +497,7 @@ function ThreadPreview({ isLoading, error, messages, onRetry, conversationId }: 
           <Text style={styles.threadHeaderText}>Latest in thread</Text>
         </View>
         <View style={styles.threadLoadingRow}>
-          <ActivityIndicator color={Colors.primary} size="small" />
+          <ShimmerIndicator color={Colors.primary} size="small" />
           <Text style={styles.threadMutedText}>Loading latest messages…</Text>
         </View>
       </View>
@@ -563,8 +557,7 @@ function ThreadPreview({ isLoading, error, messages, onRetry, conversationId }: 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   heroCard: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -574,8 +567,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -584,28 +576,23 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.primary,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   heroBadgeText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   heroTitle: {
     color: Colors.text,
     fontSize: 22,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   heroSubtitle: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   heroDescription: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   heroSearchButton: {
     marginTop: 4,
     minHeight: 44,
@@ -617,13 +604,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1A05',
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.24)',
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   heroSearchButtonText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   launcherCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -632,18 +617,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 12,
-  },
+    gap: 12},
   launcherHeading: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   launcherRow: {
-    gap: 10,
-  },
+    gap: 10},
   launcherButton: {
     minHeight: 48,
     flexDirection: 'row',
@@ -653,8 +635,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1A05',
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.24)',
-    paddingHorizontal: 14,
-  },
+    paddingHorizontal: 14},
   launcherButtonFull: {
     minHeight: 48,
     flexDirection: 'row',
@@ -665,14 +646,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.24)',
     paddingHorizontal: 14,
-    marginTop: 10,
-  },
+    marginTop: 10},
   launcherButtonText: {
     flex: 1,
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -681,75 +660,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D0D0D',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 14,
-  },
+    gap: 14},
   proofHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   proofTitleRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   proofTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofRefreshButton: {
     minHeight: 36,
     justifyContent: 'center',
     borderRadius: 999,
     backgroundColor: Colors.surfaceLight,
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   proofRefreshText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofLoadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderRadius: 18,
     backgroundColor: Colors.surface,
-    padding: 12,
-  },
+    padding: 12},
   statusDotPending: {
     width: 9,
     height: 9,
     borderRadius: 5,
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   proofMutedText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   proofErrorBlock: {
     borderRadius: 18,
     backgroundColor: '#231111',
     borderWidth: 1,
     borderColor: '#4A1E1E',
     padding: 12,
-    gap: 4,
-  },
+    gap: 4},
   proofErrorTitle: {
     color: Colors.error,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   proofMetric: {
     width: '48%',
     minHeight: 92,
@@ -758,25 +725,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 12,
-    gap: 5,
-  },
+    gap: 5},
   proofMetricLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   proofMetricValue: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofMetricHint: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   diagnosticsLink: {
     minHeight: 44,
     flexDirection: 'row',
@@ -786,23 +749,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1A05',
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.24)',
-    gap: 8,
-  },
+    gap: 8},
   diagnosticsLinkText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   loadingState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   errorState: {
     flex: 1,
     marginHorizontal: 16,
@@ -812,41 +771,34 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   errorTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   retryButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   retryButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 16,
-    gap: 12,
-  },
+    gap: 12},
   emptyContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
+    paddingBottom: 24},
   emptyState: {
     alignItems: 'center',
     gap: 10,
@@ -854,32 +806,27 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   emptyTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   openRoomButton: {
     marginTop: 6,
     borderRadius: 999,
     backgroundColor: Colors.primary,
     paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   openRoomButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   inboxCard: {
     borderRadius: 24,
     padding: 18,
@@ -887,73 +834,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     gap: 12,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   inboxCardUnread: {
     borderColor: 'rgba(255,215,0,0.45)',
-    backgroundColor: '#161203',
-  },
+    backgroundColor: '#161203'},
   unreadAccent: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
     width: 4,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   inboxTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   inboxTitleUnread: {
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   inboxPreviewUnread: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   inboxCardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   inboxTitleBlock: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   inboxTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   inboxSubtitle: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   inboxPreview: {
     color: Colors.text,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   inboxMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   inboxMetaText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   unreadBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -962,68 +895,57 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.primary,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   unreadBadgeText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   unreadBadgeLabel: {
     color: 'rgba(0,0,0,0.65)',
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   threadBlock: {
     borderRadius: 16,
     backgroundColor: '#0D0D0D',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   threadHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   threadHeaderText: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   threadLoadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   threadMutedText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   threadErrorText: {
     color: Colors.error,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   threadRetryButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     backgroundColor: Colors.surfaceLight,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   threadRetryText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   threadMessageRow: {
     borderRadius: 12,
     backgroundColor: Colors.surface,
@@ -1031,23 +953,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    gap: 2,
-  },
+    gap: 2},
   threadMessageSender: {
     color: Colors.primary,
     fontSize: 11,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   threadMessageBody: {
     color: Colors.text,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   threadMessageTime: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

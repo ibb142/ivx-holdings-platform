@@ -10,14 +10,12 @@ import { useAuth } from '@/lib/auth-context';
 import { ChatScreen } from '@/src/modules/chat';
 import {
   buildRuntimeSignalsFromProbe,
-  probeAIBackendHealth,
-} from '@/src/modules/chat/services/aiReplyService';
+  probeAIBackendHealth} from '@/src/modules/chat/services/aiReplyService';
 import {
   getChatConversationDisplayId,
   getChatConversationTitle,
   resolveChatActorId,
-  resolveChatConversationId,
-} from '@/src/modules/chat/services/chatRooms';
+  resolveChatConversationId} from '@/src/modules/chat/services/chatRooms';
 import { resolveRoomCapabilityState } from '@/src/modules/chat/services/roomCapabilityResolver';
 import { getCurrentChatRoomStatus, subscribeToChatRoomStatus } from '@/src/modules/chat/services/supabaseChatProvider';
 import type { ChatRoomRuntimeSignals, ChatRoomStatus } from '@/src/modules/chat/types/chat';
@@ -65,8 +63,7 @@ export default function AdminChatRoomScreen() {
     knowledgeBackendHealth: 'inactive',
     ownerCommandAvailability: 'inactive',
     codeAwareServiceAvailability: 'inactive',
-    aiResponseState: 'inactive',
-  });
+    aiResponseState: 'inactive'});
   const probeRanRef = useRef(false);
 
   const runAIProbe = useCallback(async () => {
@@ -111,8 +108,7 @@ export default function AdminChatRoomScreen() {
       displayConversationId,
       title,
       roomStatus,
-      currentUserId,
-    });
+      currentUserId});
   }, [conversationId, currentUserId, displayConversationId, roomStatus, routeConversationId, title]);
 
   if (isIVXOwnerRoomRoute) {
@@ -155,8 +151,7 @@ export default function AdminChatRoomScreen() {
             subtitle: capabilityResolution.subtitle,
             emptyTitle: IVX_OWNER_AI_PROFILE.sharedRoom.emptyTitle,
             emptyText: IVX_OWNER_AI_PROFILE.sharedRoom.emptyText,
-            runtimeSignals,
-          }}
+            runtimeSignals}}
         />
       </View>
     </ErrorBoundary>
@@ -166,21 +161,18 @@ export default function AdminChatRoomScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
     backgroundColor: Colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 14,
-  },
+    paddingBottom: 14},
   backButton: {
     width: 40,
     height: 40,
@@ -189,12 +181,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   headerCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   badge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -203,27 +193,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   badgeText: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   title: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   summary: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

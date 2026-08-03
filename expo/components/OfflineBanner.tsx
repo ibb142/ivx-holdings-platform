@@ -16,8 +16,7 @@ export default function OfflineBanner({ isOffline, onRetry }: OfflineBannerProps
       toValue: isOffline ? 0 : -60,
       friction: 10,
       tension: 80,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [isOffline, slideAnim]);
 
   if (!isOffline) return null;
@@ -43,8 +42,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 9999,
-  },
+    zIndex: 9999},
   inner: {
     backgroundColor: '#E53935',
     flexDirection: 'row' as const,
@@ -52,15 +50,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    gap: 8,
-  },
+    gap: 8},
   text: {
     color: Colors.white,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   retryBtn: {
     padding: 4,
-    marginLeft: 4,
-  },
-});
+    marginLeft: 4}});

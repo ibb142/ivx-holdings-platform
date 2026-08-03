@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,8 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Building2,
   Check,
@@ -27,11 +25,11 @@ import {
   TrendingUp,
   UserPlus,
   Users,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   createInvestor,
   deleteInvestor,
@@ -43,8 +41,7 @@ import {
   type InvestorListResult,
   type InvestorRecord,
   type InvestorSource,
-  type InvestorStatus,
-} from '@/src/modules/ivx-developer/investorCrmService';
+  type InvestorStatus} from '@/src/modules/ivx-developer/investorCrmService';
 
 const STATUS_ORDER: InvestorStatus[] = ['prospect', 'contacted', 'meeting_scheduled', 'active', 'invested'];
 const STATUS_LABEL: Record<InvestorStatus, string> = {
@@ -52,15 +49,13 @@ const STATUS_LABEL: Record<InvestorStatus, string> = {
   contacted: 'Contacted',
   meeting_scheduled: 'Meeting',
   active: 'Active',
-  invested: 'Invested',
-};
+  invested: 'Invested'};
 const STATUS_TONE: Record<InvestorStatus, string> = {
   prospect: Colors.textTertiary,
   contacted: Colors.info,
   meeting_scheduled: Colors.warning,
   active: Colors.primary,
-  invested: Colors.success,
-};
+  invested: Colors.success};
 
 const SOURCE_OPTIONS: { value: InvestorSource; label: string }[] = [
   { value: 'owner_entered', label: 'Owner entered' },
@@ -74,8 +69,7 @@ const SOURCE_LABEL: Record<InvestorSource, string> = {
   submitted_form: 'Submitted form',
   crm_import: 'CRM import',
   public_source: 'Public source',
-  verified_deal: 'Verified deal',
-};
+  verified_deal: 'Verified deal'};
 
 const ACCREDITED_OPTIONS: { value: AccreditedStatus; label: string }[] = [
   { value: 'unknown', label: 'Unknown' },
@@ -109,8 +103,7 @@ function emptyForm(): FormState {
     name: '', company: '', email: '', phone: '', location: '', investmentType: '',
     accreditedStatus: 'unknown', preferredMarkets: '', preferredAssetClasses: '',
     typicalCheckSize: '', investmentTimeline: '', notes: '', lastContactDate: '',
-    leadScore: '', relationshipScore: '', status: 'prospect', source: 'owner_entered', sourceDetail: '',
-  };
+    leadScore: '', relationshipScore: '', status: 'prospect', source: 'owner_entered', sourceDetail: ''};
 }
 
 function formFromRecord(r: InvestorRecord): FormState {
@@ -132,8 +125,7 @@ function formFromRecord(r: InvestorRecord): FormState {
     relationshipScore: String(r.relationshipScore),
     status: r.status,
     source: r.source,
-    sourceDetail: r.sourceDetail,
-  };
+    sourceDetail: r.sourceDetail};
 }
 
 function toCsvList(value: string): string[] {
@@ -159,8 +151,7 @@ function formToInput(form: FormState): InvestorInput {
     lastContactDate: form.lastContactDate.trim() || null,
     leadScore: form.leadScore.trim() ? Number(form.leadScore) : undefined,
     relationshipScore: form.relationshipScore.trim() ? Number(form.relationshipScore) : undefined,
-    status: form.status,
-  };
+    status: form.status};
 }
 
 function Field({ label, value, onChangeText, placeholder, keyboardType, multiline }: {
@@ -316,8 +307,7 @@ function InvestorsContent() {
 
   const query = useQuery<InvestorListResult>({
     queryKey: ['ivx-investor-crm', 'list'],
-    queryFn: listInvestors,
-  });
+    queryFn: listInvestors});
 
   const investors = useMemo(() => query.data?.investors ?? [], [query.data]);
   const summary = query.data?.summary ?? null;
@@ -446,7 +436,7 @@ function InvestorsContent() {
         {error && !modalOpen ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyCard}>
             <UserPlus size={26} color={Colors.textTertiary} />
@@ -513,7 +503,7 @@ function InvestorsContent() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </ScrollView>
             <Pressable style={[styles.saveBtn, saving ? styles.btnDisabled : null]} onPress={() => { void handleSave(); }} disabled={saving} testID="ivx-investor-save">
-              {saving ? <ActivityIndicator size="small" color={Colors.black} /> : <Check size={16} color={Colors.black} />}
+              {saving ? <ShimmerIndicator size="small" color={Colors.black} /> : <Check size={16} color={Colors.black} />}
               <Text style={styles.saveBtnText}>{editingId ? 'Save changes' : 'Add investor'}</Text>
             </Pressable>
           </View>
@@ -598,5 +588,4 @@ const styles = StyleSheet.create({
   dualItem: { flex: 1 },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, marginHorizontal: 18, marginTop: 8, paddingVertical: 14, borderRadius: 12 },
   saveBtnText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
-  btnDisabled: { opacity: 0.6 },
-});
+  btnDisabled: { opacity: 0.6 }});

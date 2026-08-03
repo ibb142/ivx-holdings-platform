@@ -1,17 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import logger from '@/lib/logger';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
   TextInput,
-  ActivityIndicator,
   Linking,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -32,14 +29,14 @@ import {
   TrendingUp,
   Briefcase,
   Building2,
-  Percent,
-} from 'lucide-react-native';
+  Percent} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
 import { Referral } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const mockUserReferrals: Referral[] = [
   {
@@ -57,8 +54,7 @@ const mockUserReferrals: Referral[] = [
     signedUpAt: '2025-01-10T14:00:00Z',
     investedAt: '2025-01-15T10:00:00Z',
     investmentAmount: 2500,
-    createdAt: '2025-01-08T09:00:00Z',
-  },
+    createdAt: '2025-01-08T09:00:00Z'},
   {
     id: 'ref-2',
     referrerId: 'current-user',
@@ -72,8 +68,7 @@ const mockUserReferrals: Referral[] = [
     reward: 25,
     rewardPaid: false,
     signedUpAt: '2025-01-20T16:00:00Z',
-    createdAt: '2025-01-18T11:00:00Z',
-  },
+    createdAt: '2025-01-18T11:00:00Z'},
   {
     id: 'ref-3',
     referrerId: 'current-user',
@@ -84,8 +79,7 @@ const mockUserReferrals: Referral[] = [
     referralCode: 'IVXHOLDINGS-INVITE',
     reward: 25,
     rewardPaid: false,
-    createdAt: '2025-01-24T08:00:00Z',
-  },
+    createdAt: '2025-01-24T08:00:00Z'},
 ];
 
 export default function ReferralsScreen() {
@@ -101,8 +95,7 @@ export default function ReferralsScreen() {
       return { referrals: refs || [], stats: null, code: profile?.referral_code || null };
     },
     retry: 1,
-    staleTime: 1000 * 60 * 2,
-  });
+    staleTime: 1000 * 60 * 2});
 
   const sendInviteMutation = useMutation({
     mutationFn: async (input: { email: string }) => {
@@ -111,8 +104,7 @@ export default function ReferralsScreen() {
       const { error } = await supabase.from('referral_invites').insert({ referrer_id: user.id, email: input.email, created_at: new Date().toISOString() });
       if (error) console.log('[Referrals] Invite insert note:', error.message);
       return { success: true };
-    },
-  });
+    }});
 
   const referrals = (referralsQuery.data?.referrals as Referral[] | undefined) ?? mockUserReferrals;
   const [inviteEmail, setInviteEmail] = useState('');
@@ -124,8 +116,7 @@ export default function ReferralsScreen() {
   const appLinks = {
     appStore: 'https://apps.apple.com/app/ipx-holding',
     playStore: 'https://play.google.com/store/apps/details?id=com.ipxholding.app',
-    website: 'https://ivxholding.com',
-  };
+    website: 'https://ivxholding.com'};
 
   const totalEarned = referrals.filter(r => r.rewardPaid).reduce((sum, r) => sum + r.reward, 0);
   const pendingRewards = referrals.filter(r => r.status === 'invested' && !r.rewardPaid).reduce((sum, r) => sum + r.reward, 0);
@@ -136,8 +127,7 @@ export default function ReferralsScreen() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-    });
+      year: 'numeric'});
   };
 
   const shareMessage = `🏠 I'm investing in real estate with IVX HOLDINGS and you should too! Start with just $100 and earn passive income from premium properties.\n\n🎁 Sign up with my code and we BOTH get $25 in FREE project shares!\n\nUse my code ${referralCode} to get started: ${referralLink}\n\n📲 Download IVXHOLDINGS App:\n🍎 iOS: ${appLinks.appStore}\n🤖 Android: ${appLinks.playStore}\n🌐 Web: ${appLinks.website}`;
@@ -234,8 +224,7 @@ export default function ReferralsScreen() {
         },
         onSettled: () => {
           setIsSending(false);
-        },
-      }
+        }}
     );
   }, [inviteEmail, sendInviteMutation, referralsQuery]);
 
@@ -264,8 +253,7 @@ export default function ReferralsScreen() {
           title: 'Refer & Earn',
           headerShown: true,
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }} 
+          headerTintColor: Colors.text}} 
       />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -371,7 +359,7 @@ export default function ReferralsScreen() {
               disabled={!inviteEmail.trim() || isSending}
             >
               {isSending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ShimmerIndicator size="small" color="#fff" />
               ) : (
                 <>
                   <Send size={16} color="#fff" />
@@ -646,5 +634,4 @@ const styles = StyleSheet.create({
   influencerStatText: { color: Colors.textSecondary, fontSize: 13 },
   influencerCta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 12 },
   influencerCtaText: { color: '#000000', fontSize: 13, fontWeight: '600' as const },
-  scrollViewBg: { backgroundColor: Colors.background },
-});
+  scrollViewBg: { backgroundColor: Colors.background }});

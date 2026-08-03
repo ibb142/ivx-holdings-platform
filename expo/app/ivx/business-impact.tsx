@@ -2,14 +2,12 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, router } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   Briefcase,
@@ -23,18 +21,17 @@ import {
   Target,
   TrendingUp,
   Users,
-  Wrench,
-} from 'lucide-react-native';
+  Wrench} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { startDailyImprovement } from '@/src/modules/ivx-developer/developerMonitorService';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getBusinessImpactDashboard,
   type BriefingPick,
-  type BusinessImpactDashboard,
-} from '@/src/modules/ivx-developer/businessImpactService';
+  type BusinessImpactDashboard} from '@/src/modules/ivx-developer/businessImpactService';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -85,8 +82,7 @@ function BusinessImpactContent() {
   const dashboardQuery = useQuery<BusinessImpactDashboard | null>({
     queryKey: ['ivx-business-impact', 'dashboard'],
     queryFn: getBusinessImpactDashboard,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const dashboard = dashboardQuery.data ?? null;
 
@@ -132,7 +128,7 @@ function BusinessImpactContent() {
             disabled={improving}
             testID="ivx-business-impact-improve"
           >
-            {improving ? <ActivityIndicator size="small" color={Colors.black} /> : <Wrench size={15} color={Colors.black} />}
+            {improving ? <ShimmerIndicator size="small" color={Colors.black} /> : <Wrench size={15} color={Colors.black} />}
             <Text style={styles.primaryButtonText}>{improving ? 'Starting…' : 'Improve IVX today'}</Text>
           </Pressable>
           <Pressable
@@ -238,7 +234,7 @@ function BusinessImpactContent() {
       ) : (
         <View style={styles.card}>
           {dashboardQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyBody}>{dashboardQuery.error instanceof Error ? dashboardQuery.error.message : 'No business-impact data yet.'}</Text>
           )}
@@ -301,5 +297,4 @@ const styles = StyleSheet.create({
   feedLine: { gap: 3 },
   feedLabel: { fontSize: 11, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
   feedValue: { fontSize: 13, color: Colors.text, lineHeight: 19 },
-  disclaimer: { fontSize: 11, color: Colors.textSecondary, lineHeight: 16, fontStyle: 'italic' as const, paddingHorizontal: 4 },
-});
+  disclaimer: { fontSize: 11, color: Colors.textSecondary, lineHeight: 16, fontStyle: 'italic' as const, paddingHorizontal: 4 }});

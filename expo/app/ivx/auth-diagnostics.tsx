@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -22,11 +20,11 @@ import {
   Sparkles,
   Trash2,
   Wifi,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   clearStaleOwnerSession,
   reAuthenticateOwner,
@@ -38,8 +36,7 @@ import {
   type AuthActionResult,
   type AuthDiagnosticField,
   type AuthDiagnosticReport,
-  type ReachabilityReport,
-} from '@/src/modules/ivx-developer/authDiagnosticsService';
+  type ReachabilityReport} from '@/src/modules/ivx-developer/authDiagnosticsService';
 
 type ActionLogEntry = {
   at: string;
@@ -112,8 +109,7 @@ function AuthDiagnosticsContent() {
       const result = await refreshOwnerSession();
       appendLog('Refresh Owner Session', {
         ok: result.ok,
-        message: `${result.message} (ownerDetected: ${result.ownerDetected ? 'YES' : 'NO'})`,
-      });
+        message: `${result.message} (ownerDetected: ${result.ownerDetected ? 'YES' : 'NO'})`});
       await runDiagnostic();
     } finally {
       setBusyAction(null);
@@ -171,13 +167,11 @@ function AuthDiagnosticsContent() {
       setReachability(result);
       appendLog('Test backend reachability', {
         ok: result.verdict === 'BACKEND_REACHABLE_OWNER_AI_OK',
-        message: `${result.verdict} — ${result.verdictDetail}`,
-      });
+        message: `${result.verdict} — ${result.verdictDetail}`});
     } catch (err) {
       appendLog('Test backend reachability', {
         ok: false,
-        message: err instanceof Error ? err.message : 'Reachability probe failed.',
-      });
+        message: err instanceof Error ? err.message : 'Reachability probe failed.'});
     } finally {
       setBusyAction(null);
     }
@@ -236,7 +230,7 @@ function AuthDiagnosticsContent() {
           testID="ivx-auth-action-refresh-owner-session"
         >
           {busyAction === 'refresh-session' ? (
-            <ActivityIndicator size="small" color={Colors.black} />
+            <ShimmerIndicator size="small" color={Colors.black} />
           ) : (
             <Sparkles size={15} color={Colors.black} />
           )}
@@ -250,7 +244,7 @@ function AuthDiagnosticsContent() {
           testID="ivx-auth-action-clear-stale-primary"
         >
           {busyAction === 'clear-stale' ? (
-            <ActivityIndicator size="small" color={Colors.error} />
+            <ShimmerIndicator size="small" color={Colors.error} />
           ) : (
             <Eraser size={15} color={Colors.error} />
           )}
@@ -417,8 +411,7 @@ function ActionButton({
   busy,
   disabled,
   onPress,
-  testID,
-}: {
+  testID}: {
   label: string;
   icon: React.ReactNode;
   busy: boolean;
@@ -433,7 +426,7 @@ function ActionButton({
       disabled={disabled}
       testID={testID}
     >
-      {busy ? <ActivityIndicator size="small" color={Colors.black} /> : icon}
+      {busy ? <ShimmerIndicator size="small" color={Colors.black} /> : icon}
       <Text style={styles.actionButtonText}>{label}</Text>
     </Pressable>
   );
@@ -491,5 +484,4 @@ const styles = StyleSheet.create({
   logTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   logChannel: { fontSize: 11, fontWeight: '700' as const, color: Colors.primary, letterSpacing: 0.3 },
   logTime: { fontSize: 10.5, color: Colors.textSecondary },
-  logMessage: { fontSize: 12.5, color: Colors.text, lineHeight: 18 },
-});
+  logMessage: { fontSize: 12.5, color: Colors.text, lineHeight: 18 }});

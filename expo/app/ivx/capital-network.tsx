@@ -2,14 +2,12 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   Building2,
@@ -25,12 +23,12 @@ import {
   Target,
   TrendingUp,
   Users,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getCapitalNetworkDashboard,
   runCapitalNetworkScan,
@@ -44,8 +42,7 @@ import {
   type ProspectType,
   type ProspectActionPlan,
   type ProspectResearch,
-  type OutreachDraftResult,
-} from '@/src/modules/ivx-developer/capitalNetworkService';
+  type OutreachDraftResult} from '@/src/modules/ivx-developer/capitalNetworkService';
 
 const POLL_INTERVAL_MS = 9000;
 
@@ -53,8 +50,7 @@ const TYPE_LABEL: Record<ProspectType, string> = {
   buyer: 'Buyer',
   investor: 'Investor',
   developer: 'Developer',
-  partner: 'Partner',
-};
+  partner: 'Partner'};
 
 function typeIcon(type: ProspectType, size: number, color: string) {
   switch (type) {
@@ -104,8 +100,7 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
   investor_portal: 'Investor portal / filing',
   referral_network: 'Referral network',
   crm_contact: 'Existing CRM / contact',
-  owner_provided: 'Owner-provided contact',
-};
+  owner_provided: 'Owner-provided contact'};
 
 type ActionPanel = 'none' | 'plan' | 'research' | 'draft';
 
@@ -215,7 +210,7 @@ function ProspectCard({ p, onStatus, busy }: { p: ProspectProfile; onStatus: (p:
       {panel !== 'none' ? (
         <View style={styles.panel}>
           {panelLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : panelError ? (
             <Text style={styles.errorText}>{panelError}</Text>
           ) : panel === 'plan' && actionPlan ? (
@@ -313,8 +308,7 @@ function CapitalNetworkContent() {
   const dashboardQuery = useQuery<CapitalNetworkDashboard | null>({
     queryKey: ['ivx-capital-network', 'dashboard'],
     queryFn: getCapitalNetworkDashboard,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const dashboard = dashboardQuery.data ?? null;
 
@@ -367,7 +361,7 @@ function CapitalNetworkContent() {
           disabled={scanning}
           testID="ivx-capital-network-run-scan"
         >
-          {scanning ? <ActivityIndicator size="small" color={Colors.black} /> : <Zap size={15} color={Colors.black} />}
+          {scanning ? <ShimmerIndicator size="small" color={Colors.black} /> : <Zap size={15} color={Colors.black} />}
           <Text style={styles.primaryButtonText}>{scanning ? 'Scanning deals…' : 'Find best capital sources'}</Text>
         </Pressable>
         {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
@@ -447,7 +441,7 @@ function CapitalNetworkContent() {
       ) : (
         <View style={styles.card}>
           {dashboardQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyBody}>{dashboardQuery.error instanceof Error ? dashboardQuery.error.message : 'No capital-network data yet.'}</Text>
           )}
@@ -557,5 +551,4 @@ const styles = StyleSheet.create({
   actBtnGhost: { alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 10, flex: 1, borderWidth: 1, borderColor: Colors.border },
   actBtnGhostText: { fontSize: 12.5, fontWeight: '600' as const, color: Colors.text },
   statusLine: { fontSize: 11, color: Colors.textTertiary, marginTop: 2 },
-  footnote: { fontSize: 11, lineHeight: 16, color: Colors.textTertiary, textAlign: 'center', marginTop: 6 },
-});
+  footnote: { fontSize: 11, lineHeight: 16, color: Colors.textTertiary, textAlign: 'center', marginTop: 6 }});

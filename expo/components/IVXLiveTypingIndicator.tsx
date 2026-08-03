@@ -46,17 +46,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(246,200,95,0.28)',
     marginBottom: 4,
     alignSelf: 'flex-start',
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   text: {
     flex: 1,
     color: '#F6C85F',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.2,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   caret: {
-    color: '#F6C85F',
-  },
-});
+    color: '#F6C85F'}});

@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { requestIVXAIText } from '../ivx-ai-runtime';
 import { resolveRuntimeCommand } from './ivx-runtime-resolver';
+import { verifyLiveCommitMatch } from './ivx-senior-developer-runtime';
 
 const execFileAsync = promisify(execFile);
 
@@ -123,6 +124,13 @@ export type IVXAutonomousCoderIteration = {
   revised: boolean;
 };
 
+export type IVXDeploymentEndpointEvidence = {
+  endpoint: string;
+  httpStatus: number | null;
+  commitSha: string | null;
+  ok: boolean;
+};
+
 export type IVXAutonomousCoderProof = {
   marker: typeof IVX_AUTONOMOUS_CODER_MARKER;
   taskId: string;
@@ -155,6 +163,9 @@ export type IVXAutonomousCoderProof = {
   productionVerified: boolean;
   liveCommit: string | null;
   healthOk: boolean;
+  /** Captured production proof required for a deploy-mode PASS. */
+  healthResponse: IVXDeploymentEndpointEvidence | null;
+  versionResponse: IVXDeploymentEndpointEvidence | null;
   iterationCount: number;
   durationMs: number;
   finalStatus: 'COMPLETED' | 'BLOCKED' | 'FAILED' | 'CANCELED';
@@ -201,6 +212,13 @@ export type IVXAutonomousCoderInput = {
   deployFn?: (commitSha: string) => Promise<{ deployId: string | null; deployStatus: string | null }>;
   /** Injectable health checker for testing. */
   healthChecker?: () => Promise<{ ok: boolean; commit: string | null }>,
+  /** Injectable full production verifier. Deploy mode is FAILED unless it returns
+   * a live Render deployment and matching /health + /version evidence. */
+  productionVerifier?: (commitSha: string, deploymentId: string) => Promise<{
+    deployStatus: string | null;
+    health: IVXDeploymentEndpointEvidence;
+    version: IVXDeploymentEndpointEvidence;
+  }>,
   /** Injectable project root for testing (defaults to the real repo root). */
   projectRoot?: string,
   /** Injectable file writer for testing (defaults to node:fs/promises writeFile). */
@@ -310,6 +328,8 @@ function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, i
     productionVerified: false,
     liveCommit: null,
     healthOk: false,
+    healthResponse: null,
+    versionResponse: null,
     iterationCount: iterations.length,
     durationMs: Date.now() - startedAt,
     finalStatus: 'CANCELED',
@@ -1341,6 +1361,39 @@ async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: strin
   return { deployId: data.id ?? null, deployStatus: data.status ?? 'triggered' };
 }
 
+async function readDeploymentEndpoint(url: string): Promise<IVXDeploymentEndpointEvidence> {
+  try {
+    const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(15_000) });
+    const body = await response.json().catch((): Record<string, unknown> => ({}));
+    const commitSha = typeof body.commit === 'string' ? body.commit : null;
+    return { endpoint: url, httpStatus: response.status, commitSha, ok: response.ok };
+  } catch {
+    return { endpoint: url, httpStatus: null, commitSha: null, ok: false };
+  }
+}
+
+async function verifyProductionDeployment(commitSha: string, deploymentId: string): Promise<{
+  deployStatus: string | null;
+  health: IVXDeploymentEndpointEvidence;
+  version: IVXDeploymentEndpointEvidence;
+}> {
+  const parity = await verifyLiveCommitMatch({ requestedCommit: commitSha, deploymentId });
+  const baseUrl = (process.env.PRODUCTION_BASE_URL
+    ?? process.env.EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL
+    ?? process.env.EXPO_PUBLIC_IVX_API_BASE_URL
+    ?? process.env.EXPO_PUBLIC_API_BASE_URL
+    ?? 'https://api.ivxholding.com').replace(/\/+$/, '');
+  const [health, version] = await Promise.all([
+    readDeploymentEndpoint(`${baseUrl}/health`),
+    readDeploymentEndpoint(`${baseUrl}/version`),
+  ]);
+  return {
+    deployStatus: parity.deployStatus,
+    health,
+    version,
+  };
+}
+
 // ── PRODUCTION ROLLBACK (Phase 16) ────────────────────────────────────────────
 //
 // When a deploy verifies-fail (health check returns a different commit, or the
@@ -1479,6 +1532,8 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
       productionVerified: false,
       liveCommit: null,
       healthOk: false,
+      healthResponse: null,
+      versionResponse: null,
       iterationCount: 0,
       durationMs: Date.now() - startedAt,
       finalStatus: 'FAILED',
@@ -2244,6 +2299,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   let productionVerified = false;
   let liveCommit: string | null = null;
   let healthOk = false;
+  let healthResponse: IVXDeploymentEndpointEvidence | null = null;
+  let versionResponse: IVXDeploymentEndpointEvidence | null = null;
   let finalStatus: 'COMPLETED' | 'BLOCKED' | 'FAILED' | 'CANCELED' = 'BLOCKED';
   let error: string | null = null;
 
@@ -2256,8 +2313,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // does not restart the service and orphan the worker mid-stage. Deploy
         // jobs still commit to main (the self-deploy handoff persists resumable
         // state before triggering Render, so the restart is expected there).
+        const approvedProductionBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
         const branchName = input.executionMode === 'deploy'
-          ? ((await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH)
+          ? approvedProductionBranch
           : AUTONOMOUS_CODER_BRANCH;
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
@@ -2265,6 +2323,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         commitSha = commitResult.commitSha;
         commitUrl = commitResult.commitUrl;
         branch = commitResult.branch;
+        if (input.executionMode === 'deploy' && branch !== approvedProductionBranch) {
+          throw new Error(`Production deployment commit was rejected: expected approved branch ${approvedProductionBranch}, received ${branch}.`);
+        }
         // RESILIENCE: persist the commit SHA to the job record IMMEDIATELY, before
         // any further work (proof construction, deploy, verify). If the process
         // crashes between this point and the proof return, the recovery sweep can
@@ -2300,16 +2361,27 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           onPhase?.('deploying', `Deploy triggered: ${deployId ?? deployStatus}`);
 
           // ── PRODUCTION VERIFY ────────────────────────────────────────────
-          onPhase?.('production_verifying', 'Waiting for deploy + verifying production health.');
-          // Bounded wait for the deploy to propagate (simplified: poll health)
-          const sleep = input.sleepFn ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-          await sleep(20_000);
-          const health = input.healthChecker
-            ? await input.healthChecker()
-            : await verifyProductionHealth();
-          healthOk = health.ok;
-          liveCommit = health.commit;
-          productionVerified = healthOk && liveCommit === commitSha;
+          onPhase?.('production_verifying', 'Waiting for Render live status and verifying production /health + /version.');
+          if (!deployId) throw new Error('Render deploy trigger returned no deployment ID.');
+          const verification = input.productionVerifier
+            ? await input.productionVerifier(commitSha, deployId)
+            : input.healthChecker
+              ? await input.healthChecker().then((health) => ({
+                  deployStatus,
+                  health: { endpoint: 'injected://health', httpStatus: health.ok ? 200 : 503, commitSha: health.commit, ok: health.ok },
+                  version: { endpoint: 'injected://version', httpStatus: health.ok ? 200 : 503, commitSha: health.commit, ok: health.ok },
+                }))
+              : await verifyProductionDeployment(commitSha, deployId);
+          deployStatus = verification.deployStatus;
+          healthResponse = verification.health;
+          versionResponse = verification.version;
+          healthOk = healthResponse.ok;
+          liveCommit = versionResponse.commitSha;
+          productionVerified = deployStatus === 'live'
+            && healthResponse.ok
+            && versionResponse.ok
+            && healthResponse.commitSha === commitSha
+            && versionResponse.commitSha === commitSha;
           if (productionVerified) {
             finalStatus = 'COMPLETED';
           } else {
@@ -2318,7 +2390,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
             // commit, or health is down. Attempt an automatic rollback: revert
             // commit + redeploy the prior SHA. Bounded to ONE attempt; any
             // failure is recorded in rollbackError (never silently swallowed).
-            onPhase?.('production_verifying', `Deploy verify-fail (healthOk=${healthOk}, liveCommit=${liveCommit}, expected=${commitSha}); attempting rollback.`);
+            onPhase?.('production_verifying', `Deploy verify-fail (deployStatus=${deployStatus}, healthCommit=${healthResponse.commitSha}, versionCommit=${versionResponse.commitSha}, expected=${commitSha}); attempting rollback.`);
             try {
               const rb = input.rollbackFn
                 ? await input.rollbackFn(commitSha, (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH)
@@ -2327,8 +2399,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
               rollbackCommitSha = rb.revertCommitSha;
               rollbackError = rb.error;
               if (rb.reverted) {
-                finalStatus = 'COMPLETED';
-                error = `Deploy verify-fail triggered automatic rollback. Revert commit: ${rb.revertCommitSha}. Production restored to prior SHA.`;
+                finalStatus = 'FAILED';
+                error = `Deploy verification failed; rollback was triggered with revert commit ${rb.revertCommitSha}. This task is FAILED because the requested commit was not verified in production.`;
+                onPhase?.('failed', error);
               } else {
                 finalStatus = 'FAILED';
                 error = `Deploy verify-fail AND rollback failed: healthOk=${healthOk}, liveCommit=${liveCommit}, expected=${commitSha}. Rollback error: ${rb.error}`;
@@ -2399,6 +2472,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     productionVerified,
     liveCommit,
     healthOk,
+    healthResponse,
+    versionResponse,
     iterationCount,
     durationMs: Date.now() - startedAt,
     finalStatus,

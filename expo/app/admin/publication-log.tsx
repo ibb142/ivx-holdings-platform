@@ -1,15 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
   Alert,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -25,18 +22,17 @@ import {
   ChevronUp,
   Shield,
   Landmark,
-  Filter,
-} from 'lucide-react-native';
+  Filter} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { getPublicationLog, restoreFromPublicationLog } from '@/lib/jv-storage';
 import type { PublicationLogEntry } from '@/lib/jv-storage';
 import { invalidateAllJVQueries } from '@/lib/jv-realtime';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const ACTION_CONFIG: Record<string, { label: string; color: string; icon: 'publish' | 'unpublish' | 'restore' }> = {
   PUBLISH: { label: 'Published', color: '#00C48C', icon: 'publish' },
   UNPUBLISH: { label: 'Unpublished', color: '#FF6B6B', icon: 'unpublish' },
-  AUTO_RESTORE: { label: 'Auto-Restored', color: '#4A90D9', icon: 'restore' },
-};
+  AUTO_RESTORE: { label: 'Auto-Restored', color: '#4A90D9', icon: 'restore' }};
 
 function formatTimestamp(ts: string): string {
   try {
@@ -75,8 +71,7 @@ export default function PublicationLogScreen() {
   const logQuery = useQuery({
     queryKey: ['publication-log'],
     queryFn: () => getPublicationLog({ limit: 200 }),
-    staleTime: 5000,
-  });
+    staleTime: 5000});
 
   const restoreMutation = useMutation({
     mutationFn: (entryId: string) => restoreFromPublicationLog(entryId, { adminOverride: true }),
@@ -91,8 +86,7 @@ export default function PublicationLogScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Error', err.message);
-    },
-  });
+    }});
 
   const entries = useMemo(() => {
     const raw = logQuery.data || [];
@@ -106,8 +100,7 @@ export default function PublicationLogScreen() {
       total: all.length,
       publishes: all.filter(e => e.action === 'PUBLISH').length,
       unpublishes: all.filter(e => e.action === 'UNPUBLISH').length,
-      restores: all.filter(e => e.restored).length,
-    };
+      restores: all.filter(e => e.restored).length};
   }, [logQuery.data]);
 
   const handleRestore = useCallback((entry: PublicationLogEntry) => {
@@ -119,8 +112,7 @@ export default function PublicationLogScreen() {
         {
           text: 'Restore Now',
           style: 'default',
-          onPress: () => restoreMutation.mutate(entry.id),
-        },
+          onPress: () => restoreMutation.mutate(entry.id)},
       ]
     );
   }, [restoreMutation]);
@@ -201,7 +193,7 @@ export default function PublicationLogScreen() {
         >
           {logQuery.isLoading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.loadingText}>Loading publication history...</Text>
             </View>
           ) : entries.length === 0 ? (
@@ -313,7 +305,7 @@ export default function PublicationLogScreen() {
                           testID={`restore-${entry.id}`}
                         >
                           {restoreMutation.isPending ? (
-                            <ActivityIndicator size="small" color="#000" />
+                            <ShimmerIndicator size="small" color="#000" />
                           ) : (
                             <RotateCcw size={16} color="#000" />
                           )}
@@ -347,55 +339,46 @@ export default function PublicationLogScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   headerTitle: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   headerRight: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
-  },
+    gap: 8},
   statCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -403,162 +386,132 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statValue: {
     fontSize: 20,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary + '18',
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   filterChipText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   scrollView: {
     flex: 1,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   loadingWrap: {
     alignItems: 'center',
-    paddingVertical: 60,
-  },
+    paddingVertical: 60},
   loadingText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    marginTop: 12,
-  },
+    marginTop: 12},
   emptyWrap: {
     alignItems: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginTop: 16,
-  },
+    marginTop: 16},
   emptySubtitle: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center',
     marginTop: 8,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   logCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   logCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-  },
+    padding: 14},
   logCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   actionBadge: {
     width: 38,
     height: 38,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   logCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   logCardTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   logCardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   actionPill: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   actionPillText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   timeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   timeText: {
     fontSize: 10,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   logCardDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   photoCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   photoCountText: {
     fontSize: 10,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   projectNameText: {
     fontSize: 10,
     color: Colors.textTertiary,
-    maxWidth: 150,
-  },
+    maxWidth: 150},
   logCardRight: {
     alignItems: 'flex-end',
-    gap: 4,
-  },
+    gap: 4},
   restoredBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -566,60 +519,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90D915',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   restoredText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    color: '#4A90D9',
-  },
+    color: '#4A90D9'},
   expandedSection: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   expandedRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   expandedLabel: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   expandedValue: {
     fontSize: 12,
     color: Colors.text,
     fontWeight: '500' as const,
     maxWidth: '60%' as any,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   photosSection: {
-    marginTop: 12,
-  },
+    marginTop: 12},
   photosSectionTitle: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   photosScroll: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   photoThumb: {
     width: 72,
     height: 72,
     borderRadius: 10,
     marginRight: 8,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   expandedActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 8,
-  },
+    marginTop: 8},
   restoreBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -628,16 +570,13 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.primary,
     borderRadius: 10,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   restoreBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   restoreBtnText: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: '#000',
-  },
+    color: '#000'},
   viewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -647,11 +586,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '40',
     borderRadius: 10,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   viewBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
-});
+    color: Colors.primary}});

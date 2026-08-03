@@ -1,14 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -27,9 +24,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Wrench,
-} from 'lucide-react-native';
+  Wrench} from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getBackupStats,
   getLastHealthReport,
@@ -37,8 +34,7 @@ import {
   createFullImageBackup,
   importExistingImages,
   getBrokenImages,
-  forceRecoverImage,
-} from '@/lib/image-backup';
+  forceRecoverImage} from '@/lib/image-backup';
 
 export default function ImageBackupScreen() {
   const router = useRouter();
@@ -48,20 +44,17 @@ export default function ImageBackupScreen() {
   const statsQuery = useQuery({
     queryKey: ['image-backup-stats'],
     queryFn: getBackupStats,
-    staleTime: 30_000,
-  });
+    staleTime: 30_000});
 
   const reportQuery = useQuery({
     queryKey: ['image-health-report'],
     queryFn: getLastHealthReport,
-    staleTime: 30_000,
-  });
+    staleTime: 30_000});
 
   const brokenQuery = useQuery({
     queryKey: ['broken-images'],
     queryFn: getBrokenImages,
-    staleTime: 30_000,
-  });
+    staleTime: 30_000});
 
   const scanMutation = useMutation({
     mutationFn: () => runImageHealthScan({ forceFullScan: true, maxImages: 100 }),
@@ -76,8 +69,7 @@ export default function ImageBackupScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Scan Failed', err.message);
-    },
-  });
+    }});
 
   const backupMutation = useMutation({
     mutationFn: createFullImageBackup,
@@ -87,16 +79,14 @@ export default function ImageBackupScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Backup Failed', err.message);
-    },
-  });
+    }});
 
   const importMutation = useMutation({
     mutationFn: importExistingImages,
     onSuccess: (count) => {
       void queryClient.invalidateQueries({ queryKey: ['image-backup-stats'] });
       Alert.alert('Import Complete', `${count} images imported into backup registry`);
-    },
-  });
+    }});
 
   const recoverMutation = useMutation({
     mutationFn: (imageId: string) => forceRecoverImage(imageId),
@@ -108,8 +98,7 @@ export default function ImageBackupScreen() {
       } else {
         Alert.alert('Recovery Failed', 'All recovery sources exhausted for this image');
       }
-    },
-  });
+    }});
 
   const onRefresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['image-backup-stats'] });
@@ -197,7 +186,7 @@ export default function ImageBackupScreen() {
             testID="scan-btn"
           >
             {scanMutation.isPending ? (
-              <ActivityIndicator size="small" color="#000" />
+              <ShimmerIndicator size="small" color="#000" />
             ) : (
               <Scan size={18} color="#000" />
             )}
@@ -213,7 +202,7 @@ export default function ImageBackupScreen() {
             testID="backup-btn"
           >
             {backupMutation.isPending ? (
-              <ActivityIndicator size="small" color="#FFD700" />
+              <ShimmerIndicator size="small" color="#FFD700" />
             ) : (
               <Cloud size={18} color="#FFD700" />
             )}
@@ -229,7 +218,7 @@ export default function ImageBackupScreen() {
             testID="import-btn"
           >
             {importMutation.isPending ? (
-              <ActivityIndicator size="small" color="#4ECDC4" />
+              <ShimmerIndicator size="small" color="#4ECDC4" />
             ) : (
               <Download size={18} color="#4ECDC4" />
             )}
@@ -382,7 +371,7 @@ export default function ImageBackupScreen() {
                     disabled={recoverMutation.isPending}
                   >
                     {recoverMutation.isPending ? (
-                      <ActivityIndicator size="small" color="#FFD700" />
+                      <ShimmerIndicator size="small" color="#FFD700" />
                     ) : (
                       <Wrench size={14} color="#FFD700" />
                     )}
@@ -469,48 +458,39 @@ function ProtectionStep({ num, title, desc }: { num: number; title: string; desc
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
-  },
+    backgroundColor: '#0A0A0A'},
   safeTop: {
-    backgroundColor: '#0D0D0D',
-  },
+    backgroundColor: '#0D0D0D'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,215,0,0.1)',
-  },
+    borderBottomColor: 'rgba(255,215,0,0.1)'},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     color: '#FFF',
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerRight: {
-    width: 36,
-  },
+    width: 36},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   statusBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -520,27 +500,22 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    gap: 14,
-  },
+    gap: 14},
   statusTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   statusTitle: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   statusSub: {
     color: '#888',
     fontSize: 13,
-    marginTop: 2,
-  },
+    marginTop: 2},
   actionRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 10,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -548,26 +523,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 12,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   actionPrimary: {
-    backgroundColor: '#FFD700',
-  },
+    backgroundColor: '#FFD700'},
   actionSecondary: {
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
+    borderColor: 'rgba(255,255,255,0.1)'},
   actionBtnText: {
     color: '#FFF',
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   actionBtnTextDark: {
     color: '#000',
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -576,177 +546,144 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: 'rgba(255,255,255,0.02)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.06)',
-  },
+    borderTopColor: 'rgba(255,255,255,0.06)'},
   sectionTitle: {
     color: '#FFF',
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   sectionBody: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
+    paddingBottom: 16},
   statGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 8,
-  },
+    marginTop: 8},
   statCard: {
     width: '47%' as any,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 10,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   statValue: {
     fontSize: 24,
     fontWeight: '800' as const,
-    fontVariant: ['tabular-nums'],
-  },
+    fontVariant: ['tabular-nums']},
   statLabel: {
     color: '#888',
     fontSize: 11,
     fontWeight: '500' as const,
     marginTop: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   lastScanRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 12,
-  },
+    marginTop: 12},
   lastScanText: {
     color: '#888',
-    fontSize: 12,
-  },
+    fontSize: 12},
   reportSummary: {
     marginTop: 8,
-    gap: 4,
-  },
+    gap: 4},
   reportLabel: {
     color: '#AAA',
-    fontSize: 13,
-  },
+    fontSize: 13},
   reportBarContainer: {
     flexDirection: 'row',
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
     marginTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   reportBar: {
-    height: 8,
-  },
+    height: 8},
   reportLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginTop: 10,
-  },
+    marginTop: 10},
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   legendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   legendText: {
     color: '#AAA',
-    fontSize: 11,
-  },
+    fontSize: 11},
   detailsList: {
     marginTop: 12,
-    gap: 6,
-  },
+    gap: 6},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     padding: 10,
     backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   detailInfo: {
-    flex: 1,
-  },
+    flex: 1},
   detailId: {
     color: '#CCC',
     fontSize: 11,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   detailStatus: {
     fontSize: 10,
     fontWeight: '700' as const,
-    marginTop: 2,
-  },
+    marginTop: 2},
   detailTime: {
     color: '#666',
     fontSize: 10,
-    fontFamily: 'monospace',
-  },
+    fontFamily: 'monospace'},
   emptyText: {
     color: '#666',
     fontSize: 13,
     textAlign: 'center',
-    paddingVertical: 20,
-  },
+    paddingVertical: 20},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 24,
-    gap: 10,
-  },
+    gap: 10},
   emptyStateText: {
     color: '#888',
-    fontSize: 14,
-  },
+    fontSize: 14},
   brokenCard: {
     backgroundColor: 'rgba(255,71,87,0.06)',
     borderRadius: 10,
     padding: 14,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,71,87,0.15)',
-  },
+    borderColor: 'rgba(255,71,87,0.15)'},
   brokenCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   brokenId: {
     color: '#FFF',
     fontSize: 12,
     fontFamily: 'monospace',
-    flex: 1,
-  },
+    flex: 1},
   brokenUrl: {
     color: '#888',
     fontSize: 10,
     fontFamily: 'monospace',
-    marginTop: 6,
-  },
+    marginTop: 6},
   brokenMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
-  },
+    marginTop: 8},
   brokenMetaText: {
     color: '#666',
-    fontSize: 11,
-  },
+    fontSize: 11},
   brokenSources: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 8,
-  },
+    marginTop: 8},
   sourceTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -754,12 +691,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   sourceTagText: {
     color: '#AAA',
-    fontSize: 10,
-  },
+    fontSize: 10},
   recoverBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -770,46 +705,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,215,0,0.1)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.2)',
-  },
+    borderColor: 'rgba(255,215,0,0.2)'},
   recoverBtnText: {
     color: '#FFD700',
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   protStep: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
-  },
+    marginTop: 12},
   protStepNum: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: 'rgba(167,139,250,0.15)',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   protStepNumText: {
     color: '#A78BFA',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   protStepContent: {
-    flex: 1,
-  },
+    flex: 1},
   protStepTitle: {
     color: '#FFF',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   protStepDesc: {
     color: '#888',
     fontSize: 12,
     marginTop: 4,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   bottomSpacer: {
-    height: 40,
-  },
-});
+    height: 40}});

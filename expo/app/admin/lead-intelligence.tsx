@@ -1,16 +1,13 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Animated,
-  ActivityIndicator,
   RefreshControl,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
@@ -35,12 +32,12 @@ import {
   Target,
   Briefcase,
   Copy,
-  Check,
-} from 'lucide-react-native';
+  Check} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FilterType = 'all' | 'user' | 'waitlist';
 type SortType = 'date' | 'name' | 'country';
@@ -69,8 +66,7 @@ const INTEREST_LABELS: Record<string, string> = {
   '10k_50k': '$10K – $50K',
   '50k_plus': '$50K+',
   'active_investor': 'Active Investor',
-  'registered': 'Just Registered',
-};
+  'registered': 'Just Registered'};
 
 const INTEREST_COLORS: Record<string, string> = {
   'under_1k': '#7CB342',
@@ -78,8 +74,7 @@ const INTEREST_COLORS: Record<string, string> = {
   '10k_50k': '#F57C00',
   '50k_plus': '#E91E63',
   'active_investor': '#00C48C',
-  'registered': '#9E9E9E',
-};
+  'registered': '#9E9E9E'};
 
 const LEAD_INTELLIGENCE_REFRESH_MS = 1000 * 60;
 
@@ -176,9 +171,7 @@ export default function LeadIntelligence() {
           totalSignups: signups.length,
           totalUsers: signups.filter((s) => s.type === 'user').length,
           totalWaitlist: signups.filter((s) => s.type === 'waitlist').length,
-          byCountry,
-        },
-      };
+          byCountry}};
     },
     staleTime: LEAD_INTELLIGENCE_REFRESH_MS,
     refetchInterval: isScreenFocused ? LEAD_INTELLIGENCE_REFRESH_MS : false,
@@ -186,8 +179,7 @@ export default function LeadIntelligence() {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     retry: 1,
-    retryDelay: 1000,
-  });
+    retryDelay: 1000});
 
   React.useEffect(() => {
     if (signupsQuery.error) {
@@ -446,8 +438,7 @@ export default function LeadIntelligence() {
                         styles.breakdownBarFill,
                         {
                           width: `${Math.round((c.count / (stats.totalSignups || 1)) * 100)}%` as any,
-                          backgroundColor: i === 0 ? '#4A90D9' : i === 1 ? '#0097A7' : '#00C48C',
-                        },
+                          backgroundColor: i === 0 ? '#4A90D9' : i === 1 ? '#0097A7' : '#00C48C'},
                       ]}
                     />
                   </View>
@@ -508,7 +499,7 @@ export default function LeadIntelligence() {
 
         {signupsQuery.isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading leads from database...</Text>
           </View>
         )}
@@ -799,16 +790,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },
   liveTag: {
@@ -818,8 +807,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5393520',
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#E53935' },
   liveTagText: { fontSize: 10, fontWeight: '700' as const, color: '#E53935' },
   viewToggle: {
@@ -828,8 +816,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   content: { padding: 16 },
 
@@ -840,16 +827,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     marginBottom: 14,
-    gap: 14,
-  },
+    gap: 14},
   heroIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   heroContent: { flex: 1 },
   heroLabel: { fontSize: 10, fontWeight: '700' as const, color: 'rgba(255,255,255,0.6)', letterSpacing: 1 },
   heroValue: { fontSize: 36, fontWeight: '900' as const, color: '#fff', marginTop: 2 },
@@ -866,8 +851,7 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
     borderLeftWidth: 3,
-    gap: 4,
-  },
+    gap: 4},
   kpiValue: { fontSize: 16, fontWeight: '800' as const, color: Colors.text },
   kpiLabel: { fontSize: 9, color: Colors.textSecondary, textAlign: 'center' as const },
 
@@ -877,8 +861,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   interestHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   interestTitle: { fontSize: 14, fontWeight: '700' as const, color: Colors.text },
   interestList: { gap: 10 },
@@ -888,8 +871,7 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   interestInfo: { flex: 1 },
   interestTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   interestLabel: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
@@ -903,8 +885,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   breakdownHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   breakdownTitle: { fontSize: 13, fontWeight: '700' as const, color: Colors.text },
   breakdownList: { gap: 8 },
@@ -925,8 +906,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   searchInput: { flex: 1, fontSize: 14, color: Colors.text },
 
   filterRow: { marginBottom: 12 },
@@ -937,8 +917,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: { backgroundColor: '#1B365D', borderColor: '#1B365D' },
   filterChipText: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary },
   filterChipTextActive: { color: '#fff' },
@@ -947,8 +926,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 14,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   sortChipActive: { backgroundColor: '#0097A730' },
   sortChipText: { fontSize: 11, fontWeight: '600' as const, color: Colors.textTertiary },
   sortChipTextActive: { color: '#0097A7' },
@@ -957,8 +935,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   leadsHeaderText: { fontSize: 14, fontWeight: '700' as const, color: Colors.text },
   refreshBtn: { padding: 6 },
 
@@ -975,14 +952,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: '#1B365D',
     paddingVertical: 10,
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   tableHeaderText: { fontSize: 10, fontWeight: '700' as const, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   tableRow: {
     flexDirection: 'row',
@@ -990,8 +965,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   tableRowAlt: { backgroundColor: Colors.background },
   tableCell1: { width: 28 },
   tableCell2: { width: 90, gap: 3 },
@@ -1017,8 +991,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   leadCardExpanded: { borderColor: '#1B365D50' },
   leadCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   avatarCircle: {
@@ -1027,8 +1000,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
+    marginTop: 2},
   avatarText: { fontSize: 15, fontWeight: '800' as const },
   leadInfo: { flex: 1 },
   leadNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
@@ -1036,8 +1008,7 @@ const styles = StyleSheet.create({
   typeBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   typeBadgeText: { fontSize: 9, fontWeight: '700' as const },
   contactPreview: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },
   contactPreviewText: { fontSize: 11, color: Colors.textSecondary },
@@ -1047,8 +1018,7 @@ const styles = StyleSheet.create({
   miniInterestPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   miniInterestText: { fontSize: 9, fontWeight: '700' as const },
   leadMetaTime: { fontSize: 11, color: Colors.textTertiary },
   leadRight: { alignItems: 'center', gap: 8, paddingTop: 4 },
@@ -1066,15 +1036,13 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: Colors.background,
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   contactIconWrap: {
     width: 34,
     height: 34,
     borderRadius: 9,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   contactFullInfo: { flex: 1 },
   contactFullLabel: { fontSize: 10, color: Colors.textTertiary, marginBottom: 1 },
   contactFullVal: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
@@ -1084,8 +1052,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   intentCard: {
     flexDirection: 'row',
@@ -1094,8 +1061,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderRadius: 12,
     padding: 14,
-    borderLeftWidth: 3,
-  },
+    borderLeftWidth: 3},
   intentContent: { flex: 1 },
   intentValue: { fontSize: 15, fontWeight: '700' as const, marginBottom: 2 },
   intentDesc: { fontSize: 11, color: Colors.textSecondary },
@@ -1110,8 +1076,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    alignSelf: 'flex-start' as const,
-  },
+    alignSelf: 'flex-start' as const},
   sourceInlineText: { fontSize: 11, fontWeight: '600' as const, color: Colors.text },
 
   leadActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
@@ -1123,8 +1088,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderRadius: 10,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   actionBtnText: { fontSize: 12, fontWeight: '600' as const },
 
   bottomPad: { height: 40 },
@@ -1134,5 +1098,4 @@ const styles = StyleSheet.create({
   errorTitle: { fontSize: 16, fontWeight: '700' as const, color: '#E53935' },
   errorText: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' as const, lineHeight: 18, paddingHorizontal: 20 },
   retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1B365D', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, marginTop: 4 },
-  retryBtnText: { fontSize: 13, fontWeight: '700' as const, color: '#fff' },
-});
+  retryBtnText: { fontSize: 13, fontWeight: '700' as const, color: '#fff' }});
