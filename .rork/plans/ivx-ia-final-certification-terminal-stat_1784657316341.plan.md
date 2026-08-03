@@ -1,7 +1,7 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-03T11:55:00.000Z
+updatedAt: 2026-08-03T12:10:00.000Z
 ---
 # 2026-08-02 P0 Stabilization Freeze — Active
 
@@ -19,6 +19,10 @@ updatedAt: 2026-08-03T11:55:00.000Z
 5. **P1 — Production recovery regression coverage** (`TEST-001`, QUEUED): Add focused failure-mode tests for endpoint receipts, Render state, SHA mismatch, and interrupted verification recovery on an isolated repair branch.
 
 **Current active task:** `CI-001`, ACTIVE workflow repair. Current production is healthy on `012bb088…`, but the 55 local commits are not proven deployed and production-quality certification remains blocked until canonical GitHub/Render evidence and CI gates are green.
+
+## 2026-08-03 Render GitHub Token QA
+
+- [x] Audited the post-sync GitHub token path without exposing credentials. This workspace has no `RENDER_API_KEY`, so Render environment variables could not be inspected or exercised. The workspace also has no `GITHUB_TOKEN`; the previously configured GitHub credential returned HTTP 401. Render-side GitHub token validity is therefore **not verified** and remains a certification blocker.
 
 ## 2026-08-03 Independent Production Recheck
 
