@@ -9,8 +9,7 @@ import {
   Platform,
   Animated,
   Linking,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -28,8 +27,7 @@ import {
   Zap,
   MessageCircle,
   Copy,
-  Clipboard,
-} from 'lucide-react-native';
+  Clipboard} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
@@ -75,8 +73,7 @@ const PHASES: Phase[] = [
       { id: 'b6', task: 'Property & Investment APIs', description: 'CRUD for properties, share purchase/sale endpoints, order book, transaction history endpoints.', days: 2, hours: 16, priority: 'critical', type: 'backend' },
       { id: 'b7', task: 'Wallet & Withdrawal System', description: 'Wallet balance, deposit/withdrawal flows, fee engine, wire transfer handling, reconciliation.', days: 2, hours: 16, priority: 'high', type: 'backend' },
       { id: 'b8', task: 'Push Notifications (Firebase)', description: 'FCM/APNS setup, notification templates, scheduled sends, user preferences, in-app delivery.', days: 1, hours: 8, priority: 'high', type: 'integration' },
-    ],
-  },
+    ]},
   {
     id: 'phase2',
     phase: 2,
@@ -94,8 +91,7 @@ const PHASES: Phase[] = [
       { id: 'f6', task: 'Wallet Screen (Live)', description: 'Real balance, deposit/withdraw flows, bank link, transaction history from live API.', days: 2, hours: 16, priority: 'high', type: 'frontend' },
       { id: 'f7', task: 'User Profile & Settings', description: 'Save profile changes, password update, notification prefs, 2FA enable/disable to backend.', days: 1, hours: 8, priority: 'high', type: 'frontend' },
       { id: 'f8', task: 'Notifications Center (Live)', description: 'Real push notifications, in-app notification list, read/unread state, deep linking.', days: 1, hours: 8, priority: 'high', type: 'frontend' },
-    ],
-  },
+    ]},
   {
     id: 'phase3',
     phase: 3,
@@ -112,8 +108,7 @@ const PHASES: Phase[] = [
       { id: 'a5', task: 'Auto-Reinvest & DRIP Engine', description: 'Scheduled dividend reinvestment, DRIP configuration per user, cron job setup.', days: 1, hours: 8, priority: 'medium', type: 'backend' },
       { id: 'a6', task: 'Tax Documents & Statements', description: 'Generate real PDF statements, 1099 forms, transaction exports from live data.', days: 1, hours: 8, priority: 'medium', type: 'backend' },
       { id: 'a7', task: 'Dividend Distribution Engine', description: 'Monthly dividend calculation per share, batch distribution, history tracking per investor.', days: 1, hours: 8, priority: 'high', type: 'backend' },
-    ],
-  },
+    ]},
   {
     id: 'phase4',
     phase: 4,
@@ -127,8 +122,7 @@ const PHASES: Phase[] = [
       { id: 's2', task: 'AML / Sanctions Screening', description: 'OFAC sanctions list check, PEP screening, transaction monitoring, suspicious activity reports.', days: 2, hours: 16, priority: 'critical', type: 'integration' },
       { id: 's3', task: 'GDPR & Data Privacy', description: 'Data deletion requests, export data, consent management, cookie policy, privacy controls.', days: 1, hours: 8, priority: 'high', type: 'backend' },
       { id: 's4', task: 'Security Audit & Pen Testing', description: 'API security audit, auth flow review, SQL injection checks, rate limiting, DDoS protection.', days: 2, hours: 16, priority: 'critical', type: 'testing' },
-    ],
-  },
+    ]},
   {
     id: 'phase5',
     phase: 5,
@@ -144,8 +138,7 @@ const PHASES: Phase[] = [
       { id: 't4', task: 'iOS App Store Submission', description: 'Build config, certificates, screenshots, App Store description, review guidelines compliance.', days: 1, hours: 8, priority: 'critical', type: 'testing' },
       { id: 't5', task: 'Google Play Submission', description: 'Release build, Play Store listing, screenshots, content rating, policy compliance review.', days: 1, hours: 8, priority: 'critical', type: 'testing' },
       { id: 't6', task: 'Server Deployment (Production)', description: 'Production server setup, SSL, CDN, monitoring (Sentry), CI/CD pipeline, backup strategy.', days: 1, hours: 8, priority: 'critical', type: 'backend' },
-    ],
-  },
+    ]},
 ];
 
 const TOTAL_DAYS = PHASES.reduce((s, p) => s + p.totalDays, 0);
@@ -157,15 +150,13 @@ const TYPE_COLORS: Record<string, string> = {
   frontend: '#F59E0B',
   integration: '#EC4899',
   testing: '#00C48C',
-  design: '#8B5CF6',
-};
+  design: '#8B5CF6'};
 
 const PRIORITY_COLORS: Record<string, string> = {
   critical: '#FF4D4D',
   high: '#F97316',
   medium: '#EAB308',
-  optional: '#6B7280',
-};
+  optional: '#6B7280'};
 
 function generateReport(): string {
   const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -229,8 +220,7 @@ export default function DeveloperBreakdownScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 350,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [fadeAnim]);
 
   const togglePhase = useCallback((id: string) => {
@@ -257,8 +247,7 @@ export default function DeveloperBreakdownScreen() {
     try {
       await Share.share({
         title: 'IVXHOLDINGS Developer Task Breakdown',
-        message: report,
-      });
+        message: report});
     } catch (err) {
       console.log('Share error:', err);
     }
@@ -546,8 +535,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: { padding: 8 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: Colors.text, fontSize: 18, fontWeight: '800' as const },
@@ -564,8 +552,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   heroStat: { alignItems: 'center', flex: 1 },
   heroNum: { color: Colors.primary, fontSize: 22, fontWeight: '800' as const },
   heroLabel: { color: Colors.textTertiary, fontSize: 11, marginTop: 2 },
@@ -575,13 +562,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginHorizontal: 16,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   clipboardRow: {
     marginHorizontal: 16,
     marginBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   whatsappBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -592,8 +577,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#25D36640',
-  },
+    borderColor: '#25D36640'},
   whatsappText: { color: '#25D366', fontSize: 13, fontWeight: '700' as const },
   pdfBtn: {
     flex: 1,
@@ -605,8 +589,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   pdfText: { color: Colors.primary, fontSize: 13, fontWeight: '700' as const },
   pasteBtn: {
     flexDirection: 'row',
@@ -617,8 +600,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   pasteText: { color: Colors.text, fontSize: 13, fontWeight: '700' as const },
   clipboardHint: { color: Colors.textTertiary, fontSize: 11, lineHeight: 16 },
   clipboardPreviewCard: {
@@ -629,8 +611,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   clipboardPreviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   clipboardPreviewTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' as const },
   clipboardPreviewMeta: { color: Colors.textTertiary, fontSize: 11 },
@@ -641,23 +622,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginHorizontal: 16,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   controlBtn: {
     backgroundColor: Colors.surfaceLight,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   controlText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' as const },
   timelineHint: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginLeft: 'auto',
-  },
+    marginLeft: 'auto'},
   timelineHintText: { color: Colors.textTertiary, fontSize: 11 },
 
   scroll: { flex: 1 },
@@ -669,21 +647,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   phaseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    padding: 14,
-  },
+    padding: 14},
   phaseIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   phaseInfo: { flex: 1 },
   phaseTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
   phaseBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
@@ -695,15 +670,13 @@ const styles = StyleSheet.create({
   taskList: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   taskItem: {
     flexDirection: 'row',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder + '60',
-  },
+    borderBottomColor: Colors.surfaceBorder + '60'},
   taskLeft: { marginRight: 12, alignItems: 'center', paddingTop: 2 },
   taskIndex: {
     width: 28,
@@ -711,8 +684,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   taskIndexText: { fontSize: 12, fontWeight: '700' as const },
   taskBody: { flex: 1 },
   taskTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
@@ -726,8 +698,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   taskMetaText: { color: Colors.textTertiary, fontSize: 11 },
   taskPriorityChip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   taskPriorityText: { fontSize: 10, fontWeight: '700' as const },
@@ -740,8 +711,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   summaryTitle: { color: Colors.text, fontSize: 13, fontWeight: '800' as const, letterSpacing: 1, marginBottom: 14 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   summaryDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
@@ -759,8 +729,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   legendTitle: { color: Colors.text, fontSize: 13, fontWeight: '800' as const, letterSpacing: 1, marginBottom: 12 },
   legendGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6, width: '44%' },
@@ -777,11 +746,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: '#25D36635',
-  },
+    borderColor: '#25D36635'},
   footerShareText: { color: '#25D366', fontSize: 15, fontWeight: '700' as const },
 
   footer: { alignItems: 'center', paddingVertical: 16 },
   footerText: { color: Colors.textTertiary, fontSize: 12 },
-  footerDate: { color: Colors.textTertiary, fontSize: 11, marginTop: 3 },
-});
+  footerDate: { color: Colors.textTertiary, fontSize: 11, marginTop: 3 }});

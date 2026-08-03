@@ -10,8 +10,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -20,9 +19,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Switch,
-} from 'react-native';
+  Switch} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
@@ -46,8 +43,7 @@ import {
   ChevronRight,
   FileText,
   Calendar,
-  AlertCircle,
-} from 'lucide-react-native';
+  AlertCircle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { COUNTRIES, Country } from '@/constants/countries';
 import {
@@ -82,9 +78,9 @@ import {
   loadDraft,
   clearDraft,
   draftToFormValues,
-  EnterpriseRegistrationDraft,
-} from '@/lib/enterprise-registration-shared';
+  EnterpriseRegistrationDraft} from '@/lib/enterprise-registration-shared';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // ---------------------------------------------------------------------------
 // SecureStore-backed draft adapter (passwords never persisted)
@@ -122,8 +118,7 @@ const secureDraftAdapter: DraftStorageAdapter = {
     } catch {
       await AsyncStorage.removeItem(key);
     }
-  },
-};
+  }};
 
 // ---------------------------------------------------------------------------
 // Progress indicator
@@ -213,8 +208,7 @@ function FormField({
   keyboardType = 'default',
   autoCapitalize = 'sentences',
   accessibilityLabel,
-  multiline,
-}: FieldProps) {
+  multiline}: FieldProps) {
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -442,8 +436,7 @@ export default function EnterpriseRegisterScreen() {
           formValues: { ...prev.formValues, ...restoredValues },
           currentStep: draft.currentStep === 'confirmation' ? 'account' : draft.currentStep,
           idempotencyKey: draft.idempotencyKey || prev.idempotencyKey,
-          draftUpdatedAt: draft.draftUpdatedAt,
-        }));
+          draftUpdatedAt: draft.draftUpdatedAt}));
       }
       setDraftLoaded(true);
     })();
@@ -465,8 +458,7 @@ export default function EnterpriseRegisterScreen() {
       formValues: { ...prev.formValues, [field]: value },
       validationErrors: { ...prev.validationErrors, [field]: undefined },
       serverError: '',
-      serverErrorCode: '',
-    }));
+      serverErrorCode: ''}));
   }, []);
 
   const currentStepIndex = VISIBLE_STEPS.indexOf(state.currentStep as typeof VISIBLE_STEPS[number]);
@@ -511,8 +503,7 @@ export default function EnterpriseRegisterScreen() {
     try {
       const result = await executeFullEnterpriseRegistration({
         formValues: state.formValues,
-        idempotencyKey: state.idempotencyKey,
-      });
+        idempotencyKey: state.idempotencyKey});
 
       if (result.ok && result.enterpriseId) {
         // Clear draft on success
@@ -523,16 +514,14 @@ export default function EnterpriseRegisterScreen() {
           currentStep: 'confirmation',
           enterpriseId: result.enterpriseId || '',
           authUserId: result.authUserId || '',
-          traceId: result.traceId || '',
-        }));
+          traceId: result.traceId || ''}));
       } else {
         // Preserve user-entered values on failure
         setState(prev => ({
           ...prev,
           submissionStatus: 'error',
           serverError: result.error || 'Registration failed. Please try again.',
-          serverErrorCode: result.errorCode || 'UNKNOWN_ERROR',
-        }));
+          serverErrorCode: result.errorCode || 'UNKNOWN_ERROR'}));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Network error. Please check your connection and try again.';
@@ -540,8 +529,7 @@ export default function EnterpriseRegisterScreen() {
         ...prev,
         submissionStatus: 'error',
         serverError: getUserFriendlyError('', message),
-        serverErrorCode: 'NETWORK_ERROR',
-      }));
+        serverErrorCode: 'NETWORK_ERROR'}));
     } finally {
       isSubmittingRef.current = false;
     }
@@ -1140,7 +1128,7 @@ export default function EnterpriseRegisterScreen() {
                   accessibilityRole="button"
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color={Colors.primaryBlack} />
+                    <ShimmerIndicator size="small" color={Colors.primaryBlack} />
                   ) : (
                     <Text style={styles.submitBtnText}>Submit Registration</Text>
                   )}
@@ -1169,8 +1157,7 @@ export default function EnterpriseRegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1178,33 +1165,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backButton: {
     padding: 8,
     minHeight: 44,
     minWidth: 44,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSpacer: {
-    width: 40,
-  },
+    width: 40},
   // Progress
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   progressStep: {
     alignItems: 'center',
-    width: 70,
-  },
+    width: 70},
   progressCircle: {
     width: 32,
     height: 32,
@@ -1213,82 +1194,63 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   progressCircleComplete: {
     backgroundColor: Colors.officialGold,
-    borderColor: Colors.officialGold,
-  },
+    borderColor: Colors.officialGold},
   progressCircleCurrent: {
-    borderColor: Colors.officialGold,
-  },
+    borderColor: Colors.officialGold},
   progressNumber: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   progressNumberCurrent: {
-    color: Colors.officialGold,
-  },
+    color: Colors.officialGold},
   progressNumberPending: {
-    color: Colors.mutedGray,
-  },
+    color: Colors.mutedGray},
   progressLabel: {
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   progressLabelCurrent: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   progressLabelPending: {
-    color: Colors.mutedGray,
-  },
+    color: Colors.mutedGray},
   progressLine: {
     flex: 1,
     height: 2,
     backgroundColor: Colors.surfaceBorder,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   progressLineComplete: {
-    backgroundColor: Colors.officialGold,
-  },
+    backgroundColor: Colors.officialGold},
   // ScrollView
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    paddingBottom: 120,
-  },
+    paddingBottom: 120},
   // Step
   stepTitle: {
     fontSize: 24,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   stepSubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   // Fields
   fieldContainer: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   fieldRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   fieldHalf: {
-    flex: 1,
-  },
+    flex: 1},
   fieldLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1297,60 +1259,47 @@ const styles = StyleSheet.create({
     borderColor: Colors.inputBorder,
     borderRadius: 10,
     paddingHorizontal: 12,
-    minHeight: 50,
-  },
+    minHeight: 50},
   inputWrapperError: {
-    borderColor: Colors.error,
-  },
+    borderColor: Colors.error},
   inputIcon: {
-    marginRight: 10,
-  },
+    marginRight: 10},
   textInput: {
     flex: 1,
     fontSize: 16,
     color: Colors.text,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   textInputMultiline: {
     minHeight: 80,
-    textAlignVertical: 'top',
-  },
+    textAlignVertical: 'top'},
   placeholderText: {
-    color: Colors.inputPlaceholder,
-  },
+    color: Colors.inputPlaceholder},
   passwordToggle: {
-    padding: 8,
-  },
+    padding: 8},
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 6,
-  },
+    marginTop: 6},
   errorText: {
     fontSize: 13,
     color: Colors.error,
-    flex: 1,
-  },
+    flex: 1},
   // Consent
   consentContainer: {
     marginTop: 16,
-    gap: 12,
-  },
+    gap: 12},
   consentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   consentText: {
     fontSize: 14,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   consentLink: {
     color: Colors.officialGold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   // Country picker
   countryDropdown: {
     backgroundColor: Colors.surfaceElevated,
@@ -1359,48 +1308,39 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 4,
     maxHeight: 250,
-    zIndex: 100,
-  },
+    zIndex: 100},
   countrySearch: {
     padding: 12,
     fontSize: 14,
     color: Colors.text,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   countryList: {
-    maxHeight: 200,
-  },
+    maxHeight: 200},
   countryItem: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   countryItemText: {
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   // Role
   roleGrid: {
-    gap: 12,
-  },
+    gap: 12},
   roleCard: {
     backgroundColor: Colors.surface,
     borderWidth: 1.5,
     borderColor: Colors.surfaceBorder,
     borderRadius: 12,
-    padding: 16,
-  },
+    padding: 16},
   roleCardSelected: {
     borderColor: Colors.officialGold,
-    backgroundColor: 'rgba(230,194,0,0.08)',
-  },
+    backgroundColor: 'rgba(230,194,0,0.08)'},
   roleCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   roleCardRadio: {
     width: 22,
     height: 22,
@@ -1408,24 +1348,19 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   roleCardRadioSelected: {
     borderColor: Colors.officialGold,
-    backgroundColor: Colors.officialGold,
-  },
+    backgroundColor: Colors.officialGold},
   roleCardLabel: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   roleCardLabelSelected: {
-    color: Colors.officialGold,
-  },
+    color: Colors.officialGold},
   roleCardDescription: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   roleInfoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1435,13 +1370,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(230,194,0,0.2)',
     borderRadius: 10,
     padding: 14,
-    marginTop: 16,
-  },
+    marginTop: 16},
   roleInfoText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   // Select
   selectDropdown: {
     backgroundColor: Colors.surfaceElevated,
@@ -1450,23 +1383,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 4,
     maxHeight: 200,
-    zIndex: 100,
-  },
+    zIndex: 100},
   selectList: {
-    maxHeight: 200,
-  },
+    maxHeight: 200},
   selectItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   selectItemText: {
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   // Document info
   documentInfoBox: {
     flexDirection: 'row',
@@ -1477,13 +1406,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     borderRadius: 10,
     padding: 14,
-    marginTop: 8,
-  },
+    marginTop: 8},
   documentInfoText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   // Review
   reviewSection: {
     backgroundColor: Colors.surface,
@@ -1491,34 +1418,29 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   reviewSectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.officialGold,
     marginBottom: 12,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   reviewRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   reviewLabel: {
     fontSize: 14,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   reviewValue: {
     fontSize: 14,
     color: Colors.text,
     fontWeight: '600' as const,
     flex: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   // Server error
   serverErrorBox: {
     flexDirection: 'row',
@@ -1529,25 +1451,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,77,77,0.2)',
     borderRadius: 10,
     padding: 14,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   serverErrorText: {
     fontSize: 14,
     color: Colors.error,
-    flex: 1,
-  },
+    flex: 1},
   // Footer
   footer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   footerButtons: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     flex: 1,
     paddingVertical: 14,
@@ -1556,13 +1474,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
     minHeight: 48,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   backBtnText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   nextBtn: {
     flex: 2,
     flexDirection: 'row',
@@ -1572,13 +1488,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
     backgroundColor: Colors.officialGold,
-    minHeight: 48,
-  },
+    minHeight: 48},
   nextBtnText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.primaryBlack,
-  },
+    color: Colors.primaryBlack},
   submitBtn: {
     flex: 2,
     flexDirection: 'row',
@@ -1587,37 +1501,30 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
     backgroundColor: Colors.officialGold,
-    minHeight: 48,
-  },
+    minHeight: 48},
   submitBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   submitBtnText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.primaryBlack,
-  },
+    color: Colors.primaryBlack},
   // Confirmation
   confirmationContainer: {
     alignItems: 'center',
-    paddingTop: 20,
-  },
+    paddingTop: 20},
   confirmationIconWrapper: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   confirmationTitle: {
     fontSize: 26,
     fontWeight: '700' as const,
     color: Colors.text,
     textAlign: 'center' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   confirmationSubtitle: {
     fontSize: 15,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   confirmationCard: {
     width: '100%' as const,
     backgroundColor: Colors.surface,
@@ -1625,44 +1532,37 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     borderRadius: 14,
     padding: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   confirmationCardTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.officialGold,
     marginBottom: 16,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   confirmationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   confirmationLabel: {
     fontSize: 13,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   confirmationValue: {
     fontSize: 13,
     color: Colors.text,
     fontWeight: '600' as const,
     flex: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   confirmationMono: {
     fontSize: 11,
     color: Colors.officialGold,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     flex: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   confirmationDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 12,
-  },
+    marginVertical: 12},
   nextStepsBox: {
     width: '100%' as const,
     backgroundColor: 'rgba(230,194,0,0.06)',
@@ -1670,19 +1570,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(230,194,0,0.2)',
     borderRadius: 10,
     padding: 16,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   nextStepsTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.officialGold,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   nextStepsText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   doneButton: {
     width: '100%' as const,
     paddingVertical: 16,
@@ -1690,11 +1587,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.officialGold,
     alignItems: 'center',
     minHeight: 48,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   doneButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.primaryBlack,
-  },
-});
+    color: Colors.primaryBlack}});

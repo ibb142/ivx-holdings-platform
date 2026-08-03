@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
   RefreshControl,
@@ -11,8 +10,7 @@ import {
   Switch,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   ChevronDown,
@@ -27,11 +25,11 @@ import {
   Snowflake,
   Sun,
   UserCheck,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   captureLead,
   createDealPacket,
@@ -52,15 +50,13 @@ import {
   type LeadRole,
   type LeadTemperature,
   type PowerToolsDashboard,
-  type PreparedDraft,
-} from '@/src/modules/ivx-developer/powerToolsService';
+  type PreparedDraft} from '@/src/modules/ivx-developer/powerToolsService';
 
 const TEMP_TONE: Record<LeadTemperature, string> = {
   cold: Colors.info,
   warm: Colors.warning,
   hot: Colors.error,
-  qualified: Colors.success,
-};
+  qualified: Colors.success};
 
 const STAGE_LABEL: Record<LeadPipelineStage, string> = {
   new_lead: 'New lead',
@@ -72,8 +68,7 @@ const STAGE_LABEL: Record<LeadPipelineStage, string> = {
   loi_requested: 'LOI',
   soft_commitment: 'Soft commit',
   closed: 'Closed',
-  lost: 'Lost',
-};
+  lost: 'Lost'};
 
 const ROLES: LeadRole[] = ['buyer', 'investor', 'broker', 'seller', 'lender'];
 
@@ -103,8 +98,7 @@ function LeadCard({
   onAdvance,
   onVerify,
   onFollowUp,
-  onDelete,
-}: {
+  onDelete}: {
   lead: LeadRecord;
   onAdvance: (l: LeadRecord) => void;
   onVerify: (l: LeadRecord) => void;
@@ -225,34 +219,27 @@ function PowerToolsContent() {
 
   const captureMutation = useMutation({
     mutationFn: (input: CaptureLeadInput) => captureLead(input),
-    onSuccess: () => { setCaptureOpen(false); invalidate(); },
-  });
+    onSuccess: () => { setCaptureOpen(false); invalidate(); }});
   const advanceMutation = useMutation({
     mutationFn: (l: LeadRecord) => setLeadStage(l.id, nextStage(l.stage)),
-    onSuccess: invalidate,
-  });
+    onSuccess: invalidate});
   const verifyMutation = useMutation({
     mutationFn: (l: LeadRecord) => recordLeadBehavior(l.id, { contactVerified: true }),
-    onSuccess: invalidate,
-  });
+    onSuccess: invalidate});
   const followUpMutation = useMutation({
     mutationFn: (l: LeadRecord) => setLeadFollowUp(l.id, 3),
-    onSuccess: invalidate,
-  });
+    onSuccess: invalidate});
   const deleteMutation = useMutation({ mutationFn: (l: LeadRecord) => deleteLead(l.id), onSuccess: invalidate });
   const packetCreateMutation = useMutation({
     mutationFn: (name: string) => createDealPacket(name),
-    onSuccess: invalidate,
-  });
+    onSuccess: invalidate});
   const packetItemMutation = useMutation({
     mutationFn: (v: { p: DealPacket; key: string; ready: boolean }) =>
       setPacketItem(v.p.id, v.key, v.ready ? 'ready' : 'pending'),
-    onSuccess: invalidate,
-  });
+    onSuccess: invalidate});
   const draftMutation = useMutation({
     mutationFn: () => prepareOutreachDraft({ type: 'investor_intro', recipientCompany: 'Prospect', relatedDeal: 'Casa Rosario' }),
-    onSuccess: (d) => setDraft(d),
-  });
+    onSuccess: (d) => setDraft(d)});
 
   const counts = dash?.counts;
 
@@ -327,7 +314,7 @@ function PowerToolsContent() {
               <Text style={styles.addRowText}>Capture a lead</Text>
             </Pressable>
             {leadsQuery.isLoading ? (
-              <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+              <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
             ) : leads.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Rocket size={26} color={Colors.textTertiary} />
@@ -358,7 +345,7 @@ function PowerToolsContent() {
               <Text style={styles.addRowText}>Start a deal packet</Text>
             </Pressable>
             {packetsQuery.isLoading ? (
-              <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+              <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
             ) : packets.length === 0 ? (
               <View style={styles.emptyCard}>
                 <FileText size={26} color={Colors.textTertiary} />
@@ -390,8 +377,7 @@ function CaptureModal({
   onClose,
   onSubmit,
   submitting,
-  error,
-}: {
+  error}: {
   visible: boolean;
   onClose: () => void;
   onSubmit: (input: CaptureLeadInput) => void;
@@ -417,8 +403,7 @@ function CaptureModal({
       preferredMarket: market,
       consent,
       source: 'owner_entered',
-      sourceDetail: 'power-tools owner capture',
-    });
+      sourceDetail: 'power-tools owner capture'});
   };
 
   return (
@@ -537,5 +522,4 @@ const styles = StyleSheet.create({
   consentText: { fontSize: 13.5, color: Colors.text, fontWeight: '600' as const },
   submitBtn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
   submitBtnDisabled: { opacity: 0.5 },
-  submitBtnText: { fontSize: 14.5, fontWeight: '700' as const, color: Colors.black },
-});
+  submitBtnText: { fontSize: 14.5, fontWeight: '700' as const, color: Colors.black }});

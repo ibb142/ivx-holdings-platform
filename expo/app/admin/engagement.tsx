@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,10 +7,8 @@ import {
   TextInput,
   Image,
   Alert,
-  ActivityIndicator,
   Modal,
-  Switch,
-} from 'react-native';
+  Switch} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -34,14 +31,14 @@ import {
   CheckCircle,
   MessageSquare,
   FileText,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { MemberEngagementStats, MemberActivity } from '@/types';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
 import { generateText } from '@/lib/ai-service';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const formatCurrency = (amount: number) => _fmtCurr(amount);
 
@@ -95,8 +92,7 @@ export default function EngagementScreen() {
         status: r.status || 'active',
         total_invested: r.totalInvested,
         created_at: r.createdAt,
-        updated_at: r.updatedAt || r.lastSeenAt,
-      }));
+        updated_at: r.updatedAt || r.lastSeenAt}));
       const now = new Date();
       const inactive: MemberEngagementStats[] = members.map((m: any) => {
         const lastActivity = new Date(m.updated_at || m.created_at || now);
@@ -115,8 +111,7 @@ export default function EngagementScreen() {
           totalInvested: Number(m.total_invested) || 0,
           engagementScore: Math.max(0, 100 - (daysSince * 10)),
           riskLevel,
-          suggestedAction: riskLevel === 'at_risk' ? 'Send re-engagement message' : riskLevel === 'inactive' ? 'Personal outreach recommended' : riskLevel === 'churned' ? 'Win-back campaign' : undefined,
-        };
+          suggestedAction: riskLevel === 'at_risk' ? 'Send re-engagement message' : riskLevel === 'inactive' ? 'Personal outreach recommended' : riskLevel === 'churned' ? 'Win-back campaign' : undefined};
       }).filter((m: MemberEngagementStats) => m.daysSinceLastActivity >= 2).sort((a: MemberEngagementStats, b: MemberEngagementStats) => b.daysSinceLastActivity - a.daysSinceLastActivity);
       return {
         members: inactive,
@@ -127,12 +122,9 @@ export default function EngagementScreen() {
           inactiveMembers: inactive.filter(m => m.riskLevel === 'inactive').length,
           churnedMembers: inactive.filter(m => m.riskLevel === 'churned').length,
           messagesSent: 0,
-          messagesOpened: 0,
-        },
-      };
+          messagesOpened: 0}};
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const [inactiveMembers, setInactiveMembers] = useState<MemberEngagementStats[]>([]);
   const [activities, setActivities] = useState<MemberActivity[]>([]);
@@ -155,8 +147,7 @@ export default function EngagementScreen() {
     autoSendMessages: false,
     dailyMessageLimit: 50,
     messagesSentToday: 12,
-    lastRunTime: '2025-01-25T08:00:00Z',
-  });
+    lastRunTime: '2025-01-25T08:00:00Z'});
   const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
   const [isRunningAutomation, setIsRunningAutomation] = useState(false);
   const [bulkGenerationProgress, setBulkGenerationProgress] = useState(0);
@@ -203,8 +194,7 @@ export default function EngagementScreen() {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const generateAIMessage = useCallback(async (member: MemberEngagementStats) => {
@@ -276,8 +266,7 @@ export default function EngagementScreen() {
       subject: `Re-engagement: ${selectedMember.memberName}`,
       message: generatedMessage,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      updatedAt: new Date().toISOString()};
 
     setDrafts(prev => [newDraft, ...prev]);
     setShowMessageModal(false);
@@ -324,8 +313,7 @@ export default function EngagementScreen() {
           onPress: () => {
             setDrafts(prev => prev.filter(d => d.id !== draftId));
             console.log('Draft deleted:', draftId);
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -343,8 +331,7 @@ export default function EngagementScreen() {
             setDrafts(prev => prev.filter(d => d.id !== draft.id));
             Alert.alert('Message Sent', `Message sent to ${draft.memberName}`);
             console.log('Draft sent to:', draft.memberEmail);
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -376,8 +363,7 @@ export default function EngagementScreen() {
           memberEmail: member.memberEmail,
           message: response,
           status: 'pending',
-          scheduledAt: new Date().toISOString(),
-        });
+          scheduledAt: new Date().toISOString()});
         console.log('Generated message for:', member.memberName);
       } catch (error) {
         console.error('Error generating message for:', member.memberName, error);
@@ -388,8 +374,7 @@ export default function EngagementScreen() {
           memberEmail: member.memberEmail,
           message: `Dear ${member.memberName},\n\nWe noticed it's been a while since your last visit to IVX HOLDINGS. We wanted to reach out and let you know about some exciting new investment opportunities.\n\nOur team has curated premium real estate properties with attractive yields. We'd love to help you explore these options.\n\nBest regards,\nIVX HOLDINGS Team`,
           status: 'pending',
-          scheduledAt: new Date().toISOString(),
-        });
+          scheduledAt: new Date().toISOString()});
       }
     }
 
@@ -403,8 +388,7 @@ export default function EngagementScreen() {
       memberName: 'AI System',
       type: 'system' as MemberActivity['type'],
       description: `Generated ${newQueue.length} AI re-engagement messages`,
-      createdAt: new Date().toISOString(),
-    };
+      createdAt: new Date().toISOString()};
     setActivities(prev => [newActivity, ...prev]);
 
     Alert.alert('Success', `Generated ${newQueue.length} personalized messages. Ready to send!`);
@@ -422,8 +406,7 @@ export default function EngagementScreen() {
           text: 'Send All',
           onPress: async () => {
             await generateBulkMessages(atRiskMembers);
-          },
-        },
+          }},
       ]
     );
   }, [inactiveMembers, generateBulkMessages]);
@@ -449,8 +432,7 @@ export default function EngagementScreen() {
             
             setAutomationSettings(prev => ({
               ...prev,
-              messagesSentToday: prev.messagesSentToday + pendingMessages.length,
-            }));
+              messagesSentToday: prev.messagesSentToday + pendingMessages.length}));
 
             const newActivity: MemberActivity = {
               id: `act-sent-${Date.now()}`,
@@ -458,14 +440,12 @@ export default function EngagementScreen() {
               memberName: 'AI System',
               type: 'system' as MemberActivity['type'],
               description: `Sent ${pendingMessages.length} re-engagement messages`,
-              createdAt: new Date().toISOString(),
-            };
+              createdAt: new Date().toISOString()};
             setActivities(prev => [newActivity, ...prev]);
 
             Alert.alert('Success', `${pendingMessages.length} messages sent successfully!`);
             console.log('Messages sent to:', pendingMessages.map(m => m.memberEmail));
-          },
-        },
+          }},
       ]
     );
   }, [messageQueue]);
@@ -502,10 +482,8 @@ export default function EngagementScreen() {
             await generateBulkMessages(targetMembers);
             setAutomationSettings(prev => ({
               ...prev,
-              lastRunTime: new Date().toISOString(),
-            }));
-          },
-        },
+              lastRunTime: new Date().toISOString()}));
+          }},
       ]
     );
   }, [automationSettings, inactiveMembers, generateBulkMessages]);
@@ -528,7 +506,7 @@ export default function EngagementScreen() {
         </View>
         <TouchableOpacity style={styles.runButton} onPress={runAutomation} disabled={isRunningAutomation}>
           {isRunningAutomation ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ShimmerIndicator size="small" color="#fff" />
           ) : (
             <>
               <Play size={14} color="#fff" />
@@ -593,7 +571,7 @@ export default function EngagementScreen() {
               </View>
               <View style={[styles.queueItemStatus, { backgroundColor: msg.status === 'sent' ? Colors.positive + '20' : msg.status === 'sending' ? Colors.warning + '20' : Colors.primary + '20' }]}>
                 {msg.status === 'sent' && <CheckCircle size={12} color={Colors.positive} />}
-                {msg.status === 'sending' && <ActivityIndicator size={10} color={Colors.warning} />}
+                {msg.status === 'sending' && <ShimmerIndicator size={10} color={Colors.warning} />}
                 <Text style={[styles.queueItemStatusText, { color: msg.status === 'sent' ? Colors.positive : msg.status === 'sending' ? Colors.warning : Colors.primary }]}>
                   {msg.status}
                 </Text>
@@ -1018,7 +996,7 @@ export default function EngagementScreen() {
           <ScrollView style={styles.modalContent}>
             {isGenerating ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <ShimmerIndicator size="large" color={Colors.primary} />
                 <Text style={styles.loadingText}>Generating personalized message...</Text>
               </View>
             ) : (
@@ -1049,7 +1027,7 @@ export default function EngagementScreen() {
                 disabled={isGenerating || isSending || !generatedMessage}
               >
                 {isSending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ShimmerIndicator size="small" color="#fff" />
                 ) : (
                   <>
                     <Send size={18} color="#fff" />
@@ -1301,5 +1279,4 @@ const styles = StyleSheet.create({
   editDraftBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   editDraftText: { color: Colors.textSecondary, fontSize: 13 },
   sendDraftBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  sendDraftText: { color: '#000000', fontSize: 13, fontWeight: '600' as const },
-});
+  sendDraftText: { color: '#000000', fontSize: 13, fontWeight: '600' as const }});

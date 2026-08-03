@@ -1,13 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -25,12 +22,12 @@ import {
   RefreshCw,
   AlertTriangle,
   MapPin,
-  Layers,
-} from 'lucide-react-native';
+  Layers} from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Colors from '@/constants/colors';
 import { fetchRawEvents } from '@/lib/analytics-compute';
 import type { RawEvent } from '@/lib/analytics-compute';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type PeriodType = '1h' | '24h' | '7d' | '30d' | '90d' | 'all';
 type TabType = 'sources' | 'geo' | 'devices' | 'events';
@@ -104,8 +101,7 @@ const COUNTRY_FLAGS: Record<string, string> = {
   'Colombia': '🇨🇴', 'Argentina': '🇦🇷', 'Netherlands': '🇳🇱', 'Switzerland': '🇨🇭',
   'Nigeria': '🇳🇬', 'South Africa': '🇿🇦', 'Philippines': '🇵🇭', 'Indonesia': '🇮🇩',
   'Turkey': '🇹🇷', 'Poland': '🇵🇱', 'Portugal': '🇵🇹', 'Ireland': '🇮🇪',
-  'China': '🇨🇳', 'South Korea': '🇰🇷', 'Thailand': '🇹🇭', 'Sweden': '🇸🇪',
-};
+  'China': '🇨🇳', 'South Korea': '🇰🇷', 'Thailand': '🇹🇭', 'Sweden': '🇸🇪'};
 
 function computeTrafficData(events: RawEvent[]) {
   const sourceSessionMap = new Map<string, { sessions: Set<string>; events: number; formSubmits: number }>();
@@ -163,8 +159,7 @@ function computeTrafficData(events: RawEvent[]) {
       sessions: d.sessions.size,
       events: d.events,
       conversionRate: d.sessions.size > 0 ? parseFloat(((d.formSubmits / d.sessions.size) * 100).toFixed(1)) : 0,
-      color: SOURCE_COLORS[idx % SOURCE_COLORS.length] ?? '#666',
-    }))
+      color: SOURCE_COLORS[idx % SOURCE_COLORS.length] ?? '#666'}))
     .sort((a, b) => b.sessions - a.sessions);
 
   const geo: GeoData[] = Array.from(countryMap.entries())
@@ -172,24 +167,21 @@ function computeTrafficData(events: RawEvent[]) {
       country,
       count,
       pct: totalWithGeo > 0 ? parseFloat(((count / totalWithGeo) * 100).toFixed(1)) : 0,
-      flag: COUNTRY_FLAGS[country] || '🌍',
-    }))
+      flag: COUNTRY_FLAGS[country] || '🌍'}))
     .sort((a, b) => b.count - a.count);
 
   const devices: DeviceData[] = Array.from(deviceMap.entries())
     .map(([device, count]) => ({
       device,
       count,
-      pct: totalEvents > 0 ? parseFloat(((count / totalEvents) * 100).toFixed(1)) : 0,
-    }))
+      pct: totalEvents > 0 ? parseFloat(((count / totalEvents) * 100).toFixed(1)) : 0}))
     .sort((a, b) => b.count - a.count);
 
   const eventBreakdown: EventData[] = Array.from(eventMap.entries())
     .map(([event, count]) => ({
       event,
       count,
-      pct: totalEvents > 0 ? parseFloat(((count / totalEvents) * 100).toFixed(1)) : 0,
-    }))
+      pct: totalEvents > 0 ? parseFloat(((count / totalEvents) * 100).toFixed(1)) : 0}))
     .sort((a, b) => b.count - a.count);
 
   const conversionRate = totalSessions > 0 ? parseFloat(((formSubmits / totalSessions) * 100).toFixed(1)) : 0;
@@ -221,8 +213,7 @@ function computeTrafficData(events: RawEvent[]) {
     eventBreakdown,
     peakHour,
     activeNow,
-    totalWithGeo,
-  };
+    totalWithGeo};
 }
 
 export default function TrafficControlCenter() {
@@ -245,8 +236,7 @@ export default function TrafficControlCenter() {
     refetchInterval: 120000,
     retry: 2,
     refetchOnMount: true,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const data = trafficQuery.data;
   const isLoading = trafficQuery.isLoading && !data;
@@ -314,8 +304,7 @@ export default function TrafficControlCenter() {
             <View style={styles.sourceBarWrap}>
               <View style={[styles.sourceBarFill, {
                 width: `${Math.max((source.sessions / maxSessions) * 100, 3)}%` as any,
-                backgroundColor: source.color,
-              }]} />
+                backgroundColor: source.color}]} />
             </View>
           </View>
         ))}
@@ -342,8 +331,7 @@ export default function TrafficControlCenter() {
               <View style={styles.geoBarWrap}>
                 <View style={[styles.geoBarFill, {
                   width: `${Math.max(g.pct, 2)}%` as any,
-                  backgroundColor: i === 0 ? Colors.primary : '#4A90D9',
-                }]} />
+                  backgroundColor: i === 0 ? Colors.primary : '#4A90D9'}]} />
               </View>
             </View>
             <View style={styles.geoStats}>
@@ -364,15 +352,13 @@ export default function TrafficControlCenter() {
       'Desktop': <Monitor size={20} color="#4A90D9" />,
       'Mobile': <Smartphone size={20} color="#00C48C" />,
       'Tablet': <Tablet size={20} color="#F57C00" />,
-      'Unknown': <Globe size={20} color={Colors.textTertiary} />,
-    };
+      'Unknown': <Globe size={20} color={Colors.textTertiary} />};
 
     const deviceColors: Record<string, string> = {
       'Desktop': '#4A90D9',
       'Mobile': '#00C48C',
       'Tablet': '#F57C00',
-      'Unknown': '#666',
-    };
+      'Unknown': '#666'};
 
     return (
       <View style={styles.tabContent}>
@@ -399,8 +385,7 @@ export default function TrafficControlCenter() {
                 <View style={styles.distBarWrap}>
                   <View style={[styles.distBarFill, {
                     width: `${Math.max(d.pct, 2)}%` as any,
-                    backgroundColor: color,
-                  }]} />
+                    backgroundColor: color}]} />
                 </View>
                 <Text style={styles.distValue}>{d.pct}%</Text>
               </View>
@@ -430,8 +415,7 @@ export default function TrafficControlCenter() {
               <View style={styles.eventBarWrap}>
                 <View style={[styles.eventBarFill, {
                   width: `${Math.max((ev.count / maxCount) * 100, 2)}%` as any,
-                  backgroundColor: SOURCE_COLORS[evIdx % SOURCE_COLORS.length] ?? '#666',
-                }]} />
+                  backgroundColor: SOURCE_COLORS[evIdx % SOURCE_COLORS.length] ?? '#666'}]} />
               </View>
             </View>
             <View style={styles.eventStats}>
@@ -528,7 +512,7 @@ export default function TrafficControlCenter() {
       >
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading real traffic data...</Text>
           </View>
         ) : trafficQuery.isError && !data ? (
@@ -560,16 +544,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: { flex: 1 },
   headerTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },
   headerSubtitle: { fontSize: 11, color: Colors.positive, fontWeight: '600' as const, marginTop: 1 },
@@ -579,15 +561,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
 
   periodBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 6,
-  },
+    gap: 6},
   periodBtn: {
     flex: 1,
     paddingVertical: 6,
@@ -595,8 +575,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   periodBtnActive: { backgroundColor: Colors.primary + '20', borderColor: Colors.primary },
   periodText: { fontSize: 12, fontWeight: '600' as const, color: Colors.textTertiary },
   periodTextActive: { color: Colors.primary },
@@ -605,8 +584,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 8,
-  },
+    gap: 8},
   heroCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -615,8 +593,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   heroValue: { fontSize: 16, fontWeight: '800' as const, color: Colors.text },
   heroLabel: { fontSize: 10, color: Colors.textSecondary },
 
@@ -629,8 +606,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   tabActive: { backgroundColor: Colors.primary },
   tabText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
   tabTextActive: { color: Colors.black },
@@ -651,8 +627,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emptyText: { fontSize: 15, fontWeight: '600' as const, color: Colors.text },
   emptySubText: { fontSize: 12, color: Colors.textSecondary, textAlign: 'center' as const, lineHeight: 18 },
 
@@ -662,16 +637,14 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   sourceHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sourceIcon: {
     width: 40,
     height: 40,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sourceIconText: { fontSize: 16, fontWeight: '800' as const },
   sourceInfo: { flex: 1 },
   sourceName: { fontSize: 14, fontWeight: '600' as const, color: Colors.text, marginBottom: 4 },
@@ -687,8 +660,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   geoHeaderText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
 
   geoRow: {
@@ -697,8 +669,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '40',
-  },
+    borderBottomColor: Colors.border + '40'},
   geoRank: { fontSize: 12, fontWeight: '700' as const, color: Colors.textTertiary, width: 20, textAlign: 'center' as const },
   geoFlag: { fontSize: 20 },
   geoInfo: { flex: 1 },
@@ -719,15 +690,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
+    gap: 6},
   deviceIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   deviceValue: { fontSize: 20, fontWeight: '800' as const, color: Colors.text },
   deviceLabel: { fontSize: 12, fontWeight: '600' as const, color: Colors.textSecondary },
   devicePct: { fontSize: 11, fontWeight: '700' as const },
@@ -738,8 +707,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginTop: 4,
-  },
+    marginTop: 4},
   sectionTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text, marginBottom: 14 },
 
   distRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
@@ -754,8 +722,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   eventHeaderText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
 
   eventRow: {
@@ -764,13 +731,11 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '40',
-  },
+    borderBottomColor: Colors.border + '40'},
   eventInfo: { flex: 1 },
   eventName: { fontSize: 12, fontWeight: '600' as const, color: Colors.text, marginBottom: 4 },
   eventBarWrap: { height: 4, backgroundColor: Colors.surfaceBorder, borderRadius: 2, overflow: 'hidden' },
   eventBarFill: { height: 4, borderRadius: 2 },
   eventStats: { alignItems: 'flex-end' },
   eventCount: { fontSize: 14, fontWeight: '700' as const, color: Colors.text },
-  eventPct: { fontSize: 10, color: Colors.textTertiary },
-});
+  eventPct: { fontSize: 10, color: Colors.textTertiary }});

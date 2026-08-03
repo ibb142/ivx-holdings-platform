@@ -1,19 +1,16 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   Animated,
   RefreshControl,
   Platform,
   Alert,
   KeyboardAvoidingView,
-  Keyboard,
-} from "react-native";
+  Keyboard} from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -39,11 +36,11 @@ import {
   Megaphone,
   Brain,
   Sparkles,
-  Radio,
-} from "lucide-react-native";
+  Radio} from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type LogType = "all" | "hourly" | "emergency" | "manual" | "daily_summary" | "smart_update";
 
@@ -103,8 +100,7 @@ const DEFAULT_SMS_REPORT_STATUS: SMSReportStatus = {
   total_simulated: 0,
   recipients: [],
   sns_configured: false,
-  updated_at: null,
-};
+  updated_at: null};
 
 const DEFAULT_SMART_SCHEDULE: SmartScheduleView = {
   running: false,
@@ -113,24 +109,21 @@ const DEFAULT_SMART_SCHEDULE: SmartScheduleView = {
   scheduledHoursET: [8, 13, 18],
   recipients: ['Kimberly Perez', 'Sharon'],
   startDate: null,
-  recentMessages: [],
-};
+  recentMessages: []};
 
 const TYPE_COLORS: Record<string, string> = {
   hourly: Colors.accent,
   emergency: Colors.error,
   manual: Colors.primary,
   daily_summary: Colors.success,
-  smart_update: "#00C9A7",
-};
+  smart_update: "#00C9A7"};
 
 const TYPE_LABELS: Record<string, string> = {
   hourly: "Hourly",
   emergency: "Emergency",
   manual: "Manual",
   daily_summary: "Daily",
-  smart_update: "AI Smart",
-};
+  smart_update: "AI Smart"};
 
 export default function SMSReportsScreen() {
   const router = useRouter();
@@ -166,8 +159,7 @@ export default function SMSReportsScreen() {
         }
         return {
           ...DEFAULT_SMS_REPORT_STATUS,
-          ...((data ?? {}) as Partial<SMSReportStatus>),
-        };
+          ...((data ?? {}) as Partial<SMSReportStatus>)};
       } catch (e: any) {
         console.log('[Supabase] sms_reports fetch failed:', e?.message);
         return DEFAULT_SMS_REPORT_STATUS;
@@ -180,8 +172,7 @@ export default function SMSReportsScreen() {
     retry: 1,
     retryDelay: 1000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const logQuery = useQuery<any>({
     queryKey: ['smsReports.getLog', { page: logPage, limit: 15, type: logFilter }],
@@ -202,8 +193,7 @@ export default function SMSReportsScreen() {
     staleTime: 0,
     retry: 1,
     retryDelay: 1000,
-    refetchOnMount: true,
-  });
+    refetchOnMount: true});
 
   const startMutation = useMutation({
     mutationFn: async () => {
@@ -233,8 +223,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Start reporting failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to start reporting');
-    },
-  });
+    }});
 
   const stopMutation = useMutation({
     mutationFn: async () => {
@@ -262,8 +251,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Stop reporting failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to stop reporting');
-    },
-  });
+    }});
 
   const sendNowMutation = useMutation({
     mutationFn: async () => {
@@ -282,8 +270,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Send now failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to send report');
-    },
-  });
+    }});
 
   const sendDailyMutation = useMutation({
     mutationFn: async () => {
@@ -302,8 +289,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Daily summary failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to send daily summary');
-    },
-  });
+    }});
 
   const sendEmergencyMutation = useMutation({
     mutationFn: async (input: { subject: string; details: string }) => {
@@ -324,8 +310,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Emergency alert failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to send emergency alert');
-    },
-  });
+    }});
 
   const sendCustomMutation = useMutation({
     mutationFn: async (input: { message: string }) => {
@@ -347,8 +332,7 @@ export default function SMSReportsScreen() {
             ...m,
             status: 'sent' as const,
             serverSentAt: data.sentAt,
-            deliveredTo: data.deliveredTo,
-          };
+            deliveredTo: data.deliveredTo};
         }
         return m;
       }));
@@ -373,8 +357,7 @@ export default function SMSReportsScreen() {
         (m.id === msgId || m.status === 'sending') ? { ...m, status: 'failed' as const } : m
       ));
       pendingMsgIdRef.current = null;
-    },
-  });
+    }});
 
   const teamRecipients = useMemo<TeamRecipient[]>(() => {
     const rawRecipients = statusQuery.data?.recipients;
@@ -394,8 +377,7 @@ export default function SMSReportsScreen() {
           phone: '',
           role: 'team_member',
           active: true,
-          alertTypes: [],
-        }];
+          alertTypes: []}];
       }
 
       if (!item || typeof item !== 'object') {
@@ -423,8 +405,7 @@ export default function SMSReportsScreen() {
         phone: typeof candidate.phone === 'string' ? candidate.phone : '',
         role: typeof candidate.role === 'string' ? candidate.role : 'team_member',
         active: candidate.active !== false,
-        alertTypes,
-      }];
+        alertTypes}];
     });
   }, [statusQuery.data?.recipients]);
 
@@ -455,8 +436,7 @@ export default function SMSReportsScreen() {
       scheduledHoursET,
       recipients,
       startDate: statusData.updated_at ? statusData.updated_at.split('T')[0] : DEFAULT_SMART_SCHEDULE.startDate,
-      recentMessages,
-    };
+      recentMessages};
   }, [statusQuery.data, teamRecipients]);
 
   const activeTeamRecipientCount = useMemo<number>(() => teamRecipients.filter((recipient) => recipient.active).length, [teamRecipients]);
@@ -469,8 +449,7 @@ export default function SMSReportsScreen() {
         const { data, error } = await supabase.from('sms_reports').upsert({
           id: 'default',
           status: 'smart_active',
-          updated_at: now,
-        }).select().single();
+          updated_at: now}).select().single();
         if (error) {
           if (error.message.includes('schema cache')) {
             const { data: d2, error: e2 } = await supabase.from('sms_reports').upsert({ id: 'default', updated_at: now }).select().single();
@@ -493,8 +472,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Start smart schedule failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to start smart schedule');
-    },
-  });
+    }});
 
   const stopSmartMutation = useMutation({
     mutationFn: async () => {
@@ -521,8 +499,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Stop smart schedule failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to stop smart schedule');
-    },
-  });
+    }});
 
   const sendSmartNowMutation = useMutation({
     mutationFn: async () => {
@@ -541,8 +518,7 @@ export default function SMSReportsScreen() {
     onError: (error: Error) => {
       console.error('[SMS] Smart send now failed:', error.message);
       Alert.alert('Error', error.message || 'Failed to send smart update');
-    },
-  });
+    }});
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -615,8 +591,7 @@ export default function SMSReportsScreen() {
     if (!emergencySubject.trim() || !emergencyDetails.trim()) return;
     sendEmergencyMutation.mutate({
       subject: emergencySubject.trim(),
-      details: emergencyDetails.trim(),
-    });
+      details: emergencyDetails.trim()});
   }, [emergencySubject, emergencyDetails, sendEmergencyMutation]);
 
   const handleSendCustom = useCallback(() => {
@@ -629,8 +604,7 @@ export default function SMSReportsScreen() {
       id: msgId,
       message: msgText,
       time: new Date(),
-      status: 'sending' as const,
-    };
+      status: 'sending' as const};
     
     pendingMsgIdRef.current = msgId;
     setSentMessages(prev => [...prev, newMsg]);
@@ -695,15 +669,13 @@ export default function SMSReportsScreen() {
               styles.smartModeBadge,
               {
                 backgroundColor: smartSchedule.running ? "#00C9A720" : Colors.surface,
-                borderColor: smartSchedule.running ? "#00C9A760" : Colors.surfaceBorder,
-              },
+                borderColor: smartSchedule.running ? "#00C9A760" : Colors.surfaceBorder},
             ]}>
               <Animated.View style={[
                 styles.smartModeDot,
                 {
                   backgroundColor: smartSchedule.running ? "#00C9A7" : Colors.textTertiary,
-                  opacity: smartSchedule.running ? pulseAnim : 1,
-                },
+                  opacity: smartSchedule.running ? pulseAnim : 1},
               ]} />
               <Text style={[
                 styles.smartModeText,
@@ -768,7 +740,7 @@ export default function SMSReportsScreen() {
                 testID="smart-start"
               >
                 {startSmartMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <ShimmerIndicator size="small" color="#FFF" />
                 ) : (
                   <>
                     <Brain size={16} color="#FFF" />
@@ -785,7 +757,7 @@ export default function SMSReportsScreen() {
                   testID="smart-send-now"
                 >
                   {sendSmartNowMutation.isPending ? (
-                    <ActivityIndicator size="small" color="#00C9A7" />
+                    <ShimmerIndicator size="small" color="#00C9A7" />
                   ) : (
                     <>
                       <Radio size={14} color="#00C9A7" />
@@ -946,7 +918,7 @@ export default function SMSReportsScreen() {
             testID="sms-send-now"
           >
             {sendNowMutation.isPending ? (
-              <ActivityIndicator size="small" color={Colors.accent} />
+              <ShimmerIndicator size="small" color={Colors.accent} />
             ) : (
               <BarChart3 size={22} color={Colors.accent} />
             )}
@@ -961,7 +933,7 @@ export default function SMSReportsScreen() {
             testID="sms-send-daily"
           >
             {sendDailyMutation.isPending ? (
-              <ActivityIndicator size="small" color={Colors.success} />
+              <ShimmerIndicator size="small" color={Colors.success} />
             ) : (
               <FileText size={22} color={Colors.success} />
             )}
@@ -1023,7 +995,7 @@ export default function SMSReportsScreen() {
               disabled={sendEmergencyMutation.isPending || !emergencySubject.trim() || !emergencyDetails.trim()}
             >
               {sendEmergencyMutation.isPending ? (
-                <ActivityIndicator size="small" color="#FFF" />
+                <ShimmerIndicator size="small" color="#FFF" />
               ) : (
                 <>
                   <Zap size={16} color="#FFF" />
@@ -1074,7 +1046,7 @@ export default function SMSReportsScreen() {
                         {displayTime}
                       </Text>
                       {msg.status === 'sending' && (
-                        <ActivityIndicator size={10} color={Colors.textTertiary} />
+                        <ShimmerIndicator size={10} color={Colors.textTertiary} />
                       )}
                       {msg.status === 'sent' && (
                         <View style={styles.readReceiptRow}>
@@ -1149,7 +1121,7 @@ export default function SMSReportsScreen() {
                   activeOpacity={0.6}
                 >
                   {sendCustomMutation.isPending ? (
-                    <ActivityIndicator size={16} color={Colors.black} />
+                    <ShimmerIndicator size={16} color={Colors.black} />
                   ) : (
                     <Send size={18} color={customMessage.trim() ? Colors.black : Colors.textTertiary} />
                   )}
@@ -1186,7 +1158,7 @@ export default function SMSReportsScreen() {
           </ScrollView>
 
           {logQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 20 }} />
+            <ShimmerIndicator size="small" color={Colors.primary} style={{ marginTop: 20 }} />
           ) : logs?.items.length === 0 ? (
             <View style={styles.emptyLog}>
               <MessageSquare size={32} color={Colors.textTertiary} />
@@ -1227,8 +1199,7 @@ export default function SMSReportsScreen() {
                             day: "numeric",
                             hour: "2-digit",
                             minute: "2-digit",
-                            second: "2-digit",
-                          })}
+                            second: "2-digit"})}
                         </Text>
                         {isExpanded ? (
                           <ChevronUp size={14} color={Colors.textTertiary} />
@@ -1254,8 +1225,7 @@ export default function SMSReportsScreen() {
                             day: "numeric",
                             hour: "2-digit",
                             minute: "2-digit",
-                            second: "2-digit",
-                          })}
+                            second: "2-digit"})}
                         </Text>
                       </View>
                     )}
@@ -1322,8 +1292,7 @@ export default function SMSReportsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -1331,79 +1300,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: Colors.surface,
     alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
+    justifyContent: "center" as const},
   headerCenter: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 17,
     fontWeight: "700" as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   refreshBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: Colors.surface,
     alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
+    justifyContent: "center" as const},
   keyboardAvoid: {
-    flex: 1,
-  },
+    flex: 1},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    gap: 16,
-  },
+    gap: 16},
   statusCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statusRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   statusLeft: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 12,
-  },
+    gap: 12},
   statusDot: {
     width: 12,
     height: 12,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusLabel: {
     fontSize: 14,
     fontWeight: "700" as const,
     color: Colors.text,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   statusPhone: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   toggleBtn: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -1411,53 +1366,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   toggleBtnStart: {
     borderColor: Colors.success + "60",
-    backgroundColor: Colors.success + "15",
-  },
+    backgroundColor: Colors.success + "15"},
   toggleBtnStop: {
     borderColor: Colors.error + "60",
-    backgroundColor: Colors.error + "15",
-  },
+    backgroundColor: Colors.error + "15"},
   toggleText: {
     fontSize: 13,
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   statsRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-around" as const,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   statItem: {
-    alignItems: "center" as const,
-  },
+    alignItems: "center" as const},
   statValue: {
     fontSize: 18,
     fontWeight: "700" as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 2,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   actionsGrid: {
     flexDirection: "row" as const,
     flexWrap: "wrap" as const,
-    gap: 10,
-  },
+    gap: 10},
   actionCard: {
     width: "48%" as any,
     backgroundColor: Colors.surface,
@@ -1467,43 +1412,36 @@ const styles = StyleSheet.create({
     alignItems: "center" as const,
     gap: 8,
     flexGrow: 1,
-    flexBasis: "45%" as any,
-  },
+    flexBasis: "45%" as any},
   actionLabel: {
     fontSize: 13,
     fontWeight: "600" as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   actionDesc: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   formCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   formHeader: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   formTitle: {
     fontSize: 14,
     fontWeight: "700" as const,
-    flex: 1,
-  },
+    flex: 1},
   chatCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.primary + "40",
-    overflow: "hidden" as const,
-  },
+    overflow: "hidden" as const},
   chatHeader: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -1511,84 +1449,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   chatCloseBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Colors.backgroundTertiary,
-  },
+    backgroundColor: Colors.backgroundTertiary},
   chatCloseText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
+    fontWeight: "500" as const},
   chatMessages: {
     maxHeight: 280,
-    minHeight: 120,
-  },
+    minHeight: 120},
   chatMessagesContent: {
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   chatEmpty: {
     alignItems: "center" as const,
     justifyContent: "center" as const,
     paddingVertical: 30,
-    gap: 8,
-  },
+    gap: 8},
   chatEmptyText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
+    fontWeight: "500" as const},
   chatEmptySubtext: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   chatBubbleRow: {
-    alignItems: "flex-end" as const,
-  },
+    alignItems: "flex-end" as const},
   chatBubble: {
     maxWidth: "80%" as any,
     backgroundColor: Colors.primary,
     borderRadius: 16,
     borderBottomRightRadius: 4,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   chatBubbleFailed: {
     backgroundColor: Colors.error + "30",
     borderColor: Colors.error + "60",
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   chatBubbleText: {
     fontSize: 14,
     color: Colors.black,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   chatBubbleMeta: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "flex-end" as const,
     gap: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   chatBubbleTime: {
     fontSize: 10,
-    color: Colors.black + "80",
-  },
+    color: Colors.black + "80"},
   readReceiptRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 2,
-  },
+    gap: 2},
   readLabel: {
     fontSize: 9,
     color: "#34B7F1",
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   deliveredToRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -1596,34 +1518,28 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 4,
     borderTopWidth: 1,
-    borderTopColor: Colors.black + "15",
-  },
+    borderTopColor: Colors.black + "15"},
   deliveredToText: {
     fontSize: 10,
     color: Colors.black + "70",
-    flex: 1,
-  },
+    flex: 1},
   chatRetryBtn: {
     marginTop: 4,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: Colors.error + "20",
-  },
+    backgroundColor: Colors.error + "20"},
   chatRetryText: {
     fontSize: 11,
     color: Colors.error,
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   logRecipientRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 4,
-  },
+    gap: 4},
   logRecipientText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   chatInputRow: {
     flexDirection: "row" as const,
     alignItems: "flex-end" as const,
@@ -1632,8 +1548,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   chatInput: {
     flex: 1,
     backgroundColor: Colors.backgroundTertiary,
@@ -1643,26 +1558,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
     maxHeight: 100,
-    minHeight: 40,
-  },
+    minHeight: 40},
   chatSendBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.primary,
     alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
+    justifyContent: "center" as const},
   chatSendBtnDisabled: {
-    backgroundColor: Colors.backgroundTertiary,
-  },
+    backgroundColor: Colors.backgroundTertiary},
   chatCharCount: {
     fontSize: 10,
     color: Colors.textTertiary,
     textAlign: "right" as const,
     paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   input: {
     backgroundColor: Colors.inputBackground,
     borderWidth: 1,
@@ -1671,68 +1582,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   multilineInput: {
     minHeight: 80,
-    textAlignVertical: "top" as const,
-  },
+    textAlignVertical: "top" as const},
   charCount: {
     fontSize: 11,
     color: Colors.textTertiary,
-    textAlign: "right" as const,
-  },
+    textAlign: "right" as const},
   sendBtn: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   sendBtnText: {
     fontSize: 14,
     fontWeight: "600" as const,
-    color: "#FFF",
-  },
+    color: "#FFF"},
   previewCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   previewTitle: {
     fontSize: 13,
     fontWeight: "600" as const,
     color: Colors.textSecondary,
     marginBottom: 10,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   previewBox: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
-    padding: 14,
-  },
+    padding: 14},
   previewText: {
     fontSize: 12,
     color: Colors.text,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   logSection: {
-    gap: 12,
-  },
+    gap: 12},
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700" as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterRow: {
     flexDirection: "row" as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -1740,170 +1639,140 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary + "20",
-    borderColor: Colors.primary + "60",
-  },
+    borderColor: Colors.primary + "60"},
   filterText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
+    fontWeight: "500" as const},
   filterTextActive: {
     color: Colors.primary,
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   emptyLog: {
     alignItems: "center" as const,
     paddingVertical: 32,
-    gap: 8,
-  },
+    gap: 8},
   emptyText: {
     fontSize: 15,
     fontWeight: "600" as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emptySubtext: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   logItem: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   logItemHeader: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-  },
+    justifyContent: "space-between" as const},
   logTypeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   logTypeText: {
     fontSize: 11,
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   logStatusRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 6,
-  },
+    gap: 6},
   logTime: {
     fontSize: 11,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   logPreview: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 17,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-  },
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace"},
   logError: {
     fontSize: 11,
     color: Colors.error,
-    fontStyle: "italic" as const,
-  },
+    fontStyle: "italic" as const},
   pagination: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: 16,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   pageBtn: {
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   pageBtnDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   pageBtnText: {
     fontSize: 12,
     color: Colors.text,
-    fontWeight: "500" as const,
-  },
+    fontWeight: "500" as const},
   pageInfo: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   infoCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   infoTitle: {
     fontSize: 14,
     fontWeight: "700" as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   infoRow: {
     flexDirection: "row" as const,
     alignItems: "flex-start" as const,
-    gap: 10,
-  },
+    gap: 10},
   infoText: {
     fontSize: 12,
     color: Colors.textSecondary,
     flex: 1,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   teamCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
     borderColor: Colors.accent + "30",
-    gap: 14,
-  },
+    gap: 14},
   teamHeader: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
-  },
+    gap: 8},
   teamTitle: {
     fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   teamBadge: {
     backgroundColor: Colors.success + "18",
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.success + "40",
-  },
+    borderColor: Colors.success + "40"},
   teamBadgeText: {
     fontSize: 11,
     fontWeight: "600" as const,
-    color: Colors.success,
-  },
+    color: Colors.success},
   teamMember: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 12,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 12,
-    padding: 12,
-  },
+    padding: 12},
   teamAvatar: {
     width: 40,
     height: 40,
@@ -1911,95 +1780,77 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     alignItems: "center" as const,
     justifyContent: "center" as const,
-    borderWidth: 2,
-  },
+    borderWidth: 2},
   teamInfo: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   teamNameRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
-  },
+    gap: 8},
   teamName: {
     fontSize: 14,
     fontWeight: "600" as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   teamRoleBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   teamRoleText: {
     fontSize: 10,
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   teamPhoneRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 4,
-  },
+    gap: 4},
   teamPhone: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   teamAlertRow: {
     flexDirection: "row" as const,
     flexWrap: "wrap" as const,
     gap: 4,
-    marginTop: 2,
-  },
+    marginTop: 2},
   alertTypeDot: {
     paddingHorizontal: 6,
     paddingVertical: 1,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   alertTypeDotText: {
     fontSize: 9,
-    fontWeight: "600" as const,
-  },
+    fontWeight: "600" as const},
   teamStatusDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   teamFooter: {
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   teamFooterText: {
     fontSize: 11,
     color: Colors.textTertiary,
     lineHeight: 16,
-    textAlign: "center" as const,
-  },
+    textAlign: "center" as const},
   smartCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
     borderColor: "#00C9A730",
-    gap: 14,
-  },
+    gap: 14},
   smartHeader: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-  },
+    justifyContent: "space-between" as const},
   smartHeaderLeft: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
-  },
+    gap: 8},
   smartTitle: {
     fontSize: 15,
     fontWeight: "700" as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   smartModeBadge: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -2007,77 +1858,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   smartModeDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   smartModeText: {
     fontSize: 10,
     fontWeight: "700" as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   smartDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   smartScheduleInfo: {
     gap: 6,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
-    padding: 12,
-  },
+    padding: 12},
   smartInfoRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
-  },
+    gap: 8},
   smartInfoText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   smartRecentSection: {
-    gap: 8,
-  },
+    gap: 8},
   smartRecentTitle: {
     fontSize: 12,
     fontWeight: "600" as const,
     color: Colors.textSecondary,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   smartRecentItem: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
     padding: 10,
-    gap: 4,
-  },
+    gap: 4},
   smartRecentHeader: {
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
-    alignItems: "center" as const,
-  },
+    alignItems: "center" as const},
   smartRecentRecipient: {
     fontSize: 12,
     fontWeight: "600" as const,
-    color: "#00C9A7",
-  },
+    color: "#00C9A7"},
   smartRecentTime: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   smartRecentMsg: {
     fontSize: 11,
     color: Colors.textSecondary,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   smartActions: {
-    gap: 8,
-  },
+    gap: 8},
   smartStartBtn: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -2085,17 +1921,14 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: "#00C9A7",
     paddingVertical: 12,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   smartStartText: {
     fontSize: 14,
     fontWeight: "600" as const,
-    color: "#FFF",
-  },
+    color: "#FFF"},
   smartRunningActions: {
     flexDirection: "row" as const,
-    gap: 8,
-  },
+    gap: 8},
   smartSendNowBtn: {
     flex: 1,
     flexDirection: "row" as const,
@@ -2106,13 +1939,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#00C9A760",
-    backgroundColor: "#00C9A715",
-  },
+    backgroundColor: "#00C9A715"},
   smartSendNowText: {
     fontSize: 13,
     fontWeight: "600" as const,
-    color: "#00C9A7",
-  },
+    color: "#00C9A7"},
   smartStopBtn: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -2123,41 +1954,33 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.error + "60",
-    backgroundColor: Colors.error + "15",
-  },
+    backgroundColor: Colors.error + "15"},
   smartStopText: {
     fontSize: 13,
     fontWeight: "600" as const,
-    color: Colors.error,
-  },
+    color: Colors.error},
   snsWarningCard: {
     backgroundColor: "#FFB80008",
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: "#FFB80030",
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   snsWarningRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   snsWarningTitle: {
     fontSize: 14,
     fontWeight: "700" as const,
-    color: "#FFB800",
-  },
+    color: "#FFB800"},
   snsWarningText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   snsWarningCount: {
     fontSize: 11,
     fontWeight: "600" as const,
     color: "#FFB800",
-    marginTop: 8,
-  },
-});
+    marginTop: 8}});

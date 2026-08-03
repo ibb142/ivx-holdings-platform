@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Switch,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -25,15 +24,13 @@ import {
   Sparkles,
   TrendingUp,
   Shield,
-  Clock,
-} from 'lucide-react-native';
+  Clock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { smartFeatures, SmartFeature, globalPresence } from '@/mocks/competitive-stats';
 import { getResponsiveSize, isExtraSmallScreen } from '@/lib/responsive';
 
 const iconMap: Record<string, any> = {
-  Brain, Zap, Bell, Activity, RefreshCw, Receipt, Users, Target,
-};
+  Brain, Zap, Bell, Activity, RefreshCw, Receipt, Users, Target};
 
 function SmartFeatureCard({ feature, index }: { feature: SmartFeature; index: number }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -46,8 +43,7 @@ function SmartFeatureCard({ feature, index }: { feature: SmartFeature; index: nu
       toValue: 1,
       duration: 400,
       delay: index * 100,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, []);
 
   return (
@@ -245,202 +241,166 @@ export default function SmartInvestingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   backButton: {
-    padding: 8,
-  },
+    padding: 8},
   headerTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     padding: 20,
-    paddingBottom: 140,
-  },
+    paddingBottom: 140},
   heroSection: {
     alignItems: 'center',
     paddingVertical: 20,
     paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   heroGlow: {
     position: 'absolute',
     top: 20,
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: Colors.primary + '12',
-  },
+    backgroundColor: Colors.primary + '12'},
   heroTitle: {
     color: Colors.text,
     fontSize: 26,
     fontWeight: '800' as const,
     textAlign: 'center',
     marginBottom: 10,
-    lineHeight: 32,
-  },
+    lineHeight: 32},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 20,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   heroStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
+    gap: 16},
   heroStat: {
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   heroStatValue: {
     color: Colors.primary,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   heroStatLabel: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   heroStatDivider: {
     width: 1,
     height: 24,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   insightCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   insightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   insightIconContainer: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   insightLiveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   liveText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   insightTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   insightBody: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   insightMetrics: {
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   insightMetric: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   insightMetricText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   insightActions: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   insightActionPrimary: {
     flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   insightActionPrimaryText: {
     color: Colors.background,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   insightActionSecondary: {
     flex: 1,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.backgroundTertiary,
-  },
+    backgroundColor: Colors.backgroundTertiary},
   insightActionSecondaryText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   sectionLabel: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   featureCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   featureCardComingSoon: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   featureTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   featureIconContainer: {
     width: 44,
     height: 44,
@@ -448,24 +408,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   featureMeta: {
     flex: 1,
     flexDirection: 'column',
-    gap: 4,
-  },
+    gap: 4},
   featureTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   featureTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    flex: 1,
-  },
+    flex: 1},
   comingSoonBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -473,18 +429,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning + '20',
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   comingSoonText: {
     color: Colors.warning,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   featureDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   benefitBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -493,32 +446,26 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   benefitText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   globalSection: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   globalTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   globalSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   globalGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   globalCard: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -526,24 +473,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     minWidth: '45%',
-    flex: 1,
-  },
+    flex: 1},
   globalCountry: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   globalValue: {
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   globalProperties: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   ctaButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
@@ -552,14 +495,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   ctaText: {
     color: Colors.background,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bottomPadding: {
-    height: 40,
-  },
-});
+    height: 40}});

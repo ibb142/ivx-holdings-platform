@@ -2,14 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import {
   Gauge, Users, UserPlus, UserCheck, Monitor, Globe,
-  Share2, Search, Megaphone, Target, Link2, ExternalLink, Hash,
-} from 'lucide-react-native';
+  Share2, Search, Megaphone, Target, Link2, ExternalLink, Hash} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import type { AcquisitionChannel, SessionQuality } from '@/lib/analytics-compute';
 import {
   BLUE, GREEN, TEAL, ORANGE, PURPLE, PINK, CHART_COLORS,
-  formatSeconds, shared,
-} from './analytics-shared';
+  formatSeconds, shared} from './analytics-shared';
 
 interface SourcesTabProps {
   acquisition: AcquisitionChannel[];
@@ -24,8 +22,7 @@ const SOURCE_DETAIL: Record<string, { icon: React.ReactNode; color: string; desc
   'Social': { icon: <Megaphone size={18} color={PINK} />, color: PINK, desc: 'Social media platforms', subSources: ['Instagram', 'Facebook', 'LinkedIn', 'Twitter/X'] },
   'Paid': { icon: <Target size={18} color={PURPLE} />, color: PURPLE, desc: 'Paid advertising campaigns', subSources: ['Google Ads', 'Meta Ads', 'LinkedIn Ads'] },
   'Referral': { icon: <Link2 size={18} color={TEAL} />, color: TEAL, desc: 'Links from other websites', subSources: ['Partner sites', 'Blog mentions', 'News articles'] },
-  'Email': { icon: <ExternalLink size={18} color={ORANGE} />, color: ORANGE, desc: 'Email marketing campaigns', subSources: ['Newsletter', 'Investor updates', 'Drip campaigns'] },
-};
+  'Email': { icon: <ExternalLink size={18} color={ORANGE} />, color: ORANGE, desc: 'Email marketing campaigns', subSources: ['Newsletter', 'Investor updates', 'Drip campaigns'] }};
 
 export function SourcesTab({ acquisition, sessionQuality, byPlatform, byReferrer }: SourcesTabProps) {
   const acq = acquisition ?? [];
@@ -240,5 +237,4 @@ const s = StyleSheet.create({
   srcCardStatDivider: { width: 1, backgroundColor: Colors.surfaceBorder, marginVertical: 2 },
   srcCardSubRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   srcCardSubBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  srcCardSubText: { fontSize: 10, fontWeight: '600' as const },
-});
+  srcCardSubText: { fontSize: 10, fontWeight: '600' as const }});

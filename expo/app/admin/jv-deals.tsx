@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,12 +8,10 @@ import {
   Modal,
   Alert,
   RefreshControl,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Animated,
-  Dimensions,
-} from 'react-native';
+  Dimensions} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
@@ -46,8 +43,7 @@ import {
   ChevronDown,
   GripVertical,
   ArrowUpToLine,
-  ArrowDownToLine,
-} from 'lucide-react-native';
+  ArrowDownToLine} from 'lucide-react-native';
 import { Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
@@ -66,6 +62,7 @@ import { buildOwnershipSnapshot } from '@/lib/ownership-math';
 import { extractExplicitDealSalePrice } from '@/lib/parse-deal';
 import { syncToLandingPage } from '@/lib/landing-sync';
 import { triggerAutoDeploy } from '@/lib/auto-deploy';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type JVDealType = 'equity_split' | 'profit_sharing' | 'hybrid' | 'development' | 'new_construction' | 'existing_complete' | 'rehab_construction';
 
@@ -156,8 +153,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   active: { label: 'Active', color: '#00C48C', bg: '#00C48C18' },
   completed: { label: 'Completed', color: '#4A90D9', bg: '#4A90D918' },
   expired: { label: 'Expired', color: '#FF4D4D', bg: '#FF4D4D18' },
-  archived: { label: 'Archived', color: '#A855F7', bg: '#A855F718' },
-};
+  archived: { label: 'Archived', color: '#A855F7', bg: '#A855F718' }};
 
 const TYPE_LABELS: Record<string, string> = {
   equity_split: 'Equity Split',
@@ -166,8 +162,7 @@ const TYPE_LABELS: Record<string, string> = {
   development: 'Development',
   new_construction: 'New Construction',
   existing_complete: 'Existing (Investor Ready)',
-  rehab_construction: 'Rehab Construction',
-};
+  rehab_construction: 'Rehab Construction'};
 
 const FILTER_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -232,8 +227,7 @@ const DEFAULT_EDIT_FORM: EditFormState = {
   yearEstablished: '',
   completedProjects: '',
   startDate: '',
-  endDate: '',
-};
+  endDate: ''};
 
 export default function AdminJVDealsScreen() {
   const router = useRouter();
@@ -299,8 +293,7 @@ export default function AdminJVDealsScreen() {
 
       return { items: deals, hasMore: result.hasMore };
       // Note: canonical-query handles dedup, retry, and SWR cache internally
-    },
-  });
+    }});
 
   // Legacy query kept for stats — fetches total count without loading all deals
   const statsQuery = useQuery<{ total: number; published: number; active: number; totalInvestment: number }>({
@@ -312,13 +305,11 @@ export default function AdminJVDealsScreen() {
         total: all.length,
         published: all.filter(d => d.published).length,
         active: all.filter(d => d.status === 'active').length,
-        totalInvestment: all.reduce((sum, d) => sum + (d.totalInvestment || 0), 0),
-      };
+        totalInvestment: all.reduce((sum, d) => sum + (d.totalInvestment || 0), 0)};
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
+    refetchOnMount: false});
 
   const publishMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -350,8 +341,7 @@ export default function AdminJVDealsScreen() {
     onError: (err: Error) => {
       console.error('[Admin JV] Publish error:', err);
       Alert.alert('Error', 'Failed to publish deal: ' + err.message);
-    },
-  });
+    }});
 
   const unpublishMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -383,8 +373,7 @@ export default function AdminJVDealsScreen() {
     onError: (err: Error) => {
       console.error('[Admin JV] Unpublish error:', err);
       Alert.alert('Error', 'Failed to unpublish deal: ' + err.message);
-    },
-  });
+    }});
 
   const updateMutation = useMutation({
     mutationFn: async (input: { id: string; data: Record<string, unknown> }) => {
@@ -439,8 +428,7 @@ export default function AdminJVDealsScreen() {
       } else {
         Alert.alert('Save Failed', 'Failed to save deal changes: ' + err.message + '\n\nPlease try again.');
       }
-    },
-  });
+    }});
 
   const archiveMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -461,8 +449,7 @@ export default function AdminJVDealsScreen() {
     onError: (err: Error) => {
       console.error('[Admin JV] Archive error:', err);
       Alert.alert('Error', 'Failed to archive deal: ' + err.message);
-    },
-  });
+    }});
 
   const restoreMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -483,8 +470,7 @@ export default function AdminJVDealsScreen() {
     onError: (err: Error) => {
       console.error('[Admin JV] Restore error:', err);
       Alert.alert('Error', 'Failed to restore deal: ' + err.message);
-    },
-  });
+    }});
 
   const photoRecoverMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -501,8 +487,7 @@ export default function AdminJVDealsScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Error', 'Photo recovery failed: ' + err.message);
-    },
-  });
+    }});
 
   const photoRestoreMutation = useMutation({
     mutationFn: async (input: { id: string; photos: string[] }) => {
@@ -522,8 +507,7 @@ export default function AdminJVDealsScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Error', 'Photo restore failed: ' + err.message);
-    },
-  });
+    }});
 
   const deleteMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -548,8 +532,7 @@ export default function AdminJVDealsScreen() {
       setDeleteTarget(null);
       setDeleteConfirmText('');
       Alert.alert('Delete Failed', err.message);
-    },
-  });
+    }});
 
   const deals = useMemo((): JVDeal[] => {
     const raw: JVDeal[] = jvList.data ?? [];
@@ -590,8 +573,7 @@ export default function AdminJVDealsScreen() {
       total: all.length,
       published: all.filter(d => d.published).length,
       active: all.filter(d => d.status === 'active').length,
-      totalInvestment: all.reduce((sum, d) => sum + (d.totalInvestment || 0), 0),
-    };
+      totalInvestment: all.reduce((sum, d) => sum + (d.totalInvestment || 0), 0)};
   }, [statsQuery.data, jvList.data]);
 
   const reorderMutation = useMutation({
@@ -619,8 +601,7 @@ export default function AdminJVDealsScreen() {
     onError: (err: Error) => {
       console.error('[Admin JV] Reorder error:', err);
       Alert.alert('Error', 'Failed to save order: ' + err.message);
-    },
-  });
+    }});
 
   const isAnyMutating = publishMutation.isPending || unpublishMutation.isPending || archiveMutation.isPending || restoreMutation.isPending || reorderMutation.isPending;
 
@@ -673,8 +654,7 @@ export default function AdminJVDealsScreen() {
       yearEstablished: String((trustData.yearEstablished as number) || ''),
       completedProjects: String((trustData.completedProjects as number) || ''),
       startDate: normalizeDate(deal.startDate || ''),
-      endDate: normalizeDate(deal.endDate || ''),
-    });
+      endDate: normalizeDate(deal.endDate || '')});
     setEditModalVisible(true);
   }, []);
 
@@ -728,8 +708,7 @@ export default function AdminJVDealsScreen() {
       ].filter(Boolean),
       riskFactors: [],
       keyMilestones: [],
-      documents: [],
-    };
+      documents: []};
     const updatePayload: Record<string, unknown> = {
       title: editForm.title.trim(),
       projectName: editForm.projectName.trim(),
@@ -746,8 +725,7 @@ export default function AdminJVDealsScreen() {
       performanceFee: Number(parseAmountInput(editForm.performanceFee)) || 20,
       minimumHoldPeriod: Number(parseAmountInput(editForm.minimumHoldPeriod)) || 12,
       photos: editPhotos,
-      trust_info: JSON.stringify(trustInfo),
-    };
+      trust_info: JSON.stringify(trustInfo)};
     if (editForm.propertyAddress.trim()) {
       updatePayload.propertyAddress = editForm.propertyAddress.trim();
     }
@@ -760,8 +738,7 @@ export default function AdminJVDealsScreen() {
     console.log('[Admin JV] Update payload keys:', Object.keys(updatePayload).join(','), '| startDate:', updatePayload.startDate, '| endDate:', updatePayload.endDate);
     updateMutation.mutate({
       id: selectedDeal.id,
-      data: updatePayload,
-    },
+      data: updatePayload},
     {
       onSuccess: () => {
         const investStr = formatAmountInput(String(parsedInvestment));
@@ -770,8 +747,7 @@ export default function AdminJVDealsScreen() {
           'Deal Saved',
           `"${editForm.projectName.trim()}" updated.\n\nInvestment: ${investStr}\nSale Price: ${hasExplicitSalePrice ? formatAmountInput(String(parsedSalePriceInput)) : 'Not set'}\nProperty Value: ${formatAmountInput(String(resolvedPropertyValue || 0))}\nROI: ${parsedROI}%\nTimeline: ${timelineStr}\nMin Investment: ${formatAmountInput(String(parsedMinInvestment))}\nFractional Share: ${formatAmountInput(String(parsedFractionalSharePrice))}\nPhotos: ${editPhotos.length}`
         );
-      },
-    });
+      }});
   }, [selectedDeal, editForm, editPhotos, updateMutation]);
 
   const pickPhotosFromGallery = useCallback(async (targetDealId?: string) => {
@@ -785,8 +761,7 @@ export default function AdminJVDealsScreen() {
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
         quality: 1.0,
-        selectionLimit: 20,
-      });
+        selectionLimit: 20});
       if (result.canceled || !result.assets || result.assets.length === 0) return;
 
       const dealId = targetDealId || selectedDeal?.id;
@@ -800,8 +775,7 @@ export default function AdminJVDealsScreen() {
 
       const localPhotos = result.assets.map((asset, idx) => ({
         id: `upload_${Date.now()}_${idx}`,
-        uri: asset.uri,
-      }));
+        uri: asset.uri}));
 
       setPendingLocalPhotos(prev => [...prev, ...localPhotos]);
 
@@ -825,8 +799,7 @@ export default function AdminJVDealsScreen() {
           Animated.timing(uploadProgressAnim, {
             toValue: completedSoFar / total,
             duration: 200,
-            useNativeDriver: false,
-          }).start();
+            useNativeDriver: false}).start();
           setUploadProgress(`${completedSoFar}/${total}`);
         },
       );
@@ -1124,7 +1097,7 @@ export default function AdminJVDealsScreen() {
                 testID="jv-reorder-save"
               >
                 {reorderMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ShimmerIndicator size="small" color="#000" />
                 ) : (
                   <Text style={styles.reorderSaveText}>Save Order</Text>
                 )}
@@ -1188,7 +1161,7 @@ export default function AdminJVDealsScreen() {
 
           {jvList.isLoading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.loadingText}>Loading deals...</Text>
             </View>
           ) : jvList.isError ? (
@@ -1441,7 +1414,7 @@ export default function AdminJVDealsScreen() {
             <View style={{ paddingVertical: 16, alignItems: 'center' }}>
               {jvList.isFetchingMore ? (
                 <>
-                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <ShimmerIndicator size="small" color={Colors.primary} />
                   <Text style={{ color: Colors.textSecondary, marginTop: 8, fontSize: 13 }}>Loading more deals…</Text>
                 </>
               ) : (
@@ -1500,7 +1473,7 @@ export default function AdminJVDealsScreen() {
                 testID="delete-confirm-btn"
               >
                 {deleteMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ShimmerIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.deleteModalConfirmText}>Delete Forever</Text>
                 )}
@@ -1570,7 +1543,7 @@ export default function AdminJVDealsScreen() {
                 testID="photo-restore-btn"
               >
                 {photoRestoreMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ShimmerIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.deleteModalConfirmText}>Add URL Photos</Text>
                 )}
@@ -1583,7 +1556,7 @@ export default function AdminJVDealsScreen() {
       {isUploadingPhotos && (
         <View style={styles.uploadToast}>
           <View style={styles.uploadToastContent}>
-            <ActivityIndicator size="small" color="#fff" />
+            <ShimmerIndicator size="small" color="#fff" />
             <Text style={styles.uploadToastText}>Uploading {uploadProgress}</Text>
           </View>
           <View style={styles.uploadToastBarBg}>
@@ -1593,9 +1566,7 @@ export default function AdminJVDealsScreen() {
                 {
                   width: uploadProgressAnim.interpolate({
                     inputRange: [0, 1],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
+                    outputRange: ['0%', '100%']})},
               ]}
             />
           </View>
@@ -1617,7 +1588,7 @@ export default function AdminJVDealsScreen() {
               accessibilityLabel="Save deal changes"
             >
               {updateMutation.isPending ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ShimmerIndicator size="small" color="#000" />
               ) : (
                 <>
                   <Check size={16} color="#000" />
@@ -1993,7 +1964,7 @@ export default function AdminJVDealsScreen() {
                         <Image source={{ uri: photo.uri }} style={[styles.photoGridImage, styles.photoGridImageUploading]} resizeMode="cover" />
                         <View style={styles.photoUploadOverlayInline}>
                           {state === 'uploading' ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <ShimmerIndicator size="small" color="#fff" />
                           ) : state === 'failed' ? (
                             <AlertTriangle size={16} color="#FF4D4D" />
                           ) : state === 'done' ? (
@@ -2051,11 +2022,9 @@ export default function AdminJVDealsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2063,26 +2032,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerActions: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
 
   createBtn: {
     width: 40,
@@ -2090,17 +2055,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingTop: 16,
-    gap: 8,
-  },
+    gap: 8},
   statCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -2108,30 +2070,24 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statValue: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statValueGreen: {
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   statValuePrimary: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   statValueYellow: {
-    color: '#FFB800',
-  },
+    color: '#FFB800'},
   statLabel: {
     color: Colors.textTertiary,
     fontSize: 9,
     fontWeight: '600' as const,
     marginTop: 2,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2142,67 +2098,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   filtersRow: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   loadingWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   errorWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 8,
-  },
+    gap: 8},
   errorTitle: {
     color: '#FF4D4D',
     fontSize: 16,
     fontWeight: '700' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   errorSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     textAlign: 'center',
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   retryBtn: {
     marginTop: 12,
     backgroundColor: Colors.primary + '20',
@@ -2210,30 +2154,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   retryBtnText: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   emptyWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 8,
-  },
+    gap: 8},
   emptyTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   emptySubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   dealCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
@@ -2241,85 +2180,68 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   dealHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   dealTitleWrap: {
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   dealProjectName: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dealTitle: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   dealBadges: {
     flexDirection: 'row',
     gap: 6,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   statusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   statusText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   pubBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   pubBadgeLive: {
-    backgroundColor: '#00C48C18',
-  },
+    backgroundColor: '#00C48C18'},
   pubBadgeHidden: {
-    backgroundColor: '#9A9A9A18',
-  },
+    backgroundColor: '#9A9A9A18'},
   pubBadgeText: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   pubBadgeTextLive: {
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   pubBadgeTextHidden: {
-    color: '#9A9A9A',
-  },
+    color: '#9A9A9A'},
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   addressText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    flex: 1,
-  },
+    flex: 1},
   dealMetrics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2327,22 +2249,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   dealMetric: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   dealMetricValue: {
     color: Colors.text,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dealActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2350,77 +2268,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   actionBtnText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   actionBtnTextPrimary: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   actionBtnTextGreen: {
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   actionBtnTextRed: {
-    color: '#FF4D4D',
-  },
+    color: '#FF4D4D'},
   actionBtnTextDanger: {
-    color: '#FF6B6B',
-  },
+    color: '#FF6B6B'},
   actionBtnTextBlue: {
-    color: '#4A90D9',
-  },
+    color: '#4A90D9'},
   editBtn: {
     borderColor: Colors.primary + '40',
     backgroundColor: Colors.primary + '10',
     flex: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   publishBtn: {
     borderColor: '#00C48C40',
     backgroundColor: '#00C48C10',
     flex: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   unpublishBtn: {
     borderColor: '#FF6B6B40',
     backgroundColor: '#FF6B6B10',
     flex: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   archiveBtn: {
     borderColor: '#FFB80040',
     backgroundColor: '#FFB80010',
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   photoBtn: {
     borderColor: '#4A90D940',
     backgroundColor: '#4A90D910',
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   restoreBtn: {
     borderColor: '#00C48C40',
     backgroundColor: '#00C48C10',
     flex: 1,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   permDeleteBtn: {
     borderColor: '#FF4D4D40',
     backgroundColor: '#FF4D4D10',
     flex: 1,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   bottomSpacer: {
-    height: 100,
-  },
+    height: 100},
   deleteOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    padding: 24,
-  },
+    padding: 24},
   deleteModal: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
@@ -2428,8 +2330,7 @@ const styles = StyleSheet.create({
     width: '100%' as const,
     maxWidth: 400,
     borderWidth: 1,
-    borderColor: '#FF4D4D30',
-  },
+    borderColor: '#FF4D4D30'},
   deleteIconWrap: {
     alignSelf: 'center' as const,
     width: 64,
@@ -2438,33 +2339,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF4D4D15',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   photoIconWrap: {
-    backgroundColor: '#4A90D915',
-  },
+    backgroundColor: '#4A90D915'},
   deleteModalTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
     textAlign: 'center' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   deleteModalSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     textAlign: 'center' as const,
     lineHeight: 18,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   deleteModalDealName: {
     color: '#FF4D4D',
     fontSize: 16,
     fontWeight: '800' as const,
     textAlign: 'center' as const,
     marginBottom: 16,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   deleteConfirmInput: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
@@ -2474,47 +2370,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FF4D4D40',
     textAlign: 'center' as const,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   photoUrlsInput: {
     textAlign: 'left' as const,
     minHeight: 120,
-    borderColor: '#4A90D940',
-  },
+    borderColor: '#4A90D940'},
   deleteModalActions: {
     flexDirection: 'row' as const,
-    gap: 12,
-  },
+    gap: 12},
   deleteModalCancel: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: Colors.backgroundSecondary,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   deleteModalCancelText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   deleteModalConfirm: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: '#FF4D4D',
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   deleteModalConfirmDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   deleteModalConfirmText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   photoConfirmBtn: {
-    backgroundColor: '#4A90D9',
-  },
+    backgroundColor: '#4A90D9'},
   galleryUploadBtnModal: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2523,36 +2410,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90D9',
     borderRadius: 12,
     paddingVertical: 14,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   galleryUploadBtnText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   photoOrDivider: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 12,
-    marginVertical: 10,
-  },
+    marginVertical: 10},
   photoOrLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   photoOrText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   photoSectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
     marginTop: 14,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   photoCountBadge: {
     backgroundColor: '#4A90D920',
     color: '#4A90D9',
@@ -2561,31 +2442,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   editPhotosSection: {
-    gap: 10,
-  },
+    gap: 10},
   photoGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 6,
-  },
+    gap: 6},
   photoGridItem: {
     width: (Dimensions.get('window').width - 32 - 18) / 4,
     height: (Dimensions.get('window').width - 32 - 18) / 4,
     borderRadius: 8,
     overflow: 'hidden' as const,
     position: 'relative' as const,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   photoGridImage: {
     width: '100%' as const,
-    height: '100%' as const,
-  },
+    height: '100%' as const},
   photoGridImageUploading: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   photoGridRemoveBtn: {
     position: 'absolute' as const,
     top: 3,
@@ -2595,8 +2470,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: 'rgba(0,0,0,0.7)',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   photoGridIndex: {
     position: 'absolute' as const,
     bottom: 3,
@@ -2604,13 +2478,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 6,
     paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
+    paddingVertical: 1},
   photoGridIndexText: {
     color: '#fff',
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   photoUploadOverlayInline: {
     position: 'absolute' as const,
     top: 0,
@@ -2619,14 +2491,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   photoPendingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.6)'},
   photoGridAddBtn: {
     width: (Dimensions.get('window').width - 32 - 18) / 4,
     height: (Dimensions.get('window').width - 32 - 18) / 4,
@@ -2637,23 +2507,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90D908',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    gap: 4,
-  },
+    gap: 4},
   photoGridAddText: {
     color: '#4A90D9',
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   editPhotosEmpty: {
     alignItems: 'center' as const,
     paddingVertical: 20,
-    gap: 8,
-  },
+    gap: 8},
   editPhotosEmptyText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   uploadToast: {
     position: 'absolute' as const,
     top: 0,
@@ -2665,34 +2531,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#4A90D930',
-  },
+    borderBottomColor: '#4A90D930'},
   uploadToastContent: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 10,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   uploadToastText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   uploadToastBarBg: {
     height: 3,
     backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 2,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   uploadToastBarFill: {
     height: 3,
     backgroundColor: '#4A90D9',
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   modalSafe: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2700,13 +2560,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   modalTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   modalSaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2714,27 +2572,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   modalSaveBtnText: {
     color: '#000',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   keyboardAvoid: {
-    flex: 1,
-  },
+    flex: 1},
   modalBody: {
     flex: 1,
-    padding: 16,
-  },
+    padding: 16},
   fieldLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '600' as const,
     marginBottom: 6,
-    marginTop: 14,
-  },
+    marginTop: 14},
   fieldInput: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -2742,46 +2595,36 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   fieldTextarea: {
-    minHeight: 100,
-  },
+    minHeight: 100},
   fieldRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   fieldHalf: {
-    flex: 1,
-  },
+    flex: 1},
   typeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   typeChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   typeChipActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   typeChipText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   typeChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   modalBottomSpacer: {
-    height: 60,
-  },
+    height: 60},
   reorderToggleBtn: {
     width: 40,
     height: 40,
@@ -2790,8 +2633,7 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   reorderBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2800,53 +2642,43 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: Colors.primary + '15',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.primary + '30',
-  },
+    borderBottomColor: Colors.primary + '30'},
   reorderBarLeft: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   reorderBarText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   reorderBarActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 10,
-  },
+    gap: 10},
   reorderCancelBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   reorderCancelText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   reorderSaveBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   reorderSaveBtnDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   reorderSaveText: {
     color: '#000',
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dealCardReorder: {
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   reorderControls: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2854,26 +2686,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   reorderPositionBadge: {
     backgroundColor: Colors.primary + '20',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   reorderPositionText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   reorderBtns: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 4,
-  },
+    gap: 4},
   reorderMoveBtn: {
     width: 36,
     height: 36,
@@ -2882,18 +2710,15 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   reorderMoveBtnDisabled: {
-    opacity: 0.35,
-  },
+    opacity: 0.35},
   inlineReorderRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'flex-end' as const,
     marginBottom: 8,
-    marginTop: -2,
-  },
+    marginTop: -2},
   inlineReorderBtns: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2903,30 +2728,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   inlineArrowBtn: {
     width: 32,
     height: 32,
     borderRadius: 8,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   inlineArrowBtnDisabled: {
-    opacity: 0.3,
-  },
+    opacity: 0.3},
   inlinePositionText: {
     color: Colors.textSecondary,
     fontSize: 11,
     fontWeight: '700' as const,
     minWidth: 24,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   positionInputWrap: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 3,
-  },
+    gap: 3},
   positionInput: {
     width: 36,
     height: 28,
@@ -2939,24 +2759,21 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     textAlign: 'center' as const,
     paddingVertical: 0,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   positionGoBtn: {
     width: 24,
     height: 24,
     borderRadius: 6,
     backgroundColor: '#00C48C',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   positionBadgeTap: {
     paddingHorizontal: 6,
     paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   trustSectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2965,37 +2782,29 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   trustSectionTitle: {
     color: '#00C48C',
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   trustToggles: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   trustToggle: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   trustToggleActive: {
     borderColor: '#00C48C',
-    backgroundColor: '#00C48C18',
-  },
+    backgroundColor: '#00C48C18'},
   trustToggleText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   trustToggleTextActive: {
-    color: '#00C48C',
-  },
-});
+    color: '#00C48C'}});

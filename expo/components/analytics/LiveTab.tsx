@@ -5,8 +5,7 @@ import Colors from '@/constants/colors';
 import type { LivePresenceState } from '@/lib/realtime-presence';
 import {
   BLUE, GREEN, TEAL, RED, ORANGE, PURPLE, CHART_COLORS,
-  COUNTRY_FLAGS, PulseIndicator, shared,
-} from './analytics-shared';
+  COUNTRY_FLAGS, PulseIndicator, shared} from './analytics-shared';
 
 interface LiveTabProps {
   presenceState: LivePresenceState;
@@ -223,5 +222,4 @@ const s = StyleSheet.create({
   sessionSourceText: { fontSize: 9, fontWeight: '800' as const, letterSpacing: 0.5 },
   sessionDetail: { fontSize: 11, fontWeight: '600' as const, color: Colors.textSecondary },
   sessionMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  sessionMeta: { fontSize: 10, fontWeight: '500' as const, color: Colors.textTertiary },
-});
+  sessionMeta: { fontSize: 10, fontWeight: '500' as const, color: Colors.textTertiary }});

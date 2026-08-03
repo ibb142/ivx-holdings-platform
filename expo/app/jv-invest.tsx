@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -11,9 +10,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Keyboard,
-  TouchableWithoutFeedback,
-  ActivityIndicator,
-} from 'react-native';
+  TouchableWithoutFeedback} from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -39,8 +36,7 @@ import {
   Landmark,
   UserPlus,
   ChevronRight,
-  LogIn,
-} from 'lucide-react-native';
+  LogIn} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrencyWithDecimals, formatNumber, formatAmountInput } from '@/lib/formatters';
 import { buildOwnershipSnapshot } from '@/lib/ownership-math';
@@ -53,6 +49,7 @@ import { purchaseJVInvestment } from '@/lib/investment-service';
 import { fetchJVDealById } from '@/lib/jv-storage';
 import type { PoolTier } from '@/types/jv';
 import { sanitizeDealPhotosForDeal } from '@/constants/deal-photos';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 
 type PaymentMethod = 'wallet' | 'bank' | 'wire';
@@ -137,8 +134,7 @@ function buildTrustMarket(row: Record<string, unknown>, totalInvestment: number,
     timelineMax: rawTrust.timelineMax,
     timelineUnit: rawTrust.timelineUnit,
     priceChange1h: rawTrust.priceChange1h,
-    priceChange2h: rawTrust.priceChange2h,
-  });
+    priceChange2h: rawTrust.priceChange2h});
 
   return {
     minInvestment: resolved.minInvestment,
@@ -147,8 +143,7 @@ function buildTrustMarket(row: Record<string, unknown>, totalInvestment: number,
     salePrice: resolved.salePrice,
     fractionalSharePrice: resolved.fractionalSharePrice,
     priceChange1h: resolved.priceChange1h,
-    priceChange2h: resolved.priceChange2h,
-  };
+    priceChange2h: resolved.priceChange2h};
 }
 
 function formatMarketCap(value: number): string {
@@ -172,8 +167,7 @@ function mapRowToDeal(row: Record<string, unknown>): DealData {
   if (!Array.isArray(photos)) photos = [];
   photos = sanitizeDealPhotosForDeal({
     title: str(row.title),
-    projectName: str(row.project_name ?? row.projectName),
-  }, photos.filter((p: string) =>
+    projectName: str(row.project_name ?? row.projectName)}, photos.filter((p: string) =>
     typeof p === 'string' && p.length > 5 && (p.startsWith('http') || p.startsWith('data:image/'))
   ));
 
@@ -189,8 +183,7 @@ function mapRowToDeal(row: Record<string, unknown>): DealData {
         minInvestment: 1000,
         currentRaised: 0,
         investorCount: 0,
-        status: 'open' as const,
-      },
+        status: 'open' as const},
     ];
   }
 
@@ -229,8 +222,7 @@ function mapRowToDeal(row: Record<string, unknown>): DealData {
     photos,
     poolTiers,
     partners: Array.isArray(partners) ? partners : [],
-    trustMarket,
-  };
+    trustMarket};
 }
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; desc: string; icon: typeof Wallet }[] = [
@@ -244,10 +236,7 @@ const POOL_CONFIG: Record<InvestmentPool, { label: string; desc: string; icon: t
     label: 'JV Investment',
     desc: 'Direct equity stake in the project with profit sharing',
     icon: Landmark,
-    color: '#00C48C',
-  },
-
-};
+    color: '#00C48C'}};
 
 export default function JVInvestScreen() {
   const router = useRouter();
@@ -286,8 +275,7 @@ export default function JVInvestScreen() {
     enabled: !!jvId,
     retry: 2,
     retryDelay: (attempt: number) => Math.min(1000 * Math.pow(2, attempt), 3000),
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const deal = dealQuery.data ?? null;
 
@@ -304,8 +292,7 @@ export default function JVInvestScreen() {
       }
     },
     enabled: canInvest,
-    staleTime: 60000,
-  });
+    staleTime: 60000});
   const walletBalance = balanceQuery.data ?? 0;
 
   const openPools = useMemo(() => {
@@ -331,8 +318,7 @@ export default function JVInvestScreen() {
       timelineMax: deal?.trustMarket.timelineMax,
       timelineUnit: 'months',
       priceChange1h: deal?.trustMarket.priceChange1h,
-      priceChange2h: deal?.trustMarket.priceChange2h,
-    });
+      priceChange2h: deal?.trustMarket.priceChange2h});
   }, [deal?.propertyValue, deal?.totalInvestment, deal?.trustMarket.fractionalSharePrice, deal?.trustMarket.minInvestment, deal?.trustMarket.priceChange1h, deal?.trustMarket.priceChange2h, deal?.trustMarket.salePrice, deal?.trustMarket.timelineMax, deal?.trustMarket.timelineMin, selectedPoolData?.minInvestment]);
   const liveSalePrice = resolvedTrustMarket.salePrice;
   const investmentRaise = Number(deal?.totalInvestment ?? 0);
@@ -365,8 +351,7 @@ export default function JVInvestScreen() {
         amount,
         equityPercent,
         expectedROI: deal.expectedROI,
-        paymentMethod,
-      });
+        paymentMethod});
     },
     onSuccess: (result) => {
       if (result.success) {
@@ -389,8 +374,7 @@ export default function JVInvestScreen() {
     },
     onError: (error: Error) => {
       Alert.alert('Error', error.message || 'Something went wrong.');
-    },
-  });
+    }});
 
   const handleAmountChange = useCallback((text: string) => {
     const clean = text.replace(/[^0-9]/g, '');
@@ -451,8 +435,7 @@ export default function JVInvestScreen() {
     pool: 'Choose Investment',
     amount: 'Investment Amount',
     review: 'Review & Confirm',
-    success: 'Success',
-  };
+    success: 'Success'};
 
   // Timeout: if loading takes more than 10 seconds, show retry state
   const [loadingTimedOut, setLoadingTimedOut] = useState<boolean>(false);
@@ -492,7 +475,7 @@ export default function JVInvestScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centerWrap}>
           <View style={styles.loadingPulse}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
           </View>
           <Text style={styles.loadingTitle}>Loading Deal</Text>
           <Text style={styles.loadingSubtext}>Fetching investment details...</Text>
@@ -1017,7 +1000,7 @@ export default function JVInvestScreen() {
           >
             {investMutation.isPending ? (
               <View style={styles.ctaRow}>
-                <ActivityIndicator size="small" color={Colors.black} />
+                <ShimmerIndicator size="small" color={Colors.black} />
                 <Text style={styles.ctaBtnText}>Processing...</Text>
               </View>
             ) : (
@@ -1049,14 +1032,12 @@ function capitalize(str: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   centerWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   loadingPulse: {
     width: 80,
     height: 80,
@@ -1064,18 +1045,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   loadingTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   loadingSubtext: {
     fontSize: 14,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   errorCircle: {
     width: 80,
     height: 80,
@@ -1083,46 +1061,39 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   errorTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: Colors.text,
     marginBottom: 8,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   errorSubtext: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
     lineHeight: 19,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   retryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingHorizontal: 28,
     paddingVertical: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   retryBtnText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   goBackBtn: {
     borderRadius: 12,
     paddingHorizontal: 28,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   goBackBtnText: {
     color: Colors.textSecondary,
     fontWeight: '600' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   authBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1133,21 +1104,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '0C',
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   authBannerText: {
-    flex: 1,
-  },
+    flex: 1},
   authBannerTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.primary,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   authBannerSub: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1155,45 +1122,36 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   headerBack: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   stepIndicator: {
     flexDirection: 'row',
     gap: 6,
-    marginTop: 6,
-  },
+    marginTop: 6},
   stepDot: {
     width: 24,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   stepDotActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   headerSpacer: {
-    width: 40,
-  },
+    width: 40},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   dealCard: {
     margin: 16,
     marginBottom: 4,
@@ -1201,148 +1159,123 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   dealCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   dealCardIcon: {
     width: 48,
     height: 48,
     borderRadius: 14,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   dealCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   dealName: {
     fontSize: 17,
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   addressText: {
     fontSize: 12,
     color: Colors.textTertiary,
-    flex: 1,
-  },
+    flex: 1},
   dealStats: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   dealStatItem: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
+    gap: 4},
   dealStatValue: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   dealStatDivider: {
     width: 1,
     height: 16,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   marketSnapshot: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   marketSnapshotCard: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   marketSnapshotLabel: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.6,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   marketSnapshotValue: {
     fontSize: 13,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   marketSnapshotValueUp: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   marketSnapshotHint: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   fundingSection: {},
   fundingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   fundingLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   fundingValue: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   fundingTrack: {
     height: 6,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   fundingFill: {
     height: 6,
     backgroundColor: Colors.primary,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   fundingPercent: {
     fontSize: 11,
     color: Colors.textTertiary,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   sectionHeading: {
     fontSize: 18,
     fontWeight: '800' as const,
     color: Colors.text,
     marginHorizontal: 16,
     marginTop: 16,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   sectionSubheading: {
     fontSize: 13,
     color: Colors.textSecondary,
     marginHorizontal: 16,
     marginBottom: 16,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   poolCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -1350,38 +1283,31 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   poolCardSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '06',
-  },
+    backgroundColor: Colors.primary + '06'},
   poolTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   poolIcon: {
     width: 46,
     height: 46,
     borderRadius: 13,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   poolInfo: {
-    flex: 1,
-  },
+    flex: 1},
   poolTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   poolDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   radio: {
     width: 22,
     height: 22,
@@ -1390,67 +1316,54 @@ const styles = StyleSheet.create({
     borderColor: Colors.textTertiary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
-  },
+    marginTop: 4},
   radioSelected: {
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   radioDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   poolMeta: {
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   poolProgressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   poolTrack: {
     flex: 1,
     height: 5,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 2.5,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   poolFill: {
     height: 5,
-    borderRadius: 2.5,
-  },
+    borderRadius: 2.5},
   poolPercent: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   poolMetaRow: {
-    flexDirection: 'row',
-  },
+    flexDirection: 'row'},
   poolMetaItem: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   poolMetaLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   poolMetaValue: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   poolMetaSep: {
     width: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 2,
-  },
+    marginVertical: 2},
   openBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1461,49 +1374,42 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.info + '0C',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.info + '20',
-  },
+    borderColor: Colors.info + '20'},
   openBannerText: {
     flex: 1,
     fontSize: 13,
     color: Colors.info,
     lineHeight: 18,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   termsCard: {
     marginHorizontal: 16,
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   termsCardTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   termRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 9,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   termLabel: {
     flex: 1,
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   termValue: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.text,
     maxWidth: 160,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   selectedPoolTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1515,36 +1421,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '0C',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.primary + '25',
-  },
+    borderColor: Colors.primary + '25'},
   selectedPoolInfo: {
-    flex: 1,
-  },
+    flex: 1},
   selectedPoolLabel: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   selectedPoolMeta: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   changeBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   changeBtnText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   amountWrap: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   fieldLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
@@ -1552,8 +1451,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginHorizontal: 16,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   amountField: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -1563,46 +1461,38 @@ const styles = StyleSheet.create({
     height: 64,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   dollarSign: {
     fontSize: 28,
     fontWeight: '300' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   amountInput: {
     flex: 1,
     fontSize: 32,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   quickAmounts: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginHorizontal: 16,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   quickBtn: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   quickBtnActive: {
     backgroundColor: Colors.primary + '18',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   quickBtnText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   quickBtnTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   summaryCard: {
     marginHorizontal: 16,
     backgroundColor: Colors.surface,
@@ -1610,37 +1500,30 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   summaryLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   summaryValue: {
     fontSize: 14,
     color: Colors.text,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   summaryDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   summaryBoldLabel: {
     fontSize: 15,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   summaryBoldValue: {
     fontSize: 18,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   protectionCard: {
     marginHorizontal: 16,
     backgroundColor: Colors.surface,
@@ -1648,19 +1531,16 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 12,
-  },
+    gap: 12},
   protectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   protectionText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   paymentCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1671,36 +1551,29 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.surfaceBorder,
     marginBottom: 8,
-    gap: 12,
-  },
+    gap: 12},
   paymentCardActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '06',
-  },
+    backgroundColor: Colors.primary + '06'},
   paymentIcon: {
     width: 44,
     height: 44,
     borderRadius: 12,
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   paymentIconActive: {
-    backgroundColor: Colors.primary + '18',
-  },
+    backgroundColor: Colors.primary + '18'},
   paymentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   paymentLabel: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   paymentDesc: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   reviewCard: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -1709,53 +1582,44 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   reviewCardTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   reviewRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   reviewLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   reviewValue: {
     fontSize: 14,
     color: Colors.text,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   reviewDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 6,
-  },
+    marginVertical: 6},
   reviewBoldLabel: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   reviewBoldValue: {
     fontSize: 20,
     fontWeight: '900' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   termsCheck: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginHorizontal: 16,
     marginBottom: 12,
-    gap: 12,
-  },
+    gap: 12},
   checkbox: {
     width: 24,
     height: 24,
@@ -1764,30 +1628,25 @@ const styles = StyleSheet.create({
     borderColor: Colors.textTertiary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   checkboxActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '12',
-  },
+    backgroundColor: Colors.primary + '12'},
   termsText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   disclaimer: {
     flexDirection: 'row',
     marginHorizontal: 16,
     gap: 8,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   disclaimerText: {
     flex: 1,
     fontSize: 12,
     color: Colors.textTertiary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -1797,8 +1656,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     backgroundColor: Colors.background,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   ctaBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
@@ -1806,50 +1664,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   ctaBtnDisabled: {
-    opacity: 0.35,
-  },
+    opacity: 0.35},
   ctaBtnText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   successScroll: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-  },
+    paddingHorizontal: 24},
   successBadge: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   successBadgeInner: {
     width: 110,
     height: 110,
     borderRadius: 55,
     backgroundColor: Colors.primary + '14',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   successTitle: {
     fontSize: 26,
     fontWeight: '900' as const,
     color: Colors.text,
     textAlign: 'center' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   successSubtitle: {
     fontSize: 15,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
     marginBottom: 28,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   successCard: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1857,22 +1706,18 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   successRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   successLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   successValue: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   primaryBtn: {
     width: '100%',
     backgroundColor: Colors.primary,
@@ -1882,13 +1727,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   primaryBtnText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   secondaryBtn: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1896,11 +1739,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   secondaryBtnText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
-});
+    color: Colors.textSecondary}});

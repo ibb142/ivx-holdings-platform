@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   FlatList,
@@ -8,10 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   RefreshControl,
-  ListRenderItem,
-} from 'react-native';
+  ListRenderItem} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -24,12 +21,12 @@ import {
   Briefcase,
   Building2,
   Megaphone,
-  Filter,
-} from 'lucide-react-native';
+  Filter} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FilterType = 'all' | 'broker' | 'agent' | 'influencer';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -74,11 +71,9 @@ export default function ApplicationsScreen() {
         agentPending: apps.filter((a: any) => a.type === 'agent' && a.status === 'pending').length,
         influencerApplications: apps.filter((a: any) => a.type === 'influencer').length,
         influencerPending: apps.filter((a: any) => a.type === 'influencer' && a.status === 'pending').length,
-        totalMembers: registryMembers.length,
-      };
+        totalMembers: registryMembers.length};
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const applicationsQuery = useQuery({
     queryKey: ['applications.listAll', { page: 1, limit: 100, type: typeFilter, status: statusFilter }],
@@ -91,8 +86,7 @@ export default function ApplicationsScreen() {
       if (error) { console.log('[Supabase] applications list error:', error.message); return null; }
       return { applications: data ?? [] };
     },
-    staleTime: 3000,
-  });
+    staleTime: 3000});
 
   const reviewMutation = useMutation({
     mutationFn: async (input: { id: string; type: string; decision: string }) => {
@@ -104,8 +98,7 @@ export default function ApplicationsScreen() {
     onSuccess: () => {
       void applicationsQuery.refetch();
       void statsQuery.refetch();
-    },
-  });
+    }});
 
   const applications = useMemo(() => {
     const items = applicationsQuery.data?.applications ?? [];
@@ -169,8 +162,7 @@ export default function ApplicationsScreen() {
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   }, []);
 
   const handleReview = useCallback((app: ApplicationItem, decision: 'approved' | 'rejected') => {
@@ -187,10 +179,8 @@ export default function ApplicationsScreen() {
             reviewMutation.mutate({
               id: app.id,
               type: app.type,
-              decision,
-            });
-          },
-        },
+              decision});
+          }},
       ]
     );
   }, [reviewMutation]);
@@ -382,7 +372,7 @@ export default function ApplicationsScreen() {
 
       {applicationsQuery.isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading applications...</Text>
         </View>
       ) : applications.length === 0 ? (
@@ -423,15 +413,13 @@ export default function ApplicationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 20,
     paddingVertical: 14,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
@@ -440,27 +428,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   headerText: {
-    flex: 1,
-  },
+    flex: 1},
   title: {
     fontSize: 22,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   subtitle: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   statsRow: {
     flexDirection: 'row' as const,
     paddingHorizontal: 20,
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   statCard: {
     flex: 1,
     backgroundColor: Colors.card,
@@ -469,19 +452,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     borderLeftWidth: 3,
-    position: 'relative' as const,
-  },
+    position: 'relative' as const},
   statNumber: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
     marginTop: 2,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   pendingDot: {
     position: 'absolute' as const,
     top: 6,
@@ -492,17 +472,14 @@ const styles = StyleSheet.create({
     height: 16,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   pendingDotText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   searchContainer: {
     paddingHorizontal: 20,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   searchBox: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -510,27 +487,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     paddingVertical: 11,
     paddingHorizontal: 10,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterRow: {
     maxHeight: 40,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   filterRow2: {
     maxHeight: 36,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   filterContent: {
     paddingHorizontal: 20,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -540,137 +512,111 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
+    gap: 6},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   statusChip: {
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 14,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statusChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   statusChipText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   statusChipTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   list: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   listContent: {
-    paddingBottom: 100,
-  },
+    paddingBottom: 100},
   appCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   appHeader: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   typeBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    gap: 5,
-  },
+    gap: 5},
   typeText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statusBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    gap: 4,
-  },
+    gap: 4},
   statusText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   appBody: {
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   appName: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   appEmail: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   appPhone: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   appLocation: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   detailsBox: {
     backgroundColor: Colors.background,
     borderRadius: 10,
     padding: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   detailsText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   appFooter: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   dateText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   actionRow: {
     flexDirection: 'row' as const,
     gap: 10,
-    marginTop: 12,
-  },
+    marginTop: 12},
   actionBtn: {
     flex: 1,
     flexDirection: 'row' as const,
@@ -678,34 +624,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     paddingVertical: 10,
     borderRadius: 10,
-    gap: 6,
-  },
+    gap: 6},
   approveBtn: {
-    backgroundColor: Colors.positive + '15',
-  },
+    backgroundColor: Colors.positive + '15'},
   rejectBtn: {
-    backgroundColor: Colors.negative + '15',
-  },
+    backgroundColor: Colors.negative + '15'},
   actionBtnText: {
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emptyContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   emptyIconWrap: {
     width: 96,
     height: 96,
@@ -715,19 +654,15 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 8,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   emptySubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 20,
-  },
-});
+    lineHeight: 20}});

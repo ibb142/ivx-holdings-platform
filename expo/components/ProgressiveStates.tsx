@@ -3,9 +3,10 @@
  * Provides Empty, Loading, Offline, and Error states with retry.
  */
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Inbox, WifiOff, AlertCircle, RefreshCw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { Skeleton } from '@/components/InstantSkeleton';
 
 type EmptyStateProps = {
   title: string;
@@ -35,10 +36,12 @@ type LoadingStateProps = {
 };
 
 export function LoadingState({ message = 'Loading…' }: LoadingStateProps) {
+  // Instagram-style: skeleton bones instead of spinner
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={Colors.primary} />
-      <Text style={styles.title}>{message}</Text>
+      <Skeleton width="80%" height={16} style={{ marginBottom: 8 }} />
+      <Skeleton width="60%" height={14} style={{ marginBottom: 8 }} />
+      <Skeleton width="70%" height={14} />
     </View>
   );
 }
@@ -97,10 +100,13 @@ export function ListFooter({ isFetchingMore, hasMore }: ListFooterProps) {
   return (
     <View style={styles.footer}>
       {isFetchingMore ? (
-        <>
-          <ActivityIndicator size="small" color={Colors.primary} />
-          <Text style={styles.footerText}>Loading more…</Text>
-        </>
+        <View style={styles.footerSkeleton}>
+          <Skeleton width={40} height={40} borderRadius={12} />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Skeleton width="70%" height={14} />
+            <Skeleton width="40%" height={11} />
+          </View>
+        </View>
       ) : null}
     </View>
   );
@@ -113,27 +119,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingVertical: 48,
-    gap: 8,
-  },
+    gap: 8},
   title: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: Colors.text,
     textAlign: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   message: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginTop: 4,
-  },
+    marginTop: 4},
   traceId: {
     fontSize: 11,
     color: Colors.textTertiary,
     fontFamily: 'monospace',
-    marginTop: 4,
-  },
+    marginTop: 4},
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -142,22 +144,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 10,
-    marginTop: 12,
-  },
+    marginTop: 12},
   actionText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 16,
-    gap: 8,
-  },
+    gap: 8},
   footerText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
-});
+    color: Colors.textSecondary}});

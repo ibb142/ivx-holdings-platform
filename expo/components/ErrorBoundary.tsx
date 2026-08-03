@@ -36,8 +36,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     try {
       errorTracker.captureError(error, 'fatal', {
         source: 'ErrorBoundary',
-        componentStack: errorInfo.slice(0, 200),
-      });
+        componentStack: errorInfo.slice(0, 200)});
     } catch {
       console.log('[ErrorBoundary] Failed to report error to tracker');
     }
@@ -92,8 +91,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-  },
+    padding: 24},
   card: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
@@ -102,8 +100,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   iconWrap: {
     width: 64,
     height: 64,
@@ -111,36 +108,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B6B15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   title: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
     textAlign: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   message: {
     color: Colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   stackScroll: {
     maxHeight: 100,
     width: '100%',
     marginBottom: 16,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   stack: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontFamily: 'monospace',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   resetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -148,11 +140,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingHorizontal: 24,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   resetBtnText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

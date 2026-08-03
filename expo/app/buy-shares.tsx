@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -12,9 +11,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   TouchableWithoutFeedback,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
+  Image} from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -35,8 +32,7 @@ import {
   Copy,
   CheckCheck,
   ShieldCheck,
-  CircleDollarSign,
-} from 'lucide-react-native';
+  CircleDollarSign} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrencyWithDecimals, formatNumber, formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import { useInvestmentGuard } from '@/hooks/useInvestmentGuard';
@@ -48,6 +44,7 @@ import { purchaseShares } from '@/lib/investment-service';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type PaymentMethod = 'wire' | 'wallet' | 'card';
 
@@ -58,8 +55,7 @@ const WIRE_TRANSFER_DETAILS = {
   accountName: 'IVXHOLDINGS LLC — Escrow',
   swiftCode: '[Pending]',
   bankAddress: '[Bank address pending configuration]',
-  reference: 'IVX-SHARES',
-};
+  reference: 'IVX-SHARES'};
 
 export default function BuySharesScreen() {
   const router = useRouter();
@@ -92,8 +88,7 @@ export default function BuySharesScreen() {
         return false;
       }
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const isCardEnabled = adminCardEnabled.data === true;
 
@@ -184,8 +179,7 @@ export default function BuySharesScreen() {
         paymentFee: cardFee,
         totalCost,
         paymentMethod,
-        investmentType: 'property_shares',
-      });
+        investmentType: 'property_shares'});
 
       if (result.success) {
         console.log('[BuyShares] Purchase successful:', result.confirmationNumber);
@@ -626,7 +620,7 @@ export default function BuySharesScreen() {
           >
             {isProcessing ? (
               <View style={styles.processingRow}>
-                <ActivityIndicator size="small" color={Colors.black} />
+                <ShimmerIndicator size="small" color={Colors.black} />
                 <Text style={styles.ctaButtonText}>Processing...</Text>
               </View>
             ) : (
@@ -645,8 +639,7 @@ export default function BuySharesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,27 +648,22 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   headerBackBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerRight: {
-    width: 40,
-  },
+    width: 40},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   propertyBanner: {
     flexDirection: 'row',
     margin: 16,
@@ -684,39 +672,32 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 14,
-  },
+    gap: 14},
   propertyThumb: {
     width: 72,
     height: 72,
     borderRadius: 12,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   propertyBannerInfo: {
     flex: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   propertyBannerName: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   propertyBannerLocation: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   propertyBannerStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   propertyBannerPrice: {
     fontSize: 14,
     fontWeight: '800' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   yieldBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -724,30 +705,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   yieldBadgeText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.success,
-  },
+    color: Colors.success},
   amountSection: {
     marginHorizontal: 16,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionLabel: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     marginBottom: 12,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   amountBtn: {
     width: 48,
     height: 48,
@@ -756,8 +732,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   amountInputWrap: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -769,47 +744,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   amountInput: {
     fontSize: 28,
     fontWeight: '800' as const,
     color: Colors.text,
     textAlign: 'center',
-    minWidth: 60,
-  },
+    minWidth: 60},
   amountInputLabel: {
     fontSize: 14,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   quickPickSection: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginHorizontal: 16,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   quickPickBtn: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   quickPickBtnActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   quickPickText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   quickPickTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   costBreakdown: {
     marginHorizontal: 16,
     backgroundColor: Colors.surface,
@@ -817,38 +784,31 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   costRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   costLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   costValue: {
     fontSize: 14,
     color: Colors.text,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   costDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   costLabelBold: {
     fontSize: 16,
     color: Colors.text,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   costValueBold: {
     fontSize: 18,
     color: Colors.primary,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   estimateCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -859,29 +819,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.success + '30',
-    gap: 12,
-  },
+    gap: 12},
   estimateIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.success + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   estimateInfo: {
-    flex: 1,
-  },
+    flex: 1},
   estimateTitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   estimateValue: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.success,
-  },
+    color: Colors.success},
   infoCard: {
     marginHorizontal: 16,
     backgroundColor: Colors.surface,
@@ -889,23 +844,19 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 12,
-  },
+    gap: 12},
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   infoText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   paymentSection: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -915,39 +866,31 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.surfaceBorder,
     marginBottom: 8,
-    gap: 12,
-  },
+    gap: 12},
   paymentOptionActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '08',
-  },
+    backgroundColor: Colors.primary + '08'},
   paymentIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 12,
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   paymentIconWrapActive: {
-    backgroundColor: Colors.primary + '20',
-  },
+    backgroundColor: Colors.primary + '20'},
   paymentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   paymentLabel: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   paymentLabelActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   paymentDesc: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   paymentRadio: {
     width: 22,
     height: 22,
@@ -955,72 +898,59 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.textTertiary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   paymentRadioActive: {
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   paymentRadioDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   orderSummary: {
     marginHorizontal: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   orderCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   orderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   orderLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   orderValue: {
     fontSize: 14,
     color: Colors.text,
     fontWeight: '500' as const,
     maxWidth: '55%' as any,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   orderDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 6,
-  },
+    marginVertical: 6},
   orderLabelBold: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   orderValueBold: {
     fontSize: 20,
     fontWeight: '900' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   disclaimerSection: {
     flexDirection: 'row',
     marginHorizontal: 16,
     gap: 8,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   disclaimerText: {
     flex: 1,
     fontSize: 12,
     color: Colors.textTertiary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -1030,61 +960,50 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     backgroundColor: Colors.background,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   ctaButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ctaButtonDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   ctaButtonProcessing: {
-    opacity: 0.8,
-  },
+    opacity: 0.8},
   ctaButtonText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   processingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   successContainer: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 24,
-  },
+    paddingHorizontal: 24},
   successCheckWrap: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   successCheckCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
     backgroundColor: Colors.success + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   successTitle: {
     fontSize: 26,
     fontWeight: '900' as const,
     color: Colors.text,
     textAlign: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   successSubtitle: {
     fontSize: 15,
     color: Colors.textSecondary,
     textAlign: 'center',
     marginBottom: 28,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   successCard: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1092,40 +1011,33 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   successRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   successLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   successValue: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   successValueGold: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   successPrimaryBtn: {
     width: '100%',
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   successPrimaryBtnText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   successSecondaryBtn: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1133,33 +1045,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   successSecondaryBtnText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   errorWrap: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   errorText: {
     fontSize: 16,
     color: Colors.textSecondary,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   backBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   backBtnText: {
     color: Colors.black,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1170,27 +1076,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#FF444430',
-    gap: 10,
-  },
+    gap: 10},
   errorBannerText: {
     flex: 1,
     fontSize: 13,
     color: '#FF6B6B',
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   paymentOptionPrimary: {
     borderWidth: 1.5,
     borderColor: Colors.success + '40',
-    backgroundColor: Colors.success + '08',
-  },
+    backgroundColor: Colors.success + '08'},
   paymentOptionCard: {
-    opacity: 0.85,
-  },
+    opacity: 0.85},
   paymentLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   recommendedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1198,15 +1099,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '20',
     borderRadius: 6,
     paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   recommendedBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.success,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   wireDetailsSection: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1214,25 +1113,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.primary + '25',
-  },
+    borderColor: Colors.primary + '25'},
   wireHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   wireHeaderTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   wireInstructions: {
     fontSize: 13,
     color: Colors.textSecondary,
     lineHeight: 19,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   wireAmountHighlight: {
     backgroundColor: Colors.primary + '15',
     borderRadius: 12,
@@ -1240,74 +1135,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   wireAmountLabel: {
     fontSize: 12,
     color: Colors.textSecondary,
     marginBottom: 4,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   wireAmountValue: {
     fontSize: 28,
     fontWeight: '900' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   wireRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   wireRowInfo: {
-    flex: 1,
-  },
+    flex: 1},
   wireRowLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     marginBottom: 2,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   wireRowValue: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   wireCopyBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   wireRefRow: {
     marginTop: 14,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   wireRefLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     marginBottom: 6,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   wireRefValueWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   wireRefValue: {
     fontSize: 17,
     fontWeight: '800' as const,
     color: Colors.primary,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   wireSecurityNote: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1317,12 +1200,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.success + '20',
-  },
+    borderColor: Colors.success + '20'},
   wireSecurityText: {
     flex: 1,
     fontSize: 12,
     color: Colors.success,
-    lineHeight: 17,
-  },
-});
+    lineHeight: 17}});

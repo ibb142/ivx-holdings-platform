@@ -10,8 +10,7 @@ import {
   Alert,
   Animated,
   KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -26,8 +25,7 @@ import {
   Building2,
   ChevronDown,
   Mail,
-  MessageSquare,
-} from 'lucide-react-native';
+  MessageSquare} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useHoldings } from '@/lib/data-hooks';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
@@ -77,8 +75,7 @@ const OCCASION_MESSAGES: Record<GiftOccasion, string[]> = {
     "No special occasion needed — just wanted to share something amazing with you! 💝 Enjoy your new property shares.",
     "Thinking of you! 😊 Here's a little something to brighten your day and boost your portfolio.",
     "Because you're awesome! 🌟 No reason needed to gift you real estate shares. Enjoy building wealth together!",
-  ],
-};
+  ]};
 
 export default function GiftSharesScreen() {
   const router = useRouter();
@@ -102,8 +99,7 @@ export default function GiftSharesScreen() {
     name: h.property?.name || 'Property',
     shares: h.shares,
     pricePerShare: h.property?.pricePerShare || 0,
-    image: h.property?.images?.[0] || '',
-  }));
+    image: h.property?.images?.[0] || ''}));
 
   const selectedProp = availableProperties.find(p => p.id === selectedProperty);
   const totalValue = selectedProp ? Number(shareCount || 0) * selectedProp.pricePerShare : 0;
@@ -135,13 +131,11 @@ export default function GiftSharesScreen() {
       Animated.timing(scaleAnim, {
         toValue: 0.95,
         duration: 100,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(scaleAnim, {
         toValue: 1,
         duration: 100,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start();
 
     Alert.alert(
@@ -157,16 +151,13 @@ export default function GiftSharesScreen() {
               shares,
               deliveryMethod,
               recipient: deliveryMethod === 'email' ? recipientEmail : recipientPhone,
-              occasion: selectedOccasion,
-            });
+              occasion: selectedOccasion});
             setGiftSent(true);
             Animated.timing(successAnim, {
               toValue: 1,
               duration: 600,
-              useNativeDriver: true,
-            }).start();
-          },
-        },
+              useNativeDriver: true}).start();
+          }},
       ]
     );
   }, [selectedProperty, shareCount, recipientName, recipientEmail, recipientPhone, deliveryMethod, selectedOccasion, selectedProp, totalValue, scaleAnim, successAnim]);
@@ -514,5 +505,4 @@ const styles = StyleSheet.create({
   doneButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   sendAnotherButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   sendAnotherText: { color: '#000000', fontSize: 13, fontWeight: '600' as const },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

@@ -1,16 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
-} from 'react-native';
+  ScrollView} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Shield, Smartphone, KeyRound, Lock } from 'lucide-react-native';
@@ -21,10 +18,10 @@ import {
   fetchOwnerRecoverySmsStatus,
   requestOwnerRecoverySms,
   verifyOwnerRecoverySms,
-  type OwnerRecoveryStatus,
-} from '@/lib/owner-recovery-sms';
+  type OwnerRecoveryStatus} from '@/lib/owner-recovery-sms';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import { Image } from 'react-native';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function OwnerSmsRecoveryScreen() {
   const router = useRouter();
@@ -187,7 +184,7 @@ export default function OwnerSmsRecoveryScreen() {
                   onPress={handleRequestCode}
                   disabled={loading}
                 >
-                  {loading ? <ActivityIndicator color={Colors.black} /> : <Text style={styles.primaryBtnText}>Send recovery code</Text>}
+                  {loading ? <ShimmerIndicator color={Colors.black} /> : <Text style={styles.primaryBtnText}>Send recovery code</Text>}
                 </TouchableOpacity>
               ) : null}
 
@@ -217,7 +214,7 @@ export default function OwnerSmsRecoveryScreen() {
                       onPress={handleVerifyCode}
                       disabled={loading}
                     >
-                      {loading ? <ActivityIndicator color={Colors.black} /> : <Text style={styles.primaryBtnText}>Verify code</Text>}
+                      {loading ? <ShimmerIndicator color={Colors.black} /> : <Text style={styles.primaryBtnText}>Verify code</Text>}
                     </TouchableOpacity>
                   ) : null}
                 </>
@@ -261,7 +258,7 @@ export default function OwnerSmsRecoveryScreen() {
                       onPress={handleResetPassword}
                       disabled={loading}
                     >
-                      {loading ? <ActivityIndicator color={Colors.black} /> : <Text style={styles.primaryBtnText}>Reset password & sign in</Text>}
+                      {loading ? <ShimmerIndicator color={Colors.black} /> : <Text style={styles.primaryBtnText}>Reset password & sign in</Text>}
                     </TouchableOpacity>
                   ) : null}
                 </>
@@ -313,5 +310,4 @@ const styles = StyleSheet.create({
   secondaryBtnText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
   successCard: { backgroundColor: '#D1FAE5', borderRadius: 12, padding: 14, marginTop: 8 },
   successTitle: { fontSize: 14, fontWeight: '700', color: '#065F46', marginBottom: 4 },
-  successText: { fontSize: 13, color: '#065F46' },
-});
+  successText: { fontSize: 13, color: '#065F46' }});

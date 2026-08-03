@@ -46,8 +46,7 @@ export function SupabaseAuthDiagnostic(): React.ReactElement {
       issuerMatch: null,
       lastError: null,
       configSource: audit.usingFallback ? 'fallback' : 'env',
-      hostMatch: getProjectRef(url) === 'kvclcdjmjghndxsngfzb',
-    };
+      hostMatch: getProjectRef(url) === 'kvclcdjmjghndxsngfzb'};
   });
 
   const runTest = async () => {
@@ -75,8 +74,7 @@ export function SupabaseAuthDiagnostic(): React.ReactElement {
         issuerMatch,
         lastError: error ? JSON.stringify(error) : null,
         configSource: currentAudit.usingFallback ? 'fallback' : 'env',
-        hostMatch: currentAudit.host.includes('kvclcdjmjghndxsngfzb'),
-      }));
+        hostMatch: currentAudit.host.includes('kvclcdjmjghndxsngfzb')}));
     } catch (e) {
       setState((s) => ({
         ...s,
@@ -84,8 +82,7 @@ export function SupabaseAuthDiagnostic(): React.ReactElement {
         testStatus: null,
         testMessage: e instanceof Error ? e.message : String(e),
         issuerMatch: false,
-        lastError: null,
-      }));
+        lastError: null}));
     }
   };
 
@@ -148,8 +145,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
     padding: 14,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   cardOk: { backgroundColor: 'rgba(34,197,94,0.12)' },
   cardFail: { backgroundColor: 'rgba(239,68,68,0.12)' },
   title: { color: Colors.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
@@ -162,7 +158,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     paddingVertical: 8,
     borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: { color: Colors.black, fontSize: 12, fontWeight: '700' },
-});
+    alignItems: 'center'},
+  buttonText: { color: Colors.black, fontSize: 12, fontWeight: '700' }});

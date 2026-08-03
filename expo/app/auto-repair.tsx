@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   RefreshControl,
@@ -8,8 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,9 +29,9 @@ import {
   Shield,
   Sparkles,
   Wrench,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   executeSafeRepairAction,
   runAIOpsScan,
@@ -44,8 +42,7 @@ import {
   type AIOpsRepairAction,
   type AIOpsRepairResult,
   type AIOpsSeverity,
-  type AIOpsSnapshot,
-} from '@/lib/ai-ops';
+  type AIOpsSnapshot} from '@/lib/ai-ops';
 
 type Tone = AIOpsOverallStatus | AIOpsSeverity;
 
@@ -61,27 +58,22 @@ const TONE_CONFIG: Record<Tone, ToneConfig> = {
     color: '#00C48C',
     background: 'rgba(34,197,94,0.12)',
     border: 'rgba(34,197,94,0.22)',
-    label: 'Healthy',
-  },
+    label: 'Healthy'},
   degraded: {
     color: '#F59E0B',
     background: 'rgba(245,158,11,0.12)',
     border: 'rgba(245,158,11,0.24)',
-    label: 'Degraded',
-  },
+    label: 'Degraded'},
   warning: {
     color: '#F59E0B',
     background: 'rgba(245,158,11,0.12)',
     border: 'rgba(245,158,11,0.24)',
-    label: 'Warning',
-  },
+    label: 'Warning'},
   critical: {
     color: '#FF5A5A',
     background: 'rgba(255,90,90,0.12)',
     border: 'rgba(255,90,90,0.24)',
-    label: 'Critical',
-  },
-};
+    label: 'Critical'}};
 
 const MODULE_ICONS = {
   frontend: Globe,
@@ -89,14 +81,12 @@ const MODULE_ICONS = {
   storage: Database,
   realtime: Radio,
   infrastructure: Cpu,
-  security: Lock,
-} as const;
+  security: Lock} as const;
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
     dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+    timeStyle: 'short'});
 }
 
 function getTone(tone: Tone): ToneConfig {
@@ -106,8 +96,7 @@ function getTone(tone: Tone): ToneConfig {
 const SectionHeader = memo(function SectionHeader({
   icon,
   title,
-  subtitle,
-}: {
+  subtitle}: {
   icon: React.ReactNode;
   title: string;
   subtitle?: string;
@@ -126,8 +115,7 @@ const SectionHeader = memo(function SectionHeader({
 const MetricCard = memo(function MetricCard({
   label,
   value,
-  tone,
-}: {
+  tone}: {
   label: string;
   value: string;
   tone: Tone;
@@ -223,8 +211,7 @@ const RepairLogCard = memo(function RepairLogCard({ result }: { result: AIOpsRep
 function IncidentCard({
   incident,
   isPending,
-  onRepair,
-}: {
+  onRepair}: {
   incident: AIOpsIncident;
   isPending: boolean;
   onRepair: (action: AIOpsRepairAction) => void;
@@ -268,7 +255,7 @@ function IncidentCard({
             disabled={isPending}
             testID={`incident-fix-${incident.id}`}
           >
-            {isPending ? <ActivityIndicator size="small" color={Colors.black} /> : <Wrench size={15} color={Colors.black} />}
+            {isPending ? <ShimmerIndicator size="small" color={Colors.black} /> : <Wrench size={15} color={Colors.black} />}
             <Text style={styles.repairActionText}>{isPending ? 'Running...' : 'Run Safe Fix'}</Text>
           </TouchableOpacity>
         ) : null}
@@ -290,8 +277,7 @@ export default function AutoRepairScreen() {
     staleTime: 120000,
     refetchInterval: 120000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const repairMutation = useMutation<AIOpsRepairResult, Error, AIOpsRepairAction>({
     mutationFn: async (action) => executeSafeRepairAction(action),
@@ -313,8 +299,7 @@ export default function AutoRepairScreen() {
     },
     onSettled: () => {
       setActiveAction(null);
-    },
-  });
+    }});
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -322,13 +307,11 @@ export default function AutoRepairScreen() {
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 1400,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
         Animated.timing(pulseAnim, {
           toValue: 0.85,
           duration: 1400,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
       ]),
     );
 
@@ -393,7 +376,7 @@ export default function AutoRepairScreen() {
             testID="aiops-rescan"
           >
             {repairMutation.isPending && activeAction === 'rerun-scan' ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ShimmerIndicator size="small" color={Colors.primary} />
             ) : (
               <RefreshCw size={18} color={Colors.primary} />
             )}
@@ -420,8 +403,7 @@ export default function AutoRepairScreen() {
                   {
                     backgroundColor: overallTone.background,
                     borderColor: overallTone.border,
-                    transform: [{ scale: pulseAnim }],
-                  },
+                    transform: [{ scale: pulseAnim }]},
                 ]}
               >
                 <Bot size={28} color={overallTone.color} />
@@ -453,7 +435,7 @@ export default function AutoRepairScreen() {
                 testID="hero-run-rescan"
               >
                 {repairMutation.isPending && activeAction === 'rerun-scan' ? (
-                  <ActivityIndicator size="small" color={Colors.black} />
+                  <ShimmerIndicator size="small" color={Colors.black} />
                 ) : (
                   <Zap size={16} color={Colors.black} />
                 )}
@@ -468,7 +450,7 @@ export default function AutoRepairScreen() {
                 testID="hero-storage-check"
               >
                 {repairMutation.isPending && activeAction === 'check-storage-integrity' ? (
-                  <ActivityIndicator size="small" color={Colors.text} />
+                  <ShimmerIndicator size="small" color={Colors.text} />
                 ) : (
                   <Database size={16} color={Colors.text} />
                 )}
@@ -479,7 +461,7 @@ export default function AutoRepairScreen() {
 
           {snapshotQuery.isLoading && !snapshot ? (
             <View style={styles.loadingCard}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.loadingTitle}>Scanning live app safeguards</Text>
               <Text style={styles.loadingBody}>Checking frontend, backend, storage, realtime, and safe-repair boundaries.</Text>
             </View>
@@ -598,11 +580,9 @@ export default function AutoRepairScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#040607',
-  },
+    backgroundColor: '#040607'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -610,8 +590,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
+    borderBottomColor: 'rgba(255,255,255,0.06)'},
   backButton: {
     width: 42,
     height: 42,
@@ -620,22 +599,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   headerCopy: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '800' as const,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   headerAction: {
     width: 42,
     height: 42,
@@ -644,40 +619,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.primary + '26',
-  },
+    borderColor: Colors.primary + '26'},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
-    paddingBottom: 44,
-  },
+    paddingBottom: 44},
   heroCard: {
     backgroundColor: '#0C1012',
     borderRadius: 26,
     padding: 20,
     marginBottom: 18,
     borderWidth: 1,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   heroTopRow: {
     flexDirection: 'row',
     gap: 16,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   heroOrb: {
     width: 68,
     height: 68,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   heroCopy: {
     flex: 1,
-    gap: 8,
-  },
+    gap: 8},
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -686,31 +654,26 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   heroBadgeDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   heroBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   heroTitle: {
     color: Colors.text,
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '800' as const,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   heroBody: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 21,
-  },
+    lineHeight: 21},
   promiseCard: {
     marginTop: 16,
     borderRadius: 18,
@@ -720,19 +683,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,215,0,0.18)',
     flexDirection: 'row',
     gap: 10,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   promiseText: {
     flex: 1,
     color: Colors.text,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   heroActionsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 16,
-  },
+    marginTop: 16},
   primaryButton: {
     flex: 1,
     minHeight: 48,
@@ -741,13 +701,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   primaryButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   secondaryButton: {
     flex: 1,
     minHeight: 48,
@@ -758,35 +716,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   secondaryButtonText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disabledButton: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   loadingCard: {
     backgroundColor: '#0C1012',
     borderRadius: 22,
     padding: 24,
     alignItems: 'center',
     gap: 10,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   loadingTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   loadingBody: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   errorCard: {
     backgroundColor: 'rgba(239,68,68,0.08)',
     borderRadius: 20,
@@ -794,18 +746,15 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     borderWidth: 1,
     borderColor: 'rgba(239,68,68,0.18)',
-    gap: 8,
-  },
+    gap: 8},
   errorTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorBody: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   retryButton: {
     alignSelf: 'flex-start',
     marginTop: 4,
@@ -815,22 +764,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   retryButtonText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   section: {
-    marginBottom: 22,
-  },
+    marginBottom: 22},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionHeaderIcon: {
     width: 38,
     height: 38,
@@ -839,27 +784,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.primary + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sectionHeaderTextWrap: {
-    flex: 1,
-  },
+    flex: 1},
   sectionTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '800' as const,
-    letterSpacing: -0.2,
-  },
+    letterSpacing: -0.2},
   sectionSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   metricCard: {
     width: '48%' as const,
     flexGrow: 1,
@@ -869,129 +809,106 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     padding: 14,
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   metricToneDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   metricValue: {
     color: Colors.text,
     fontSize: 26,
     fontWeight: '800' as const,
-    letterSpacing: -0.6,
-  },
+    letterSpacing: -0.6},
   metricLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   moduleCard: {
     backgroundColor: '#0C1012',
     borderRadius: 18,
     padding: 15,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   moduleTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   moduleIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   moduleCopy: {
-    flex: 1,
-  },
+    flex: 1},
   moduleTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   moduleSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   moduleDetail: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginTop: 12,
-  },
+    marginTop: 12},
   pill: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   pillText: {
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   incidentCard: {
     backgroundColor: '#0C1012',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   incidentTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   incidentIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   incidentCopy: {
-    flex: 1,
-  },
+    flex: 1},
   incidentTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   incidentSource: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   incidentSummary: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginTop: 12,
-  },
+    marginTop: 12},
   incidentFooter: {
     marginTop: 14,
-    gap: 10,
-  },
+    gap: 10},
   eligibilityPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   eligibilityText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   repairActionButton: {
     minHeight: 46,
     borderRadius: 14,
@@ -999,111 +916,92 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   repairActionText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   capabilityCard: {
     backgroundColor: '#0C1012',
     borderRadius: 18,
     padding: 15,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   capabilityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   capabilityIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   capabilityCopy: {
-    flex: 1,
-  },
+    flex: 1},
   capabilityTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   capabilityMeta: {
     color: Colors.textTertiary,
     fontSize: 12,
     marginTop: 2,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   capabilityDetail: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginTop: 12,
-  },
+    marginTop: 12},
   resultCard: {
     backgroundColor: '#0C1012',
     borderRadius: 18,
     padding: 15,
     borderWidth: 1,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   resultTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   resultIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   resultCopy: {
-    flex: 1,
-  },
+    flex: 1},
   resultTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   resultTimestamp: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   resultMessage: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginTop: 12,
-  },
+    marginTop: 12},
   resultDetailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    marginTop: 8,
-  },
+    marginTop: 8},
   resultDetailDot: {
     width: 6,
     height: 6,
     borderRadius: 4,
-    marginTop: 6,
-  },
+    marginTop: 6},
   resultDetailText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   emptyStateCard: {
     backgroundColor: '#0C1012',
     borderRadius: 18,
@@ -1111,20 +1009,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   emptyStateTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptyStateBody: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   bottomSpacer: {
-    height: 24,
-  },
-});
+    height: 24}});

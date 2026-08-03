@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { useRouter } from 'expo-router';
@@ -101,70 +100,58 @@ const macroStyles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   headerTitle: {
     flex: 1,
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sentBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   sentText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   subtext: {
     color: Colors.textTertiary,
     fontSize: 11,
     marginBottom: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   signals: {
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   signal: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   signalDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   signalLeft: { flex: 1 },
   signalLabel: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   signalDesc: {
     color: Colors.textTertiary,
-    fontSize: 10,
-  },
+    fontSize: 10},
   signalDetail: {
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -172,15 +159,12 @@ const macroStyles = StyleSheet.create({
     backgroundColor: Colors.primary + '10',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
+    paddingVertical: 7},
   footerText: {
     color: Colors.textSecondary,
     fontSize: 10,
     flex: 1,
-    lineHeight: 15,
-  },
-});
+    lineHeight: 15}});
 
 function MyResaleListingsWidget({ router }: { router: ReturnType<typeof useRouter> }) {
   const { isAuthenticated } = useAuth();
@@ -199,8 +183,7 @@ function MyResaleListingsWidget({ router }: { router: ReturnType<typeof useRoute
       return (data || []) as ResaleListing[];
     },
     enabled: isAuthenticated,
-    staleTime: 1000 * 30,
-  });
+    staleTime: 1000 * 30});
 
   const listings = myListingsQuery.data ?? [];
   if (listings.length === 0) return null;
@@ -243,59 +226,48 @@ const resaleStyles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   headerTitle: {
     flex: 1,
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   countBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   countText: {
     color: Colors.black,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   rowInfo: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   rowName: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   rowMeta: {
     color: Colors.textTertiary,
     fontSize: 10,
-    marginTop: 1,
-  },
+    marginTop: 1},
   rowTotal: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});
 
 const generatePortfolioHistory = (baseValue: number) => {
   const history = [];
@@ -331,8 +303,7 @@ export default function PortfolioScreen() {
       return { holdings: data || [] };
     },
     staleTime: 1000 * 60 * 2,
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
 
   const ipxContext = useIPX();
   const ipxHoldings = ipxContext?.holdings ?? [];
@@ -363,8 +334,7 @@ export default function PortfolioScreen() {
     txIconSize: isXs ? 28 : isCompact ? 32 : 40,
 
     cardPadding: isXs ? 14 : isCompact ? 16 : 20,
-    cardMargin: isXs ? 12 : 20,
-  }), [isCompact, isXs]);
+    cardMargin: isXs ? 12 : 20}), [isCompact, isXs]);
 
   const totalPortfolioValue = totalInvestedBackend + getTotalIPXValue;
   const totalUnrealizedPnL = getTotalIPXPnL;
@@ -442,8 +412,7 @@ export default function PortfolioScreen() {
                 styles.changeBadge,
                 {
                   backgroundColor: isPositive ? Colors.success + '20' : Colors.error + '20',
-                  paddingHorizontal: responsiveStyles.changeBadgePadding,
-                }
+                  paddingHorizontal: responsiveStyles.changeBadgePadding}
               ]}>
                 {isPositive ? (
                   <TrendingUp size={isXs ? 12 : 14} color={Colors.success} />
@@ -629,61 +598,49 @@ export default function PortfolioScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   headerTitle: {
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   portfolioCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   portfolioHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
     gap: 8,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   portfolioLabel: {
     color: Colors.textSecondary,
     fontWeight: '500' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   changeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: 20,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   changeText: {
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   portfolioValue: {
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   pnlText: {
     fontWeight: '600' as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   chartContainer: {
     alignItems: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   ipxSummaryCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -693,44 +650,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   ipxSummaryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   ipxIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ipxSummaryLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '500' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   ipxSummaryValue: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginTop: 2,
-  },
+    marginTop: 2},
   ipxPnlBadge: {
     borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   ipxPnlText: {
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   walletCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -739,8 +689,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   earnCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -749,14 +698,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   earnLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   earnApyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -764,98 +711,77 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 8,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   earnApyBadgeText: {
     color: Colors.black,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   walletLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   walletLabel: {
     color: Colors.textSecondary,
     fontWeight: '500' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   walletValue: {
     color: Colors.text,
     fontWeight: '700' as const,
-    marginTop: 2,
-  },
+    marginTop: 2},
   walletRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   manageFundsText: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '600' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   tab: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   tabActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   tabText: {
     color: Colors.textSecondary,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   tabTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   holdingsSection: {
-    gap: 10,
-  },
+    gap: 10},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 48,
-    gap: 8,
-  },
+    gap: 8},
   emptyStateText: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   emptyStateSubtext: {
     color: Colors.textTertiary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   emptyStateCta: {
     marginTop: 12,
     backgroundColor: Colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   emptyStateCtaText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bottomPadding: {
-    height: 120,
-  },
+    height: 120},
   scrollView: {
-    backgroundColor: Colors.background,
-  },
-});
+    backgroundColor: Colors.background}});

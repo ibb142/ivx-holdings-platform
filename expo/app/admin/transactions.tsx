@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   useWindowDimensions,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -19,13 +16,13 @@ import {
   ArrowDownRight,
   DollarSign,
   Building2,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { AdminTransaction } from '@/types';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FilterType = 'all' | 'deposit' | 'withdrawal' | 'buy' | 'sell' | 'dividend';
 type StatusFilter = 'all' | 'completed' | 'pending' | 'failed';
@@ -96,8 +93,7 @@ export default function TransactionsScreen() {
           description: `${investType} — ${dealTitle || 'Deal'} (Landing)`,
           property_name: dealTitle,
           created_at: createdAt,
-          source: 'landing',
-        };
+          source: 'landing'};
       });
 
       const normalizeStatus = (raw: unknown) => {
@@ -110,8 +106,7 @@ export default function TransactionsScreen() {
       const appTx = txData.map((row: Record<string, unknown>) => ({
         ...row,
         source: 'app',
-        status: normalizeStatus(row.status),
-      }));
+        status: normalizeStatus(row.status)}));
 
       const combined = [
         ...appTx,
@@ -122,8 +117,7 @@ export default function TransactionsScreen() {
       return { transactions: combined, count: combined.length };
     },
     staleTime: 1000 * 30,
-    retry: 1,
-  });
+    retry: 1});
 
   const allTransactions: AdminTransaction[] = useMemo(() => {
     if (!txQuery.data?.transactions) return [];
@@ -137,8 +131,7 @@ export default function TransactionsScreen() {
       userEmail: row?.user_email || '',
       description: row?.description || '',
       propertyName: row?.property_name || '',
-      createdAt: row?.created_at || new Date().toISOString(),
-    }));
+      createdAt: row?.created_at || new Date().toISOString()}));
   }, [txQuery.data]);
 
   const onRefresh = useCallback(() => {
@@ -183,8 +176,7 @@ export default function TransactionsScreen() {
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   };
 
   const getTypeIcon = (type: AdminTransaction['type']) => {
@@ -363,7 +355,7 @@ export default function TransactionsScreen() {
         ListEmptyComponent={
           txQuery.isLoading ? (
             <View style={{ alignItems: 'center' as const, paddingVertical: 40 }}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={{ color: Colors.textSecondary, marginTop: 12, fontSize: 13 }}>Loading transactions...</Text>
             </View>
           ) : (
@@ -375,7 +367,7 @@ export default function TransactionsScreen() {
         ListFooterComponent={
           displayCount < filteredTransactions.length ? (
             <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ShimmerIndicator size="small" color={Colors.primary} />
               <Text style={{ color: Colors.textSecondary, marginTop: 8, fontSize: 13 }}>Loading more…</Text>
             </View>
           ) : null
@@ -441,55 +433,45 @@ export default function TransactionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
-    gap: 12,
-  },
+    gap: 12},
   headerTop: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: Colors.card, justifyContent: 'center' as const, alignItems: 'center' as const, borderWidth: 1, borderColor: Colors.border },
   title: {
     fontSize: 26,
     fontWeight: '700',
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   titleSmall: {
-    fontSize: 22,
-  },
+    fontSize: 22},
   statsRow: {
     flexDirection: 'row' as const,
-    gap: 10,
-  },
+    gap: 10},
   statBox: {
     flex: 1,
     backgroundColor: Colors.card,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statLabel: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   statValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   searchContainer: {
     paddingHorizontal: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -497,158 +479,125 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 10,
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterContainer: {
     maxHeight: 44,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   filterContent: {
     paddingHorizontal: 20,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: '#fff',
-  },
+    color: '#fff'},
   resultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   resultsCount: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   resultsVolume: {
     fontSize: 13,
     color: Colors.primary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   list: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   txCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   txHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   typeIcon: {
     width: 42,
     height: 42,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   txInfo: {
-    flex: 1,
-  },
+    flex: 1},
   txTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   txType: {
     fontSize: 11,
     fontWeight: '700',
     color: Colors.textSecondary,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusText: {
     fontSize: 10,
     fontWeight: '600',
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   txUser: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   txEmail: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   txAmount: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   amount: {
     fontSize: 16,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   amountPositive: {
-    color: Colors.positive,
-  },
+    color: Colors.positive},
   amountNegative: {
-    color: Colors.negative,
-  },
+    color: Colors.negative},
   txDetails: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   txDescription: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   propertyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 6,
-  },
+    marginTop: 6},
   propertyName: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   txDate: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 8,
-  },
+    marginTop: 8},
   bottomPadding: {
-    height: 100,
-  },
-});
+    height: 100}});

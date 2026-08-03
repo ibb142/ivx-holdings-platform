@@ -11,8 +11,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -29,27 +28,23 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
-  Shield,
-} from 'lucide-react-native';
+  Shield} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   getCategoryById,
   getArticlesByCategory,
-  type KBArticle,
-} from '@/lib/knowledge-base-data';
+  type KBArticle} from '@/lib/knowledge-base-data';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>> = {
   Network, Users, TrendingUp, FileText, Briefcase, Building2,
-  AlertTriangle, CheckCircle2, ClipboardCheck, Shield,
-};
+  AlertTriangle, CheckCircle2, ClipboardCheck, Shield};
 
 function ArticleRow({
   article,
   categoryColor,
   onPress,
-  isCompact,
-}: {
+  isCompact}: {
   article: KBArticle;
   categoryColor: string;
   onPress: () => void;
@@ -201,38 +196,31 @@ export default function KnowledgeBaseCategoryScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   backButton: {
     width: 44,
     height: 44,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    marginLeft: -4,
-  },
+    marginLeft: -4},
   headerTitleWrap: {
     flex: 1,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   categoryHero: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -242,47 +230,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   categoryHeroIcon: {
     width: 64,
     height: 64,
     borderRadius: 16,
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   categoryHeroContent: {
     flex: 1,
-    marginLeft: 16,
-  },
+    marginLeft: 16},
   categoryHeroTitle: {
     fontSize: 22,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   categoryHeroSubtitle: {
     fontSize: 13,
     color: Colors.textSecondary,
     marginTop: 4,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
-    paddingBottom: 32,
-  },
+    paddingBottom: 32},
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 1,
     marginBottom: 12,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   articlesContainer: {
-    gap: 10,
-  },
+    gap: 10},
   articleRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -290,88 +269,70 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   articleRowCompact: {
-    padding: 12,
-  },
+    padding: 12},
   articleRowLeft: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   articleNumberDot: {
     width: 44,
     height: 44,
     borderRadius: 12,
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   articleNumberText: {
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   articleRowContent: {
     flex: 1,
-    marginLeft: 14,
-  },
+    marginLeft: 14},
   articleRowTitle: {
     fontWeight: '700' as const,
     color: Colors.text,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   articleRowSummary: {
     color: Colors.textSecondary,
     marginTop: 4,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   articleRowMeta: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   articleRowTags: {
     flexDirection: 'row' as const,
     gap: 6,
-    flex: 1,
-  },
+    flex: 1},
   articleRowTag: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 6,
     paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   articleRowTagText: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   articleRowReadTime: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 3,
-  },
+    gap: 3},
   articleRowReadTimeText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   emptyState: {
     flex: 1,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginTop: 16,
-  },
+    marginTop: 16},
   emptyText: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
-    marginTop: 8,
-  },
-});
+    marginTop: 8}});

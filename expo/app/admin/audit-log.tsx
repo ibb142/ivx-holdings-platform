@@ -1,14 +1,11 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
-  TextInput,
-} from 'react-native';
+  TextInput} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -25,12 +22,12 @@ import {
   UserCheck,
   Database,
   ChevronDown,
-  ChevronUp,
-} from 'lucide-react-native';
+  ChevronUp} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { getAuditTrail, getAuditStats } from '@/lib/audit-trail';
 import { formatAuditTimestamp, loadTimezoneProfile, getOffsetString, type IanaTimezone } from '@/lib/time-service';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const ACTION_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   CREATE: { label: 'Created', color: '#00C48C', icon: 'plus' },
@@ -56,8 +53,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; icon: string
   BACKUP_RESTORED: { label: 'Backup Restored', color: '#FFD700', icon: 'database' },
   SYSTEM_EVENT: { label: 'System', color: '#9A9A9A', icon: 'system' },
   PHOTO_UPDATE: { label: 'Photos Updated', color: '#4A90D9', icon: 'image' },
-  REFUND: { label: 'Refund', color: '#FF8C00', icon: 'refund' },
-};
+  REFUND: { label: 'Refund', color: '#FF8C00', icon: 'refund' }};
 
 const ENTITY_LABELS: Record<string, string> = {
   jv_deal: 'JV Deal',
@@ -70,8 +66,7 @@ const ENTITY_LABELS: Record<string, string> = {
   notification: 'Notification',
   application: 'Application',
   auth: 'Auth',
-  system: 'System',
-};
+  system: 'System'};
 
 function getActionIcon(action: string) {
   switch (action) {
@@ -136,8 +131,7 @@ export default function AuditLogScreen() {
       console.log('[AuditLog] Fetched', entries.length, 'entries');
       return { entries, stats };
     },
-    staleTime: 1000 * 10,
-  });
+    staleTime: 1000 * 10});
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -272,7 +266,7 @@ export default function AuditLogScreen() {
         >
           {auditQuery.isLoading ? (
             <View style={styles.centerWrap}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.centerText}>Loading audit trail...</Text>
             </View>
           ) : filteredEntries.length === 0 ? (
@@ -391,11 +385,9 @@ export default function AuditLogScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -403,45 +395,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerRight: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCount: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingTop: 14,
-    gap: 8,
-  },
+    gap: 8},
   statCard: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -449,21 +434,18 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statValue: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statLabel: {
     color: Colors.textTertiary,
     fontSize: 9,
     fontWeight: '600' as const,
     marginTop: 2,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,64 +456,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   filtersRow: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   centerWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   centerText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   emptyTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   emptySubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     textAlign: 'center',
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   entryCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -540,110 +510,89 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    borderLeftWidth: 3,
-  },
+    borderLeftWidth: 3},
   entryHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   entryIcon: {
     width: 32,
     height: 32,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-  },
+    marginRight: 10},
   entryInfo: {
-    flex: 1,
-  },
+    flex: 1},
   entryTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   actionBadge: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   actionBadgeText: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   entityBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   entityBadgeText: {
     fontSize: 9,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   entryTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   entryMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 3,
-  },
+    marginTop: 3},
   entryDate: {
     color: Colors.textTertiary,
-    fontSize: 10,
-  },
+    fontSize: 10},
   entryUser: {
     color: Colors.textTertiary,
     fontSize: 10,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   entryDetails: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   detailRow: {
     flexDirection: 'row',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   detailLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '600' as const,
-    width: 100,
-  },
+    width: 100},
   detailValue: {
     color: Colors.text,
     fontSize: 11,
-    flex: 1,
-  },
+    flex: 1},
   snapshotBox: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
     padding: 10,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#FF4D4D30',
-  },
+    borderColor: '#FF4D4D30'},
   snapshotLabel: {
     color: '#FF4D4D',
     fontSize: 10,
     fontWeight: '700' as const,
     marginBottom: 6,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   snapshotText: {
     color: Colors.textSecondary,
     fontSize: 10,
     fontFamily: 'monospace' as const,
-    lineHeight: 15,
-  },
-});
+    lineHeight: 15}});

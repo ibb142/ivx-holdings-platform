@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import * as Clipboard from 'expo-clipboard';
 import {
   CheckCircle2,
@@ -22,8 +20,7 @@ import {
   ShieldAlert,
   Smartphone,
   TriangleAlert,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -32,6 +29,7 @@ import { getIVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
 import { fetchBackendMarker, type IVXBackendMarker } from '@/src/modules/ivx-owner-ai/services/ivxBackendMarkerService';
 import { auditOwnerAISendPaths, type OwnerAISendPathAuditReport } from '@/src/modules/ivx-owner-ai/services/ivxSendPathAudit';
 import { ivxAIWatchdog, type WatchdogSnapshot } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 /**
  * Version comparison verdict between the frontend bundle and the live backend.
@@ -229,7 +227,7 @@ function ProductionDiagnosticsContent() {
         {/* BACKEND MARKER */}
         <Card icon={<Cloud size={15} color={Colors.info} />} title="Backend build (api.ivxholding.com)">
           {loading && !backend ? (
-            <View style={styles.loadingRow}><ActivityIndicator color={Colors.primary} /><Text style={styles.loadingText}>Fetching /health…</Text></View>
+            <View style={styles.loadingRow}><ShimmerIndicator color={Colors.primary} /><Text style={styles.loadingText}>Fetching /health…</Text></View>
           ) : (
             <>
               <Row label="Deployment marker" value={backend?.deploymentMarker ?? '—'} mono />
@@ -337,5 +335,4 @@ const styles = StyleSheet.create({
   actionPrimary: { backgroundColor: Colors.primary },
   actionPrimaryText: { color: Colors.black, fontSize: 13, fontWeight: '700' as const },
   actionSecondary: { backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.surfaceBorder },
-  actionSecondaryText: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
-});
+  actionSecondaryText: { color: Colors.text, fontSize: 13, fontWeight: '600' as const }});

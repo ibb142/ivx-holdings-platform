@@ -8,8 +8,7 @@ import {
   TextInput,
   Animated,
   Dimensions,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -31,8 +30,7 @@ import {
   Briefcase,
   Shield,
   CircleDot,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Lender, LenderType, LenderCategory, LenderStatus } from '@/types';
 import { useLenders } from '@/lib/lender-context';
@@ -48,8 +46,7 @@ const STATUS_COLORS: Record<LenderStatus, string> = {
   prospect: Colors.accent,
   contacted: Colors.warning,
   interested: '#E879F9',
-  committed: Colors.primary,
-};
+  committed: Colors.primary};
 
 const STATUS_LABELS: Record<LenderStatus, string> = {
   active: 'Active',
@@ -57,8 +54,7 @@ const STATUS_LABELS: Record<LenderStatus, string> = {
   prospect: 'Prospect',
   contacted: 'Contacted',
   interested: 'Interested',
-  committed: 'Committed',
-};
+  committed: 'Committed'};
 
 const CATEGORY_ICONS: Record<LenderCategory, React.ReactNode> = {
   bank: <Landmark size={14} color={Colors.text} />,
@@ -70,8 +66,7 @@ const CATEGORY_ICONS: Record<LenderCategory, React.ReactNode> = {
   pension_fund: <Shield size={14} color={Colors.text} />,
   insurance: <Shield size={14} color={Colors.text} />,
   individual: <Users size={14} color={Colors.text} />,
-  crowdfunding: <Globe size={14} color={Colors.text} />,
-};
+  crowdfunding: <Globe size={14} color={Colors.text} />};
 
 const CATEGORY_LABELS: Record<LenderCategory, string> = {
   bank: 'Bank',
@@ -83,8 +78,7 @@ const CATEGORY_LABELS: Record<LenderCategory, string> = {
   pension_fund: 'Pension Fund',
   insurance: 'Insurance',
   individual: 'Individual',
-  crowdfunding: 'Crowdfunding',
-};
+  crowdfunding: 'Crowdfunding'};
 
 type FilterTab = 'all' | 'public' | 'private';
 
@@ -431,5 +425,4 @@ const styles = StyleSheet.create({
   tagText: { color: Colors.textSecondary, fontSize: 13 },
   emptyState: { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '600' as const },
-  emptyText: { color: Colors.textTertiary, fontSize: 14 },
-});
+  emptyText: { color: Colors.textTertiary, fontSize: 14 }});

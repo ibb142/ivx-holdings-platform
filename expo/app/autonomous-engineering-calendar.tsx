@@ -14,16 +14,13 @@
  * Auto-refreshes every 30s + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  Modal,
-} from 'react-native';
+  Modal} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -37,10 +34,10 @@ import {
   Lock,
   RefreshCw,
   X,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { TEAM_NAMES } from '@/lib/ivx-module-registry';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const SCHEDULER_URL = `${API_BASE}/api/ivx/scheduler`;
@@ -307,7 +304,7 @@ export default function AutonomousEngineeringCalendarScreen() {
 
       {isLoading ? (
         <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color="#FBBF24" />
+          <ShimmerIndicator size="large" color="#FBBF24" />
           <Text style={styles.loadingText}>Loading live calendar…</Text>
         </View>
       ) : isUnauthorized ? (
@@ -679,8 +676,7 @@ function ScheduleCard({
   title,
   subtitle,
   icon,
-  children,
-}: {
+  children}: {
   title: string;
   subtitle: string;
   icon: React.ReactNode;
@@ -717,8 +713,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1E293B',
-  },
+    borderBottomColor: '#1E293B'},
   backButton: { padding: 6, marginRight: 6 },
   headerTitleWrap: { flex: 1 },
   headerTitle: { color: '#F1F5F9', fontSize: 18, fontWeight: '700' as const },
@@ -793,5 +788,4 @@ const styles = StyleSheet.create({
   modalScrollContent: { padding: 14, gap: 8 },
   detailRow: { flexDirection: 'row', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B' },
   detailLabel: { color: '#64748B', fontSize: 12, minWidth: 120 },
-  detailValue: { color: '#E2E8F0', fontSize: 12, flex: 1 },
-});
+  detailValue: { color: '#E2E8F0', fontSize: 12, flex: 1 }});

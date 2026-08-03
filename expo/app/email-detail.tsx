@@ -7,8 +7,7 @@ import {
   ScrollView,
   Platform,
   Alert,
-  Image,
-} from 'react-native';
+  Image} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
@@ -28,8 +27,7 @@ import {
   ChevronUp,
   ImageIcon,
   Video,
-  File,
-} from 'lucide-react-native';
+  File} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useEmail } from '@/lib/email-context';
@@ -43,8 +41,7 @@ function formatFullDate(dateStr: string): string {
     month: 'long',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit',
-  });
+    minute: '2-digit'});
 }
 
 function formatFileSize(bytes: number): string {
@@ -87,8 +84,7 @@ export default function EmailDetailScreen() {
     toggleFlag,
     deleteEmail,
     moveToFolder,
-    activeAccount,
-  } = useEmail();
+    activeAccount} = useEmail();
 
   const email = useMemo(() => getEmailById(id ?? ''), [getEmailById, id]);
   const [showDetails, setShowDetails] = React.useState(false);
@@ -126,8 +122,7 @@ export default function EmailDetailScreen() {
           onPress: () => {
             deleteEmail(email.id);
             router.back();
-          },
-        },
+          }},
       ]
     );
   }, [email, deleteEmail, router]);
@@ -401,11 +396,9 @@ export default function EmailDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -413,188 +406,153 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   headerButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerActions: {
     flexDirection: 'row',
-    gap: 2,
-  },
+    gap: 2},
   body: {
-    flex: 1,
-  },
+    flex: 1},
   bodyContent: {
-    paddingBottom: 20,
-  },
+    paddingBottom: 20},
   subjectRow: {
     padding: 20,
     paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   priorityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   priorityText: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.error,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   subject: {
     fontSize: 22,
     fontWeight: '700' as const,
     color: Colors.text,
-    lineHeight: 28,
-  },
+    lineHeight: 28},
   labelRow: {
     flexDirection: 'row',
     gap: 6,
     marginTop: 10,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   labelBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   labelText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   senderSection: {
     flexDirection: 'row',
     padding: 20,
     paddingBottom: 16,
-    gap: 12,
-  },
+    gap: 12},
   senderAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(255,215,0,0.12)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   senderAvatarText: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   senderInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   senderNameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   senderName: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   emailTime: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginLeft: 8,
-  },
+    marginLeft: 8},
   senderEmail: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   recipientToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
-  },
+    marginTop: 2},
   recipientLabel: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   detailsSection: {
     marginHorizontal: 20,
     padding: 14,
     backgroundColor: Colors.surface,
     borderRadius: 10,
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   detailRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   detailLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
-    width: 60,
-  },
+    width: 60},
   detailValue: {
     fontSize: 12,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   emailBody: {
-    padding: 20,
-  },
+    padding: 20},
   bodyText: {
     fontSize: 15,
     color: Colors.text,
-    lineHeight: 24,
-  },
+    lineHeight: 24},
   attachmentsSection: {
     marginHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingTop: 16,
-  },
+    paddingTop: 16},
   attachmentsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   attachmentsTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   attachmentsTotalSize: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   imageAttachmentsScroll: {
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   imagePreviewCard: {
     width: 160,
     height: 120,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   imagePreview: {
     width: 160,
     height: 120,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   imagePreviewOverlay: {
     position: 'absolute',
     bottom: 0,
@@ -604,13 +562,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-  },
+    borderBottomRightRadius: 12},
   imagePreviewName: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   attachmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,33 +574,27 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
-    gap: 12,
-  },
+    gap: 12},
   attachmentIcon: {
     width: 40,
     height: 40,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   attachmentInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   attachmentName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   attachmentMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   attachmentSize: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   attachmentType: {
     fontSize: 10,
     fontWeight: '600' as const,
@@ -653,16 +603,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   attachmentDownload: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: Colors.backgroundTertiary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   actionBar: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -670,34 +618,27 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     paddingVertical: 8,
     paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 4 : 8,
-  },
+    paddingBottom: Platform.OS === 'ios' ? 4 : 8},
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    gap: 8,
-  },
+    gap: 8},
   actionButtonText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   actionDivider: {
     width: 1,
     backgroundColor: Colors.border,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   notFoundState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-  },
+    gap: 12},
   notFoundText: {
     fontSize: 16,
-    color: Colors.textTertiary,
-  },
-});
+    color: Colors.textTertiary}});

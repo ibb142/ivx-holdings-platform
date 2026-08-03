@@ -7,8 +7,7 @@
  * - Fetches engagement data from project_engagement view
  */
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
@@ -16,9 +15,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Animated,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import {
   Play,
@@ -27,8 +24,7 @@ import {
   VolumeX,
   ChevronRight,
   MapPin,
-  Maximize2,
-} from 'lucide-react-native';
+  Maximize2} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact, formatCurrencyWithDecimals } from '@/lib/formatters';
@@ -44,8 +40,7 @@ import {
   trackProjectShare,
   fetchProjectMedia,
   trackVideoView,
-  trackInvestClick,
-} from '@/lib/project-engagement';
+  trackInvestClick} from '@/lib/project-engagement';
 import ProjectEngagementBar from './ProjectEngagementBar';
 import ProjectCommentsSheet from './ProjectCommentsSheet';
 import ProjectShareSheet from './ProjectShareSheet';
@@ -54,8 +49,7 @@ import {
   fetchProjectComments,
   addProjectComment,
   deleteProjectComment,
-  type ProjectComment,
-} from '@/lib/project-engagement';
+  type ProjectComment} from '@/lib/project-engagement';
 
 const GOLD = '#FFD700';
 const GOLD_DIM = '#C9A800';
@@ -90,8 +84,7 @@ const InstagramProjectCard = memo(function InstagramProjectCard({
   galleryWidth = 340,
   showVideo = true,
   compact = false,
-  light = false,
-}: InstagramProjectCardProps) {
+  light = false}: InstagramProjectCardProps) {
   // Video state
   const [videos, setVideos] = useState<ProjectVideo[]>([]);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
@@ -105,8 +98,7 @@ const InstagramProjectCard = memo(function InstagramProjectCard({
   // Engagement state
   const [engagement, setEngagement] = useState<ProjectEngagement>({
     like_count: 0, comment_count: 0, share_count: 0, save_count: 0,
-    user_liked: false, user_saved: false,
-  });
+    user_liked: false, user_saved: false});
   const [comments, setComments] = useState<ProjectComment[]>([]);
   const [commentsTotal, setCommentsTotal] = useState(0);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -163,8 +155,7 @@ const InstagramProjectCard = memo(function InstagramProjectCard({
       setEngagement(prev => ({
         ...prev,
         like_count: result.likeCount,
-        user_liked: result.liked,
-      }));
+        user_liked: result.liked}));
     } catch {}
   }, [userId]);
 
@@ -176,8 +167,7 @@ const InstagramProjectCard = memo(function InstagramProjectCard({
       setEngagement(prev => ({
         ...prev,
         save_count: result.saveCount,
-        user_saved: result.saved,
-      }));
+        user_saved: result.saved}));
     } catch {}
   }, [userId]);
 
@@ -486,78 +476,64 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#222',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   // ── Video ──────────────────────────────────────────────────────────
   videoContainer: {
     position: 'relative',
     backgroundColor: '#000',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   videoTouchArea: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   video: {
     width: '100%',
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   videoOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   progressBar: {
     height: 3,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    marginHorizontal: 0,
-  },
+    marginHorizontal: 0},
   progressFill: {
     height: 3,
-    backgroundColor: GOLD,
-  },
+    backgroundColor: GOLD},
   videoControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    gap: 8,
-  },
+    gap: 8},
   videoControlBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   videoControlSpacer: {
-    flex: 1,
-  },
+    flex: 1},
   videoDotsRow: {
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
   videoDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.35)'},
   videoDotActive: {
     backgroundColor: '#fff',
-    width: 16,
-  },
+    width: 16},
   videoBadges: {
     position: 'absolute',
     top: -220,
     left: 12,
     right: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -567,31 +543,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,200,100,0.4)',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: ACCENT_GREEN,
-  },
+    backgroundColor: ACCENT_GREEN},
   liveBadgeText: {
     color: ACCENT_GREEN,
     fontSize: 9,
     fontWeight: '900' as const,
-    letterSpacing: 1.5,
-  },
+    letterSpacing: 1.5},
   durationBadge: {
     backgroundColor: 'rgba(0,0,0,0.65)',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   durationText: {
     color: '#fff',
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   centerPlayBtn: {
     position: 'absolute',
     top: 0,
@@ -599,8 +570,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   centerPlayCircle: {
     width: 56,
     height: 56,
@@ -612,32 +582,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
-    elevation: 8,
-  },
+    elevation: 8},
   // ── Deal Info ───────────────────────────────────────────────────────
   dealInfoSection: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   dealHeader: {
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   dealTitle: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '800' as const,
     letterSpacing: -0.3,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   locationText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   metricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -646,57 +610,47 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#222',
-  },
+    borderColor: '#222'},
   metric: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   metricValue: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '800' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   metricHighlight: {
-    color: ACCENT_GREEN,
-  },
+    color: ACCENT_GREEN},
   metricLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   metricDivider: {
     width: 1,
     height: 28,
-    backgroundColor: '#222',
-  },
+    backgroundColor: '#222'},
   ownershipHint: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    paddingHorizontal: 2,
-  },
+    paddingHorizontal: 2},
   // ── CTA ─────────────────────────────────────────────────────────────
   ctaRow: {
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 16,
-    paddingBottom: 14,
-  },
+    paddingBottom: 14},
   investBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: GOLD,
-  },
+    backgroundColor: GOLD},
   investBtnText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   detailsBtn: {
     flex: 1,
     alignItems: 'center',
@@ -705,11 +659,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#333',
-    backgroundColor: '#141414',
-  },
+    backgroundColor: '#141414'},
   detailsBtnText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

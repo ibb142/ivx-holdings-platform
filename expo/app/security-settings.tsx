@@ -9,8 +9,7 @@ import {
   TextInput,
   Alert,
   Modal,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import {
   Lock,
   Smartphone,
@@ -24,8 +23,7 @@ import {
   LogOut,
   Copy,
   Key,
-  ShieldCheck,
-} from 'lucide-react-native';
+  ShieldCheck} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,8 +35,7 @@ import {
   getBiometricType,
   isBiometricAvailable,
   isBiometricEnabled as loadBiometricPref,
-  setBiometricEnabled as saveBiometricPref,
-} from '@/lib/biometric-auth';
+  setBiometricEnabled as saveBiometricPref} from '@/lib/biometric-auth';
 import { useAnalytics } from '@/lib/analytics-context';
 import { validatePassword } from '@/lib/auth-helpers';
 import { updateOwnerPasswordViaBackend } from '@/lib/owner-password-update-bypass';
@@ -48,8 +45,7 @@ import {
   extractMfaAssurance,
   extractMfaEnrollment,
   extractVerifiedMfaFactors,
-  verifyPasswordWithEphemeralClient,
-} from '@/lib/auth-mfa';
+  verifyPasswordWithEphemeralClient} from '@/lib/auth-mfa';
 
 interface LoginSession {
   id: string;
@@ -87,8 +83,7 @@ const createCurrentSession = (): LoginSession => ({
   device: getDeviceName(),
   location: 'Current Location',
   lastActive: 'Now',
-  isCurrent: true,
-});
+  isCurrent: true});
 
 function isReauthenticationError(message: string): boolean {
   const lowered = message.toLowerCase();
@@ -177,11 +172,9 @@ export default function SecuritySettingsScreen() {
         factorId,
         factorLabel,
         currentLevel,
-        nextLevel,
-      };
+        nextLevel};
     },
-    retry: 1,
-  });
+    retry: 1});
 
   const changePasswordMutation = useMutation<ChangePasswordResult, Error, { currentPassword: string; newPassword: string; nonce: string }>({
     mutationFn: async (input) => {
@@ -200,8 +193,7 @@ export default function SecuritySettingsScreen() {
         return {
           success: false,
           requiresNonce: false,
-          message: 'The current password was rejected by live Supabase verification. Password was not changed.',
-        };
+          message: 'The current password was rejected by live Supabase verification. Password was not changed.'};
       }
 
       // Route password updates through the owner-gated backend bypass endpoint.
@@ -211,8 +203,7 @@ export default function SecuritySettingsScreen() {
       // Falls back to the client-side path if the backend is unreachable.
       const bypassResult = await updateOwnerPasswordViaBackend({
         currentPassword: input.currentPassword,
-        newPassword: input.newPassword,
-      });
+        newPassword: input.newPassword});
       if (!bypassResult.ok) {
         const requiresNonce = /reauth|verification code|nonce/i.test(bypassResult.message);
         if (requiresNonce && !input.nonce.trim()) {
@@ -223,30 +214,25 @@ export default function SecuritySettingsScreen() {
           return {
             success: false,
             requiresNonce: true,
-            message: 'A verification code was sent to your confirmed email. Enter it below to finish changing your password.',
-          };
+            message: 'A verification code was sent to your confirmed email. Enter it below to finish changing your password.'};
         }
         return {
           success: false,
           requiresNonce,
-          message: bypassResult.message || 'Failed to update password.',
-        };
+          message: bypassResult.message || 'Failed to update password.'};
       }
 
       return {
         success: true,
         requiresNonce: false,
-        message: 'Password updated successfully.',
-      };
-    },
-  });
+        message: 'Password updated successfully.'};
+    }});
 
   const enable2FAMutation = useMutation({
     mutationFn: async () => {
       const enrollResult = await supabase.auth.mfa.enroll({
         factorType: 'totp',
-        friendlyName: `IVX ${getDeviceName()}`,
-      });
+        friendlyName: `IVX ${getDeviceName()}`});
       if (enrollResult.error) {
         throw new Error(enrollResult.error.message || 'Failed to start two-factor setup.');
       }
@@ -269,8 +255,7 @@ export default function SecuritySettingsScreen() {
     onError: (error: Error) => {
       console.log('[Security] 2FA enable error:', error.message);
       Alert.alert('2FA Setup Failed', error.message);
-    },
-  });
+    }});
 
   const confirm2FAMutation = useMutation({
     mutationFn: async (input: { factorId: string; code: string }) => {
@@ -287,8 +272,7 @@ export default function SecuritySettingsScreen() {
       const verifyResult = await supabase.auth.mfa.verify({
         factorId: input.factorId,
         challengeId,
-        code: input.code.trim(),
-      });
+        code: input.code.trim()});
       if (verifyResult.error) {
         throw new Error(verifyResult.error.message || 'The authenticator code was rejected.');
       }
@@ -309,8 +293,7 @@ export default function SecuritySettingsScreen() {
     onError: (error: Error) => {
       console.log('[Security] 2FA confirm error:', error.message);
       Alert.alert('Invalid Code', error.message);
-    },
-  });
+    }});
 
   const disable2FAMutation = useMutation({
     mutationFn: async (input: { password: string; code: string }) => {
@@ -347,8 +330,7 @@ export default function SecuritySettingsScreen() {
       const verifyResult = await supabase.auth.mfa.verify({
         factorId: factor.id,
         challengeId,
-        code: input.code.trim(),
-      });
+        code: input.code.trim()});
       if (verifyResult.error) {
         throw new Error(verifyResult.error.message || 'The authenticator code was rejected.');
       }
@@ -372,8 +354,7 @@ export default function SecuritySettingsScreen() {
     onError: (error: Error) => {
       console.log('[Security] 2FA disable error:', error.message);
       Alert.alert('2FA Disable Failed', error.message);
-    },
-  });
+    }});
 
   useEffect(() => {
     const loadPrefs = async () => {
@@ -401,8 +382,7 @@ export default function SecuritySettingsScreen() {
               parsed[currentIdx] = {
                 ...parsed[currentIdx],
                 lastActive: 'Now',
-                device: getDeviceName(),
-              };
+                device: getDeviceName()};
             }
           }
           setSessions(parsed);
@@ -470,8 +450,7 @@ export default function SecuritySettingsScreen() {
             void persistSessions(updated);
             trackAction('session_revoked', { device: session.device });
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
+          }},
       ]
     );
   }, [persistSessions, sessions, trackAction]);
@@ -514,8 +493,7 @@ export default function SecuritySettingsScreen() {
       {
         currentPassword,
         newPassword,
-        nonce: passwordNonce,
-      },
+        nonce: passwordNonce},
       {
         onSuccess: async (result) => {
           if (result.success) {
@@ -537,8 +515,7 @@ export default function SecuritySettingsScreen() {
         onError: (error: Error) => {
           console.log('[Security] Password change error:', error.message);
           Alert.alert('Password Change Failed', error.message);
-        },
-      }
+        }}
     );
   }, [changePasswordMutation, closePasswordModal, confirmPassword, currentPassword, newPassword, passwordNonce, requiresPasswordNonce, trackAction]);
 
@@ -566,8 +543,7 @@ export default function SecuritySettingsScreen() {
 
     confirm2FAMutation.mutate({
       factorId: setupFactorId,
-      code: setupVerifyCode,
-    });
+      code: setupVerifyCode});
   }, [confirm2FAMutation, setupFactorId, setupVerifyCode]);
 
   const handleDisable2FA = useCallback(() => {
@@ -583,8 +559,7 @@ export default function SecuritySettingsScreen() {
 
     disable2FAMutation.mutate({
       password: disablePassword,
-      code: disableCode,
-    });
+      code: disableCode});
   }, [disable2FAMutation, disableCode, disablePassword]);
 
   const twoFAEnabled = profileQuery.data?.twoFactorEnabled ?? false;
@@ -969,15 +944,12 @@ export default function SecuritySettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollView: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     padding: 20,
-    paddingBottom: 140,
-  },
+    paddingBottom: 140},
   securityScore: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
@@ -986,8 +958,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     padding: 18,
     gap: 16,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   scoreCircle: {
     width: 76,
     height: 76,
@@ -995,163 +966,133 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 2,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scoreValue: {
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   scoreLabel: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   scoreMeta: {
     flex: 1,
-    gap: 6,
-  },
+    gap: 6},
   scoreTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   scoreSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   scoreChecks: {
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   scoreCheck: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   scoreCheckText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   section: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '800' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   settingsCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    gap: 14,
-  },
+    gap: 14},
   sessionsCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    gap: 14,
-  },
+    gap: 14},
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   settingLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   settingTextWrap: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   settingIcon: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   settingLabel: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   settingSub: {
     color: Colors.textSecondary,
     fontSize: 12,
     marginTop: 3,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   changeText: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   rowDivider: {
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   infoCard: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.primary + '22',
     backgroundColor: Colors.primary + '10',
     padding: 14,
-    gap: 6,
-  },
+    gap: 6},
   infoTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   infoText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   infoMeta: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   sessionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   sessionLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   sessionNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap' as const,
-  },
+    flexWrap: 'wrap' as const},
   currentBadge: {
     borderRadius: 999,
     backgroundColor: Colors.success + '15',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   currentBadgeText: {
     color: Colors.success,
     fontSize: 10,
     fontWeight: '800' as const,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   revokeButton: {
     width: 42,
     height: 42,
@@ -1160,33 +1101,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.error + '10',
     borderWidth: 1,
-    borderColor: Colors.error + '20',
-  },
+    borderColor: Colors.error + '20'},
   modalOverlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
     justifyContent: 'center',
-    padding: 20,
-  },
+    padding: 20},
   modalContent: {
     backgroundColor: Colors.surface,
     borderRadius: 22,
     padding: 22,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    maxHeight: '88%' as const,
-  },
+    maxHeight: '88%' as const},
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   modalTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   noticeCard: {
     flexDirection: 'row',
     gap: 10,
@@ -1196,14 +1132,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '22',
     backgroundColor: Colors.success + '10',
     padding: 14,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   noticeText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   warningCard: {
     flexDirection: 'row',
     gap: 10,
@@ -1213,23 +1147,19 @@ const styles = StyleSheet.create({
     borderColor: Colors.warning + '22',
     backgroundColor: Colors.warning + '10',
     padding: 14,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   warningText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   passwordField: {
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   passwordLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   passwordInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1239,8 +1169,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.backgroundSecondary,
     paddingHorizontal: 14,
-    minHeight: 52,
-  },
+    minHeight: 52},
   passwordInput: {
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
@@ -1249,32 +1178,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 52,
     color: Colors.text,
-    fontSize: 15,
-  },
+    fontSize: 15},
   passwordInputFlex: {
     flex: 1,
     borderWidth: 0,
     backgroundColor: 'transparent',
-    paddingHorizontal: 0,
-  },
+    paddingHorizontal: 0},
   inlineHint: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   updateButton: {
     minHeight: 52,
     borderRadius: 14,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
-  },
+    marginTop: 6},
   updateButtonText: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   dangerButton: {
     minHeight: 52,
     borderRadius: 14,
@@ -1283,22 +1207,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.error + '20',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
-  },
+    marginTop: 6},
   dangerButtonText: {
     color: Colors.error,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   buttonDisabled: {
-    opacity: 0.45,
-  },
+    opacity: 0.45},
   setupStep: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   stepBadge: {
     width: 24,
     height: 24,
@@ -1306,19 +1226,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   stepBadgeText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   setupStepText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   secretBox: {
     minHeight: 52,
     borderRadius: 14,
@@ -1329,14 +1246,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   secretText: {
     flex: 1,
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   uriBox: {
     borderRadius: 14,
     backgroundColor: Colors.backgroundSecondary,
@@ -1346,14 +1261,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   uriText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   codeInput: {
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
@@ -1364,9 +1277,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 18,
     letterSpacing: 6,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   bottomPadding: {
-    height: 20,
-  },
-});
+    height: 20}});

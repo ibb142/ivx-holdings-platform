@@ -1,13 +1,11 @@
 import React, { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { Stack } from 'expo-router';
 import {
   Bot,
@@ -15,11 +13,11 @@ import {
   CircleX,
   Search,
   ShieldX,
-  Trash2,
-} from 'lucide-react-native';
+  Trash2} from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type AuditEntry = {
   type: string;
@@ -83,8 +81,7 @@ function LeadAuditLogScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['ivx', 'lead-audit-log'] as const,
     queryFn: fetchAuditLog,
-    refetchInterval: 45_000,
-  });
+    refetchInterval: 45_000});
 
   const onRefresh = useCallback(() => { void refetch(); }, [refetch]);
   const entries = data ?? [];
@@ -105,7 +102,7 @@ function LeadAuditLogScreen() {
         </View>
 
         {isLoading ? (
-          <View style={styles.center}><ActivityIndicator color={Colors.text} /></View>
+          <View style={styles.center}><ShimmerIndicator color={Colors.text} /></View>
         ) : isError ? (
           <View style={styles.errorCard}>
             <CircleX size={18} color={Colors.error ?? '#FF4D4D'} />
@@ -156,8 +153,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 4,
-  },
+    gap: 4},
   headerTitle: { color: Colors.text, fontSize: 16, fontWeight: '800' as const },
   headerSub: { color: Colors.muted ?? '#94a3b8', fontSize: 12, lineHeight: 18 },
   row: {
@@ -168,8 +164,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   rowIcon: { marginTop: 1 },
   rowBody: { flex: 1, gap: 2 },
   rowDetail: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
@@ -182,8 +177,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border ?? '#1f2937',
-  },
+    borderColor: Colors.border ?? '#1f2937'},
   cardBody: { color: Colors.muted ?? '#94a3b8', fontSize: 13, lineHeight: 19 },
   errorCard: {
     flexDirection: 'row',
@@ -193,7 +187,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.error ?? '#FF4D4D',
-  },
-  errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 },
-});
+    borderColor: Colors.error ?? '#FF4D4D'},
+  errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 }});

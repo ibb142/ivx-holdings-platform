@@ -63,8 +63,7 @@ function ReelVideoPlayerInner({
   isMuted,
   onProgress,
   onPlaybackStatusUpdate,
-  testID,
-}: ReelVideoPlayerProps) {
+  testID}: ReelVideoPlayerProps) {
   const network = useNetworkState();
   const [retryKey, setRetryKey] = useState<number>(0);
   const [showTapToPlay, setShowTapToPlay] = useState<boolean>(false);
@@ -161,24 +160,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
-    zIndex: 50,
-  },
+    zIndex: 50},
   overlayText: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700' as const,
-    marginTop: 12,
-  },
+    marginTop: 12},
   overlaySub: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 12,
-    marginTop: 4,
-  },
-});
+    marginTop: 4}});

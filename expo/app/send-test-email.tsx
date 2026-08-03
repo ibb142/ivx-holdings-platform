@@ -1,14 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   Platform,
-  Animated,
-  ActivityIndicator,
-} from 'react-native';
+  Animated} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -20,11 +17,11 @@ import {
   Building2,
   Globe,
   MapPin,
-  Shield,
-} from 'lucide-react-native';
+  Shield} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useEmail } from '@/lib/email-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const TEST_RECIPIENT = 'osconstructors@gmail.com';
 
@@ -105,8 +102,7 @@ export default function SendTestEmailScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 500,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [fadeAnim]);
 
   useEffect(() => {
@@ -140,8 +136,7 @@ export default function SendTestEmailScreen() {
       const result = await sendEmail({
         to: TEST_RECIPIENT,
         subject: 'IVX Holdings — Enterprise Email System Test & Brand Verification',
-        body: BRANDED_EMAIL_BODY,
-      });
+        body: BRANDED_EMAIL_BODY});
 
       console.log('[TestEmail] Send result:', JSON.stringify(result));
 
@@ -294,7 +289,7 @@ export default function SendTestEmailScreen() {
           >
             {status === 'sending' ? (
               <Animated.View style={[styles.sendButtonInner, { opacity: pulseAnim }]}>
-                <ActivityIndicator size="small" color={Colors.background} />
+                <ShimmerIndicator size="small" color={Colors.background} />
                 <Text style={styles.sendButtonText}>Sending via AWS SES...</Text>
               </Animated.View>
             ) : (
@@ -315,221 +310,177 @@ export default function SendTestEmailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     flex: 1,
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   headerSpacer: {
-    width: 40,
-  },
+    width: 40},
   body: {
-    flex: 1,
-  },
+    flex: 1},
   bodyContent: {
     padding: 16,
-    gap: 16,
-  },
+    gap: 16},
   brandCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   brandHeader: {
     backgroundColor: Colors.backgroundSecondary,
     padding: 24,
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   logoContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-  },
+    alignItems: 'baseline'},
   logoIvx: {
     fontSize: 28,
     fontWeight: '800' as const,
     color: Colors.primary,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   logoHoldings: {
     fontSize: 28,
     fontWeight: '300' as const,
     color: Colors.text,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   brandSubtitle: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     letterSpacing: 1,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
-  },
+    backgroundColor: Colors.border},
   detailSection: {
     padding: 20,
-    gap: 16,
-  },
+    gap: 16},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    paddingTop: 2,
-  },
+    paddingTop: 2},
   detailInfo: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   detailLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   detailValue: {
     fontSize: 14,
     color: Colors.text,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   sesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   sesDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.textTertiary,
-  },
+    backgroundColor: Colors.textTertiary},
   sesDotActive: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   sesDotError: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   sesDotWarning: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   emailPreviewCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
-    gap: 10,
-  },
+    gap: 10},
   previewTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   previewSubject: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.primary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   previewDivider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   previewBody: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   previewNote: {
     fontSize: 11,
     color: Colors.textTertiary,
     fontStyle: 'italic' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   resultCard: {
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   resultSuccess: {
     backgroundColor: 'rgba(0,196,140,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(0,196,140,0.2)',
-  },
+    borderColor: 'rgba(0,196,140,0.2)'},
   resultError: {
     backgroundColor: 'rgba(255,184,0,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,184,0,0.2)',
-  },
+    borderColor: 'rgba(255,184,0,0.2)'},
   resultTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   resultDelivery: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   resultMessage: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   sendButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sendButtonDisabled: {
-    backgroundColor: Colors.primaryDark,
-  },
+    backgroundColor: Colors.primaryDark},
   sendButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   sendButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.background,
-  },
+    color: Colors.background},
   bottomPadding: {
-    height: 20,
-  },
-});
+    height: 20}});

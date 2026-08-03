@@ -8,8 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -26,8 +25,7 @@ import {
   FileText,
   Globe,
   MapPin,
-  Shield,
-} from 'lucide-react-native';
+  Shield} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { useMutation } from '@tanstack/react-query';
@@ -66,8 +64,7 @@ export default function InfluencerApplyScreen() {
     referralCode: '',
     aboutYou: '',
     country: null,
-    taxAgreement: false,
-  });
+    taxAgreement: false});
 
   const platforms: { id: PlatformType; name: string; icon: React.ReactNode }[] = [
     { id: 'instagram', name: 'Instagram', icon: <Instagram size={24} color={Colors.text} /> },
@@ -143,8 +140,7 @@ export default function InfluencerApplyScreen() {
       const { error } = await supabase.from('influencer_applications').insert(input);
       if (error) console.log('[Influencer] Application insert note:', error.message);
       return { success: true };
-    },
-  });
+    }});
   const { trackAction } = useAnalytics();
 
   const handleSubmit = async () => {
@@ -165,8 +161,7 @@ export default function InfluencerApplyScreen() {
         source: formData.referralCode ? 'referral' : 'app_search',
         referred_by: formData.referralCode || null,
         country: formData.country || null,
-        created_at: new Date().toISOString(),
-      },
+        created_at: new Date().toISOString()},
       {
         onSuccess: () => {
           setIsSubmitting(false);
@@ -183,8 +178,7 @@ export default function InfluencerApplyScreen() {
             'Thank you for applying to become an IVXHOLDINGS Influencer. Our team will review your application and get back to you within 2-3 business days.',
             [{ text: 'OK', onPress: () => router.back() }]
           );
-        },
-      }
+        }}
     );
   };
 
@@ -537,8 +531,7 @@ export default function InfluencerApplyScreen() {
         options={{
           title: 'Become an Influencer',
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }}
+          headerTintColor: Colors.text}}
       />
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -680,5 +673,4 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: Colors.success, borderColor: Colors.success },
   checkboxLabel: { color: Colors.textSecondary, fontSize: 13, flex: 1, lineHeight: 18 },
   infoTextWarning: { color: Colors.warning, fontSize: 13, lineHeight: 18 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

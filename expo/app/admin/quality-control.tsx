@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   RefreshControl,
@@ -8,8 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,9 +29,9 @@ import {
   ShieldCheck,
   Target,
   Wrench,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   type QCAuditCycleResult,
   type QCAuditSummary,
@@ -51,8 +49,7 @@ import {
   getDaemonState,
   executeHealAction,
   dismissRepairTask,
-  resolveRepairTask,
-} from '@/lib/qc';
+  resolveRepairTask} from '@/lib/qc';
 
 type HealthTone = 'healthy' | 'degraded' | 'critical';
 
@@ -65,8 +62,7 @@ interface ToneStyle {
 const TONES: Record<HealthTone, ToneStyle> = {
   healthy: { color: '#00C48C', bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.20)' },
   degraded: { color: '#F59E0B', bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.22)' },
-  critical: { color: '#FF4D4D', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.22)' },
-};
+  critical: { color: '#FF4D4D', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.22)' }};
 
 function probeStatusToTone(status: string): HealthTone {
   if (status === 'pass') return 'healthy';
@@ -164,8 +160,7 @@ const HealRow = memo(function HealRow({ heal }: { heal: QCHealAttempt }) {
 function RepairTaskCard({
   task,
   onDismiss,
-  onResolve,
-}: {
+  onResolve}: {
   task: QCRepairTask;
   onDismiss: (id: string) => void;
   onResolve: (id: string) => void;
@@ -246,8 +241,7 @@ export default function QualityControlScreen() {
     queryFn: () => getDashboardSnapshotAsync(),
     staleTime: 30_000,
     refetchInterval: isMonitoring ? 60_000 : false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const runCycleMutation = useMutation<QCAuditCycleResult, Error>({
     mutationFn: async () => runAuditCycle(),
@@ -257,8 +251,7 @@ export default function QualityControlScreen() {
     },
     onError: (err) => {
       Alert.alert('Cycle failed', err.message);
-    },
-  });
+    }});
 
   const toggleMonitoring = useCallback(() => {
     if (isMonitoring) {
@@ -376,7 +369,7 @@ export default function QualityControlScreen() {
                 disabled={runCycleMutation.isPending}
                 testID="qc-run-cycle"
               >
-                {runCycleMutation.isPending ? <ActivityIndicator size="small" color="#000" /> : <Zap size={16} color="#000" />}
+                {runCycleMutation.isPending ? <ShimmerIndicator size="small" color="#000" /> : <Zap size={16} color="#000" />}
                 <Text style={styles.primaryBtnText}>Run audit cycle</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -393,7 +386,7 @@ export default function QualityControlScreen() {
 
           {snapshotQuery.isLoading && !snapshot ? (
             <View style={styles.loadingCard}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.loadingText}>Loading QC dashboard...</Text>
             </View>
           ) : null}
@@ -575,5 +568,4 @@ const styles = StyleSheet.create({
   diagTime: { color: Colors.textTertiary, fontSize: 10, marginTop: 4 },
   footer: { alignItems: 'center', gap: 4, paddingVertical: 16 },
   footerText: { color: Colors.textTertiary, fontSize: 11 },
-  spacer: { height: 24 },
-});
+  spacer: { height: 24 }});

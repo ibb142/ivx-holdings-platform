@@ -2,15 +2,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   Banknote,
@@ -22,18 +20,17 @@ import {
   ShoppingBag,
   Target,
   TrendingUp,
-  UserCheck,
-} from 'lucide-react-native';
+  UserCheck} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getCapitalCommandCenter,
   runBestInvestor,
   type AttentionItem,
   type CapitalCommandCenter,
-  type BestInvestorWorkflowResult,
-} from '@/src/modules/ivx-developer/capitalCommandService';
+  type BestInvestorWorkflowResult} from '@/src/modules/ivx-developer/capitalCommandService';
 
 function usd(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`;
@@ -60,8 +57,7 @@ function BestCard({
   name,
   subtitle,
   score,
-  evidence,
-}: {
+  evidence}: {
   title: string;
   icon: React.ReactNode;
   name: string;
@@ -89,8 +85,7 @@ function AttentionSection({
   title,
   icon,
   items,
-  tone,
-}: {
+  tone}: {
   title: string;
   icon: React.ReactNode;
   items: AttentionItem[];
@@ -198,15 +193,13 @@ function CommandCenterContent() {
 
   const query = useQuery<CapitalCommandCenter | null>({
     queryKey: ['ivx-capital-command-center'],
-    queryFn: getCapitalCommandCenter,
-  });
+    queryFn: getCapitalCommandCenter});
 
   const workflow = useMutation<BestInvestorWorkflowResult | null, Error, string>({
     mutationFn: (q: string) => runBestInvestor(q),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ivx-capital-command-center'] });
-    },
-  });
+    }});
 
   const dashboard = query.data ?? null;
   const pipeline = dashboard?.capitalPipeline ?? null;
@@ -267,7 +260,7 @@ function CommandCenterContent() {
               disabled={!dealQuery.trim() || workflow.isPending}
               testID="ivx-run-best-investor"
             >
-              {workflow.isPending ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={styles.runBtnText}>Find</Text>}
+              {workflow.isPending ? <ShimmerIndicator size="small" color={Colors.black} /> : <Text style={styles.runBtnText}>Find</Text>}
             </Pressable>
           </View>
           {workflow.isError ? (
@@ -346,7 +339,7 @@ function CommandCenterContent() {
           <Text style={styles.errorText}>{query.error instanceof Error ? query.error.message : 'Could not load the command center.'}</Text>
         ) : null}
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : null}
         {dashboard ? <Text style={styles.note}>{dashboard.note}</Text> : null}
       </ScrollView>
@@ -422,5 +415,4 @@ const styles = StyleSheet.create({
   attentionName: { fontSize: 13.5, fontWeight: '600' as const, color: Colors.text },
   attentionReason: { fontSize: 12, lineHeight: 16, color: Colors.textTertiary },
   emptyRow: { fontSize: 12.5, color: Colors.textTertiary, fontStyle: 'italic' },
-  note: { fontSize: 11.5, color: Colors.textTertiary, lineHeight: 16 },
-});
+  note: { fontSize: 11.5, color: Colors.textTertiary, lineHeight: 16 }});

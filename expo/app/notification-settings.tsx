@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import {
   Bell,
   Mail,
@@ -17,8 +16,7 @@ import {
   Shield,
   DollarSign,
   Megaphone,
-  CheckCircle,
-} from 'lucide-react-native';
+  CheckCircle} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
@@ -44,8 +42,7 @@ export default function NotificationSettingsScreen() {
       icon: <TrendingUp size={20} color={Colors.success} />,
       push: true,
       email: true,
-      sms: false,
-    },
+      sms: false},
     {
       id: 'dividends',
       title: 'Dividends & Returns',
@@ -53,8 +50,7 @@ export default function NotificationSettingsScreen() {
       icon: <DollarSign size={20} color={Colors.primary} />,
       push: true,
       email: true,
-      sms: true,
-    },
+      sms: true},
     {
       id: 'security',
       title: 'Security Alerts',
@@ -62,8 +58,7 @@ export default function NotificationSettingsScreen() {
       icon: <Shield size={20} color={Colors.error} />,
       push: true,
       email: true,
-      sms: true,
-    },
+      sms: true},
     {
       id: 'market',
       title: 'Market Alerts',
@@ -71,8 +66,7 @@ export default function NotificationSettingsScreen() {
       icon: <TrendingUp size={20} color={Colors.info} />,
       push: true,
       email: false,
-      sms: false,
-    },
+      sms: false},
     {
       id: 'promotions',
       title: 'Promotions & News',
@@ -80,8 +74,7 @@ export default function NotificationSettingsScreen() {
       icon: <Megaphone size={20} color={Colors.warning} />,
       push: false,
       email: true,
-      sms: false,
-    },
+      sms: false},
   ]);
 
   const [masterPush, setMasterPush] = useState(true);
@@ -109,28 +102,24 @@ export default function NotificationSettingsScreen() {
           user_id: user.id,
           email_prefs: prefs.email,
           push_prefs: prefs.push,
-          updated_at: new Date().toISOString(),
-        });
+          updated_at: new Date().toISOString()});
       if (error) {
         console.log('[NotificationSettings] Supabase upsert note:', error.message);
       }
       return { success: true };
-    },
-  });
+    }});
 
   const handleSave = () => {
     const emailPrefs = {
       marketing: settings.find(s => s.id === 'promotions')?.email ?? false,
       transactions: settings.find(s => s.id === 'investments')?.email ?? true,
       dividends: settings.find(s => s.id === 'dividends')?.email ?? true,
-      newProperties: settings.find(s => s.id === 'market')?.email ?? false,
-    };
+      newProperties: settings.find(s => s.id === 'market')?.email ?? false};
     const pushPrefs = {
       transactions: settings.find(s => s.id === 'investments')?.push ?? true,
       dividends: settings.find(s => s.id === 'dividends')?.push ?? true,
       newProperties: settings.find(s => s.id === 'market')?.push ?? true,
-      priceAlerts: settings.find(s => s.id === 'market')?.push ?? true,
-    };
+      priceAlerts: settings.find(s => s.id === 'market')?.push ?? true};
 
     updatePrefsMutation.mutate(
       { email: emailPrefs, push: pushPrefs },
@@ -144,8 +133,7 @@ export default function NotificationSettingsScreen() {
           console.error('[NotificationSettings] Save error:', error);
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           Alert.alert('Error', 'Failed to save your notification preferences. Please try again.');
-        },
-      }
+        }}
     );
   };
 
@@ -296,5 +284,4 @@ const styles = StyleSheet.create({
   saveButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   saveButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import logger from '@/lib/logger';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,9 +8,7 @@ import {
   Alert,
   TextInput,
   Modal,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
@@ -31,26 +28,23 @@ import {
   X,
   Download,
   ChevronRight,
-  Lock,
-} from 'lucide-react-native';
+  Lock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   propertyDocumentSubmissions,
-  REQUIRED_TITLE_DOCUMENTS,
-} from '@/mocks/title-company';
+  REQUIRED_TITLE_DOCUMENTS} from '@/mocks/title-company';
 import {
   TitleDocument,
   TitleDocumentStatus,
-  PropertyDocumentSubmission,
-} from '@/types';
+  PropertyDocumentSubmission} from '@/types';
 
 const STATUS_CONFIG: Record<TitleDocumentStatus, { color: string; label: string }> = {
   not_uploaded: { color: Colors.textTertiary, label: 'Not Uploaded' },
   uploaded: { color: Colors.info, label: 'Pending Review' },
   under_review: { color: Colors.warning, label: 'Under Review' },
   approved: { color: Colors.success, label: 'Approved' },
-  rejected: { color: Colors.error, label: 'Rejected' },
-};
+  rejected: { color: Colors.error, label: 'Rejected' }};
 
 export default function TitleReviewScreen() {
   const router = useRouter();
@@ -102,8 +96,7 @@ export default function TitleReviewScreen() {
                 status: 'approved' as TitleDocumentStatus,
                 reviewedAt: new Date().toISOString(),
                 reviewedBy: 'Title Reviewer',
-                reviewNotes,
-              }
+                reviewNotes}
             : d
         )
       );
@@ -136,8 +129,7 @@ export default function TitleReviewScreen() {
                 reviewedAt: new Date().toISOString(),
                 reviewedBy: 'Title Reviewer',
                 reviewNotes,
-                rejectionReason,
-              }
+                rejectionReason}
             : d
         )
       );
@@ -161,8 +153,7 @@ export default function TitleReviewScreen() {
         status: approved ? 'approved' : 'needs_revision',
         completedAt: approved ? new Date().toISOString() : undefined,
         overallNotes,
-        tokenizationApproved: approved,
-      }));
+        tokenizationApproved: approved}));
       setProcessing(false);
       setShowFinalizeModal(false);
 
@@ -233,8 +224,7 @@ export default function TitleReviewScreen() {
         options={{
           title: 'Title Review',
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }}
+          headerTintColor: Colors.text}}
       />
       <View style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -387,7 +377,7 @@ export default function TitleReviewScreen() {
                 disabled={processing}
               >
                 {processing ? (
-                  <ActivityIndicator size="small" color={Colors.error} />
+                  <ShimmerIndicator size="small" color={Colors.error} />
                 ) : (
                   <>
                     <ThumbsDown size={16} color={Colors.error} />
@@ -401,7 +391,7 @@ export default function TitleReviewScreen() {
                 disabled={processing}
               >
                 {processing ? (
-                  <ActivityIndicator size="small" color={Colors.background} />
+                  <ShimmerIndicator size="small" color={Colors.background} />
                 ) : (
                   <>
                     <ThumbsUp size={16} color={Colors.background} />
@@ -468,7 +458,7 @@ export default function TitleReviewScreen() {
                   disabled={processing}
                 >
                   {processing ? (
-                    <ActivityIndicator size="small" color={Colors.warning} />
+                    <ShimmerIndicator size="small" color={Colors.warning} />
                   ) : (
                     <Text style={styles.revisionBtnText}>Request Revision</Text>
                   )}
@@ -480,7 +470,7 @@ export default function TitleReviewScreen() {
                 disabled={processing || rejectedCount > 0}
               >
                 {processing ? (
-                  <ActivityIndicator size="small" color={Colors.background} />
+                  <ShimmerIndicator size="small" color={Colors.background} />
                 ) : (
                   <>
                     <Shield size={16} color={Colors.background} />
@@ -567,5 +557,4 @@ const styles = StyleSheet.create({
   revisionBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   revisionBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   approveAllBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
-  approveAllBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
-});
+  approveAllBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 }});

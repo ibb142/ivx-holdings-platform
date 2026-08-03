@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Stack } from 'expo-router';
 import { Activity, AlertTriangle, CheckCircle2, Clock3, LayoutDashboard, RefreshCw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FeatureAreaStatus = 'live' | 'in_progress' | 'planned';
 
@@ -57,14 +58,12 @@ const INITIAL_STATE: LoadState = {
   error: null,
   httpStatus: null,
   payload: null,
-  fetchedAt: null,
-};
+  fetchedAt: null};
 
 const STATUS_META: Record<FeatureAreaStatus, { label: string; color: string }> = {
   live: { label: 'Live', color: '#00C48C' },
   in_progress: { label: 'In progress', color: '#FFB000' },
-  planned: { label: 'Planned', color: '#7DD3FC' },
-};
+  planned: { label: 'Planned', color: '#7DD3FC' }};
 
 export default function IVXProjectDashboardRoute() {
   const [state, setState] = useState<LoadState>(INITIAL_STATE);
@@ -74,8 +73,7 @@ export default function IVXProjectDashboardRoute() {
     try {
       const response = await fetch(`${DASHBOARD_ENDPOINT}?view=full&window=all`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
+        headers: { 'Content-Type': 'application/json' }});
       const text = await response.text();
       let payload: DashboardPayload | null = null;
       try {
@@ -88,16 +86,14 @@ export default function IVXProjectDashboardRoute() {
         error: response.ok ? null : `HTTP ${response.status}`,
         httpStatus: response.status,
         payload,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
     } catch (error) {
       setState({
         loading: false,
         error: error instanceof Error ? error.message : 'Request failed',
         httpStatus: null,
         payload: null,
-        fetchedAt: new Date().toISOString(),
-      });
+        fetchedAt: new Date().toISOString()});
     }
   }, []);
 
@@ -129,7 +125,7 @@ export default function IVXProjectDashboardRoute() {
           onPress={runFetch}
           disabled={state.loading}
         >
-          {state.loading ? <ActivityIndicator color="#0B0B0B" /> : <RefreshCw color="#0B0B0B" size={18} />}
+          {state.loading ? <ShimmerIndicator color="#0B0B0B" /> : <RefreshCw color="#0B0B0B" size={18} />}
           <Text style={styles.primaryButtonText}>{state.loading ? 'Refreshing…' : 'Refresh dashboard'}</Text>
         </TouchableOpacity>
 
@@ -221,8 +217,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   primaryButtonText: { color: '#0B0B0B', fontWeight: '700' as const, fontSize: 15 },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   metricTile: {
@@ -232,8 +227,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#222222',
-  },
+    borderColor: '#222222'},
   metricValue: { fontSize: 26, fontWeight: '800' as const },
   metricLabel: { color: '#9A9A9A', fontSize: 12, marginTop: 4 },
   progressTrack: { height: 10, borderRadius: 999, backgroundColor: '#222222', overflow: 'hidden' },
@@ -248,8 +242,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: '#222222',
-  },
+    borderColor: '#222222'},
   pillText: { color: '#E6E6E6', fontSize: 12 },
   card: {
     backgroundColor: '#141414',
@@ -257,8 +250,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#222222',
-    gap: 6,
-  },
+    gap: 6},
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const, flex: 1 },
   cardMeta: { color: '#9A9A9A', fontSize: 12 },
@@ -267,5 +259,4 @@ const styles = StyleSheet.create({
   errorCard: { borderColor: '#7F1D1D' },
   errorText: { color: '#FF6B6B', flex: 1 },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  footnote: { color: '#6B6B6B', fontSize: 11, fontFamily: 'Courier', marginTop: 8, lineHeight: 16 },
-});
+  footnote: { color: '#6B6B6B', fontSize: 11, fontFamily: 'Courier', marginTop: 8, lineHeight: 16 }});

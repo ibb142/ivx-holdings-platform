@@ -8,8 +8,7 @@ import {
   TextInput,
   Modal,
   Alert,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -31,8 +30,7 @@ import {
   Search,
   Activity,
   Inbox,
-  AlertTriangle,
-} from 'lucide-react-native';
+  AlertTriangle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { EMAIL_ACCOUNTS } from '@/mocks/emails';
 import { teamMembers as mockTeamMembers } from '@/mocks/admin';
@@ -61,8 +59,7 @@ interface EmailAccountWithAccess extends EmailAccount {
 const ACCESS_LEVEL_CONFIG: Record<AccessLevel, { label: string; color: string; icon: typeof Eye }> = {
   read: { label: 'Read Only', color: '#4A90D9', icon: Eye },
   send: { label: 'Read & Send', color: '#00C48C', icon: Send },
-  manage: { label: 'Full Access', color: '#FFD700', icon: Settings },
-};
+  manage: { label: 'Full Access', color: '#FFD700', icon: Settings }};
 
 const generateInitialAccess = (): EmailAccountWithAccess[] => {
   return EMAIL_ACCOUNTS.map((account) => {
@@ -113,8 +110,7 @@ const generateInitialAccess = (): EmailAccountWithAccess[] => {
     }
 
     const storageMap: Record<string, number> = {
-      admin: 2.4, ceo: 1.8, noreply: 0.1, support: 5.2, kyc: 3.7, investors: 2.1, legal: 4.3, finance: 3.9, security: 1.1,
-    };
+      admin: 2.4, ceo: 1.8, noreply: 0.1, support: 5.2, kyc: 3.7, investors: 2.1, legal: 4.3, finance: 3.9, security: 1.1};
 
     return {
       ...account,
@@ -123,8 +119,7 @@ const generateInitialAccess = (): EmailAccountWithAccess[] => {
       forwardTo: null,
       autoReply: account.id === 'noreply',
       storageUsed: (storageMap[account.id] ?? 0.5) * 1024,
-      storageLimit: 15 * 1024,
-    };
+      storageLimit: 15 * 1024};
   });
 };
 
@@ -186,8 +181,7 @@ export default function EmailAccountsScreen() {
       staffEmail: staff.email,
       accessLevel: selectedAccessLevel,
       assignedAt: new Date().toISOString(),
-      lastAccessed: null,
-    };
+      lastAccessed: null};
 
     setAccounts(prev => prev.map(a =>
       a.id === assigningAccount
@@ -217,8 +211,7 @@ export default function EmailAccountsScreen() {
                 ? { ...a, staffAccess: a.staffAccess.filter(s => s.staffId !== staffId) }
                 : a
             ));
-          },
-        },
+          }},
       ]
     );
   }, [accounts]);
@@ -238,8 +231,7 @@ export default function EmailAccountsScreen() {
           ...a,
           staffAccess: a.staffAccess.map(s =>
             s.staffId === staffId ? { ...s, accessLevel: nextLevel } : s
-          ),
-        }
+          )}
         : a
     ));
   }, [accounts]);
@@ -397,8 +389,7 @@ export default function EmailAccountsScreen() {
                     <View style={styles.storageBarOuter}>
                       <View style={[styles.storageBarInner, {
                         width: `${Math.min(100, storagePercent)}%`,
-                        backgroundColor: storagePercent > 80 ? Colors.error : storagePercent > 60 ? Colors.warning : Colors.accent,
-                      }]} />
+                        backgroundColor: storagePercent > 80 ? Colors.error : storagePercent > 60 ? Colors.warning : Colors.accent}]} />
                     </View>
                     <Text style={styles.storageText}>
                       {formatStorage(account.storageUsed)} / {formatStorage(account.storageLimit)}
@@ -616,8 +607,7 @@ export default function EmailAccountsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -625,8 +615,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
@@ -635,27 +624,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   headerCenter: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 8,
-  },
+    gap: 8},
   statPill: {
     flex: 1,
     alignItems: 'center',
@@ -665,22 +649,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statValue: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   searchRow: {
     paddingHorizontal: 14,
-    paddingBottom: 10,
-  },
+    paddingBottom: 10},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -690,158 +670,129 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   content: {
     flex: 1,
-    paddingHorizontal: 14,
-  },
+    paddingHorizontal: 14},
   accountCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   accountHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   accountAvatar: {
     width: 48,
     height: 48,
     borderRadius: 14,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   accountAvatarText: {
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   accountInfo: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   accountNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   accountName: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   inactiveBadge: {
     backgroundColor: Colors.error + '20',
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   inactiveBadgeText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    color: Colors.error,
-  },
+    color: Colors.error},
   accountEmail: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   accountMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 2,
-  },
+    marginTop: 2},
   accessCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   accessCountText: {
     fontSize: 11,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   unreadBadge: {
     backgroundColor: Colors.warning + '20',
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   unreadText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   accountExpanded: {
     paddingHorizontal: 14,
     paddingBottom: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   accountDetailsRow: {
     flexDirection: 'row',
     gap: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   accountDetail: {
-    flex: 1,
-  },
+    flex: 1},
   accountDetailLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   accountDetailValue: {
     fontSize: 13,
     color: Colors.text,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   storageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   storageLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    width: 50,
-  },
+    width: 50},
   storageBarOuter: {
     flex: 1,
     height: 6,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   storageBarInner: {
     height: '100%',
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   storageText: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
     minWidth: 90,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   accountActions: {
     flexDirection: 'row',
     gap: 8,
-    paddingBottom: 14,
-  },
+    paddingBottom: 14},
   accountActionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -850,26 +801,21 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 9,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   accountActionText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   staffSection: {
-    gap: 8,
-  },
+    gap: 8},
   staffSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   staffSectionTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   addStaffBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -877,96 +823,78 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 8,
     paddingVertical: 5,
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   addStaffBtnText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.background,
-  },
+    color: Colors.background},
   noStaff: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 12,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   noStaffText: {
     fontSize: 13,
     color: Colors.warning,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   staffCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    padding: 10,
-  },
+    padding: 10},
   staffCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
-  },
+    flex: 1},
   staffAvatar: {
     width: 36,
     height: 36,
     borderRadius: 10,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   staffAvatarText: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   staffInfo: {
     flex: 1,
-    gap: 1,
-  },
+    gap: 1},
   staffName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   staffEmail: {
     fontSize: 11,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   staffLastAccess: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   staffCardRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   accessLevelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   accessLevelText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   removeAccessBtn: {
-    padding: 4,
-  },
+    padding: 4},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   emptyText: {
     fontSize: 16,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   legendSection: {
     marginTop: 16,
     backgroundColor: Colors.card,
@@ -974,83 +902,68 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   legendTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   legendDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   legendLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.text,
-    minWidth: 80,
-  },
+    minWidth: 80},
   legendDesc: {
     fontSize: 11,
     color: Colors.textTertiary,
-    flex: 1,
-  },
+    flex: 1},
   modalOverlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   modalContent: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '85%',
-  },
+    maxHeight: '85%'},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   modalTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   modalSubtitle: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalSectionLabel: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: Colors.text,
     marginBottom: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   staffList: {
     maxHeight: 220,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   noStaffAvail: {
     alignItems: 'center',
-    paddingVertical: 20,
-  },
+    paddingVertical: 20},
   noStaffAvailText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   staffSelectItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1061,18 +974,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   staffSelectItemActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
-  },
+    backgroundColor: Colors.primary + '10'},
   staffSelectLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
-  },
+    flex: 1},
   staffSelectAvatar: {
     width: 40,
     height: 40,
@@ -1081,39 +991,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   staffSelectAvatarActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   staffSelectAvatarText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   staffSelectAvatarTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   staffSelectName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   staffSelectEmail: {
     fontSize: 11,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   staffSelectRole: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   accessLevelSelector: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   accessLevelOption: {
     flex: 1,
     flexDirection: 'row',
@@ -1124,13 +1026,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   accessLevelOptionText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   assignBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1138,14 +1038,10 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   assignBtnDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   assignBtnText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.background,
-  },
-});
+    color: Colors.background}});

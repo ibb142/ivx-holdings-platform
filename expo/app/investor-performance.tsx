@@ -6,16 +6,13 @@
  * Pulls from the backend /api/ivx/investor-performance endpoint.
  */
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   RefreshControl,
   TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+  TextInput} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -30,10 +27,10 @@ import {
   Calendar,
   Percent,
   Wallet,
-  Target,
-} from 'lucide-react-native';
+  Target} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,9 +98,7 @@ export default function InvestorPerformanceScreen() {
       const response = await fetch('https://api.ivxholding.com/api/ivx/investor-performance', {
         headers: {
           'Content-Type': 'application/json',
-          ...(user?.id ? { 'x-user-id': user.id } : {}),
-        },
-      });
+          ...(user?.id ? { 'x-user-id': user.id } : {})}});
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -156,48 +151,42 @@ export default function InvestorPerformanceScreen() {
         formatted: formatCurrency(data.investedCapital),
         trend: 'flat',
         trendPercent: null,
-        icon: 'wallet',
-      },
+        icon: 'wallet'},
       {
         label: 'Active Deals',
         value: data.activeDealsCount,
         formatted: String(data.activeDealsCount),
         trend: 'flat',
         trendPercent: null,
-        icon: 'building',
-      },
+        icon: 'building'},
       {
         label: 'Total Distributions',
         value: data.totalDistributions,
         formatted: formatCurrency(data.totalDistributions),
         trend: 'up',
         trendPercent: null,
-        icon: 'dollar',
-      },
+        icon: 'dollar'},
       {
         label: 'Unrealized Value',
         value: data.unrealizedValue,
         formatted: formatCurrency(data.unrealizedValue),
         trend: data.unrealizedValue >= 0 ? 'up' : 'down',
         trendPercent: null,
-        icon: 'target',
-      },
+        icon: 'target'},
       {
         label: 'Realized Return',
         value: data.realizedReturn,
         formatted: formatCurrency(data.realizedReturn),
         trend: data.realizedReturn >= 0 ? 'up' : 'down',
         trendPercent: null,
-        icon: 'trending',
-      },
+        icon: 'trending'},
       {
         label: 'Total ROI',
         value: data.totalROI,
         formatted: `${data.totalROI.toFixed(2)}%`,
         trend: data.totalROI >= 0 ? 'up' : 'down',
         trendPercent: null,
-        icon: 'percent',
-      },
+        icon: 'percent'},
     ];
   }, [data]);
 
@@ -206,7 +195,7 @@ export default function InvestorPerformanceScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading performance data…</Text>
         </View>
       </SafeAreaView>
@@ -437,62 +426,51 @@ function renderMetricIcon(icon: PerformanceMetric['icon']) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-  },
+    gap: 16},
   loadingText: {
     color: Colors.muted,
-    fontSize: 14,
-  },
+    fontSize: 14},
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    gap: 12,
-  },
+    gap: 12},
   errorTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorMessage: {
     color: Colors.muted,
     fontSize: 14,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retryButton: {
     marginTop: 8,
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: Colors.primary,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   retryButtonText: {
     color: Colors.primaryBlack,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   headerTitle: {
     color: Colors.text,
     fontSize: 24,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   headerSubtitle: {
     color: Colors.muted,
     fontSize: 14,
-    marginTop: 4,
-  },
+    marginTop: 4},
   partialErrorBanner: {
     marginHorizontal: 20,
     marginBottom: 8,
@@ -501,18 +479,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
+    borderColor: 'rgba(245, 158, 11, 0.3)'},
   partialErrorText: {
     color: Colors.warning,
-    fontSize: 12,
-  },
+    fontSize: 12},
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 12,
-    gap: 8,
-  },
+    gap: 8},
   metricCard: {
     width: '48%',
     flexGrow: 1,
@@ -520,40 +495,33 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   metricIconRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   metricValue: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   metricLabel: {
     color: Colors.muted,
     fontSize: 12,
-    marginTop: 4,
-  },
+    marginTop: 4},
   lastActivityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   lastActivityText: {
     color: Colors.muted,
-    fontSize: 12,
-  },
+    fontSize: 12},
   controlsContainer: {
     paddingHorizontal: 20,
     paddingVertical: 12,
-    gap: 10,
-  },
+    gap: 10},
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -561,21 +529,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchIcon: {
-    marginRight: 8,
-  },
+    marginRight: 8},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   filterRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -583,99 +547,78 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginRight: 8,
-  },
+    marginRight: 8},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     color: Colors.muted,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterChipTextActive: {
-    color: Colors.primaryBlack,
-  },
+    color: Colors.primaryBlack},
   section: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-  },
+    paddingTop: 16},
   sectionTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   emptySectionText: {
     color: Colors.muted,
     fontSize: 13,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   dealCard: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 14,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   dealCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   dealTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusActive: {
-    backgroundColor: 'rgba(0, 196, 140, 0.15)',
-  },
+    backgroundColor: 'rgba(0, 196, 140, 0.15)'},
   statusCompleted: {
-    backgroundColor: 'rgba(74, 144, 217, 0.15)',
-  },
+    backgroundColor: 'rgba(74, 144, 217, 0.15)'},
   statusText: {
     color: Colors.success,
     fontSize: 10,
     fontWeight: '700' as const,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   dealMetricsRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   dealMetric: {
-    flex: 1,
-  },
+    flex: 1},
   dealMetricLabel: {
     color: Colors.muted,
     fontSize: 10,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   dealMetricValue: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   dealMetricSub: {
     fontSize: 10,
-    marginTop: 1,
-  },
+    marginTop: 1},
   valuePositive: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   valueNegative: {
-    color: Colors.error,
-  },
+    color: Colors.error},
   distributionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -685,67 +628,54 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   distributionInfo: {
-    flex: 1,
-  },
+    flex: 1},
   distributionTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   distributionDate: {
     color: Colors.muted,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   distributionTypeBadge: {
     marginTop: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
     backgroundColor: 'rgba(230, 194, 0, 0.1)',
     borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
+    alignSelf: 'flex-start'},
   distributionTypeText: {
     color: Colors.primary,
     fontSize: 9,
     fontWeight: '700' as const,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   distributionAmount: {
     color: Colors.success,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 80,
     paddingHorizontal: 32,
-    gap: 12,
-  },
+    gap: 12},
   emptyTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptySubtitle: {
     color: Colors.muted,
     fontSize: 14,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   emptyCta: {
     marginTop: 12,
     paddingHorizontal: 28,
     paddingVertical: 14,
     backgroundColor: Colors.primary,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   emptyCtaText: {
     color: Colors.primaryBlack,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

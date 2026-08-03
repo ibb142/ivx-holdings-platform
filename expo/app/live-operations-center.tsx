@@ -13,16 +13,13 @@
  *   - Self-improvement tasks
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -47,9 +44,9 @@ import {
   TrendingUp,
   Users,
   XCircle,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,8 +80,7 @@ const AUTH_HEADER = () => {
   // IVX owner token (Supabase JWT) — no Rork runtime dependency.
   return {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${process.env.EXPO_PUBLIC_IVX_OWNER_TOKEN ?? ''}`,
-  };
+    'Authorization': `Bearer ${process.env.EXPO_PUBLIC_IVX_OWNER_TOKEN ?? ''}`};
 };
 
 async function fetchJSON<T>(path: string): Promise<T> {
@@ -106,8 +102,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: {
     width: 40,
@@ -115,8 +110,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   title: { fontSize: 22, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.3 },
   subtitle: { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
   refreshBtn: {
@@ -125,8 +119,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(255,215,0,0.12)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   // KPIs row
   kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   kpiCard: {
@@ -136,8 +129,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   kpiLabel: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
   kpiValue: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', marginTop: 4 },
   kpiSub: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 },
@@ -151,8 +143,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 10,
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   // Status card
   statusCard: {
     backgroundColor: 'rgba(255,255,255,0.04)',
@@ -163,8 +154,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.06)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   statusCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   statusIcon: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   statusName: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
@@ -176,8 +166,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   agentName: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   agentRole: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
   agentMeta: { flexDirection: 'row', gap: 8, marginTop: 8 },
@@ -187,8 +176,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     fontSize: 10,
     fontWeight: '600',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   // Loading
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   loadingText: { color: 'rgba(255,255,255,0.4)', marginTop: 12, fontSize: 14 },
@@ -199,12 +187,10 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.2)',
-  },
+    borderColor: 'rgba(239,68,68,0.2)'},
   errorText: { color: '#FF4D4D', fontSize: 13 },
   // Empty
-  emptyText: { color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: 20 },
-});
+  emptyText: { color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: 20 }});
 
 // ── Health Badge ───────────────────────────────────────────────────────────
 
@@ -213,8 +199,7 @@ const HEALTH_CONFIG: Record<string, { color: string; bg: string; label: string }
   degraded: { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', label: 'Degraded' },
   unreachable: { color: '#FF4D4D', bg: 'rgba(239,68,68,0.12)', label: 'Unreachable' },
   stopped: { color: '#6366F1', bg: 'rgba(99,102,241,0.12)', label: 'Stopped' },
-  loading: { color: '#9CA3AF', bg: 'rgba(156,163,175,0.12)', label: 'Loading...' },
-};
+  loading: { color: '#9CA3AF', bg: 'rgba(156,163,175,0.12)', label: 'Loading...' }};
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = HEALTH_CONFIG[status] ?? HEALTH_CONFIG.loading;
@@ -232,8 +217,7 @@ function SubsystemCard({
   name,
   detail,
   health,
-  onPress,
-}: {
+  onPress}: {
   icon: typeof Activity;
   name: string;
   detail: string;
@@ -269,8 +253,7 @@ export default function LiveOperationsCenter() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData>({
     kpis: null, agents: null, research: null, opportunities: null,
-    improvement: null, governance: null, memory: null, reports: null,
-  });
+    improvement: null, governance: null, memory: null, reports: null});
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -298,8 +281,7 @@ export default function LiveOperationsCenter() {
         improvement: improvement.status === 'fulfilled' ? improvement.value : null,
         governance: governance.status === 'fulfilled' ? governance.value : null,
         memory: memory.status === 'fulfilled' ? memory.value : null,
-        reports: reports.status === 'fulfilled' ? reports.value : null,
-      });
+        reports: reports.status === 'fulfilled' ? reports.value : null});
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load operations data');
     } finally {
@@ -319,7 +301,7 @@ export default function LiveOperationsCenter() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ShimmerIndicator size="large" color="#FFD700" />
           <Text style={styles.loadingText}>Loading Operations Center...</Text>
         </View>
       </SafeAreaView>
@@ -449,14 +431,12 @@ export default function LiveOperationsCenter() {
                     backgroundColor:
                       agent.riskLevel === 'high' ? 'rgba(239,68,68,0.15)' :
                       agent.riskLevel === 'medium' ? 'rgba(245,158,11,0.15)' :
-                      'rgba(34,197,94,0.15)',
-                  }]}>
+                      'rgba(34,197,94,0.15)'}]}>
                     <Text style={[styles.agentBadge, {
                       color:
                         agent.riskLevel === 'high' ? '#FF4D4D' :
                         agent.riskLevel === 'medium' ? '#F59E0B' :
-                        '#00C48C',
-                    }]}>
+                        '#00C48C'}]}>
                       {agent.riskLevel.toUpperCase()}
                     </Text>
                   </View>

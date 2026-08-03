@@ -2,26 +2,24 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { CalendarDays, CheckCircle2, ChevronRight, LockKeyhole, RefreshCw, ShieldAlert, ShieldCheck, Target } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getIVXIndependenceStatus,
   type IVXIndependenceChecklistItem,
   type IVXIndependenceDependency,
   type IVXIndependenceDependencyStatus,
   type IVXIndependenceRiskLevel,
-  type IVXIndependenceStatus,
-} from '@/src/modules/ivx-owner-ai/services/ivxVariablesToolService';
+  type IVXIndependenceStatus} from '@/src/modules/ivx-owner-ai/services/ivxVariablesToolService';
 
 const IVX_INDEPENDENCE_STATUS_QUERY_KEY = ['ivx-owner-ai', 'independence-status'] as const;
 
@@ -135,8 +133,7 @@ export default function IVXIndependenceTrackerRoute() {
   const statusQuery = useQuery<IVXIndependenceStatus, Error>({
     queryKey: IVX_INDEPENDENCE_STATUS_QUERY_KEY,
     queryFn: getIVXIndependenceStatus,
-    refetchInterval: 60_000,
-  });
+    refetchInterval: 60_000});
 
   const status = statusQuery.data ?? null;
   const dependencies = useMemo<IVXIndependenceDependency[]>(() => status?.dependencies ?? [], [status?.dependencies]);
@@ -184,7 +181,7 @@ export default function IVXIndependenceTrackerRoute() {
           </View>
           {statusQuery.isLoading ? (
             <View style={styles.loadingRow}>
-              <ActivityIndicator color={Colors.primary} size="small" />
+              <ShimmerIndicator color={Colors.primary} size="small" />
               <Text style={styles.mutedText}>Loading owner-only independence proof…</Text>
             </View>
           ) : statusQuery.error ? (
@@ -255,20 +252,17 @@ export default function IVXIndependenceTrackerRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     padding: 16,
-    gap: 14,
-  },
+    gap: 14},
   heroCard: {
     padding: 20,
     borderRadius: 30,
     backgroundColor: '#071019',
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.28)',
-    gap: 14,
-  },
+    gap: 14},
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row' as const,
@@ -277,31 +271,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   heroBadgeText: {
     color: Colors.black,
     fontSize: 11,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   heroTitle: {
     color: Colors.text,
     fontSize: 28,
     lineHeight: 33,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   scoreRow: {
     flexDirection: 'row' as const,
-    gap: 12,
-  },
+    gap: 12},
   scoreCard: {
     flex: 1,
     padding: 12,
@@ -310,54 +299,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   scoreCircle: {
     width: 86,
     height: 86,
     borderRadius: 43,
     borderWidth: 7,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   scoreValue: {
     fontSize: 24,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   scoreLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '800' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   card: {
     padding: 16,
     borderRadius: 24,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 14,
-  },
+    gap: 14},
   cardHeaderRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   cardHeaderCopy: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   cardTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   cardSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   refreshButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -365,37 +345,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   refreshButtonText: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   loadingRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   mutedText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorText: {
     color: Colors.error,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   proofGrid: {
-    gap: 7,
-  },
+    gap: 7},
   proofText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   nextActionBox: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -404,77 +377,64 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: 'rgba(245,158,11,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.3)',
-  },
+    borderColor: 'rgba(245,158,11,0.3)'},
   nextActionText: {
     flex: 1,
     color: Colors.warning,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   dependencyCard: {
     padding: 14,
     borderRadius: 20,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   dependencyTopRow: {
     flexDirection: 'row' as const,
     gap: 11,
-    alignItems: 'flex-start' as const,
-  },
+    alignItems: 'flex-start' as const},
   dependencyIndex: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '900' as const,
-    paddingTop: 2,
-  },
+    paddingTop: 2},
   dependencyTitleBlock: {
     flex: 1,
-    gap: 8,
-  },
+    gap: 8},
   dependencyTitle: {
     color: Colors.text,
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   badgeRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 7,
-  },
+    gap: 7},
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   badgeText: {
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.35,
-  },
+    letterSpacing: 0.35},
   detailBlock: {
-    gap: 4,
-  },
+    gap: 4},
   detailLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   detailText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   completedProofBox: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -483,87 +443,71 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(34,197,94,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.28)',
-  },
+    borderColor: 'rgba(34,197,94,0.28)'},
   completedProofCopy: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   completedProofTitle: {
     color: Colors.success,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   completedProofText: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dayCard: {
     padding: 14,
     borderRadius: 20,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   dayHeader: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   dayNumberPill: {
     paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   dayNumber: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   dayTitleBlock: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   dayTitle: {
     color: Colors.text,
     fontSize: 14,
     lineHeight: 19,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   dayStatus: {
     fontSize: 11,
     fontWeight: '900' as const,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   dayChecklist: {
-    gap: 8,
-  },
+    gap: 8},
   checklistRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 8,
-  },
+    gap: 8},
   checkDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     marginTop: 5,
-    backgroundColor: Colors.textTertiary,
-  },
+    backgroundColor: Colors.textTertiary},
   checkDotDone: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   checklistText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerVariablesButton: {
     alignSelf: 'flex-start',
     flexDirection: 'row' as const,
@@ -572,11 +516,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   ownerVariablesButtonText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
-});
+    fontWeight: '900' as const}});

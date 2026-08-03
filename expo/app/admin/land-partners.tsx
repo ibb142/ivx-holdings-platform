@@ -8,8 +8,7 @@ import {
   RefreshControl,
   Modal,
   Alert,
-  TextInput,
-} from 'react-native';
+  TextInput} from 'react-native';
 import { Stack } from 'expo-router';
 import {
   Handshake,
@@ -25,8 +24,7 @@ import {
   FileText,
   Building2,
   Briefcase,
-  Play,
-} from 'lucide-react-native';
+  Play} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { landPartnerDeals, landPartnerStats } from '@/mocks/ipx-invest';
 import { LandPartnerDeal, LandPartnerStatus } from '@/types';
@@ -42,8 +40,7 @@ const STATUS_CONFIG: Record<LandPartnerStatus, { label: string; color: string; b
   approved: { label: 'Approved', color: Colors.success, bgColor: Colors.success + '20' },
   active: { label: 'Active', color: Colors.success, bgColor: Colors.success + '20' },
   completed: { label: 'Completed', color: Colors.primary, bgColor: Colors.primary + '20' },
-  rejected: { label: 'Rejected', color: Colors.error, bgColor: Colors.error + '20' },
-};
+  rejected: { label: 'Rejected', color: Colors.error, bgColor: Colors.error + '20' }};
 
 export default function LandPartnersScreen() {
   const [refreshing, setRefreshing] = useState(false);
@@ -63,8 +60,7 @@ export default function LandPartnersScreen() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-    });
+      year: 'numeric'});
   };
 
   const getFilteredDeals = () => {
@@ -115,8 +111,7 @@ export default function LandPartnersScreen() {
             console.log(`Updating deal ${dealId} to status: ${newStatus}`);
             Alert.alert('Success', 'Deal status updated successfully');
             setShowDetailModal(false);
-          },
-        },
+          }},
       ]
     );
   };
@@ -216,8 +211,7 @@ export default function LandPartnersScreen() {
           title: 'Land Partners',
           headerShown: true,
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }}
+          headerTintColor: Colors.text}}
       />
 
       <ScrollView
@@ -600,5 +594,4 @@ const styles = StyleSheet.create({
   actionSection: { marginBottom: 16 },
   actionButtons: { gap: 10 },
   actionButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  actionButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
-});
+  actionButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 }});

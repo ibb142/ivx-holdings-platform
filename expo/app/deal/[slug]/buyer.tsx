@@ -12,17 +12,14 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -37,13 +34,13 @@ import {
   Calendar,
   Shield,
   Building2,
-  User,
-} from 'lucide-react-native';
+  User} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { submitBuyerOffer } from '@/lib/payment-api-client';
 import { useQuery } from '@tanstack/react-query';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface DealData {
   id: string;
@@ -95,8 +92,7 @@ export default function BuyerOfferPage() {
       const data = await res.json();
       return data.deal as DealData;
     },
-    enabled: !!slug,
-  });
+    enabled: !!slug});
 
   const askingPrice = dealData?.buyer_asking_price || 0;
   const minOffer = dealData?.buyer_minimum_offer || 0;
@@ -142,8 +138,7 @@ export default function BuyerOfferPage() {
         brokerName: brokerName.trim(),
         offerExpirationDays: dealData.offer_expiration_days || 7,
         message: message.trim(),
-        acceptedTerms: true,
-      });
+        acceptedTerms: true});
 
       if (result.ok) {
         setStep('submitted');
@@ -163,7 +158,7 @@ export default function BuyerOfferPage() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading deal...</Text>
       </View>
     );
@@ -583,5 +578,4 @@ const styles = StyleSheet.create({
   failedTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginTop: 16, marginBottom: 8 },
   failedSubtitle: { color: '#909090', fontSize: 14, textAlign: 'center', marginBottom: 24 },
   retryButton: { backgroundColor: '#E6C200', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
-  retryButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
-});
+  retryButtonText: { color: '#000', fontSize: 16, fontWeight: '700' }});

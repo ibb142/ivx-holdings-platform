@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View, type ListRenderItem } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View, type ListRenderItem } from "react-native";
 import { Activity, AlertCircle, CheckCircle2, Clock, Database, Radio, Server, Zap } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   listOwnerAIDiagnosticEntries,
-  type OwnerAIDiagnosticsEntry,
-} from '@/src/modules/ivx-owner-ai/services/ivxOwnerAIDiagnosticsLogService';
+  type OwnerAIDiagnosticsEntry} from '@/src/modules/ivx-owner-ai/services/ivxOwnerAIDiagnosticsLogService';
 
 const ICON_SIZE = 14 as const;
 
@@ -125,8 +125,7 @@ export default function OwnerAILogScreen() {
     queryKey: ['ivx', 'owner-ai', 'diagnostics-log'],
     queryFn: async () => listOwnerAIDiagnosticEntries({ limit: 50 }),
     refetchInterval: 5000,
-    refetchOnWindowFocus: true,
-  });
+    refetchOnWindowFocus: true});
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -150,7 +149,7 @@ export default function OwnerAILogScreen() {
           </Text>
         </View>
         {query.isLoading && entries.length === 0 ? (
-          <View style={styles.center}><ActivityIndicator color={Colors.tint ?? '#4A90D9'} /></View>
+          <View style={styles.center}><ShimmerIndicator color={Colors.tint ?? '#4A90D9'} /></View>
         ) : null}
         {errorMessage ? (
           <View style={styles.errorBanner}>
@@ -189,8 +188,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
     borderWidth: 1,
-    borderColor: Colors.border ?? 'rgba(148, 163, 184, 0.16)',
-  },
+    borderColor: Colors.border ?? 'rgba(148, 163, 184, 0.16)'},
   entryHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   entryRequestId: { color: Colors.text, fontFamily: 'Menlo', fontSize: 11, flex: 1 },
@@ -204,5 +202,4 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyText: { color: Colors.subtitle, fontSize: 13, textAlign: 'center' },
   errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 6, padding: 10, borderRadius: 10, backgroundColor: 'rgba(239, 68, 68, 0.12)' },
-  errorBannerText: { color: Colors.danger ?? '#FF4D4D', fontSize: 12, flex: 1 },
-});
+  errorBannerText: { color: Colors.danger ?? '#FF4D4D', fontSize: 12, flex: 1 }});

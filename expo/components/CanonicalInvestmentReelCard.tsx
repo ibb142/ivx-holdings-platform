@@ -31,8 +31,7 @@ import {
   AppState,
   Platform,
   useWindowDimensions,
-  type ViewStyle,
-} from 'react-native';
+  type ViewStyle} from 'react-native';
 import { ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -48,8 +47,7 @@ import {
   Play,
   Hexagon,
   Users,
-  Home,
-} from 'lucide-react-native';
+  Home} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import SafeVideo from '@/components/SafeVideo';
 import ReelVideoPlayer from '@/components/ReelVideoPlayer';
@@ -158,20 +156,17 @@ function useInvestmentOptions(dealType: string | null | undefined): InvestmentOp
     id: 'tokenized',
     label: 'Tokenized',
     icon: <Hexagon size={16} color={Colors.primary} />,
-    tint: Colors.primary,
-  };
+    tint: Colors.primary};
   const jvDeals: InvestmentOption = {
     id: 'jvDeals',
     label: 'JV Deal',
     icon: <Users size={16} color={Colors.blue} />,
-    tint: Colors.blue,
-  };
+    tint: Colors.blue};
   const buyers: InvestmentOption = {
     id: 'buyers',
     label: 'Buyer',
     icon: <Home size={16} color={Colors.green} />,
-    tint: Colors.green,
-  };
+    tint: Colors.green};
   switch (t) {
     case 'jv':
     case 'equity_split':
@@ -204,8 +199,7 @@ const CanonicalInvestmentReelCard = memo(function CanonicalInvestmentReelCard({
   onSave,
   onShare,
   onToggleMute,
-  testIDPrefix = 'reel-card',
-}: CanonicalInvestmentReelCardProps) {
+  testIDPrefix = 'reel-card'}: CanonicalInvestmentReelCardProps) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
@@ -746,8 +740,7 @@ export function feedVideoToReelData(video: FeedVideo): CanonicalReelData {
     isSaved: false,
     audioEnabled: true,
     creatorId: video.creator_id ?? null,
-    dealUrl: deal?.url ?? null,
-  };
+    dealUrl: deal?.url ?? null};
 }
 
 /**
@@ -781,8 +774,7 @@ export function homeFeedDealToReelData(deal: HomeFeedDeal): CanonicalReelData {
     isSaved: false,
     audioEnabled: false,
     creatorId: null,
-    dealUrl: deal.url ?? null,
-  };
+    dealUrl: deal.url ?? null};
 }
 
 /**
@@ -797,8 +789,7 @@ export function parsedDealToReelData(deal: ParsedJVDeal): CanonicalReelData {
     publishedAt: deal.publishedAt,
     created_at: deal.created_at,
     updatedAt: typeof deal.updatedAt === 'string' ? deal.updatedAt : null,
-    updated_at: typeof deal.updated_at === 'string' ? deal.updated_at : null,
-  });
+    updated_at: typeof deal.updated_at === 'string' ? deal.updated_at : null});
 
   const location = deal.city && deal.state
     ? `${deal.city}, ${deal.state}`
@@ -836,8 +827,7 @@ export function parsedDealToReelData(deal: ParsedJVDeal): CanonicalReelData {
     isSaved: false,
     audioEnabled: false,
     creatorId: null,
-    dealUrl: `https://ivxholding.com/invest/${deal.id}`,
-  };
+    dealUrl: `https://ivxholding.com/invest/${deal.id}`};
 }
 
 /**
@@ -878,8 +868,7 @@ export function publishedCardToReelData(
     isSaved: false,
     audioEnabled: false,
     creatorId: null,
-    dealUrl: `https://ivxholding.com/invest/${card.id}`,
-  };
+    dealUrl: `https://ivxholding.com/invest/${card.id}`};
 }
 
 // ─── Styles ────────────────────────────────────────────────────────────
@@ -888,8 +877,7 @@ const styles = StyleSheet.create({
   container: {
     width: '100%' as const,
     backgroundColor: '#000',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   progressBar: {
     position: 'absolute' as const,
     bottom: 0,
@@ -897,12 +885,10 @@ const styles = StyleSheet.create({
     right: 0,
     height: 3,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    zIndex: 21,
-  },
+    zIndex: 21},
   progressFill: {
     height: '100%' as const,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   centerPlay: {
     position: 'absolute' as const,
     top: 0,
@@ -911,44 +897,38 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    zIndex: 25,
-  },
+    zIndex: 25},
   centerPlayCircle: {
     width: 64,
     height: 64,
     borderRadius: 32,
     backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   burstHeart: {
     position: 'absolute' as const,
     top: '50%' as const,
     left: '50%' as const,
     marginLeft: -48,
     marginTop: -48,
-    zIndex: 26,
-  },
+    zIndex: 26},
   rail: {
     position: 'absolute' as const,
     right: 10,
     zIndex: 20,
     flexDirection: 'column' as const,
     alignItems: 'center' as const,
-    gap: 16,
-  },
+    gap: 16},
   railBtn: {
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   railIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   railCount: {
     color: '#fff',
     fontSize: 11,
@@ -956,28 +936,24 @@ const styles = StyleSheet.create({
     marginTop: 3,
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
+    textShadowRadius: 3},
   info: {
     position: 'absolute' as const,
     left: 14,
     right: 84,
-    zIndex: 20,
-  },
+    zIndex: 20},
   bottomScrim: {
     position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
     height: 340,
-    zIndex: 10,
-  },
+    zIndex: 10},
   badgeRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 6,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   badgeInvestment: {
     backgroundColor: Colors.primary,
     borderRadius: 5,
@@ -988,8 +964,7 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.4,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   badgeActive: {
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1,
@@ -1002,16 +977,14 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.4,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   infoTitle: {
     color: '#fff',
     fontSize: 22,
     fontWeight: '800' as const,
     textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
+    textShadowRadius: 4},
   infoSubtitle: {
     color: 'rgba(255,255,255,0.9)',
     fontSize: 15,
@@ -1019,45 +992,37 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
+    textShadowRadius: 4},
   infoLocation: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 13,
     marginTop: 2,
     textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
+    textShadowRadius: 4},
   metricRow: {
     flexDirection: 'row' as const,
     gap: 10,
     marginTop: 8,
-    flexWrap: 'wrap' as const,
-  },
+    flexWrap: 'wrap' as const},
   metric: {
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   metricValue: {
     color: Colors.primary,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   metricLabel: {
     color: 'rgba(255,255,255,0.75)',
     fontSize: 10,
     fontWeight: '600' as const,
     marginTop: 4,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   optionsRow: {
     flexDirection: 'row' as const,
     gap: 14,
-    marginTop: 10,
-  },
+    marginTop: 10},
   optionIcon: {
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   optionIconCircle: {
     width: 40,
     height: 40,
@@ -1065,8 +1030,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
+    backgroundColor: 'rgba(0,0,0,0.35)'},
   optionIconLabel: {
     color: '#fff',
     fontSize: 10,
@@ -1074,13 +1038,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
+    textShadowRadius: 3},
   ctaRow: {
     flexDirection: 'row' as const,
     gap: 10,
-    marginTop: 14,
-  },
+    marginTop: 14},
   viewDealBtn: {
     flex: 1,
     borderWidth: 2,
@@ -1088,23 +1050,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 13,
     alignItems: 'center' as const,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
+    backgroundColor: 'rgba(0,0,0,0.45)'},
   viewDealText: {
     color: Colors.primary,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   investNowBtn: {
     flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 999,
     paddingVertical: 13,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   investNowText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,9 +8,7 @@ import {
   RefreshControl,
   Modal,
   TextInput,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
@@ -25,8 +22,7 @@ import {
   CheckCircle,
   Lock,
   Info,
-  Clock,
-} from 'lucide-react-native';
+  Clock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { DebtAcquisitionProperty } from '@/types';
 
@@ -34,8 +30,7 @@ const debtAcquisitionProperties: DebtAcquisitionProperty[] = [];
 
 const debtAcquisitionStats = {
   totalPropertiesListed: 0, totalDebtAcquired: 0, totalTokenized: 0,
-  firstLiensSecured: 0, totalInvestorReturns: 0, averageYield: 0, averageLTV: 0,
-};
+  firstLiensSecured: 0, totalInvestorReturns: 0, averageYield: 0, averageLTV: 0};
 
 function calculateTokenization(property: DebtAcquisitionProperty, tokens: number) {
   const pricePerToken = property.pricePerToken || 100;
@@ -50,10 +45,10 @@ function calculateTokenization(property: DebtAcquisitionProperty, tokens: number
     projectedAnnualReturn, lienPosition: property.ipxLienPosition || 'first',
     financingAmount: property.tokenizationAmount || 0,
     pricePerToken, totalTokens: property.totalTokens || 0,
-    availableTokens: property.availableTokens || 0,
-  };
+    availableTokens: property.availableTokens || 0};
 }
 import { formatDollar, formatCurrencyWithDecimals } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type FilterType = 'all' | 'available' | 'tokenizing' | 'first_lien_secured';
 
@@ -120,8 +115,7 @@ export default function DebtAcquisitionScreen() {
               `You now own ${tokens} mortgage-backed tokens in ${selectedProperty.name}.\n\nLien Position: FIRST\nExpected Yield: ${selectedProperty.projectedYield}%\n\nYour investment is secured by the first lien mortgage. View holdings in Portfolio.`,
               [{ text: 'OK' }]
             );
-          },
-        },
+          }},
       ]
     );
   };
@@ -165,8 +159,7 @@ export default function DebtAcquisitionScreen() {
             <TouchableOpacity onPress={() => setShowInfoModal(true)} style={styles.headerButton}>
               <Info size={22} color={Colors.primary} />
             </TouchableOpacity>
-          ),
-        }}
+          )}}
       />
 
       <ScrollView
@@ -470,7 +463,7 @@ export default function DebtAcquisitionScreen() {
                   disabled={!acceptedDisclosure || isPurchasing}
                 >
                   {isPurchasing ? (
-                    <ActivityIndicator color={Colors.black} />
+                    <ShimmerIndicator color={Colors.black} />
                   ) : (
                     <Text style={styles.confirmButtonText}>Confirm Investment</Text>
                   )}
@@ -586,15 +579,12 @@ export default function DebtAcquisitionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   headerButton: {
-    padding: 8,
-  },
+    padding: 8},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   heroCard: {
     margin: 20,
     backgroundColor: Colors.surface,
@@ -602,8 +592,7 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   heroIconContainer: {
     width: 60,
     height: 60,
@@ -611,53 +600,44 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   heroTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
     textAlign: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   strategyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-  },
+    width: '100%'},
   strategyItem: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   strategyValue: {
     color: Colors.primary,
     fontSize: 22,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   strategyLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   strategyDivider: {
     width: 1,
     height: 32,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 20,
     gap: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   statCard: {
     flex: 1,
     minWidth: '45%',
@@ -667,58 +647,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statValue: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statLabel: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   filterScroll: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   filterContainer: {
     paddingHorizontal: 20,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterChipTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   sectionHeader: {
     paddingHorizontal: 20,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   sectionTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sectionSubtitle: {
     color: Colors.textTertiary,
     fontSize: 13,
-    marginTop: 4,
-  },
+    marginTop: 4},
   propertyCard: {
     marginHorizontal: 20,
     marginBottom: 16,
@@ -726,149 +694,120 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   propertyImage: {
     width: '100%',
-    height: 180,
-  },
+    height: 180},
   propertyBadges: {
     position: 'absolute',
     top: 12,
     left: 12,
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   statusBadgeText: {
     color: Colors.white,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   yieldBadge: {
     backgroundColor: Colors.success + '20',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   yieldBadgeText: {
     color: Colors.success,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   propertyContent: {
-    padding: 16,
-  },
+    padding: 16},
   propertyName: {
     color: Colors.text,
     fontSize: 17,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   propertyLocation: {
     color: Colors.textTertiary,
     fontSize: 13,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   debtStructure: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 12,
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   debtRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   debtRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   debtLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   debtLabelBold: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   debtValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   debtValueHighlight: {
     color: Colors.warning,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   debtValuePrimary: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   debtValueSuccess: {
     color: Colors.success,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   progressSection: {
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   progressLabel: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   progressPercent: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   progressBarBg: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   progressBarFill: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   metricItem: {
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   metricValue: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   metricLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   investButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -876,52 +815,43 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   investButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   bottomPadding: {
-    height: 120,
-  },
+    height: 120},
   modalOverlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   modalContent: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '90%',
-  },
+    maxHeight: '90%'},
   infoModalContent: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 24,
     margin: 20,
-    maxHeight: '80%',
-  },
+    maxHeight: '80%'},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   modalPropertyName: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   modalLienBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -931,85 +861,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalLienText: {
     color: Colors.success,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   calculatorSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   calculatorTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   mortgageBreakdown: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 14,
     gap: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   breakdownRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   breakdownRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   breakdownDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   breakdownLabel: {
     flex: 1,
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   breakdownLabelBold: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   breakdownValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   breakdownValuePrimary: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   breakdownValueWarning: {
     color: Colors.warning,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   breakdownValueSuccess: {
     color: Colors.success,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   inputSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   inputLabel: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '600' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   tokenInput: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
@@ -1017,60 +931,49 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   availableText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 6,
-  },
+    marginTop: 6},
   summarySection: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 14,
     gap: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   summaryLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   summaryValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   summaryValueGreen: {
     color: Colors.success,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   summaryFee: {
     color: Colors.warning,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   summaryTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   summaryTotalLabel: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   summaryTotalValue: {
     color: Colors.primary,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   lienPositionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1078,61 +981,51 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   lienPositionText: {
     color: Colors.success,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disclosureSection: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   disclosureHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   disclosureTitle: {
     color: Colors.warning,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disclosureText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   riskTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   riskItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   riskBullet: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.warning,
-    marginTop: 5,
-  },
+    marginTop: 5},
   riskText: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   acceptRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1140,11 +1033,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   acceptRowChecked: {
-    backgroundColor: Colors.success + '10',
-  },
+    backgroundColor: Colors.success + '10'},
   checkbox: {
     width: 24,
     height: 24,
@@ -1152,102 +1043,82 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkboxChecked: {
     backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
+    borderColor: Colors.success},
   acceptText: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   acceptTextChecked: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   confirmButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   confirmButtonDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   confirmButtonText: {
     color: Colors.black,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   infoStep: {
     flexDirection: 'row',
     gap: 14,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   infoStepNumber: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   infoStepNumberText: {
     color: Colors.black,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   infoStepContent: {
-    flex: 1,
-  },
+    flex: 1},
   infoStepTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   infoStepDesc: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   benefitsSection: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 14,
     padding: 16,
-    marginTop: 8,
-  },
+    marginTop: 8},
   benefitsTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   benefitItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   benefitText: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   propertyImagePlaceholder: {
     backgroundColor: Colors.backgroundTertiary,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   propertyImagePlaceholderText: {
     color: Colors.textTertiary,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

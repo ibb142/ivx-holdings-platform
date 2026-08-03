@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -10,9 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator,
-  Animated,
-} from 'react-native';
+  Animated} from "react-native";
 import { Stack } from 'expo-router';
 import {
   X,
@@ -28,12 +25,12 @@ import {
   BarChart3,
   Info,
   Landmark,
-  Lock,
-} from 'lucide-react-native';
+  Lock} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useEarn, PROFIT_TIERS } from '@/lib/earn-context';
 import { formatCurrencyWithDecimals, formatAmountInput, parseAmountInput } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function IPXEarnScreen() {
   // Safe access with fallbacks — useEarn() returns undefined if EarnProvider
@@ -74,13 +71,11 @@ export default function IPXEarnScreen() {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 600,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 600,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start();
 
     const pulse = Animated.loop(
@@ -88,13 +83,11 @@ export default function IPXEarnScreen() {
         Animated.timing(pulseAnim, {
           toValue: 1.05,
           duration: 2000,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 2000,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
       ])
     );
     pulse.start();
@@ -105,8 +98,7 @@ export default function IPXEarnScreen() {
     Animated.timing(progressBarWidth, {
       toValue: quarterProgress,
       duration: 1000,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
   }, [quarterProgress, progressBarWidth]);
 
   const displayAmount = amount ? formatAmountInput(amount) : '';
@@ -266,7 +258,7 @@ export default function IPXEarnScreen() {
               disabled={isProcessing || !amount || parseFloat(amount) <= 0}
             >
               {isProcessing ? (
-                <ActivityIndicator size="small" color={isDeposit ? Colors.black : Colors.text} />
+                <ShimmerIndicator size="small" color={isDeposit ? Colors.black : Colors.text} />
               ) : (
                 <Text style={[styles.actionButtonText, isDeposit ? styles.depositActionText : styles.withdrawActionText]}>
                   {isDeposit ? 'Deposit & Start Earning' : `Withdraw ${amount ? formatCurrencyWithDecimals(parseFloat(amount)) : '$0.00'}`}
@@ -287,8 +279,7 @@ export default function IPXEarnScreen() {
           title: 'IVXHOLDINGS Earn',
           headerStyle: { backgroundColor: Colors.background },
           headerTintColor: Colors.text,
-          headerShadowVisible: false,
-        }}
+          headerShadowVisible: false}}
       />
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -367,9 +358,7 @@ export default function IPXEarnScreen() {
                   {
                     width: progressBarWidth.interpolate({
                       inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
+                      outputRange: ['0%', '100%']})},
                 ]}
               />
             </View>
@@ -425,23 +414,19 @@ export default function IPXEarnScreen() {
               {
                 icon: <PiggyBank size={22} color={Colors.primary} />,
                 title: 'You Deposit',
-                desc: 'Transfer funds from your wallet into IVXHOLDINGS Earn. Min $100.',
-              },
+                desc: 'Transfer funds from your wallet into IVXHOLDINGS Earn. Min $100.'},
               {
                 icon: <Landmark size={22} color="#00B4D8" />,
                 title: 'IVXHOLDINGS Invests',
-                desc: 'IVX HOLDINGS deploys capital into real estate deals & property investments.',
-              },
+                desc: 'IVX HOLDINGS deploys capital into real estate deals & property investments.'},
               {
                 icon: <CircleDollarSign size={22} color={Colors.success} />,
                 title: `You Earn ${apyPercent}–${maxApyPercent}% APY`,
-                desc: `IVXHOLDINGS shares ${apyPercent}–${maxApyPercent}% annual profit from its margin directly to you, accrued daily. Rate increases as IVX HOLDINGS profits grow.`,
-              },
+                desc: `IVXHOLDINGS shares ${apyPercent}–${maxApyPercent}% annual profit from its margin directly to you, accrued daily. Rate increases as IVX HOLDINGS profits grow.`},
               {
                 icon: <Lock size={22} color={Colors.primary} />,
                 title: 'No Lock-Up',
-                desc: 'Withdraw your funds anytime. No penalties, no hidden fees.',
-              },
+                desc: 'Withdraw your funds anytime. No penalties, no hidden fees.'},
             ].map((step, idx) => (
               <View key={idx} style={styles.howStep}>
                 <View style={styles.howStepIcon}>{step.icon}</View>
@@ -479,8 +464,7 @@ export default function IPXEarnScreen() {
                     backgroundColor:
                       payout.type === 'deposit' ? Colors.success + '15' :
                       payout.type === 'withdrawal' ? Colors.error + '15' :
-                      Colors.primary + '15',
-                  },
+                      Colors.primary + '15'},
                 ]}>
                   {payout.type === 'deposit' && <ArrowDownLeft size={18} color={Colors.success} />}
                   {payout.type === 'withdrawal' && <ArrowUpRight size={18} color={Colors.error} />}
@@ -643,5 +627,4 @@ const styles = StyleSheet.create({
   actionButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   depositActionText: { color: '#000000', fontSize: 13, fontWeight: '600' as const },
   withdrawActionText: { color: '#000000', fontSize: 13, fontWeight: '600' as const },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

@@ -10,8 +10,7 @@ import {
   Alert,
   RefreshControl,
   Image,
-  Switch,
-} from 'react-native';
+  Switch} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -39,8 +38,7 @@ import {
   Copy,
   RotateCcw,
   Play,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useIntro, OnboardingStep, OnboardingFeature } from '@/lib/intro-context';
@@ -76,8 +74,7 @@ export default function IntroManagement() {
     toggleStepActive,
     duplicateStep,
     resetToDefaults,
-    resetOnboarding,
-  } = useIntro();
+    resetOnboarding} = useIntro();
 
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -136,8 +133,7 @@ export default function IntroManagement() {
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             deleteStep(stepId);
-          },
-        },
+          }},
       ]
     );
   }, [deleteStep]);
@@ -167,8 +163,7 @@ export default function IntroManagement() {
       gradientStart: Colors.primary,
       gradientEnd: Colors.accent,
       isActive: true,
-      order: steps.length,
-    };
+      order: steps.length};
     addStep(newStep);
     handleEditStep(newStep);
   }, [steps.length, addStep, handleEditStep]);
@@ -178,12 +173,10 @@ export default function IntroManagement() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newFeature: OnboardingFeature = {
       id: Date.now().toString(),
-      text: newFeatureText.trim(),
-    };
+      text: newFeatureText.trim()};
     setEditedStep({
       ...editedStep,
-      features: [...editedStep.features, newFeature],
-    });
+      features: [...editedStep.features, newFeature]});
     setNewFeatureText('');
   }, [editedStep, newFeatureText]);
 
@@ -192,8 +185,7 @@ export default function IntroManagement() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditedStep({
       ...editedStep,
-      features: editedStep.features.filter(f => f.id !== featureId),
-    });
+      features: editedStep.features.filter(f => f.id !== featureId)});
   }, [editedStep]);
 
   const handleUpdateFeature = useCallback((featureId: string, text: string) => {
@@ -202,8 +194,7 @@ export default function IntroManagement() {
       ...editedStep,
       features: editedStep.features.map(f => 
         f.id === featureId ? { ...f, text } : f
-      ),
-    });
+      )});
   }, [editedStep]);
 
   const handleDuplicateStep = useCallback((step: OnboardingStep) => {
@@ -223,8 +214,7 @@ export default function IntroManagement() {
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             resetToDefaults();
-          },
-        },
+          }},
       ]
     );
   }, [resetToDefaults]);
@@ -241,8 +231,7 @@ export default function IntroManagement() {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             resetOnboarding();
             Alert.alert('Success', 'Onboarding reset! Restart the app to see the intro.');
-          },
-        },
+          }},
       ]
     );
   }, [resetOnboarding]);
@@ -757,5 +746,4 @@ const styles = StyleSheet.create({
   previewFeatures: { gap: 8 },
   previewFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   previewFeatureDot: { width: 8, height: 8, borderRadius: 4 },
-  previewFeatureText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  previewFeatureText: { color: Colors.textSecondary, fontSize: 13 }});

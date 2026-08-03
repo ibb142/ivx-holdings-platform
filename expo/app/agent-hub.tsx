@@ -8,17 +8,14 @@
  * Capital, Research.
  */
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   RefreshControl,
-  ActivityIndicator,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -39,8 +36,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Zap,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   IVX_DOMAIN_AGENTS,
@@ -48,8 +44,7 @@ import {
   getTotalTools,
   getTotalCapabilities,
   searchAgents,
-  type IVXDomainAgent,
-} from '@/lib/ivx-agents-data';
+  type IVXDomainAgent} from '@/lib/ivx-agents-data';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Users,
@@ -61,20 +56,17 @@ const ICON_MAP: Record<string, React.ElementType> = {
   ClipboardCheck,
   Shield,
   DollarSign,
-  Lightbulb,
-};
+  Lightbulb};
 
 const RISK_COLORS: Record<string, { bg: string; text: string }> = {
   low: { bg: 'rgba(0,196,140,0.15)', text: Colors.success },
   medium: { bg: 'rgba(245,158,11,0.15)', text: Colors.warning },
-  high: { bg: 'rgba(255,77,77,0.15)', text: Colors.error },
-};
+  high: { bg: 'rgba(255,77,77,0.15)', text: Colors.error }};
 
 function AgentCard({
   agent,
   onPress,
-  isCompact,
-}: {
+  isCompact}: {
   agent: IVXDomainAgent;
   onPress: () => void;
   isCompact: boolean;
@@ -255,38 +247,31 @@ export default function AgentHubScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backButton: {
     padding: 6,
-    marginRight: 8,
-  },
+    marginRight: 8},
   headerTitleWrap: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: Colors.textWhite,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   headerSubtitle: {
     fontSize: 12,
     color: Colors.mutedGray,
-    marginTop: 2,
-  },
+    marginTop: 2},
   content: {
     padding: 16,
-    paddingBottom: 120,
-  },
+    paddingBottom: 120},
   statsBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -296,28 +281,23 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statsItem: {
     alignItems: 'center' as const,
-    flex: 1,
-  },
+    flex: 1},
   statsValue: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: Colors.textWhite,
-    marginTop: 6,
-  },
+    marginTop: 6},
   statsLabel: {
     fontSize: 11,
     color: Colors.mutedGray,
-    marginTop: 2,
-  },
+    marginTop: 2},
   statsDivider: {
     width: 1,
     height: 40,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   searchContainer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -328,91 +308,75 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   searchInput: {
     flex: 1,
     color: Colors.textWhite,
     fontSize: 15,
-    padding: 0,
-  },
+    padding: 0},
   agentGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     justifyContent: 'space-between' as const,
-    gap: 12,
-  },
+    gap: 12},
   agentCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    minHeight: 200,
-  },
+    minHeight: 200},
   agentHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   agentIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginRight: 12,
-  },
+    marginRight: 12},
   agentHeaderText: {
-    flex: 1,
-  },
+    flex: 1},
   agentNumber: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.mutedGray,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   agentName: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.textWhite,
-    marginTop: 1,
-  },
+    marginTop: 1},
   agentRole: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 17,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   agentMeta: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 6,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   metaPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   metaPillText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   agentStats: {
     flexDirection: 'row' as const,
     gap: 12,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   statItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 4,
-  },
+    gap: 4},
   statText: {
     fontSize: 11,
-    color: Colors.mutedGray,
-  },
+    color: Colors.mutedGray},
   prodBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -422,14 +386,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   prodBadgeText: {
     fontSize: 9,
     fontWeight: '800' as const,
     color: Colors.warning,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   agentFooter: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -437,35 +399,27 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   engineText: {
     fontSize: 10,
     color: Colors.mutedGray,
-    flex: 1,
-  },
+    flex: 1},
   emptyState: {
     alignItems: 'center' as const,
-    paddingVertical: 40,
-  },
+    paddingVertical: 40},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.textWhite,
-  },
+    color: Colors.textWhite},
   emptyBody: {
     fontSize: 13,
     color: Colors.mutedGray,
-    marginTop: 4,
-  },
+    marginTop: 4},
   footer: {
     marginTop: 24,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   footerText: {
     fontSize: 11,
     color: Colors.mutedGray,
     textAlign: 'center' as const,
-    lineHeight: 17,
-  },
-});
+    lineHeight: 17}});

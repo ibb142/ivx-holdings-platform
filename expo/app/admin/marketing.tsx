@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,7 +7,6 @@ import {
   TextInput,
   Image,
   Alert,
-  ActivityIndicator,
   Modal,
   Switch,
   Share,
@@ -16,8 +14,7 @@ import {
   Linking,
   Clipboard,
   KeyboardAvoidingView,
-  Animated,
-} from 'react-native';
+  Animated} from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -65,8 +62,7 @@ import {
   Play,
   Plus,
   Upload,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
@@ -74,8 +70,7 @@ import { generateText } from '@/lib/ai-service';
 import {
   getInactiveMembers,
   getEngagementStats,
-  getBroadcastStats,
-} from '@/mocks/admin';
+  getBroadcastStats} from '@/mocks/admin';
 import {
   mockInfluencers,
   mockGrowthStats,
@@ -85,9 +80,9 @@ import {
   mockTrackableLinks,
   mockLinkEvents,
   getLinkAnalytics,
-  generateTrackableLink,
-} from '@/mocks/marketing';
+  generateTrackableLink} from '@/mocks/marketing';
 import { MemberEngagementStats, Influencer, AIMarketingInsight, TrackableLink, LinkEvent, SocialPlatform } from '@/types';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type TabType = 'intelligence' | 'engage' | 'content' | 'influencers' | 'analytics' | 'links';
 
@@ -219,8 +214,7 @@ export default function AIMarketingHub() {
       aiSummary: `${m.memberName} is a ${m.riskLevel.replace('_', ' ')} investor with ${formatCurrency(m.totalInvested)} invested. Last active ${m.daysSinceLastActivity} days ago.`,
       predictedAction: m.riskLevel === 'churned' ? 'Likely to leave' : m.riskLevel === 'at_risk' ? 'May become inactive' : 'Potential reinvestment',
       bestTimeToContact: m.daysSinceLastActivity > 3 ? 'Morning (9-11 AM)' : 'Evening (6-8 PM)',
-      personalizedTone: m.totalInvested > 50000 ? 'formal' : 'friendly' as const,
-    }));
+      personalizedTone: m.totalInvested > 50000 ? 'formal' : 'friendly' as const}));
   }, []);
 
   const filteredUsers = useMemo(() => {
@@ -326,8 +320,7 @@ Only output the message body, no subject line.`;
                     message: response,
                     channel: user.preferredChannel,
                     personalizationScore: Math.floor(Math.random() * 20) + 80,
-                    status: 'draft',
-                  });
+                    status: 'draft'});
                   console.log('[AI Marketing] Message generated for:', user.name);
                 } else {
                   throw new Error('Empty response');
@@ -342,8 +335,7 @@ Only output the message body, no subject line.`;
                   message: `Dear ${user.name}, we miss you at IVX HOLDINGS! Check out new investment opportunities today.`,
                   channel: user.preferredChannel,
                   personalizationScore: 65,
-                  status: 'draft',
-                });
+                  status: 'draft'});
               }
             }
 
@@ -351,8 +343,7 @@ Only output the message body, no subject line.`;
             setIsGenerating(false);
             console.log('[AI Marketing] Bulk generation complete:', messages.length, 'messages');
             Alert.alert('Success', `Generated ${messages.length} personalized messages!`);
-          },
-        },
+          }},
       ]
     );
   }, [userProfiles])
@@ -427,8 +418,7 @@ Requirements:
             setGeneratedMessage('');
             setSelectedUser(null);
             Alert.alert('Sent!', `Message sent to ${selectedUser.name}`);
-          },
-        },
+          }},
       ]
     );
   }, [selectedUser, generatedMessage]);
@@ -452,8 +442,7 @@ Requirements:
     try {
       const result = await Share.share({
         message: generatedContent,
-        title: 'Share to Social Media',
-      });
+        title: 'Share to Social Media'});
       if (result.action === Share.sharedAction) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         console.log('Content shared successfully');
@@ -653,8 +642,7 @@ Requirements:
       } else {
         await Share.share({
           message: shareText,
-          title: 'IVX HOLDINGS',
-        });
+          title: 'IVX HOLDINGS'});
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
@@ -681,16 +669,14 @@ Requirements:
       allowsMultipleSelection: true,
       selectionLimit: remainingSlots,
       quality: 0.8,
-      videoMaxDuration: 60,
-    });
+      videoMaxDuration: 60});
 
     if (!result.canceled && result.assets) {
       const newMedia: MediaItem[] = result.assets.map((asset, index) => ({
         id: `media-${Date.now()}-${index}`,
         uri: asset.uri,
         type: asset.type === 'video' ? 'video' : 'image',
-        duration: asset.duration ?? undefined,
-      }));
+        duration: asset.duration ?? undefined}));
 
       setUploadedMedia(prev => [...prev, ...newMedia].slice(0, MAX_MEDIA_COUNT));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -858,8 +844,7 @@ Requirements:
         Animated.timing(imageProgressAnim, {
           toValue: newProgress,
           duration: 300,
-          useNativeDriver: false,
-        }).start();
+          useNativeDriver: false}).start();
         return newProgress;
       });
     }, 500);
@@ -870,8 +855,7 @@ Requirements:
     try {
       const requestBody = {
         prompt: `Professional marketing image for IVX HOLDINGS real estate investment platform: ${imagePrompt}. Style: Modern, clean, professional, high quality, suitable for social media marketing.`,
-        size: imageSize,
-      };
+        size: imageSize};
       console.log('Request body:', JSON.stringify(requestBody));
 
       const { generateImage: aiGenImg } = await import('@/lib/ai-service');
@@ -897,8 +881,7 @@ Requirements:
       Animated.timing(imageProgressAnim, {
         toValue: 100,
         duration: 200,
-        useNativeDriver: false,
-      }).start();
+        useNativeDriver: false}).start();
       setGeneratedImage(imageUri);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       console.log('AI generated image successfully');
@@ -938,8 +921,7 @@ Requirements:
       } else {
         await Share.share({
           url: generatedImage,
-          title: 'IVXHOLDINGS Marketing Image',
-        });
+          title: 'IVXHOLDINGS Marketing Image'});
       }
       console.log('Image shared/downloaded');
     } catch (error) {
@@ -968,8 +950,7 @@ Requirements:
         Animated.timing(videoProgressAnim, {
           toValue: newProgress,
           duration: 300,
-          useNativeDriver: false,
-        }).start();
+          useNativeDriver: false}).start();
         return newProgress;
       });
     }, 400);
@@ -1015,14 +996,12 @@ Output just the script with timing notes.`;
       Animated.timing(videoProgressAnim, {
         toValue: 100,
         duration: 200,
-        useNativeDriver: false,
-      }).start();
+        useNativeDriver: false}).start();
 
       setGeneratedVideo({
         url: thumbnailUrl,
         script: script,
-        videoUrl: videoUrl,
-      });
+        videoUrl: videoUrl});
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       console.log('AI video script generated successfully');
@@ -1043,8 +1022,7 @@ Output just the script with timing notes.`;
       setGeneratedVideo({
         url: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=450&fit=crop',
         script: fallbackScript,
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      });
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'});
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
       setIsGeneratingVideo(false);
@@ -1061,8 +1039,7 @@ Output just the script with timing notes.`;
       } else {
         await Share.share({
           message: generatedVideo.script,
-          title: 'IVXHOLDINGS Video Script',
-        });
+          title: 'IVXHOLDINGS Video Script'});
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       console.log('Video script shared');
@@ -1403,7 +1380,7 @@ Output just the script with timing notes.`;
                   disabled={isGenerating}
                 >
                   {isGenerating ? (
-                    <ActivityIndicator size="small" color={Colors.accent} />
+                    <ShimmerIndicator size="small" color={Colors.accent} />
                   ) : (
                     <Sparkles size={14} color={Colors.accent} />
                   )}
@@ -1455,7 +1432,7 @@ Output just the script with timing notes.`;
               disabled={isSharingMedia || selectedMediaPlatforms.size === 0}
             >
               {isSharingMedia ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ShimmerIndicator size="small" color="#000" />
               ) : (
                 <Send size={18} color="#000" />
               )}
@@ -1534,7 +1511,7 @@ Output just the script with timing notes.`;
         disabled={isGenerating}
       >
         {isGenerating ? (
-          <ActivityIndicator size="small" color="#000" />
+          <ShimmerIndicator size="small" color="#000" />
         ) : (
           <Sparkles size={18} color="#000" />
         )}
@@ -1579,7 +1556,7 @@ Output just the script with timing notes.`;
             disabled={isCreatingLink}
           >
             {isCreatingLink ? (
-              <ActivityIndicator size="small" color="#000" />
+              <ShimmerIndicator size="small" color="#000" />
             ) : (
               <Link size={16} color="#000" />
             )}
@@ -1631,7 +1608,7 @@ Output just the script with timing notes.`;
         disabled={isGeneratingImage}
       >
         {isGeneratingImage ? (
-          <ActivityIndicator size="small" color="#000" />
+          <ShimmerIndicator size="small" color="#000" />
         ) : (
           <ImageIcon size={18} color="#000" />
         )}
@@ -1649,8 +1626,7 @@ Output just the script with timing notes.`;
                 { 
                   width: imageProgressAnim.interpolate({
                     inputRange: [0, 100],
-                    outputRange: ['0%', '100%'],
-                  })
+                    outputRange: ['0%', '100%']})
                 }
               ]} 
             />
@@ -1732,7 +1708,7 @@ Output just the script with timing notes.`;
         disabled={isGeneratingVideo}
       >
         {isGeneratingVideo ? (
-          <ActivityIndicator size="small" color="#000" />
+          <ShimmerIndicator size="small" color="#000" />
         ) : (
           <Play size={18} color="#000" />
         )}
@@ -1750,8 +1726,7 @@ Output just the script with timing notes.`;
                 { 
                   width: videoProgressAnim.interpolate({
                     inputRange: [0, 100],
-                    outputRange: ['0%', '100%'],
-                  })
+                    outputRange: ['0%', '100%']})
                 }
               ]} 
             />
@@ -2305,7 +2280,7 @@ Output just the script with timing notes.`;
               <Text style={styles.messageLabel}>AI Generated Message</Text>
               {isGenerating ? (
                 <View style={styles.loadingBox}>
-                  <ActivityIndicator size="large" color={Colors.primary} />
+                  <ShimmerIndicator size="large" color={Colors.primary} />
                   <Text style={styles.loadingText}>AI is crafting a personalized message...</Text>
                 </View>
               ) : (
@@ -2956,5 +2931,4 @@ const styles = StyleSheet.create({
   mediaInfoContent: { flex: 1, gap: 4 },
   mediaInfoTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' as const },
   mediaInfoText: { color: Colors.textSecondary, fontSize: 13 },
-  contentDivider: { width: 1, height: 24, backgroundColor: Colors.surfaceBorder },
-});
+  contentDivider: { width: 1, height: 24, backgroundColor: Colors.surfaceBorder }});

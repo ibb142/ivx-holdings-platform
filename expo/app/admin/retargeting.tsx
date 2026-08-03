@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Dimensions,
-} from 'react-native';
+  Dimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -30,8 +29,7 @@ import {
   Layers,
   Mail,
   Bell,
-  Activity,
-} from 'lucide-react-native';
+  Activity} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -49,8 +47,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   twitter: '#1DA1F2',
   email: '#00C48C',
   browser: '#FFD700',
-  website: '#FF6B9D',
-};
+  website: '#FF6B9D'};
 
 const PLATFORM_LABELS: Record<string, string> = {
   meta: 'Meta',
@@ -60,8 +57,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   twitter: 'Twitter/X',
   email: 'Email',
   browser: 'Browser',
-  website: 'Website',
-};
+  website: 'Website'};
 
 function formatCurrency(val: number): string {
   if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
@@ -79,8 +75,7 @@ const s = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: Colors.text, fontSize: 18, fontWeight: '800' as const, letterSpacing: -0.3 },
   headerSub: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const, marginTop: 1 },
@@ -95,8 +90,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   tabActive: { backgroundColor: Colors.primary },
   tabText: { color: Colors.textTertiary, fontSize: 12, fontWeight: '700' as const },
   tabTextActive: { color: '#000' },
@@ -113,8 +107,7 @@ const s = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   summaryIconWrap: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   summaryCardLabel: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const },
@@ -257,8 +250,7 @@ const s = StyleSheet.create({
   utmSourceStats: { alignItems: 'flex-end' as const },
   utmSourceSessions: { color: Colors.text, fontSize: 12, fontWeight: '700' as const },
   utmSourceConv: { fontSize: 10, fontWeight: '600' as const },
-  utmSourceRoas: { fontSize: 10, fontWeight: '800' as const },
-});
+  utmSourceRoas: { fontSize: 10, fontWeight: '800' as const }});
 
 function formatNumber(val: number): string {
   if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
@@ -281,8 +273,7 @@ export default function RetargetingDashboard() {
       if (error) { console.log('[Supabase] retargeting_dashboard error:', error.message); return null; }
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
   const audiencesQuery = useQuery<any>({
     queryKey: ['engagementIntel.getAudienceSegments'],
     queryFn: async () => {
@@ -290,8 +281,7 @@ export default function RetargetingDashboard() {
       if (error) return null;
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
   const pixelsQuery = useQuery<any>({
     queryKey: ['engagementIntel.getAdPixelStatus'],
     queryFn: async () => {
@@ -299,8 +289,7 @@ export default function RetargetingDashboard() {
       if (error) return null;
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
   const seoQuery = useQuery<any>({
     queryKey: ['engagementIntel.getSearchDiscoveryData'],
     queryFn: async () => {
@@ -308,8 +297,7 @@ export default function RetargetingDashboard() {
       if (error) return null;
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
   const triggersQuery = useQuery<any>({
     queryKey: ['engagementIntel.getReEngagementTriggers'],
     queryFn: async () => {
@@ -317,8 +305,7 @@ export default function RetargetingDashboard() {
       if (error) return null;
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
   const utmQuery = useQuery<any>({
     queryKey: ['engagementIntel.getUTMAnalytics', { period: '30d' }],
     queryFn: async () => {
@@ -326,8 +313,7 @@ export default function RetargetingDashboard() {
       if (error) return null;
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
   const scoringQuery = useQuery<any>({
     queryKey: ['engagementIntel.getEngagementScoring', { period: '30d' }],
     queryFn: async () => {
@@ -335,8 +321,7 @@ export default function RetargetingDashboard() {
       if (error) return null;
       return data;
     },
-    enabled: isAuthenticated,
-  });
+    enabled: isAuthenticated});
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -715,8 +700,7 @@ export default function RetargetingDashboard() {
       push_notification: <Bell size={16} color="#FF6B9D" />,
       email: <Mail size={16} color={Colors.positive} />,
       popup: <Layers size={16} color={Colors.accent} />,
-      search_retarget: <Search size={16} color="#4285F4" />,
-    };
+      search_retarget: <Search size={16} color="#4285F4" />};
 
     return (
       <View style={s.tabContent}>

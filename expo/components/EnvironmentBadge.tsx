@@ -22,12 +22,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
     zIndex: 9999,
-    opacity: 0.85,
-  },
+    opacity: 0.85},
   text: {
     color: '#FFFFFF',
     fontSize: 9,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
-});
+    letterSpacing: 0.5}});

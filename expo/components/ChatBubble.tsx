@@ -200,60 +200,48 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     marginBottom: 12,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   containerUser: {
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    marginRight: 8,
-  },
+    marginRight: 8},
   bubble: {
     maxWidth: '80%',
     padding: 12,
-    borderRadius: 16,
-  },
+    borderRadius: 16},
   bubbleSupport: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 4,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   bubbleUser: {
     backgroundColor: Colors.primary,
-    borderTopRightRadius: 4,
-  },
+    borderTopRightRadius: 4},
   senderName: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.primary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   messageText: {
     fontSize: 15,
     color: Colors.text,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   messageTextUser: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   meta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   timestamp: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   timestampUser: {
-    color: 'rgba(0, 0, 0, 0.5)',
-  },
+    color: 'rgba(0, 0, 0, 0.5)'},
   proofRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -261,28 +249,23 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   proofText: {
     flex: 1,
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   proofTextLive: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   attachments: {
     gap: 6,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   attachmentImage: {
     width: 180,
     height: 180,
     borderRadius: 10,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   attachmentFile: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -290,15 +273,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.12)',
-  },
+    backgroundColor: 'rgba(0,0,0,0.12)'},
   attachmentFileName: {
     flex: 1,
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   attachmentFileNameUser: {
-    color: Colors.black,
-  },
-});
+    color: Colors.black}});

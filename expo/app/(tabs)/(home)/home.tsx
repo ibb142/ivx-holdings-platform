@@ -1,15 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   useWindowDimensions,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import {
@@ -27,8 +24,7 @@ import {
   Home,
   Handshake,
   Sparkles,
-  Lock,
-} from 'lucide-react-native';
+  Lock} from 'lucide-react-native';
 import { useRouter, Link } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
 import Colors from '@/constants/colors';
@@ -57,8 +53,7 @@ function getPrimaryDealPhoto(deal: JVAgreement): string | undefined {
     updatedAt: deal.updatedAt,
     updated_at: typeof (deal as unknown as Record<string, unknown>).updated_at === 'string'
       ? ((deal as unknown as Record<string, unknown>).updated_at as string)
-      : undefined,
-  });
+      : undefined});
 
   if (primaryPhoto) {
   }
@@ -77,40 +72,35 @@ function ExploreDealsSection({ router }: { router: ReturnType<typeof useRouter> 
         subtitle: 'Fractional ownership in premium real estate',
         tint: Colors.gold,
         onPress: () => router.push('/(tabs)/market' as any),
-        testID: 'explore-buy-shares',
-      },
+        testID: 'explore-buy-shares'},
       {
         icon: Handshake,
         title: 'JV Partnerships',
         subtitle: 'View JV Deals',
         tint: Colors.blue,
         onPress: () => router.push('/(tabs)/invest' as any),
-        testID: 'explore-jv-partnerships',
-      },
+        testID: 'explore-jv-partnerships'},
       {
         icon: Brain,
         title: 'Smart Investing',
         subtitle: 'Get Started',
         tint: Colors.green,
         onPress: () => router.push('/(tabs)/chat' as any),
-        testID: 'explore-smart-investing',
-      },
+        testID: 'explore-smart-investing'},
       {
         icon: BarChart3,
         title: 'Investor Dashboard',
         subtitle: 'Track performance & distributions',
         tint: Colors.orange,
         onPress: () => router.push('/(tabs)/portfolio' as any),
-        testID: 'explore-investor-dashboard',
-      },
+        testID: 'explore-investor-dashboard'},
       {
         icon: TrendingUp,
         title: 'Performance Center',
         subtitle: 'ROI, distributions & deal metrics',
         tint: Colors.primary,
         onPress: () => router.push('/investor-performance' as any),
-        testID: 'explore-investor-performance',
-      },
+        testID: 'explore-investor-performance'},
     ],
     [router],
   );
@@ -160,34 +150,28 @@ function ExploreDealsSection({ router }: { router: ReturnType<typeof useRouter> 
 const exploreStyles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   title: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   seeAll: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   seeAllText: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
+    gap: 12},
   card: {
     flex: 1,
     minWidth: '46%',
@@ -195,34 +179,28 @@ const exploreStyles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   iconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   cardTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
     marginBottom: 4,
-    paddingRight: 18,
-  },
+    paddingRight: 18},
   cardSubtitle: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   cardArrow: {
     position: 'absolute',
     top: 14,
-    right: 14,
-  },
-});
+    right: 14}});
 
 function InlineTrustBadges({ t }: { t: (key: any) => string }) {
   return (
@@ -267,30 +245,24 @@ const trustStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   iconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   text: {
-    flex: 1,
-  },
+    flex: 1},
   title: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   subtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
-});
+    marginTop: 2}});
 
 class JVErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -367,8 +339,7 @@ export default function HomeScreen() {
           title: deal.title || deal.projectName || 'Untitled Deal',
           projectName: deal.projectName || deal.title || '',
           partners: (deal.partners as any),
-          profitSplit: Array.isArray(deal.profitSplit) ? deal.profitSplit : [],
-        };
+          profitSplit: Array.isArray(deal.profitSplit) ? deal.profitSplit : []};
         return base;
       }) as JVAgreement[];
 
@@ -396,8 +367,7 @@ export default function HomeScreen() {
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    staleTime: 1000 * 60 * 10,
-  });
+    staleTime: 1000 * 60 * 10});
 
   const unreadNotifications = unreadQuery.data?.count ?? 0;
 
@@ -449,8 +419,7 @@ export default function HomeScreen() {
       timelineMin: trustMarket?.timelineMin,
       timelineMax: trustMarket?.timelineMax,
       priceChange1h: trustMarket?.priceChange1h,
-      priceChange2h: trustMarket?.priceChange2h,
-    });
+      priceChange2h: trustMarket?.priceChange2h});
     setQuickBuyVisible(true);
   }, []);
 
@@ -621,37 +590,30 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   brandContainer: {
     flexDirection: 'column',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   brandTitle: {
     fontSize: 20,
     fontWeight: '900' as const,
     color: Colors.primary,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   brandSubtitle: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   headerActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 10,
-  },
+    gap: 10},
   iconButton: {
     width: 40,
     height: 40,
@@ -660,12 +622,10 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   notificationButton: {
     position: 'relative' as const,
-    padding: 8,
-  },
+    padding: 8},
   notificationBadge: {
     position: 'absolute',
     top: 4,
@@ -676,40 +636,33 @@ const styles = StyleSheet.create({
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   notificationBadgeText: {
     color: Colors.white,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   welcomeSection: {
     paddingTop: 4,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   inlineTrustRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 10,
     gap: 6,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   inlineTrustBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   inlineTrustText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   inlineTrustDot: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: Colors.textTertiary,
-  },
+    backgroundColor: Colors.textTertiary},
   ownerCTA: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -718,53 +671,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   ownerCTALeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   ownerCTAIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ownerCTAMeta: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   ownerCTATitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerCTASubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   footer: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     textAlign: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   bottomPadding: {
-    height: 120,
-  },
+    height: 120},
   scrollView: {
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollViewWeb: {
     // @ts-ignore: web-only CSS property to hide scrollbar
     scrollbarWidth: 'none',
     // @ts-ignore: web-only CSS property
-    msOverflowStyle: 'none',
-  } as any,
-});
+    msOverflowStyle: 'none'} as any});

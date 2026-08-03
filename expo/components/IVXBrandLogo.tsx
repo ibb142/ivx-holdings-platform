@@ -37,8 +37,7 @@ export default function IVXBrandLogo({
   style,
   containerStyle,
   accessibilityLabel,
-  testID = 'ivx-brand-logo',
-}: IVXBrandLogoProps) {
+  testID = 'ivx-brand-logo'}: IVXBrandLogoProps) {
   const spec = getIVXLogoSpec(variant, size, theme);
 
   return (
@@ -48,8 +47,7 @@ export default function IVXBrandLogo({
         style={[
           {
             width: spec.width,
-            height: spec.height,
-          },
+            height: spec.height},
           style,
         ]}
         resizeMode="contain"
@@ -63,6 +61,4 @@ export default function IVXBrandLogo({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-});
+    justifyContent: 'center' as const}});

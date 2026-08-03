@@ -9,8 +9,7 @@ import {
   Platform,
   Easing,
   ImageBackground,
-  ScrollView,
-} from 'react-native';
+  ScrollView} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -49,8 +48,7 @@ import {
   BadgeDollarSign,
   Trophy,
   Rocket,
-  Eye,
-} from 'lucide-react-native';
+  Eye} from 'lucide-react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const SLIDE_SPEED = 8500;
@@ -67,8 +65,7 @@ const BG: Record<string, string> = {
   revenue:    'https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=1400&q=95',
   growth:     'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1400&q=95',
   traction:   'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=1400&q=95',
-  closing:    'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1400&q=95',
-};
+  closing:    'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1400&q=95'};
 
 interface Slide {
   id: string; bg: string;
@@ -199,8 +196,7 @@ const pb = StyleSheet.create({
   bar: { flexDirection: 'row', paddingHorizontal: 16, gap: 2, paddingVertical: 6 },
   seg: { flex: 1, height: 14, justifyContent: 'center' },
   segBg: { height: 2.5, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden' },
-  segFill: { height: '100%', borderRadius: 2 },
-});
+  segFill: { height: '100%', borderRadius: 2 }});
 
 export default function InvestorPitchScreen() {
   const router = useRouter();
@@ -454,16 +450,14 @@ export default function InvestorPitchScreen() {
               <Animated.View key={i} style={[s.visionCard, {
                 opacity: cardAnims[i],
                 borderColor: item.color + '40',
-                transform: [{ scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] }) }],
-              }]}>
+                transform: [{ scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] }) }]}]}>
                 <View style={[s.visionCardBar, { backgroundColor: item.color }]} />
                 <Text style={[s.visionCardV, { color: item.color }]}>{item.v}</Text>
                 <Text style={s.visionCardL}>{item.l}</Text>
                 <Text style={s.visionCardSub}>{item.sub}</Text>
                 <Animated.View style={[s.visionCardProgress, {
                   width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', '80%'] }),
-                  backgroundColor: item.color + '60',
-                }]} />
+                  backgroundColor: item.color + '60'}]} />
               </Animated.View>
             ))}
           </View>
@@ -483,8 +477,7 @@ export default function InvestorPitchScreen() {
             {PROBLEM_POINTS.map((p, i) => (
               <Animated.View key={i} style={[s.problemRow, {
                 opacity: cardAnims[i],
-                transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-35, 0] }) }],
-              }]}>
+                transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-35, 0] }) }]}]}>
                 <View style={s.problemLeft}>
                   <Text style={s.problemEmoji}>{p.icon}</Text>
                   <Text style={s.problemText}>{p.text}</Text>
@@ -514,8 +507,7 @@ export default function InvestorPitchScreen() {
                 <Animated.View key={i} style={[s.stepCard, {
                   borderColor: step.color + '40',
                   opacity: cardAnims[i],
-                  transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }],
-                }]}>
+                  transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }]}]}>
                   <View style={[s.stepNumWrap, { backgroundColor: step.color }]}>
                     <Text style={s.stepNum}>{step.step}</Text>
                   </View>
@@ -528,8 +520,7 @@ export default function InvestorPitchScreen() {
                     <Animated.View style={[s.stepProgressBg]}>
                       <Animated.View style={[s.stepProgressFill, {
                         backgroundColor: step.color,
-                        width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-                      }]} />
+                        width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })}]} />
                     </Animated.View>
                   </View>
                 </Animated.View>
@@ -555,8 +546,7 @@ export default function InvestorPitchScreen() {
                 <Animated.View key={i} style={[s.stepCard, {
                   borderColor: step.color + '40',
                   opacity: cardAnims[i],
-                  transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }],
-                }]}>
+                  transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }]}]}>
                   <View style={[s.stepNumWrap, { backgroundColor: step.color }]}>
                     <Text style={s.stepNum}>{step.step}</Text>
                   </View>
@@ -569,8 +559,7 @@ export default function InvestorPitchScreen() {
                     <Animated.View style={s.stepProgressBg}>
                       <Animated.View style={[s.stepProgressFill, {
                         backgroundColor: step.color,
-                        width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-                      }]} />
+                        width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })}]} />
                     </Animated.View>
                   </View>
                 </Animated.View>
@@ -596,8 +585,7 @@ export default function InvestorPitchScreen() {
                 <Animated.View key={i} style={[s.aiCard, {
                   borderColor: item.color + '45',
                   opacity: cardAnims[i],
-                  transform: [{ scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.65, 1] }) }],
-                }]}>
+                  transform: [{ scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.65, 1] }) }]}]}>
                   <Animated.View style={[s.aiIconWrap, { backgroundColor: item.color + '20', transform: [{ scale: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.05] }) }] }]}>
                     <Icon size={22} color={item.color} />
                   </Animated.View>
@@ -632,8 +620,7 @@ export default function InvestorPitchScreen() {
                   opacity: cardAnims[i],
                   transform: [
                     { scale: Animated.multiply(cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }), moduleClickAnims[i]) },
-                  ],
-                }]}>
+                  ]}]}>
                   <View style={[s.moduleIconBg, { backgroundColor: mod.color + '18', borderColor: mod.color + '45' }]}>
                     <Icon size={20} color={mod.color} />
                   </View>
@@ -662,8 +649,7 @@ export default function InvestorPitchScreen() {
             {MARKET_STATS.map((item, i) => (
               <Animated.View key={i} style={[s.statRow, {
                 opacity: cardAnims[i],
-                transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-50, 0] }) }],
-              }]}>
+                transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-50, 0] }) }]}]}>
                 <View style={[s.statValueBox, { borderLeftColor: item.color }]}>
                   <Text style={[s.statValue, { color: item.color }]}>{item.value}</Text>
                   <Text style={s.statLabel}>{item.label}</Text>
@@ -671,8 +657,7 @@ export default function InvestorPitchScreen() {
                 <View style={s.statBarBg}>
                   <Animated.View style={[s.statBarFill, {
                     width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', `${item.bar * 100}%`] }),
-                    backgroundColor: item.color,
-                  }]} />
+                    backgroundColor: item.color}]} />
                 </View>
               </Animated.View>
             ))}
@@ -696,8 +681,7 @@ export default function InvestorPitchScreen() {
                 <Animated.View key={i} style={[s.revenueRow, {
                   borderColor: item.color + '30',
                   opacity: cardAnims[i],
-                  transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }],
-                }]}>
+                  transform: [{ translateX: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }]}]}>
                   <View style={[s.revenueIconWrap, { backgroundColor: item.color + '18' }]}>
                     <Icon size={16} color={item.color} />
                   </View>
@@ -706,8 +690,7 @@ export default function InvestorPitchScreen() {
                     <View style={s.revenueBarBg}>
                       <Animated.View style={[s.revenueBarFill, {
                         width: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: ['0%', `${item.bar * 100}%`] }),
-                        backgroundColor: item.color,
-                      }]} />
+                        backgroundColor: item.color}]} />
                     </View>
                   </View>
                   <Text style={[s.revenuePct, { color: item.color }]}>{item.pct}</Text>
@@ -735,14 +718,12 @@ export default function InvestorPitchScreen() {
             {GROWTH_PHASES.map((phase, i) => (
               <Animated.View key={i} style={[s.growthCol, {
                 opacity: cardAnims[i],
-                transform: [{ scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
-              }]}>
+                transform: [{ scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }]}]}>
                 <Text style={[s.growthTarget, { color: phase.color }]}>{phase.target}</Text>
                 <View style={s.growthBarCol}>
                   <Animated.View style={[s.growthBar, {
                     backgroundColor: phase.color,
-                    height: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: [4, phase.h] }),
-                  }]} />
+                    height: barAnims[i].interpolate({ inputRange: [0, 1], outputRange: [4, phase.h] })}]} />
                 </View>
                 <View style={[s.growthPhaseTag, { backgroundColor: phase.color + '20', borderColor: phase.color + '40' }]}>
                   <Text style={[s.growthPhase, { color: phase.color }]}>{phase.phase}</Text>
@@ -784,8 +765,7 @@ export default function InvestorPitchScreen() {
                   transform: [
                     { scale: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                     { translateY: cardAnims[i].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
-                  ],
-                }]}>
+                  ]}]}>
                   <View style={[s.tractionIconWrap, { backgroundColor: item.color + '18' }]}>
                     <Icon size={18} color={item.color} />
                   </View>
@@ -809,8 +789,7 @@ export default function InvestorPitchScreen() {
           <Animated.View style={[s.closingGlow, {
             backgroundColor: slide.accent + '12',
             opacity: glowAnim,
-            transform: [{ scale: pulseAnim.interpolate({ inputRange: [1, 1.06], outputRange: [1, 1.3] }) }],
-          }]} />
+            transform: [{ scale: pulseAnim.interpolate({ inputRange: [1, 1.06], outputRange: [1, 1.3] }) }]}]} />
           {renderAccentLine(slide.accent, { alignSelf: 'center' as const, marginBottom: 12 })}
           <Animated.Text style={[s.closingTitle, { opacity: fadeAnim, transform: [{ translateY: titleY }, { scale: heroScale }], color: slide.accent }]}>
             {slide.title}
@@ -1055,5 +1034,4 @@ const s = StyleSheet.create({
   closingCta:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15, borderRadius: 16 },
   closingCtaText:{ fontSize: 16, fontWeight: '900' as const, color: '#000', letterSpacing: 0.3 },
   closingSecondary:{ alignItems: 'center', paddingVertical: 10 },
-  closingSecondaryText:{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
-});
+  closingSecondaryText:{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const }});

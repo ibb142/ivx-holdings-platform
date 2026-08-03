@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -11,9 +10,7 @@ import {
   Platform,
   Alert,
   Share,
-  Linking,
-  ActivityIndicator,
-} from 'react-native';
+  Linking} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
@@ -50,12 +47,12 @@ import {
   Trash2,
   CheckCircle,
   Share2,
-  Image as ImageIcon,
-} from 'lucide-react-native';
+  Image as ImageIcon} from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import Colors from '@/constants/colors';
 import { generateText, generateImage as aiGenerateImage } from '@/lib/ai-service';
 import { SCREEN_MOCKUP_MAP } from '@/components/ScreenMockups';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WAVE_BAR_COUNT = 5;
@@ -109,71 +106,54 @@ const SECTION_CONFIGS = [
 const FALLBACK_NARRATIONS: Record<string, { narration: string; bullets: string[] }> = {
   intro: {
     narration: 'Welcome to IVXHOLDINGS Real Estate, the revolutionary investment platform transforming how the world invests in property. Built with cutting-edge technology and designed for the modern investor, IVXHOLDINGS puts institutional-grade real estate opportunities in the palm of your hand.',
-    bullets: ['$326 Trillion global real estate market', 'Fractional ownership from just $100', 'SEC-compliant investment structure', '340+ features across the platform'],
-  },
+    bullets: ['$326 Trillion global real estate market', 'Fractional ownership from just $100', 'SEC-compliant investment structure', '340+ features across the platform']},
   opportunity: {
     narration: 'The global real estate market represents the largest asset class in the world at over 326 trillion dollars. Until now, only institutional investors had access to the best opportunities. IVXHOLDINGS is democratizing real estate investment through fractional ownership and blockchain technology.',
-    bullets: ['Largest asset class globally at $326T', '90% of millionaires built wealth via real estate', 'Only 15% of Americans invest directly', 'Fractional ownership removes all barriers'],
-  },
+    bullets: ['Largest asset class globally at $326T', '90% of millionaires built wealth via real estate', 'Only 15% of Americans invest directly', 'Fractional ownership removes all barriers']},
   platform: {
     narration: 'IVXHOLDINGS is a complete investment ecosystem with over 340 features designed to provide a seamless, institutional-grade experience. From AI-powered analytics to automated compliance, every detail has been engineered for excellence.',
-    bullets: ['340+ features built and integrated', 'AI-powered investment recommendations', 'Real-time market data and analytics', 'Multi-platform: iOS, Android, and Web'],
-  },
+    bullets: ['340+ features built and integrated', 'AI-powered investment recommendations', 'Real-time market data and analytics', 'Multi-platform: iOS, Android, and Web']},
   onboarding: {
     narration: 'Our smart onboarding ensures every investor is verified and compliant from day one. AI-powered KYC verification and biometric authentication maintain the highest standards of security — open to all investors with no accreditation barriers.',
-    bullets: ['AI-powered document verification', 'Biometric authentication built-in', 'Open to all investors — no accreditation required', 'GDPR-compliant data handling'],
-  },
+    bullets: ['AI-powered document verification', 'Biometric authentication built-in', 'Open to all investors — no accreditation required', 'GDPR-compliant data handling']},
   marketplace: {
     narration: 'Our curated property marketplace features vetted investment opportunities across residential, commercial, and mixed-use real estate. Advanced filters, interactive maps, and detailed financial projections help investors make informed decisions.',
-    bullets: ['Curated, pre-vetted properties', '25+ advanced filter options', 'Interactive property maps', 'Detailed ROI projections per listing'],
-  },
+    bullets: ['Curated, pre-vetted properties', '25+ advanced filter options', 'Interactive property maps', 'Detailed ROI projections per listing']},
   trading: {
     narration: 'The IVXHOLDINGS trading engine enables fractional real estate investment with institutional-grade execution. Place market and limit orders, set up automated investing schedules, and reinvest dividends automatically with our DRIP program.',
-    bullets: ['Fractional shares from $100', 'Market and limit order types', 'Automated recurring investments', 'DRIP dividend reinvestment'],
-  },
+    bullets: ['Fractional shares from $100', 'Market and limit order types', 'Automated recurring investments', 'DRIP dividend reinvestment']},
   portfolio: {
     narration: 'Track your entire real estate portfolio with AI-powered analytics. Interactive performance charts, asset allocation views, and benchmark comparisons give you complete visibility into your investments at all times.',
-    bullets: ['Real-time portfolio valuation', 'Interactive performance charts', 'AI-powered investment insights', 'Tax reporting documentation'],
-  },
+    bullets: ['Real-time portfolio valuation', 'Interactive performance charts', 'AI-powered investment insights', 'Tax reporting documentation']},
   wallet: {
     narration: 'Our digital wallet supports multiple payment methods including ACH transfers, wire deposits, card payments, and cryptocurrency. Instant withdrawal processing and complete fee transparency ensure a frictionless experience.',
-    bullets: ['ACH, wire, and card payments', 'Instant withdrawal processing', 'Complete fee transparency', 'Multi-currency support'],
-  },
+    bullets: ['ACH, wire, and card payments', 'Instant withdrawal processing', 'Complete fee transparency', 'Multi-currency support']},
   tokenomics: {
     narration: 'The IVXHOLDINGS token ecosystem rewards active participants with enhanced yields, governance rights, and exclusive platform benefits. Stake tokens for additional returns, vote on platform decisions, and unlock premium features.',
-    bullets: ['Token staking for enhanced yields', 'Governance voting rights', 'Tiered benefit system', 'Referral bonus multipliers'],
-  },
+    bullets: ['Token staking for enhanced yields', 'Governance voting rights', 'Tiered benefit system', 'Referral bonus multipliers']},
   ai: {
     narration: 'Our AI suite powers every aspect of the platform. From intelligent chatbots and automated email outreach to AI-generated video presentations and predictive analytics, artificial intelligence is at the core of IVXHOLDINGS.',
-    bullets: ['24/7 AI investment assistant', 'AI-powered email engine', 'Automated video generation', 'Predictive market analytics'],
-  },
+    bullets: ['24/7 AI investment assistant', 'AI-powered email engine', 'Automated video generation', 'Predictive market analytics']},
   admin: {
     narration: 'The admin command center provides complete platform control with over 45 management tools. Monitor transactions, manage users, run marketing campaigns, and analyze performance metrics from a single dashboard.',
-    bullets: ['45+ admin management tools', 'Real-time transaction monitoring', 'Integrated email marketing engine', 'AI-powered outreach automation'],
-  },
+    bullets: ['45+ admin management tools', 'Real-time transaction monitoring', 'Integrated email marketing engine', 'AI-powered outreach automation']},
   security: {
     narration: 'IVXHOLDINGS employs enterprise-grade security including end-to-end encryption, two-factor authentication, and continuous activity monitoring. Fully SEC-compliant and GDPR-ready, your investments and data are always protected.',
-    bullets: ['End-to-end encryption', 'Two-factor authentication', 'SEC and GDPR compliance', 'Continuous threat monitoring'],
-  },
+    bullets: ['End-to-end encryption', 'Two-factor authentication', 'SEC and GDPR compliance', 'Continuous threat monitoring']},
   growth: {
     narration: 'Our growth engine includes a multi-tier referral program, influencer partnerships, and social media command center. These tools enable organic platform growth while rewarding early adopters and community builders.',
-    bullets: ['Multi-tier referral program', 'Influencer partnership platform', 'Social media command center', 'Gamified engagement system'],
-  },
+    bullets: ['Multi-tier referral program', 'Influencer partnership platform', 'Social media command center', 'Gamified engagement system']},
   metrics: {
     narration: 'IVXHOLDINGS delivers measurable results. Our platform tracks key performance indicators across user acquisition, transaction volume, portfolio growth, and investor satisfaction for continuous improvement and transparency.',
-    bullets: ['User acquisition and retention', 'Transaction volume growth rate', 'Average portfolio return tracking', 'Net promoter score monitoring'],
-  },
+    bullets: ['User acquisition and retention', 'Transaction volume growth rate', 'Average portfolio return tracking', 'Net promoter score monitoring']},
   closing: {
     narration: 'The future of real estate investment is here. IVXHOLDINGS combines cutting-edge technology with institutional-grade infrastructure to create the most comprehensive property investment platform ever built. Start building your real estate portfolio today.',
-    bullets: ['Start investing with just $100', 'Join thousands of active investors', 'Download free on iOS and Android', 'Contact us for partnerships'],
-  },
-};
+    bullets: ['Start investing with just $100', 'Join thousands of active investors', 'Download free on iOS and Android', 'Contact us for partnerships']}};
 
 const STYLE_ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string }>> = {
   briefcase: Briefcase,
   zap: Zap,
-  target: Target,
-};
+  target: Target};
 
 const SCREEN_FEATURE_MAP: Record<string, string[]> = {
   intro: ['Onboarding Flow', 'Multi-Platform', 'Instant Sign-Up'],
@@ -190,8 +170,7 @@ const SCREEN_FEATURE_MAP: Record<string, string[]> = {
   security: ['E2E Encryption', '2FA Enabled', 'SEC Compliant'],
   growth: ['Referral Program', 'Influencer Hub', 'Social Command'],
   metrics: ['User Growth KPIs', 'Txn Volume', 'NPS Tracking'],
-  closing: ['Start from $100', 'Free Download', 'iOS + Android + Web'],
-};
+  closing: ['Start from $100', 'Free Download', 'iOS + Android + Web']};
 
 const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5];
 
@@ -346,8 +325,7 @@ export default function AIVideoStudio() {
               if (cancelled) return;
               setIsSpeaking(false);
               playTimerRef.current = setTimeout(advanceToNext, 3000);
-            },
-          });
+            }});
         } catch {
           setIsSpeaking(false);
           playTimerRef.current = setTimeout(advanceToNext, 5000);
@@ -429,8 +407,7 @@ export default function AIVideoStudio() {
           imageUrl,
           themeColor: config.color,
           icon: config.icon,
-          screenFeatures,
-        });
+          screenFeatures});
       }
       return generated;
     },
@@ -444,8 +421,7 @@ export default function AIVideoStudio() {
     },
     onError: (error) => {
       console.error('[AIVideo] Generation failed:', error);
-    },
-  });
+    }});
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -510,8 +486,7 @@ export default function AIVideoStudio() {
     Speech.speak('Welcome to IVXHOLDINGS Real Estate, the future of property investment.', {
       rate: voiceSpeed,
       pitch: 1.0,
-      language: 'en-US',
-    });
+      language: 'en-US'});
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [voiceSpeed]);
 
@@ -544,8 +519,7 @@ export default function AIVideoStudio() {
         label: template.label,
         base64: imageResult.base64Data,
         mimeType: imageResult.mimeType,
-        createdAt: new Date().toISOString(),
-      };
+        createdAt: new Date().toISOString()};
       const newCount = photoCount + 1;
       setPhotoCount(newCount);
       await AsyncStorage.setItem(PHOTO_DAILY_KEY, JSON.stringify({ date: getTodayKey(), count: newCount }));
@@ -882,7 +856,7 @@ export default function AIVideoStudio() {
         <Text style={styles.photoStudioDesc}>Generate stunning 8K photorealistic real estate images using AI</Text>
         {isGeneratingPhoto && (
           <View style={styles.photoGeneratingBanner}>
-            <ActivityIndicator size="small" color="#FFD700" />
+            <ShimmerIndicator size="small" color="#FFD700" />
             <Text style={styles.photoGeneratingText}>Generating 8K image... (10–30 sec)</Text>
           </View>
         )}
@@ -899,7 +873,7 @@ export default function AIVideoStudio() {
                 activeOpacity={0.7}
               >
                 <View style={[styles.photoTemplateIcon, { backgroundColor: t.color + '15' }]}>
-                  {isActive ? <ActivityIndicator size="small" color={t.color} /> : <Camera size={16} color={t.color} />}
+                  {isActive ? <ShimmerIndicator size="small" color={t.color} /> : <Camera size={16} color={t.color} />}
                 </View>
                 <View style={styles.photoTemplateInfo}>
                   <Text style={styles.photoTemplateLabel}>{t.label}</Text>
@@ -950,8 +924,7 @@ export default function AIVideoStudio() {
             styles.waveBar,
             {
               backgroundColor: currentSlideData?.themeColor || Colors.primary,
-              transform: [{ scaleY: bar }],
-            },
+              transform: [{ scaleY: bar }]},
           ]}
         />
       ))}
@@ -1321,5 +1294,4 @@ const styles = StyleSheet.create({
   chapterName: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   chapterSub: { color: Colors.textTertiary, fontSize: 12, marginTop: 2 },
   nowBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  nowBadgeText: { fontSize: 11, fontWeight: '700' as const },
-});
+  nowBadgeText: { fontSize: 11, fontWeight: '700' as const }});

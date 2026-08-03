@@ -1,14 +1,12 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { Stack } from 'expo-router';
 import {
   Archive,
@@ -16,12 +14,12 @@ import {
   CheckCircle2,
   CircleX,
     RotateCcw,
-  Trash2,
-} from 'lucide-react-native';
+  Trash2} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type VipTier = 'vip1' | 'vip2' | 'vip3' | 'vip4' | 'blocked_review';
 type TransactionStatus =
@@ -145,8 +143,7 @@ async function postAction(input: { recordId: string; action: OwnerActionType; re
   const res = await fetch(`${base}/api/ivx/ordering/action`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify(input),
-  });
+    body: JSON.stringify(input)});
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
   if (!res.ok || json.ok === false) throw new Error(json.error ?? `HTTP ${res.status}`);
 }
@@ -156,16 +153,14 @@ const VIP_COLOR: Record<VipTier, string> = {
   vip2: Colors.success,
   vip3: Colors.info,
   vip4: Colors.muted,
-  blocked_review: Colors.error,
-};
+  blocked_review: Colors.error};
 
 const VIP_LABEL: Record<VipTier, string> = {
   vip1: 'VIP 1',
   vip2: 'VIP 2',
   vip3: 'VIP 3',
   vip4: 'VIP 4',
-  blocked_review: 'BLOCKED',
-};
+  blocked_review: 'BLOCKED'};
 
 const TX_COLOR: Record<TransactionStatus, string> = {
   active_transaction: Colors.success,
@@ -173,8 +168,7 @@ const TX_COLOR: Record<TransactionStatus, string> = {
   no_transaction: Colors.muted,
   expired: Colors.orange,
   blocked: Colors.error,
-  owner_review: Colors.warning,
-};
+  owner_review: Colors.warning};
 
 const TYPE_LABEL: Record<RecordType, string> = {
   buyer: 'Buyer',
@@ -182,8 +176,7 @@ const TYPE_LABEL: Record<RecordType, string> = {
   jv: 'JV',
   tokenized_buyer: 'Tokenized',
   opportunity: 'Opportunity',
-  other: 'Other',
-};
+  other: 'Other'};
 
 function formatTime(value: string | null): string {
   if (!value) return '—';
@@ -204,8 +197,7 @@ const ACTION_LABEL: Record<OwnerActionType, string> = {
   delete: 'Delete',
   return_to_active: 'Return',
   move_to_review: 'Review',
-  set_transaction_status: 'Status',
-};
+  set_transaction_status: 'Status'};
 
 const ACTION_ICON: Partial<Record<OwnerActionType, React.ReactNode>> = {
   approve: <CheckCircle2 size={13} color={Colors.success} />,
@@ -214,8 +206,7 @@ const ACTION_ICON: Partial<Record<OwnerActionType, React.ReactNode>> = {
   queue_delete: <Trash2 size={13} color={Colors.orange} />,
   delete: <Trash2 size={13} color={Colors.error} />,
   return_to_active: <RotateCcw size={13} color={Colors.info} />,
-  move_to_review: <CircleX size={13} color={Colors.warning} />,
-};
+  move_to_review: <CircleX size={13} color={Colors.warning} />};
 
 function SummaryChip({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
@@ -229,8 +220,7 @@ function SummaryChip({ label, value, tone }: { label: string; value: number; ton
 function RecordRow({
   rec,
   onAction,
-  pending,
-}: {
+  pending}: {
   rec: OrderedRecord;
   onAction: (recordId: string, action: OwnerActionType) => void;
   pending: boolean;
@@ -291,15 +281,13 @@ function OwnerOrderingScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: fetchBoard,
-    refetchInterval: 60_000,
-  });
+    refetchInterval: 60_000});
 
   const actionMutation = useMutation({
     mutationFn: postAction,
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-    },
-  });
+    }});
 
   const onRefresh = useCallback(() => {
     void refetch();
@@ -374,7 +362,7 @@ function OwnerOrderingScreen() {
         </ScrollView>
 
         {isLoading ? (
-          <View style={styles.center}><ActivityIndicator color={Colors.gold} /></View>
+          <View style={styles.center}><ShimmerIndicator color={Colors.gold} /></View>
         ) : isError ? (
           <View style={styles.errorCard}>
             <CircleX size={18} color={Colors.error} />
@@ -415,8 +403,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroTitle: { color: Colors.text, fontSize: 18, fontWeight: '700' as const },
   heroSub: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
@@ -429,8 +416,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     minWidth: 72,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   chipValue: { fontSize: 18, fontWeight: '800' as const },
   chipLabel: { color: Colors.textTertiary, fontSize: 11, marginTop: 2 },
   tabsScroll: { marginHorizontal: -16 },
@@ -441,8 +427,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   tabActive: { backgroundColor: Colors.gold, borderColor: Colors.gold },
   tabText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' as const },
   tabTextActive: { color: Colors.black },
@@ -453,8 +438,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: `${Colors.error}22`,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   errorText: { color: Colors.error, fontSize: 13, flex: 1 },
   emptyCard: { padding: 24, alignItems: 'center' },
   emptyText: { color: Colors.textTertiary, fontSize: 13 },
@@ -464,8 +448,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 4,
-  },
+    gap: 4},
   rowHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   orderNum: { color: Colors.textTertiary, fontSize: 13, fontWeight: '700' as const, fontVariant: ['tabular-nums'] },
   vipBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
@@ -487,7 +470,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  actionText: { color: Colors.text, fontSize: 12, fontWeight: '600' as const },
-});
+    paddingVertical: 6},
+  actionText: { color: Colors.text, fontSize: 12, fontWeight: '600' as const }});

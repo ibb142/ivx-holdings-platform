@@ -31,8 +31,7 @@ function SkeletonBlock({ width = '100%', height = 16, borderRadius = 8, style }:
           height,
           borderRadius,
           backgroundColor: Colors.surfaceLight,
-          opacity,
-        },
+          opacity},
         style,
       ]}
     />
@@ -138,30 +137,25 @@ const sk = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cardBody: {
     padding: 14,
-    gap: 4,
-  },
+    gap: 4},
   cardRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 12,
-    gap: 8,
-  },
+    gap: 8},
   portfolioWrap: {
     gap: 12,
     paddingHorizontal: 20,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   portfolioCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   walletRow: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -170,8 +164,7 @@ const sk = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   holdingRow: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -180,17 +173,13 @@ const sk = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   marketRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   homeWrap: {
-    paddingTop: 8,
-  },
-});
+    paddingTop: 8}});

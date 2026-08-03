@@ -1,14 +1,11 @@
 import React, { useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
-  TextInput,
-} from 'react-native';
+  TextInput} from "react-native";
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
@@ -26,8 +23,7 @@ import {
   RefreshCw,
   Zap,
   Globe,
-  Smartphone,
-} from 'lucide-react-native';
+  Smartphone} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { useAuth } from '@/lib/auth-context';
@@ -39,22 +35,20 @@ import {
   fetchOwnerRepairReadiness,
   getOwnerRepairReadiness,
   type OwnerRepairReadiness,
-  type RepairIssueItem,
-} from '@/lib/owner-repair-readiness';
+  type RepairIssueItem} from '@/lib/owner-repair-readiness';
 import {
   getAdminAccessLockFixUpdate,
   getAdminAccessLockHonestStatus,
   getAdminAccessLockMessage,
   getAdminAccessLockNextStep,
-  isAdminAccessLocked,
-} from '@/lib/admin-access-lock';
+  isAdminAccessLocked} from '@/lib/admin-access-lock';
 import { getOpenAccessModeMessage, isOpenAccessModeEnabled } from '@/lib/open-access';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchOwnerRecoverySmsStatus,
   requestOwnerRecoverySms,
   verifyOwnerRecoverySms,
-  type OwnerRecoveryStatus,
-} from '@/lib/owner-recovery-sms';
+  type OwnerRecoveryStatus} from '@/lib/owner-recovery-sms';
 
 interface AccessRouteCard {
   id: string;
@@ -95,9 +89,7 @@ function buildOwnerLoginRoute(email?: string) {
     pathname: '/login',
     params: {
       ownerMode: '1',
-      ...(normalizedEmail ? { email: normalizedEmail } : {}),
-    },
-  } as const;
+      ...(normalizedEmail ? { email: normalizedEmail } : {})}} as const;
 }
 
 interface DirectAnswerItem {
@@ -114,8 +106,7 @@ const ACCESS_ROUTES: AccessRouteCard[] = [
     detail: 'Best for daily use, write actions, admin approvals, and deploy-authorized operations. No public signup is required for existing owner recovery.',
     cta: 'Open full app',
     accent: '#FFD700',
-    mode: 'signin',
-  },
+    mode: 'signin'},
   {
     id: 'trusted-restore',
     title: '2. Trusted device restore',
@@ -123,8 +114,7 @@ const ACCESS_ROUTES: AccessRouteCard[] = [
     detail: 'Works with carrier subnet matching — your mobile IP can change within the same network range.',
     cta: 'Restore trusted access',
     accent: '#00C48C',
-    mode: 'restore',
-  },
+    mode: 'restore'},
   {
     id: 'owner-controls',
     title: '3. Owner controls',
@@ -132,8 +122,7 @@ const ACCESS_ROUTES: AccessRouteCard[] = [
     detail: 'Use this to keep owner recovery under your control and re-verify your current network.',
     cta: 'Open owner controls',
     accent: '#4A90D9',
-    mode: 'controls',
-  },
+    mode: 'controls'},
 ];
 
 function formatAuthoritySource(source: string | null | undefined): string {
@@ -225,8 +214,7 @@ export default function OwnerAccessScreen() {
       isAdmin: auth.isAdmin,
       isOwnerIPAccess: auth.isOwnerIPAccess,
       userRole: auth.userRole,
-      email: auth.user?.email ?? null,
-    });
+      email: auth.user?.email ?? null});
     router.replace('/(tabs)/(home)/home' as any);
   }, [
     auth.isAuthenticated,
@@ -245,15 +233,13 @@ export default function OwnerAccessScreen() {
     queryFn: () => auth.auditOwnerDirectAccess(requestedOwnerEmail || undefined),
     staleTime: 10000,
     refetchOnWindowFocus: true,
-    enabled: !openAccessMode,
-  });
+    enabled: !openAccessMode});
   const ownerIdentityAuditQuery = useQuery({
     queryKey: ['owner-identity-audit-hub', requestedOwnerEmail, auth.user?.id ?? 'anon', auth.userRole, auth.isOwnerIPAccess],
     queryFn: () => auth.auditOwnerIdentity(requestedOwnerEmail || undefined),
     staleTime: 10000,
     refetchOnWindowFocus: true,
-    enabled: !openAccessMode,
-  });
+    enabled: !openAccessMode});
   const effectiveOwnerEmail = useMemo(() => {
     if (ownerAuditQuery.data?.emailMismatch && ownerAuditQuery.data.verifiedEmail) {
       return ownerAuditQuery.data.verifiedEmail;
@@ -276,8 +262,7 @@ export default function OwnerAccessScreen() {
     onError: (error: Error) => {
       console.log('[OwnerAccessHub] Trusted owner restore error:', error.message);
       Alert.alert('Trusted Access Blocked', error.message);
-    },
-  });
+    }});
 
   const forceVerifyMutation = useMutation({
     mutationFn: () => auth.activateOwnerAccess(effectiveOwnerEmail || undefined),
@@ -293,8 +278,7 @@ export default function OwnerAccessScreen() {
     },
     onError: (error: Error) => {
       Alert.alert('Verification Failed', error.message);
-    },
-  });
+    }});
 
   const claimOwnerMutation = useMutation({
     mutationFn: async () => {
@@ -318,8 +302,7 @@ export default function OwnerAccessScreen() {
     },
     onError: (error: Error) => {
       Alert.alert('Claim Failed', error.message);
-    },
-  });
+    }});
 
   // ── Owner login recovery via AWS SNS SMS (secondary access path) ──
   const [recoverySmsStatus, setRecoverySmsStatus] = React.useState<OwnerRecoveryStatus | null>(null);
@@ -331,8 +314,7 @@ export default function OwnerAccessScreen() {
     queryKey: ['owner-recovery-sms-status'],
     queryFn: () => fetchOwnerRecoverySmsStatus(),
     staleTime: 30000,
-    refetchOnWindowFocus: true,
-  });
+    refetchOnWindowFocus: true});
 
   React.useEffect(() => {
     if (recoverySmsStatusQuery.data) {
@@ -357,8 +339,7 @@ export default function OwnerAccessScreen() {
     onError: (error: Error) => {
       setRecoverySmsRequested(false);
       Alert.alert('Recovery SMS Failed', error.message);
-    },
-  });
+    }});
 
   const recoverySmsVerifyMutation = useMutation({
     mutationFn: () => verifyOwnerRecoverySms(
@@ -390,8 +371,7 @@ export default function OwnerAccessScreen() {
     },
     onError: (error: Error) => {
       Alert.alert('Verification Failed', error.message);
-    },
-  });
+    }});
 
   const recoverySmsReady = recoverySmsStatus?.ready === true;
   const recoverySmsEnabled = Boolean(effectiveOwnerEmail || auth.user?.email) && recoverySmsReady;
@@ -407,8 +387,7 @@ export default function OwnerAccessScreen() {
       console.log('[OwnerAccessHub] Sending owner password reset to:', normalizedEmail, 'redirect:', redirectTo);
       try {
         const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo,
-        });
+          redirectTo});
         if (error) {
           throw new Error(error.message || 'Failed to send password reset email.');
         }
@@ -436,8 +415,7 @@ export default function OwnerAccessScreen() {
         return;
       }
       Alert.alert('Reset Failed', raw || 'Could not send the reset email right now. Please try again in a minute.');
-    },
-  });
+    }});
 
   const hasLiveOwnerControl = auth.isAuthenticated && auth.isAdmin;
   const audit = ownerAuditQuery.data;
@@ -498,8 +476,7 @@ export default function OwnerAccessScreen() {
     queryKey: ['owner-repair-readiness'],
     queryFn: fetchOwnerRepairReadiness,
     staleTime: 60000,
-    enabled: !openAccessMode,
-  });
+    enabled: !openAccessMode});
   const ownerRepairReadiness = ownerRepairReadinessQuery.data ?? getOwnerRepairReadiness();
   const repairIssueItems = useMemo<RepairIssueItem[]>(() => buildRepairIssueItems(ownerRepairReadiness), [ownerRepairReadiness]);
   const criticalRepairIssues = useMemo<RepairIssueItem[]>(() => repairIssueItems.filter((item) => item.tone === 'critical'), [repairIssueItems]);
@@ -540,8 +517,7 @@ export default function OwnerAccessScreen() {
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Sign In',
-            onPress: () => router.push(buildOwnerLoginRoute(effectiveOwnerEmail) as any),
-          },
+            onPress: () => router.push(buildOwnerLoginRoute(effectiveOwnerEmail) as any)},
         ]
       );
       return;
@@ -596,8 +572,7 @@ export default function OwnerAccessScreen() {
         accent: Colors.primary,
         icon: LayoutGrid,
         onPress: () => router.replace('/(tabs)/(home)/home' as any),
-        testID: 'owner-access-open-full-app',
-      },
+        testID: 'owner-access-open-full-app'},
       {
         id: 'admin-hq',
         title: 'Open Admin HQ',
@@ -605,8 +580,7 @@ export default function OwnerAccessScreen() {
         accent: '#00C48C',
         icon: ShieldCheck,
         onPress: () => router.push('/admin' as any),
-        testID: 'owner-access-open-admin-hq',
-      },
+        testID: 'owner-access-open-admin-hq'},
       {
         id: 'ivx-owner-room',
         title: 'Open IVX Owner room',
@@ -614,8 +588,7 @@ export default function OwnerAccessScreen() {
         accent: '#FF9F43',
         icon: MessageSquareText,
         onPress: () => router.push('/ivx/chat' as any),
-        testID: 'owner-access-open-ivx-owner-room',
-      },
+        testID: 'owner-access-open-ivx-owner-room'},
       {
         id: 'deploy-proof',
         title: 'Open deploy proof',
@@ -623,8 +596,7 @@ export default function OwnerAccessScreen() {
         accent: '#38BDF8',
         icon: ScanLine,
         onPress: () => router.push('/admin/sync-diagnostics' as any),
-        testID: 'owner-access-open-deploy-proof',
-      },
+        testID: 'owner-access-open-deploy-proof'},
       {
         id: 'owner-controls',
         title: 'Open Owner Controls',
@@ -632,8 +604,7 @@ export default function OwnerAccessScreen() {
         accent: '#4A90D9',
         icon: IVXBrandIcon,
         onPress: () => router.push('/admin/owner-controls' as any),
-        testID: 'owner-access-open-owner-controls',
-      },
+        testID: 'owner-access-open-owner-controls'},
     ];
   }, [auth.isOwnerIPAccess, hasLiveOwnerControl, router]);
 
@@ -648,18 +619,15 @@ export default function OwnerAccessScreen() {
       {
         id: 'fix-update',
         title: 'What is already in place',
-        detail: adminAccessLockFixUpdate,
-      },
+        detail: adminAccessLockFixUpdate},
       {
         id: 'honest-lock-status',
         title: 'What is still blocking you',
-        detail: adminAccessLockHonestStatus,
-      },
+        detail: adminAccessLockHonestStatus},
       {
         id: 'next-step',
         title: 'What must happen next',
-        detail: adminAccessLockNextStep,
-      },
+        detail: adminAccessLockNextStep},
     ];
   }, [adminAccessLockFixUpdate, adminAccessLockHonestStatus, adminAccessLockNextStep]);
   const directAnswerItems = useMemo<DirectAnswerItem[]>(() => {
@@ -671,20 +639,17 @@ export default function OwnerAccessScreen() {
         title: 'Why the server repair key came up',
         detail: ownerRepairReadiness.hasRealServiceRole
           ? 'That key is only for backend-only inspection or repair of an existing owner auth user. Your normal owner email/password sign-in still stays separate.'
-          : 'That key is only for backend-only inspection or repair of an existing owner auth user. It did not cause the password rejection on this screen.',
-      },
+          : 'That key is only for backend-only inspection or repair of an existing owner auth user. It did not cause the password rejection on this screen.'},
       {
         id: 'remove-login-answer',
         title: 'Why admin login is not removed',
-        detail: 'The app cannot safely drop owner verification on a new or untrusted device. Full admin access still requires either a verified owner sign-in or a previously trusted-device restore.',
-      },
+        detail: 'The app cannot safely drop owner verification on a new or untrusted device. Full admin access still requires either a verified owner sign-in or a previously trusted-device restore.'},
       {
         id: 'fastest-path-answer',
         title: 'Fastest safe path now',
         detail: trustedReady
           ? 'This device is already trusted. Use restore now and you can open the full app immediately.'
-          : `If the current password is wrong or unknown, send a reset link to ${resetTargetLabel}, set a new password, sign in once, then verify this device again.`,
-      },
+          : `If the current password is wrong or unknown, send a reset link to ${resetTargetLabel}, set a new password, sign in once, then verify this device again.`},
     ];
   }, [effectiveOwnerEmail, ownerRepairReadiness.hasRealServiceRole, trustedReady]);
 
@@ -721,26 +686,22 @@ export default function OwnerAccessScreen() {
         id: 'owner-email',
         label: 'Email evidence',
         value: ownerEmailValue,
-        tone: carriedEmail || auth.user?.email ? Colors.primary : '#F59E0B',
-      },
+        tone: carriedEmail || auth.user?.email ? Colors.primary : '#F59E0B'},
       {
         id: 'signin-state',
         label: 'Sign-in state',
         value: signinValue,
-        tone: hasLiveOwnerControl ? Colors.success : auth.isAuthenticated ? '#F59E0B' : '#FF4D4D',
-      },
+        tone: hasLiveOwnerControl ? Colors.success : auth.isAuthenticated ? '#F59E0B' : '#FF4D4D'},
       {
         id: 'trusted-state',
         label: 'Trusted restore',
         value: trustedValue,
-        tone: trustedReady ? Colors.success : audit?.ownerDeviceVerified ? '#F59E0B' : '#FF4D4D',
-      },
+        tone: trustedReady ? Colors.success : audit?.ownerDeviceVerified ? '#F59E0B' : '#FF4D4D'},
       {
         id: 'next-action',
         label: 'Exact next action',
         value: nextActionValue,
-        tone: Colors.text,
-      },
+        tone: Colors.text},
     ];
   }, [audit?.emailMismatch, audit?.ownerDeviceVerified, audit?.verifiedEmail, auth.isAdmin, auth.isAuthenticated, auth.user?.email, carriedEmail, hasLiveOwnerControl, ownerRepairReadiness.hasRealServiceRole, recoverySource, trustedReady]);
 
@@ -761,38 +722,32 @@ export default function OwnerAccessScreen() {
         id: 'identity-requested-email',
         label: 'Audited email',
         value: identityAudit.requestedEmail || 'Missing',
-        tone: identityAudit.requestedEmail ? Colors.primary : '#F59E0B',
-      },
+        tone: identityAudit.requestedEmail ? Colors.primary : '#F59E0B'},
       {
         id: 'identity-authenticated-email',
         label: 'Authenticated session email',
         value: identityAudit.authenticatedEmail || 'No active session',
-        tone: identityAudit.matchesAuthenticatedEmail ? Colors.success : identityAudit.authenticatedEmail ? '#F59E0B' : '#FF4D4D',
-      },
+        tone: identityAudit.matchesAuthenticatedEmail ? Colors.success : identityAudit.authenticatedEmail ? '#F59E0B' : '#FF4D4D'},
       {
         id: 'identity-authenticated-authority',
         label: 'Authenticated authority',
         value: authenticatedAuthorityValue,
-        tone: identityAudit.authenticatedAuthorityIsAdmin ? Colors.success : identityAudit.authenticatedEmail ? '#F59E0B' : '#FF4D4D',
-      },
+        tone: identityAudit.authenticatedAuthorityIsAdmin ? Colors.success : identityAudit.authenticatedEmail ? '#F59E0B' : '#FF4D4D'},
       {
         id: 'identity-trusted-email',
         label: 'Trusted-device owner email',
         value: identityAudit.trustedDeviceVerifiedEmail || 'Missing',
-        tone: identityAudit.matchesTrustedDeviceEmail ? Colors.success : identityAudit.trustedDeviceVerifiedEmail ? '#F59E0B' : '#FF4D4D',
-      },
+        tone: identityAudit.matchesTrustedDeviceEmail ? Colors.success : identityAudit.trustedDeviceVerifiedEmail ? '#F59E0B' : '#FF4D4D'},
       {
         id: 'identity-trusted-authority',
         label: 'Trusted-device authority',
         value: trustedAuthorityValue,
-        tone: identityAudit.trustedDeviceAuthorityIsAdmin ? Colors.success : identityAudit.trustedDeviceVerified ? '#F59E0B' : '#FF4D4D',
-      },
+        tone: identityAudit.trustedDeviceAuthorityIsAdmin ? Colors.success : identityAudit.trustedDeviceVerified ? '#F59E0B' : '#FF4D4D'},
       {
         id: 'identity-verdict',
         label: 'Identity verdict',
         value: formatIdentityVerdict(identityAudit.status),
-        tone: identityVerdictTone,
-      },
+        tone: identityVerdictTone},
     ];
   }, [identityAudit, identityVerdictTone]);
 
@@ -810,74 +765,62 @@ export default function OwnerAccessScreen() {
         id: 'carried-email',
         label: 'Carried email',
         value: carriedEmail || 'None',
-        tone: carriedEmail ? Colors.primary : '#F59E0B',
-      },
+        tone: carriedEmail ? Colors.primary : '#F59E0B'},
       {
         id: 'session-email',
         label: 'Authenticated email',
         value: auth.user?.email || 'No active authenticated session email',
-        tone: auth.user?.email ? Colors.primary : '#F59E0B',
-      },
+        tone: auth.user?.email ? Colors.primary : '#F59E0B'},
       {
         id: 'verified-email',
         label: 'Verified owner email',
         value: audit.verifiedEmail || 'Missing',
-        tone: audit.verifiedEmail ? Colors.success : '#F59E0B',
-      },
+        tone: audit.verifiedEmail ? Colors.success : '#F59E0B'},
       {
         id: 'email-check',
         label: 'Email authority check',
         value: audit.emailCheckPassed ? 'Pass' : 'Mismatch',
-        tone: audit.emailCheckPassed ? Colors.success : '#FF4D4D',
-      },
+        tone: audit.emailCheckPassed ? Colors.success : '#FF4D4D'},
       {
         id: 'trusted-mode',
         label: 'Trusted mode',
         value: audit.ipEnabled ? 'Enabled' : 'Disabled',
-        tone: audit.ipEnabled ? Colors.success : '#FF4D4D',
-      },
+        tone: audit.ipEnabled ? Colors.success : '#FF4D4D'},
       {
         id: 'device-verified',
         label: 'Device verified',
         value: audit.ownerDeviceVerified ? 'Yes' : 'No',
-        tone: audit.ownerDeviceVerified ? Colors.success : '#FF4D4D',
-      },
+        tone: audit.ownerDeviceVerified ? Colors.success : '#FF4D4D'},
       {
         id: 'verified-user-id',
         label: 'Verified owner id',
         value: audit.verifiedUserId || 'Missing',
-        tone: audit.hasValidTrustedIdentity ? Colors.success : '#FF4D4D',
-      },
+        tone: audit.hasValidTrustedIdentity ? Colors.success : '#FF4D4D'},
       {
         id: 'verified-role',
         label: 'Verified role',
         value: audit.verifiedRole || 'Missing',
-        tone: audit.verifiedRole ? Colors.primary : '#FF4D4D',
-      },
+        tone: audit.verifiedRole ? Colors.primary : '#FF4D4D'},
       {
         id: 'verified-at',
         label: 'Verified at',
         value: verifiedAtValue,
-        tone: audit.trustedDeviceWindowActive ? Colors.success : '#F59E0B',
-      },
+        tone: audit.trustedDeviceWindowActive ? Colors.success : '#F59E0B'},
       {
         id: 'exact-match',
         label: 'Exact network match',
         value: audit.exactIPMatch ? 'Pass' : 'No',
-        tone: audit.exactIPMatch ? Colors.success : '#FF4D4D',
-      },
+        tone: audit.exactIPMatch ? Colors.success : '#FF4D4D'},
       {
         id: 'subnet-match',
         label: 'Carrier subnet match',
         value: audit.subnetMatch ? 'Pass' : 'No',
-        tone: audit.subnetMatch ? Colors.success : '#F59E0B',
-      },
+        tone: audit.subnetMatch ? Colors.success : '#F59E0B'},
       {
         id: 'access-path',
         label: 'Restore path',
         value: audit.accessPath,
-        tone: audit.eligible ? Colors.success : Colors.textSecondary,
-      },
+        tone: audit.eligible ? Colors.success : Colors.textSecondary},
     ];
   }, [audit, auth.user?.email, carriedEmail]);
 
@@ -895,13 +838,11 @@ export default function OwnerAccessScreen() {
         {
           id: 'owner-only-lock',
           title: 'Owner-only admin lock is active',
-          detail: adminAccessLockMessage,
-        },
+          detail: adminAccessLockMessage},
         {
           id: 'use-owner-email',
           title: effectiveOwnerEmail ? `Use ${effectiveOwnerEmail} on Sign In` : 'Use your configured owner email on Sign In',
-          detail: 'This temporary lock only allows the configured owner email to keep admin access while testing.',
-        },
+          detail: 'This temporary lock only allows the configured owner email to keep admin access while testing.'},
       ];
     }
 
@@ -910,15 +851,13 @@ export default function OwnerAccessScreen() {
         {
           id: 'open-app',
           title: 'Open Full App',
-          detail: 'Your owner session is already live. Use the command center below.',
-        },
+          detail: 'Your owner session is already live. Use the command center below.'},
         {
           id: 'verify-device',
           title: audit?.ownerDeviceVerified ? 'Trusted device already verified' : 'Verify this device once',
           detail: audit?.ownerDeviceVerified
             ? 'Trusted restore is tied to this verified device/network.'
-            : 'Open Owner Controls and verify this phone/network so future owner recovery works without login.',
-        },
+            : 'Open Owner Controls and verify this phone/network so future owner recovery works without login.'},
       ];
     }
 
@@ -927,13 +866,11 @@ export default function OwnerAccessScreen() {
         {
           id: 'restore-now',
           title: 'Tap Restore trusted access',
-          detail: 'This device/network is already recognized for owner recovery.',
-        },
+          detail: 'This device/network is already recognized for owner recovery.'},
         {
           id: 'open-modules',
           title: 'Then open Admin HQ or Full App',
-          detail: 'Once restored, all owner modules will be available again.',
-        },
+          detail: 'Once restored, all owner modules will be available again.'},
       ];
     }
 
@@ -942,13 +879,11 @@ export default function OwnerAccessScreen() {
         {
           id: 'use-verified-email',
           title: `Use ${audit.verifiedEmail} on Sign In`,
-          detail: 'The carried email does not match the trusted owner authority saved on this device.',
-        },
+          detail: 'The carried email does not match the trusted owner authority saved on this device.'},
         {
           id: 'reverify-after-login',
           title: 'After sign-in, verify this device again if needed',
-          detail: 'That keeps the trusted-device authority aligned to the real owner account you control.',
-        },
+          detail: 'That keeps the trusted-device authority aligned to the real owner account you control.'},
       ];
     }
 
@@ -956,13 +891,11 @@ export default function OwnerAccessScreen() {
       {
         id: 'signin-owner',
         title: effectiveOwnerEmail ? `Use ${effectiveOwnerEmail} + your owner password` : 'Use your owner email + password',
-        detail: 'Owner access starts with your existing sign-in. Do not create a new public account.',
-      },
+        detail: 'Owner access starts with your existing sign-in. Do not create a new public account.'},
       {
         id: 'verify-after-login',
         title: 'After sign-in, verify this device in Owner Controls',
-        detail: 'That saves this phone/network for trusted owner recovery next time.',
-      },
+        detail: 'That saves this phone/network for trusted owner recovery next time.'},
     ];
   }, [adminAccessLockMessage, adminAccessLocked, audit?.emailMismatch, audit?.ownerDeviceVerified, audit?.verifiedEmail, effectiveOwnerEmail, hasLiveOwnerControl, trustedReady]);
 
@@ -1102,7 +1035,7 @@ export default function OwnerAccessScreen() {
           >
             <View style={styles.claimIconWrap}>
               {claimOwnerMutation.isPending ? (
-                <ActivityIndicator color="#000" size="small" />
+                <ShimmerIndicator color="#000" size="small" />
               ) : (
                 <IVXBrandIcon size={22} />
               )}
@@ -1362,7 +1295,7 @@ export default function OwnerAccessScreen() {
                 testID="owner-access-sms-request-code"
               >
                 {recoverySmsRequestMutation.isPending ? (
-                  <ActivityIndicator color={Colors.black} size="small" />
+                  <ShimmerIndicator color={Colors.black} size="small" />
                 ) : (
                   <Text style={styles.smsRecoveryPrimaryBtnText}>
                     {recoverySmsRequested ? 'Resend recovery code' : 'Text me a recovery code'}
@@ -1403,7 +1336,7 @@ export default function OwnerAccessScreen() {
                     testID="owner-access-sms-verify-btn"
                   >
                     {recoverySmsVerifyMutation.isPending ? (
-                      <ActivityIndicator color={Colors.black} size="small" />
+                      <ShimmerIndicator color={Colors.black} size="small" />
                     ) : (
                       <Text style={styles.smsRecoveryPrimaryBtnText}>Verify code & restore access</Text>
                     )}
@@ -1431,7 +1364,7 @@ export default function OwnerAccessScreen() {
           >
             <View style={styles.resetIconWrap}>
               {ownerPasswordResetMutation.isPending ? (
-                <ActivityIndicator color={Colors.black} size="small" />
+                <ShimmerIndicator color={Colors.black} size="small" />
               ) : (
                 <KeyRound size={18} color={Colors.black} />
               )}
@@ -1476,7 +1409,7 @@ export default function OwnerAccessScreen() {
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <Text style={styles.statusTitle}>Owner access status</Text>
-            {ownerAuditQuery.isFetching ? <ActivityIndicator color={Colors.primary} size="small" /> : null}
+            {ownerAuditQuery.isFetching ? <ShimmerIndicator color={Colors.primary} size="small" /> : null}
           </View>
 
           <View style={styles.statusRow}>
@@ -1531,7 +1464,7 @@ export default function OwnerAccessScreen() {
           >
             <View style={styles.verifyIconWrap}>
               {forceVerifyMutation.isPending ? (
-                <ActivityIndicator color="#000" size="small" />
+                <ShimmerIndicator color="#000" size="small" />
               ) : (
                 <Fingerprint size={20} color="#000" />
               )}
@@ -1565,7 +1498,7 @@ export default function OwnerAccessScreen() {
           >
             <View style={[styles.verifyIconWrap, { backgroundColor: '#F59E0B' }]}>
               {forceVerifyMutation.isPending ? (
-                <ActivityIndicator color="#000" size="small" />
+                <ShimmerIndicator color="#000" size="small" />
               ) : (
                 <RefreshCw size={18} color="#000" />
               )}
@@ -1648,7 +1581,7 @@ export default function OwnerAccessScreen() {
               </View>
               <View style={styles.routeAction}>
                 {loading ? (
-                  <ActivityIndicator color={item.accent} size="small" />
+                  <ShimmerIndicator color={item.accent} size="small" />
                 ) : (
                   <>
                     <Text style={[styles.routeActionText, { color: item.accent }]}>{item.mode === 'signin' ? ownerSigninCta : item.cta}</Text>
@@ -1680,24 +1613,20 @@ export default function OwnerAccessScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     padding: 16,
     paddingBottom: 32,
-    gap: 14,
-  },
+    gap: 14},
   heroCard: {
     backgroundColor: '#101010',
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#262626',
-  },
+    borderColor: '#262626'},
   heroCardActive: {
     borderColor: '#00C48C30',
-    backgroundColor: '#081208',
-  },
+    backgroundColor: '#081208'},
   heroIconWrap: {
     width: 44,
     height: 44,
@@ -1705,53 +1634,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primary,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   eyebrow: {
     color: Colors.primary,
     fontSize: 11,
     fontWeight: '800' as const,
     letterSpacing: 1,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   title: {
     color: Colors.text,
     fontSize: 28,
     fontWeight: '900' as const,
-    lineHeight: 34,
-  },
+    lineHeight: 34},
   subtitle: {
     marginTop: 10,
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   directAnswerCard: {
     backgroundColor: '#0E1726',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1E3A5F',
-    gap: 12,
-  },
+    gap: 12},
   directAnswerTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   directAnswerSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   directAnswerList: {
-    gap: 10,
-  },
+    gap: 10},
   directAnswerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   directAnswerIndexWrap: {
     width: 28,
     height: 28,
@@ -1759,35 +1679,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
+    marginTop: 2},
   directAnswerIndex: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   directAnswerBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   directAnswerRowTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   directAnswerRowDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   nextStepsCard: {
     backgroundColor: '#111111',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#252525',
-    gap: 12,
-  },
+    gap: 12},
   lockCard: {
     backgroundColor: '#1A1113',
     borderRadius: 20,
@@ -1796,249 +1710,201 @@ const styles = StyleSheet.create({
     borderColor: '#4B2027',
     gap: 12,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   lockIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: '#2A1013',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   lockBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   lockTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   lockText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   honestStatusCard: {
     backgroundColor: '#0E1621',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#203148',
-    gap: 12,
-  },
+    gap: 12},
   honestStatusTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   honestStatusSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   honestStatusList: {
-    gap: 2,
-  },
+    gap: 2},
   honestStatusRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#203148',
-    gap: 6,
-  },
+    gap: 6},
   honestStatusLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   honestStatusValue: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   repairReadinessCard: {
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    gap: 12,
-  },
+    gap: 12},
   repairReadinessCardCritical: {
     backgroundColor: '#181014',
-    borderColor: '#4B2027',
-  },
+    borderColor: '#4B2027'},
   repairReadinessCardSuccess: {
     backgroundColor: '#0A1614',
-    borderColor: '#1E4F45',
-  },
+    borderColor: '#1E4F45'},
   repairReadinessEyebrow: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   repairReadinessTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   repairReadinessSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   repairIssueGroup: {
-    gap: 10,
-  },
+    gap: 10},
   repairIssueGroupTitle: {
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   repairIssueGroupTitleCritical: {
-    color: '#F87171',
-  },
+    color: '#F87171'},
   repairIssueGroupTitleWarning: {
-    color: '#F59E0B',
-  },
+    color: '#F59E0B'},
   repairIssueGroupTitleSuccess: {
-    color: '#34D399',
-  },
+    color: '#34D399'},
   repairIssueRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
     borderRadius: 16,
     padding: 12,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   repairIssueRowCritical: {
     backgroundColor: '#2A1216',
-    borderColor: '#5B232C',
-  },
+    borderColor: '#5B232C'},
   repairIssueRowWarning: {
     backgroundColor: '#2A210F',
-    borderColor: '#5A4311',
-  },
+    borderColor: '#5A4311'},
   repairIssueRowSuccess: {
     backgroundColor: '#10211A',
-    borderColor: '#1E4F45',
-  },
+    borderColor: '#1E4F45'},
   repairIssueIndexWrap: {
     width: 24,
     height: 24,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
+    marginTop: 2},
   repairIssueIndexWrapCritical: {
-    backgroundColor: '#FF4D4D',
-  },
+    backgroundColor: '#FF4D4D'},
   repairIssueIndexWrapWarning: {
-    backgroundColor: '#F59E0B',
-  },
+    backgroundColor: '#F59E0B'},
   repairIssueIndexWrapSuccess: {
-    backgroundColor: '#00C48C',
-  },
+    backgroundColor: '#00C48C'},
   repairIssueIndex: {
     color: '#08110B',
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   repairIssueBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   repairIssueTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '800' as const,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   repairIssueDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   identityCard: {
     backgroundColor: '#0A1614',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1E4F45',
-    gap: 12,
-  },
+    gap: 12},
   identityHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   identityTitle: {
     flex: 1,
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   identitySubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   identityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   identityBadgeDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   identityBadgeText: {
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   identityRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1E4F45',
-    gap: 5,
-  },
+    gap: 5},
   identityWarningsCard: {
     backgroundColor: '#1F180C',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#5A4311',
-    gap: 12,
-  },
+    gap: 12},
   identityWarningsTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   identityWarningsSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   identityWarningsList: {
-    gap: 10,
-  },
+    gap: 10},
   identityWarningRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   identityWarningIndexWrap: {
     width: 24,
     height: 24,
@@ -2046,86 +1912,71 @@ const styles = StyleSheet.create({
     backgroundColor: '#F59E0B',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
+    marginTop: 2},
   identityWarningIndex: {
     color: '#161006',
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   identityWarningText: {
     flex: 1,
     color: Colors.text,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   evidenceCard: {
     backgroundColor: '#151120',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#34294D',
-    gap: 12,
-  },
+    gap: 12},
   evidenceTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   evidenceSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   evidenceList: {
-    gap: 2,
-  },
+    gap: 2},
   evidenceRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#34294D',
-    gap: 5,
-  },
+    gap: 5},
   evidenceLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   evidenceValue: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   blockersCard: {
     backgroundColor: '#1A1113',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#4B2027',
-    gap: 12,
-  },
+    gap: 12},
   blockersTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   blockersSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   blockersList: {
-    gap: 10,
-  },
+    gap: 10},
   blockerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   blockerIndexWrap: {
     width: 24,
     height: 24,
@@ -2133,33 +1984,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF4D4D',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
+    marginTop: 2},
   blockerIndex: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   blockerText: {
     flex: 1,
     color: Colors.text,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   nextStepsTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   nextStepsList: {
-    gap: 12,
-  },
+    gap: 12},
   nextStepRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   nextStepIndexWrap: {
     width: 28,
     height: 28,
@@ -2167,45 +2012,37 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
+    marginTop: 2},
   nextStepIndex: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   nextStepBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   nextStepTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   nextStepDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   auditCallout: {
     backgroundColor: '#0F172A',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1E3A5F',
-    gap: 8,
-  },
+    gap: 8},
   auditCalloutTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   auditCalloutText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   recoveryCard: {
     backgroundColor: '#111827',
     borderRadius: 20,
@@ -2214,111 +2051,92 @@ const styles = StyleSheet.create({
     borderColor: '#1F3A5F',
     flexDirection: 'row',
     gap: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   recoveryIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   recoveryBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   recoveryTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   recoverySubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   recoveryAction: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: '#FFFFFF10',
     borderWidth: 1,
-    borderColor: '#FFFFFF14',
-  },
+    borderColor: '#FFFFFF14'},
   recoveryActionText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   resetCard: {
     backgroundColor: '#FFD700',
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   resetCardDisabled: {
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   resetIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: '#00000012',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   resetBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   resetTitle: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   resetSubtitle: {
     color: '#312600',
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   claimCard: {
     backgroundColor: '#00C48C',
     borderRadius: 22,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-  },
+    gap: 14},
   claimCardDisabled: {
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   claimIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 16,
     backgroundColor: '#00000018',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   claimBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   claimTitle: {
     color: '#000',
     fontSize: 17,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   claimSubtitle: {
     color: '#0A3D1A',
     fontSize: 13,
     lineHeight: 19,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   emailChip: {
     alignSelf: 'flex-start',
     marginTop: 8,
@@ -2328,28 +2146,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B1220',
     borderWidth: 1,
     borderColor: '#22324F',
-    gap: 2,
-  },
+    gap: 2},
   emailChipLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   emailChipValue: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   primarySigninCard: {
     backgroundColor: Colors.primary,
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   ownerSignupCard: {
     backgroundColor: '#1A1207',
     borderRadius: 20,
@@ -2358,135 +2172,113 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   primarySigninIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: '#00000012',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ownerSignupIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: '#F59E0B',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   primarySigninBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   primarySigninTitle: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   primarySigninSubtitle: {
     color: '#312600',
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ownerSignupTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   ownerSignupSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   statusCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   statusTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   statusLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   statusValue: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
     flexShrink: 1,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   statusBadgeText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   statusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   ipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   subnetInfoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     backgroundColor: '#F59E0B10',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   subnetInfoText: {
     flex: 1,
     color: '#F59E0B',
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   statusMessageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    marginTop: 6,
-  },
+    marginTop: 6},
   statusMessage: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   verifyDeviceCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2495,91 +2287,76 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#FFD70030',
-    gap: 12,
-  },
+    gap: 12},
   verifyIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFD700',
-  },
+    backgroundColor: '#FFD700'},
   verifyBody: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   verifyTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   verifySubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   commandDeck: {
     backgroundColor: '#0B0B0B',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#232323',
-    gap: 14,
-  },
+    gap: 14},
   commandDeckHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   commandDeckTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   commandDeckGrid: {
-    gap: 10,
-  },
+    gap: 10},
   commandCard: {
     borderRadius: 18,
     padding: 14,
     backgroundColor: '#121212',
     borderWidth: 1,
     borderColor: '#212121',
-    gap: 8,
-  },
+    gap: 8},
   commandIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   commandTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   commandSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   routeCard: {
     backgroundColor: '#0F0F0F',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#232323',
-  },
+    borderColor: '#232323'},
   routeIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   readyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2587,48 +2364,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#00C48C18',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   readyDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00C48C',
-  },
+    backgroundColor: '#00C48C'},
   readyText: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: '#00C48C',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   routeBody: {
-    gap: 6,
-  },
+    gap: 6},
   routeTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   routeDescription: {
     color: Colors.text,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   routeDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   routeAction: {
     marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   routeActionText: {
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   secondaryButton: {
     marginTop: 4,
     borderRadius: 16,
@@ -2639,71 +2407,58 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   secondaryButtonText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   smsRecoveryCard: {
     backgroundColor: '#0B1220',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#1E3A5F',
-    gap: 14,
-  },
+    gap: 14},
   smsRecoveryHeader: {
     flexDirection: 'row',
     gap: 12,
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   smsRecoveryIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   smsRecoveryHeaderText: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   smsRecoveryTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   smsRecoverySubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   smsRecoveryPrimaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   smsRecoveryBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   smsRecoveryPrimaryBtnText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   smsRecoveryVerifyWrap: {
-    gap: 10,
-  },
+    gap: 10},
   smsRecoveryLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   smsRecoveryInput: {
     backgroundColor: '#111827',
     borderRadius: 12,
@@ -2712,26 +2467,21 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#1F3A5F',
-  },
+    borderColor: '#1F3A5F'},
   smsRecoveryVerifyBtn: {
     backgroundColor: '#00C48C',
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
-  },
+    marginTop: 4},
   smsRecoveryPendingRow: {
     backgroundColor: '#111827',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#1F3A5F',
-  },
+    borderColor: '#1F3A5F'},
   smsRecoveryPendingText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    lineHeight: 16,
-  },
-});
+    lineHeight: 16}});

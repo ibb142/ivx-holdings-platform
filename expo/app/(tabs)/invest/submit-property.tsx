@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,9 +8,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
+  Image} from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
@@ -32,8 +29,7 @@ import {
   IdCard,
   FileCheck,
   RefreshCw,
-  Loader,
-} from 'lucide-react-native';
+  Loader} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 const IPX_HOLDING_NAME = 'IVX HOLDINGS LLC';
 const ipxFeeConfigs = [
@@ -54,6 +50,7 @@ import { generateObject } from '@/lib/ai-service';
 import { z } from 'zod';
 import { DocumentVerificationStatus } from '@/types';
 import { formatDollar } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type PropertyType = 'residential' | 'commercial' | 'mixed' | 'industrial' | 'land';
 type IDType = 'drivers_license' | 'passport' | 'national_id';
@@ -92,11 +89,9 @@ const deedVerificationSchema = z.object({
     ownerName: z.string().optional().describe('Property owner name if visible'),
     issuingAuthority: z.string().optional().describe('County or authority that issued the deed'),
     issueDate: z.string().optional().describe('Date the deed was issued'),
-    recordingDate: z.string().optional().describe('Date deed was recorded'),
-  }).describe('Extracted information from the deed'),
+    recordingDate: z.string().optional().describe('Date deed was recorded')}).describe('Extracted information from the deed'),
   issues: z.array(z.string()).describe('List of potential issues or concerns with the document'),
-  recommendations: z.array(z.string()).describe('Recommendations for verification'),
-});
+  recommendations: z.array(z.string()).describe('Recommendations for verification')});
 
 const idVerificationSchema = z.object({
   isAuthentic: z.boolean().describe('Whether the ID appears to be a legitimate government-issued document'),
@@ -107,11 +102,9 @@ const idVerificationSchema = z.object({
     documentNumber: z.string().optional().describe('ID/License number (partially masked for security)'),
     issuingState: z.string().optional().describe('State or country that issued the ID'),
     expirationDate: z.string().optional().describe('Expiration date if visible'),
-    dateOfBirth: z.string().optional().describe('Date of birth (partially masked)'),
-  }).describe('Extracted information from the ID'),
+    dateOfBirth: z.string().optional().describe('Date of birth (partially masked)')}).describe('Extracted information from the ID'),
   isExpired: z.boolean().describe('Whether the ID appears to be expired'),
-  issues: z.array(z.string()).describe('List of potential issues or concerns with the ID'),
-});
+  issues: z.array(z.string()).describe('List of potential issues or concerns with the ID')});
 
 export default function SubmitPropertyScreen() {
   const router = useRouter();
@@ -126,20 +119,17 @@ export default function SubmitPropertyScreen() {
     estimatedValue: '',
     deedNumber: '',
     description: '',
-    images: [],
-  });
+    images: []});
 
   const [deedScan, setDeedScan] = useState<DocumentScanState>({
     uri: null,
     status: 'not_uploaded',
-    verificationResult: null,
-  });
+    verificationResult: null});
 
   const [idScan, setIdScan] = useState<DocumentScanState>({
     uri: null,
     status: 'not_uploaded',
-    verificationResult: null,
-  });
+    verificationResult: null});
 
   const [selectedIdType, setSelectedIdType] = useState<IDType>('drivers_license');
 
@@ -179,23 +169,20 @@ export default function SubmitPropertyScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [16, 9],
-      quality: 0.9,
-    });
+      quality: 0.9});
 
     if (!result.canceled && result.assets[0]) {
       const pickedUri = result.assets[0].uri;
       setFormData((prev) => ({
         ...prev,
-        images: [...prev.images, pickedUri],
-      }));
+        images: [...prev.images, pickedUri]}));
     }
   };
 
   const removeImage = (index: number) => {
     setFormData((prev) => ({
       ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
+      images: prev.images.filter((_, i) => i !== index)}));
   };
 
   const scanDocument = async (type: 'deed' | 'id') => {
@@ -219,13 +206,11 @@ export default function SubmitPropertyScreen() {
               mediaTypes: ['images'],
               allowsEditing: true,
               aspect: [4, 3],
-              quality: 0.9,
-            });
+              quality: 0.9});
             if (!result.canceled && result.assets[0]) {
               void handleDocumentCapture(type, result.assets[0].uri);
             }
-          },
-        },
+          }},
         {
           text: 'Choose from Library',
           onPress: async () => {
@@ -233,13 +218,11 @@ export default function SubmitPropertyScreen() {
               mediaTypes: ['images'],
               allowsEditing: true,
               aspect: [4, 3],
-              quality: 0.9,
-            });
+              quality: 0.9});
             if (!result.canceled && result.assets[0]) {
               void handleDocumentCapture(type, result.assets[0].uri);
             }
-          },
-        },
+          }},
         { text: 'Cancel', style: 'cancel' },
       ]
     );
@@ -251,8 +234,7 @@ export default function SubmitPropertyScreen() {
     setState({
       uri,
       status: 'scanning',
-      verificationResult: null,
-    });
+      verificationResult: null});
 
     try {
       setState(prev => ({ ...prev, status: 'verifying' }));
@@ -268,8 +250,7 @@ export default function SubmitPropertyScreen() {
         });
       } else {
         const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: 'base64',
-        });
+          encoding: 'base64'});
         base64Image = `data:image/jpeg;base64,${base64}`;
       }
 
@@ -281,11 +262,9 @@ export default function SubmitPropertyScreen() {
               content: [
                 { type: 'text', text: `Analyze this property deed document image. Verify if it appears to be an authentic legal property deed document. Extract key information such as deed number, property address, owner name, issuing authority, and dates. Check for any signs of tampering, inconsistencies, or issues that might indicate the document is not genuine. Property address being submitted: ${formData.propertyAddress}, ${formData.city}, ${formData.state} ${formData.zipCode}` },
                 { type: 'image', image: base64Image },
-              ],
-            },
+              ]},
           ],
-          schema: deedVerificationSchema,
-        });
+          schema: deedVerificationSchema});
 
         setState({
           uri,
@@ -294,9 +273,7 @@ export default function SubmitPropertyScreen() {
             isAuthentic: result.isAuthentic,
             confidence: result.confidence,
             extractedData: result.extractedData as Record<string, string>,
-            issues: result.issues,
-          },
-        });
+            issues: result.issues}});
 
         if (result.extractedData.deedNumber && !formData.deedNumber) {
           updateForm('deedNumber', result.extractedData.deedNumber);
@@ -309,11 +286,9 @@ export default function SubmitPropertyScreen() {
               content: [
                 { type: 'text', text: `Analyze this ${selectedIdType.replace('_', ' ')} ID document image. Verify if it appears to be an authentic government-issued identification document. Extract key information (partially mask sensitive data like full ID numbers and birth dates for security). Check for any signs of tampering, expiration, or issues that might indicate the document is not genuine.` },
                 { type: 'image', image: base64Image },
-              ],
-            },
+              ]},
           ],
-          schema: idVerificationSchema,
-        });
+          schema: idVerificationSchema});
 
         setState({
           uri,
@@ -322,9 +297,7 @@ export default function SubmitPropertyScreen() {
             isAuthentic: result.isAuthentic,
             confidence: result.confidence,
             extractedData: { ...result.extractedData as Record<string, string>, isExpired: String(result.isExpired) },
-            issues: result.issues,
-          },
-        });
+            issues: result.issues}});
       }
     } catch (error) {
       console.log('Document verification error:', error);
@@ -335,9 +308,7 @@ export default function SubmitPropertyScreen() {
           isAuthentic: false,
           confidence: 0,
           extractedData: {},
-          issues: ['Failed to verify document. Please try again with a clearer image.'],
-        },
-      });
+          issues: ['Failed to verify document. Please try again with a clearer image.']}});
     }
   };
 
@@ -346,8 +317,7 @@ export default function SubmitPropertyScreen() {
     setState({
       uri: null,
       status: 'not_uploaded',
-      verificationResult: null,
-    });
+      verificationResult: null});
   };
 
   const getStatusColor = (status: DocumentVerificationStatus) => {
@@ -438,8 +408,7 @@ export default function SubmitPropertyScreen() {
               'Your property has been submitted for verification. We will review the deed, check for liens, and assess any outstanding debts.\n\nYou will be notified once the review is complete.',
               [{ text: 'OK', onPress: () => router.back() }]
             );
-          },
-        },
+          }},
       ]
     );
   };
@@ -575,7 +544,7 @@ export default function SubmitPropertyScreen() {
             <Image source={{ uri: scanState.uri }} style={styles.documentPreview} />
             {isProcessing && (
               <View style={styles.processingOverlay}>
-                <ActivityIndicator size="large" color={Colors.white} />
+                <ShimmerIndicator size="large" color={Colors.white} />
                 <Text style={styles.processingText}>
                   {scanState.status === 'scanning' ? 'Scanning document...' : 'AI analyzing document...'}
                 </Text>
@@ -603,8 +572,7 @@ export default function SubmitPropertyScreen() {
                     styles.confidenceBar, 
                     { 
                       width: `${scanState.verificationResult.confidence}%`,
-                      backgroundColor: getStatusColor(scanState.status),
-                    }
+                      backgroundColor: getStatusColor(scanState.status)}
                   ]} 
                 />
               </View>
@@ -1023,19 +991,16 @@ export default function SubmitPropertyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    gap: 0,
-  },
+    gap: 0},
   progressStep: {
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   progressDot: {
     width: 32,
     height: 32,
@@ -1044,47 +1009,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   progressDotActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   progressDotCompleted: {
     backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
+    borderColor: Colors.success},
   progressDotText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   progressDotTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   progressLine: {
     width: 24,
     height: 2,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   progressLineActive: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     padding: 20,
-    paddingBottom: 140,
-  },
+    paddingBottom: 140},
   stepContent: {
-    gap: 16,
-  },
+    gap: 16},
   stepHeader: {
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   stepIcon: {
     width: 52,
     height: 52,
@@ -1092,28 +1046,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   stepTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   stepSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 4,
-  },
+    marginTop: 4},
   inputGroup: {
-    gap: 6,
-  },
+    gap: 6},
   inputLabel: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   input: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -1121,8 +1070,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   textArea: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -1132,17 +1080,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     minHeight: 100,
-    textAlignVertical: 'top',
-  },
+    textAlignVertical: 'top'},
   inputRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   inputHint: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 4,
-  },
+    marginTop: 4},
   currencyInput: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1150,133 +1095,109 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    paddingLeft: 14,
-  },
+    paddingLeft: 14},
   currencySymbol: {
     color: Colors.textSecondary,
     fontSize: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   currencyInputField: {
     flex: 1,
     padding: 14,
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   typeSelector: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   typeOption: {
     backgroundColor: Colors.surface,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   typeOptionActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   typeOptionText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   typeOptionTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   infoCard: {
     backgroundColor: Colors.info + '10',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.info + '20',
-  },
+    borderColor: Colors.info + '20'},
   infoCardContent: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   infoCardTitle: {
     color: Colors.info,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   infoCardText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   summaryCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   summaryTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   summaryItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   summaryLabel: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   summaryValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   summaryDivider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   feeSection: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   feeSectionTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   feeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   feeLabel: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   feeHint: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   feeAmount: {
     color: Colors.primary,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   warningCard: {
     backgroundColor: Colors.warning + '10',
     borderRadius: 12,
@@ -1284,63 +1205,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.warning + '20',
-  },
+    borderColor: Colors.warning + '20'},
   warningText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   imageUploadSection: {
-    gap: 12,
-  },
+    gap: 12},
   imageUploadHeader: {
-    gap: 4,
-  },
+    gap: 4},
   imageUploadTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   imageUploadTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   imageCountBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   imageCountText: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   imageUploadSubtitle: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   imageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   imageSlot: {
     width: '31%' as any,
-    aspectRatio: 1,
-  },
+    aspectRatio: 1},
   imageContainer: {
     flex: 1,
     borderRadius: 12,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   uploadedImage: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   removeImageButton: {
     position: 'absolute',
     top: 4,
@@ -1350,8 +1258,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.error,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   emptyImageSlot: {
     flex: 1,
     borderRadius: 12,
@@ -1360,32 +1267,26 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
+    gap: 4},
   emptyImageText: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   imageInfoCard: {
     backgroundColor: Colors.surface,
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   imageInfoText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   marketImageNotice: {
     backgroundColor: Colors.info + '10',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   marketImageNoticeText: {
     color: Colors.info,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   footer: {
     flexDirection: 'row',
     gap: 12,
@@ -1393,8 +1294,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   backButton: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1402,188 +1302,152 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   backButtonText: {
     color: Colors.text,
     fontWeight: '600' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   nextButton: {
     flex: 2,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   nextButtonFull: {
-    flex: 1,
-  },
+    flex: 1},
   nextButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   documentCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   documentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   documentIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   documentTitleContainer: {
-    flex: 1,
-  },
+    flex: 1},
   documentTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   documentSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   statusBadge: {
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   statusText: {
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   scanButton: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   scanButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   scanButtonHint: {
     color: Colors.black,
     fontSize: 11,
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   documentPreviewContainer: {
     borderRadius: 10,
     overflow: 'hidden',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   documentPreview: {
     width: '100%',
     height: 160,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: Colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   processingText: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '600' as const,
-    marginTop: 8,
-  },
+    marginTop: 8},
   verificationResultContainer: {
-    gap: 12,
-  },
+    gap: 12},
   confidenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   confidenceLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   confidenceBarContainer: {
     flex: 1,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   confidenceBar: {
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   confidenceValue: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
     minWidth: 36,
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   extractedDataContainer: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   extractedDataTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   extractedDataRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   extractedDataKey: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   extractedDataValue: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   issuesContainer: {
-    gap: 6,
-  },
+    gap: 6},
   issuesTitle: {
     color: Colors.warning,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   issueRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 6,
-  },
+    gap: 6},
   issueText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   documentActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   rescanButton: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1591,13 +1455,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   rescanButtonText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   aiVerificationBanner: {
     backgroundColor: Colors.primary + '10',
     borderRadius: 12,
@@ -1605,29 +1467,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   aiVerificationContent: {
-    flex: 1,
-  },
+    flex: 1},
   aiVerificationTitle: {
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   aiVerificationText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   idTypeSelector: {
-    gap: 8,
-  },
+    gap: 8},
   idTypeOptions: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   idTypeOption: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1635,54 +1491,43 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   idTypeOptionActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   idTypeOptionText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   idTypeOptionTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   securityNote: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: Colors.success + '10',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   securityNoteText: {
     color: Colors.success,
     fontSize: 12,
-    flex: 1,
-  },
+    flex: 1},
   verifiedDocsCard: {
     backgroundColor: Colors.success + '10',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.success + '20',
-  },
+    borderColor: Colors.success + '20'},
   verifiedDocsTitle: {
     color: Colors.success,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   verifiedDocRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   verifiedDocText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
-});
+    fontSize: 13}});

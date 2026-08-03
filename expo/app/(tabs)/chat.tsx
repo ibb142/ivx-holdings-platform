@@ -8,8 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
@@ -32,8 +31,7 @@ import {
   buildLiveSupportTicketDraft,
   createSupportTicket,
   fetchUserSupportTickets,
-  mapSupportTicketRows,
-} from '@/lib/support-chat';
+  mapSupportTicketRows} from '@/lib/support-chat';
 import { probeAIBackendHealth } from '@/src/modules/chat/services/aiReplyService';
 import { getCurrentChatRoomStatus, subscribeToChatRoomStatus } from '@/src/modules/chat/services/supabaseChatProvider';
 import type { ChatRoomStatus, ServiceRuntimeHealth } from '@/src/modules/chat/types/chat';
@@ -149,20 +147,17 @@ export default function ChatScreen() {
 
   const ticketsQuery = useQuery<SupportTicketRow[]>({
     queryKey: ['support-tickets'],
-    queryFn: fetchUserSupportTickets,
-  });
+    queryFn: fetchUserSupportTickets});
 
   const deployProofQuery = useQuery({
     queryKey: ['chat-room-proof', 'deploy'],
     queryFn: async () => {
       return {
         deploy: getDeployStatus(),
-        autoDeploy: await getAutoDeployStatus(),
-      };
+        autoDeploy: await getAutoDeployStatus()};
     },
     staleTime: 60000,
-    refetchInterval: 120000,
-  });
+    refetchInterval: 120000});
 
   const aiHealthQuery = useQuery<ServiceRuntimeHealth>({
     queryKey: ['chat-room-proof', 'ai-health'],
@@ -171,12 +166,10 @@ export default function ChatScreen() {
       return probe.health;
     },
     staleTime: 30000,
-    refetchInterval: 60000,
-  });
+    refetchInterval: 60000});
 
   const createTicketMutation = useMutation<SupportTicketRow, Error, CreateSupportTicketParams>({
-    mutationFn: createSupportTicket,
-  });
+    mutationFn: createSupportTicket});
 
   const supportTickets = useMemo<SupportTicketItem[]>(() => {
     return mapSupportTicketRows(ticketsQuery.data ?? []);
@@ -233,13 +226,11 @@ export default function ChatScreen() {
       Animated.timing(welcomeFadeAnim, {
         toValue: 0,
         duration: 1800,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(welcomeSlideAnim, {
         toValue: -40,
         duration: 1800,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start(() => {
       setShowWelcomeBanner(false);
     });
@@ -287,8 +278,7 @@ export default function ChatScreen() {
         const data = await createTicketMutation.mutateAsync({
           subject,
           category,
-          message,
-        });
+          message});
         await ticketsQuery.refetch();
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Ticket Created', `Your ${subject} ticket has been submitted. We'll respond within 24 hours.`);
@@ -309,8 +299,7 @@ export default function ChatScreen() {
       if (openTickets.length >= 3) {
         return {
           ok: false,
-          message: `You already have ${openTickets.length} open tickets. Please wait for an existing ticket to be updated before starting another live support request.`,
-        };
+          message: `You already have ${openTickets.length} open tickets. Please wait for an existing ticket to be updated before starting another live support request.`};
       }
 
       const draft = buildLiveSupportTicketDraft(messages);
@@ -320,22 +309,19 @@ export default function ChatScreen() {
           subject: draft.subject,
           category: draft.category,
           message: draft.message,
-          priority: draft.priority,
-        });
+          priority: draft.priority});
         await ticketsQuery.refetch();
         const waitTime = openTickets.length === 0 ? '5-10' : `${10 + openTickets.length * 5}-${15 + openTickets.length * 5}`;
         setViewMode('tickets');
 
         return {
           ok: true,
-          message: `Your live chat request has been submitted (Ticket #${data.id.slice(-6)}). Estimated wait time: ${waitTime} minutes. A support agent will review your ticket shortly.`,
-        };
+          message: `Your live chat request has been submitted (Ticket #${data.id.slice(-6)}). Estimated wait time: ${waitTime} minutes. A support agent will review your ticket shortly.`};
       } catch (error) {
         console.error('[ChatScreen] Live support request failed:', error);
         return {
           ok: false,
-          message: 'Sorry, we could not create your support ticket right now. Please try again later or email investors@ivxholding.com.',
-        };
+          message: 'Sorry, we could not create your support ticket right now. Please try again later or email investors@ivxholding.com.'};
       }
     },
     [createTicketMutation, supportTickets, ticketsQuery]
@@ -363,8 +349,7 @@ export default function ChatScreen() {
               {
                 marginHorizontal: isXs ? 16 : 20,
                 opacity: welcomeFadeAnim,
-                transform: [{ translateY: welcomeSlideAnim }],
-              },
+                transform: [{ translateY: welcomeSlideAnim }]},
             ]}
             testID="ivx-welcome-banner"
           >
@@ -490,26 +475,22 @@ export default function ChatScreen() {
                     text: 'Account Issue',
                     onPress: () => {
                       void submitTicket('Account Issue', 'general', 'I need help with my account.');
-                    },
-                  },
+                    }},
                   {
                     text: 'Investment Help',
                     onPress: () => {
                       void submitTicket('Investment Help', 'trading', 'I need help with my investments.');
-                    },
-                  },
+                    }},
                   {
                     text: 'Technical Issue',
                     onPress: () => {
                       void submitTicket('Technical Issue', 'technical', 'I need help with a technical problem, bug, or integration.');
-                    },
-                  },
+                    }},
                   {
                     text: 'General Support',
                     onPress: () => {
                       void submitTicket('General Support', 'general', 'I need general assistance.');
-                    },
-                  },
+                    }},
                 ]);
               }}
               testID="chat-create-ticket"
@@ -557,67 +538,54 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerTitle: {
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   headerSubtitle: {
     color: Colors.textSecondary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: Colors.primary,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   headerBadgeText: {
     color: Colors.black,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   moduleCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   moduleCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   moduleBadge: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   moduleBadgeText: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   moduleActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   moduleButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -625,8 +593,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   moduleGhostButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -636,33 +603,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   moduleGhostButtonText: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   moduleButtonText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   moduleTitle: {
     color: Colors.text,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   moduleText: {
     color: Colors.textSecondary,
     lineHeight: 19,
-    marginTop: 6,
-  },
+    marginTop: 6},
   proofGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 14,
-  },
+    marginTop: 14},
   proofCard: {
     flexBasis: '48%',
     flexGrow: 1,
@@ -672,39 +633,33 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   proofTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   proofLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   proofValue: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '800' as const,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   proofMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   tab: {
     flex: 1,
     flexDirection: 'row',
@@ -712,28 +667,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   tabActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   tabText: {
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   chatPanel: {
-    flex: 1,
-  },
+    flex: 1},
   ticketsContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   ticketsContent: {
-    paddingBottom: 120,
-  },
+    paddingBottom: 120},
   newTicketButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -741,66 +689,54 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   newTicketText: {
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   ticketCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   ticketHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   ticketStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   ticketStatusText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   ticketDate: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   ticketSubject: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '600' as const,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   ticketFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   ticketCategory: {
     backgroundColor: Colors.surfaceLight,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   ticketCategoryText: {
     color: Colors.textSecondary,
     fontSize: 11,
     fontWeight: '600' as const,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   ticketMessages: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -811,19 +747,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.surface,
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   emptyStateTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptyStateText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   welcomeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -834,33 +767,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.primary,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   welcomeIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   welcomeTextCol: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   welcomeTitle: {
     color: Colors.text,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   welcomeSubtitle: {
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   welcomeClose: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+    justifyContent: 'center'}});

@@ -2,20 +2,18 @@ import React, { useCallback, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { CheckCircle2, ShieldCheck, XCircle } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   runOwnerAIDurabilityProof,
-  type OwnerAIDurabilityProofResult,
-} from '@/src/modules/ivx-owner-ai/services/ivxDurabilityProofService';
+  type OwnerAIDurabilityProofResult} from '@/src/modules/ivx-owner-ai/services/ivxDurabilityProofService';
 
 type FieldRowProps = {
   label: string;
@@ -60,8 +58,7 @@ export default function IVXDurabilityProofRoute() {
 
   const proofMutation = useMutation<OwnerAIDurabilityProofResult, Error, void>({
     mutationFn: async () => runOwnerAIDurabilityProof(),
-    onSuccess: (data) => setResult(data),
-  });
+    onSuccess: (data) => setResult(data)});
 
   const handleRun = useCallback((): void => {
     setResult(null);
@@ -77,8 +74,7 @@ export default function IVXDurabilityProofRoute() {
           options={{
             title: 'Owner AI Durability Proof',
             headerStyle: { backgroundColor: Colors.background },
-            headerTintColor: Colors.text,
-          }}
+            headerTintColor: Colors.text}}
         />
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.headerRow}>
@@ -94,7 +90,7 @@ export default function IVXDurabilityProofRoute() {
             testID="durability-run-button"
           >
             {isRunning ? (
-              <ActivityIndicator color={Colors.black} />
+              <ShimmerIndicator color={Colors.black} />
             ) : (
               <Text style={styles.runButtonText}>Run Owner AI Durability Proof</Text>
             )}
@@ -102,7 +98,7 @@ export default function IVXDurabilityProofRoute() {
 
           {isRunning ? (
             <View style={styles.statusBlock} testID="durability-running">
-              <ActivityIndicator color={Colors.primary} />
+              <ShimmerIndicator color={Colors.primary} />
               <Text style={styles.statusText}>Sending → reloading → searching → comparing…</Text>
             </View>
           ) : null}
@@ -165,49 +161,40 @@ export default function IVXDurabilityProofRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scroll: {
     padding: 16,
-    gap: 16,
-  },
+    gap: 16},
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   headerTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
-    flex: 1,
-  },
+    flex: 1},
   runButton: {
     minHeight: 52,
     borderRadius: 16,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
+    paddingHorizontal: 18},
   runButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   runButtonText: {
     color: Colors.black,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statusBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   statusText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   errorBlock: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,59 +203,46 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.error,
-    padding: 12,
-  },
+    padding: 12},
   errorText: {
     color: Colors.error,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   resultCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    gap: 12,
-  },
+    gap: 12},
   fieldRow: {
-    gap: 4,
-  },
+    gap: 4},
   fieldLabel: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   fieldValue: {
     color: Colors.text,
-    fontSize: 14,
-  },
+    fontSize: 14},
   fieldValueMono: {
     fontFamily: 'monospace',
-    fontSize: 13,
-  },
+    fontSize: 13},
   fieldValueYes: {
     color: Colors.success ?? '#00C48C',
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   fieldValueNo: {
     color: Colors.error,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   divider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 2,
-  },
+    marginVertical: 2},
   verdictRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   verdictText: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

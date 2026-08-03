@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
@@ -35,8 +34,7 @@ import {
   Mail,
   Phone,
   Globe,
-  Target,
-} from 'lucide-react-native';
+  Target} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -137,15 +135,12 @@ function normalizeSystemHealth(value: unknown): SystemHealthShape | null {
       .map((item) => ({
         name: typeof item.name === 'string' ? item.name : 'Service',
         status: typeof item.status === 'string' ? item.status : 'unknown',
-        responseTime: Number(item.responseTime ?? 0),
-      })),
+        responseTime: Number(item.responseTime ?? 0)})),
     metrics: {
       activeUsers: Number(rawMetrics.activeUsers ?? 0),
       transactionsPerHour: Number(rawMetrics.transactionsPerHour ?? 0),
       errorRate: Number(rawMetrics.errorRate ?? 0),
-      avgResponseTime: Number(rawMetrics.avgResponseTime ?? 0),
-    },
-  };
+      avgResponseTime: Number(rawMetrics.avgResponseTime ?? 0)}};
 }
 
 function normalizeRetention(value: unknown): RetentionShape | null {
@@ -162,17 +157,13 @@ function normalizeRetention(value: unknown): RetentionShape | null {
     retention: {
       day1: Number(retention.day1 ?? retention.day_1 ?? record.day1 ?? record.day_1 ?? 0),
       day7: Number(retention.day7 ?? retention.day_7 ?? record.day7 ?? record.day_7 ?? 0),
-      day30: Number(retention.day30 ?? retention.day_30 ?? record.day30 ?? record.day_30 ?? 0),
-    },
+      day30: Number(retention.day30 ?? retention.day_30 ?? record.day30 ?? record.day_30 ?? 0)},
     engagement: {
-      dauMauRatio: Number(engagement.dauMauRatio ?? engagement.dau_mau_ratio ?? record.dauMauRatio ?? record.dau_mau_ratio ?? 0),
-    },
+      dauMauRatio: Number(engagement.dauMauRatio ?? engagement.dau_mau_ratio ?? record.dauMauRatio ?? record.dau_mau_ratio ?? 0)},
     churn: {
       churnedUsers: Number(churn.churnedUsers ?? churn.churned_users ?? record.churnedUsers ?? record.churned_users ?? 0),
       churnRate: Number(churn.churnRate ?? churn.churn_rate ?? record.churnRate ?? record.churn_rate ?? 0),
-      atRisk: Number(churn.atRisk ?? churn.at_risk ?? record.atRisk ?? record.at_risk ?? 0),
-    },
-  };
+      atRisk: Number(churn.atRisk ?? churn.at_risk ?? record.atRisk ?? record.at_risk ?? 0)}};
 
   console.log('[AdminDashboard] Normalized retention metrics:', normalized);
 
@@ -191,8 +182,7 @@ function normalizeInvestment(value: unknown): InvestmentShape | null {
     averageInvestment: Number(record.averageInvestment ?? 0),
     uniqueInvestors: Number(record.uniqueInvestors ?? 0),
     netFlow: Number(record.netFlow ?? 0),
-    totalDividends: Number(record.totalDividends ?? 0),
-  };
+    totalDividends: Number(record.totalDividends ?? 0)};
 }
 
 export default function AdminDashboardScreen() {
@@ -217,8 +207,7 @@ export default function AdminDashboardScreen() {
     refetchIntervalInBackground: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const memberRegistryStatsQuery = useQuery<{ total: number; active: number; pendingKyc: number }>({
     queryKey: ['members.registryStats'],
@@ -228,13 +217,11 @@ export default function AdminDashboardScreen() {
       return {
         total: members.length,
         active: members.filter((m) => (m.status || 'active') === 'active').length,
-        pendingKyc: members.filter((m) => (m.kycStatus || 'pending') === 'pending' || m.kycStatus === 'in_review').length,
-      };
+        pendingKyc: members.filter((m) => (m.kycStatus || 'pending') === 'pending' || m.kycStatus === 'in_review').length};
     },
     staleTime: 15000,
     refetchInterval: isScreenFocused ? 30000 : false,
-    placeholderData: (prev) => prev,
-  });
+    placeholderData: (prev) => prev});
   const registryStats = memberRegistryStatsQuery.data;
 
   const kpiQuery = useQuery<any>({
@@ -246,8 +233,7 @@ export default function AdminDashboardScreen() {
       return data;
     },
     staleTime: 1000 * 30,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const systemHealthQuery = useQuery<any>({
     queryKey: ['analytics.getSystemHealth'],
@@ -262,8 +248,7 @@ export default function AdminDashboardScreen() {
     refetchIntervalInBackground: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const transactionsQuery = useQuery<any>({
     queryKey: ['transactions.list', { page: 1, limit: 6 }],
@@ -274,8 +259,7 @@ export default function AdminDashboardScreen() {
       return { transactions: data ?? [] };
     },
     staleTime: 1000 * 30,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const pendingKycQuery = useQuery<any>({
     queryKey: ['members.list', { kycStatus: 'pending', limit: 5 }],
@@ -286,8 +270,7 @@ export default function AdminDashboardScreen() {
       return { members: data ?? [] };
     },
     staleTime: 1000 * 30,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const inReviewKycQuery = useQuery<any>({
     queryKey: ['members.list', { kycStatus: 'in_review', limit: 5 }],
@@ -298,8 +281,7 @@ export default function AdminDashboardScreen() {
       return { members: data ?? [] };
     },
     staleTime: 1000 * 30,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const retentionQuery = useQuery<any>({
     queryKey: ['analytics.getRetentionMetrics', { period: '30d' }],
@@ -310,8 +292,7 @@ export default function AdminDashboardScreen() {
       return data;
     },
     staleTime: 1000 * 60 * 2,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const investmentQuery = useQuery<any>({
     queryKey: ['analytics.getInvestmentAnalytics', { period: '30d' }],
@@ -322,8 +303,7 @@ export default function AdminDashboardScreen() {
       return data;
     },
     staleTime: 1000 * 60 * 2,
-    placeholderData: (prev: any) => prev,
-  });
+    placeholderData: (prev: any) => prev});
 
   const cachedDash = dashboardQuery.data;
   const cachedTx = transactionsQuery.data;
@@ -346,8 +326,7 @@ export default function AdminDashboardScreen() {
     refetchInterval: isScreenFocused ? ADMIN_DASHBOARD_LEADS_REFRESH_MS : false,
     refetchIntervalInBackground: false,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const leadsStats = leadsQuery.data?.stats;
   const recentLeads = leadsQuery.data?.signups ?? [];
@@ -393,8 +372,7 @@ export default function AdminDashboardScreen() {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   }, []);
 
   const getTransactionIcon = useCallback((type: string) => {
@@ -832,8 +810,7 @@ export default function AdminDashboardScreen() {
                 backgroundColor: tx.type === 'deposit' ? Colors.positive + '15'
                   : tx.type === 'withdrawal' ? Colors.negative + '15'
                   : tx.type === 'buy' ? Colors.primary + '15'
-                  : Colors.accent + '15',
-              }]}>
+                  : Colors.accent + '15'}]}>
                 {getTransactionIcon(tx.type)}
               </View>
               <View style={styles.txInfo}>
@@ -989,8 +966,7 @@ export default function AdminDashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -998,8 +974,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 36,
     height: 36,
@@ -1008,14 +983,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   title: {
     flex: 1,
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1023,44 +996,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.positive + '15',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
-  },
+    borderRadius: 20},
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   liveText: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.positive,
-  },
+    color: Colors.positive},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     fontSize: 14,
     color: Colors.textSecondary,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   heroRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingTop: 16,
-    gap: 12,
-  },
+    gap: 12},
   heroCard: {
     flex: 1,
     borderRadius: 16,
-    padding: 16,
-  },
+    padding: 16},
   heroIcon: {
     width: 36,
     height: 36,
@@ -1068,73 +1033,61 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   heroLabel: {
     fontSize: 11,
     fontWeight: '600',
     color: 'rgba(0,0,0,0.6)',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   heroValue: {
     fontSize: 22,
     fontWeight: '800',
     color: Colors.background,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   heroSub: {
     fontSize: 11,
-    color: 'rgba(0,0,0,0.5)',
-  },
+    color: 'rgba(0,0,0,0.5)'},
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 16,
     paddingTop: 12,
-    gap: 12,
-  },
+    gap: 12},
   statCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   statVal: {
     fontSize: 20,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   statLbl: {
     fontSize: 12,
     color: Colors.textSecondary,
     fontWeight: '500',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   statFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   statDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   statSub: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   metricsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
@@ -1143,68 +1096,55 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 16,
-  },
+    padding: 16},
   metricItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   metricDivider: {
     width: 1,
-    backgroundColor: Colors.border,
-  },
+    backgroundColor: Colors.border},
   metricValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   metricLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   section: {
     marginTop: 20,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-  },
+    gap: 7},
   sectionTitleText: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   badge: {
     backgroundColor: Colors.warning + '25',
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   badgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   seeAll: {
     fontSize: 13,
     color: Colors.primary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   kpiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   kpiCard: {
     width: '48%' as any,
     backgroundColor: Colors.card,
@@ -1212,92 +1152,72 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   kpiName: {
     fontSize: 11,
     color: Colors.textSecondary,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   kpiValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   kpiChange: {
     alignSelf: 'flex-start',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   kpiUp: {
-    backgroundColor: Colors.positive + '20',
-  },
+    backgroundColor: Colors.positive + '20'},
   kpiDown: {
-    backgroundColor: Colors.negative + '20',
-  },
+    backgroundColor: Colors.negative + '20'},
   kpiChangeText: {
     fontSize: 10,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   kpiUpText: {
-    color: Colors.positive,
-  },
+    color: Colors.positive},
   kpiDownText: {
-    color: Colors.negative,
-  },
+    color: Colors.negative},
   healthBadge: {
     paddingHorizontal: 10,
     paddingVertical: 3,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   healthGood: {
-    backgroundColor: Colors.positive + '20',
-  },
+    backgroundColor: Colors.positive + '20'},
   healthBad: {
-    backgroundColor: Colors.negative + '20',
-  },
+    backgroundColor: Colors.negative + '20'},
   healthBadgeText: {
     fontSize: 11,
     fontWeight: '700',
     color: Colors.positive,
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   servicesGrid: {
     backgroundColor: Colors.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   serviceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   serviceDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   serviceUp: {
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   serviceDown: {
-    backgroundColor: Colors.negative,
-  },
+    backgroundColor: Colors.negative},
   serviceName: {
     flex: 1,
     fontSize: 12,
     color: Colors.text,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   serviceTime: {
     fontSize: 11,
     color: Colors.textTertiary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   healthMetrics: {
     flexDirection: 'row',
     marginTop: 8,
@@ -1305,27 +1225,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 12,
-  },
+    padding: 12},
   healthMetricItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   healthMetricVal: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   healthMetricLbl: {
     fontSize: 9,
     color: Colors.textTertiary,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retentionGrid: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   retentionCard: {
     flex: 1,
     backgroundColor: Colors.card,
@@ -1334,18 +1249,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   retentionLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   retentionValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   churnRow: {
     flexDirection: 'row',
     marginTop: 8,
@@ -1354,26 +1266,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   churnItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   churnLabel: {
     fontSize: 10,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   churnValue: {
     fontSize: 16,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   investGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   investCard: {
     width: '48%' as any,
     backgroundColor: Colors.card,
@@ -1381,18 +1288,15 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   investLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
-    fontWeight: '500',
-  },
+    fontWeight: '500'},
   investValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   kycRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1402,49 +1306,39 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   kycAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   kycInitials: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   kycInfo: {
-    flex: 1,
-  },
+    flex: 1},
   kycName: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   kycEmail: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   kycBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   inReview: {
-    backgroundColor: Colors.accent + '20',
-  },
+    backgroundColor: Colors.accent + '20'},
   pendingBadge: {
-    backgroundColor: Colors.warning + '20',
-  },
+    backgroundColor: Colors.warning + '20'},
   kycBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1454,83 +1348,65 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   txIconWrap: {
     width: 32,
     height: 32,
     borderRadius: 10,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   txInfo: {
-    flex: 1,
-  },
+    flex: 1},
   txUser: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   txDesc: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   txDate: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   txRight: {
     alignItems: 'flex-end',
-    gap: 3,
-  },
+    gap: 3},
   txAmount: {
     fontSize: 13,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   txStatus: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   txDone: {
-    backgroundColor: Colors.positive + '20',
-  },
+    backgroundColor: Colors.positive + '20'},
   txPend: {
-    backgroundColor: Colors.warning + '20',
-  },
+    backgroundColor: Colors.warning + '20'},
   txFail: {
-    backgroundColor: Colors.negative + '20',
-  },
+    backgroundColor: Colors.negative + '20'},
   txStatusText: {
     fontSize: 9,
     fontWeight: '700',
     color: Colors.text,
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   emptyState: {
     paddingVertical: 24,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   emptyStateText: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   quickLinks: {
     marginTop: 20,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   quickLinksTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   quickGrid: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   quickCard: {
     flex: 1,
     backgroundColor: Colors.card,
@@ -1539,104 +1415,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   quickIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   quickLabel: {
     fontSize: 10,
     fontWeight: '600',
     color: Colors.textSecondary,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   leadsHeroCard: {
     backgroundColor: '#1B1040',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E91E6320',
-  },
+    borderColor: '#E91E6320'},
   leadsHeroTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   leadsHeroIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 13,
     backgroundColor: '#E91E6330',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   leadsHeroInfo: {
-    flex: 1,
-  },
+    flex: 1},
   leadsHeroLabel: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   leadsHeroValue: {
     fontSize: 32,
     fontWeight: '900' as const,
     color: '#fff',
-    marginTop: 1,
-  },
+    marginTop: 1},
   leadsHeroBreakdown: {
-    gap: 5,
-  },
+    gap: 5},
   leadsHeroBreakdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   leadsHeroDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   leadsHeroBreakdownText: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.7)',
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   leadsKpiRow: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 12,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   leadsKpiItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   leadsKpiValue: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   leadsKpiLabel: {
     fontSize: 9,
     color: 'rgba(255,255,255,0.45)',
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   leadsKpiDivider: {
     width: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.1)'},
   recentLeadsList: {
     marginTop: 10,
-    gap: 6,
-  },
+    gap: 6},
   recentLeadRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1645,41 +1502,33 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   recentLeadAvatar: {
     width: 34,
     height: 34,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   recentLeadInitials: {
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   recentLeadInfo: {
-    flex: 1,
-  },
+    flex: 1},
   recentLeadName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   recentLeadEmail: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   recentLeadTypeBadge: {
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   recentLeadTypeText: {
     fontSize: 9,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   viewAllLeadsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1690,21 +1539,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E91E6320',
-    marginTop: 4,
-  },
+    marginTop: 4},
   viewAllLeadsBtnText: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: '#E91E63',
-  },
+    color: '#E91E63'},
   bottomPad: {
-    height: 100,
-  },
+    height: 100},
   skeletonLine: {
     height: 14,
     borderRadius: 6,
     backgroundColor: Colors.border,
     width: '80%',
-    marginTop: 10,
-  },
-});
+    marginTop: 10}});

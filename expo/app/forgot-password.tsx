@@ -1,17 +1,14 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Image,
-} from 'react-native';
+  Image} from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Mail, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -20,6 +17,7 @@ import { validateEmail, sanitizeEmail } from '@/lib/auth-helpers';
 import { supabase, isSupabaseConfigured, getSupabaseConfigAudit } from '@/lib/supabase';
 import { getPasswordResetRedirectUrl, inspectPasswordResetRedirect } from '@/lib/auth-password-recovery';
 import { clearAuthAttempts } from '@/lib/auth-rate-limiter';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -159,7 +157,7 @@ export default function ForgotPasswordScreen() {
                   testID="forgot-password-submit"
                 >
                   {loading ? (
-                    <ActivityIndicator size="small" color={Colors.black} />
+                    <ShimmerIndicator size="small" color={Colors.black} />
                   ) : (
                     <>
                       <Text style={styles.primaryButtonText}>Send reset link</Text>
@@ -186,12 +184,10 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     flexGrow: 1,
-    paddingBottom: 32,
-  },
+    paddingBottom: 32},
   backButton: {
     marginTop: 8,
     marginLeft: 20,
@@ -202,70 +198,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   hero: {
     alignItems: 'center',
     paddingTop: 28,
-    paddingBottom: 28,
-  },
+    paddingBottom: 28},
   logoCard: {
     borderRadius: 24,
     padding: 8,
     backgroundColor: '#090909',
     borderWidth: 1,
     borderColor: Colors.primary + '22',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   logo: {
     width: 84,
     height: 84,
     borderRadius: 20,
-    backgroundColor: '#090909',
-  },
+    backgroundColor: '#090909'},
   brand: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '900' as const,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   tagline: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '600' as const,
     letterSpacing: 1,
-    marginTop: 4,
-  },
+    marginTop: 4},
   formCard: {
     marginHorizontal: 20,
     backgroundColor: Colors.surface,
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   title: {
     color: Colors.text,
     fontSize: 26,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     marginBottom: 20,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   fieldGroup: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   fieldLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '600' as const,
     marginBottom: 8,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,14 +260,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
     gap: 10,
-    height: 52,
-  },
+    height: 52},
   input: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
-    height: '100%' as any,
-  },
+    height: '100%' as any},
   primaryButton: {
     minHeight: 54,
     borderRadius: 16,
@@ -290,16 +273,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   primaryButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   primaryButtonText: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   infoCard: {
     marginTop: 16,
     borderRadius: 14,
@@ -308,14 +288,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning + '10',
     padding: 14,
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   infoText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   successCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -323,25 +301,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '10',
     padding: 20,
     alignItems: 'center' as const,
-    gap: 10,
-  },
+    gap: 10},
   successIconWrap: {
     width: 56,
     height: 56,
     borderRadius: 28,
     backgroundColor: Colors.success + '1F',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   successTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   successText: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    textAlign: 'center' as const,
-  },
-});
+    textAlign: 'center' as const}});

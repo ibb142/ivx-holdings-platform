@@ -2,13 +2,11 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import {
   Brain, Timer, Percent, Clock, Flame, Smartphone, Tablet,
-  Monitor, Target, TrendingUp, Zap, UserMinus,
-} from 'lucide-react-native';
+  Monitor, Target, TrendingUp, Zap, UserMinus} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   ACCENT, BLUE, GREEN, RED, PINK, CHART_COLORS,
-  AnimatedRing, formatSeconds, shared,
-} from './analytics-shared';
+  AnimatedRing, formatSeconds, shared} from './analytics-shared';
 
 interface SmartInsights {
   avgTimeOnPage: number;
@@ -33,8 +31,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   critical: '#FF3B30',
   high: '#FF9500',
   medium: '#FFD700',
-  low: '#34C759',
-};
+  low: '#34C759'};
 
 interface ReEngagementStrategy {
   priority: string;
@@ -68,8 +65,7 @@ export function IntelTab({ insights, uniqueSessions, funnel }: IntelTabProps) {
         strategy: 'Send targeted follow-up to visitors who left early. Consider improving landing page above-the-fold content.',
         expectedImpact: `Could recover ${Math.round(atRiskUsers * 0.15)} visitors`,
         suggestedAction: 'Launch re-engagement email campaign with exclusive content',
-        userCount: atRiskUsers,
-      });
+        userCount: atRiskUsers});
     }
     if (funnel.scroll75 > 0 && funnel.formSubmits === 0) {
       strategies.push({
@@ -78,8 +74,7 @@ export function IntelTab({ insights, uniqueSessions, funnel }: IntelTabProps) {
         strategy: 'Visitors scrolled 75%+ but didn\'t convert. Consider adding a CTA or form at the 75% scroll point.',
         expectedImpact: `${funnel.scroll75} potential leads`,
         suggestedAction: 'Add exit-intent popup or mid-page CTA',
-        userCount: funnel.scroll75,
-      });
+        userCount: funnel.scroll75});
     }
     if (dormantUsers > 0) {
       strategies.push({
@@ -88,8 +83,7 @@ export function IntelTab({ insights, uniqueSessions, funnel }: IntelTabProps) {
         strategy: 'Users who visited but haven\'t returned. Send personalized re-engagement content.',
         expectedImpact: `Could re-engage ${Math.round(dormantUsers * 0.1)} users`,
         suggestedAction: 'Create a "We miss you" campaign with new property highlights',
-        userCount: dormantUsers,
-      });
+        userCount: dormantUsers});
     }
     return strategies;
   }, [bounceRate, funnel.formSubmits, funnel.scroll75, insights, uniqueSessions]);
@@ -292,8 +286,7 @@ const s = StyleSheet.create({
   devicePct: { fontSize: 13, fontWeight: '800' as const },
   reengageBanner: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A0A2E',
-    borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#2D1B4E', gap: 12,
-  },
+    borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#2D1B4E', gap: 12},
   reengageIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#8E44AD', justifyContent: 'center', alignItems: 'center' },
   reengageContent: { flex: 1 },
   reengageTitle: { fontSize: 15, fontWeight: '700' as const, color: '#E0B0FF' },
@@ -313,5 +306,4 @@ const s = StyleSheet.create({
   breakdownGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   breakdownItem: { width: '47%' as any, backgroundColor: Colors.backgroundTertiary, borderRadius: 10, padding: 12, alignItems: 'center' },
   breakdownValue: { fontSize: 22, fontWeight: '700' as const, color: Colors.text, marginBottom: 2 },
-  breakdownLabel: { fontSize: 11, color: Colors.textTertiary, fontWeight: '500' as const },
-});
+  breakdownLabel: { fontSize: 11, color: Colors.textTertiary, fontWeight: '500' as const }});

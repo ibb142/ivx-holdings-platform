@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -25,8 +24,7 @@ import {
   Wifi,
   WifiOff,
   AlertTriangle,
-  RefreshCw,
-} from 'lucide-react-native';
+  RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchRawEvents, computeAnalytics, fetchExtraCounts } from '@/lib/analytics-compute';
@@ -227,8 +225,7 @@ export default function AnalyticsReportScreen() {
     retry: 1,
     retryDelay: 1000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const data = analyticsQuery.data as AnalyticsData | undefined ?? null;
   const isError = analyticsQuery.isError && !data;
@@ -462,8 +459,7 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceBorder,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   backBtn: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.backgroundSecondary },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
   headerTitle: { fontSize: 20, fontWeight: '800' as const, color: Colors.text, letterSpacing: -0.3 },
@@ -478,8 +474,7 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: Colors.backgroundSecondary,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   statusText: { fontSize: 10, fontWeight: '600' as const, color: Colors.textTertiary },
   statusLeads: { fontSize: 10, fontWeight: '700' as const, color: GREEN },
   tabBar: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.surfaceBorder, maxHeight: 44 },
@@ -503,5 +498,4 @@ const s = StyleSheet.create({
   adminGateIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#E5393512', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   adminGateTitle: { fontSize: 20, fontWeight: '800' as const, color: Colors.text, textAlign: 'center' as const },
   adminGateSub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' as const, lineHeight: 20 },
-  adminGateRole: { fontSize: 11, fontWeight: '600' as const, color: Colors.textTertiary, marginTop: 4 },
-});
+  adminGateRole: { fontSize: 11, fontWeight: '600' as const, color: Colors.textTertiary, marginTop: 4 }});

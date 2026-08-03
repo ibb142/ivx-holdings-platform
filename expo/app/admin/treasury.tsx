@@ -14,8 +14,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -31,8 +30,7 @@ import {
   Percent,
   Megaphone,
   Brain,
-  AlertTriangle,
-} from 'lucide-react-native';
+  AlertTriangle} from 'lucide-react-native';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { assertOwnerSessionAccessToken } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
 
@@ -75,8 +73,7 @@ async function ownerGet(path: string): Promise<Record<string, unknown>> {
   const token = await assertOwnerSessionAccessToken();
   const base = getDirectApiBaseUrl().replace(/\/+$/, '');
   const response = await fetch(`${base}${path}`, {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  });
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }});
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(
@@ -97,16 +94,14 @@ export default function TreasuryScreen() {
     queryFn: async (): Promise<TreasuryDashboard> => {
       const payload = await ownerGet('/api/ivx/treasury/dashboard');
       return payload.dashboard as unknown as TreasuryDashboard;
-    },
-  });
+    }});
 
   const aiFinanceQuery = useQuery({
     queryKey: ['treasury-ai-finance'],
     queryFn: async (): Promise<AIFinance> => {
       const payload = await ownerGet('/api/ivx/treasury/ai-finance');
       return payload.aiFinance as unknown as AIFinance;
-    },
-  });
+    }});
 
   const dashboard = dashboardQuery.data;
   const ai = aiFinanceQuery.data;
@@ -124,8 +119,7 @@ export default function TreasuryScreen() {
           title: 'Capital & Treasury',
           headerStyle: { backgroundColor: BG },
           headerTintColor: GOLD,
-          headerTitleStyle: { color: TEXT },
-        }}
+          headerTitleStyle: { color: TEXT }}}
       />
       <ScrollView
         style={styles.scroll}
@@ -256,8 +250,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 16,
-    gap: 6,
-  },
+    gap: 6},
   heroLabel: { color: SUB, fontSize: 12 },
   heroValue: { color: GOLD, fontSize: 22, fontWeight: '700' as const },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -268,8 +261,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    gap: 4,
-  },
+    gap: 4},
   statLabel: { color: SUB, fontSize: 11 },
   statValue: { color: TEXT, fontSize: 16, fontWeight: '600' as const },
   sectionTitle: { color: TEXT, fontSize: 16, fontWeight: '700' as const, marginTop: 8 },
@@ -281,8 +273,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   cardBody: { flex: 1, gap: 2 },
   cardTitle: { color: TEXT, fontSize: 14, fontWeight: '600' as const },
   cardSub: { color: SUB, fontSize: 12 },
@@ -294,11 +285,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 16,
-    gap: 10,
-  },
+    gap: 10},
   aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   aiTitle: { color: GOLD, fontSize: 14, fontWeight: '700' as const },
   aiSummary: { color: TEXT, fontSize: 13, lineHeight: 19 },
   aiStats: { gap: 4 },
-  aiStat: { color: SUB, fontSize: 12 },
-});
+  aiStat: { color: SUB, fontSize: 12 }});

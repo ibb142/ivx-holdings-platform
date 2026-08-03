@@ -1,16 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
   Alert,
-  ActivityIndicator,
   Platform,
-  Animated,
-} from 'react-native';
+  Animated} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -32,8 +29,7 @@ import {
   ChevronRight,
   Copy,
   Play,
-  User,
-} from 'lucide-react-native';
+  User} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -41,6 +37,7 @@ import { validateEmail, validatePassword, validatePhone } from '@/lib/auth-helpe
 import { fetchPublicGeoData } from '@/lib/public-geo';
 import * as Clipboard from 'expo-clipboard';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface DeviceInfo {
   ip: string;
@@ -122,15 +119,13 @@ export default function RegistrationAuditScreen() {
           timezone: geo.timezone || '',
           lat: geo.lat,
           lon: geo.lng,
-          org: geo.org || '',
-        };
+          org: geo.org || ''};
       }
 
       return { ip: 'Could not detect' };
     },
     staleTime: 1000 * 60 * 5,
-    retry: 1,
-  });
+    retry: 1});
 
   const recentRegsQuery = useQuery<RecentRegistration[]>({
     queryKey: ['admin-recent-registrations'],
@@ -145,11 +140,9 @@ export default function RegistrationAuditScreen() {
         country: member.country,
         role: member.role,
         kyc_status: member.kycStatus,
-        created_at: member.createdAt,
-      }));
+        created_at: member.createdAt}));
     },
-    staleTime: 1000 * 30,
-  });
+    staleTime: 1000 * 30});
 
   const profileCountQuery = useQuery<number>({
     queryKey: ['admin-profile-count'],
@@ -157,8 +150,7 @@ export default function RegistrationAuditScreen() {
       const members = await fetchAdminMemberRegistry();
       return members.length;
     },
-    staleTime: 1000 * 60,
-  });
+    staleTime: 1000 * 60});
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -277,7 +269,7 @@ export default function RegistrationAuditScreen() {
       case 'pass': return <CheckCircle size={16} color={Colors.positive} />;
       case 'fail': return <XCircle size={16} color={Colors.negative} />;
       case 'warn': return <AlertTriangle size={16} color={Colors.warning} />;
-      case 'running': return <ActivityIndicator size={14} color={Colors.primary} />;
+      case 'running': return <ShimmerIndicator size={14} color={Colors.primary} />;
       default: return <Clock size={16} color={Colors.textTertiary} />;
     }
   };
@@ -302,7 +294,7 @@ export default function RegistrationAuditScreen() {
           )}
         </View>
         {deviceQuery.isLoading && (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 12 }} />
+          <ShimmerIndicator color={Colors.primary} style={{ marginTop: 12 }} />
         )}
       </View>
 
@@ -391,7 +383,7 @@ export default function RegistrationAuditScreen() {
       >
         {isRunningTests ? (
           <Animated.View style={{ opacity: pulseAnim, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <ActivityIndicator color="#000" size="small" />
+            <ShimmerIndicator color="#000" size="small" />
             <Text style={styles.runAllBtnText}>Running Tests...</Text>
           </Animated.View>
         ) : (
@@ -448,7 +440,7 @@ export default function RegistrationAuditScreen() {
       </View>
 
       {recentRegsQuery.isLoading && (
-        <ActivityIndicator color={Colors.primary} style={{ marginVertical: 30 }} />
+        <ShimmerIndicator color={Colors.primary} style={{ marginVertical: 30 }} />
       )}
 
       {recentRegs.length === 0 && !recentRegsQuery.isLoading && (
@@ -560,8 +552,7 @@ export default function RegistrationAuditScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -569,8 +560,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 38,
     height: 38,
@@ -579,39 +569,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   headerLiveDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   headerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   refreshBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 4,
-    gap: 8,
-  },
+    gap: 8},
   tab: {
     flex: 1,
     flexDirection: 'row',
@@ -622,109 +606,91 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   tabActive: {
     backgroundColor: Colors.primary + '15',
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   tabLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   tabLabelActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   content: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   ipCard: {
     backgroundColor: '#0A1F14',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1.5,
     borderColor: Colors.positive,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   ipCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   ipIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 14,
     backgroundColor: Colors.positive,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ipCardHeaderText: {
-    flex: 1,
-  },
+    flex: 1},
   ipCardLabel: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: Colors.positive,
     letterSpacing: 0.8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   ipCardTitle: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   copyBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.primary + '18',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   detailsCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   detailsTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   detailLabel: {
     fontSize: 12,
     color: Colors.textSecondary,
-    width: 90,
-  },
+    width: 90},
   detailValue: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.text,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   statsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   statBox: {
     flex: 1,
     backgroundColor: Colors.card,
@@ -732,20 +698,17 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statNumber: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   statLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   quickActionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -755,30 +718,25 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   quickActionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   quickActionIcon: {
     width: 40,
     height: 40,
     borderRadius: 11,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   quickActionTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   quickActionSub: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   runAllBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
@@ -787,16 +745,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   runAllBtnDisabled: {
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   runAllBtnText: {
     fontSize: 15,
     fontWeight: '800' as const,
-    color: '#000',
-  },
+    color: '#000'},
   testSummary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -806,24 +761,20 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   testSummaryDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   testSummaryText: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   testSummaryCount: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   testCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -833,83 +784,67 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   testCardFail: {
-    borderColor: Colors.negative + '40',
-  },
+    borderColor: Colors.negative + '40'},
   testCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
-  },
+    flex: 1},
   testIconWrap: {
     width: 32,
     height: 32,
     borderRadius: 9,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   testCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   testCardName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   testCardMsg: {
     fontSize: 11,
-    marginTop: 1,
-  },
+    marginTop: 1},
   testCardRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   testDuration: {
     fontSize: 10,
     color: Colors.textTertiary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   regHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   regHeaderTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   regCountBadge: {
     backgroundColor: Colors.primary + '18',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   regCountText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 50,
-  },
+    paddingVertical: 50},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginTop: 12,
-  },
+    marginTop: 12},
   emptySub: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   regCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -918,8 +853,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   regCardAvatar: {
     width: 40,
     height: 40,
@@ -927,63 +861,48 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '20',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-  },
+    marginRight: 10},
   regCardAvatarText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   regCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   regCardName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   regCardEmail: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   regCardMeta: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   regCardMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   regCardMetaText: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   regCardRight: {
     alignItems: 'flex-end',
-    gap: 6,
-  },
+    gap: 6},
   kycBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: Colors.textTertiary + '20',
-  },
+    backgroundColor: Colors.textTertiary + '20'},
   kycApproved: {
-    backgroundColor: Colors.positive + '18',
-  },
+    backgroundColor: Colors.positive + '18'},
   kycPending: {
-    backgroundColor: Colors.warning + '18',
-  },
+    backgroundColor: Colors.warning + '18'},
   kycRejected: {
-    backgroundColor: Colors.negative + '18',
-  },
+    backgroundColor: Colors.negative + '18'},
   kycBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
-    textTransform: 'uppercase',
-  },
-});
+    textTransform: 'uppercase'}});

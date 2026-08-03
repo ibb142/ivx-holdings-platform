@@ -5,8 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -22,14 +21,12 @@ import {
   XCircle,
   ChevronRight,
   Zap,
-  Target,
-} from 'lucide-react-native';
+  Target} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   assetClassComparison,
   returnProjections,
-  AssetClassPerformance,
-} from '@/mocks/competitive-stats';
+  AssetClassPerformance} from '@/mocks/competitive-stats';
 
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 
@@ -42,14 +39,12 @@ function ReturnBar({ asset, maxReturn }: { asset: AssetClassPerformance; maxRetu
       toValue: barWidth,
       duration: 800,
       delay: 200,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
   }, [barWidth, widthAnim]);
 
   const animatedWidth = widthAnim.interpolate({
     inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-  });
+    outputRange: ['0%', '100%']});
 
   return (
     <View style={styles.barRow}>
@@ -63,8 +58,7 @@ function ReturnBar({ asset, maxReturn }: { asset: AssetClassPerformance; maxRetu
             styles.barFill,
             {
               width: animatedWidth,
-              backgroundColor: asset.color,
-            },
+              backgroundColor: asset.color},
           ]}
         />
       </View>
@@ -179,8 +173,7 @@ function ProjectionCalculator() {
                   styles.yearBarFill,
                   {
                     width: `${Math.min((yr.value / tenYearValue) * 100, 100)}%`,
-                    backgroundColor: riskProfile === 'conservative' ? '#4ECDC4' : riskProfile === 'moderate' ? Colors.primary : '#FF6B6B',
-                  },
+                    backgroundColor: riskProfile === 'conservative' ? '#4ECDC4' : riskProfile === 'moderate' ? Colors.primary : '#FF6B6B'},
                 ]}
               />
             </View>
@@ -416,5 +409,4 @@ const styles = StyleSheet.create({
   ctaButton: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   ctaText: { color: '#000000', fontSize: 13, fontWeight: '600' as const },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

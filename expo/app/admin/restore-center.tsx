@@ -9,16 +9,13 @@
  * Calls the REAL backend at api.ivxholding.com/api/ivx/restore-center/*
  */
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -35,10 +32,10 @@ import {
   Download,
   PlayCircle,
   FileText,
-  Lock,
-} from 'lucide-react-native';
+  Lock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchOverview,
   fetchReport,
@@ -47,8 +44,7 @@ import {
   type OverviewResponse,
   type ReportResponse,
   type DrillResponse,
-  type ExportResponse,
-} from '@/lib/restore-center';
+  type ExportResponse} from '@/lib/restore-center';
 
 type TabType = 'overview' | 'report' | 'drill' | 'export';
 
@@ -61,28 +57,24 @@ export default function RestoreCenterScreen() {
   const overviewQuery = useQuery({
     queryKey: ['restore-center-overview'],
     queryFn: fetchOverview,
-    staleTime: 60_000,
-  });
+    staleTime: 60_000});
 
   const reportQuery = useQuery({
     queryKey: ['restore-center-report'],
     queryFn: fetchReport,
-    staleTime: 60_000,
-  });
+    staleTime: 60_000});
 
   const drillMutation = useMutation({
     mutationFn: runDrill,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['restore-center-overview'] });
-    },
-  });
+    }});
 
   const exportMutation = useMutation({
     mutationFn: runEmergencyExport,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['restore-center-overview'] });
-    },
-  });
+    }});
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -103,8 +95,7 @@ export default function RestoreCenterScreen() {
           text: 'Run Drill',
           onPress: () => {
             drillMutation.mutate();
-          },
-        },
+          }},
       ],
     );
   }, [drillMutation]);
@@ -119,8 +110,7 @@ export default function RestoreCenterScreen() {
           text: 'Export Now',
           onPress: () => {
             exportMutation.mutate();
-          },
-        },
+          }},
       ],
     );
   }, [exportMutation]);
@@ -233,8 +223,7 @@ function OverviewTab({
   overview,
   isLoading,
   isError,
-  onRetry,
-}: {
+  onRetry}: {
   overview: OverviewResponse['overview'] | null;
   isLoading: boolean;
   isError: boolean;
@@ -243,7 +232,7 @@ function OverviewTab({
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.centerStateText}>Loading restore center…</Text>
       </View>
     );
@@ -377,8 +366,7 @@ function ReportTab({
   report,
   isLoading,
   isError,
-  onRetry,
-}: {
+  onRetry}: {
   report: ReportResponse['report'] | null;
   isLoading: boolean;
   isError: boolean;
@@ -387,7 +375,7 @@ function ReportTab({
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.centerStateText}>Loading daily report…</Text>
       </View>
     );
@@ -483,8 +471,7 @@ function DrillTab({
   drillResult,
   isRunning,
   onRun,
-  error,
-}: {
+  error}: {
   drillResult: DrillResponse['report'] | null;
   isRunning: boolean;
   onRun: () => void;
@@ -508,7 +495,7 @@ function DrillTab({
           testID="run-drill-btn"
         >
           {isRunning ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ShimmerIndicator size="small" color="#000" />
           ) : (
             <Text style={styles.actionButtonText}>Run Recovery Drill</Text>
           )}
@@ -571,8 +558,7 @@ function ExportTab({
   exportResult,
   isRunning,
   onExport,
-  error,
-}: {
+  error}: {
   exportResult: ExportResponse['export'] | null;
   isRunning: boolean;
   onExport: () => void;
@@ -596,7 +582,7 @@ function ExportTab({
           testID="run-export-btn"
         >
           {isRunning ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ShimmerIndicator size="small" color="#000" />
           ) : (
             <Text style={styles.actionButtonText}>Export Snapshot Now</Text>
           )}
@@ -631,8 +617,7 @@ function ExportTab({
 function SectionCard({
   icon,
   title,
-  children,
-}: {
+  children}: {
   icon: React.ReactNode;
   title: string;
   children: React.ReactNode;
@@ -652,8 +637,7 @@ function StatusRow({
   label,
   value,
   positive,
-  negative,
-}: {
+  negative}: {
   label: string;
   value: string;
   positive?: boolean;
@@ -678,18 +662,15 @@ function StatusRow({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   backBtn: {
     width: 40,
     height: 40,
@@ -698,19 +679,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   tab: {
     flex: 1,
     flexDirection: 'row',
@@ -721,33 +699,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   tabActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '15',
-  },
+    backgroundColor: Colors.primary + '15'},
   tabText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabTextActive: {
     color: Colors.primary,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   tabContent: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   sectionCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     marginBottom: 16,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -755,41 +727,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   sectionTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sectionBody: {
     padding: 16,
-    gap: 10,
-  },
+    gap: 10},
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 12,
-  },
+    gap: 12},
   statusLabel: {
     color: Colors.textTertiary,
     fontSize: 13,
     fontWeight: '600' as const,
-    flex: 1,
-  },
+    flex: 1},
   statusValue: {
     fontSize: 13,
     fontWeight: '700' as const,
     textAlign: 'right',
-    flex: 1,
-  },
+    flex: 1},
   recommendation: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginTop: 4,
-  },
+    marginTop: 4},
   recommendationBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -797,53 +762,44 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,215,0,0.1)',
     borderRadius: 10,
     padding: 12,
-    marginTop: 4,
-  },
+    marginTop: 4},
   recommendationText: {
     color: Colors.gold,
     fontSize: 12,
     flex: 1,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   tableList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   tableChip: {
     backgroundColor: Colors.background,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   tableChipText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   tabDescription: {
     color: Colors.textTertiary,
     fontSize: 13,
     lineHeight: 19,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   actionButton: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   actionButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   actionButtonText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -851,55 +807,43 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,59,92,0.1)',
     borderRadius: 10,
     padding: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   errorText: {
     color: Colors.error,
     fontSize: 13,
-    flex: 1,
-  },
+    flex: 1},
   stepsList: {
     gap: 10,
-    marginTop: 8,
-  },
+    marginTop: 8},
   stepRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   stepInfo: {
-    flex: 1,
-  },
+    flex: 1},
   stepName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   stepDetail: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   centerState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   centerStateText: {
     color: Colors.textTertiary,
     fontSize: 14,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   retryBtnText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

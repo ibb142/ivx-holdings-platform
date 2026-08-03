@@ -2,19 +2,18 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { Search as SearchIcon, MessageSquare, X, ServerCrash, Database, HardDrive } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ivxChatService, type IVXOwnerMessageSearchResult } from '@/src/modules/ivx-owner-ai/services';
 import { sanitizeUserFacingChatText } from '@/src/modules/chat/services/visibleTextSanitizer';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const MIN_QUERY_LENGTH = 2;
 
@@ -25,8 +24,7 @@ function formatTimestamp(value: string): string {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
-    minute: '2-digit',
-  });
+    minute: '2-digit'});
 }
 
 function senderLabel(result: IVXOwnerMessageSearchResult): string {
@@ -45,8 +43,7 @@ export default function IVXOwnerSearchRoute() {
     mutationFn: async (q) => {
       console.log('[IVXOwnerSearchRoute] Running search:', q);
       return ivxChatService.searchOwnerMessages({ query: q, limit: 100 });
-    },
-  });
+    }});
 
   const trimmedQuery = useMemo<string>(() => query.trim(), [query]);
   const canSearch = trimmedQuery.length >= MIN_QUERY_LENGTH;
@@ -68,9 +65,7 @@ export default function IVXOwnerSearchRoute() {
       pathname: '/ivx/chat',
       params: {
         conversationId: result.conversationId,
-        highlightMessageId: result.message.id,
-      },
-    });
+        highlightMessageId: result.message.id}});
   }, [router]);
 
   const results = searchMutation.data ?? [];
@@ -147,7 +142,7 @@ export default function IVXOwnerSearchRoute() {
 
         {searchMutation.isPending ? (
           <View style={styles.stateBlock} testID="ivx-owner-search-loading">
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
             <Text style={styles.stateText}>Searching messages…</Text>
           </View>
         ) : searchMutation.isError ? (
@@ -194,16 +189,14 @@ export default function IVXOwnerSearchRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   inputWrap: {
     flex: 1,
     flexDirection: 'row',
@@ -214,129 +207,105 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     borderRadius: 18,
     paddingHorizontal: 12,
-    minHeight: 44,
-  },
+    minHeight: 44},
   input: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   searchButton: {
     minHeight: 44,
     justifyContent: 'center',
     backgroundColor: Colors.primary,
     borderRadius: 18,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   searchButtonDisabled: {
-    backgroundColor: Colors.surfaceLight,
-  },
+    backgroundColor: Colors.surfaceLight},
   searchButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   searchButtonTextDisabled: {
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   hintRow: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   hintText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 24,
-    gap: 10,
-  },
+    gap: 10},
   resultsHeader: {
     color: Colors.textTertiary,
     fontSize: 12,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   resultCard: {
     borderRadius: 18,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 8,
-  },
+    gap: 8},
   resultHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   resultSenderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   resultSender: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '800' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   resultTime: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   resultSnippet: {
     color: Colors.text,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   resultFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   resultSource: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   stateBlock: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingHorizontal: 32,
-  },
+    paddingHorizontal: 32},
   stateTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '800' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   stateText: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retryButton: {
     marginTop: 6,
     borderRadius: 999,
     backgroundColor: Colors.primary,
     paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   retryButtonText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

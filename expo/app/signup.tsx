@@ -13,8 +13,7 @@ import {
   Platform,
   Image,
   Modal,
-  FlatList,
-} from 'react-native';
+  FlatList} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Href } from 'expo-router';
 import {
@@ -31,8 +30,7 @@ import {
   ChevronRight,
   ChevronDown,
   Search,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { COUNTRIES, Country } from '@/constants/countries';
 import { useAuth, resetOwnerLocalSignupState } from '@/lib/auth-context';
@@ -78,8 +76,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
     country: 'United States',
     countryCode: 'US',
     dialCode: '+1',
-    acceptTerms: false,
-  });
+    acceptTerms: false});
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
@@ -117,8 +114,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
 
     router.replace({
       pathname: '/login',
-      params,
-    } as Href);
+      params} as Href);
   }, [router]);
 
   const navigateToOwnerLogin = React.useCallback((prefillEmail?: string, justRegistered?: boolean) => {
@@ -136,9 +132,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
       pathname: '/login',
       params: {
         ...params,
-        ownerMode: '1',
-      },
-    } as Href);
+        ownerMode: '1'}} as Href);
   }, [router]);
 
   const navigateToOwnerAccess = React.useCallback((prefillEmail?: string) => {
@@ -148,9 +142,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
       pathname: '/owner-access',
       params: {
         source: 'signup',
-        ...(trimmedEmail ? { email: trimmedEmail } : {}),
-      },
-    } as Href);
+        ...(trimmedEmail ? { email: trimmedEmail } : {})}} as Href);
   }, [router]);
 
   React.useEffect(() => {
@@ -244,8 +236,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
                 country: 'United States',
                 countryCode: 'US',
                 dialCode: '+1',
-                acceptTerms: false,
-              });
+                acceptTerms: false});
               setExistingAccountDetected(false);
               setSignupCooldownUntilMs(0);
               setCooldownNowMs(Date.now());
@@ -268,8 +259,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
             } finally {
               setIsLoading(false);
             }
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -285,8 +275,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
         [
           {
             text: isOwnerSignup ? 'Sign in instead' : 'Go to Sign In',
-            onPress: () => isOwnerSignup ? navigateToOwnerLogin(normalizedEmail) : navigateToLogin(normalizedEmail),
-          },
+            onPress: () => isOwnerSignup ? navigateToOwnerLogin(normalizedEmail) : navigateToLogin(normalizedEmail)},
           { text: 'OK', style: 'cancel' },
         ]
       );
@@ -327,8 +316,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
         lastName: formData.lastName,
         phone: formData.phone ? `${formData.dialCode}${formData.phone}` : undefined,
         country: formData.country,
-        accountType,
-      });
+        accountType});
 
       logger.signup.log('Register result:', result);
 
@@ -352,12 +340,10 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
             [
               {
                 text: 'Open Owner Login',
-                onPress: () => navigateToOwnerLogin(result.email ?? formData.email, true),
-              },
+                onPress: () => navigateToOwnerLogin(result.email ?? formData.email, true)},
               {
                 text: 'Owner Recovery',
-                onPress: () => navigateToOwnerAccess(result.email ?? formData.email),
-              },
+                onPress: () => navigateToOwnerAccess(result.email ?? formData.email)},
             ]
           );
           return;
@@ -370,8 +356,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
             [
               {
                 text: 'Go to Sign In',
-                onPress: () => navigateToLogin(result.email ?? formData.email, true),
-              },
+                onPress: () => navigateToLogin(result.email ?? formData.email, true)},
             ]
           );
           return;
@@ -394,16 +379,13 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
           [
             {
               text: isOwnerSignup ? 'Sign in instead' : 'Owner Login',
-              onPress: () => navigateToOwnerLogin(result.email ?? formData.email),
-            },
+              onPress: () => navigateToOwnerLogin(result.email ?? formData.email)},
             {
               text: 'Regular Sign In',
-              onPress: () => navigateToLogin(result.email ?? formData.email),
-            },
+              onPress: () => navigateToLogin(result.email ?? formData.email)},
             {
               text: 'Cancel',
-              style: 'cancel',
-            },
+              style: 'cancel'},
           ]
         );
       } else if (result.deploymentBlocked) {
@@ -414,12 +396,10 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
           [
             {
               text: 'Owner Login',
-              onPress: () => navigateToOwnerLogin(result.email ?? normalizedEmail),
-            },
+              onPress: () => navigateToOwnerLogin(result.email ?? normalizedEmail)},
             {
               text: 'OK',
-              style: 'cancel',
-            },
+              style: 'cancel'},
           ]
         );
       } else if (result.rateLimited) {
@@ -432,12 +412,10 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
           [
             {
               text: isOwnerSignup ? 'Sign in instead' : 'Go to Sign In',
-              onPress: () => isOwnerSignup ? navigateToOwnerLogin(result.email ?? normalizedEmail) : navigateToLogin(result.email ?? normalizedEmail),
-            },
+              onPress: () => isOwnerSignup ? navigateToOwnerLogin(result.email ?? normalizedEmail) : navigateToLogin(result.email ?? normalizedEmail)},
             {
               text: 'OK',
-              style: 'cancel',
-            },
+              style: 'cancel'},
           ]
         );
       } else {
@@ -532,16 +510,14 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
               onPress: () => {
                 setCurrentStep('verify_phone');
                 startResendTimer();
-              },
-            },
+              }},
           ]);
         } else {
           setPhoneVerified(true);
           Alert.alert('Phone Verified', 'Your phone number has been verified successfully.', [
             {
               text: 'Continue',
-              onPress: () => setCurrentStep('complete'),
-            },
+              onPress: () => setCurrentStep('complete')},
           ]);
         }
       } else {
@@ -570,8 +546,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
           {
             text: 'Continue',
             // Land on Home so the owner sees the real app first; Owner Controls is reachable from Profile/Admin.
-            onPress: () => router.replace('/(tabs)/(home)/home' as Href),
-          },
+            onPress: () => router.replace('/(tabs)/(home)/home' as Href)},
         ]
       );
       return;
@@ -582,13 +557,11 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
       [
         {
           text: 'Start KYC',
-          onPress: () => router.replace('/kyc-verification' as Href),
-        },
+          onPress: () => router.replace('/kyc-verification' as Href)},
         {
           text: 'Later',
           style: 'cancel',
-          onPress: () => router.replace('/(tabs)/(home)' as Href),
-        },
+          onPress: () => router.replace('/(tabs)/(home)' as Href)},
       ]
     );
   };
@@ -1002,8 +975,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
       ...prev,
       country: country.name,
       countryCode: country.code,
-      dialCode: country.dialCode,
-    }));
+      dialCode: country.dialCode}));
     setShowCountryPicker(false);
     setCountrySearch('');
   };
@@ -1115,69 +1087,55 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   keyboardView: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   backButton: {
-    padding: 8,
-  },
+    padding: 8},
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   progressDot: {
     width: 28,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.surface,
-  },
+    backgroundColor: Colors.surface},
   progressDotActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   logoContainer: {
     alignItems: 'center',
     paddingTop: 16,
-    paddingBottom: 24,
-  },
+    paddingBottom: 24},
   logo: {
     width: 64,
     height: 64,
     borderRadius: 16,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   title: {
     color: Colors.text,
     fontSize: 24,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   formSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   accountTypeCard: {
     marginBottom: 16,
     borderRadius: 22,
@@ -1185,50 +1143,41 @@ const styles = StyleSheet.create({
     borderColor: '#243242',
     backgroundColor: '#0A121C',
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   accountTypeEyebrow: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '800' as const,
     letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   accountTypeSwitch: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   accountTypeCardOwnerLocked: {
     borderColor: '#F59E0B66',
-    backgroundColor: '#1A1207',
-  },
+    backgroundColor: '#1A1207'},
   ownerLockedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   ownerLockedIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F59E0B',
-  },
+    backgroundColor: '#F59E0B'},
   ownerLockedContent: {
-    flex: 1,
-  },
+    flex: 1},
   ownerLockedTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   ownerLockedSubtitle: {
     marginTop: 4,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   accountTypeOption: {
     flex: 1,
     borderRadius: 16,
@@ -1237,41 +1186,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F1722',
     padding: 12,
     minHeight: 82,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   accountTypeOptionActive: {
     borderColor: Colors.primary + '80',
-    backgroundColor: Colors.primary + '16',
-  },
+    backgroundColor: Colors.primary + '16'},
   accountTypeOptionActiveOwner: {
     borderColor: '#F59E0B88',
-    backgroundColor: '#F59E0B18',
-  },
+    backgroundColor: '#F59E0B18'},
   accountTypeOptionTitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   accountTypeOptionTitleActive: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   accountTypeOptionSubtitle: {
     marginTop: 4,
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 15,
-  },
+    lineHeight: 15},
   accountTypeProofText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   ownerLockedActionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   resetOwnerButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -1279,26 +1220,22 @@ const styles = StyleSheet.create({
     borderColor: '#F87171AA',
     backgroundColor: '#7F1D1D22',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   resetOwnerText: {
     color: '#FCA5A5',
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   switchToRegularButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.primary + '44',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   switchToRegularText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerShortcutCard: {
     marginBottom: 16,
     borderRadius: 18,
@@ -1309,40 +1246,33 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   ownerShortcutIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   ownerAccessCard: {
     borderColor: '#F59E0B44',
-    backgroundColor: '#1A1207',
-  },
+    backgroundColor: '#1A1207'},
   ownerShortcutContent: {
-    flex: 1,
-  },
+    flex: 1},
   ownerShortcutTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerShortcutSubtitle: {
     marginTop: 3,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   ownerAccessActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 12,
-  },
+    marginTop: 12},
   ownerAccessLoginButton: {
     minHeight: 38,
     borderRadius: 999,
@@ -1351,13 +1281,11 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   ownerAccessLoginText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   ownerAccessSignupButton: {
     minHeight: 38,
     borderRadius: 999,
@@ -1368,16 +1296,13 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   ownerAccessSignupText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   inputGroup: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   existingAccountCard: {
     marginTop: 10,
     borderRadius: 16,
@@ -1388,33 +1313,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   existingAccountContent: {
-    flex: 1,
-  },
+    flex: 1},
   existingAccountTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   existingAccountSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   inputRow: {
-    flexDirection: 'row',
-  },
+    flexDirection: 'row'},
   inputLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '600' as const,
     marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1422,22 +1341,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    paddingHorizontal: 14,
-  },
+    paddingHorizontal: 14},
   input: {
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 10,
     color: Colors.text,
-    fontSize: 16,
-  },
+    fontSize: 16},
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     marginBottom: 20,
-    marginTop: 4,
-  },
+    marginTop: 4},
   checkbox: {
     width: 22,
     height: 22,
@@ -1446,22 +1362,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   checkboxChecked: {
     backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
+    borderColor: Colors.success},
   termsText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    flex: 1,
-  },
+    flex: 1},
   termsLink: {
     color: Colors.primary,
-    textDecorationLine: 'underline' as const,
-  },
+    textDecorationLine: 'underline' as const},
   cooldownCard: {
     marginBottom: 14,
     borderRadius: 18,
@@ -1472,33 +1384,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   cooldownContent: {
-    flex: 1,
-  },
+    flex: 1},
   cooldownTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   cooldownSubtitle: {
     marginTop: 3,
     color: Colors.textSecondary,
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   cooldownSignInButton: {
     borderRadius: 999,
     backgroundColor: '#F59E0B',
     paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   cooldownSignInText: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   primaryButton: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
@@ -1507,41 +1413,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   buttonDisabled: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   primaryButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 16,
-  },
+    fontSize: 16},
   loginRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   loginText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   loginLink: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bottomPadding: {
-    height: 40,
-  },
+    height: 40},
   verificationContainer: {
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 40,
-  },
+    paddingTop: 40},
   verificationIcon: {
     width: 80,
     height: 80,
@@ -1549,35 +1447,30 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   verificationTitle: {
     color: Colors.text,
     fontSize: 22,
     fontWeight: '800' as const,
     marginBottom: 8,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   verificationSubtitle: {
     color: Colors.textSecondary,
     fontSize: 15,
     fontWeight: '500' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   verificationTarget: {
     color: Colors.primary,
     fontSize: 16,
     fontWeight: '700' as const,
     marginBottom: 28,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   codeContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 10,
     marginBottom: 24,
-    width: '100%',
-  },
+    width: '100%'},
   codeInput: {
     width: 48,
     height: 56,
@@ -1588,29 +1481,23 @@ const styles = StyleSheet.create({
     textAlign: 'center' as const,
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   codeInputFilled: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
-  },
+    backgroundColor: Colors.primary + '10'},
   resendButton: {
     paddingVertical: 12,
     paddingHorizontal: 20,
     alignItems: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   resendButtonDisabled: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   resendText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   resendTextDisabled: {
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1619,19 +1506,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    marginTop: 16,
-  },
+    marginTop: 16},
   verifiedText: {
     color: Colors.success,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   completeContainer: {
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 40,
-  },
+    paddingTop: 40},
   completeIcon: {
     width: 100,
     height: 100,
@@ -1639,23 +1523,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   completeTitle: {
     color: Colors.text,
     fontSize: 24,
     fontWeight: '800' as const,
     marginBottom: 8,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   completeSubtitle: {
     color: Colors.textSecondary,
     fontSize: 15,
     fontWeight: '500' as const,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   verificationStatus: {
     width: '100%',
     backgroundColor: Colors.surface,
@@ -1664,36 +1545,30 @@ const styles = StyleSheet.create({
     gap: 14,
     marginBottom: 28,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   statusText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   statusTextPending: {
     color: '#FF9800',
     fontSize: 14,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   pendingIcon: {
     width: 20,
     height: 20,
     borderRadius: 10,
     backgroundColor: '#FF9800' + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   pendingIconText: {
     color: '#FF9800',
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   secondaryButton: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -1701,45 +1576,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    width: '100%',
-  },
+    width: '100%'},
   secondaryButtonText: {
     color: Colors.text,
     fontWeight: '600' as const,
-    fontSize: 16,
-  },
+    fontSize: 16},
   countryText: {
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 10,
     color: Colors.text,
-    fontSize: 16,
-  },
+    fontSize: 16},
   dialCode: {
     color: Colors.textSecondary,
     fontSize: 15,
     fontWeight: '600' as const,
-    marginLeft: 4,
-  },
+    marginLeft: 4},
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   modalTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   modalCloseButton: {
-    padding: 8,
-  },
+    padding: 8},
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1748,34 +1615,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 16,
     paddingVertical: 14,
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   countryList: {
-    flex: 1,
-  },
+    flex: 1},
   countryItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   countryItemName: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   countryItemDialCode: {
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

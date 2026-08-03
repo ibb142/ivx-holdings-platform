@@ -1,14 +1,11 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+  TextInput} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -27,11 +24,11 @@ import {
   Database,
   AlertTriangle,
   Filter,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const ACTION_ICONS: Record<string, { icon: typeof Eye; color: string }> = {
   view: { icon: Eye, color: Colors.accent },
@@ -41,8 +38,7 @@ const ACTION_ICONS: Record<string, { icon: typeof Eye; color: string }> = {
   export: { icon: Database, color: '#9B59B6' },
   approve: { icon: Shield, color: Colors.positive },
   reject: { icon: X, color: Colors.negative },
-  default: { icon: Activity, color: Colors.textSecondary },
-};
+  default: { icon: Activity, color: Colors.textSecondary }};
 
 function getActionMeta(action: string) {
   const lower = action.toLowerCase();
@@ -70,8 +66,7 @@ function formatTimestamp(ts: string) {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit',
-  });
+    minute: '2-digit'});
 }
 
 function parseSection(details: string): string {
@@ -106,11 +101,9 @@ export default function StaffActivityScreen() {
         totalActionsToday: 0,
         totalActionsWeek: 0,
         totalStaff: data?.length ?? 0,
-        sectionBreakdown: {},
-      };
+        sectionBreakdown: {}};
     },
-    staleTime: 30000,
-  });
+    staleTime: 30000});
 
   const logsQuery = useQuery<{ logs: any[]; total: number; totalPages: number; page: number } | null>({
     queryKey: ['staffActivity.getActivityLog', { page, limit: 50, staffId: filterStaffId, action: searchQuery || undefined }],
@@ -122,11 +115,9 @@ export default function StaffActivityScreen() {
         logs: data ?? [],
         total: data?.length ?? 0,
         totalPages: 1,
-        page: 1,
-      };
+        page: 1};
     },
-    staleTime: 3000,
-  });
+    staleTime: 3000});
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -176,7 +167,7 @@ export default function StaffActivityScreen() {
       >
         {isLoading && !summary && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading activity data...</Text>
           </View>
         )}
@@ -349,7 +340,7 @@ export default function StaffActivityScreen() {
           </View>
 
           {logsQuery.isLoading && (
-            <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+            <ShimmerIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
           )}
 
           {logs?.logs.map((log: any) => {
@@ -416,8 +407,7 @@ export default function StaffActivityScreen() {
                           year: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
-                          second: '2-digit',
-                        })}
+                          second: '2-digit'})}
                       </Text>
                     </View>
                     <View style={styles.detailLine}>
@@ -540,5 +530,4 @@ const styles = StyleSheet.create({
   pageBtnDisabled: { opacity: 0.4 },
   pageBtnText: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
   pageBtnTextDisabled: { color: Colors.textTertiary },
-  pageInfo: { color: Colors.textSecondary, fontSize: 12 },
-});
+  pageInfo: { color: Colors.textSecondary, fontSize: 12 }});

@@ -1,14 +1,12 @@
 import React, { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { Stack } from 'expo-router';
 import {
   Activity,
@@ -19,11 +17,11 @@ import {
   Play,
   Rocket,
   ShieldCheck,
-  TrendingUp,
-} from 'lucide-react-native';
+  TrendingUp} from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ScaleResult = 'VERIFIED' | 'FAILED' | 'BLOCKED_FOR_APPROVAL' | 'never';
 
@@ -83,8 +81,7 @@ async function runNow(): Promise<void> {
   const res = await fetch(`${base}/api/ivx/autonomous-scale/run`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({}),
-  });
+    body: JSON.stringify({})});
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
   if (!res.ok || json.ok === false) throw new Error(json.error ?? `HTTP ${res.status}`);
 }
@@ -122,15 +119,13 @@ function AutonomousScaleScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: fetchDashboard,
-    refetchInterval: 30_000,
-  });
+    refetchInterval: 30_000});
 
   const runMutation = useMutation({
     mutationFn: runNow,
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-    },
-  });
+    }});
 
   const onRefresh = useCallback(() => {
     void refetch();
@@ -169,7 +164,7 @@ function AutonomousScaleScreen() {
         </View>
 
         {isLoading ? (
-          <View style={styles.center}><ActivityIndicator color={Colors.text} /></View>
+          <View style={styles.center}><ShimmerIndicator color={Colors.text} /></View>
         ) : isError ? (
           <View style={styles.errorCard}>
             <CircleX size={18} color={Colors.error ?? '#FF4D4D'} />
@@ -260,7 +255,7 @@ function AutonomousScaleScreen() {
           disabled={runMutation.isPending}
         >
           {runMutation.isPending ? (
-            <ActivityIndicator color="#fff" />
+            <ShimmerIndicator color="#fff" />
           ) : (
             <>
               <Play size={18} color="#fff" />
@@ -294,8 +289,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 10,
-  },
+    gap: 10},
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroTitle: { color: Colors.text, fontSize: 18, fontWeight: '800' as const },
   heroSubtitle: { color: Colors.muted ?? '#94a3b8', fontSize: 13, lineHeight: 19 },
@@ -311,8 +305,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 4,
-  },
+    gap: 4},
   statIcon: { marginBottom: 2 },
   statValue: { color: Colors.text, fontSize: 14, fontWeight: '800' as const },
   statLabel: { color: Colors.muted ?? '#94a3b8', fontSize: 11 },
@@ -322,8 +315,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border ?? '#1f2937',
-    gap: 8,
-  },
+    gap: 8},
   cardTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   cardBody: { color: Colors.muted ?? '#94a3b8', fontSize: 13, lineHeight: 19 },
   tag: {
@@ -331,8 +323,7 @@ const styles = StyleSheet.create({
     color: Colors.info ?? '#38bdf8',
     fontSize: 11,
     fontWeight: '700' as const,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   proofRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   proofLabel: { color: Colors.muted ?? '#94a3b8', fontSize: 13, width: 100 },
   proofValue: { color: Colors.text, fontSize: 13, fontWeight: '600' as const, flex: 1 },
@@ -353,8 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.error ?? '#FF4D4D',
-  },
+    borderColor: Colors.error ?? '#FF4D4D'},
   errorText: { color: Colors.error ?? '#FF4D4D', fontSize: 13, flex: 1 },
   runButton: {
     flexDirection: 'row',
@@ -364,8 +354,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
     borderRadius: 14,
     paddingVertical: 15,
-    marginTop: 4,
-  },
+    marginTop: 4},
   runButtonPressed: { opacity: 0.85 },
-  runButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' as const },
-});
+  runButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' as const }});

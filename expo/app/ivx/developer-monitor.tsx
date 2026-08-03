@@ -2,14 +2,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Activity,
   CheckCircle2,
@@ -21,11 +19,11 @@ import {
   Radio,
   Rocket,
   ShieldAlert,
-  TerminalSquare,
-} from 'lucide-react-native';
+  TerminalSquare} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getMonitorTaskBlocks,
   getMonitorTaskEvents,
@@ -35,8 +33,7 @@ import {
   type IVXBlockStatus,
   type IVXMonitorBlock,
   type IVXMonitorEvent,
-  type IVXMonitorTask,
-} from '@/src/modules/ivx-developer/developerMonitorService';
+  type IVXMonitorTask} from '@/src/modules/ivx-developer/developerMonitorService';
 
 const POLL_INTERVAL_MS = 3500;
 
@@ -88,8 +85,7 @@ function DeveloperMonitorContent() {
   const tasksQuery = useQuery({
     queryKey: ['ivx-developer-monitor', 'tasks'],
     queryFn: listMonitorTasks,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   // Resolve which task to show: explicit selection, else the most recent task.
   const resolvedTaskId = useMemo<string | null>(() => {
@@ -102,15 +98,13 @@ function DeveloperMonitorContent() {
     queryKey: ['ivx-developer-monitor', 'blocks', resolvedTaskId],
     queryFn: () => getMonitorTaskBlocks(resolvedTaskId as string),
     enabled: !!resolvedTaskId,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const eventsQuery = useQuery({
     queryKey: ['ivx-developer-monitor', 'events', resolvedTaskId],
     queryFn: () => getMonitorTaskEvents(resolvedTaskId as string, 40),
     enabled: !!resolvedTaskId,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const task = blocksQuery.data?.task ?? null;
   const blocks: IVXMonitorBlock[] = blocksQuery.data?.blocks ?? [];
@@ -186,7 +180,7 @@ function DeveloperMonitorContent() {
           disabled={starting}
           testID="ivx-monitor-improve-today"
         >
-          {starting ? <ActivityIndicator size="small" color={Colors.black} /> : <Play size={15} color={Colors.black} />}
+          {starting ? <ShimmerIndicator size="small" color={Colors.black} /> : <Play size={15} color={Colors.black} />}
           <Text style={styles.primaryButtonText}>{starting ? 'Starting…' : 'Improve IVX today'}</Text>
         </Pressable>
         <Pressable
@@ -335,8 +329,7 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   heroHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },
   heroSubtitle: { fontSize: 13, lineHeight: 19, color: Colors.textSecondary },
@@ -347,8 +340,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     paddingVertical: 13,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   primaryButtonText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
   streamButton: {
     flexDirection: 'row',
@@ -359,8 +351,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.primary,
     paddingVertical: 11,
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   streamButtonText: { fontSize: 13.5, fontWeight: '700' as const, color: Colors.primary },
   buttonDisabled: { opacity: 0.6 },
   errorText: { fontSize: 12.5, color: Colors.error, lineHeight: 18 },
@@ -371,8 +362,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emptyTitle: { fontSize: 15, fontWeight: '600' as const, color: Colors.text },
   emptyBody: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19 },
   card: {
@@ -381,8 +371,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   blockerCard: { borderColor: Colors.warning },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   eyebrow: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.6, textTransform: 'uppercase' as const, color: Colors.textSecondary },
@@ -409,10 +398,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingVertical: 10,
     borderRadius: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   secondaryButtonText: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
   eventRow: { gap: 2, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   eventType: { fontSize: 11, fontWeight: '700' as const, color: Colors.primary, letterSpacing: 0.3 },
-  eventDetail: { fontSize: 12, color: Colors.textSecondary },
-});
+  eventDetail: { fontSize: 12, color: Colors.textSecondary }});

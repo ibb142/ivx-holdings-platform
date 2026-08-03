@@ -1,20 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Bot, CheckCircle2, Clock3, Play, RefreshCw, RotateCcw, ShieldCheck, Square, XCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   createIVXAgentJob,
   getIVXAgentJobsStatus,
@@ -22,8 +21,7 @@ import {
   runIVXAgentJobAction,
   runIVXAgentWorkerOnce,
   type IVXAgentJob,
-  type IVXAgentJobStatus,
-} from '@/src/modules/ivx-developer/agentJobsService';
+  type IVXAgentJobStatus} from '@/src/modules/ivx-developer/agentJobsService';
 
 const STATUS_FILTERS: Array<IVXAgentJobStatus | 'all'> = ['all', 'queued', 'running', 'waiting_approval', 'completed', 'failed', 'canceled'];
 const STATUS_LABEL: Record<IVXAgentJobStatus | 'all', string> = {
@@ -33,16 +31,14 @@ const STATUS_LABEL: Record<IVXAgentJobStatus | 'all', string> = {
   waiting_approval: 'Approval',
   completed: 'Completed',
   failed: 'Failed',
-  canceled: 'Canceled',
-};
+  canceled: 'Canceled'};
 const STATUS_COLOR: Record<IVXAgentJobStatus, string> = {
   queued: Colors.warning,
   running: Colors.blue,
   waiting_approval: Colors.gold,
   completed: Colors.green,
   failed: Colors.error,
-  canceled: Colors.textTertiary,
-};
+  canceled: Colors.textTertiary};
 
 function formatTime(value: string | null | undefined): string {
   if (!value) return '—';
@@ -72,13 +68,11 @@ export default function IVXAgentJobsScreen() {
   const statusQuery = useQuery({
     queryKey: ['ivx-agent-jobs-status'],
     queryFn: getIVXAgentJobsStatus,
-    refetchInterval: 15_000,
-  });
+    refetchInterval: 15_000});
   const jobsQuery = useQuery({
     queryKey: jobsKey,
     queryFn: () => listIVXAgentJobs(status),
-    refetchInterval: 10_000,
-  });
+    refetchInterval: 10_000});
 
   const invalidate = async (): Promise<void> => {
     await Promise.all([
@@ -93,17 +87,14 @@ export default function IVXAgentJobsScreen() {
       prompt,
       payload: {
         createdFrom: '/admin/ivx-agent-jobs',
-        proofRequired: ['server_side_worker', 'job_logs', 'phone_independent', 'rork_chat_independent'],
-      },
+        proofRequired: ['server_side_worker', 'job_logs', 'phone_independent', 'rork_chat_independent']},
       approvalRequired: false,
-      maxAttempts: 3,
-    }),
+      maxAttempts: 3}),
     onSuccess: async () => {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       await invalidate();
     },
-    onError: (error) => Alert.alert('Create job failed', error instanceof Error ? error.message : 'Unknown error'),
-  });
+    onError: (error) => Alert.alert('Create job failed', error instanceof Error ? error.message : 'Unknown error')});
 
   const runOnceMutation = useMutation({
     mutationFn: runIVXAgentWorkerOnce,
@@ -111,8 +102,7 @@ export default function IVXAgentJobsScreen() {
       await invalidate();
       Alert.alert('Worker tick complete', stringifyPreview(result.result));
     },
-    onError: (error) => Alert.alert('Worker tick failed', error instanceof Error ? error.message : 'Unknown error'),
-  });
+    onError: (error) => Alert.alert('Worker tick failed', error instanceof Error ? error.message : 'Unknown error')});
 
   const actionMutation = useMutation({
     mutationFn: async ({ jobId, action }: { jobId: string; action: 'retry' | 'cancel' | 'approve' }) => {
@@ -124,8 +114,7 @@ export default function IVXAgentJobsScreen() {
       await invalidate();
     },
     onError: (error) => Alert.alert('Job action failed', error instanceof Error ? error.message : 'Unknown error'),
-    onSettled: () => setBusyJobId(null),
-  });
+    onSettled: () => setBusyJobId(null)});
 
   const refresh = async (): Promise<void> => {
     await invalidate();
@@ -194,7 +183,7 @@ export default function IVXAgentJobsScreen() {
               <Text style={[styles.actionBtnText, { color: Colors.error }]}>Cancel</Text>
             </Pressable>
           ) : null}
-          {busy ? <ActivityIndicator size="small" color={Colors.gold} /> : null}
+          {busy ? <ShimmerIndicator size="small" color={Colors.gold} /> : null}
         </View>
       </View>
     );
@@ -243,7 +232,7 @@ export default function IVXAgentJobsScreen() {
               <Text style={styles.smallBtnText}>Refresh</Text>
             </Pressable>
           </View>
-          {statusQuery.isLoading ? <ActivityIndicator color={Colors.gold} /> : null}
+          {statusQuery.isLoading ? <ShimmerIndicator color={Colors.gold} /> : null}
           {worker ? (
             <>
               <Text style={styles.workerLine}>loop: {worker.loopStarted ? 'started' : 'stopped'} · serverSide: {worker.serverSide ? 'yes' : 'no'}</Text>
@@ -258,7 +247,7 @@ export default function IVXAgentJobsScreen() {
             style={[styles.primaryWideBtn, runOnceMutation.isPending && styles.disabledBtn]}
             testID="block22-run-worker-once"
           >
-            {runOnceMutation.isPending ? <ActivityIndicator size="small" color={Colors.background} /> : <Play size={14} color={Colors.background} />}
+            {runOnceMutation.isPending ? <ShimmerIndicator size="small" color={Colors.background} /> : <Play size={14} color={Colors.background} />}
             <Text style={styles.primaryWideBtnText}>Run worker once</Text>
           </Pressable>
         </View>
@@ -280,7 +269,7 @@ export default function IVXAgentJobsScreen() {
             style={[styles.primaryWideBtn, (createMutation.isPending || !prompt.trim()) && styles.disabledBtn]}
             testID="block22-create-job"
           >
-            {createMutation.isPending ? <ActivityIndicator size="small" color={Colors.background} /> : <Play size={14} color={Colors.background} />}
+            {createMutation.isPending ? <ShimmerIndicator size="small" color={Colors.background} /> : <Play size={14} color={Colors.background} />}
             <Text style={styles.primaryWideBtnText}>Create queued job</Text>
           </Pressable>
         </View>
@@ -299,7 +288,7 @@ export default function IVXAgentJobsScreen() {
 
         <View style={styles.rowBetween}>
           <Text style={styles.sectionTitle}>Jobs ({jobs.length})</Text>
-          {jobsQuery.isFetching ? <ActivityIndicator size="small" color={Colors.gold} /> : null}
+          {jobsQuery.isFetching ? <ShimmerIndicator size="small" color={Colors.gold} /> : null}
         </View>
         {jobsQuery.error ? <Text style={styles.errorText}>{(jobsQuery.error as Error).message}</Text> : null}
         {jobs.length === 0 && !jobsQuery.isLoading ? (
@@ -365,5 +354,4 @@ const styles = StyleSheet.create({
   actionBtnText: { color: Colors.text, fontSize: 12, fontWeight: '800' as const },
   actionBtnTextDark: { color: Colors.background, fontSize: 12, fontWeight: '900' as const },
   emptyCard: { minHeight: 90, borderRadius: 18, borderWidth: 1, borderStyle: 'dashed' as const, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyText: { color: Colors.textTertiary, fontSize: 13 },
-});
+  emptyText: { color: Colors.textTertiary, fontSize: 13 }});

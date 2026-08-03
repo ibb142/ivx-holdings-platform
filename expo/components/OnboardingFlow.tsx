@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   Modal,
@@ -9,9 +8,7 @@ import {
   Animated,
   useWindowDimensions,
   Image,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
+  ScrollView} from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -24,11 +21,11 @@ import {
   ChevronLeft,
   X,
   Sparkles,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useIntro } from '@/lib/intro-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface OnboardingFlowProps {
   visible: boolean;
@@ -43,8 +40,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string
   trending: TrendingUp,
   briefcase: Briefcase,
   user: User,
-  zap: Zap,
-};
+  zap: Zap};
 
 export default function OnboardingFlow({ visible, onClose, onComplete }: OnboardingFlowProps) {
   const { width, height } = useWindowDimensions();
@@ -72,13 +68,11 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 150,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(slideAnim, {
         toValue: toValue * 0.3,
         duration: 150,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start(() => {
       callback();
       slideAnim.setValue(direction === 'next' ? width * 0.3 : -width * 0.3);
@@ -86,13 +80,11 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 200,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
         Animated.spring(slideAnim, {
           toValue: 0,
           friction: 8,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
       ]).start();
     });
   }, [fadeAnim, slideAnim, width]);
@@ -136,19 +128,16 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
             toValue: 1,
             friction: 4,
             tension: 40,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
           Animated.timing(logoOpacityAnim, {
             toValue: 1,
             duration: 600,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
         ]),
         Animated.timing(brandTextAnim, {
           toValue: 1,
           duration: 500,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
       ]).start();
 
       const glowLoop = Animated.loop(
@@ -156,13 +145,11 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
           Animated.timing(glowAnim, {
             toValue: 1,
             duration: 2000,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
           Animated.timing(glowAnim, {
             toValue: 0,
             duration: 2000,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
         ])
       );
       glowLoop.start();
@@ -177,7 +164,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
     return (
       <Modal visible={visible} animationType="fade" transparent={false}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
         </View>
       </Modal>
     );
@@ -233,8 +220,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                   styles.heroContent,
                   {
                     opacity: fadeAnim,
-                    transform: [{ translateX: slideAnim }],
-                  },
+                    transform: [{ translateX: slideAnim }]},
                 ]}
               >
                 <View style={styles.heroLogoSection}>
@@ -244,15 +230,11 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                       {
                         opacity: glowAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [0.2, 0.6],
-                        }),
+                          outputRange: [0.2, 0.6]}),
                         transform: [{
                           scale: glowAnim.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [1, 1.2],
-                          }),
-                        }],
-                      },
+                            outputRange: [1, 1.2]})}]},
                     ]}
                   />
                   <Animated.View
@@ -261,15 +243,11 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                       {
                         opacity: glowAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [0.4, 1],
-                        }),
+                          outputRange: [0.4, 1]}),
                         transform: [{
                           scale: glowAnim.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [1, 1.12],
-                          }),
-                        }],
-                      },
+                            outputRange: [1, 1.12]})}]},
                     ]}
                   />
                   <Animated.View
@@ -278,15 +256,11 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                       {
                         opacity: glowAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [0.5, 0.9],
-                        }),
+                          outputRange: [0.5, 0.9]}),
                         transform: [{
                           scale: glowAnim.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [1.05, 1],
-                          }),
-                        }],
-                      },
+                            outputRange: [1.05, 1]})}]},
                     ]}
                   />
                   <Animated.View
@@ -294,8 +268,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                       styles.heroLogoContainer,
                       {
                         opacity: logoOpacityAnim,
-                        transform: [{ scale: logoScaleAnim }],
-                      },
+                        transform: [{ scale: logoScaleAnim }]},
                     ]}
                   >
                     <Image
@@ -314,10 +287,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                       transform: [{
                         translateY: brandTextAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [20, 0],
-                        }),
-                      }],
-                    },
+                          outputRange: [20, 0]})}]},
                   ]}
                 >
                   <Text style={styles.heroBrandName}>IVXHOLDINGS</Text>
@@ -334,10 +304,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                       transform: [{
                         translateY: brandTextAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [30, 0],
-                        }),
-                      }],
-                    },
+                          outputRange: [30, 0]})}]},
                   ]}
                 >
                   <View style={styles.goldLine} />
@@ -349,8 +316,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                   style={[
                     styles.heroDescription,
                     {
-                      opacity: brandTextAnim,
-                    },
+                      opacity: brandTextAnim},
                   ]}
                 >
                   Your gateway to fractional real estate investing.
@@ -361,8 +327,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                   style={[
                     styles.heroFeaturesContainer,
                     {
-                      opacity: brandTextAnim,
-                    },
+                      opacity: brandTextAnim},
                   ]}
                 >
                   {step.features.map((feature, index) => (
@@ -379,8 +344,7 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
                 styles.content,
                 {
                   opacity: fadeAnim,
-                  transform: [{ translateX: slideAnim }],
-                },
+                  transform: [{ translateX: slideAnim }]},
               ]}
             >
               <View style={styles.iconContainer}>
@@ -479,274 +443,222 @@ export default function OnboardingFlow({ visible, onClose, onComplete }: Onboard
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   loadingContainer: {
     flex: 1,
     backgroundColor: Colors.background,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   scrollContentCentered: {
     flexGrow: 1,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   heroContent: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-  },
+    paddingHorizontal: 24},
   heroLogoSection: {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
     width: 160,
-    height: 160,
-  },
+    height: 160},
   outerGlowRing: {
     position: 'absolute',
     width: 160,
     height: 160,
     borderRadius: 80,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   glowRing: {
     position: 'absolute',
     width: 130,
     height: 130,
     borderRadius: 65,
     borderWidth: 2,
-    borderColor: Colors.primary + '50',
-  },
+    borderColor: Colors.primary + '50'},
   innerGlowRing: {
     position: 'absolute',
     width: 110,
     height: 110,
     borderRadius: 55,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   heroLogoContainer: {
     width: 88,
     height: 88,
     borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: Colors.primary + '60',
-  },
+    borderColor: Colors.primary + '60'},
   heroLogo: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   heroBrandSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   heroBrandName: {
     fontSize: 28,
     fontWeight: '900' as const,
     color: Colors.text,
-    letterSpacing: 3,
-  },
+    letterSpacing: 3},
   llcBadge: {
     backgroundColor: Colors.primary + '20',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   llcText: {
     color: Colors.primary,
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   heroTaglineSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   goldLine: {
     width: 32,
     height: 1,
-    backgroundColor: Colors.primary + '60',
-  },
+    backgroundColor: Colors.primary + '60'},
   heroTagline: {
     color: Colors.primary,
     fontSize: 13,
     fontWeight: '700' as const,
-    letterSpacing: 4,
-  },
+    letterSpacing: 4},
   heroDescription: {
     color: Colors.textSecondary,
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',
     marginBottom: 28,
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   heroFeaturesContainer: {
     gap: 12,
     width: '100%',
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   heroFeatureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   heroFeatureDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   heroFeatureText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   skipButton: {
     paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   skipText: {
     color: Colors.textTertiary,
     fontSize: 15,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   logoContainer: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   logo: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   closeButton: {
-    padding: 6,
-  },
+    padding: 6},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
-    paddingBottom: 20,
-  },
+    paddingBottom: 20},
   content: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 20,
-  },
+    paddingTop: 20},
   iconContainer: {
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   iconBackground: {
     width: 80,
     height: 80,
     borderRadius: 24,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   title: {
     fontSize: 26,
     fontWeight: '800' as const,
     color: Colors.text,
     textAlign: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   titleSmall: {
-    fontSize: 22,
-  },
+    fontSize: 22},
   description: {
     fontSize: 16,
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   descriptionSmall: {
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   imageContainer: {
     width: '100%',
     borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   stepImage: {
     width: '100%',
-    borderRadius: 16,
-  },
+    borderRadius: 16},
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 16,
-  },
+    borderRadius: 16},
   featuresContainer: {
     gap: 14,
     width: '100%',
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   featureDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   featureText: {
     color: Colors.textSecondary,
     fontSize: 15,
-    flex: 1,
-  },
+    flex: 1},
   featureTextSmall: {
-    fontSize: 13,
-  },
+    fontSize: 13},
   footer: {
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 8,
-    gap: 14,
-  },
+    gap: 14},
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   dotTouchable: {
-    padding: 4,
-  },
+    padding: 4},
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   dotActive: {
     width: 24,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   buttonsContainer: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   prevButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -757,13 +669,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   prevButtonText: {
     color: Colors.text,
     fontWeight: '600' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   nextButton: {
     flex: 1,
     flexDirection: 'row',
@@ -771,19 +681,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 14,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   nextButtonFull: {
-    flex: 1,
-  },
+    flex: 1},
   nextButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 16,
-  },
+    fontSize: 16},
   stepIndicator: {
     color: Colors.textTertiary,
     fontSize: 12,
-    textAlign: 'center',
-  },
-});
+    textAlign: 'center'}});

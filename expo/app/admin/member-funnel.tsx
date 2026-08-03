@@ -13,8 +13,7 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  TouchableOpacity,
-} from 'react-native';
+  TouchableOpacity} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -28,8 +27,7 @@ import {
   UserCheck,
   Trees,
   ArrowDown,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { assertOwnerSessionAccessToken } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
 
@@ -89,8 +87,7 @@ async function ownerGet(path: string): Promise<Record<string, unknown>> {
   const token = await assertOwnerSessionAccessToken();
   const base = getDirectApiBaseUrl().replace(/\/+$/, '');
   const response = await fetch(`${base}${path}`, {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  });
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }});
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(
@@ -106,8 +103,7 @@ export default function MemberFunnelScreen() {
     queryFn: async (): Promise<FunnelDashboard> => {
       const payload = await ownerGet('/api/ivx/member-admin/dashboard');
       return payload.dashboard as unknown as FunnelDashboard;
-    },
-  });
+    }});
 
   const applicationsQuery = useQuery({
     queryKey: ['member-admin-applications'],
@@ -116,8 +112,7 @@ export default function MemberFunnelScreen() {
       return Array.isArray(payload.applications)
         ? (payload.applications as AdminApplication[])
         : [];
-    },
-  });
+    }});
 
   const dashboard = dashboardQuery.data;
   const applications = applicationsQuery.data ?? [];
@@ -286,8 +281,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#5A2A2A',
     padding: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   errorText: { color: '#F87171', fontSize: 13 },
 
   tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -299,8 +293,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     padding: 12,
     alignItems: 'flex-start',
-    gap: 4,
-  },
+    gap: 4},
   tileValue: { fontSize: 20, fontWeight: '800' as const, color: TEXT },
   tileLabel: { fontSize: 10, color: SUB, fontWeight: '600' as const },
 
@@ -310,8 +303,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     padding: 16,
-    marginTop: 16,
-  },
+    marginTop: 16},
   cardTitle: { fontSize: 16, fontWeight: '800' as const, color: TEXT, marginBottom: 14 },
 
   funnelRow: {
@@ -321,20 +313,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     overflow: 'hidden' as const,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   funnelBar: {
     position: 'absolute' as const,
     left: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255,215,0,0.18)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.18)'},
   funnelTextRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   funnelLabel: { fontSize: 13, fontWeight: '700' as const, color: TEXT },
   funnelValue: { fontSize: 13, fontWeight: '800' as const, color: GOLD },
   funnelArrowRow: {
@@ -342,8 +331,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: 6,
-    paddingLeft: 12,
-  },
+    paddingLeft: 12},
   funnelRate: { fontSize: 11, color: SUB, fontWeight: '600' as const },
 
   emptyText: { fontSize: 13, color: SUB, lineHeight: 19 },
@@ -352,15 +340,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: BORDER,
     paddingVertical: 12,
-    gap: 4,
-  },
+    gap: 4},
   appHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusBadge: {
     backgroundColor: 'rgba(255,215,0,0.12)',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   statusBadgeVerified: { backgroundColor: 'rgba(34,197,94,0.14)' },
   statusBadgeText: { fontSize: 10, fontWeight: '800' as const, color: GOLD, letterSpacing: 0.6 },
   statusBadgeTextVerified: { color: GREEN },
@@ -368,5 +354,4 @@ const styles = StyleSheet.create({
   scoreText: { fontSize: 11, fontWeight: '700' as const, color: GOLD },
   appMeta: { fontSize: 12, color: TEXT, fontWeight: '600' as const },
   appMetaDim: { fontSize: 11, color: SUB },
-  appReason: { fontSize: 11, color: SUB, fontStyle: 'italic' as const },
-});
+  appReason: { fontSize: 11, color: SUB, fontStyle: 'italic' as const }});

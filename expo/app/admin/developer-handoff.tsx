@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Platform,
@@ -9,8 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AlertTriangle,
@@ -40,8 +38,7 @@ import {
   Share2,
   ShieldCheck,
   Clipboard as ClipboardIcon,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -56,9 +53,9 @@ import {
   getConfiguredEnvCount,
   getDeliverySummary,
   getInProgressCount,
-  getReadyCount,
-} from '@/mocks/developer-handoff';
+  getReadyCount} from '@/mocks/developer-handoff';
 import type { IntegrationOwner, IntegrationPriority, IntegrationStatus } from '@/mocks/developer-handoff';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   Database: <Database size={18} color="#4A90D9" />,
@@ -70,28 +67,24 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   Building2: <Building2 size={18} color="#F97316" />,
   BarChart3: <BarChart3 size={18} color="#0EA5E9" />,
   FileCheck: <FileCheck size={18} color="#78716C" />,
-  Plug: <Plug size={18} color="#00C48C" />,
-};
+  Plug: <Plug size={18} color="#00C48C" />};
 
 const PRIORITY_CONFIG: Record<IntegrationPriority, { color: string; label: string }> = {
   critical: { color: '#DC2626', label: 'Critical' },
   high: { color: '#F59E0B', label: 'High' },
   medium: { color: '#4A90D9', label: 'Medium' },
-  low: { color: '#6B7280', label: 'Low' },
-};
+  low: { color: '#6B7280', label: 'Low' }};
 
 const STATUS_CONFIG: Record<IntegrationStatus, { color: string; label: string }> = {
   ready: { color: '#00C48C', label: 'Ready' },
   mock_only: { color: '#F59E0B', label: 'Mock Only' },
   in_progress: { color: '#4A90D9', label: 'In Progress' },
-  not_started: { color: '#6B7280', label: 'Not Started' },
-};
+  not_started: { color: '#6B7280', label: 'Not Started' }};
 
 const OWNER_CONFIG: Record<IntegrationOwner, { color: string; label: string; shortLabel: string }> = {
   ivx: { color: '#FFD700', label: 'IVX side', shortLabel: 'IVX' },
   user: { color: '#FF6B9D', label: 'Your side', shortLabel: 'You' },
-  shared: { color: '#A78BFA', label: 'Shared', shortLabel: 'Both' },
-};
+  shared: { color: '#A78BFA', label: 'Shared', shortLabel: 'Both' }};
 
 function getEffectivePriority(item: { priority: IntegrationPriority; status: IntegrationStatus }): IntegrationPriority {
   if (item.status === 'ready' || item.status === 'mock_only') {
@@ -153,8 +146,7 @@ export default function DeveloperHandoffScreen() {
 
     return DEVELOPER_HANDOFF_CATEGORIES.map((category) => ({
       ...category,
-      items: category.items.filter((item) => getEffectivePriority(item) === filterPriority),
-    })).filter((category) => category.items.length > 0);
+      items: category.items.filter((item) => getEffectivePriority(item) === filterPriority)})).filter((category) => category.items.length > 0);
   }, [filterPriority]);
 
   const visibleItemCount = useMemo(() => {
@@ -248,8 +240,7 @@ export default function DeveloperHandoffScreen() {
           await Sharing.shareAsync(uri, {
             mimeType: 'application/pdf',
             dialogTitle: 'Developer Workplan',
-            UTI: 'com.adobe.pdf',
-          });
+            UTI: 'com.adobe.pdf'});
         } else {
           Alert.alert('PDF ready', uri);
         }
@@ -317,8 +308,7 @@ export default function DeveloperHandoffScreen() {
       const content = generateHandoffTextReport();
       await Share.share({
         title: 'Developer Workplan',
-        message: content,
-      });
+        message: content});
     } catch (error) {
       console.log('[DeveloperHandoff] General share failed', error);
     }
@@ -462,7 +452,7 @@ export default function DeveloperHandoffScreen() {
               style={[styles.actionButton, { backgroundColor: '#DC2626' }]}
               testID="developer-module-pdf-btn"
             >
-              {isGeneratingPDF ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Printer size={16} color="#FFFFFF" />}
+              {isGeneratingPDF ? <ShimmerIndicator color="#FFFFFF" size="small" /> : <Printer size={16} color="#FFFFFF" />}
               <Text style={styles.actionButtonText}>{isGeneratingPDF ? 'Creating' : 'PDF'}</Text>
             </TouchableOpacity>
 
@@ -779,19 +769,16 @@ export default function DeveloperHandoffScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   contentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 32,
-    gap: 16,
-  },
+    gap: 16},
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   backButton: {
     width: 40,
     height: 40,
@@ -800,85 +787,70 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   topBarCenter: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-  },
+    gap: 2},
   topBarTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   topBarSubtitle: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   topBarSpacer: {
     width: 40,
-    height: 40,
-  },
+    height: 40},
   heroCard: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderRadius: 24,
     padding: 22,
-    gap: 14,
-  },
+    gap: 14},
   heroIconWrap: {
     width: 56,
     height: 56,
     borderRadius: 18,
     backgroundColor: Colors.primary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   heroTitle: {
     color: Colors.text,
     fontSize: 26,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 21,
-  },
+    lineHeight: 21},
   heroBadgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   heroBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   heroBadgeText: {
     color: Colors.background,
     fontSize: 12,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   heroBadgeSecondary: {
     backgroundColor: '#1F2937',
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   heroBadgeSecondaryText: {
     color: Colors.white,
     fontSize: 12,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
+    gap: 12},
   statCard: {
     flexGrow: 1,
     flexBasis: '47%',
@@ -887,52 +859,43 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 16,
-    gap: 6,
-  },
+    gap: 6},
   statValue: {
     color: Colors.text,
     fontSize: 24,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   statLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   sectionCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 18,
-    gap: 14,
-  },
+    gap: 14},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   sectionTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   sectionMeta: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   splitGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
+    gap: 12},
   splitCard: {
     flexGrow: 1,
     flexBasis: '31%',
@@ -942,33 +905,27 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     borderRadius: 18,
     padding: 14,
-    gap: 8,
-  },
+    gap: 8},
   splitPill: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   splitPillText: {
     color: Colors.background,
     fontSize: 11,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   splitTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   splitValue: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   splitSub: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   timeBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -977,23 +934,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.18)',
-    padding: 14,
-  },
+    padding: 14},
   timeBannerText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   timeBannerBold: {
     color: Colors.text,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   actionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   actionButton: {
     minWidth: 98,
     flexGrow: 1,
@@ -1004,13 +957,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   actionButtonText: {
     color: Colors.white,
     fontSize: 13,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   clipboardPreviewCard: {
     marginTop: 4,
     backgroundColor: '#0F0F10',
@@ -1018,248 +969,201 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   clipboardPreviewText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   filterRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   filterChip: {
     backgroundColor: '#101010',
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
+    paddingVertical: 9},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   filterChipTextActive: {
-    color: Colors.background,
-  },
+    color: Colors.background},
   expandActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   secondaryButton: {
     backgroundColor: '#101010',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   secondaryButtonText: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   categoryList: {
-    gap: 12,
-  },
+    gap: 12},
   categoryCard: {
     backgroundColor: '#0F0F10',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    padding: 16,
-  },
+    padding: 16},
   categoryHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   categoryIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   categoryHeaderText: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   categoryTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   categoryMeta: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   itemList: {
     paddingHorizontal: 16,
     paddingBottom: 16,
-    gap: 12,
-  },
+    gap: 12},
   itemCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   itemHeader: {
-    gap: 10,
-  },
+    gap: 10},
   itemHeaderText: {
-    gap: 4,
-  },
+    gap: 4},
   itemName: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   itemProvider: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   itemBadges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   tag: {
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   tagText: {
     fontSize: 11,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   itemBody: {
-    gap: 12,
-  },
+    gap: 12},
   itemDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   inlineMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   inlineMetaText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   detailBlock: {
-    gap: 10,
-  },
+    gap: 10},
   detailTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   envCard: {
     backgroundColor: '#101010',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderRadius: 14,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   envCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   envCardBadges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
-    gap: 8,
-  },
+    gap: 8},
   envName: {
     color: Colors.text,
     fontSize: 12,
     fontWeight: '800',
-    flex: 1,
-  },
+    flex: 1},
   envDescription: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   envExample: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   endpointText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   noteRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     backgroundColor: 'rgba(245,158,11,0.08)',
     borderRadius: 12,
-    padding: 10,
-  },
+    padding: 10},
   noteText: {
     flex: 1,
     color: '#FCD34D',
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   docsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     alignSelf: 'flex-start',
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   docsButtonText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   envSummaryRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   allEnvList: {
-    gap: 10,
-  },
+    gap: 10},
   allEnvCard: {
     backgroundColor: '#101010',
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderRadius: 14,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   infoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1268,20 +1172,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderRadius: 18,
-    padding: 16,
-  },
+    padding: 16},
   infoCardTextWrap: {
     flex: 1,
-    gap: 6,
-  },
+    gap: 6},
   infoCardTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   infoCardText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
-});
+    lineHeight: 19}});

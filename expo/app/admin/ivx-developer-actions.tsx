@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -9,8 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -31,8 +29,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   BLOCK21_APPROVED_ACTIONS_MARKER,
@@ -46,9 +43,9 @@ import {
   listApprovedActions,
   listAuditEntries,
   proposeAction,
-  rejectAction,
-} from '@/src/modules/ivx-developer/developerApprovedActionsService';
+  rejectAction} from '@/src/modules/ivx-developer/developerApprovedActionsService';
 import { listPatches, type PatchProposal } from '@/src/modules/ivx-developer/developerWorkspaceService';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const OWNER_LABEL = 'owner' as const;
 const SUPABASE_DOUBLE_CONFIRM_PHRASE = 'I CONFIRM DESTRUCTIVE SQL';
@@ -60,15 +57,13 @@ const KIND_LABEL: Record<ApprovedActionKind, string> = {
   file_patch: 'File Patch',
   github_commit: 'GitHub Commit',
   supabase_sql: 'Supabase SQL',
-  render_deploy: 'Render Deploy',
-};
+  render_deploy: 'Render Deploy'};
 
 const KIND_ICON: Record<ApprovedActionKind, React.ComponentType<{ size?: number; color?: string }>> = {
   file_patch: FileCode,
   github_commit: GitBranch,
   supabase_sql: Database,
-  render_deploy: Rocket,
-};
+  render_deploy: Rocket};
 
 const STATUS_COLOR: Record<ApprovedAction['status'], string> = {
   proposed: Colors.warning,
@@ -76,8 +71,7 @@ const STATUS_COLOR: Record<ApprovedAction['status'], string> = {
   executing: Colors.blue,
   executed: Colors.green,
   failed: Colors.error,
-  rejected: Colors.textTertiary,
-};
+  rejected: Colors.textTertiary};
 
 export default function IVXDeveloperActionsScreen() {
   const router = useRouter();
@@ -142,8 +136,7 @@ export default function IVXDeveloperActionsScreen() {
           commitMessage: commitMessage.trim(),
           files,
           patchIds: approvedPatches.map((p) => p.id),
-          reason: reason.trim(),
-        });
+          reason: reason.trim()});
       } else if (proposeMode === 'supabase_sql') {
         if (!sqlInput.trim()) {
           Alert.alert('SQL required', 'Paste the SQL to be reviewed before approval.');
@@ -153,14 +146,12 @@ export default function IVXDeveloperActionsScreen() {
           kind: 'supabase_sql',
           sql: sqlInput,
           returnRows: false,
-          reason: reason.trim(),
-        });
+          reason: reason.trim()});
       } else {
         await proposeAction({
           kind: 'render_deploy',
           clearCache: deployClearCache,
-          reason: reason.trim(),
-        });
+          reason: reason.trim()});
       }
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -197,8 +188,7 @@ export default function IVXDeveloperActionsScreen() {
                     await approveAction(action.id, { approver: OWNER_LABEL, doubleConfirmed: false });
                   }
                   resolve();
-                },
-              },
+                }},
             ],
             'plain-text',
           );
@@ -274,8 +264,7 @@ export default function IVXDeveloperActionsScreen() {
           onPress: async () => {
             await deleteApprovedAction(action.id);
             await refresh();
-          },
-        },
+          }},
       ]);
     },
     [refresh],
@@ -368,7 +357,7 @@ export default function IVXDeveloperActionsScreen() {
               testID={`block21-execute-${action.id}`}
             >
               {isExec ? (
-                <ActivityIndicator size="small" color={Colors.background} />
+                <ShimmerIndicator size="small" color={Colors.background} />
               ) : (
                 <Play size={12} color={Colors.background} />
               )}
@@ -643,8 +632,7 @@ export default function IVXDeveloperActionsScreen() {
                               ? Colors.green
                               : entry.result === 'failed' || entry.result === 'blocked'
                               ? Colors.error
-                              : Colors.warning,
-                        },
+                              : Colors.warning},
                       ]}
                     />
                     <View style={styles.auditMain}>
@@ -688,8 +676,7 @@ const styles = StyleSheet.create({
     gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    backgroundColor: '#0A0F0A',
-  },
+    backgroundColor: '#0A0F0A'},
   backBtn: {
     width: 36,
     height: 36,
@@ -698,8 +685,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   headerTitleWrap: { flex: 1 },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' as const, letterSpacing: 0.2 },
@@ -707,8 +693,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 11,
     marginTop: 2,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -718,8 +703,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.35)',
-    backgroundColor: 'rgba(34,197,94,0.08)',
-  },
+    backgroundColor: 'rgba(34,197,94,0.08)'},
   headerBadgeText: { color: Colors.green, fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.6 },
   tabBar: {
     flexDirection: 'row',
@@ -729,8 +713,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    backgroundColor: '#080C08',
-  },
+    backgroundColor: '#080C08'},
   tabItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -740,8 +723,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   tabItemActive: { backgroundColor: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.4)' },
   tabLabel: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const },
   tabLabelActive: { color: Colors.green },
@@ -753,15 +735,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34,197,94,0.05)',
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.25)',
-    gap: 6,
-  },
+    gap: 6},
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroPrompt: {
     color: Colors.green,
     fontSize: 12,
     fontWeight: '700' as const,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   heroText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionLabel: {
@@ -769,8 +749,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginTop: 4,
-  },
+    marginTop: 4},
   smallBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -780,8 +759,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   smallBtnText: { color: Colors.green, fontSize: 11, fontWeight: '600' as const },
   emptyCard: {
     padding: 18,
@@ -789,8 +767,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderStyle: 'dashed' as const,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emptyText: { color: Colors.textTertiary, fontSize: 12, lineHeight: 17 },
   card: {
     padding: 12,
@@ -798,8 +775,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusLabel: { color: Colors.text, fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.8 },
@@ -812,8 +788,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: 'rgba(34,197,94,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-  },
+    borderColor: 'rgba(34,197,94,0.25)'},
   kindPillText: { color: Colors.green, fontSize: 10, fontWeight: '600' as const },
   destructivePill: {
     flexDirection: 'row',
@@ -824,8 +799,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: 'rgba(239,68,68,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.35)',
-  },
+    borderColor: 'rgba(239,68,68,0.35)'},
   destructivePillText: { color: Colors.error, fontSize: 10, fontWeight: '700' as const },
   cardTitle: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
   cardReason: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
@@ -836,41 +810,35 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   tagText: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   previewBox: {
     padding: 8,
     borderRadius: 6,
     backgroundColor: '#06090A',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   previewText: {
     color: Colors.text,
     fontSize: 11,
     lineHeight: 15,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   metaText: { color: Colors.textTertiary, fontSize: 10 },
   resultBox: {
     padding: 8,
     borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.02)',
     borderWidth: 1,
-    gap: 4,
-  },
+    gap: 4},
   resultTitle: { color: Colors.text, fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.6 },
   resultBody: { color: Colors.textSecondary, fontSize: 11 },
   resultDetail: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   actionRow: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 6 },
   actionBtn: {
     flexDirection: 'row',
@@ -881,12 +849,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   actionBtnPrimary: {
     backgroundColor: Colors.green,
-    borderColor: Colors.green,
-  },
+    borderColor: Colors.green},
   actionBtnText: { color: Colors.green, fontSize: 11, fontWeight: '600' as const },
   actionBtnTextDark: { color: Colors.background, fontSize: 11, fontWeight: '700' as const },
   kindRow: { flexDirection: 'row', gap: 6 },
@@ -899,8 +865,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   kindCardActive: { borderColor: 'rgba(34,197,94,0.5)', backgroundColor: 'rgba(34,197,94,0.06)' },
   kindCardLabel: { color: Colors.textTertiary, fontSize: 11, fontWeight: '600' as const },
   kindCardLabelActive: { color: Colors.green },
@@ -912,15 +877,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   inputMultiline: { minHeight: 70, textAlignVertical: 'top' as const },
   inputSql: {
     minHeight: 160,
     textAlignVertical: 'top' as const,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    fontSize: 12,
-  },
+    fontSize: 12},
   safetyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -929,25 +892,21 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(245,158,11,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.3)',
-  },
+    borderColor: 'rgba(245,158,11,0.3)'},
   safetyBannerDanger: {
     backgroundColor: 'rgba(239,68,68,0.08)',
-    borderColor: 'rgba(239,68,68,0.4)',
-  },
+    borderColor: 'rgba(239,68,68,0.4)'},
   safetyText: { color: Colors.textSecondary, fontSize: 11, flex: 1, lineHeight: 15 },
   staticBox: {
     padding: 12,
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   staticBoxText: {
     color: Colors.text,
     fontSize: 13,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -956,16 +915,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   toggleRowActive: { borderColor: 'rgba(34,197,94,0.4)', backgroundColor: 'rgba(34,197,94,0.06)' },
   toggleDot: {
     width: 14,
     height: 14,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: Colors.textTertiary,
-  },
+    borderColor: Colors.textTertiary},
   toggleDotActive: { borderColor: Colors.green, backgroundColor: Colors.green },
   toggleText: { color: Colors.text, fontSize: 12 },
   proposeBtn: {
@@ -975,8 +932,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: Colors.green,
-  },
+    backgroundColor: Colors.green},
   proposeBtnText: { color: Colors.background, fontSize: 13, fontWeight: '700' as const },
   auditRow: {
     flexDirection: 'row',
@@ -985,8 +941,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   auditDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
   auditMain: { flex: 1, gap: 3 },
   auditHead: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 6, alignItems: 'center' },
@@ -997,13 +952,10 @@ const styles = StyleSheet.create({
   auditMeta: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })},
   footerNote: {
     color: Colors.textTertiary,
     fontSize: 10,
     textAlign: 'center' as const,
     marginTop: 12,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
-});
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })}});

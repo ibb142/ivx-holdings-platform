@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,8 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   Megaphone,
@@ -24,11 +22,11 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   approveOutreachMessage,
   createOutreachMessage,
@@ -44,28 +42,24 @@ import {
   type OutreachListResult,
   type OutreachMessage,
   type OutreachStatus,
-  type OutreachType,
-} from '@/src/modules/ivx-developer/outreachService';
+  type OutreachType} from '@/src/modules/ivx-developer/outreachService';
 
 const STATUS_LABEL: Record<OutreachStatus, string> = {
   draft: 'Draft',
   pending_approval: 'Pending approval',
   approved: 'Approved',
   sent: 'Sent',
-  replied: 'Replied',
-};
+  replied: 'Replied'};
 const STATUS_TONE: Record<OutreachStatus, string> = {
   draft: Colors.textTertiary,
   pending_approval: Colors.warning,
   approved: Colors.info,
   sent: Colors.primary,
-  replied: Colors.success,
-};
+  replied: Colors.success};
 
 const TYPE_OPTIONS: { value: OutreachType; label: string }[] = OUTREACH_TYPES.map((t) => ({
   value: t,
-  label: OUTREACH_TYPE_LABEL[t],
-}));
+  label: OUTREACH_TYPE_LABEL[t]}));
 
 const FILTERS: { value: OutreachStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -91,8 +85,7 @@ type FormState = {
 function emptyForm(): FormState {
   return {
     type: 'investor_intro', recipientName: '', recipientCompany: '', recipientContact: '',
-    relatedDeal: '', contextNote: '', senderName: '', subject: '', body: '',
-  };
+    relatedDeal: '', contextNote: '', senderName: '', subject: '', body: ''};
 }
 
 function formToInput(form: FormState): OutreachCreateInput {
@@ -105,8 +98,7 @@ function formToInput(form: FormState): OutreachCreateInput {
     contextNote: form.contextNote.trim(),
     senderName: form.senderName.trim(),
     subject: form.subject.trim(),
-    body: form.body.trim(),
-  };
+    body: form.body.trim()};
 }
 
 function Field({ label, value, onChangeText, placeholder, multiline }: {
@@ -237,8 +229,7 @@ function OutreachContent() {
 
   const query = useQuery<OutreachListResult>({
     queryKey: ['ivx-outreach', 'list'],
-    queryFn: listOutreachMessages,
-  });
+    queryFn: listOutreachMessages});
 
   const messages = useMemo(() => query.data?.messages ?? [], [query.data]);
   const summary = query.data?.summary ?? null;
@@ -341,7 +332,7 @@ function OutreachContent() {
         {error && !modalOpen ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyCard}>
             <Megaphone size={26} color={Colors.textTertiary} />
@@ -407,7 +398,7 @@ function OutreachContent() {
               <Field label="Your sign-off" value={form.senderName} onChangeText={(t) => set('senderName', t)} placeholder="Daniel, IVX Holdings" />
 
               <Pressable style={[styles.previewBtn, previewing ? styles.btnDisabled : null]} onPress={() => { void handlePreview(); }} disabled={previewing} testID="ivx-outreach-preview">
-                {previewing ? <ActivityIndicator size="small" color={Colors.primary} /> : <Sparkles size={15} color={Colors.primary} />}
+                {previewing ? <ShimmerIndicator size="small" color={Colors.primary} /> : <Sparkles size={15} color={Colors.primary} />}
                 <Text style={styles.previewBtnText}>{previewing ? 'Drafting…' : 'Let IVX draft it'}</Text>
               </Pressable>
 
@@ -416,7 +407,7 @@ function OutreachContent() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </ScrollView>
             <Pressable style={[styles.saveBtn, saving ? styles.btnDisabled : null]} onPress={() => { void handleSave(); }} disabled={saving} testID="ivx-outreach-save">
-              {saving ? <ActivityIndicator size="small" color={Colors.black} /> : <CheckCircle2 size={16} color={Colors.black} />}
+              {saving ? <ShimmerIndicator size="small" color={Colors.black} /> : <CheckCircle2 size={16} color={Colors.black} />}
               <Text style={styles.saveBtnText}>Save as draft</Text>
             </Pressable>
           </View>
@@ -500,5 +491,4 @@ const styles = StyleSheet.create({
   previewBtnText: { fontSize: 13.5, fontWeight: '700' as const, color: Colors.primary },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, marginHorizontal: 18, marginTop: 8, paddingVertical: 14, borderRadius: 12 },
   saveBtnText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
-  btnDisabled: { opacity: 0.6 },
-});
+  btnDisabled: { opacity: 0.6 }});

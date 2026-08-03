@@ -12,8 +12,7 @@ import {
   Image,
   Linking,
   Platform,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -27,8 +26,7 @@ import {
   X,
   Building2,
   Copy,
-  ExternalLink,
-} from 'lucide-react-native';
+  ExternalLink} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -53,8 +51,7 @@ const DEFAULT_INFO: CompanyInfo = {
   email: 'support@ivxholding.com',
   ceoEmail: 'ceo@ivxholding.com',
   phone: '',
-  website: 'www.ivxholding.com',
-};
+  website: 'www.ivxholding.com'};
 
 export default function CompanyInfoScreen() {
   const router = useRouter();
@@ -68,8 +65,7 @@ export default function CompanyInfoScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
     loadInfo();
   }, []);
 
@@ -146,8 +142,7 @@ export default function CompanyInfoScreen() {
     const url = Platform.select({
       ios: `maps:0,0?q=${encoded}`,
       android: `geo:0,0?q=${encoded}`,
-      default: `https://www.google.com/maps/search/?api=1&query=${encoded}`,
-    });
+      default: `https://www.google.com/maps/search/?api=1&query=${encoded}`});
     if (url) {
       Linking.openURL(url).catch(() => {
         Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encoded}`);
@@ -491,5 +486,4 @@ const styles = StyleSheet.create({
   legalFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   legalText: { color: Colors.textSecondary, fontSize: 13 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

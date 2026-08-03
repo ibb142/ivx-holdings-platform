@@ -11,7 +11,7 @@
  * No deal is ever rendered as a reel — explicit display_type mapping.
  */
 import React, { Component, useCallback, useMemo, type ReactNode } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
+import {View, Text, StyleSheet, useWindowDimensions } from "react-native";
 import { Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -22,14 +22,14 @@ import CanonicalInvestmentReelCard, {
   feedVideoToReelData,
   homeFeedDealToReelData,
   parsedDealToReelData,
-  type CanonicalReelData,
-} from '@/components/CanonicalInvestmentReelCard';
+  type CanonicalReelData} from '@/components/CanonicalInvestmentReelCard';
 import { fetchHomeFeed, type HomeFeedBlock, type HomeFeedDeal } from '@/lib/video-feed';
 import type { ParsedJVDeal } from '@/lib/parse-deal';
 import type { JVAgreement } from '@/types/jv';
 import { trackProjectShare } from '@/lib/project-engagement';
 import { toggleVideoLike, toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
 import { resolveDealPhotos } from '@/lib/parse-deal';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 /** Per-card error boundary so one bad card never crashes the home feed */
 class CardBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -63,8 +63,7 @@ function homeFeedDealToInvestmentCard(
       publishedAt: local.publishedAt,
       created_at: (local as unknown as Record<string, unknown>).created_at as string | undefined,
       updatedAt: local.updatedAt,
-      updated_at: (local as unknown as Record<string, unknown>).updated_at as string | undefined,
-    });
+      updated_at: (local as unknown as Record<string, unknown>).updated_at as string | undefined});
   }
   if (photos.length === 0 && deal.photo_url) {
     photos = [deal.photo_url];
@@ -96,8 +95,7 @@ function homeFeedDealToInvestmentCard(
     developerName: null,
     developerLogo: null,
     investmentDetails: null,
-    timelineSummary: null,
-  };
+    timelineSummary: null};
 }
 
 export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardWidth, openQuickBuy }: {
@@ -121,8 +119,7 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
     queryFn: () => fetchHomeFeed(60),
     retry: 1,
     staleTime: 1000 * 60 * 2,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const localById = useMemo(() => {
     const map = new Map<string, JVAgreement>();
@@ -154,9 +151,7 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
         is_featured: false,
         priority: 0,
         display_order: null,
-        created_at: d.createdAt ?? null,
-      },
-    }));
+        created_at: d.createdAt ?? null}}));
   }, [homeFeedQuery.data?.blocks, jvDeals]);
 
   const goToDeal = useCallback((dealId: string) => {
@@ -227,7 +222,7 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
 
       {isLoading ? (
         <View style={[styles.loadingBox, { marginHorizontal: padH }]}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Syncing live deals...</Text>
         </View>
       ) : blocks.length === 0 ? (
@@ -296,23 +291,19 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   title: {
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -320,37 +311,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   liveBadgeText: {
     color: Colors.success,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   loadingBox: {
     height: 200,
     borderRadius: 16,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   loadingText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginTop: 10,
-  },
+    marginTop: 10},
   emptyBox: {
     paddingVertical: 32,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   emptyTitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    marginTop: 10,
-  },
+    marginTop: 10},
   emptySubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 4,
-  },
-});
+    marginTop: 4}});

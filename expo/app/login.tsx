@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { LoginFailureReason, OwnerDirectAccessAuditResult } from '@/lib/auth-context';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
@@ -12,9 +11,7 @@ import {
   Platform,
   Image,
   Animated,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
+  ScrollView} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Href } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, ChevronRight, MailCheck, Check, AlertTriangle } from 'lucide-react-native';
@@ -28,8 +25,7 @@ import {
   buildRepairIssueItems,
   fetchOwnerRepairReadiness,
   getOwnerRepairReadiness,
-  type OwnerRepairReadiness,
-} from '@/lib/owner-repair-readiness';
+  type OwnerRepairReadiness} from '@/lib/owner-repair-readiness';
 
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import {
@@ -37,8 +33,7 @@ import {
   getAdminAccessLockHonestStatus,
   getAdminAccessLockMessage,
   getAdminAccessLockNextStep,
-  isAdminAccessLocked,
-} from '@/lib/admin-access-lock';
+  isAdminAccessLocked} from '@/lib/admin-access-lock';
 import { getOpenAccessModeMessage, isOpenAccessModeEnabled } from '@/lib/open-access';
 import { supabase, isSupabaseConfigured, getSupabaseConfigAudit, forceProductionSupabaseClient, SUPABASE_USING_PRODUCTION_FALLBACK, SUPABASE_NOT_CONFIGURED_MESSAGE, SUPABASE_HOST_HINT } from '@/lib/supabase';
 import { resolveSupabaseUrl, resolveSupabaseAnonKey } from '@/lib/supabase-env';
@@ -73,6 +68,7 @@ function preflightSupabaseConfig(): {
 }
 import { SupabaseAuthDiagnostic } from '@/components/SupabaseAuthDiagnostic';
 import { OwnerAuthActions } from '@/components/OwnerAuthActions';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 
 /** True when the Supabase client failed to initialize (URL/key missing).
@@ -161,8 +157,7 @@ const INITIAL_LOGIN_ATTEMPT_STATE: LoginAttemptState = {
   title: 'Direct sign-in path',
   detail: 'Email + password always go through live Supabase sign-in. Trusted owner restore stays separate below.',
   email: '',
-  tone: 'neutral',
-};
+  tone: 'neutral'};
 
 type LoginIssueSeverity = 'critical' | 'warning' | 'success';
 
@@ -222,8 +217,7 @@ function buildLoginIssueItems(params: {
     remainingAttempts,
     lockedUntilMs,
     audit,
-    ownerRepairReadiness,
-  } = params;
+    ownerRepairReadiness} = params;
 
   const items: LoginIssueItem[] = [];
 
@@ -234,8 +228,7 @@ function buildLoginIssueItems(params: {
       detail: attemptedEmail
         ? `The exact password entered for ${attemptedEmail} was sent to Supabase and rejected there.`
         : 'The exact password entered on this screen was sent to Supabase and rejected there.',
-      severity: 'critical',
-    });
+      severity: 'critical'});
   }
 
   if (failureReason === 'email_not_confirmed') {
@@ -243,8 +236,7 @@ function buildLoginIssueItems(params: {
       id: 'email-not-confirmed',
       title: 'Email confirmation is incomplete',
       detail: 'Supabase still requires email confirmation for this account before password sign-in can complete.',
-      severity: 'critical',
-    });
+      severity: 'critical'});
   }
 
   if (failureReason === 'service_unavailable') {
@@ -252,8 +244,7 @@ function buildLoginIssueItems(params: {
       id: 'service-unavailable',
       title: 'Live sign-in is temporarily unavailable',
       detail: 'The direct Supabase login path could not be reached cleanly. Trusted owner recovery or password reset is the safe fallback.',
-      severity: 'warning',
-    });
+      severity: 'warning'});
   }
 
   if (failureReason === 'admin_access_locked') {
@@ -261,8 +252,7 @@ function buildLoginIssueItems(params: {
       id: 'admin-access-locked',
       title: 'Admin access is temporarily locked',
       detail: getAdminAccessLockMessage(),
-      severity: 'critical',
-    });
+      severity: 'critical'});
   }
 
   if (failureReason === 'rate_limited') {
@@ -270,8 +260,7 @@ function buildLoginIssueItems(params: {
       id: 'server-rate-limit',
       title: 'Rate limit is active',
       detail: 'Supabase is throttling repeated sign-in attempts right now. Wait briefly before trying again.',
-      severity: 'warning',
-    });
+      severity: 'warning'});
   }
 
   const shouldSurfaceServerRepairBlocker = (
@@ -284,8 +273,7 @@ function buildLoginIssueItems(params: {
       id: 'admin-repair-separate-from-signin',
       title: 'Server repair key is separate from normal sign-in',
       detail: 'This password rejection already came from the live Supabase email/password sign-in path. A missing or bad service-role key did not cause the rejection. That key is only needed for backend admin repair of an existing owner auth account if support must inspect or rewrite it.',
-      severity: 'warning',
-    });
+      severity: 'warning'});
   }
 
   if (shouldSurfaceServerRepairBlocker) {
@@ -296,8 +284,7 @@ function buildLoginIssueItems(params: {
           id: `owner-repair-${item.id}`,
           title: item.title,
           detail: item.detail,
-          severity: item.tone === 'critical' ? 'critical' : 'warning',
-        });
+          severity: item.tone === 'critical' ? 'critical' : 'warning'});
       });
   }
 
@@ -306,15 +293,13 @@ function buildLoginIssueItems(params: {
       id: 'device-cooldown-active',
       title: 'Device cooldown is active',
       detail: getRateLimitMessage(lockedUntilMs),
-      severity: 'warning',
-    });
+      severity: 'warning'});
   } else if (failureReason === 'invalid_credentials' && remainingAttempts > 0) {
     items.push({
       id: 'device-cooldown-guard',
       title: 'Local cooldown guard is armed',
       detail: `${remainingAttempts} invalid password attempt${remainingAttempts === 1 ? '' : 's'} remain before this device pauses sign-in for 15 minutes.`,
-      severity: 'warning',
-    });
+      severity: 'warning'});
   }
 
   if (audit?.eligible) {
@@ -324,8 +309,7 @@ function buildLoginIssueItems(params: {
       detail: audit.currentIP
         ? `This verified device can restore owner access now from ${audit.currentIP}.`
         : 'This verified device can restore owner access now without another password entry.',
-      severity: 'success',
-    });
+      severity: 'success'});
   }
 
   if (audit?.emailMismatch && audit.verifiedEmail) {
@@ -333,8 +317,7 @@ function buildLoginIssueItems(params: {
       id: 'verified-email-mismatch',
       title: 'The entered owner email is not the verified owner email',
       detail: `This device is anchored to ${audit.verifiedEmail}, not ${(audit.requestedEmail ?? attemptedEmail) || 'the current email'}.`,
-      severity: 'critical',
-    });
+      severity: 'critical'});
   }
 
   if (audit && !audit.eligible) {
@@ -344,8 +327,7 @@ function buildLoginIssueItems(params: {
         id: `audit-reason-${index}`,
         title: classifyOwnerAuditSeverity(reason) === 'critical' ? 'Owner restore blocker' : 'Owner restore warning',
         detail: reason,
-        severity: classifyOwnerAuditSeverity(reason),
-      });
+        severity: classifyOwnerAuditSeverity(reason)});
     });
   }
 
@@ -354,8 +336,7 @@ function buildLoginIssueItems(params: {
       id: 'carrier-subnet-match',
       title: 'Carrier subnet fallback is available',
       detail: `Current network ${audit.currentIP} is different from ${audit.storedIP}, but both still match the same trusted carrier subnet.`,
-      severity: 'warning',
-    });
+      severity: 'warning'});
   }
 
   return dedupeLoginIssues(items);
@@ -399,8 +380,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     userRole,
     auditOwnerDirectAccess,
     ownerDirectAccess,
-    loginOwnerPasswordless,
-  } = useAuth();
+    loginOwnerPasswordless} = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -444,8 +424,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       title: 'Owner sign-in path',
       detail: 'Enter your approved owner email and password. This route is separate from worker and regular user signup.',
       email: '',
-      tone: 'neutral',
-    }
+      tone: 'neutral'}
     : INITIAL_LOGIN_ATTEMPT_STATE);
   const twoFARefs = useRef<(TextInput | null)[]>([]);
 
@@ -641,9 +620,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       pathname: '/owner-access',
       params: {
         source,
-        ...(normalizedEmail ? { email: normalizedEmail } : {}),
-      },
-    } as Href);
+        ...(normalizedEmail ? { email: normalizedEmail } : {})}} as Href);
   }, [email, router]);
 
   // ── navigateAfterSuccessfulLogin must be declared before handlePasswordlessLogin ──
@@ -684,8 +661,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           title: 'Owner session verified',
           detail: 'Signed in securely without a password. Opening your workspace.',
           email: normalizedEmailForLogin,
-          tone: 'success',
-        });
+          tone: 'success'});
         navigateAfterSuccessfulLogin('password');
       } else if (result.requiresTwoFactor) {
         setLastFailureReason(null);
@@ -694,8 +670,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           title: 'Second factor required',
           detail: 'Your identity was verified. Enter the verification code to complete sign-in.',
           email: normalizedEmailForLogin,
-          tone: 'neutral',
-        });
+          tone: 'neutral'});
       } else {
         shake();
         const userMessage = 'Owner login is not available right now. Please try again or use email and password sign-in.';
@@ -706,8 +681,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           title: 'Owner login unavailable',
           detail: userMessage,
           email: normalizedEmailForLogin,
-          tone: 'warning',
-        });
+          tone: 'warning'});
         Alert.alert('Owner Login Unavailable', userMessage);
       }
     } catch (error: unknown) {
@@ -742,8 +716,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           title: 'Trusted owner access restored',
           detail: result.message,
           email: normalizedEmail,
-          tone: 'success',
-        });
+          tone: 'success'});
         Alert.alert('Owner Access Restored', result.message, [
           {
             text: 'Continue',
@@ -753,8 +726,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
               }
               ownerTrustedRestoreNavigationDoneRef.current = true;
               router.replace('/(tabs)/(home)/home' as any);
-            },
-          },
+            }},
         ]);
         return;
       }
@@ -764,8 +736,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Trusted owner access blocked',
         detail: result.message,
         email: normalizedEmail,
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Trusted Access Blocked', result.message);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to restore trusted owner access';
@@ -774,8 +745,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Trusted owner access blocked',
         detail: message,
         email: normalizedEmail,
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Trusted Access Blocked', message);
     } finally {
       setOwnerRecoveryLoading(false);
@@ -817,8 +787,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
 
 
       const { error } = await supabase.auth.resetPasswordForEmail(resetTarget, {
-        redirectTo,
-      });
+        redirectTo});
       if (error) {
         throw error;
       }
@@ -837,8 +806,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         email: resetTarget,
         tone: 'success',
         cooldownCleared: cooldownWasCleared,
-        kind: 'reset-sent',
-      });
+        kind: 'reset-sent'});
       const alertSuffix = cooldownWasCleared
         ? '\n\nDevice cooldown cleared — you can sign in as soon as you set the new password.'
         : '';
@@ -859,8 +827,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
             title: 'Secondary email reset not confirmed',
             detail,
             email: resetTarget,
-            tone: 'warning',
-          });
+            tone: 'warning'});
           Alert.alert('Email Reset Fallback Not Confirmed', detail);
           return;
         }
@@ -876,8 +843,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           email: resetTarget,
           tone: 'success',
           cooldownCleared: cooldownWasCleared,
-          kind: 'reset-sent',
-        });
+          kind: 'reset-sent'});
         const alertSuffix = cooldownWasCleared
           ? '\n\nDevice cooldown cleared \u2014 you can sign in as soon as you set the new password.'
           : '';
@@ -899,8 +865,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           title: 'Reset link not sent yet',
           detail: friendly,
           email: resetTarget,
-          tone: 'warning',
-        });
+          tone: 'warning'});
         return;
       }
 
@@ -913,8 +878,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
             title: 'Secondary email reset not confirmed',
             detail,
             email: resetTarget,
-            tone: 'warning',
-          });
+            tone: 'warning'});
           Alert.alert('Email Reset Fallback Not Confirmed', detail);
           return;
         }
@@ -930,8 +894,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           email: resetTarget,
           tone: 'success',
           cooldownCleared: cooldownWasCleared,
-          kind: 'reset-sent',
-        });
+          kind: 'reset-sent'});
         Alert.alert(effectiveOwnerMode ? 'Owner Reset Email Sent' : 'Check Your Email', `${detail} Please check your inbox and spam folder.`);
         return;
       }
@@ -945,8 +908,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Password reset email could not be sent',
         detail: message,
         email: resetTarget,
-        tone: 'warning',
-      });
+        tone: 'warning'});
     } finally {
       setPasswordResetLoading(false);
     }
@@ -966,8 +928,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'New owner password required',
         detail: `${passwordValidationError} This value will be sent once over HTTPS to the backend, set directly in Supabase, then immediately used by this phone for sign-in.`,
         email: target,
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Set Owner Password Now', passwordValidationError);
       shake();
       return;
@@ -981,16 +942,14 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       email: target,
       newPassword: enteredPassword,
       sendPasswordReset: false,
-      clientFlow: 'phone_exact_password_repair_v7_render_direct_backend',
-    };
+      clientFlow: 'phone_exact_password_repair_v7_render_direct_backend'};
     const safeRequestPayload = {
       email: target,
       newPassword: `[redacted:${enteredPassword.length} chars]`,
       passwordSubmitted: true,
       sendPasswordReset: false,
       apiBaseSource: 'render_direct_backend_origin',
-      clientFlow: 'phone_exact_password_repair_v7_render_direct_backend',
-    };
+      clientFlow: 'phone_exact_password_repair_v7_render_direct_backend'};
     const requestJson = JSON.stringify(safeRequestPayload, null, 2);
     setRepairDebug({ endpoint, status: null, ok: false, timestamp: startedAt, requestJson, response: 'Warming Render backend (cold-start can take 30–60s)…' });
     pushTelemetry('1. repair POST started', `endpoint=${endpoint}`);
@@ -1003,8 +962,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(repairPayload),
-          signal: controller.signal,
-        });
+          signal: controller.signal});
       } finally {
         clearTimeout(timer);
       }
@@ -1016,8 +974,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         await fetch(`${apiBase}${OWNER_REPAIR_ENDPOINT_PATH}/status`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
-          signal: warmController.signal,
-        }).finally(() => clearTimeout(warmTimer));
+          signal: warmController.signal}).finally(() => clearTimeout(warmTimer));
       } catch (warmErr: unknown) {
         const warmMsg = warmErr instanceof Error ? warmErr.message : String(warmErr ?? '');
       }
@@ -1056,8 +1013,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         ok: response.ok,
         timestamp: finishedAt,
         requestJson,
-        response: JSON.stringify(parsed, null, 2),
-      });
+        response: JSON.stringify(parsed, null, 2)});
 
       if (backendVersion !== OWNER_REPAIR_EXPECTED_BACKEND_VERSION) {
         const rawResponse = typeof parsed.rawResponse === 'string' ? parsed.rawResponse : '';
@@ -1067,15 +1023,13 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         const blocker = `${OWNER_REPAIR_OLD_BACKEND_MESSAGE} Expected backendVersion=${OWNER_REPAIR_EXPECTED_BACKEND_VERSION}, received backendVersion=${backendVersion}.${hostHint}`;
         setRepairDebug((prev) => prev ? {
           ...prev,
-          autoSignIn: { attempted: false, success: false, message: blocker },
-        } : prev);
+          autoSignIn: { attempted: false, success: false, message: blocker }} : prev);
         setAttemptState({
           status: 'failed',
           title: OWNER_REPAIR_OLD_BACKEND_MESSAGE,
           detail: blocker,
           email: target,
-          tone: 'warning',
-        });
+          tone: 'warning'});
         Alert.alert(OWNER_REPAIR_OLD_BACKEND_MESSAGE, blocker);
         return;
       }
@@ -1090,8 +1044,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           title: 'Server-side owner repair blocked',
           detail: failMessage,
           email: target,
-          tone: 'warning',
-        });
+          tone: 'warning'});
         Alert.alert('Server Repair Blocked', failMessage);
         return;
       }
@@ -1100,15 +1053,13 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         const blocker = `${OWNER_REPAIR_OLD_BACKEND_MESSAGE} The phone sent a new password, but the backend did not acknowledge passwordUpdateSource=client_request. Current source: ${passwordUpdateSource}. Redeploy/restart the ivx-holdings-platform Render API so the V7 backend is live, then tap this button again.`;
         setRepairDebug((prev) => prev ? {
           ...prev,
-          autoSignIn: { attempted: false, success: false, message: blocker },
-        } : prev);
+          autoSignIn: { attempted: false, success: false, message: blocker }} : prev);
         setAttemptState({
           status: 'failed',
           title: 'Render API is not on the exact-password repair build',
           detail: blocker,
           email: target,
-          tone: 'warning',
-        });
+          tone: 'warning'});
         Alert.alert('Render API Update Required', blocker);
         return;
       }
@@ -1130,9 +1081,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
             supabaseErrorMessage: signInResult.supabaseErrorMessage ?? (signInResult.success ? null : signInResult.message),
             supabaseErrorCode: signInResult.supabaseErrorCode ?? null,
             supabaseErrorStatus: signInResult.supabaseErrorStatus ?? null,
-            supabaseErrorName: signInResult.supabaseErrorName ?? null,
-          },
-        } : prev);
+            supabaseErrorName: signInResult.supabaseErrorName ?? null}} : prev);
         if (signInResult.success) {
           clearAuthAttempts(target);
           if (normalizedEmail) clearAuthAttempts(normalizedEmail);
@@ -1144,8 +1093,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
             detail: `Phone called ${OWNER_REPAIR_ENDPOINT_PATH}, backend version ${OWNER_REPAIR_EXPECTED_BACKEND_VERSION} set the exact password entered on this screen, Supabase accepted that same value, device cooldown is clear, and Continue routes to the full app (Home / Invest / Market / Portfolio / Chat / Profile). Admin Panel and Owner Controls are reachable from Profile.`,
             email: target,
             tone: 'success',
-            cooldownCleared: true,
-          });
+            cooldownCleared: true});
           // Auto-navigate immediately. Do not block on Alert/Continue —
           // the Supabase session is already live and the route guard will
           // hydrate isAdmin from the in-memory userRole. Showing an Alert
@@ -1172,8 +1120,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
             supabaseErrorMessage: exactMessage,
             supabaseErrorCode: signInResult.supabaseErrorCode,
             supabaseErrorStatus: signInResult.supabaseErrorStatus,
-            supabaseErrorName: signInResult.supabaseErrorName,
-          });
+            supabaseErrorName: signInResult.supabaseErrorName});
           Alert.alert(
             'App Config Issue — Not a Password Problem',
             `The backend accepted your new password, but this Expo Go bundle could not connect to Supabase to sign you in.\n\nError: ${exactMessage}\n\nFix: Close Expo Go fully, reopen it, and reload the app. The latest code has production fallbacks that always load the Supabase URL.`
@@ -1191,24 +1138,21 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           supabaseErrorMessage: exactMessage,
           supabaseErrorCode: signInResult.supabaseErrorCode,
           supabaseErrorStatus: signInResult.supabaseErrorStatus,
-          supabaseErrorName: signInResult.supabaseErrorName,
-        });
+          supabaseErrorName: signInResult.supabaseErrorName});
         Alert.alert('Same-Value Sign-In Failed', `${mismatchDetail}${signInResult.supabaseErrorName ? `\nType: ${signInResult.supabaseErrorName}` : ''}`);
         return;
       } catch (signInErr: unknown) {
         const msg = signInErr instanceof Error ? signInErr.message : String(signInErr ?? '');
         setRepairDebug((prev) => prev ? {
           ...prev,
-          autoSignIn: { attempted: true, success: false, message: msg, supabaseErrorMessage: msg },
-        } : prev);
+          autoSignIn: { attempted: true, success: false, message: msg, supabaseErrorMessage: msg }} : prev);
         setAttemptState({
           status: 'failed',
           title: 'Owner password updated; sign-in exception',
           detail: `Exact sign-in exception after same-value repair: ${msg}`,
           email: target,
           tone: 'warning',
-          supabaseErrorMessage: msg,
-        });
+          supabaseErrorMessage: msg});
         Alert.alert('Owner Password Updated — Sign-In Exception', `Exact sign-in exception: ${msg}`);
       }
     } catch (error: unknown) {
@@ -1221,8 +1165,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         ok: false,
         timestamp: new Date().toISOString(),
         requestJson,
-        response: `Network/exception: ${raw || name || 'unknown'}${isAbort ? '\n\nThe Render backend did not respond within 90 seconds. This usually means the free-tier service is cold-starting. Wait ~30 seconds and tap the button again — the second attempt typically succeeds because the service is now warm.' : ''}`,
-      });
+        response: `Network/exception: ${raw || name || 'unknown'}${isAbort ? '\n\nThe Render backend did not respond within 90 seconds. This usually means the free-tier service is cold-starting. Wait ~30 seconds and tap the button again — the second attempt typically succeeds because the service is now warm.' : ''}`});
       const friendly = isAbort
         ? 'Render backend cold-start exceeded 90s and the request was aborted. The service should now be warming up — wait about 30 seconds and tap Reset password & log in again.'
         : raw && !/^\d+:\d+:/.test(raw)
@@ -1233,8 +1176,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Server-side owner repair blocked',
         detail: friendly,
         email: target,
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Server Repair Blocked', friendly);
     } finally {
       setServerPasswordRepairLoading(false);
@@ -1253,8 +1195,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Email required',
         detail: 'Enter the exact owner or member email before submitting.',
         email: '',
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Missing Email', 'Please enter your email address.');
       shake();
       return;
@@ -1265,8 +1206,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Email format invalid',
         detail: 'The sign-in request was not sent because the email format is invalid.',
         email: email.trim(),
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Invalid Email', 'Please enter a valid email address.');
       shake();
       return;
@@ -1280,8 +1220,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Password required',
         detail: 'The app trims leading/trailing spaces, but it cannot sign in with an empty password.',
         email: identifier,
-        tone: 'warning',
-      });
+        tone: 'warning'});
       Alert.alert('Missing Password', 'Please enter your password.');
       shake();
       return;
@@ -1294,8 +1233,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Device cooldown active',
         detail: lockedMessage,
         email: identifier,
-        tone: 'warning',
-      });
+        tone: 'warning'});
       shake();
       Alert.alert('Account Locked', lockedMessage);
       return;
@@ -1308,8 +1246,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       title: 'Checking live credentials',
       detail: 'Submitting your exact email/password to Supabase and waiting for a real session response.',
       email: identifier,
-      tone: 'neutral',
-    });
+      tone: 'neutral'});
     setFailedLoginMessage(null);
 
     // HARD PRE-SIGN-IN GUARD: verify the resolved Supabase config is valid
@@ -1331,8 +1268,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           tone: 'warning',
           supabaseErrorMessage: recheck.reason,
           supabaseErrorName: 'PreflightGuardError',
-          supabaseErrorStatus: 401,
-        });
+          supabaseErrorStatus: 401});
         setFailedLoginMessage(recheck.reason);
         setLastFailureReason('service_unavailable');
         Alert.alert(
@@ -1363,8 +1299,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           tone: 'warning',
           supabaseErrorMessage: SUPABASE_NOT_CONFIGURED_MESSAGE,
           supabaseErrorName: 'AuthError',
-          supabaseErrorStatus: 500,
-        });
+          supabaseErrorStatus: 500});
         setFailedLoginMessage('Supabase is not configured in this bundle. Clear Expo Go cache and try again.');
         setLastFailureReason('service_unavailable');
         Alert.alert(
@@ -1390,8 +1325,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Session verified',
         detail: 'Supabase returned a live session. Opening your workspace now.',
         email: identifier,
-        tone: 'success',
-      });
+        tone: 'success'});
       navigateAfterSuccessfulLogin('password');
       return;
     }
@@ -1403,8 +1337,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         title: 'Second factor required',
         detail: 'Your password was accepted. Enter the verification code to complete sign-in.',
         email: identifier,
-        tone: 'neutral',
-      });
+        tone: 'neutral'});
       return;
     }
 
@@ -1457,8 +1390,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       supabaseErrorMessage: result.supabaseErrorMessage,
       supabaseErrorCode: result.supabaseErrorCode,
       supabaseErrorStatus: result.supabaseErrorStatus,
-      supabaseErrorName: result.supabaseErrorName,
-    });
+      supabaseErrorName: result.supabaseErrorName});
 
     if (audit?.eligible) {
       Alert.alert(
@@ -1535,8 +1467,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     queryKey: ['owner-repair-readiness'],
     queryFn: fetchOwnerRepairReadiness,
     staleTime: 60000,
-    enabled: !openAccessMode,
-  });
+    enabled: !openAccessMode});
   const ownerRepairReadiness = ownerRepairReadinessQuery.data ?? getOwnerRepairReadiness();
   const loginIssueItems = useMemo<LoginIssueItem[]>(() => buildLoginIssueItems({
     failureReason: lastFailureReason,
@@ -1545,8 +1476,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     remainingAttempts: rateLimitSnapshot.remainingAttempts,
     lockedUntilMs: rateLimitSnapshot.lockedUntilMs,
     audit: ownerRecoveryAudit,
-    ownerRepairReadiness,
-  }), [failedLoginMessage, lastFailureReason, normalizedEmail, ownerRecoveryAudit, ownerRepairReadiness, rateLimitSnapshot.lockedUntilMs, rateLimitSnapshot.remainingAttempts]);
+    ownerRepairReadiness}), [failedLoginMessage, lastFailureReason, normalizedEmail, ownerRecoveryAudit, ownerRepairReadiness, rateLimitSnapshot.lockedUntilMs, rateLimitSnapshot.remainingAttempts]);
   const criticalLoginIssues = useMemo<LoginIssueItem[]>(() => loginIssueItems.filter((item) => item.severity === 'critical'), [loginIssueItems]);
   const warningLoginIssues = useMemo<LoginIssueItem[]>(() => loginIssueItems.filter((item) => item.severity === 'warning'), [loginIssueItems]);
   const successLoginIssues = useMemo<LoginIssueItem[]>(() => loginIssueItems.filter((item) => item.severity === 'success'), [loginIssueItems]);
@@ -1595,18 +1525,15 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       {
         id: 'fix-update',
         title: 'What is already in place',
-        detail: adminAccessLockFixUpdate,
-      },
+        detail: adminAccessLockFixUpdate},
       {
         id: 'honest-lock-status',
         title: 'What is still blocking you',
-        detail: adminAccessLockHonestStatus,
-      },
+        detail: adminAccessLockHonestStatus},
       {
         id: 'next-step',
         title: 'What must happen next',
-        detail: adminAccessLockNextStep,
-      },
+        detail: adminAccessLockNextStep},
     ];
   }, [adminAccessLockFixUpdate, adminAccessLockHonestStatus, adminAccessLockNextStep]);
   const recoveryTruthItems = useMemo<RecoveryTruthItem[]>(() => {
@@ -1616,8 +1543,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       {
         id: 'truth-direct-signin',
         title: 'Normal owner sign-in',
-        detail: 'This screen requires the exact owner email and password. The server repair key is not used for that sign-in.',
-      },
+        detail: 'This screen requires the exact owner email and password. The server repair key is not used for that sign-in.'},
       {
         id: 'truth-service-role',
         title: ownerRepairReadiness.hasRealServiceRole
@@ -1625,15 +1551,13 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
           : 'Backend repair is separate from your sign-in',
         detail: ownerRepairReadiness.hasRealServiceRole
           ? 'If support must inspect or repair an existing owner auth user directly, the backend has the required admin authority.'
-          : 'A missing or bad service-role key only affects backend-only repair of an existing owner auth user. It did not cause the password rejection on this screen.',
-      },
+          : 'A missing or bad service-role key only affects backend-only repair of an existing owner auth user. It did not cause the password rejection on this screen.'},
       {
         id: 'truth-fastest-path',
         title: 'Fastest safe path now',
         detail: ownerRecoveryAudit?.eligible
           ? 'This device is already trusted. Use restore to reopen owner access without another password entry.'
-          : `Admin login cannot safely be removed from a new or unverified device. If the password is wrong or unknown, send a reset link to ${resetTargetLabel}, sign in with the new password, then verify this device again.`,
-      },
+          : `Admin login cannot safely be removed from a new or unverified device. If the password is wrong or unknown, send a reset link to ${resetTargetLabel}, sign in with the new password, then verify this device again.`},
     ];
   }, [effectiveRecoveryEmail, ownerRecoveryAudit?.eligible, ownerRepairReadiness.hasRealServiceRole]);
 
@@ -1736,7 +1660,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
               </Animated.View>
 
               {isLoading && (
-                <ActivityIndicator color={Colors.primary} style={{ marginTop: 24 }} />
+                <ShimmerIndicator color={Colors.primary} style={{ marginTop: 24 }} />
               )}
 
               <TouchableOpacity style={styles.cancelLink} onPress={() => cancelTwoFactor()}>
@@ -1767,8 +1691,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
 
             <Animated.View style={[styles.heroSection, {
               opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }, { scale: logoScale }],
-            }]}>
+              transform: [{ translateY: slideAnim }, { scale: logoScale }]}]}>
               <View style={styles.logoCard}>
                 <Image source={IVX_LOGO_SOURCE} style={styles.logo} resizeMode="contain" />
               </View>
@@ -1776,8 +1699,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
 
             <Animated.View style={[styles.formCard, {
               opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }, { translateX: shakeAnim }],
-            }]}>
+              transform: [{ translateY: slideAnim }, { translateX: shakeAnim }]}]}>
               <Text style={styles.title}>{loginTitle}</Text>
               {loginSubtitle ? <Text style={styles.subtitle}>{loginSubtitle}</Text> : null}
 
@@ -1932,8 +1854,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                       onPress={() => {
                         router.push({
                           pathname: '/forgot-password',
-                          params: normalizedEmail ? { email: normalizedEmail } : undefined,
-                        } as Href);
+                          params: normalizedEmail ? { email: normalizedEmail } : undefined} as Href);
                       }}
                       disabled={passwordResetLoading}
                     >
@@ -1984,7 +1905,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 testID="login-submit"
               >
                 {isLoading ? (
-                  <ActivityIndicator color={Colors.black} />
+                  <ShimmerIndicator color={Colors.black} />
                 ) : (
                   <>
                     <Text style={styles.signInBtnText}>{signInButtonLabel}</Text>
@@ -2034,7 +1955,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                     testID="owner-login-forgot-password"
                   >
                     {passwordResetLoading ? (
-                      <ActivityIndicator size="small" color={Colors.primary} />
+                      <ShimmerIndicator size="small" color={Colors.primary} />
                     ) : (
                       <Mail size={16} color={Colors.primary} />
                     )}
@@ -2060,7 +1981,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                   disabled={ownerRecoveryLoading || passwordResetLoading}
                 >
                   {ownerRecoveryLoading || passwordResetLoading || liveOwnerAuditLoading ? (
-                    <ActivityIndicator size="small" color={ownerAccessNoticeAccent} />
+                    <ShimmerIndicator size="small" color={ownerAccessNoticeAccent} />
                   ) : (
                     <Shield size={16} color={ownerAccessNoticeAccent} />
                   )}
@@ -2196,7 +2117,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                         testID="login-restore-owner-access"
                       >
                         {ownerRecoveryLoading ? (
-                          <ActivityIndicator size="small" color={Colors.black} />
+                          <ShimmerIndicator size="small" color={Colors.black} />
                         ) : (
                           <>
                             <Text style={styles.loginFailurePrimaryActionText}>Restore owner access</Text>
@@ -2214,7 +2135,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                         testID="login-failure-server-owner-reset"
                       >
                         {serverPasswordRepairLoading ? (
-                          <ActivityIndicator size="small" color={Colors.black} />
+                          <ShimmerIndicator size="small" color={Colors.black} />
                         ) : (
                           <>
                             <Text style={styles.loginFailurePrimaryActionText}>Server reset with typed password</Text>
@@ -2235,7 +2156,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                         testID="login-reset-owner-password"
                       >
                         {passwordResetLoading ? (
-                          <ActivityIndicator size="small" color={shouldPromoteResetAction ? Colors.black : Colors.text} />
+                          <ShimmerIndicator size="small" color={shouldPromoteResetAction ? Colors.black : Colors.text} />
                         ) : shouldPromoteResetAction ? (
                           <>
                             <Text style={styles.loginFailurePrimaryActionText}>Reset password now</Text>
@@ -2302,17 +2223,14 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 32,
-  },
+    paddingBottom: 32},
   openAccessContainer: {
     flex: 1,
     justifyContent: 'center' as const,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   backButton: {
     marginTop: 8,
     marginLeft: 20,
@@ -2323,115 +2241,95 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   heroSection: {
     alignItems: 'center',
     paddingTop: 28,
-    paddingBottom: 28,
-  },
+    paddingBottom: 28},
   logoCard: {
     borderRadius: 24,
     padding: 8,
     backgroundColor: '#090909',
     borderWidth: 1,
     borderColor: Colors.primary + '22',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   logo: {
     width: 84,
     height: 84,
     borderRadius: 20,
-    backgroundColor: '#090909',
-  },
+    backgroundColor: '#090909'},
   brand: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '900' as const,
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   tagline: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '600' as const,
     letterSpacing: 1,
-    marginTop: 4,
-  },
+    marginTop: 4},
   formCard: {
     marginHorizontal: 20,
     backgroundColor: Colors.surface,
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   title: {
     color: Colors.text,
     fontSize: 26,
     fontWeight: '800' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     marginBottom: 12,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   configStatusBanner: {
     alignSelf: 'stretch' as const,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   configStatusOk: {
     borderColor: Colors.success + '44',
-    backgroundColor: Colors.success + '12',
-  },
+    backgroundColor: Colors.success + '12'},
   configStatusError: {
     borderColor: Colors.error + '66',
-    backgroundColor: Colors.error + '14',
-  },
+    backgroundColor: Colors.error + '14'},
   configStatusText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   authAuditCard: {
     borderRadius: 18,
     borderWidth: 1,
     padding: 14,
     marginBottom: 18,
-    gap: 8,
-  },
+    gap: 8},
   authAuditCardNeutral: {
     borderColor: Colors.primary + '26',
-    backgroundColor: Colors.primary + '10',
-  },
+    backgroundColor: Colors.primary + '10'},
   authAuditCardSuccess: {
     borderColor: Colors.success + '2E',
-    backgroundColor: Colors.success + '12',
-  },
+    backgroundColor: Colors.success + '12'},
   authAuditCardWarning: {
     borderColor: '#F59E0B35',
-    backgroundColor: '#1B1409',
-  },
+    backgroundColor: '#1B1409'},
   authAuditHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   authAuditTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   authAuditText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   authAuditEmailRow: {
     marginTop: 2,
     borderRadius: 12,
@@ -2440,20 +2338,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#050A11',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 4,
-  },
+    gap: 4},
   authAuditEmailLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     letterSpacing: 0.4,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   authAuditEmailValue: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   supabaseErrorBox: {
     marginTop: 10,
     borderRadius: 12,
@@ -2462,21 +2357,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B0B0B',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 4,
-  },
+    gap: 4},
   supabaseErrorTitle: {
     color: Colors.error,
     fontSize: 11,
     fontWeight: '800' as const,
     letterSpacing: 0.3,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   supabaseErrorLine: {
     color: Colors.text,
     fontSize: 11,
     lineHeight: 16,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'},
   ownerVerifiedContinueButton: {
     marginTop: 8,
     minHeight: 46,
@@ -2485,13 +2377,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   ownerVerifiedContinueButtonText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   resetSentCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -2500,8 +2390,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 18,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   resetSentIconWrap: {
     width: 56,
     height: 56,
@@ -2509,37 +2398,31 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '1F',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   resetSentTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '800' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   resetSentSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   resetSentEmail: {
     color: Colors.success,
     fontSize: 15,
     fontWeight: '800' as const,
     marginTop: 2,
     marginBottom: 8,
-    maxWidth: '100%' as const,
-  },
+    maxWidth: '100%' as const},
   resetSentSteps: {
     alignSelf: 'stretch' as const,
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   resetSentStepRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   resetSentStepBadge: {
     width: 22,
     height: 22,
@@ -2549,26 +2432,22 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '55',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginTop: 1,
-  },
+    marginTop: 1},
   resetSentStepBadgeText: {
     color: Colors.success,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   resetSentStepText: {
     flex: 1,
     color: Colors.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-  },
+    lineHeight: 19},
   resetSentHint: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 16,
     textAlign: 'center' as const,
-    marginTop: 10,
-  },
+    marginTop: 10},
   cooldownClearedChip: {
     alignSelf: 'flex-start' as const,
     marginTop: 8,
@@ -2577,35 +2456,29 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#0E2A1A',
     borderWidth: 1,
-    borderColor: '#1FB67333',
-  },
+    borderColor: '#1FB67333'},
   cooldownClearedChipText: {
     color: '#34D399',
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   fieldGroup: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   fieldLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '600' as const,
     marginBottom: 8,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   fieldLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   forgotLink: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   inlineErrorRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -2616,15 +2489,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.error + '40',
     backgroundColor: Colors.error + '12',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   inlineErrorText: {
     color: Colors.error,
     fontSize: 12,
     fontWeight: '600' as const,
     lineHeight: 17,
-    flex: 1,
-  },
+    flex: 1},
   inlineSuccessRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -2635,15 +2506,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.success + '40',
     backgroundColor: Colors.success + '12',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   inlineSuccessText: {
     color: Colors.success,
     fontSize: 12,
     fontWeight: '600' as const,
     lineHeight: 17,
-    flex: 1,
-  },
+    flex: 1},
   troubleshootToggle: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2655,27 +2524,23 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   troubleshootToggleText: {
     color: Colors.textTertiary,
     fontSize: 12,
     fontWeight: '600' as const,
-    letterSpacing: 0.2,
-  },
+    letterSpacing: 0.2},
   passwordPolicyHint: {
     color: Colors.primary,
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   rememberMeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 16,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   checkbox: {
     width: 22,
     height: 22,
@@ -2683,17 +2548,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkboxChecked: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   rememberMeText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2703,14 +2565,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 14,
     gap: 10,
-    height: 52,
-  },
+    height: 52},
   input: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
-    height: '100%' as any,
-  },
+    height: '100%' as any},
   signInBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 16,
@@ -2719,17 +2579,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 8,
-  },
+    marginTop: 8},
   signInBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   signInBtnText: {
     color: Colors.black,
     fontSize: 16,
     fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   passwordlessSignInBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -2740,13 +2597,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.primary + '60',
     backgroundColor: Colors.primary + '08',
-    marginTop: 10,
-  },
+    marginTop: 10},
   passwordlessSignInBtnText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerNormalSignInButton: {
     marginTop: 10,
     minHeight: 42,
@@ -2756,13 +2611,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   ownerNormalSignInButtonText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerSmsRecoveryButton: {
     marginTop: 10,
     minHeight: 42,
@@ -2772,13 +2625,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '10',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
+    paddingHorizontal: 12},
   ownerSmsRecoveryButtonText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   passwordlessNote: {
     marginTop: 10,
     borderRadius: 14,
@@ -2786,14 +2637,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '40',
     backgroundColor: Colors.success + '10',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   passwordlessNoteText: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ownerAccessNotice: {
     marginTop: 10,
     borderRadius: 14,
@@ -2804,8 +2653,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   ownerPasswordResetCard: {
     marginTop: 10,
     borderRadius: 14,
@@ -2816,40 +2664,32 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   ownerPasswordResetCardDisabled: {
-    opacity: 0.62,
-  },
+    opacity: 0.62},
   ownerPasswordResetContent: {
-    flex: 1,
-  },
+    flex: 1},
   ownerPasswordResetTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerPasswordResetText: {
     marginTop: 3,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   ownerAccessNoticeContent: {
-    flex: 1,
-  },
+    flex: 1},
   ownerAccessNoticeText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ownerAccessLink: {
     marginTop: 4,
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   adminLockCard: {
     marginTop: 12,
     borderRadius: 18,
@@ -2858,8 +2698,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B0B0B',
     paddingHorizontal: 14,
     paddingVertical: 14,
-    gap: 8,
-  },
+    gap: 8},
   ownerAlternativeCard: {
     marginTop: 12,
     borderRadius: 18,
@@ -2870,33 +2709,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   ownerAlternativeCardDisabled: {
-    opacity: 0.52,
-  },
+    opacity: 0.52},
   ownerAlternativeIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   ownerAlternativeContent: {
-    flex: 1,
-  },
+    flex: 1},
   ownerAlternativeTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerAlternativeText: {
     marginTop: 3,
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   truthCard: {
     marginTop: 14,
     borderRadius: 18,
@@ -2904,26 +2737,21 @@ const styles = StyleSheet.create({
     borderColor: '#1E3A5F',
     backgroundColor: '#0E1726',
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   truthTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   truthSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   truthList: {
-    gap: 10,
-  },
+    gap: 10},
   truthRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   truthIndexWrap: {
     width: 22,
     height: 22,
@@ -2931,27 +2759,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   truthIndex: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   truthBody: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   truthRowTitle: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   truthRowDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   loginFailureCard: {
     marginTop: 14,
     borderRadius: 18,
@@ -2959,29 +2782,24 @@ const styles = StyleSheet.create({
     borderColor: '#F59E0B30',
     backgroundColor: '#18120A',
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   loginFailureHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   loginFailureTitle: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   loginFailureText: {
     color: Colors.text,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   loginFailureHint: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   failedEmailChip: {
     marginTop: 2,
     borderRadius: 14,
@@ -2990,102 +2808,80 @@ const styles = StyleSheet.create({
     backgroundColor: '#080F18',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 4,
-  },
+    gap: 4},
   failedEmailChipLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.4,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   failedEmailChipValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   issueMatrix: {
-    gap: 12,
-  },
+    gap: 12},
   issueGroup: {
-    gap: 8,
-  },
+    gap: 8},
   issueGroupTitle: {
     fontSize: 12,
     fontWeight: '800' as const,
     letterSpacing: 0.3,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   issueGroupTitleCritical: {
-    color: Colors.error,
-  },
+    color: Colors.error},
   issueGroupTitleWarning: {
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   issueGroupTitleSuccess: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   issueRow: {
     borderRadius: 14,
     borderWidth: 1,
     padding: 10,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-  },
+    gap: 10},
   issueRowCritical: {
     borderColor: Colors.error + '30',
-    backgroundColor: '#1A0B0B',
-  },
+    backgroundColor: '#1A0B0B'},
   issueRowWarning: {
     borderColor: Colors.warning + '30',
-    backgroundColor: '#1B1409',
-  },
+    backgroundColor: '#1B1409'},
   issueRowSuccess: {
     borderColor: Colors.success + '30',
-    backgroundColor: '#08140C',
-  },
+    backgroundColor: '#08140C'},
   issueIndexWrap: {
     width: 22,
     height: 22,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   issueIndexWrapCritical: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   issueIndexWrapWarning: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   issueIndexWrapSuccess: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   issueIndex: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   issueBody: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   issueTitle: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   issueDetail: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   loginFailureActions: {
     flexDirection: 'row',
     gap: 10,
-    flexWrap: 'wrap' as const,
-  },
+    flexWrap: 'wrap' as const},
   loginFailurePrimaryAction: {
     minHeight: 42,
     borderRadius: 12,
@@ -3095,13 +2891,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
+    gap: 6},
   loginFailurePrimaryActionText: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   loginFailureSecondaryAction: {
     minHeight: 42,
     borderRadius: 12,
@@ -3111,68 +2905,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   loginFailureSecondaryActionText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   loginFailureActionDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginVertical: 20,
-  },
+    marginVertical: 20},
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   dividerText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   signupRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   signupText: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   signupLink: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   signupChoiceCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   signupChoiceTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '800' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   signupChoiceSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   signupChoiceActions: {
-    flexDirection: 'row',
-  },
+    flexDirection: 'row'},
   signupChoiceButton: {
     flex: 1,
     minHeight: 44,
@@ -3182,48 +2963,40 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   signupChoiceOwnerButton: {
     flexDirection: 'row',
     gap: 6,
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   signupChoiceButtonLabel: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   signupChoiceOwnerButtonLabel: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   securityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     marginTop: 24,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   securityText: {
     color: Colors.textTertiary,
     fontSize: 11,
     textAlign: 'center',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 20,
-  },
+    paddingTop: 20},
   twoFAHeader: {
     alignItems: 'center',
     marginTop: 40,
-    marginBottom: 40,
-  },
+    marginBottom: 40},
   twoFAIconWrap: {
     width: 72,
     height: 72,
@@ -3233,26 +3006,22 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '40',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   twoFATitle: {
     color: Colors.text,
     fontSize: 24,
     fontWeight: '800' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   twoFASubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   codeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
-  },
+    gap: 10},
   codeBox: {
     width: 48,
     height: 58,
@@ -3263,19 +3032,14 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 22,
     fontWeight: '700' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   codeBoxFilled: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '12',
-  },
+    backgroundColor: Colors.primary + '12'},
   cancelLink: {
     marginTop: 32,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   cancelLinkText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

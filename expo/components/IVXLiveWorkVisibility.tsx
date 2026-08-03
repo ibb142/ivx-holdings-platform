@@ -7,9 +7,10 @@
  * `/api/ivx/senior-dev/evidence` route.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, type AppStateStatus, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, type AppStateStatus, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useQuery } from '@tanstack/react-query';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 let LIVE_WORK_INSTANCE_COUNT = 0;
 const LIVE_WORK_POLL_MS = 20_000;
@@ -42,8 +43,7 @@ async function fetchEvidence(): Promise<EvidenceBundle | null> {
   if (!token) return null;
   const response = await fetch(`${base}/api/ivx/senior-dev/evidence`, {
     method: 'GET',
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-  });
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }});
   if (!response.ok) return null;
   return (await response.json().catch(() => null)) as EvidenceBundle | null;
 }
@@ -86,8 +86,7 @@ export function IVXLiveWorkVisibility(): React.ReactElement | null {
     refetchOnWindowFocus: pollingEnabled,
     refetchOnReconnect: pollingEnabled,
     staleTime: LIVE_WORK_STALE_MS,
-    enabled: isPrimary,
-  });
+    enabled: isPrimary});
 
   const onRefresh = useCallback(() => {
     void query.refetch();
@@ -98,7 +97,7 @@ export function IVXLiveWorkVisibility(): React.ReactElement | null {
   if (query.isLoading) {
     return (
       <View style={styles.container} testID="ivx-live-work-visibility-loading">
-        <ActivityIndicator />
+        <ShimmerIndicator />
         <Text style={styles.muted}>Loading senior-dev evidence…</Text>
       </View>
     );
@@ -188,7 +187,6 @@ const styles = StyleSheet.create({
   refreshLabel: { color: '#fff', fontWeight: '600' as const, fontSize: 12 },
   statusPass: { color: '#0a7d2c', fontWeight: '600' as const },
   statusError: { color: '#b42318', fontWeight: '600' as const },
-  statusPending: { color: '#7a5b00', fontWeight: '600' as const },
-});
+  statusPending: { color: '#7a5b00', fontWeight: '600' as const }});
 
 export default IVXLiveWorkVisibility;

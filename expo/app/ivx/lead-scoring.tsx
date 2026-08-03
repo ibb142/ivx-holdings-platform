@@ -2,14 +2,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   ChevronDown,
   ChevronRight,
@@ -17,23 +15,21 @@ import {
   Flame,
   Gauge,
   Snowflake,
-  Sun,
-} from 'lucide-react-native';
+  Sun} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getLeadScoring,
   type LeadCategory,
   type LeadScore,
-  type LeadScoringResult,
-} from '@/src/modules/ivx-developer/leadScoringService';
+  type LeadScoringResult} from '@/src/modules/ivx-developer/leadScoringService';
 
 const CATEGORY_TONE: Record<LeadCategory, string> = {
   hot: Colors.error,
   warm: Colors.warning,
-  cold: Colors.info,
-};
+  cold: Colors.info};
 const CATEGORY_LABEL: Record<LeadCategory, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold' };
 
 function CategoryIcon({ category, size }: { category: LeadCategory; size: number }) {
@@ -125,8 +121,7 @@ function LeadScoringContent() {
 
   const query = useQuery<LeadScoringResult | null>({
     queryKey: ['ivx-lead-scoring'],
-    queryFn: getLeadScoring,
-  });
+    queryFn: getLeadScoring});
 
   const result = query.data ?? null;
   const leads = useMemo(() => result?.leads ?? [], [result]);
@@ -189,7 +184,7 @@ function LeadScoringContent() {
         ) : null}
 
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyCard}>
             <Gauge size={26} color={Colors.textTertiary} />
@@ -262,5 +257,4 @@ const styles = StyleSheet.create({
   signalDetail: { fontSize: 11.5, lineHeight: 16, color: Colors.textTertiary },
   emptyCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 26, gap: 8, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   emptyTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
-  emptyBody: { fontSize: 12.5, lineHeight: 18, color: Colors.textSecondary, textAlign: 'center' },
-});
+  emptyBody: { fontSize: 12.5, lineHeight: 18, color: Colors.textSecondary, textAlign: 'center' }});

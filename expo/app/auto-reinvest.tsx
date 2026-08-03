@@ -7,8 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Animated,
-} from 'react-native';
+  Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -19,8 +18,7 @@ import {
   Check,
   Info,
   DollarSign,
-  Calendar,
-} from 'lucide-react-native';
+  Calendar} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useHoldings } from '@/lib/data-hooks';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
@@ -53,8 +51,7 @@ export default function AutoReinvestScreen() {
         nextDividendDate: '2026-06-01',
         estimatedDividend: h.shares * 0.40,
         sharesOwned: h.shares,
-        pricePerShare: h.avgCostBasis || 0,
-      })));
+        pricePerShare: h.avgCostBasis || 0})));
     }
   }, [holdings, dripSettings.length]);
 
@@ -64,8 +61,7 @@ export default function AutoReinvestScreen() {
         toValue: 1,
         duration: 400,
         delay: 100 + index * 100,
-        useNativeDriver: true,
-      }).start();
+        useNativeDriver: true}).start();
     });
   }, [slideAnims]);
 
@@ -188,10 +184,7 @@ export default function AutoReinvestScreen() {
                   transform: [{
                     translateY: (slideAnims[index] || new Animated.Value(1)).interpolate({
                       inputRange: [0, 1],
-                      outputRange: [20, 0],
-                    }),
-                  }],
-                },
+                      outputRange: [20, 0]})}]},
               ]}
             >
               <View style={styles.holdingHeader}>
@@ -315,5 +308,4 @@ const styles = StyleSheet.create({
   projectionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
   projectionLabel: { color: Colors.textSecondary, fontSize: 13 },
   projectionValue: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

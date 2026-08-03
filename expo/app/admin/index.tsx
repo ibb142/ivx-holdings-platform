@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   TextInput,
-  Modal,
-} from 'react-native';
+  Modal} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
@@ -69,8 +68,7 @@ import {
   MapPin,
   Send,
   Sliders,
-  Cpu,
-} from 'lucide-react-native';
+  Cpu} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -91,8 +89,7 @@ const adminTeamMembers = [
     email: 'kimberly@ivxholding.com',
     status: 'active' as const,
     avatarInitials: 'KP',
-    avatarColor: '#FF6B9D',
-  },
+    avatarColor: '#FF6B9D'},
   {
     id: 'mgr-sharon',
     name: 'Sharon',
@@ -100,8 +97,7 @@ const adminTeamMembers = [
     email: 'sharon@ivxholding.com',
     status: 'active' as const,
     avatarInitials: 'SH',
-    avatarColor: '#4ECDC4',
-  },
+    avatarColor: '#4ECDC4'},
 ];
 
 const ADMIN_MODULES = [
@@ -202,8 +198,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Marketing': '#FF9F43',
   'AI & Intelligence': '#A78BFA',
   'Email': '#38BDF8',
-  'Settings': '#9A9A9A',
-};
+  'Settings': '#9A9A9A'};
 
 console.log('[Admin] v6 ADMIN_MODULES loaded:', ADMIN_MODULES.length, 'modules');
 
@@ -235,8 +230,7 @@ export default function AdminDashboard() {
     refetchOnWindowFocus: false,
     placeholderData: (prev: any) => prev,
     retry: 0,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const transactionsQuery = useQuery<any>({
     queryKey: ['transactions.list', { page: 1, limit: 5 }],
@@ -252,8 +246,7 @@ export default function AdminDashboard() {
     staleTime: 1000 * 30,
     placeholderData: (prev: any) => prev,
     retry: 0,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const memberAuditQuery = useQuery<AdminMemberRegistrySnapshot>({
     queryKey: ['admin-member-registry-snapshot'],
@@ -262,8 +255,7 @@ export default function AdminDashboard() {
     refetchInterval: isScreenFocused ? ADMIN_AUDIT_REFRESH_MS : false,
     refetchIntervalInBackground: false,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const deployAccessQuery = useQuery({
     queryKey: ['admin-deploy-access-diagnostic'],
@@ -272,8 +264,7 @@ export default function AdminDashboard() {
     refetchInterval: isScreenFocused ? ADMIN_AUDIT_REFRESH_MS : false,
     refetchIntervalInBackground: false,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const autoDeployStatusQuery = useQuery({
     queryKey: ['admin-auto-deploy-status'],
@@ -282,8 +273,7 @@ export default function AdminDashboard() {
     refetchInterval: isScreenFocused ? ADMIN_AUDIT_REFRESH_MS : false,
     refetchIntervalInBackground: false,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
+    refetchOnWindowFocus: false});
 
   const pendingKycQuery = useQuery<any>({
     queryKey: ['members.list', { kycStatus: 'pending', limit: 10 }],
@@ -299,8 +289,7 @@ export default function AdminDashboard() {
     staleTime: 1000 * 60,
     placeholderData: (prev: any) => prev,
     retry: 0,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const inReviewKycQuery = useQuery<any>({
     queryKey: ['members.list', { kycStatus: 'in_review', limit: 10 }],
@@ -316,8 +305,7 @@ export default function AdminDashboard() {
     staleTime: 1000 * 60,
     placeholderData: (prev: any) => prev,
     retry: 0,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const stats = dashboardQuery.data;
   const recentTransactions = transactionsQuery.data?.transactions ?? [];
@@ -388,26 +376,22 @@ export default function AdminDashboard() {
         id: 'member-merged',
         label: 'Durable member registry',
         value: snapshot ? String(snapshot.mergedCount) : '... ',
-        tone: snapshot && snapshot.mergedCount > 0 ? 'good' : 'warn',
-      },
+        tone: snapshot && snapshot.mergedCount > 0 ? 'good' : 'warn'},
       {
         id: 'member-remote',
         label: 'Remote profiles',
         value: snapshot ? String(snapshot.remoteProfileCount) : '... ',
-        tone: snapshot && snapshot.remoteProfileCount > 0 ? 'good' : 'warn',
-      },
+        tone: snapshot && snapshot.remoteProfileCount > 0 ? 'good' : 'warn'},
       {
         id: 'member-shadow',
         label: 'Waitlist shadows',
         value: snapshot ? String(snapshot.remoteWaitlistShadowCount) : '... ',
-        tone: snapshot && snapshot.remoteWaitlistShadowCount > 0 ? 'good' : 'warn',
-      },
+        tone: snapshot && snapshot.remoteWaitlistShadowCount > 0 ? 'good' : 'warn'},
       {
         id: 'member-local-only',
         label: 'Local-only recovery',
         value: snapshot ? String(snapshot.staleLocalOnlyCount) : '... ',
-        tone: snapshot && snapshot.staleLocalOnlyCount === 0 ? 'good' : 'warn',
-      },
+        tone: snapshot && snapshot.staleLocalOnlyCount === 0 ? 'good' : 'warn'},
     ];
   }, [memberAuditQuery.data]);
 
@@ -419,26 +403,22 @@ export default function AdminDashboard() {
         id: 'owner-auth',
         label: 'Authenticated session',
         value: auth.isAuthenticated ? 'Live' : 'Missing',
-        tone: auth.isAuthenticated ? 'good' : 'bad',
-      },
+        tone: auth.isAuthenticated ? 'good' : 'bad'},
       {
         id: 'owner-role',
         label: 'Resolved role',
         value: deployAccess?.role ?? auth.userRole ?? 'unknown',
-        tone: (deployAccess?.role ?? auth.userRole) && (deployAccess?.role ?? auth.userRole) !== 'investor' ? 'good' : 'warn',
-      },
+        tone: (deployAccess?.role ?? auth.userRole) && (deployAccess?.role ?? auth.userRole) !== 'investor' ? 'good' : 'warn'},
       {
         id: 'owner-trusted',
         label: 'Trusted owner path',
         value: auth.isOwnerIPAccess ? 'Restored on verified network' : trustedOwnerEnabled ? 'Configured, normal session active' : 'Not active',
-        tone: auth.isOwnerIPAccess ? 'good' : trustedOwnerEnabled ? 'warn' : 'warn',
-      },
+        tone: auth.isOwnerIPAccess ? 'good' : trustedOwnerEnabled ? 'warn' : 'warn'},
       {
         id: 'owner-ip',
         label: 'Detected IP',
         value: auth.detectedIP ?? 'Unavailable',
-        tone: auth.detectedIP ? 'good' : 'warn',
-      },
+        tone: auth.detectedIP ? 'good' : 'warn'},
     ];
   }, [auth.detectedIP, auth.isAuthenticated, auth.isOwnerIPAccess, auth.userRole, deployAccessQuery.data]);
 
@@ -450,26 +430,22 @@ export default function AdminDashboard() {
         id: 'deploy-access',
         label: 'Deploy write access',
         value: deployAccess?.allowed ? 'Verified' : 'Blocked',
-        tone: deployAccess?.allowed ? 'good' : 'bad',
-      },
+        tone: deployAccess?.allowed ? 'good' : 'bad'},
       {
         id: 'deploy-token',
         label: 'Fresh auth token',
         value: deployAccess?.tokenAvailable ? 'Ready' : 'Missing',
-        tone: deployAccess?.tokenAvailable ? 'good' : 'bad',
-      },
+        tone: deployAccess?.tokenAvailable ? 'good' : 'bad'},
       {
         id: 'auto-deploy',
         label: 'Auto-deploy',
         value: autoDeploy?.config.enabled ? 'Enabled' : 'Disabled',
-        tone: autoDeploy?.config.enabled ? 'good' : 'warn',
-      },
+        tone: autoDeploy?.config.enabled ? 'good' : 'warn'},
       {
         id: 'publish-trigger',
         label: 'Publish trigger',
         value: autoDeploy?.config.deployOnDealPublish ? 'On' : 'Off',
-        tone: autoDeploy?.config.deployOnDealPublish ? 'good' : 'warn',
-      },
+        tone: autoDeploy?.config.deployOnDealPublish ? 'good' : 'warn'},
     ];
   }, [autoDeployStatusQuery.data, deployAccessQuery.data]);
 
@@ -479,8 +455,7 @@ export default function AdminDashboard() {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-    });
+      minute: '2-digit'});
   }, []);
 
   const getTransactionIcon = useCallback((type: string) => {
@@ -957,8 +932,7 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -966,53 +940,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   title: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   searchBtn: {
     backgroundColor: Colors.primary + '15',
     width: 38,
     height: 38,
     borderRadius: 10,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   exitBtn: {
     backgroundColor: Colors.negative + '18',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   exitBtnText: {
     color: Colors.negative,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   searchModal: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   searchHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1020,8 +985,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   searchInputWrap: {
     flex: 1,
     flexDirection: 'row',
@@ -1032,47 +996,38 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: Colors.text,
-  },
+    color: Colors.text},
   searchCancel: {
     paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
+    paddingHorizontal: 4},
   searchCancelText: {
     fontSize: 15,
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   searchResults: {
     flex: 1,
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   searchCategory: {
-    marginTop: 20,
-  },
+    marginTop: 20},
   searchCategoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   searchCategoryDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   searchCategoryTitle: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   searchItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1081,41 +1036,34 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchItemIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
-  },
+    marginRight: 10},
   searchItemName: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   noResults: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-  },
+    paddingVertical: 60},
   noResultsTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginTop: 14,
-  },
+    marginTop: 14},
   noResultsSub: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   systemCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1127,8 +1075,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: '#00E676',
-  },
+    borderColor: '#00E676'},
   autonomousLiveCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1140,98 +1087,81 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: '#00E676',
-  },
+    borderColor: '#00E676'},
   autonomousLiveCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   autonomousLiveCardIcon: {
     width: 48,
     height: 48,
     borderRadius: 13,
     backgroundColor: '#00E676',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   autonomousLiveCardText: {
-    flex: 1,
-  },
+    flex: 1},
   autonomousLiveCardLiveRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   autonomousLiveCardLiveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00E676',
-  },
+    backgroundColor: '#00E676'},
   autonomousLiveCardLiveLabel: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: '#00E676',
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   autonomousLiveCardTitle: {
     fontSize: 17,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   autonomousLiveCardSub: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 3,
-  },
+    marginTop: 3},
   systemCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   systemCardIcon: {
     width: 48,
     height: 48,
     borderRadius: 13,
     backgroundColor: '#00E676',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   systemCardText: {
-    flex: 1,
-  },
+    flex: 1},
   systemCardLiveRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   systemCardLiveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00E676',
-  },
+    backgroundColor: '#00E676'},
   systemCardLiveLabel: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: '#00E676',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   systemCardTitle: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#FFFFFF',
-  },
+    color: '#FFFFFF'},
   systemCardSub: {
     fontSize: 11,
     color: '#8B9CB6',
-    marginTop: 2,
-  },
+    marginTop: 2},
   activationCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1242,53 +1172,44 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   activationCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
-  },
+    flex: 1},
   activationCardIcon: {
     width: 42,
     height: 42,
     borderRadius: 11,
     backgroundColor: Colors.primary + '20',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   activationCardText: {
-    flex: 1,
-  },
+    flex: 1},
   activationCardLiveRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   activationCardLiveDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   activationCardLiveLabel: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: Colors.positive,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   activationCardTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   activationCardSub: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   teamSection: {
     marginHorizontal: 14,
     marginBottom: 8,
@@ -1296,20 +1217,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   teamHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   teamHeaderTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.text,
-    flex: 1,
-  },
+    flex: 1},
   teamOnlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1317,44 +1235,37 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.positive + '15',
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   teamOnlineDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   teamOnlineText: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: Colors.positive,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   teamList: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   teamCard: {
     flex: 1,
     alignItems: 'center',
     backgroundColor: Colors.background,
     borderRadius: 12,
-    padding: 12,
-  },
+    padding: 12},
   teamAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   teamAvatarText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: '#000',
-  },
+    color: '#000'},
   teamStatusDot: {
     width: 10,
     height: 10,
@@ -1363,70 +1274,58 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     borderWidth: 2,
-    borderColor: Colors.background,
-  },
+    borderColor: Colors.background},
   teamStatusActive: {
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   teamStatusAway: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   teamName: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.text,
     textAlign: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   teamRoleBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   teamRoleText: {
     fontSize: 9,
     fontWeight: '600' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 14,
     paddingVertical: 4,
-    gap: 10,
-  },
+    gap: 10},
   statCard: {
     width: '47%' as any,
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statIcon: {
     width: 40,
     height: 40,
     borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   statValue: {
     fontSize: 17,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   statLabel: {
     fontSize: 12,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   statSub: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 3,
-  },
+    marginTop: 3},
   metricsRow: {
     flexDirection: 'row',
     marginHorizontal: 14,
@@ -1436,51 +1335,41 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 12,
-  },
+    padding: 12},
   metricItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   metricValue: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   metricLabel: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   metricDivider: {
     width: 1,
-    backgroundColor: Colors.border,
-  },
+    backgroundColor: Colors.border},
   section: {
     paddingHorizontal: 14,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   seeAll: {
     fontSize: 13,
     color: Colors.primary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   kycCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1490,42 +1379,33 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   kycInfo: {
-    flex: 1,
-  },
+    flex: 1},
   kycName: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   kycEmail: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   kycRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   kycBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   kycPending: {
-    backgroundColor: Colors.warning + '20',
-  },
+    backgroundColor: Colors.warning + '20'},
   kycInReview: {
-    backgroundColor: Colors.primary + '20',
-  },
+    backgroundColor: Colors.primary + '20'},
   kycBadgeText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   txCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1534,8 +1414,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   txIconWrap: {
     width: 34,
     height: 34,
@@ -1543,104 +1422,81 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
-  },
+    marginRight: 10},
   txInfo: {
-    flex: 1,
-  },
+    flex: 1},
   txUser: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   txDesc: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   txDate: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 3,
-  },
+    marginTop: 3},
   txAmountWrap: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   txAmount: {
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   positive: {
-    color: Colors.positive,
-  },
+    color: Colors.positive},
   negative: {
-    color: Colors.negative,
-  },
+    color: Colors.negative},
   txStatusBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    marginTop: 3,
-  },
+    marginTop: 3},
   txCompleted: {
-    backgroundColor: Colors.positive + '20',
-  },
+    backgroundColor: Colors.positive + '20'},
   txPendingBadge: {
-    backgroundColor: Colors.warning + '20',
-  },
+    backgroundColor: Colors.warning + '20'},
   txFailed: {
-    backgroundColor: Colors.negative + '20',
-  },
+    backgroundColor: Colors.negative + '20'},
   txStatusText: {
     fontSize: 9,
     fontWeight: '600' as const,
     color: Colors.text,
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   emptyState: {
     paddingVertical: 20,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   emptyText: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   modulesSection: {
     paddingHorizontal: 14,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   modulesSectionTitle: {
     fontSize: 18,
     fontWeight: '800' as const,
     color: Colors.text,
     marginBottom: 14,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   categoryBlock: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   categoryLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   categoryDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   categoryLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   moduleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   modCard: {
     flex: 1,
     minWidth: '29%' as any,
@@ -1651,25 +1507,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
+    gap: 6},
   modIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 11,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   modName: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.text,
     textAlign: 'center',
-    lineHeight: 13,
-  },
+    lineHeight: 13},
   bottomPad: {
-    height: 120,
-  },
+    height: 120},
   auditPanel: {
     marginHorizontal: 14,
     marginBottom: 10,
@@ -1678,95 +1530,79 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(59,130,246,0.28)',
-    gap: 14,
-  },
+    gap: 14},
   auditPanelHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   auditPanelEyebrow: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: '#7DD3FC',
     letterSpacing: 1,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   auditPanelTitle: {
     fontSize: 17,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   auditPanelSub: {
     marginTop: 4,
     fontSize: 12,
     lineHeight: 18,
     color: '#9FB0C8',
-    maxWidth: 260,
-  },
+    maxWidth: 260},
   auditPanelAction: {
     backgroundColor: 'rgba(125,211,252,0.14)',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(125,211,252,0.22)',
-  },
+    borderColor: 'rgba(125,211,252,0.22)'},
   auditPanelActionText: {
     color: '#7DD3FC',
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   auditGrid: {
-    gap: 10,
-  },
+    gap: 10},
   auditSectionCard: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 14,
     padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    gap: 8,
-  },
+    gap: 8},
   auditSectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   auditSectionTitle: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   auditRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-  },
+    gap: 12},
   auditRowLabel: {
     flex: 1,
     fontSize: 12,
-    color: '#9FB0C8',
-  },
+    color: '#9FB0C8'},
   auditRowValue: {
     maxWidth: '52%' as const,
     fontSize: 12,
     fontWeight: '700' as const,
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   auditHintText: {
     fontSize: 11,
     lineHeight: 16,
-    color: '#F5C16C',
-  },
+    color: '#F5C16C'},
   auditQuickActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   auditQuickBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1776,13 +1612,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   auditQuickBtnText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   regAuditCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1793,40 +1627,32 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1.5,
-    borderColor: Colors.primary + '50',
-  },
+    borderColor: Colors.primary + '50'},
   regAuditCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-  },
+    flex: 1},
   regAuditCardIcon: {
     width: 44,
     height: 44,
     borderRadius: 12,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   regAuditCardText: {
-    flex: 1,
-  },
+    flex: 1},
   regAuditCardLabel: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: Colors.primary,
     letterSpacing: 0.8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   regAuditCardTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   regAuditCardSub: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
-});
+    marginTop: 1}});

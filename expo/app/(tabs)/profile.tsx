@@ -8,8 +8,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import {
@@ -41,8 +40,7 @@ import {
   Rocket,
   BarChart3,
   CreditCard,
-  Cpu,
-} from 'lucide-react-native';
+  Cpu} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
@@ -119,8 +117,7 @@ export default function ProfileScreen() {
       return data;
     },
     staleTime: 1000 * 60 * 2,
-    enabled: !!profileData,
-  });
+    enabled: !!profileData});
 
   const currentUser = useMemo(() => {
     const pd = profileData;
@@ -139,8 +136,7 @@ export default function ProfileScreen() {
       kycStatus: (isOwnerOrAdmin ? 'approved' : (pd?.kycStatus ?? 'pending')) as 'approved' | 'pending' | 'in_review' | 'rejected',
       walletBalance: balanceQuery.data?.available ?? (pd as any)?.walletBalance ?? 0,
       totalInvested: balanceQuery.data?.invested ?? (pd as any)?.totalInvested ?? 0,
-      totalReturns: (pd as any)?.totalReturns ?? 0,
-    };
+      totalReturns: (pd as any)?.totalReturns ?? 0};
   }, [profileData, balanceQuery.data]);
 
   const classificationQuery = useQuery({
@@ -152,8 +148,7 @@ export default function ProfileScreen() {
       return result.ok ? result.classification ?? null : null;
     },
     staleTime: 1000 * 60 * 5,
-    enabled: !!profileData && !currentUser.isOwnerOrAdmin,
-  });
+    enabled: !!profileData && !currentUser.isOwnerOrAdmin});
 
   // Treat the signed-in person as an owner session when their role is owner/admin
   // or their email matches the approved owner email. When true, the yellow card
@@ -666,24 +661,19 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   headerTitle: {
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   settingsButton: {
-    padding: 8,
-  },
+    padding: 8},
   profileCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
@@ -692,134 +682,110 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   avatar: {
     borderWidth: 2,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   avatarPlaceholder: {
     borderWidth: 2,
     borderColor: Colors.primary,
     backgroundColor: Colors.surfaceElevated,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   profileInfo: {
-    flex: 1,
-  },
+    flex: 1},
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginBottom: 4,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   userName: {
     fontWeight: '700' as const,
     color: Colors.text,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   userEmail: {
     color: Colors.textSecondary,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   kycBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   kycDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   kycText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   section: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   sectionTitle: {
     color: Colors.textTertiary,
     fontWeight: '700' as const,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   menuGroup: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   ownerLoginButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: Colors.primary,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   ownerLoginIcon: {
     borderRadius: 11,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ownerLoginTitle: {
     color: Colors.background,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownerLoginSubtitle: {
     color: Colors.background,
     opacity: 0.85,
-    marginTop: 2,
-  },
+    marginTop: 2},
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   menuItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   menuItemIcon: {
     borderRadius: 10,
     backgroundColor: Colors.surfaceLight,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   menuItemTitle: {
     color: Colors.text,
     fontWeight: '600' as const,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   menuItemSubtitle: {
     color: Colors.textTertiary,
     marginTop: 2,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   menuItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   badge: {
     width: 22,
     height: 22,
     borderRadius: 11,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -827,75 +793,59 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.error + '15',
     borderRadius: 14,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   logoutText: {
     color: Colors.error,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   versionText: {
     color: Colors.textTertiary,
     fontSize: 12,
     textAlign: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   companySection: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   companyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   companyLogo: {
-    borderRadius: 12,
-  },
+    borderRadius: 12},
   companyName: {
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   companyDescription: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   companyDetails: {
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   companyDetailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   companyDetailText: {
     color: Colors.textSecondary,
-    flex: 1,
-  },
+    flex: 1},
   companyLegal: {
     color: Colors.textTertiary,
     textAlign: 'center',
     marginTop: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   bottomPadding: {
-    height: 120,
-  },
+    height: 120},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     paddingTop: 8,
     paddingBottom: 160,
-    flexGrow: 1,
-  },
-});
+    flexGrow: 1}});

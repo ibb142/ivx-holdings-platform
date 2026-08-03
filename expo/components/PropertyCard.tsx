@@ -51,8 +51,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
-} from 'react-native';
+  Image} from 'react-native';
 import { MapPin, TrendingUp, Building2, Brain, ImageOff, Zap } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter, Href } from 'expo-router';
@@ -98,8 +97,7 @@ const PROPERTY_TYPE_MAP: Record<string, TranslationKeys> = {
   'retail': 'typeRetail',
   'hospitality': 'typeHospitality',
   'office': 'typeOffice',
-  'land': 'typeLand',
-};
+  'land': 'typeLand'};
 
 const CompactPropertyImage = memo(function CompactPropertyImage({ uri, height, name }: { uri: string; height: number; name: string }) {
   const [failed, setFailed] = useState(false);
@@ -336,42 +334,35 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   imageWrapper: {
-    position: 'relative',
-  },
+    position: 'relative'},
   statusBadge: {
     position: 'absolute',
     top: 16,
     left: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusText: {
     color: Colors.black,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   content: {
-    padding: 16,
-  },
+    padding: 16},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   name: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: Colors.text,
     flex: 1,
     marginRight: 8,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   typeTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -379,24 +370,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundTertiary,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   typeText: {
     fontSize: 11,
     color: Colors.primary,
     fontWeight: '600' as const,
-    textTransform: 'capitalize',
-  },
+    textTransform: 'capitalize'},
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   location: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -405,70 +392,56 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   stat: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   occupancyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   statDivider: {
     width: 1,
     height: 30,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   statValue: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   statLabel: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   progressSection: {
-    marginTop: 4,
-  },
+    marginTop: 4},
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   progressLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   progressPercent: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   progressBar: {
     height: 6,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   progressFill: {
     height: '100%',
     backgroundColor: Colors.primary,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   targetText: {
     fontSize: 12,
     color: Colors.textTertiary,
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   buyBtnRow: {
-    marginTop: 14,
-  },
+    marginTop: 14},
   buySharesBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -476,13 +449,11 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 14,
-  },
+    paddingVertical: 14},
   buySharesBtnText: {
     color: '#000',
     fontSize: 15,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   aiScoreBadgeCompact: {
     position: 'absolute',
     top: 6,
@@ -492,13 +463,11 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   aiScoreTextCompact: {
     color: Colors.black,
     fontSize: 9,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   aiScoreBadgeFull: {
     position: 'absolute',
     top: 16,
@@ -508,19 +477,16 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   aiScoreTextFull: {
     color: Colors.black,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   aiScoreLabelFull: {
     color: Colors.black,
     fontSize: 10,
     fontWeight: '700' as const,
-    opacity: 0.8,
-  },
+    opacity: 0.8},
   compactContainer: {
     width: 160,
     backgroundColor: Colors.surface,
@@ -528,44 +494,36 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginRight: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   compactImage: {
     width: '100%',
-    height: 100,
-  },
+    height: 100},
   compactImagePlaceholder: {
     backgroundColor: Colors.surface,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   compactContent: {
-    padding: 10,
-  },
+    padding: 10},
   compactName: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   compactLocation: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   compactLocationText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   compactStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   compactBuyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -573,21 +531,16 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: Colors.primary,
     borderRadius: 8,
-    paddingVertical: 7,
-  },
+    paddingVertical: 7},
   compactBuyBtnText: {
     color: '#000',
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   compactPrice: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   compactYield: {
     fontSize: 11,
     color: Colors.success,
-    fontWeight: '600' as const,
-  },
-});
+    fontWeight: '600' as const}});

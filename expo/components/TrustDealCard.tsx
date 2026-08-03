@@ -6,8 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   NativeSyntheticEvent,
-  NativeScrollEvent,
-} from 'react-native';
+  NativeScrollEvent} from 'react-native';
 import { Image } from 'expo-image';
 import {
   Shield,
@@ -15,8 +14,7 @@ import {
   CheckCircle2,
   FileText,
   Lock,
-  HardHat,
-} from 'lucide-react-native';
+  HardHat} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact, formatCurrencyWithDecimals } from '@/lib/formatters';
@@ -75,8 +73,7 @@ function getDefaultTrustInfo(deal: ParsedJVDeal): DealTrustInfo {
     ],
     riskFactors: [],
     keyMilestones: [],
-    documents: [],
-  };
+    documents: []};
 }
 
 function formatTimelineString(trust: DealTrustInfo): string {
@@ -104,8 +101,7 @@ const TrustDealCard = memo(function TrustDealCard({
   deal,
   onInvestNow,
   onViewDetails,
-  galleryWidth = 300,
-}: TrustDealCardProps) {
+  galleryWidth = 300}: TrustDealCardProps) {
   const trust = useMemo(() => {
     if (deal.trustInfo) {
       return deal.trustInfo;
@@ -122,8 +118,7 @@ const TrustDealCard = memo(function TrustDealCard({
         timelineUnit: deal.trustMarket.timelineUnit ?? 'months',
         priceChange1h: deal.trustMarket.priceChange1h,
         priceChange2h: deal.trustMarket.priceChange2h,
-        ownershipLabel: deal.trustMarket.ownershipLabel ?? ownershipSnapshot.ownershipText,
-      };
+        ownershipLabel: deal.trustMarket.ownershipLabel ?? ownershipSnapshot.ownershipText};
     }
     return getDefaultTrustInfo(deal);
   }, [deal]);
@@ -138,8 +133,7 @@ const TrustDealCard = memo(function TrustDealCard({
       publishedAt: deal.publishedAt,
       created_at: deal.created_at,
       updatedAt: typeof deal.updatedAt === 'string' ? deal.updatedAt : undefined,
-      updated_at: typeof deal.updated_at === 'string' ? deal.updated_at : undefined,
-    });
+      updated_at: typeof deal.updated_at === 'string' ? deal.updated_at : undefined});
   }, [deal.created_at, deal.id, deal.photos, deal.projectName, deal.publishedAt, deal.title, deal.updatedAt, deal.updated_at]);
 
   useEffect(() => {
@@ -213,23 +207,20 @@ const TrustDealCard = memo(function TrustDealCard({
       {
         key: 'fractional',
         label: 'Fractional',
-        value: `from ${formatCurrencyWithDecimals(minInvestment)}`,
-      },
+        value: `from ${formatCurrencyWithDecimals(minInvestment)}`},
     ];
 
     if (showEntryPill) {
       pills.push({
         key: 'entry',
         label: 'Entry',
-        value: formatCurrencyWithDecimals(shareEntryPrice),
-      });
+        value: formatCurrencyWithDecimals(shareEntryPrice)});
     }
 
     pills.push({
       key: 'ownership',
       label: 'Ownership',
-      value: minOwnershipLabel,
-    });
+      value: minOwnershipLabel});
 
     return pills;
   }, [minInvestment, minOwnershipLabel, shareEntryPrice, showEntryPill]);
@@ -428,22 +419,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     overflow: 'hidden',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   imageSection: {
     position: 'relative' as const,
     height: 200,
     overflow: 'hidden',
-    width: '100%',
-  },
+    width: '100%'},
   imageScroll: {
     height: 200,
-    width: '100%',
-  },
+    width: '100%'},
   image: {
     height: 200,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   photoDots: {
     position: 'absolute' as const,
     bottom: 10,
@@ -451,19 +438,16 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 5,
-  },
+    gap: 5},
   photoDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.overlay,
-  },
+    backgroundColor: Colors.overlay},
   photoDotActive: {
     width: 18,
     backgroundColor: Colors.primary,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   photoCounter: {
     position: 'absolute' as const,
     bottom: 10,
@@ -471,14 +455,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.overlay,
     borderRadius: 10,
     paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   photoCounterText: {
     color: Colors.white,
     fontSize: 11,
     fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   liveBadgeOverlay: {
     position: 'absolute' as const,
     top: 10,
@@ -491,20 +473,17 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '40',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   liveBadgeText: {
     color: Colors.success,
     fontSize: 9,
     fontWeight: '900' as const,
-    letterSpacing: 1.5,
-  },
+    letterSpacing: 1.5},
   verifiedBadgeOverlay: {
     position: 'absolute' as const,
     top: 10,
@@ -517,34 +496,28 @@ const styles = StyleSheet.create({
     borderColor: Colors.success + '30',
     borderRadius: 10,
     paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   verifiedBadgeText: {
     color: Colors.success,
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   content: {
-    padding: 18,
-  },
+    padding: 18},
   headerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   headerCopy: {
     flex: 1,
-    minWidth: 0,
-  },
+    minWidth: 0},
   dealTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '900' as const,
     letterSpacing: -0.3,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   salePriceChip: {
     flexShrink: 1,
     maxWidth: 130,
@@ -554,128 +527,105 @@ const styles = StyleSheet.create({
     borderColor: Colors.gold + '24',
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   salePriceChipLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-  },
+    letterSpacing: 0.8},
   salePriceChipValue: {
     color: Colors.primary,
     fontSize: 16,
     fontWeight: '900' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   salePriceChipSubtext: {
     color: Colors.success,
     fontSize: 11,
     fontWeight: '700' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   locationText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   divider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 14,
-  },
+    marginVertical: 14},
   metricsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   metric: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   metricValue: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: '900' as const,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   metricValueHighlight: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   metricLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 3,
-  },
+    marginTop: 3},
   metricSeparator: {
     width: 1,
     height: 32,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   marketStrip: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   marketStatPill: {
     flex: 1,
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   marketStatLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.6,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   marketStatValue: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   ownershipHint: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   trustRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     marginBottom: 12,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   trustItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   trustText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   trustBold: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   trustIndicators: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   trustBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -683,31 +633,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   trustBadgeText: {
     color: Colors.textSecondary,
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   actionRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   investBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   investBtnText: {
     color: Colors.black,
     fontSize: 15,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   detailsBtn: {
     flex: 1,
     alignItems: 'center',
@@ -716,27 +661,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   detailsBtnText: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   minInvestWrap: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   minInvestText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   minInvestBold: {
     color: Colors.text,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

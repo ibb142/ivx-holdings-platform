@@ -1,16 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Animated,
   Platform,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -33,8 +30,7 @@ import {
   Shield,
   Eye,
   ChevronDown,
-  ChevronUp,
-} from 'lucide-react-native';
+  ChevronUp} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { safeSetString } from '@/lib/safe-clipboard';
@@ -42,6 +38,7 @@ import { executeSupabaseSqlScript, isSupabaseSqlExecMissing } from '@/lib/supaba
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type DeployStatus = 'idle' | 'checking' | 'deploying' | 'success' | 'error';
 
@@ -180,8 +177,7 @@ export default function DeployWaitlistScreen() {
         return { exists: false, rowCount: 0, error: (err as Error)?.message };
       }
     },
-    staleTime: 5000,
-  });
+    staleTime: 5000});
 
   const entriesQuery = useQuery({
     queryKey: ['waitlist-entries'],
@@ -207,8 +203,7 @@ export default function DeployWaitlistScreen() {
       }
     },
     enabled: tableCheckQuery.data?.exists === true,
-    staleTime: 10000,
-  });
+    staleTime: 10000});
 
   const getSupabaseProjectRef = useCallback((): string | null => {
     const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
@@ -321,8 +316,7 @@ export default function DeployWaitlistScreen() {
           deployed_at: new Date().toISOString(),
           status: 'success',
           trigger: 'manual',
-          details: JSON.stringify({ action: 'deploy_waitlist_table', source: 'admin' }),
-        });
+          details: JSON.stringify({ action: 'deploy_waitlist_table', source: 'admin' })});
       } catch {
         console.log('[DeployWaitlist] Deploy log insert failed (non-critical)');
       }
@@ -344,8 +338,7 @@ export default function DeployWaitlistScreen() {
       setDeployMessage(err.message);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       console.log('[DeployWaitlist] Deploy FAILED:', err.message);
-    },
-  });
+    }});
 
   const handleDeploy = useCallback(() => {
     if (tableCheckQuery.data?.exists) {
@@ -398,8 +391,7 @@ export default function DeployWaitlistScreen() {
     if (!dateString) return '—';
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-      });
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
     } catch { return dateString; }
   };
 
@@ -440,7 +432,7 @@ export default function DeployWaitlistScreen() {
               { borderColor: tableExists ? '#00E676' : tableCheckQuery.isLoading ? Colors.primary : '#FF5252' },
             ]}>
               {tableCheckQuery.isLoading ? (
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
               ) : tableExists ? (
                 <CheckCircle size={28} color="#00E676" />
               ) : (
@@ -512,7 +504,7 @@ export default function DeployWaitlistScreen() {
         >
           {isDeploying ? (
             <View style={styles.deployBtnInner}>
-              <ActivityIndicator color="#000" size="small" />
+              <ShimmerIndicator color="#000" size="small" />
               <Text style={styles.deployBtnText}>{deployMessage}</Text>
             </View>
           ) : (
@@ -569,7 +561,7 @@ export default function DeployWaitlistScreen() {
               <View style={styles.entriesBlock}>
                 {entriesQuery.isLoading ? (
                   <View style={styles.entriesLoading}>
-                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <ShimmerIndicator size="small" color={Colors.primary} />
                     <Text style={styles.entriesLoadingText}>Loading entries...</Text>
                   </View>
                 ) : entries.length === 0 ? (
@@ -666,8 +658,7 @@ export default function DeployWaitlistScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -675,27 +666,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.card,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   refreshBtn: {
     width: 38,
     height: 38,
@@ -704,25 +691,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   statusCard: {
     margin: 16,
     padding: 18,
     backgroundColor: Colors.card,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statusTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   statusRing: {
     width: 68,
     height: 68,
@@ -730,49 +713,40 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   statusInfo: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   statusLabel: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   statusValue: {
     fontSize: 16,
     fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statusMeta: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   statusGrid: {
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingTop: 14,
-  },
+    paddingTop: 14},
   statusStat: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   statusStatValue: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statusStatLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -784,14 +758,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D2818',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#00E67630',
-  },
+    borderColor: '#00E67630'},
   successText: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
-    color: '#00E676',
-  },
+    color: '#00E676'},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -802,14 +774,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A0808',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FF525240',
-  },
+    borderColor: '#FF525240'},
   errorText: {
     flex: 1,
     fontSize: 12,
     color: '#FF8A80',
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   deployBtn: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -817,26 +787,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     height: 56,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   deployBtnDisabled: {
-    opacity: 0.7,
-  },
+    opacity: 0.7},
   deployBtnUpdate: {
     backgroundColor: '#1A3D1A',
     borderWidth: 1.5,
-    borderColor: '#00E676',
-  },
+    borderColor: '#00E676'},
   deployBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   deployBtnText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#000',
-  },
+    color: '#000'},
   sqlToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -848,18 +813,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   sqlToggleLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   sqlToggleText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   sqlBlock: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -868,8 +830,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 14,
-    maxHeight: 300,
-  },
+    maxHeight: 300},
   copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -879,19 +840,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: Colors.primary + '15',
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   copyBtnText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   sqlText: {
     fontSize: 11,
     color: '#8FBC8F',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   entriesToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -904,90 +862,74 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   entriesToggleLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   entriesToggleText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   entriesBlock: {
     marginHorizontal: 16,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   entriesLoading: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 30,
-  },
+    paddingVertical: 30},
   entriesLoadingText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   entriesEmpty: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 6,
-  },
+    gap: 6},
   entriesEmptyTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginTop: 6,
-  },
+    marginTop: 6},
   entriesEmptyText: {
     fontSize: 12,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
     paddingHorizontal: 20,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   entryCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 14,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   entryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   entryName: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   entryDate: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   entryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 3,
-  },
+    marginBottom: 3},
   entryDetail: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   entryTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 8,
-  },
+    marginTop: 8},
   entryTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -995,13 +937,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   entryTagText: {
     fontSize: 11,
     color: Colors.text,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   infoCard: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -1009,40 +949,34 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   infoTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   infoStep: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   infoStepNum: {
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: Colors.primary + '20',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   infoStepNumText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   infoStepText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
     lineHeight: 19,
-    marginTop: 2,
-  },
+    marginTop: 2},
   manualCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1053,20 +987,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A0E00',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FF980030',
-  },
+    borderColor: '#FF980030'},
   manualContent: {
-    flex: 1,
-  },
+    flex: 1},
   manualTitle: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: '#FF9800',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   manualText: {
     fontSize: 12,
     color: '#B87A3D',
-    lineHeight: 18,
-  },
-});
+    lineHeight: 18}});

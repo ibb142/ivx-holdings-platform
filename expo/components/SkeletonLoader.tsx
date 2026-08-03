@@ -31,8 +31,7 @@ export function Skeleton({ width = '100%', height = 16, borderRadius = 8, style 
           height,
           borderRadius,
           backgroundColor: Colors.surfaceLight,
-          opacity,
-        },
+          opacity},
         style,
       ]}
     />
@@ -107,18 +106,15 @@ const skeletonStyles = StyleSheet.create({
     overflow: 'hidden' as const,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cardContent: {
     padding: 16,
-    gap: 4,
-  },
+    gap: 4},
   cardRow: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginTop: 12,
-  },
+    marginTop: 12},
   listItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -128,26 +124,19 @@ const skeletonStyles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   listItemContent: {
-    flex: 1,
-  },
+    flex: 1},
   profile: {
     alignItems: 'center' as const,
-    paddingVertical: 24,
-  },
+    paddingVertical: 24},
   home: {
-    padding: 20,
-  },
+    padding: 20},
   homeHeader: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   homeRow: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
-    marginTop: 16,
-  },
-});
+    marginTop: 16}});

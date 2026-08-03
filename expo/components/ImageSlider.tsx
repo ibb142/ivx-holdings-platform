@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, memo, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   ScrollView,
   Image,
@@ -12,13 +11,12 @@ import {
   Modal,
   Animated,
   StatusBar,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+  Platform} from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ImageOff } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface ImageSliderProps {
   images: string[];
@@ -35,8 +33,7 @@ const ImageSlider = memo(function ImageSlider({
   images: imagesProp,
   height = 320,
   showPagination = true,
-  onImagePress,
-}: ImageSliderProps) {
+  onImagePress}: ImageSliderProps) {
   const images = React.useMemo(() => {
     const filtered = Array.isArray(imagesProp) ? imagesProp.filter(img => img && img.length > 0) : [];
     return filtered.length > 0 ? filtered.slice(0, 8) : [];
@@ -78,8 +75,7 @@ const ImageSlider = memo(function ImageSlider({
           toValue: i === newIndex ? 1 : 0,
           useNativeDriver: false,
           tension: 60,
-          friction: 8,
-        }).start();
+          friction: 8}).start();
       }
     });
   }, [images, indicatorAnims]);
@@ -131,14 +127,12 @@ const ImageSlider = memo(function ImageSlider({
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 250,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.spring(scaleAnim, {
         toValue: 1,
         useNativeDriver: true,
         tension: 50,
-        friction: 9,
-      }),
+        friction: 9}),
     ]).start();
 
     if (onImagePress) {
@@ -152,13 +146,11 @@ const ImageSlider = memo(function ImageSlider({
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 200,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(scaleAnim, {
         toValue: 0.95,
         duration: 200,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
     ]).start(() => {
       setFullscreenVisible(false);
     });
@@ -169,8 +161,7 @@ const ImageSlider = memo(function ImageSlider({
       setTimeout(() => {
         fullscreenScrollRef.current?.scrollTo({
           x: fullscreenIndex * screenWidth,
-          animated: false,
-        });
+          animated: false});
       }, 50);
     }
   }, [fullscreenVisible, fullscreenIndex, screenWidth]);
@@ -185,8 +176,7 @@ const ImageSlider = memo(function ImageSlider({
       setFullscreenIndex(newIndex);
       fullscreenScrollRef.current?.scrollTo({
         x: newIndex * screenWidth,
-        animated: true,
-      });
+        animated: true});
     }
   }, [fullscreenIndex, images.length, screenWidth]);
 
@@ -234,7 +224,7 @@ const ImageSlider = memo(function ImageSlider({
           >
             {loadingStates[index] && (
               <View style={styles.loadingOverlay}>
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
               </View>
             )}
             <Image
@@ -259,16 +249,13 @@ const ImageSlider = memo(function ImageSlider({
               if (!anim) return null;
               const widthAnim = anim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [INDICATOR_SIZE, INDICATOR_ACTIVE_WIDTH],
-              });
+                outputRange: [INDICATOR_SIZE, INDICATOR_ACTIVE_WIDTH]});
               const opacityAnim = anim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0.4, 1],
-              });
+                outputRange: [0.4, 1]});
               const bgAnim = anim.interpolate({
                 inputRange: [0, 1],
-                outputRange: ['rgba(255,255,255,0.5)', Colors.primary],
-              });
+                outputRange: ['rgba(255,255,255,0.5)', Colors.primary]});
 
               return (
                 <Animated.View
@@ -278,8 +265,7 @@ const ImageSlider = memo(function ImageSlider({
                     {
                       width: widthAnim,
                       opacity: opacityAnim,
-                      backgroundColor: bgAnim,
-                    },
+                      backgroundColor: bgAnim},
                   ]}
                 />
               );
@@ -402,23 +388,19 @@ const styles = StyleSheet.create({
   container: {
     position: 'relative' as const,
     backgroundColor: '#000',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   imageContainer: {
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   image: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     backgroundColor: '#111',
-    zIndex: 1,
-  },
+    zIndex: 1},
   imageGradientBottom: {
     position: 'absolute' as const,
     bottom: 0,
@@ -426,23 +408,20 @@ const styles = StyleSheet.create({
     right: 0,
     height: 80,
     backgroundColor: 'transparent',
-    borderBottomWidth: 0,
-  },
+    borderBottomWidth: 0},
   imageGradientTop: {
     position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
     height: 60,
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   indicatorBar: {
     position: 'absolute' as const,
     bottom: 14,
     left: 0,
     right: 0,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   indicatorTrack: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -450,57 +429,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
+    backgroundColor: 'rgba(0,0,0,0.35)'},
   indicator: {
     height: INDICATOR_SIZE,
-    borderRadius: INDICATOR_SIZE / 2,
-  },
+    borderRadius: INDICATOR_SIZE / 2},
   counterContainer: {
     position: 'absolute' as const,
     top: 12,
-    right: 12,
-  },
+    right: 12},
   counterPill: {
     backgroundColor: 'rgba(0,0,0,0.55)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 14,
-
-  },
+    borderRadius: 14},
   counterText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   counterSeparator: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 11,
-  },
+    fontSize: 11},
   zoomHint: {
     position: 'absolute' as const,
     bottom: 14,
     right: 12,
     backgroundColor: 'rgba(0,0,0,0.35)',
     borderRadius: 12,
-    padding: 6,
-  },
+    padding: 6},
   fullscreenContainer: {
     flex: 1,
-    backgroundColor: '#000',
-  },
+    backgroundColor: '#000'},
   fullscreenContent: {
-    flex: 1,
-  },
+    flex: 1},
   fullscreenImageWrapper: {
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   fullscreenImage: {
     width: '100%',
-    height: '100%',
-  },
+    height: '100%'},
   fullscreenHeader: {
     position: 'absolute' as const,
     top: 0,
@@ -510,28 +477,24 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   fullscreenCloseBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   fullscreenCounterPill: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 16,
     paddingVertical: 7,
-    borderRadius: 20,
-  },
+    borderRadius: 20},
   fullscreenCounterText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   fullscreenNavBtn: {
     position: 'absolute' as const,
     top: '48%',
@@ -541,45 +504,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    marginTop: -22,
-  },
+    marginTop: -22},
   fullscreenNavLeft: {
-    left: 12,
-  },
+    left: 12},
   fullscreenNavRight: {
-    right: 12,
-  },
+    right: 12},
   fullscreenFooter: {
     position: 'absolute' as const,
     bottom: 0,
     left: 0,
     right: 0,
     alignItems: 'center' as const,
-    paddingTop: 12,
-  },
+    paddingTop: 12},
   fullscreenIndicatorRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   fullscreenDot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.3)'},
   fullscreenDotActive: {
     width: 22,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   fullscreenQualityBadge: {
     color: 'rgba(255,255,255,0.35)',
     fontSize: 10,
     fontWeight: '600' as const,
     letterSpacing: 1.2,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   emptyContainer: {
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
@@ -587,16 +542,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderStyle: 'dashed' as const,
-    gap: 8,
-  },
+    gap: 8},
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 14,
     fontWeight: '600' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   emptySubtext: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
-});
+    fontSize: 12}});

@@ -9,8 +9,9 @@
  * CONFIG_ERROR, UNKNOWN_ERROR
  */
 import React, { Component, type ReactNode } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity} from "react-native";
 import { RefreshCw, AlertCircle } from 'lucide-react-native';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ErrorCategory =
   | 'AUTH_ERROR'
@@ -54,8 +55,7 @@ const CATEGORY_MESSAGES: Record<ErrorCategory, string> = {
   DATA_ERROR: 'Could not load data from the server.',
   RENDER_ERROR: 'This section encountered a rendering error.',
   CONFIG_ERROR: 'Configuration issue detected.',
-  UNKNOWN_ERROR: 'An unexpected error occurred.',
-};
+  UNKNOWN_ERROR: 'An unexpected error occurred.'};
 
 export class ModuleErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null, category: 'UNKNOWN_ERROR', traceId: null };
@@ -65,8 +65,7 @@ export class ModuleErrorBoundary extends Component<Props, State> {
       hasError: true,
       error,
       category: classifyError(error),
-      traceId: generateTraceId(),
-    };
+      traceId: generateTraceId()};
   }
 
   componentDidCatch(error: Error) {
@@ -106,7 +105,7 @@ export class ModuleErrorBoundary extends Component<Props, State> {
 export function ModuleLoading({ moduleName }: { moduleName: string }) {
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#FFD700" />
+      <ShimmerIndicator size="large" color="#FFD700" />
       <Text style={styles.loadingText}>Loading {moduleName}…</Text>
     </View>
   );
@@ -129,8 +128,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    minHeight: 200,
-  },
+    minHeight: 200},
   card: {
     backgroundColor: '#14141B',
     borderRadius: 16,
@@ -138,8 +136,7 @@ const styles = StyleSheet.create({
     borderColor: '#242424',
     padding: 24,
     alignItems: 'center',
-    maxWidth: 320,
-  },
+    maxWidth: 320},
   iconWrap: {
     width: 56,
     height: 56,
@@ -147,27 +144,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B6B15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   moduleName: {
     color: '#FF6B6B',
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   message: {
     color: '#888',
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   traceId: {
     color: '#555',
     fontSize: 10,
     fontFamily: 'monospace' as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -175,28 +168,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700',
     borderRadius: 12,
     paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   retryText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   loadingText: {
     color: '#FFD700',
     fontSize: 14,
     fontWeight: '600' as const,
-    marginTop: 12,
-  },
+    marginTop: 12},
   emptyTitle: {
     color: '#888',
     fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   emptyMessage: {
     color: '#555',
     fontSize: 13,
-    textAlign: 'center',
-  },
-});
+    textAlign: 'center'}});

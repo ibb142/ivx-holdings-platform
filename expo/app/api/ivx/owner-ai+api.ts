@@ -3,8 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   IVX_OWNER_AI_PROFILE,
   IVX_OWNER_AI_ROOM_ID,
-  IVX_OWNER_AI_ROOM_SLUG,
-} from '@/constants/ivx-owner-ai';
+  IVX_OWNER_AI_ROOM_SLUG} from '@/constants/ivx-owner-ai';
 import { buildOwnerTrustPromptBlock } from '@/src/modules/ivx-owner-ai/services/ownerTrust';
 import {
   IVX_OWNER_AI_TABLES,
@@ -14,8 +13,7 @@ import {
   type IVXOwnerAICapabilityProof,
   type IVXOwnerAIHealthProbeResponse,
   type IVXOwnerAIRoomStatus,
-  type IVXOwnerAIResponse,
-} from '@/shared/ivx';
+  type IVXOwnerAIResponse} from '@/shared/ivx';
 
 type IVXOwnerAIRequestBody = {
   requestId?: string;
@@ -107,8 +105,7 @@ function buildGenericMessagePayload(input: {
       text: input.text,
       body: input.text,
       created_at: input.createdAt,
-      updated_at: input.updatedAt,
-    },
+      updated_at: input.updatedAt},
     {
       room_id: input.conversationId,
       user_id: input.senderId,
@@ -116,20 +113,17 @@ function buildGenericMessagePayload(input: {
       text: input.text,
       body: input.text,
       created_at: input.createdAt,
-      updated_at: input.updatedAt,
-    },
+      updated_at: input.updatedAt},
     {
       room_id: input.conversationId,
       sender_id: input.senderId,
       body: input.text,
-      created_at: input.createdAt,
-    },
+      created_at: input.createdAt},
     {
       room_id: input.conversationId,
       user_id: input.senderId,
       body: input.text,
-      created_at: input.createdAt,
-    },
+      created_at: input.createdAt},
   ];
 
   if (input.messageId) {
@@ -155,8 +149,7 @@ async function insertGenericMessage(
   const payloads = buildGenericMessagePayload({
     ...input,
     createdAt,
-    updatedAt,
-  });
+    updatedAt});
 
   let lastError: { message?: string } | null = null;
 
@@ -169,8 +162,7 @@ async function insertGenericMessage(
 
     console.log('[IVXOwnerAI-API] Generic message insert attempt failed:', {
       message: error.message,
-      keys: Object.keys(payload),
-    });
+      keys: Object.keys(payload)});
     lastError = error;
 
     if (error.message?.includes('column') && error.message?.includes('does not exist')) {
@@ -207,8 +199,7 @@ const JSON_HEADERS = {
   'Cache-Control': 'no-store',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-} as const;
+  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS'} as const;
 
 let cachedApiTables: ResolvedApiTables | null = null;
 const DEPLOYMENT_MARKER = 'ivx-owner-ai-2026-04-11t2215z';
@@ -270,8 +261,7 @@ async function resolveApiTables(client: SupabaseClient): Promise<ResolvedApiTabl
       conversations: IVX_OWNER_AI_TABLES.conversations,
       messages: IVX_OWNER_AI_TABLES.messages,
       inboxState: IVX_OWNER_AI_TABLES.inboxState,
-      aiRequests: IVX_OWNER_AI_TABLES.aiRequests,
-    };
+      aiRequests: IVX_OWNER_AI_TABLES.aiRequests};
     return cachedApiTables;
   }
 
@@ -285,8 +275,7 @@ async function resolveApiTables(client: SupabaseClient): Promise<ResolvedApiTabl
       conversations: 'conversations',
       messages: 'messages',
       inboxState: 'conversation_participants',
-      aiRequests: null,
-    };
+      aiRequests: null};
     return cachedApiTables;
   }
 
@@ -299,8 +288,7 @@ async function resolveApiTables(client: SupabaseClient): Promise<ResolvedApiTabl
       conversations: 'conversations',
       messages: 'messages',
       inboxState: 'conversation_participants',
-      aiRequests: null,
-    };
+      aiRequests: null};
     return cachedApiTables;
   }
 
@@ -311,8 +299,7 @@ async function resolveApiTables(client: SupabaseClient): Promise<ResolvedApiTabl
     conversations: IVX_OWNER_AI_TABLES.conversations,
     messages: IVX_OWNER_AI_TABLES.messages,
     inboxState: null,
-    aiRequests: null,
-  };
+    aiRequests: null};
   return cachedApiTables;
 }
 
@@ -321,24 +308,21 @@ function buildRoomStatus(tables: ResolvedApiTables): IVXOwnerAIRoomStatus {
     return {
       storageMode: 'primary_supabase_tables',
       visibility: 'shared',
-      deliveryMethod: 'primary_realtime',
-    };
+      deliveryMethod: 'primary_realtime'};
   }
 
   if (tables.schema === 'generic') {
     return {
       storageMode: 'alternate_room_schema',
       visibility: 'shared',
-      deliveryMethod: 'alternate_shared',
-    };
+      deliveryMethod: 'alternate_shared'};
   }
 
   return {
     storageMode: 'local_device_only',
     visibility: 'local_only',
     deliveryMethod: 'local_only',
-    warning: 'No shared IVX chat tables are available yet. AI replies can still run, but room sync stays local until the chat schema is provisioned.',
-  };
+    warning: 'No shared IVX chat tables are available yet. AI replies can still run, but room sync stays local until the chat schema is provisioned.'};
 }
 
 function sortConversationLookupRows(rows: ConversationLookupRow[]): ConversationLookupRow[] {
@@ -361,8 +345,7 @@ async function findExistingConversation(client: SupabaseClient, tables: Resolved
     return {
       id: IVX_OWNER_AI_ROOM_ID,
       title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-      subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle,
-    };
+      subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle};
   }
 
   const scopedClient = getScopedQueryClient(client, tables.dbSchema);
@@ -386,8 +369,7 @@ async function findExistingConversation(client: SupabaseClient, tables: Resolved
         dbSchema: tables.dbSchema,
         field: lookup.field,
         value: lookup.value,
-        message: error.message,
-      });
+        message: error.message});
       continue;
     }
 
@@ -412,16 +394,14 @@ async function findExistingConversation(client: SupabaseClient, tables: Resolved
       schema: tables.schema,
       dbSchema: tables.dbSchema,
       selectedId,
-      duplicateIds,
-    });
+      duplicateIds});
     throw new DuplicateOwnerRoomError(duplicateIds, selectedId);
   }
 
   return {
     id: readTrimmed(selectedRow.id) || IVX_OWNER_AI_ROOM_ID,
     title: readTrimmed(selectedRow.title) || IVX_OWNER_AI_PROFILE.sharedRoom.title,
-    subtitle: readTrimmed(selectedRow.subtitle) || null,
-  };
+    subtitle: readTrimmed(selectedRow.subtitle) || null};
 }
 
 async function ensureConversation(client: SupabaseClient, tables: ResolvedApiTables): Promise<ConversationResult> {
@@ -438,13 +418,11 @@ async function ensureConversation(client: SupabaseClient, tables: ResolvedApiTab
     title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
     subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle,
     last_message_text: null,
-    last_message_at: null,
-  };
+    last_message_at: null};
 
   const primaryPayload: Record<string, unknown> = {
     ...basePayload,
-    slug: IVX_OWNER_AI_ROOM_SLUG,
-  };
+    slug: IVX_OWNER_AI_ROOM_SLUG};
 
   if (tables.schema === 'ivx') {
     primaryPayload.created_at = nowIso();
@@ -460,8 +438,7 @@ async function ensureConversation(client: SupabaseClient, tables: ResolvedApiTab
     return {
       id: IVX_OWNER_AI_ROOM_ID,
       title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-      subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle,
-    };
+      subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle};
   }
 
   console.log('[IVXOwnerAI-API] Conversation upsert failed:', insertError.message);
@@ -478,16 +455,14 @@ async function ensureConversation(client: SupabaseClient, tables: ResolvedApiTab
       .upsert({
         id: IVX_OWNER_AI_ROOM_ID,
         title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-        subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle,
-      }, { onConflict: 'id' });
+        subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle}, { onConflict: 'id' });
 
     if (!simpleErr) {
       console.log('[IVXOwnerAI-API] Conversation created with minimal payload');
       return {
         id: IVX_OWNER_AI_ROOM_ID,
         title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-        subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle,
-      };
+        subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle};
     }
   }
 
@@ -495,8 +470,7 @@ async function ensureConversation(client: SupabaseClient, tables: ResolvedApiTab
   return {
     id: IVX_OWNER_AI_ROOM_ID,
     title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-    subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle,
-  };
+    subtitle: IVX_OWNER_AI_PROFILE.sharedRoom.subtitle};
 }
 
 async function loadRecentMessages(client: SupabaseClient, tables: ResolvedApiTables, conversationId: string): Promise<RecentMessageRow[]> {
@@ -520,8 +494,7 @@ async function loadRecentMessages(client: SupabaseClient, tables: ResolvedApiTab
     conversationField,
     conversationId,
     rowCount: Array.isArray(data) ? data.length : 0,
-    error: error?.message ?? null,
-  });
+    error: error?.message ?? null});
 
   if (error) {
     return [];
@@ -552,8 +525,7 @@ async function insertMessage(client: SupabaseClient, tables: ResolvedApiTables, 
   const payload: Record<string, unknown> = {
     conversation_id: input.conversationId,
     created_at: nowIso(),
-    updated_at: nowIso(),
-  };
+    updated_at: nowIso()};
 
   if (input.messageId) {
     payload.id = input.messageId;
@@ -579,8 +551,7 @@ async function insertMessage(client: SupabaseClient, tables: ResolvedApiTables, 
       conversation_id: input.conversationId,
       sender_id: input.senderId,
       sender_label: input.senderLabel,
-      text: input.text,
-    };
+      text: input.text};
     const { error: fallbackErr } = await scopedClient.from(tables.messages).insert(fallbackPayload);
     if (!fallbackErr) {
       console.log('[IVXOwnerAI-API] Message inserted with fallback payload');
@@ -606,8 +577,7 @@ async function updateConversationSummary(client: SupabaseClient, tables: Resolve
   const trimmedPreview = preview.length <= 120 ? preview : `${preview.slice(0, 117)}...`;
   const { error } = await scopedClient.from(tables.conversations).update({
     last_message_text: trimmedPreview,
-    last_message_at: nowIso(),
-  }).eq('id', conversationId);
+    last_message_at: nowIso()}).eq('id', conversationId);
 
   if (error) {
     console.log('[IVXOwnerAI-API] Conversation summary update non-blocking error:', error.message);
@@ -624,10 +594,8 @@ async function ensureInboxState(client: SupabaseClient, tables: ResolvedApiTable
     user_id: userId,
     unread_count: 0,
     last_read_at: nowIso(),
-    updated_at: nowIso(),
-  }, {
-    onConflict: 'conversation_id,user_id',
-  });
+    updated_at: nowIso()}, {
+    onConflict: 'conversation_id,user_id'});
 
   if (error) {
     console.log('[IVXOwnerAI-API] Inbox state upsert non-blocking error:', error.message);
@@ -687,10 +655,8 @@ async function logAIRequest(client: SupabaseClient, tables: ResolvedApiTables, i
     status: input.status,
     model: input.model,
     created_at: nowIso(),
-    updated_at: nowIso(),
-  }, {
-    onConflict: 'id',
-  });
+    updated_at: nowIso()}, {
+    onConflict: 'id'});
 
   if (error) {
     console.log('[IVXOwnerAI-API] AI request insert non-blocking error:', error.message);
@@ -715,8 +681,7 @@ function buildPrompt(input: {
     ownerRoomAuthenticated: input.conversation.id === IVX_OWNER_AI_ROOM_ID || input.conversation.title === IVX_OWNER_AI_PROFILE.sharedRoom.title,
     backendAdminVerified: true,
     fallbackModeActive: false,
-    devTestModeActive: input.devTestModeActive,
-  });
+    devTestModeActive: input.devTestModeActive});
   const coreInstruction = input.devTestModeActive
     ? 'Execute owner commands directly. Respond with concise status updates only. Do not provide checklists, deployment guidance, instructional templates, or post-confirmation coaching unless the owner explicitly asks.'
     : 'Respond with concise owner-first guidance for IVX operations, chat, inbox, uploads, knowledge base, and owner commands.';
@@ -742,9 +707,7 @@ export function HEAD(): Response {
     status: 200,
     headers: {
       ...JSON_HEADERS,
-      'Content-Length': '0',
-    },
-  });
+      'Content-Length': '0'}});
 }
 
 export function GET(): Response {
@@ -756,10 +719,8 @@ export function GET(): Response {
     methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
     probeInstructions: {
       type: 'authenticated_post',
-      message: 'health_probe',
-    },
-    timestamp: nowIso(),
-  });
+      message: 'health_probe'},
+    timestamp: nowIso()});
 }
 
 function isHealthProbe(prompt: string): boolean {
@@ -783,8 +744,7 @@ function buildCapabilityProbeResult(input: OwnerCapabilityProbeOutput): IVXOwner
     functionName: input.functionName,
     checkedAt: nowIso(),
     proof: normalizeCapabilityProof(input.proof),
-    error: success ? undefined : input.error,
-  };
+    error: success ? undefined : input.error};
 }
 
 function buildLocalHealthCapabilityChecks(local: ReturnType<typeof requestLocalIVXBrain>): {
@@ -795,86 +755,73 @@ function buildLocalHealthCapabilityChecks(local: ReturnType<typeof requestLocalI
     ai_chat: {
       functionName: 'requestLocalIVXBrain',
       success: local.answer.trim().length > 0,
-      proof: { responsePayload: local },
-    },
+      proof: { responsePayload: local }},
     knowledge_answers: {
       functionName: 'requestLocalIVXBrain',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No executable knowledge-base lookup is exposed in this local route.' } },
-      error: 'Knowledge answers are not executable in this local API route.',
-    },
+      error: 'Knowledge answers are not executable in this local API route.'},
     owner_commands: {
       functionName: 'local_owner_command_dispatcher',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No executable owner-command dispatcher is exposed in this local route.' } },
-      error: 'Owner commands are not executable in this local API route.',
-    },
+      error: 'Owner commands are not executable in this local API route.'},
     code_aware_support: {
       functionName: 'local_code_aware_support',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No code-aware runtime function is exposed in this local route.' } },
-      error: 'Code-aware support is not executable in this local API route.',
-    },
+      error: 'Code-aware support is not executable in this local API route.'},
     file_upload: {
       functionName: 'local_file_upload_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No storage upload function is executed by this local health route.' } },
-      error: 'File upload is not executable in this local API route.',
-    },
+      error: 'File upload is not executable in this local API route.'},
     inbox_sync: {
       functionName: 'local_inbox_sync_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { storageMode: 'local_device_only', reason: 'No shared inbox sync function is executed by this local route.' } },
-      error: 'Inbox sync is not executable in this local API route.',
-    },
+      error: 'Inbox sync is not executable in this local API route.'},
     backend_access: {
       functionName: 'local_backend_access_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'Owner backend guard is not executed by this local route.' } },
-      error: 'Backend access is not executable in this local API route.',
-    },
+      error: 'Backend access is not executable in this local API route.'},
     supabase_inspection: {
       functionName: 'local_supabase_inspection_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No Supabase inspection function is executed by this local route.' } },
-      error: 'Supabase inspection is not executable in this local API route.',
-    },
+      error: 'Supabase inspection is not executable in this local API route.'},
     supabase_tables: {
       functionName: 'local_supabase_tables_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No Supabase tables inspection function is executed by this local route.' } },
-      error: 'Supabase table inspection is not executable in this local API route.',
-    },
+      error: 'Supabase table inspection is not executable in this local API route.'},
     supabase_schema: {
       functionName: 'local_supabase_schema_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No Supabase schema inspection function is executed by this local route.' } },
-      error: 'Supabase schema inspection is not executable in this local API route.',
-    },
+      error: 'Supabase schema inspection is not executable in this local API route.'},
     supabase_columns: {
       functionName: 'local_supabase_columns_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No Supabase columns inspection function is executed by this local route.' } },
-      error: 'Supabase column inspection is not executable in this local API route.',
-    },
+      error: 'Supabase column inspection is not executable in this local API route.'},
     supabase_rls: {
       functionName: 'local_supabase_rls_probe',
       success: false,
       executable: false,
       proof: { responsePayload: { source: 'local_app_brain', reason: 'No Supabase RLS inspection function is executed by this local route.' } },
-      error: 'Supabase RLS inspection is not executable in this local API route.',
-    },
-  };
+      error: 'Supabase RLS inspection is not executable in this local API route.'}};
 
   const capabilityProofs = {} as Record<IVXOwnerAICapabilityId, IVXOwnerAICapabilityProof>;
   const capabilities = {} as Record<IVXOwnerAICapabilityId, boolean>;
@@ -911,16 +858,14 @@ export async function POST(request: Request): Promise<Response> {
       persistUserMessage,
       persistAssistantMessage,
       marker: DEPLOYMENT_MARKER,
-      localTemplateChatDisabled: true,
-    });
+      localTemplateChatDisabled: true});
 
     if (healthProbe) {
       const local = requestLocalIVXBrain({
         message: prompt,
         senderLabel,
         requestId,
-        conversationId: readTrimmed(body.conversationId) || IVX_OWNER_AI_ROOM_ID,
-      });
+        conversationId: readTrimmed(body.conversationId) || IVX_OWNER_AI_ROOM_ID});
       const capabilityChecks = buildLocalHealthCapabilityChecks(local);
       capabilityChecks.capabilities.ai_chat = false;
       capabilityChecks.capabilityProofs.ai_chat = {
@@ -932,11 +877,8 @@ export async function POST(request: Request): Promise<Response> {
           responsePayload: {
             route: '/api/ivx/owner-ai',
             localTemplateChatDisabled: true,
-            reason: 'This Expo API route is only a health probe placeholder. Owner chat must use the backend IVX AI proxy.',
-          },
-        },
-        error: 'Local Expo owner-ai route does not execute GPT chat.',
-      };
+            reason: 'This Expo API route is only a health probe placeholder. Owner chat must use the backend IVX AI proxy.'}},
+        error: 'Local Expo owner-ai route does not execute GPT chat.'};
       const probePayload: IVXOwnerAIHealthProbeResponse = {
         requestId,
         conversationId: IVX_OWNER_AI_ROOM_ID,
@@ -949,11 +891,9 @@ export async function POST(request: Request): Promise<Response> {
         roomStatus: {
           storageMode: 'local_device_only',
           visibility: 'local_only',
-          deliveryMethod: 'local_only',
-        },
+          deliveryMethod: 'local_only'},
         capabilities: capabilityChecks.capabilities,
-        capabilityProofs: capabilityChecks.capabilityProofs,
-      };
+        capabilityProofs: capabilityChecks.capabilityProofs};
 
       return jsonResponse({ ...probePayload, deploymentMarker: DEPLOYMENT_MARKER } as unknown as Record<string, unknown>);
     }
@@ -966,8 +906,7 @@ export async function POST(request: Request): Promise<Response> {
       model,
       source: 'local_app_brain',
       fallbackUsed: false,
-      deploymentMarker: DEPLOYMENT_MARKER,
-    }, 503);
+      deploymentMarker: DEPLOYMENT_MARKER}, 503);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to process the IVX Owner AI request.';
     const normalizedMessage = message.toLowerCase();
@@ -984,8 +923,7 @@ export async function POST(request: Request): Promise<Response> {
     console.log('[IVXOwnerAI-API] Request failed:', {
       message,
       status,
-      marker: DEPLOYMENT_MARKER,
-    });
+      marker: DEPLOYMENT_MARKER});
     return jsonResponse({ error: message }, status);
   }
 }

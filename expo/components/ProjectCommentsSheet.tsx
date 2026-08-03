@@ -4,24 +4,22 @@
  * Shows comments with owner replies, input field, moderation controls.
  */
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   TouchableOpacity,
   TextInput,
   FlatList,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Alert,
   Animated,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from "react-native";
 import { X, Send, ShieldCheck, Trash2, Flag, MessageCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import type { ProjectComment } from '@/lib/project-engagement';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const GOLD = '#FFD700';
 const SURFACE = '#141414';
@@ -45,8 +43,7 @@ function CommentItem({
   onReply,
   onDelete,
   onReport,
-  isOwner = false,
-}: {
+  isOwner = false}: {
   comment: ProjectComment;
   onReply: (commentId: string) => void;
   onDelete?: (commentId: string) => void;
@@ -162,8 +159,7 @@ const ProjectCommentsSheet = memo(function ProjectCommentsSheet({
   onAddComment,
   onDeleteComment,
   onReportComment,
-  totalComments,
-}: CommentsSheetProps) {
+  totalComments}: CommentsSheetProps) {
   const [draft, setDraft] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -176,8 +172,7 @@ const ProjectCommentsSheet = memo(function ProjectCommentsSheet({
       toValue: visible ? 0 : windowHeight,
       tension: 80,
       friction: 12,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [visible, slideAnim, windowHeight]);
 
   const handleSubmit = useCallback(async () => {
@@ -230,7 +225,7 @@ const ProjectCommentsSheet = memo(function ProjectCommentsSheet({
           )}
           ListEmptyComponent={
             isLoading ? (
-              <ActivityIndicator size="small" color={GOLD} style={{ marginTop: 40 }} />
+              <ShimmerIndicator size="small" color={GOLD} style={{ marginTop: 40 }} />
             ) : (
               <View style={sheetStyles.emptyState}>
                 <MessageCircle size={32} color={Colors.textTertiary} />
@@ -281,7 +276,7 @@ const ProjectCommentsSheet = memo(function ProjectCommentsSheet({
                 testID="send-comment"
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ShimmerIndicator size="small" color="#000" />
                 ) : (
                   <Send size={18} color={draft.trim() ? '#000' : Colors.textTertiary} />
                 )}
@@ -306,8 +301,7 @@ const sheetStyles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
-    zIndex: 100,
-  },
+    zIndex: 100},
   sheet: {
     backgroundColor: SURFACE,
     borderTopLeftRadius: 24,
@@ -315,8 +309,7 @@ const sheetStyles = StyleSheet.create({
     maxHeight: '80%',
     minHeight: 400,
     borderTopWidth: 1,
-    borderColor: BORDER,
-  },
+    borderColor: BORDER},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -324,31 +317,25 @@ const sheetStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
+    borderBottomColor: BORDER},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   listContent: {
     flexGrow: 1,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 8,
-  },
+    gap: 8},
   emptyTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   emptyText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   inputContainer: {
     borderTopWidth: 1,
     borderTopColor: BORDER,
@@ -356,25 +343,21 @@ const sheetStyles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: SURFACE_ELEVATED,
     borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
+    borderBottomRightRadius: 24},
   replyingToBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-    paddingBottom: 6,
-  },
+    paddingBottom: 6},
   replyingToText: {
     color: GOLD,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-  },
+    gap: 8},
   input: {
     flex: 1,
     backgroundColor: '#242424',
@@ -385,71 +368,58 @@ const sheetStyles = StyleSheet.create({
     fontSize: 14,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: BORDER,
-  },
+    borderColor: BORDER},
   sendBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: GOLD,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   sendBtnDisabled: {
-    backgroundColor: '#333',
-  },
-});
+    backgroundColor: '#333'}});
 
 const commentStyles = StyleSheet.create({
   commentItem: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.04)',
-  },
+    borderBottomColor: 'rgba(255,255,255,0.04)'},
   commentHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   commentAuthorRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    flex: 1,
-  },
+    flex: 1},
   avatarPlaceholder: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: '#333',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   avatarOwner: {
     backgroundColor: GOLD + '20',
     borderWidth: 1,
-    borderColor: GOLD + '40',
-  },
+    borderColor: GOLD + '40'},
   avatarText: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   commentMeta: {
-    flex: 1,
-  },
+    flex: 1},
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   commentAuthor: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -459,64 +429,51 @@ const commentStyles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: GOLD + '30',
-  },
+    borderColor: GOLD + '30'},
   ownerBadgeText: {
     color: GOLD,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   commentTime: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   commentBody: {
     color: Colors.text,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 6,
-    marginLeft: 40,
-  },
+    marginLeft: 40},
   commentActions: {
     flexDirection: 'row',
     gap: 10,
-    paddingTop: 4,
-  },
+    paddingTop: 4},
   replyBtn: {
     marginLeft: 40,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   replyBtnText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   repliesContainer: {
     marginLeft: 40,
     paddingLeft: 12,
     borderLeftWidth: 2,
     borderLeftColor: BORDER,
     marginTop: 8,
-    gap: 8,
-  },
+    gap: 8},
   replyItem: {
-    paddingBottom: 4,
-  },
+    paddingBottom: 4},
   replyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   replyAuthor: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   replyBody: {
     color: Colors.text,
     fontSize: 13,
-    lineHeight: 19,
-  },
-});
+    lineHeight: 19}});

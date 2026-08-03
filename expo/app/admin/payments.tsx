@@ -13,15 +13,12 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -38,11 +35,11 @@ import {
   Receipt,
   RefreshCw,
   Zap,
-  Banknote,
-} from 'lucide-react-native';
+  Banknote} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface PaymentConfig {
   provider: string;
@@ -113,7 +110,7 @@ export default function AdminPaymentSettings() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading payment settings...</Text>
       </View>
     );
@@ -334,5 +331,4 @@ const styles = StyleSheet.create({
   actionButton: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: '#1A1A1A', borderRadius: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#2A2A2A' },
   actionButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   footer: { padding: 16, alignItems: 'center' },
-  footerText: { color: '#555', fontSize: 11 },
-});
+  footerText: { color: '#555', fontSize: 11 }});

@@ -2,14 +2,12 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   CalendarClock,
@@ -25,11 +23,11 @@ import {
   Target,
   UserCheck,
   Users,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   createProspectOutreachDraft,
   getCapitalOutreachPlan,
@@ -43,22 +41,19 @@ import {
   type PacketPriority,
   type ProspectActionPlan,
   type ProspectResearch,
-  type ProspectStatus,
-} from '@/src/modules/ivx-developer/capitalNetworkService';
+  type ProspectStatus} from '@/src/modules/ivx-developer/capitalNetworkService';
 
 const POLL_INTERVAL_MS = 12000;
 
 const PRIORITY_TONE: Record<string, string> = {
   high: Colors.success,
   medium: Colors.warning,
-  low: Colors.textTertiary,
-};
+  low: Colors.textTertiary};
 
 const PACKET_TONE: Record<PacketPriority, string> = {
   required: Colors.error,
   recommended: Colors.warning,
-  optional: Colors.textTertiary,
-};
+  optional: Colors.textTertiary};
 
 type ActionPanel = 'sequence' | 'why' | 'research' | 'draft' | null;
 
@@ -68,8 +63,7 @@ const STATUS_LABEL: Record<ProspectStatus, string> = {
   contacted: 'Contacted',
   qualified: 'Qualified',
   matched: 'Matched',
-  dismissed: 'Dismissed',
-};
+  dismissed: 'Dismissed'};
 
 function ActionButton({
   icon,
@@ -77,8 +71,7 @@ function ActionButton({
   onPress,
   busy,
   tone,
-  testID,
-}: {
+  testID}: {
   icon: React.ReactNode;
   label: string;
   onPress: () => void;
@@ -93,7 +86,7 @@ function ActionButton({
       disabled={busy}
       testID={testID}
     >
-      {busy ? <ActivityIndicator size="small" color={tone ?? Colors.primary} /> : icon}
+      {busy ? <ShimmerIndicator size="small" color={tone ?? Colors.primary} /> : icon}
       <Text style={[styles.actionBtnText, tone ? { color: tone } : null]}>{label}</Text>
     </Pressable>
   );
@@ -357,8 +350,7 @@ function CapitalOutreachContent() {
   const planQuery = useQuery<CapitalOutreachPlan | null>({
     queryKey: ['ivx-capital-outreach', 'plan'],
     queryFn: getCapitalOutreachPlan,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const plan = planQuery.data ?? null;
   const refetch = useCallback(() => { void planQuery.refetch(); }, [planQuery]);
@@ -475,7 +467,7 @@ function CapitalOutreachContent() {
       ) : (
         <View style={styles.card}>
           {planQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyBody}>{planQuery.error instanceof Error ? planQuery.error.message : 'No outreach plan yet.'}</Text>
           )}
@@ -568,5 +560,4 @@ const styles = StyleSheet.create({
   channelLabel: { fontSize: 12, fontWeight: '600' as const, color: Colors.text },
   channelDetail: { fontSize: 11.5, lineHeight: 16, color: Colors.textSecondary },
   approvalGate: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, borderWidth: 1, borderColor: Colors.warning, borderRadius: 10, padding: 9, backgroundColor: 'rgba(245,158,11,0.07)' },
-  approvalGateText: { flex: 1, fontSize: 11.5, lineHeight: 16, color: Colors.warning },
-});
+  approvalGateText: { flex: 1, fontSize: 11.5, lineHeight: 16, color: Colors.warning }});

@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Animated,
   Platform,
-  RefreshControl,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { Stack } from 'expo-router';
 import {
   Shield,
@@ -30,13 +27,13 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
-  RefreshCw,
-} from 'lucide-react-native';
+  RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useDeviceIP } from '@/lib/use-device-ip';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { validateEmail, validatePassword, validatePhone } from '@/lib/auth-helpers';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type AuditStatus = 'pass' | 'fail' | 'warn' | 'checking';
 
@@ -81,8 +78,7 @@ export default function RegistrationAuditScreen() {
       status: emailValid ? 'pass' : 'fail',
       detail: emailValid ? 'Email validation function working correctly' : 'Email validation function is broken',
       category: 'Form Validation',
-      icon: <Mail size={16} color={emailValid ? Colors.success : Colors.error} />,
-    });
+      icon: <Mail size={16} color={emailValid ? Colors.success : Colors.error} />});
 
     const emailRejectsInvalid = !validateEmail('notanemail');
     items.push({
@@ -91,8 +87,7 @@ export default function RegistrationAuditScreen() {
       status: emailRejectsInvalid ? 'pass' : 'fail',
       detail: emailRejectsInvalid ? 'Correctly rejects invalid email formats' : 'Invalid emails are not being rejected',
       category: 'Form Validation',
-      icon: <Mail size={16} color={emailRejectsInvalid ? Colors.success : Colors.error} />,
-    });
+      icon: <Mail size={16} color={emailRejectsInvalid ? Colors.success : Colors.error} />});
 
     const pwResult = validatePassword('Test1234!');
     items.push({
@@ -101,8 +96,7 @@ export default function RegistrationAuditScreen() {
       status: pwResult.valid ? 'pass' : 'fail',
       detail: pwResult.valid ? 'Password validator accepts strong passwords' : `Password validator issue: ${pwResult.reason}`,
       category: 'Form Validation',
-      icon: <Lock size={16} color={pwResult.valid ? Colors.success : Colors.error} />,
-    });
+      icon: <Lock size={16} color={pwResult.valid ? Colors.success : Colors.error} />});
 
     const weakPwResult = validatePassword('123');
     items.push({
@@ -111,8 +105,7 @@ export default function RegistrationAuditScreen() {
       status: !weakPwResult.valid ? 'pass' : 'fail',
       detail: !weakPwResult.valid ? 'Correctly rejects weak passwords' : 'Weak passwords are being accepted',
       category: 'Form Validation',
-      icon: <Lock size={16} color={!weakPwResult.valid ? Colors.success : Colors.error} />,
-    });
+      icon: <Lock size={16} color={!weakPwResult.valid ? Colors.success : Colors.error} />});
 
     const phoneValid = validatePhone('5551234567');
     items.push({
@@ -121,8 +114,7 @@ export default function RegistrationAuditScreen() {
       status: phoneValid ? 'pass' : 'warn',
       detail: phoneValid ? 'Phone validation working' : 'Phone validation may need adjustment',
       category: 'Form Validation',
-      icon: <Phone size={16} color={phoneValid ? Colors.success : Colors.warning} />,
-    });
+      icon: <Phone size={16} color={phoneValid ? Colors.success : Colors.warning} />});
 
     items.push({
       id: 'name-fields',
@@ -130,8 +122,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'First name and last name are required fields in signup form',
       category: 'Form Validation',
-      icon: <User size={16} color={Colors.success} />,
-    });
+      icon: <User size={16} color={Colors.success} />});
 
     items.push({
       id: 'country-picker',
@@ -139,8 +130,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Country picker with search functionality is available',
       category: 'Form Validation',
-      icon: <Globe size={16} color={Colors.success} />,
-    });
+      icon: <Globe size={16} color={Colors.success} />});
 
     items.push({
       id: 'terms-checkbox',
@@ -148,8 +138,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Terms of Service and Privacy Policy acceptance is enforced before registration',
       category: 'Form Validation',
-      icon: <Shield size={16} color={Colors.success} />,
-    });
+      icon: <Shield size={16} color={Colors.success} />});
 
     let supabaseConnected = false;
     try {
@@ -163,8 +152,7 @@ export default function RegistrationAuditScreen() {
           ? `Auth service connected. Session: ${data?.session ? 'Active' : 'No active session'}`
           : `Auth service error: ${error?.message}`,
         category: 'Backend Services',
-        icon: <Database size={16} color={supabaseConnected ? Colors.success : Colors.error} />,
-      });
+        icon: <Database size={16} color={supabaseConnected ? Colors.success : Colors.error} />});
     } catch (err: any) {
       items.push({
         id: 'supabase-auth',
@@ -172,8 +160,7 @@ export default function RegistrationAuditScreen() {
         status: 'fail',
         detail: `Connection failed: ${err?.message ?? 'Unknown error'}`,
         category: 'Backend Services',
-        icon: <Database size={16} color={Colors.error} />,
-      });
+        icon: <Database size={16} color={Colors.error} />});
     }
 
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -184,8 +171,7 @@ export default function RegistrationAuditScreen() {
       status: supabaseUrl ? 'pass' : 'fail',
       detail: supabaseUrl ? `URL: ${supabaseUrl.substring(0, 30)}...` : 'EXPO_PUBLIC_SUPABASE_URL is not set',
       category: 'Backend Services',
-      icon: <Server size={16} color={supabaseUrl ? Colors.success : Colors.error} />,
-    });
+      icon: <Server size={16} color={supabaseUrl ? Colors.success : Colors.error} />});
 
     items.push({
       id: 'supabase-key',
@@ -193,8 +179,7 @@ export default function RegistrationAuditScreen() {
       status: supabaseKey ? 'pass' : 'fail',
       detail: supabaseKey ? `Key: ${supabaseKey.substring(0, 12)}...` : 'EXPO_PUBLIC_SUPABASE_ANON_KEY is not set',
       category: 'Backend Services',
-      icon: <Key size={16} color={supabaseKey ? Colors.success : Colors.error} />,
-    });
+      icon: <Key size={16} color={supabaseKey ? Colors.success : Colors.error} />});
 
     let profileTableExists = false;
     try {
@@ -206,8 +191,7 @@ export default function RegistrationAuditScreen() {
         status: profileTableExists ? 'pass' : 'warn',
         detail: profileTableExists ? 'Profiles table accessible' : `Profiles table issue: ${error?.message}`,
         category: 'Backend Services',
-        icon: <Database size={16} color={profileTableExists ? Colors.success : Colors.warning} />,
-      });
+        icon: <Database size={16} color={profileTableExists ? Colors.success : Colors.warning} />});
     } catch {
       items.push({
         id: 'profiles-table',
@@ -215,8 +199,7 @@ export default function RegistrationAuditScreen() {
         status: 'warn',
         detail: 'Could not verify profiles table',
         category: 'Backend Services',
-        icon: <Database size={16} color={Colors.warning} />,
-      });
+        icon: <Database size={16} color={Colors.warning} />});
     }
 
     items.push({
@@ -225,8 +208,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Login screen with email/password, shake animation on error, forgot password link',
       category: 'Auth Flows',
-      icon: <Lock size={16} color={Colors.success} />,
-    });
+      icon: <Lock size={16} color={Colors.success} />});
 
     items.push({
       id: 'signup-flow',
@@ -234,8 +216,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: '4-step registration: form → email verify → phone verify → complete',
       category: 'Auth Flows',
-      icon: <User size={16} color={Colors.success} />,
-    });
+      icon: <User size={16} color={Colors.success} />});
 
     items.push({
       id: '2fa-flow',
@@ -243,8 +224,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: '2FA code entry with 6-digit input, auto-submit on completion',
       category: 'Auth Flows',
-      icon: <Fingerprint size={16} color={Colors.success} />,
-    });
+      icon: <Fingerprint size={16} color={Colors.success} />});
 
     items.push({
       id: 'rate-limiting',
@@ -252,8 +232,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Rate limiter tracks failed attempts and locks account after max retries',
       category: 'Auth Flows',
-      icon: <Shield size={16} color={Colors.success} />,
-    });
+      icon: <Shield size={16} color={Colors.success} />});
 
     items.push({
       id: 'password-reset',
@@ -261,8 +240,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Forgot password sends reset email via Supabase auth',
       category: 'Auth Flows',
-      icon: <Mail size={16} color={Colors.success} />,
-    });
+      icon: <Mail size={16} color={Colors.success} />});
 
     items.push({
       id: 'kyc-redirect',
@@ -270,8 +248,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'After registration, user is prompted to complete KYC or skip',
       category: 'Auth Flows',
-      icon: <Shield size={16} color={Colors.success} />,
-    });
+      icon: <Shield size={16} color={Colors.success} />});
 
     items.push({
       id: 'auth-gate',
@@ -279,8 +256,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Protected routes redirect unauthenticated users to login. Public routes accessible without auth.',
       category: 'Security',
-      icon: <Lock size={16} color={Colors.success} />,
-    });
+      icon: <Lock size={16} color={Colors.success} />});
 
     items.push({
       id: 'session-persist',
@@ -288,8 +264,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Auth state persisted via auth-store, restored on app launch',
       category: 'Security',
-      icon: <Clock size={16} color={Colors.success} />,
-    });
+      icon: <Clock size={16} color={Colors.success} />});
 
     items.push({
       id: 'session-monitor',
@@ -297,8 +272,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Session monitor tracks inactivity and refreshes tokens',
       category: 'Security',
-      icon: <Clock size={16} color={Colors.success} />,
-    });
+      icon: <Clock size={16} color={Colors.success} />});
 
     items.push({
       id: 'email-sanitize',
@@ -306,8 +280,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Emails are trimmed and lowercased before auth calls',
       category: 'Security',
-      icon: <Mail size={16} color={Colors.success} />,
-    });
+      icon: <Mail size={16} color={Colors.success} />});
 
     items.push({
       id: 'no-investor-limit',
@@ -315,8 +288,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Registration open to all users — no accredited investor verification required, no income limits',
       category: 'Access Policy',
-      icon: <CheckCircle size={16} color={Colors.success} />,
-    });
+      icon: <CheckCircle size={16} color={Colors.success} />});
 
     items.push({
       id: 'min-investment',
@@ -324,8 +296,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Any registered user can invest starting from $50 — no upper limit for regular investors',
       category: 'Access Policy',
-      icon: <CheckCircle size={16} color={Colors.success} />,
-    });
+      icon: <CheckCircle size={16} color={Colors.success} />});
 
     items.push({
       id: 'global-access',
@@ -333,8 +304,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: 'Country selector supports 190+ countries, no geographic restrictions on registration',
       category: 'Access Policy',
-      icon: <Globe size={16} color={Colors.success} />,
-    });
+      icon: <Globe size={16} color={Colors.success} />});
 
     items.push({
       id: 'ip-detection',
@@ -344,8 +314,7 @@ export default function RegistrationAuditScreen() {
         ? `Detected: ${ipInfo.ip}${ipInfo.city ? ` (${ipInfo.city}, ${ipInfo.country})` : ''}`
         : ipInfo.isLoading ? 'Detecting IP address...' : `IP detection issue: ${ipInfo.error}`,
       category: 'Network',
-      icon: <Wifi size={16} color={ipInfo.ip && !ipInfo.error ? Colors.success : Colors.warning} />,
-    });
+      icon: <Wifi size={16} color={ipInfo.ip && !ipInfo.error ? Colors.success : Colors.warning} />});
 
     items.push({
       id: 'platform-info',
@@ -353,8 +322,7 @@ export default function RegistrationAuditScreen() {
       status: 'pass',
       detail: `Running on ${Platform.OS} (${Platform.Version ?? 'unknown version'})`,
       category: 'Network',
-      icon: <Server size={16} color={Colors.success} />,
-    });
+      icon: <Server size={16} color={Colors.success} />});
 
     const pass = items.filter(i => i.status === 'pass').length;
     const fail = items.filter(i => i.status === 'fail').length;
@@ -371,8 +339,7 @@ export default function RegistrationAuditScreen() {
     const cats: AuditCategory[] = Array.from(categoryMap.entries()).map(([name, catItems]) => ({
       name,
       items: catItems,
-      expanded: catItems.some(i => i.status === 'fail') || catItems.some(i => i.status === 'warn'),
-    }));
+      expanded: catItems.some(i => i.status === 'fail') || catItems.some(i => i.status === 'warn')}));
 
     setCategories(cats);
     setAuditing(false);
@@ -380,8 +347,7 @@ export default function RegistrationAuditScreen() {
     Animated.timing(progressAnim, {
       toValue: pass / items.length,
       duration: 800,
-      useNativeDriver: false,
-    }).start();
+      useNativeDriver: false}).start();
 
     console.log('[RegAudit] Audit complete. Pass:', pass, 'Fail:', fail, 'Warn:', warn);
   }, [ipInfo, progressAnim, fadeAnim]);
@@ -408,7 +374,7 @@ export default function RegistrationAuditScreen() {
       case 'pass': return <CheckCircle size={18} color={Colors.success} />;
       case 'fail': return <XCircle size={18} color={Colors.error} />;
       case 'warn': return <AlertTriangle size={18} color={Colors.warning} />;
-      case 'checking': return <ActivityIndicator size="small" color={Colors.primary} />;
+      case 'checking': return <ShimmerIndicator size="small" color={Colors.primary} />;
     }
   };
 
@@ -423,8 +389,7 @@ export default function RegistrationAuditScreen() {
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
+    outputRange: ['0%', '100%']});
 
   const overallScore = summary.total > 0 ? Math.round((summary.pass / summary.total) * 100) : 0;
 
@@ -444,7 +409,7 @@ export default function RegistrationAuditScreen() {
           <View style={styles.ipBannerContent}>
             <Text style={styles.ipBannerLabel}>Your Device IP</Text>
             {ipInfo.isLoading ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ShimmerIndicator size="small" color={Colors.primary} />
             ) : (
               <>
                 <Text style={styles.ipBannerValue}>{ipInfo.ip || 'Unknown'}</Text>
@@ -483,11 +448,9 @@ export default function RegistrationAuditScreen() {
                   </Text>
                 </View>
                 <View style={[styles.userBadge, {
-                  backgroundColor: user.kycStatus === 'verified' ? Colors.success + '18' : Colors.warning + '18',
-                }]}>
+                  backgroundColor: user.kycStatus === 'verified' ? Colors.success + '18' : Colors.warning + '18'}]}>
                   <Text style={[styles.userBadgeText, {
-                    color: user.kycStatus === 'verified' ? Colors.success : Colors.warning,
-                  }]}>
+                    color: user.kycStatus === 'verified' ? Colors.success : Colors.warning}]}>
                     KYC: {(user.kycStatus ?? 'PENDING').toUpperCase()}
                   </Text>
                 </View>
@@ -499,11 +462,9 @@ export default function RegistrationAuditScreen() {
         <Animated.View style={[styles.scoreCard, { opacity: fadeAnim }]}>
           <View style={styles.scoreCircleWrap}>
             <View style={[styles.scoreCircle, {
-              borderColor: overallScore >= 80 ? Colors.success : overallScore >= 50 ? Colors.warning : Colors.error,
-            }]}>
+              borderColor: overallScore >= 80 ? Colors.success : overallScore >= 50 ? Colors.warning : Colors.error}]}>
               <Text style={[styles.scoreValue, {
-                color: overallScore >= 80 ? Colors.success : overallScore >= 50 ? Colors.warning : Colors.error,
-              }]}>
+                color: overallScore >= 80 ? Colors.success : overallScore >= 50 ? Colors.warning : Colors.error}]}>
                 {auditing ? '...' : `${overallScore}%`}
               </Text>
               <Text style={styles.scoreLabel}>Health</Text>
@@ -536,14 +497,13 @@ export default function RegistrationAuditScreen() {
           <View style={styles.progressBarWrap}>
             <Animated.View style={[styles.progressBarFill, {
               width: progressWidth as any,
-              backgroundColor: overallScore >= 80 ? Colors.success : overallScore >= 50 ? Colors.warning : Colors.error,
-            }]} />
+              backgroundColor: overallScore >= 80 ? Colors.success : overallScore >= 50 ? Colors.warning : Colors.error}]} />
           </View>
         </Animated.View>
 
         {auditing ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ShimmerIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Running registration audit...</Text>
           </View>
         ) : (
@@ -621,8 +581,7 @@ export default function RegistrationAuditScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   ipBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -633,54 +592,45 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.primary + '30',
-    gap: 14,
-  },
+    gap: 14},
   ipBannerIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   ipBannerContent: {
-    flex: 1,
-  },
+    flex: 1},
   ipBannerLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   ipBannerValue: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   ipLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   ipLocationText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   ipOrgText: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   ipTimezoneText: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 1,
-  },
+    marginTop: 1},
   userBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -691,52 +641,43 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.success + '30',
-    gap: 14,
-  },
+    gap: 14},
   userBannerIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: Colors.success + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   userBannerContent: {
-    flex: 1,
-  },
+    flex: 1},
   userBannerLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   userBannerName: {
     fontSize: 17,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   userBannerEmail: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   userBadgeRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 8,
-  },
+    marginTop: 8},
   userBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   userBadgeText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   scoreCard: {
     backgroundColor: Colors.surface,
     marginHorizontal: 16,
@@ -745,125 +686,101 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   scoreCircleWrap: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   scoreCircle: {
     width: 100,
     height: 100,
     borderRadius: 50,
     borderWidth: 4,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   scoreValue: {
     fontSize: 28,
     fontWeight: '900' as const,
-    letterSpacing: -1,
-  },
+    letterSpacing: -1},
   scoreLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
-    marginTop: -2,
-  },
+    marginTop: -2},
   scoreStats: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 20,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   scoreStat: {
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   scoreStatDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   scoreStatValue: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   scoreStatLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   progressBarWrap: {
     width: '100%',
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.backgroundSecondary,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   progressBarFill: {
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   loadingWrap: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 14,
-  },
+    gap: 14},
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   categoriesWrap: {
     paddingHorizontal: 16,
-    gap: 8,
-  },
+    gap: 8},
   categoryCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-  },
+    padding: 16},
   categoryHeaderLeft: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   categoryName: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   categoryCountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   categoryCount: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   categoryFailBadge: {
     backgroundColor: Colors.error + '18',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   categoryFailText: {
     fontSize: 10,
     fontWeight: '700' as const,
-    color: Colors.error,
-  },
+    color: Colors.error},
   categoryItems: {
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   auditItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -871,28 +788,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   auditItemLeft: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
     flex: 1,
-    paddingRight: 12,
-  },
+    paddingRight: 12},
   auditItemText: {
-    flex: 1,
-  },
+    flex: 1},
   auditItemLabel: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   auditItemDetail: {
     fontSize: 11,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   rerunBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -902,11 +814,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     paddingVertical: 14,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   rerunBtnText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
-});
+    color: Colors.black}});

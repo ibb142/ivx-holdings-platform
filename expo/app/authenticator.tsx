@@ -11,8 +11,7 @@ import {
   Platform,
   Keyboard,
   Dimensions,
-  KeyboardAvoidingView,
-} from 'react-native';
+  KeyboardAvoidingView} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -38,8 +37,7 @@ import {
   Camera,
   Keyboard as KeyboardIcon,
   Check,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { generateTOTP, getTimeRemaining, parseOtpAuthUri } from '@/lib/totp';
@@ -57,8 +55,7 @@ interface AuthAccount {
 function CodeCard({
   account,
   onTapCopy,
-  onDelete,
-}: {
+  onDelete}: {
   account: AuthAccount;
   onTapCopy: (code: string, issuer: string) => void;
   onDelete: (id: string) => void;
@@ -145,8 +142,7 @@ function CodeCard({
                 cardStyles.timerFill,
                 {
                   width: `${progress * 100}%` as any,
-                  backgroundColor: isLow ? Colors.error : Colors.primary,
-                },
+                  backgroundColor: isLow ? Colors.error : Colors.primary},
               ]} />
             </View>
             <Text style={[cardStyles.timerText, isLow && { color: Colors.error }]}>{remaining}s</Text>
@@ -178,82 +174,67 @@ const cardStyles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   issuerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 12,
-  },
+    marginRight: 12},
   avatar: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   avatarText: {
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   issuerInfo: {
     marginLeft: 10,
-    flex: 1,
-  },
+    flex: 1},
   issuer: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   account: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 1,
-  },
+    marginTop: 1},
   timerWrap: {
     alignItems: 'flex-end',
-    gap: 4,
-  },
+    gap: 4},
   timerTrack: {
     width: 40,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   timerFill: {
     height: 4,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   timerText: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
-    fontVariant: ['tabular-nums'] as any,
-  },
+    fontVariant: ['tabular-nums'] as any},
   codeRow: {
     alignItems: 'center',
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   code: {
     fontSize: 38,
     fontWeight: '700' as const,
     color: Colors.text,
     letterSpacing: 6,
-    fontVariant: ['tabular-nums'] as any,
-  },
+    fontVariant: ['tabular-nums'] as any},
   tapHint: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 6,
-  },
+    marginTop: 6},
   copiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -262,19 +243,15 @@ const cardStyles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginTop: 6,
-  },
+    marginTop: 6},
   copiedText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.background,
-  },
-});
+    color: Colors.background}});
 
 function AddAccountScreen({
   onAdd,
-  onClose,
-}: {
+  onClose}: {
   onAdd: (account: AuthAccount) => void;
   onClose: () => void;
 }) {
@@ -297,8 +274,7 @@ function AddAccountScreen({
       toValue: 0,
       useNativeDriver: true,
       tension: 65,
-      friction: 11,
-    }).start();
+      friction: 11}).start();
   }, [slideAnim]);
 
   useEffect(() => {
@@ -319,8 +295,7 @@ function AddAccountScreen({
     Animated.timing(slideAnim, {
       toValue: Dimensions.get('window').width,
       duration: 250,
-      useNativeDriver: true,
-    }).start(cb);
+      useNativeDriver: true}).start(cb);
   }, [slideAnim]);
 
   const handleClose = useCallback(() => {
@@ -341,8 +316,7 @@ function AddAccountScreen({
         issuer: parsed.issuer,
         account: parsed.account,
         secret: parsed.secret,
-        createdAt: Date.now(),
-      });
+        createdAt: Date.now()});
     } else {
       Alert.alert(
         'Invalid QR',
@@ -371,8 +345,7 @@ function AddAccountScreen({
       issuer: issuer.trim() || 'Unknown',
       account: accountName.trim(),
       secret: cleanSecret,
-      createdAt: Date.now(),
-    });
+      createdAt: Date.now()});
   }, [secret, accountName, issuer, onAdd]);
 
   const handlePasteUri = useCallback(() => {
@@ -389,8 +362,7 @@ function AddAccountScreen({
         issuer: parsed.issuer,
         account: parsed.account,
         secret: parsed.secret,
-        createdAt: Date.now(),
-      });
+        createdAt: Date.now()});
     } else {
       Alert.alert('Invalid URI', 'Not a valid otpauth:// URI. Make sure you copied the full link.');
     }
@@ -753,11 +725,9 @@ const CORNER_WIDTH = 3;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -765,62 +735,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   backBtn: {
     width: 40,
     height: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   addHeaderBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   list: {
     padding: 16,
-    paddingBottom: 40,
-  },
+    paddingBottom: 40},
   countRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   countText: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   longPressHint: {
     fontSize: 11,
     color: Colors.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   emptyIcon: {
     width: 88,
     height: 88,
@@ -828,21 +787,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   emptyDesc: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 28,
-  },
+    marginBottom: 28},
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -850,13 +806,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 14,
-  },
+    borderRadius: 14},
   emptyAddText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.background,
-  },
+    color: Colors.background},
   addScreen: {
     position: 'absolute',
     top: 0,
@@ -864,8 +818,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: Colors.background,
-    zIndex: 200,
-  },
+    zIndex: 200},
   addHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -873,19 +826,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   addBackBtn: {
     width: 40,
     height: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   addHeaderTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   modeRow: {
     flexDirection: 'row',
     marginHorizontal: 20,
@@ -893,8 +843,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 3,
     marginTop: 16,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   modeBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -902,41 +851,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   modeBtnActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   modeBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   modeBtnTextActive: {
-    color: Colors.background,
-  },
+    color: Colors.background},
   addBody: {
-    flex: 1,
-  },
+    flex: 1},
   addBodyContent: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-  },
+    paddingTop: 20},
   formLabel: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   inputGroup: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   inputLabel: {
     fontSize: 13,
     fontWeight: '500' as const,
     color: Colors.textSecondary,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   input: {
     backgroundColor: Colors.inputBackground,
     borderWidth: 1,
@@ -945,109 +885,89 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   pasteInput: {
     minHeight: 80,
     textAlignVertical: 'top' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   formHint: {
     fontSize: 12,
     color: Colors.textTertiary,
     lineHeight: 17,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   primaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   primaryBtnText: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.background,
-  },
+    color: Colors.background},
   scanWrap: {
     alignItems: 'center',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   cameraBox: {
     width: 260,
     height: 260,
     borderRadius: 20,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   camera: {
-    flex: 1,
-  },
+    flex: 1},
   scanFrame: {
-    ...StyleSheet.absoluteFillObject,
-  },
+    ...StyleSheet.absoluteFillObject},
   corner: {
     position: 'absolute',
     width: CORNER_SIZE,
-    height: CORNER_SIZE,
-  },
+    height: CORNER_SIZE},
   cornerTL: {
     top: 24,
     left: 24,
     borderTopWidth: CORNER_WIDTH,
     borderLeftWidth: CORNER_WIDTH,
     borderColor: Colors.primary,
-    borderTopLeftRadius: 4,
-  },
+    borderTopLeftRadius: 4},
   cornerTR: {
     top: 24,
     right: 24,
     borderTopWidth: CORNER_WIDTH,
     borderRightWidth: CORNER_WIDTH,
     borderColor: Colors.primary,
-    borderTopRightRadius: 4,
-  },
+    borderTopRightRadius: 4},
   cornerBL: {
     bottom: 24,
     left: 24,
     borderBottomWidth: CORNER_WIDTH,
     borderLeftWidth: CORNER_WIDTH,
     borderColor: Colors.primary,
-    borderBottomLeftRadius: 4,
-  },
+    borderBottomLeftRadius: 4},
   cornerBR: {
     bottom: 24,
     right: 24,
     borderBottomWidth: CORNER_WIDTH,
     borderRightWidth: CORNER_WIDTH,
     borderColor: Colors.primary,
-    borderBottomRightRadius: 4,
-  },
+    borderBottomRightRadius: 4},
   scanHint: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginTop: 16,
-  },
+    marginTop: 16},
   camPrompt: {
     alignItems: 'center',
-    paddingVertical: 32,
-  },
+    paddingVertical: 32},
   camPromptTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: Colors.text,
     marginTop: 12,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   camPromptDesc: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   closeText: {
     fontSize: 18,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-});
+    fontWeight: '500' as const}});

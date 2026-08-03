@@ -3,8 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+  TouchableOpacity} from 'react-native';
 import { ChevronDown, ChevronUp, Shield } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
@@ -49,31 +48,24 @@ export default function InvestorDisclosure({ compact = false }: InvestorDisclosu
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 8,
-  },
+    marginVertical: 8},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   body: {
     paddingTop: 4,
-    gap: 8,
-  },
+    gap: 8},
   disclosureText: {
     fontSize: 11,
     color: Colors.textTertiary,
-    lineHeight: 16,
-  },
-});
+    lineHeight: 16}});

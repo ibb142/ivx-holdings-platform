@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,9 +8,7 @@ import {
   Alert,
   Modal,
   KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+  Platform} from "react-native";
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -44,19 +41,18 @@ import {
   Navigation,
   Calendar,
   BarChart3,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { LandPartnerFormData, DocumentScan, LandPartnerCalculation, CompSearchResult } from '@/types';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const DEAL_TERMS = {
   cashPaymentPercent: 60,
   collateralPercent: 40,
   partnerProfitShare: 30,
   developerProfitShare: 70,
-  termMonths: 30,
-};
+  termMonths: 30};
 
 const STEPS = [
   { id: 'type', title: 'Partner Type', icon: Handshake },
@@ -85,8 +81,7 @@ const initialFormData: LandPartnerFormData = {
   estimatedValue: '',
   description: '',
   controlDisclosureAccepted: false,
-  paymentStructure: 'immediate',
-};
+  paymentStructure: 'immediate'};
 
 export default function LandPartnerScreen() {
   const router = useRouter();
@@ -124,8 +119,7 @@ export default function LandPartnerScreen() {
       estimatedNetProfit,
       partnerProfit,
       developerProfit,
-      totalPartnerReturn,
-    };
+      totalPartnerReturn};
   }, [formData.estimatedValue]);
 
   const formatCurrency = (value: number) => _fmtCurr(value);
@@ -135,15 +129,13 @@ export default function LandPartnerScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.8,
-      });
+        quality: 0.8});
 
       if (!result.canceled && result.assets[0]) {
         const docScan: DocumentScan = {
           uri: result.assets[0].uri,
           uploadedAt: new Date().toISOString(),
-          status: 'scanning',
-        };
+          status: 'scanning'};
 
         if (type === 'deed') {
           updateFormData('deedDocument', docScan);
@@ -161,9 +153,7 @@ export default function LandPartnerScreen() {
               documentType: type === 'deed' ? 'Property Deed' : 'Government ID',
               extractedData: {},
               issues: [],
-              recommendations: [],
-            },
-          };
+              recommendations: []}};
           if (type === 'deed') {
             updateFormData('deedDocument', verifiedDoc);
           } else {
@@ -196,8 +186,7 @@ export default function LandPartnerScreen() {
       propertyType: z.string(),
       zoning: z.string(),
       daysOnMarket: z.number(),
-      source: z.string(),
-    })),
+      source: z.string()})),
     marketAnalysis: z.object({
       averagePrice: z.number(),
       medianPrice: z.number(),
@@ -205,10 +194,8 @@ export default function LandPartnerScreen() {
       averagePricePerSqft: z.number(),
       marketTrend: z.enum(['rising', 'stable', 'declining']),
       confidenceScore: z.number(),
-      recommendedValue: z.number(),
-    }),
-    insights: z.array(z.string()),
-  });
+      recommendedValue: z.number()}),
+    insights: z.array(z.string())});
 
   const searchComps = async () => {
     if (!formData.propertyAddress || !formData.city || !formData.state || !formData.lotSize) {
@@ -250,11 +237,9 @@ Provide market analysis with:
 - Confidence score (70-95%)
 - Recommended fair market value based on comps
 
-Also provide 3-4 actionable insights about the local market.`,
-          },
+Also provide 3-4 actionable insights about the local market.`},
         ],
-        schema: compSearchSchema,
-      });
+        schema: compSearchSchema});
 
       const compResult: CompSearchResult = {
         subjectProperty: {
@@ -262,13 +247,11 @@ Also provide 3-4 actionable insights about the local market.`,
           city: formData.city,
           state: formData.state,
           lotSize: lotSizeNum,
-          lotSizeUnit: formData.lotSizeUnit,
-        },
+          lotSizeUnit: formData.lotSizeUnit},
         comparables: result.comparables,
         marketAnalysis: result.marketAnalysis,
         insights: result.insights,
-        generatedAt: new Date().toISOString(),
-      };
+        generatedAt: new Date().toISOString()};
 
       setCompResults(compResult);
       console.log('Comp search completed:', compResult);
@@ -787,7 +770,7 @@ Also provide 3-4 actionable insights about the local market.`,
             <View style={styles.documentStatus}>
               {formData.deedDocument.status === 'scanning' ? (
                 <>
-                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <ShimmerIndicator size="small" color={Colors.primary} />
                   <Text style={styles.documentStatusText}>Scanning document...</Text>
                 </>
               ) : formData.deedDocument.status === 'verified' ? (
@@ -842,7 +825,7 @@ Also provide 3-4 actionable insights about the local market.`,
             <View style={styles.documentStatus}>
               {formData.idDocument.status === 'scanning' ? (
                 <>
-                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <ShimmerIndicator size="small" color={Colors.primary} />
                   <Text style={styles.documentStatusText}>Scanning document...</Text>
                 </>
               ) : formData.idDocument.status === 'verified' ? (
@@ -1123,7 +1106,7 @@ Also provide 3-4 actionable insights about the local market.`,
           disabled={isSubmitting || (currentStep === STEPS.length - 1 && !formData.controlDisclosureAccepted)}
         >
           {isSubmitting ? (
-            <ActivityIndicator size="small" color={Colors.background} />
+            <ShimmerIndicator size="small" color={Colors.background} />
           ) : (
             <>
               <Text style={styles.footerButtonPrimaryText}>
@@ -1182,7 +1165,7 @@ Also provide 3-4 actionable insights about the local market.`,
 
             {compSearching ? (
               <View style={styles.compLoadingContainer}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <ShimmerIndicator size="large" color={Colors.primary} />
                 <Text style={styles.compLoadingText}>Searching public records...</Text>
                 <Text style={styles.compLoadingSubtext}>Analyzing comparable sales within 3 miles</Text>
               </View>
@@ -1317,35 +1300,29 @@ Also provide 3-4 actionable insights about the local market.`,
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   headerTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   headerStep: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   stepIndicatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
     paddingBottom: 12,
-    gap: 0,
-  },
+    gap: 0},
   stepIndicatorItem: {
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   stepDot: {
     width: 28,
     height: 28,
@@ -1354,108 +1331,86 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   stepDotActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   stepDotCompleted: {
     backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
+    borderColor: Colors.success},
   stepLine: {
     width: 20,
     height: 2,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   stepLineCompleted: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   scrollView: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scrollContent: {
     padding: 20,
-    paddingBottom: 140,
-  },
+    paddingBottom: 140},
   stepContent: {
-    gap: 16,
-  },
+    gap: 16},
   stepTitle: {
     color: Colors.text,
     fontSize: 22,
     fontWeight: '800' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   stepSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   partnerCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 2,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   partnerCardSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '08',
-  },
+    backgroundColor: Colors.primary + '08'},
   partnerCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   partnerIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   partnerCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   partnerCardTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   partnerCardSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   selectedBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   partnerCardDesc: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   partnerCardFeatures: {
-    gap: 6,
-  },
+    gap: 6},
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   featureText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   infoButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1464,32 +1419,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.surfaceBorder,
-  },
+    borderTopColor: Colors.surfaceBorder},
   infoButtonText: {
     color: Colors.primary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   formRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   formHalf: {
-    flex: 1,
-  },
+    flex: 1},
   formQuarter: {
-    flex: 0.5,
-  },
+    flex: 0.5},
   inputLabel: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '600' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   inputContainer: {
-    gap: 6,
-  },
+    gap: 6},
   input: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -1497,14 +1445,11 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   inputNoPadding: {
-    paddingVertical: 0,
-  },
+    paddingVertical: 0},
   textAreaContainer: {
-    gap: 6,
-  },
+    gap: 6},
   textArea: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -1514,284 +1459,231 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     minHeight: 100,
-    textAlignVertical: 'top',
-  },
+    textAlignVertical: 'top'},
   unitToggle: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: 10,
     padding: 3,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   unitButton: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   unitButtonActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   unitButtonText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   unitButtonTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   documentCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   documentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   documentIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   documentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   documentTitle: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   documentSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   uploadButton: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingVertical: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   uploadButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   documentUploaded: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   documentStatus: {
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   documentStatusText: {
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   removeDocButton: {
-    padding: 4,
-  },
+    padding: 4},
   verificationNote: {
     backgroundColor: Colors.info + '10',
     borderRadius: 8,
     padding: 10,
-    marginTop: 8,
-  },
+    marginTop: 8},
   verificationNoteText: {
     color: Colors.info,
     fontSize: 12,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   dealCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   dealHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   dealHeaderTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   termBadge: {
     backgroundColor: Colors.primary + '20',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   termBadgeText: {
     color: Colors.primary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dealTermsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   dealTermItem: {
     flex: 1,
     minWidth: '45%',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 10,
     padding: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   dealTermValue: {
     color: Colors.primary,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   dealTermLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   calculationCard: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 14,
-    gap: 8,
-  },
+    gap: 8},
   calculationTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   calculationNote: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   calculationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   calculationLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   calculationValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   calculationValueSmall: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   highlightValue: {
     color: Colors.primary,
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   divider: {
     height: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginVertical: 4,
-  },
+    marginVertical: 4},
   totalReturnCard: {
     backgroundColor: Colors.success + '10',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.success + '20',
-  },
+    borderColor: Colors.success + '20'},
   totalReturnLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   totalReturnValue: {
     color: Colors.success,
     fontSize: 24,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   totalReturnNote: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 4,
-  },
+    marginTop: 4},
   disclaimerCard: {
     backgroundColor: Colors.warning + '10',
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.warning + '20',
-  },
+    borderColor: Colors.warning + '20'},
   disclaimerText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   disclosureCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   disclosureHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   disclosureTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disclosureContent: {
-    padding: 16,
-  },
+    padding: 16},
   disclosureText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   disclosureBold: {
     color: Colors.text,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disclosureSection: {
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   disclosureList: {
     gap: 6,
-    marginLeft: 8,
-  },
+    marginLeft: 8},
   disclosureListItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1799,8 +1691,7 @@ const styles = StyleSheet.create({
     padding: 14,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   checkbox: {
     width: 24,
     height: 24,
@@ -1808,43 +1699,34 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkboxChecked: {
     backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
+    borderColor: Colors.success},
   checkboxLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   signatureNote: {
     backgroundColor: Colors.info + '10',
     borderRadius: 10,
-    padding: 12,
-  },
+    padding: 12},
   signatureNoteText: {
     color: Colors.info,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   accreditedSection: {
-    gap: 10,
-  },
+    gap: 10},
   accreditedHeader: {
-    gap: 4,
-  },
+    gap: 4},
   accreditedTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   accreditedNote: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   accreditedOption: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -1853,25 +1735,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     borderWidth: 2,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   accreditedOptionSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '08',
-  },
+    backgroundColor: Colors.primary + '08'},
   accreditedOptionText: {
-    flex: 1,
-  },
+    flex: 1},
   accreditedOptionTitle: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   accreditedOptionDesc: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   radioCircle: {
     width: 22,
     height: 22,
@@ -1880,33 +1757,26 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-  },
+    marginTop: 1},
   radioCircleSelected: {
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   radioDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   paymentStructureSection: {
-    gap: 10,
-  },
+    gap: 10},
   sectionLabel: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   sectionNote: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   paymentOptions: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   paymentOption: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1914,30 +1784,24 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   paymentOptionSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '08',
-  },
+    backgroundColor: Colors.primary + '08'},
   paymentOptionText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   paymentOptionTextSelected: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   paymentInfoBox: {
     backgroundColor: Colors.info + '10',
     borderRadius: 10,
-    padding: 12,
-  },
+    padding: 12},
   paymentInfoText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   footer: {
     flexDirection: 'row',
     gap: 12,
@@ -1945,70 +1809,56 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   footerButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   footerButtonSecondary: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   footerButtonSecondaryText: {
     color: Colors.text,
     fontWeight: '600' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   footerButtonPrimary: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   footerButtonPrimaryText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   footerButtonDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   modalOverlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
     justifyContent: 'center',
-    padding: 20,
-  },
+    padding: 20},
   modalContent: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 24,
-    maxHeight: '80%',
-  },
+    maxHeight: '80%'},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   modalTitle: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   modalBody: {
-    gap: 12,
-  },
+    gap: 12},
   modalText: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   aiCompButton: {
     borderRadius: 14,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   aiCompButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2017,288 +1867,230 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   aiCompIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: Colors.primary + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   aiCompTextContainer: {
-    flex: 1,
-  },
+    flex: 1},
   aiCompButtonTitle: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   aiCompButtonSubtitle: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   compModalOverlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   compModalContent: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '90%',
-  },
+    maxHeight: '90%'},
   compModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   compModalTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   compModalTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   compLoadingContainer: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 12,
-  },
+    gap: 12},
   compLoadingText: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   compLoadingSubtext: {
     color: Colors.textTertiary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   compResultsScroll: {
-    gap: 12,
-  },
+    gap: 12},
   compSubjectCard: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   compSubjectLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     textTransform: 'uppercase',
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   compSubjectAddress: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   compSubjectDetails: {
     color: Colors.textSecondary,
     fontSize: 13,
-    marginTop: 4,
-  },
+    marginTop: 4},
   compMarketCard: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   compSectionTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   compMarketGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   compMarketItem: {
     flex: 1,
     minWidth: '45%',
     alignItems: 'center',
-    padding: 8,
-  },
+    padding: 8},
   compMarketValue: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   compMarketLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   compTrendBadge: {
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
     alignSelf: 'center',
-    marginTop: 8,
-  },
+    marginTop: 8},
   compTrendRising: {
-    backgroundColor: Colors.success + '15',
-  },
+    backgroundColor: Colors.success + '15'},
   compTrendDeclining: {
-    backgroundColor: Colors.error + '15',
-  },
+    backgroundColor: Colors.error + '15'},
   compTrendText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   compRecommendedCard: {
     backgroundColor: Colors.primary + '10',
     borderRadius: 14,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   compRecommendedHeader: {
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   compRecommendedLabel: {
     color: Colors.textSecondary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   compRecommendedValue: {
     color: Colors.primary,
     fontSize: 24,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   compConfidenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     width: '100%',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   compConfidenceBar: {
     flex: 1,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   compConfidenceFill: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   compConfidenceText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   applyValueButton: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   applyValueText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 14,
-  },
+    fontSize: 14},
   compListSection: {
-    gap: 8,
-  },
+    gap: 8},
   compCard: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    padding: 14,
-  },
+    padding: 14},
   compCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   compCardIndex: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   compCardIndexText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   compCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   compCardAddress: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   compCardLocation: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   compCardPrice: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   compCardPriceValue: {
     color: Colors.success,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   compCardDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   compCardDetail: {
     backgroundColor: Colors.surface,
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   compCardDetailText: {
     color: Colors.textSecondary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   compCardSource: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 6,
-  },
+    marginTop: 6},
   compInsightsSection: {
-    gap: 6,
-  },
+    gap: 6},
   compInsightItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-  },
+    gap: 8},
   compInsightText: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   compDisclaimer: {
     backgroundColor: Colors.warning + '08',
     borderRadius: 10,
-    padding: 12,
-  },
+    padding: 12},
   compDisclaimerText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
-  },
-});
+    lineHeight: 16}});

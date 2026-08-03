@@ -2,14 +2,12 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack, router } from 'expo-router';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   CheckCircle2,
   FlaskConical,
@@ -17,18 +15,17 @@ import {
   Rocket,
   Sparkles,
   TrendingUp,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getInnovationDashboard,
   runInnovationScan,
   setInnovationIdeaStatus,
   type InnovationDashboard,
-  type InnovationIdea,
-} from '@/src/modules/ivx-developer/innovationService';
+  type InnovationIdea} from '@/src/modules/ivx-developer/innovationService';
 
 const POLL_INTERVAL_MS = 6000;
 
@@ -37,16 +34,14 @@ const CATEGORY_LABEL: Record<InnovationIdea['category'], string> = {
   business_model: 'Business model',
   ai_workflow: 'AI workflow',
   platform_capability: 'Platform',
-  technology_concept: 'Technology',
-};
+  technology_concept: 'Technology'};
 
 const SIGNAL_LABEL: Record<InnovationIdea['signalSource'], string> = {
   ivx_data: 'IVX data',
   user_behavior: 'User behavior',
   performance: 'Performance',
   market: 'Market',
-  competitor: 'Competitor',
-};
+  competitor: 'Competitor'};
 
 function formatUsd(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
@@ -85,8 +80,7 @@ function InnovationDashboardContent() {
   const dashboardQuery = useQuery<InnovationDashboard | null>({
     queryKey: ['ivx-innovation', 'dashboard'],
     queryFn: getInnovationDashboard,
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+    refetchInterval: POLL_INTERVAL_MS});
 
   const dashboard = dashboardQuery.data ?? null;
 
@@ -144,7 +138,7 @@ function InnovationDashboardContent() {
             disabled={scanning}
             testID="ivx-innovation-run-scan"
           >
-            {scanning ? <ActivityIndicator size="small" color={Colors.black} /> : <Lightbulb size={15} color={Colors.black} />}
+            {scanning ? <ShimmerIndicator size="small" color={Colors.black} /> : <Lightbulb size={15} color={Colors.black} />}
             <Text style={styles.primaryButtonText}>{scanning ? 'Scanning…' : 'Generate ideas'}</Text>
           </Pressable>
           <Pressable
@@ -232,7 +226,7 @@ function InnovationDashboardContent() {
       ) : (
         <View style={styles.card}>
           {dashboardQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
           ) : (
             <Text style={styles.emptyBody}>{dashboardQuery.error instanceof Error ? dashboardQuery.error.message : 'No innovation data yet.'}</Text>
           )}
@@ -297,5 +291,4 @@ const styles = StyleSheet.create({
   rejectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 10, flex: 1, borderWidth: 1, borderColor: Colors.error },
   rejectButtonText: { fontSize: 13, fontWeight: '700' as const, color: Colors.error },
   statusTag: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, marginTop: 2 },
-  statusTagText: { fontSize: 11, fontWeight: '700' as const, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
-});
+  statusTagText: { fontSize: 11, fontWeight: '700' as const, textTransform: 'uppercase' as const, letterSpacing: 0.5 }});

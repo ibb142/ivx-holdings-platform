@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -10,8 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -19,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Cloud, FileText, Film, ImageIcon, Sparkles, UploadCloud } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   analyzeFile,
   importGoogleDriveFile,
@@ -27,8 +26,7 @@ import {
   type IVXMultimodalAnalysis,
   type IVXMultimodalKind,
   type IVXMultimodalSummary,
-  type IVXMultimodalUpload,
-} from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
+  type IVXMultimodalUpload} from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
 
 type StoredItem = {
   id: string;
@@ -76,8 +74,7 @@ export default function IVXFilesScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.92,
-        allowsMultipleSelection: false,
-      });
+        allowsMultipleSelection: false});
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       setBusy('Uploading image…');
@@ -87,8 +84,7 @@ export default function IVXFilesScreen() {
         fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
         mimeType: asset.mimeType ?? blob.type ?? 'image/jpeg',
         sizeBytes: sizeBytes ?? null,
-        body: blob,
-      });
+        body: blob});
       pushItem(upload, 'upload');
     } catch (error) {
       Alert.alert('Image upload failed', error instanceof Error ? error.message : 'Unknown error');
@@ -111,8 +107,7 @@ export default function IVXFilesScreen() {
         fileName: asset.name ?? `${kind}-${Date.now()}`,
         mimeType,
         sizeBytes: asset.size ?? sizeBytes ?? null,
-        body: blob,
-      });
+        body: blob});
       pushItem(upload, 'upload');
     } catch (error) {
       Alert.alert(`${kind.toUpperCase()} upload failed`, error instanceof Error ? error.message : 'Unknown error');
@@ -138,8 +133,7 @@ export default function IVXFilesScreen() {
         sizeBytes: file.sizeBytes,
         storagePath: file.path,
         readUrl: file.readUrl,
-        source: 'drive',
-      }, ...prev]);
+        source: 'drive'}, ...prev]);
     } catch (error) {
       Alert.alert('Drive import failed', error instanceof Error ? error.message : 'Unknown error');
     } finally {
@@ -156,8 +150,7 @@ export default function IVXFilesScreen() {
       sizeBytes: upload.sizeBytes,
       storagePath: upload.path,
       readUrl: upload.readUrl,
-      source,
-    }, ...prev]);
+      source}, ...prev]);
   }
 
   const runAnalyze = useCallback(async (item: StoredItem, mode: 'analyze' | 'summary') => {
@@ -254,7 +247,7 @@ export default function IVXFilesScreen() {
 
           {busy && (
             <View style={styles.busyRow}>
-              <ActivityIndicator size="small" color={Colors.text} />
+              <ShimmerIndicator size="small" color={Colors.text} />
               <Text style={styles.busyText}>{busy}</Text>
             </View>
           )}
@@ -312,8 +305,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   actionLabel: { fontSize: 12, fontWeight: '600' as const, color: Colors.text },
   driveBox: {
     marginTop: 8,
@@ -322,8 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   driveHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   driveTitle: { fontSize: 14, fontWeight: '700' as const, color: Colors.text },
   driveHint: { fontSize: 12, color: Colors.muted },
@@ -335,8 +326,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: Colors.text,
-    fontSize: 13,
-  },
+    fontSize: 13},
   driveButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -344,8 +334,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.text,
     paddingVertical: 12,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   driveButtonText: { color: Colors.background, fontWeight: '700' as const, fontSize: 13 },
   busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   busyText: { color: Colors.muted, fontSize: 12 },
@@ -358,8 +347,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   fileHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fileName: { flex: 1, fontSize: 14, fontWeight: '700' as const, color: Colors.text },
   fileMeta: { fontSize: 11, color: Colors.muted },
@@ -371,8 +359,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.background,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   fileActionText: { fontSize: 12, fontWeight: '600' as const, color: Colors.text },
   analysisBox: {
     marginTop: 6,
@@ -381,12 +368,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
+    gap: 6},
   analysisHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   analysisHeaderText: { fontSize: 11, fontWeight: '700' as const, color: Colors.text },
   analysisAnswer: { fontSize: 13, color: Colors.text, lineHeight: 18 },
-  analysisMeta: { fontSize: 11, color: Colors.muted },
-});
+  analysisMeta: { fontSize: 11, color: Colors.muted }});
 
 void FileSystem;

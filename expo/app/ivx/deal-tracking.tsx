@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,8 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Check,
   ClipboardList,
@@ -23,11 +21,11 @@ import {
   Trash2,
   TrendingUp,
   Users,
-  X,
-} from 'lucide-react-native';
+  X} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   createDeal,
   deleteDeal,
@@ -39,16 +37,13 @@ import {
   type DealSource,
   type DealStatus,
   type DealTrackingListResult,
-  type DealTrackingRecord,
-} from '@/src/modules/ivx-developer/dealTrackingService';
+  type DealTrackingRecord} from '@/src/modules/ivx-developer/dealTrackingService';
 
 const STATUS_ORDER: DealStatus[] = ['open', 'in_progress', 'closed_won', 'closed_lost'];
 const STATUS_LABEL: Record<DealStatus, string> = {
-  open: 'Open', in_progress: 'In progress', closed_won: 'Closed won', closed_lost: 'Closed lost',
-};
+  open: 'Open', in_progress: 'In progress', closed_won: 'Closed won', closed_lost: 'Closed lost'};
 const STATUS_TONE: Record<DealStatus, string> = {
-  open: Colors.info, in_progress: Colors.warning, closed_won: Colors.success, closed_lost: Colors.error,
-};
+  open: Colors.info, in_progress: Colors.warning, closed_won: Colors.success, closed_lost: Colors.error};
 
 const SOURCE_OPTIONS: { value: DealSource; label: string }[] = [
   { value: 'owner_entered', label: 'Owner entered' },
@@ -207,8 +202,7 @@ function DealTrackingContent() {
 
   const query = useQuery<DealTrackingListResult>({
     queryKey: ['ivx-deal-tracking', 'list'],
-    queryFn: listDeals,
-  });
+    queryFn: listDeals});
 
   const deals = useMemo(() => query.data?.deals ?? [], [query.data]);
   const metrics = query.data?.metrics ?? null;
@@ -248,8 +242,7 @@ function DealTrackingContent() {
         status: form.status,
         capitalTarget: form.capitalTarget.trim() ? Number(form.capitalTarget.replace(/[$,\s]/g, '')) : null,
         capitalCommitted: form.capitalCommitted.trim() ? Number(form.capitalCommitted.replace(/[$,\s]/g, '')) : null,
-        notes: form.notes.trim(),
-      };
+        notes: form.notes.trim()};
       await createDeal(input);
       setModalOpen(false);
       await query.refetch();
@@ -343,7 +336,7 @@ function DealTrackingContent() {
         {error && !modalOpen ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {query.isLoading ? (
-          <View style={styles.card}><ActivityIndicator size="small" color={Colors.primary} /></View>
+          <View style={styles.card}><ShimmerIndicator size="small" color={Colors.primary} /></View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyCard}>
             <ClipboardList size={26} color={Colors.textTertiary} />
@@ -400,7 +393,7 @@ function DealTrackingContent() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
             </ScrollView>
             <Pressable style={[styles.saveBtn, saving ? styles.btnDisabled : null]} onPress={() => { void handleSave(); }} disabled={saving} testID="ivx-deal-track-save">
-              {saving ? <ActivityIndicator size="small" color={Colors.black} /> : <Check size={16} color={Colors.black} />}
+              {saving ? <ShimmerIndicator size="small" color={Colors.black} /> : <Check size={16} color={Colors.black} />}
               <Text style={styles.saveBtnText}>Add deal</Text>
             </Pressable>
           </View>
@@ -477,5 +470,4 @@ const styles = StyleSheet.create({
   dualItem: { flex: 1 },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, marginHorizontal: 18, marginTop: 8, paddingVertical: 14, borderRadius: 12 },
   saveBtnText: { fontSize: 15, fontWeight: '700' as const, color: Colors.black },
-  btnDisabled: { opacity: 0.6 },
-});
+  btnDisabled: { opacity: 0.6 }});

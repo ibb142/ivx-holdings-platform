@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Dimensions,
-} from 'react-native';
+  Dimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -38,8 +37,7 @@ import {
   Flame,
   Star,
   ArrowUpRight,
-  ArrowDownRight,
-} from 'lucide-react-native';
+  ArrowDownRight} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import {
   MODULE_HEALTH_DATA,
@@ -50,8 +48,7 @@ import {
   WORLD_STATS,
   type ModuleHealth,
   type GrowthChannel,
-  type DiagnosticRecommendation,
-} from '@/mocks/system-monitor';
+  type DiagnosticRecommendation} from '@/mocks/system-monitor';
 
 const { width: _SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -278,8 +275,7 @@ export default function SystemMonitorPage() {
       Animated.timing(scanAnim, {
         toValue: 1,
         duration: 3000,
-        useNativeDriver: false,
-      })
+        useNativeDriver: false})
     );
     scanLoop.start();
     return () => scanLoop.stop();
@@ -287,8 +283,7 @@ export default function SystemMonitorPage() {
 
   const scanWidth = scanAnim.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: ['0%', '100%', '0%'],
-  });
+    outputRange: ['0%', '100%', '0%']});
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -584,11 +579,9 @@ export default function SystemMonitorPage() {
             >
               <View style={styles.reportCardLeft}>
                 <View style={[styles.reportScoreBadge, {
-                  backgroundColor: report.overallScore >= 90 ? '#00E67620' : report.overallScore >= 70 ? '#FFB30020' : '#FF174420',
-                }]}>
+                  backgroundColor: report.overallScore >= 90 ? '#00E67620' : report.overallScore >= 70 ? '#FFB30020' : '#FF174420'}]}>
                   <Text style={[styles.reportScoreText, {
-                    color: report.overallScore >= 90 ? '#00E676' : report.overallScore >= 70 ? '#FFB300' : '#FF1744',
-                  }]}>{report.overallScore}</Text>
+                    color: report.overallScore >= 90 ? '#00E676' : report.overallScore >= 70 ? '#FFB300' : '#FF1744'}]}>{report.overallScore}</Text>
                 </View>
                 <View>
                   <Text style={styles.reportCardTitle}>{report.type.charAt(0).toUpperCase() + report.type.slice(1)} Scan</Text>
@@ -636,11 +629,9 @@ export default function SystemMonitorPage() {
         </View>
         <View style={styles.headerRight}>
           <View style={[styles.healthBadge, {
-            backgroundColor: overallHealth >= 90 ? '#00E67620' : '#FFB30020',
-          }]}>
+            backgroundColor: overallHealth >= 90 ? '#00E67620' : '#FFB30020'}]}>
             <Text style={[styles.healthBadgeText, {
-              color: overallHealth >= 90 ? '#00E676' : '#FFB300',
-            }]}>{overallHealth}%</Text>
+              color: overallHealth >= 90 ? '#00E676' : '#FFB300'}]}>{overallHealth}%</Text>
           </View>
         </View>
       </View>
@@ -705,58 +696,48 @@ function RecommendationItem({ rec }: { rec: DiagnosticRecommendation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#050508',
-  },
+    backgroundColor: '#050508'},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1F',
-  },
+    borderBottomColor: '#1A1A1F'},
   backBtn: {
-    padding: 6,
-  },
+    padding: 6},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 17,
     fontWeight: '700',
     color: Colors.text,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   headerRight: {
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   healthBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   healthBadgeText: {
     fontSize: 13,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#00E676',
-  },
+    backgroundColor: '#00E676'},
   tabRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1F',
-  },
+    borderBottomColor: '#1A1A1F'},
   tabBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -765,26 +746,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     gap: 5,
-    backgroundColor: '#0D0D12',
-  },
+    backgroundColor: '#0D0D12'},
   tabBtnActive: {
     backgroundColor: Colors.primary + '18',
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   tabText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   tabTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   scrollContent: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingTop: 14,
-  },
+    paddingTop: 14},
 
   pulseHeader: {
     flexDirection: 'row',
@@ -794,11 +770,9 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   pulseScoreContainer: {
-    marginRight: 20,
-  },
+    marginRight: 20},
   pulseScoreRing: {
     width: 88,
     height: 88,
@@ -806,38 +780,31 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0A10',
-  },
+    backgroundColor: '#0A0A10'},
   pulseScoreValue: {
     fontSize: 28,
     fontWeight: '800',
-    color: Colors.text,
-  },
+    color: Colors.text},
   pulseScoreLabel: {
     fontSize: 9,
     fontWeight: '700',
     color: Colors.textTertiary,
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   pulseStatsColumn: {
     flex: 1,
-    gap: 8,
-  },
+    gap: 8},
   pulseStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   pulseStatValue: {
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
-    minWidth: 24,
-  },
+    minWidth: 24},
   pulseStatLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
 
   liveServerCard: {
     backgroundColor: '#0D0D14',
@@ -845,58 +812,47 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   liveServerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   liveServerTitle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   liveServerTitleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   liveServerTime: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   serverMetricsGrid: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   serverMetric: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   serverMetricValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   serverMetricLabel: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
 
   miniBarTrack: {
     width: '100%',
     height: 4,
     backgroundColor: '#1A1A22',
     borderRadius: 2,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   miniBarFill: {
     height: '100%',
-    borderRadius: 2,
-  },
+    borderRadius: 2},
 
   issuesSummaryCard: {
     backgroundColor: '#0D0D14',
@@ -904,34 +860,28 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   issuesSummaryTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   issuesSummaryRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   issueBlock: {
     flex: 1,
     borderRadius: 12,
     padding: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   issueBlockCount: {
     fontSize: 22,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   issueBlockLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
     marginTop: 4,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
 
   worldStatsCard: {
     backgroundColor: '#0D0D14',
@@ -939,41 +889,34 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   worldStatsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   worldStatsTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   worldStatsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   worldStat: {
     width: '31%' as any,
     backgroundColor: '#12121A',
     borderRadius: 10,
     padding: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   worldStatValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   worldStatLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   yourShareRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -981,21 +924,17 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A22',
-  },
+    borderTopColor: '#1A1A22'},
   yourShareLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   yourShareValue: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   yourSharePercent: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
 
   scanningCard: {
     backgroundColor: '#0D0D14',
@@ -1003,40 +942,33 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Colors.primary + '20',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   scanningHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   scanningText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   scanBarContainer: {
     height: 3,
     backgroundColor: '#1A1A22',
     borderRadius: 2,
     overflow: 'hidden',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   scanBar: {
     height: '100%',
     backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   scanNote: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
 
   moduleFilterRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   moduleFilterBtn: {
     flex: 1,
     paddingVertical: 8,
@@ -1044,20 +976,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#0D0D12',
     borderWidth: 1,
-    borderColor: '#1A1A22',
-  },
+    borderColor: '#1A1A22'},
   moduleFilterBtnActive: {
     backgroundColor: Colors.primary + '15',
-    borderColor: Colors.primary + '40',
-  },
+    borderColor: Colors.primary + '40'},
   moduleFilterText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   moduleFilterTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
 
   moduleRow: {
     flexDirection: 'row',
@@ -1067,58 +995,47 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#1A1A22',
-  },
+    borderColor: '#1A1A22'},
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 12,
-  },
+    marginRight: 12},
   moduleMainInfo: {
-    flex: 1,
-  },
+    flex: 1},
   moduleRowName: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   moduleRowMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 3,
-    gap: 4,
-  },
+    gap: 4},
   moduleRowMetaText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   moduleRowDivider: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   moduleRowRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   issueBadgeCritical: {
     backgroundColor: '#FF174430',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   issueBadgeWarn: {
     backgroundColor: '#FFB30030',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   issueBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
 
   moduleDetailOverlay: {
     position: 'absolute',
@@ -1129,73 +1046,60 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     paddingHorizontal: 14,
-    zIndex: 100,
-  },
+    zIndex: 100},
   moduleDetailCard: {
     backgroundColor: '#12121A',
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#2A2A35',
-  },
+    borderColor: '#2A2A35'},
   moduleDetailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   statusDotLarge: {
     width: 14,
     height: 14,
-    borderRadius: 7,
-  },
+    borderRadius: 7},
   moduleDetailName: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   moduleDetailStatus: {
     fontSize: 11,
     fontWeight: '700',
     color: Colors.textSecondary,
     letterSpacing: 1,
-    marginTop: 2,
-  },
+    marginTop: 2},
   moduleDetailClose: {
-    padding: 4,
-  },
+    padding: 4},
   moduleDetailGrid: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   moduleDetailStat: {
     flex: 1,
     backgroundColor: '#0A0A10',
     borderRadius: 12,
     padding: 12,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   moduleDetailStatValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   moduleDetailStatLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   platformRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   platformLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   platformBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1203,13 +1107,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A25',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   platformBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   recommendationBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1218,14 +1120,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderLeftWidth: 3,
-    borderLeftColor: '#FFB300',
-  },
+    borderLeftColor: '#FFB300'},
   recommendationText: {
     flex: 1,
     fontSize: 13,
     color: '#FFB300',
-    lineHeight: 18,
-  },
+    lineHeight: 18},
 
   growthSummary: {
     flexDirection: 'row',
@@ -1235,41 +1135,33 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   growthSummaryLeft: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   growthSummaryRight: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   growthSummaryArrow: {
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   growthSummaryLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   growthSummaryValue: {
     fontSize: 28,
     fontWeight: '800',
-    color: Colors.text,
-  },
+    color: Colors.text},
 
   sectionLabel: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.textSecondary,
     marginBottom: 10,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
 
   milestonesScroll: {
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   milestoneCard: {
     width: 180,
     backgroundColor: '#0D0D14',
@@ -1277,42 +1169,34 @@ const styles = StyleSheet.create({
     padding: 14,
     marginRight: 10,
     borderWidth: 1,
-    borderColor: '#1A1A22',
-  },
+    borderColor: '#1A1A22'},
   milestoneCardReached: {
     borderColor: '#00E67640',
-    backgroundColor: '#00E67608',
-  },
+    backgroundColor: '#00E67608'},
   milestoneHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   milestoneTarget: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
-  },
+    color: Colors.text},
   milestoneDate: {
     fontSize: 11,
     color: Colors.primary,
     marginBottom: 6,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   milestoneStrategy: {
     fontSize: 11,
     color: Colors.textSecondary,
     lineHeight: 15,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   milestoneConfidence: {
-    gap: 4,
-  },
+    gap: 4},
   milestoneConfText: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
 
   channelRow: {
     flexDirection: 'row',
@@ -1322,52 +1206,41 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#1A1A22',
-  },
+    borderColor: '#1A1A22'},
   channelLeft: {
-    flex: 1,
-  },
+    flex: 1},
   channelName: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   channelMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 3,
-  },
+    marginTop: 3},
   channelMetaText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   channelDivider: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   channelRight: {
     alignItems: 'flex-end',
-    gap: 2,
-  },
+    gap: 2},
   channelGrowthBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   channelGrowthText: {
     fontSize: 12,
-    fontWeight: '700',
-  },
+    fontWeight: '700'},
   channelConversion: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   channelROI: {
     fontSize: 10,
     color: Colors.primary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
   channelInsightCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1376,19 +1249,16 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 10,
     borderLeftWidth: 3,
-    borderLeftColor: '#FF6D00',
-  },
+    borderLeftColor: '#FF6D00'},
   channelInsightTitle: {
     fontSize: 13,
     fontWeight: '700',
     color: '#FF6D00',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   channelInsightText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
 
   reportSummaryCard: {
     backgroundColor: '#0D0D14',
@@ -1396,24 +1266,20 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: '#1A1A22',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   reportSummaryTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   reportSummarySubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 17,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   reportCycleRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   reportCycleItem: {
     flex: 1,
     flexDirection: 'row',
@@ -1421,13 +1287,11 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: '#12121A',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   reportCycleText: {
     fontSize: 11,
     color: Colors.textSecondary,
-    fontWeight: '600',
-  },
+    fontWeight: '600'},
 
   reportCard: {
     backgroundColor: '#0D0D14',
@@ -1435,74 +1299,61 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A22',
     marginBottom: 8,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   reportCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-  },
+    padding: 14},
   reportCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   reportScoreBadge: {
     width: 42,
     height: 42,
     borderRadius: 12,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   reportScoreText: {
     fontSize: 16,
-    fontWeight: '800',
-  },
+    fontWeight: '800'},
   reportCardTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
+    color: Colors.text},
   reportCardTime: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   reportCardRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   reportBadgeRow: {
     flexDirection: 'row',
-    gap: 4,
-  },
+    gap: 4},
   reportIssueBadge: {
     backgroundColor: '#FF174420',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   reportIssueBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FF1744',
-  },
+    color: '#FF1744'},
 
   reportRecommendations: {
     padding: 14,
     paddingTop: 0,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A22',
-  },
+    borderTopColor: '#1A1A22'},
   reportRecTitle: {
     fontSize: 13,
     fontWeight: '700',
     color: Colors.text,
     marginTop: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
 
   recItem: {
     backgroundColor: '#0A0A10',
@@ -1510,35 +1361,29 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#1A1A22',
-  },
+    borderColor: '#1A1A22'},
   recHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 8,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   recSeverityDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   recModule: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   recActionBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   recActionText: {
     fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   autoFixBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1546,28 +1391,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#00E67620',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   autoFixText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#00E676',
-  },
+    color: '#00E676'},
   recTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   recDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 17,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   recImpact: {
     fontSize: 11,
     color: Colors.primary,
-    fontWeight: '600',
-  },
-});
+    fontWeight: '600'}});

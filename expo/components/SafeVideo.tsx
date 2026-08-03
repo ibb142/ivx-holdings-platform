@@ -12,7 +12,7 @@
  * Poster is rendered as a separate Image layer (not expo-av posterSource).
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator, Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Animated, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { Video, ResizeMode, type VideoReadyForDisplayEvent } from 'expo-av';
 import { RefreshCw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -55,8 +55,7 @@ export default function SafeVideo({
   resizeMode = ResizeMode.COVER,
   onProgress,
   onPlaybackStatusUpdate,
-  testID,
-}: SafeVideoProps) {
+  testID}: SafeVideoProps) {
   const videoRef = useRef<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -114,15 +113,15 @@ export default function SafeVideo({
   };
 
   if (!playbackUri) {
+    // Instagram-style: show dark placeholder with shimmer, not a spinner
     return (
       <View style={[styles.container, style]} testID={testID ? `${testID}-no-source` : undefined}>
         {posterUri ? (
           <View style={[styles.container, style]}>
             <View style={[StyleSheet.absoluteFill, { backgroundColor: '#111' }]} />
-            <ActivityIndicator size="large" color={GOLD} style={StyleSheet.absoluteFill} />
           </View>
         ) : (
-          <ActivityIndicator size="large" color={GOLD} />
+          <View style={[styles.container, { backgroundColor: '#111' }]} />
         )}
       </View>
     );
@@ -172,14 +171,14 @@ export default function SafeVideo({
             onPlaybackStatusUpdate?.({
               isPlaying: status.isPlaying ?? false,
               durationMillis: status.durationMillis,
-              positionMillis: status.positionMillis ?? 0,
-            });
+              positionMillis: status.positionMillis ?? 0});
           }
         }}
       />
       {loading && !error && (
         <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator size="large" color={GOLD} />
+          {/* Instagram-style: subtle dark overlay while video buffers — no spinner */}
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.15)' }]} />
         </View>
       )}
       {error && (
@@ -190,7 +189,7 @@ export default function SafeVideo({
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           ) : (
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Video unavailable</Text>
           )}
         </View>
       )}
@@ -203,14 +202,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-  },
+    backgroundColor: 'rgba(0,0,0,0.25)'},
   retryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -218,11 +215,8 @@ const styles = StyleSheet.create({
     backgroundColor: GOLD,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   retryText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
-});
+    fontWeight: '700' as const}});

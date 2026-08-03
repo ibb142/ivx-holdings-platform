@@ -1,8 +1,9 @@
 import React, { useMemo, useRef } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import {View, Text, StyleSheet } from "react-native";
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdminGuard } from '@/hooks/useAdminGuard';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // IVX Crash Shield: route-level error boundary for every admin screen.
 export { ErrorBoundary } from 'expo-router';
@@ -12,22 +13,18 @@ const ADMIN_GUARD_OPTIONS = { redirectOnFail: true } as const;
 const ADMIN_STACK_SCREEN_OPTIONS = {
   headerShown: false,
   contentStyle: { backgroundColor: Colors.background },
-  animation: 'slide_from_right' as const,
-} as const;
+  animation: 'slide_from_right' as const} as const;
 
 const layoutStyles = StyleSheet.create({
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   loadingText: {
     color: '#97A0AF',
     fontSize: 14,
-    marginTop: 12,
-  },
-});
+    marginTop: 12}});
 
 export default function AdminLayout() {
   const renderCountRef = useRef(0);
@@ -42,7 +39,7 @@ export default function AdminLayout() {
   if (isVerifying) {
     return (
       <View style={layoutStyles.loading}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={layoutStyles.loadingText}>Verifying access...</Text>
       </View>
     );

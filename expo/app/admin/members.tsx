@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   FlatList,
@@ -8,12 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   RefreshControl,
   ListRenderItem,
   Share,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -32,20 +29,19 @@ import {
   Smartphone,
   Copy,
   ArrowUpDown,
-  FileSpreadsheet,
-} from 'lucide-react-native';
+  FileSpreadsheet} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Image } from 'expo-image';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchAdminMemberRegistry,
   syncMemberRegistryFromSupabase,
   upsertStoredMemberRegistryRecord,
   getLastRegistryFetchStatus,
-  RegistryFetchStatus,
-} from '@/lib/member-registry';
+  RegistryFetchStatus} from '@/lib/member-registry';
 
 type FilterType = 'all' | 'active' | 'pending_kyc' | 'suspended';
 type TypeFilter = 'all' | 'member' | 'investor' | 'buyer' | 'realtor' | 'influencer' | 'jv_partner';
@@ -119,8 +115,7 @@ export default function MembersScreen() {
       return { members, total: members.length };
     },
     staleTime: 30_000,
-    refetchInterval: 60_000,
-  });
+    refetchInterval: 60_000});
 
   // Derive stats from the same query — eliminates the duplicate
   // fetchAdminMemberRegistry() call that statsQuery used to make.
@@ -139,8 +134,7 @@ export default function MembersScreen() {
       }).length,
       newMembersToday: all.filter((m: any) => (m.createdAt || m.created_at || '') >= todayStart).length,
       newMembersThisWeek: all.filter((m: any) => (m.createdAt || m.created_at || '') >= weekStart).length,
-      newMembersThisMonth: all.filter((m: any) => (m.createdAt || m.created_at || '') >= monthStart).length,
-    };
+      newMembersThisMonth: all.filter((m: any) => (m.createdAt || m.created_at || '') >= monthStart).length};
   }, [membersQuery.data?.members]);
 
 
@@ -158,8 +152,7 @@ export default function MembersScreen() {
       }
       void syncMemberRegistryFromSupabase();
       void membersQuery.refetch();
-    },
-  });
+    }});
 
   const suspendMutation = useMutation({
     mutationFn: async (input: { id: string; reason: string }) => {
@@ -174,8 +167,7 @@ export default function MembersScreen() {
       }
       void syncMemberRegistryFromSupabase();
       void membersQuery.refetch();
-    },
-  });
+    }});
 
   const updateMutation = useMutation({
     mutationFn: async (input: { id: string; data: Record<string, unknown> }) => {
@@ -190,8 +182,7 @@ export default function MembersScreen() {
       }
       void syncMemberRegistryFromSupabase();
       void membersQuery.refetch();
-    },
-  });
+    }});
 
   const members = useMemo(() => {
     const rawItems = membersQuery.data?.members ?? [];
@@ -216,8 +207,7 @@ export default function MembersScreen() {
       verificationStatus: (m.verificationStatus || m.verification_status || 'unverified') as string,
       registrySource: (m.source || '') as string,
       registrationSource: (m.registrationSource || m.source_detail || '') as string,
-      avatarUrl: (m.pictureUrl || m.picture_url || '') as string,
-    }));
+      avatarUrl: (m.pictureUrl || m.picture_url || '') as string}));
     let result = items;
 
     if (filter === 'active') {
@@ -301,8 +291,7 @@ export default function MembersScreen() {
             } else if (action === 'activate') {
               updateMutation.mutate({ id: member.id, data: { status: 'active' } });
             }
-          },
-        },
+          }},
       ]
     );
   }, [kycMutation, suspendMutation, updateMutation]);
@@ -322,8 +311,7 @@ export default function MembersScreen() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-    });
+      year: 'numeric'});
   }, []);
 
   const keyExtractor = useCallback((item: MemberItem) => item.id, []);
@@ -726,7 +714,7 @@ export default function MembersScreen() {
 
       {membersQuery.isLoading && !membersQuery.data ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading members...</Text>
         </View>
       ) : members.length === 0 ? (
@@ -764,7 +752,7 @@ export default function MembersScreen() {
           ListFooterComponent={
             displayCount < members.length ? (
               <View style={styles.loadingFooter}>
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ShimmerIndicator size="small" color={Colors.primary} />
                 <Text style={styles.loadingFooterText}>Loading more...</Text>
               </View>
             ) : null
@@ -785,15 +773,13 @@ export default function MembersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    gap: 10,
-  },
+    gap: 10},
   backBtn: {
     width: 38,
     height: 38,
@@ -802,19 +788,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   title: {
     fontSize: 22,
     fontWeight: '700' as const,
     color: Colors.text,
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   subtitle: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   registryBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -824,27 +807,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   registryBannerOk: {
     backgroundColor: 'rgba(0,196,140,0.08)',
-    borderColor: 'rgba(0,196,140,0.35)',
-  },
+    borderColor: 'rgba(0,196,140,0.35)'},
   registryBannerError: {
     backgroundColor: 'rgba(255,90,90,0.10)',
-    borderColor: 'rgba(255,90,90,0.40)',
-  },
+    borderColor: 'rgba(255,90,90,0.40)'},
   registryDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   registryBannerText: {
     flex: 1,
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   quickStats: {
     flexDirection: 'row' as const,
     marginHorizontal: 20,
@@ -854,32 +832,26 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   quickStatItem: {
     flex: 1,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   quickStatNum: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   quickStatLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
     marginTop: 2,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   quickStatDivider: {
     width: 1,
     height: 28,
-    backgroundColor: Colors.border,
-  },
+    backgroundColor: Colors.border},
   searchContainer: {
     paddingHorizontal: 20,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   searchBox: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -887,59 +859,48 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 10,
     fontSize: 15,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterContainer: {
     maxHeight: 44,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   filterContent: {
     paddingHorizontal: 20,
-    gap: 10,
-  },
+    gap: 10},
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   exportChip: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 5,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   sortChip: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 5,
-  },
+    gap: 5},
   joinDateRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   copyIdBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -949,61 +910,50 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   copyIdText: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   list: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   memberCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   memberHeader: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   avatarPlaceholder: {
     width: 50,
     height: 50,
     borderRadius: 25,
     backgroundColor: Colors.background,
     justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
+    alignItems: 'center' as const},
   memberInfo: {
     flex: 1,
-    marginLeft: 12,
-  },
+    marginLeft: 12},
   memberName: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   memberEmail: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   memberCountry: {
     fontSize: 12,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   badgeRow: {
     flexDirection: 'row' as const,
     gap: 6,
-    marginTop: 6,
-  },
+    marginTop: 6},
   miniBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1011,40 +961,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   miniBadgeOn: {
     backgroundColor: 'rgba(0,196,140,0.10)',
-    borderColor: 'rgba(0,196,140,0.35)',
-  },
+    borderColor: 'rgba(0,196,140,0.35)'},
   miniBadgeOff: {
     backgroundColor: 'rgba(255,255,255,0.04)',
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   miniBadgeText: {
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   memberStats: {
     flexDirection: 'row' as const,
     marginTop: 16,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   stat: {
-    flex: 1,
-  },
+    flex: 1},
   statLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   statValue: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   memberFooter: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
@@ -1052,107 +994,85 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+    borderTopColor: Colors.border},
   statusRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   kycBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    gap: 4,
-  },
+    gap: 4},
   kycText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusActive: {
-    backgroundColor: Colors.positive + '20',
-  },
+    backgroundColor: Colors.positive + '20'},
   statusSuspended: {
-    backgroundColor: Colors.negative + '20',
-  },
+    backgroundColor: Colors.negative + '20'},
   statusInactive: {
-    backgroundColor: Colors.textTertiary + '20',
-  },
+    backgroundColor: Colors.textTertiary + '20'},
   statusText: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.text,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   joinDate: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   actions: {
     flexDirection: 'row' as const,
     gap: 10,
-    marginTop: 14,
-  },
+    marginTop: 14},
   actionBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    gap: 6,
-  },
+    gap: 6},
   approveBtn: {
-    backgroundColor: Colors.positive + '15',
-  },
+    backgroundColor: Colors.positive + '15'},
   suspendBtn: {
-    backgroundColor: Colors.negative + '15',
-  },
+    backgroundColor: Colors.negative + '15'},
   activateBtn: {
-    backgroundColor: Colors.positive + '15',
-  },
+    backgroundColor: Colors.positive + '15'},
   actionBtnText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   listContent: {
-    paddingBottom: 100,
-  },
+    paddingBottom: 100},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   loadingText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   loadingFooter: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 8,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   loadingFooterText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   emptyContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   emptyIconWrap: {
     width: 96,
     height: 96,
@@ -1162,19 +1082,15 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
     color: Colors.text,
     marginBottom: 8,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   emptySubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 20,
-  },
-});
+    lineHeight: 20}});

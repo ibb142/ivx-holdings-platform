@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   FlatList,
@@ -14,12 +13,10 @@ import {
   Alert,
   Keyboard,
   Image,
-  ActivityIndicator,
   type StyleProp,
   type ViewStyle,
   type NativeSyntheticEvent,
-  type NativeScrollEvent,
-} from 'react-native';
+  type NativeScrollEvent} from "react-native";
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowRight, Bot, CheckCircle, ChevronDown, FileText, Headphones, Paperclip, Send, Sparkles, X } from 'lucide-react-native';
@@ -37,10 +34,10 @@ import {
   pickChatDocument,
   pickChatImage,
   toPublicChatPayload,
-  uploadChatAttachment,
-} from '@/lib/chat-attachments';
+  uploadChatAttachment} from '@/lib/chat-attachments';
 import { loadChatHistory, saveChatHistory } from '@/lib/chat-persistence';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   isAtBottom as isAtBottomEngine,
   shouldShowJumpButton,
@@ -49,8 +46,7 @@ import {
   getScrollToIndexTarget,
   shouldUseScrollToIndexFallback,
   getWebScrollDelay,
-  MAX_SCROLL_RETRIES,
-} from '@/src/modules/chat/chatScrollEngine';
+  MAX_SCROLL_RETRIES} from '@/src/modules/chat/chatScrollEngine';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'waiting';
 
@@ -100,8 +96,7 @@ export default function InvestorSupportChat({
   requestHumanLabel,
   welcomeMessage = DEFAULT_WELCOME_MESSAGE,
   onRequestHumanSupport,
-  quickReplies = DEFAULT_QUICK_REPLIES,
-}: InvestorSupportChatProps) {
+  quickReplies = DEFAULT_QUICK_REPLIES}: InvestorSupportChatProps) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -114,8 +109,7 @@ export default function InvestorSupportChat({
       message: welcomeMessage,
       timestamp: new Date().toISOString(),
       isSupport: true,
-      status: 'read',
-    },
+      status: 'read'},
   ]);
   const [inputText, setInputText] = useState<string>('');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connected');
@@ -179,8 +173,7 @@ export default function InvestorSupportChat({
               currentList.scrollToIndex({
                 index: targetIndex,
                 animated: false,
-                viewPosition: 1,
-              });
+                viewPosition: 1});
             } catch {
               // scrollToIndex can throw if the index is out of range
               // during rapid updates — the retry loop handles this.
@@ -217,8 +210,7 @@ export default function InvestorSupportChat({
     Animated.timing(jumpButtonAnim, {
       toValue: showJumpToLatest ? 1 : 0,
       duration: 180,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [showJumpToLatest, jumpButtonAnim]);
 
   // DEF-SCROLL-5 FIX: Use the engine's dynamic threshold which accounts for
@@ -301,13 +293,11 @@ export default function InvestorSupportChat({
           Animated.timing(pulseAnim, {
             toValue: 0.4,
             duration: 800,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 800,
-            useNativeDriver: true,
-          }),
+            useNativeDriver: true}),
         ])
       );
       pulse.start();
@@ -324,8 +314,7 @@ export default function InvestorSupportChat({
       message,
       timestamp: new Date().toISOString(),
       isSupport: true,
-      status: 'delivered',
-    };
+      status: 'delivered'};
 
     setMessages((prev) => trimMessages([...prev, supportReply]));
   }, []);
@@ -364,8 +353,7 @@ export default function InvestorSupportChat({
       timestamp: new Date().toISOString(),
       isSupport: false,
       status: 'sent',
-      attachments: readyAttachments.length > 0 ? readyAttachments : undefined,
-    };
+      attachments: readyAttachments.length > 0 ? readyAttachments : undefined};
 
     // Pass the PRIOR conversation as history. The provider chain sends the prompt
     // separately as the current message, so including it here too would duplicate
@@ -402,9 +390,7 @@ export default function InvestorSupportChat({
           route: result.meta?.route,
           source: result.meta?.source,
           model: result.meta?.model,
-          deploymentMarker: result.meta?.deploymentMarker,
-        },
-      };
+          deploymentMarker: result.meta?.deploymentMarker}};
 
       setMessages((prev) => trimMessages([...prev, aiReply]));
       setIsAiTyping(false);
@@ -419,13 +405,11 @@ export default function InvestorSupportChat({
             attachment_count: readyAttachments.length,
             ai_provider: result.provider,
             language: result.language,
-            failovers: result.failovers,
-          },
+            failovers: result.failovers},
           platform: Platform.OS,
           source,
           timestamp: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        });
+          created_at: new Date().toISOString()});
       } catch (analyticsError) {
         console.log('[InvestorSupportChat] Analytics enqueue failed:', (analyticsError as Error)?.message);
       }
@@ -478,14 +462,12 @@ export default function InvestorSupportChat({
         text: 'Photo / Image',
         onPress: () => {
           void handleAddAttachment('image');
-        },
-      },
+        }},
       {
         text: 'Document (PDF / CSV)',
         onPress: () => {
           void handleAddAttachment('document');
-        },
-      },
+        }},
       { text: 'Cancel', style: 'cancel' },
     ]);
   }, [handleAddAttachment]);
@@ -593,7 +575,7 @@ export default function InvestorSupportChat({
               <Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text>
               <View style={styles.attachmentStatusRow}>
                 {attachment.status === 'uploading' ? (
-                  <ActivityIndicator size="small" color={Colors.textTertiary} />
+                  <ShimmerIndicator size="small" color={Colors.textTertiary} />
                 ) : null}
                 <Text
                   style={[
@@ -733,8 +715,7 @@ export default function InvestorSupportChat({
                     transform: [
                       { scale: jumpButtonAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
                       { translateY: jumpButtonAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
-                    ],
-                  },
+                    ]},
                 ]}
               >
                 <TouchableOpacity
@@ -874,17 +855,12 @@ export default function InvestorSupportChat({
                     {
                       scale: jumpButtonAnim.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [0.6, 1],
-                      }),
-                    },
+                        outputRange: [0.6, 1]})},
                     {
                       translateY: jumpButtonAnim.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [12, 0],
-                      }),
-                    },
-                  ],
-                },
+                        outputRange: [12, 0]})},
+                  ]},
               ]}
             >
               <TouchableOpacity
@@ -1007,25 +983,20 @@ export default function InvestorSupportChat({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   containerCard: {
     backgroundColor: '#090909',
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#1F1F1F',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   keyboardContainer: {
-    flex: 1,
-  },
+    flex: 1},
   connectionStatusContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   connectionStatusContainerCard: {
-    paddingTop: 14,
-  },
+    paddingTop: 14},
   connectionStatusInner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1034,76 +1005,60 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   statusDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusDotConnecting: {
-    backgroundColor: Colors.warning,
-  },
+    backgroundColor: Colors.warning},
   statusDotWaiting: {
-    backgroundColor: Colors.info,
-  },
+    backgroundColor: Colors.info},
   statusDotConnected: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   connectionTextContainer: {
-    flex: 1,
-  },
+    flex: 1},
   connectionStatusText: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   connectionSubText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   connectionSubTextOnline: {
     color: Colors.success,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   agentAvatarContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   aiConnectedRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   aiBadgeSmall: {
     backgroundColor: Colors.primary + '20',
     borderRadius: 6,
-    padding: 3,
-  },
+    padding: 3},
   typingIndicator: {
     paddingHorizontal: 12,
-    paddingTop: 6,
-  },
+    paddingTop: 6},
   typingText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontStyle: 'italic' as const,
-  },
+    fontStyle: 'italic' as const},
   listWrapper: {
     flex: 1,
-    position: 'relative' as const,
-  },
+    position: 'relative' as const},
   jumpToLatestWrapper: {
     position: 'absolute' as const,
     right: 16,
-    bottom: 12,
-  },
+    bottom: 12},
   jumpToLatestButton: {
     width: 44,
     height: 44,
@@ -1117,60 +1072,48 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 6,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   messagesContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   messagesContainerCard: {
-    backgroundColor: '#090909',
-  },
+    backgroundColor: '#090909'},
   messagesContent: {
     paddingVertical: 12,
-    gap: 4,
-  },
+    gap: 4},
   welcomeCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     alignItems: 'center' as const,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   welcomeCardCompact: {
-    marginTop: 2,
-  },
+    marginTop: 2},
   welcomeIconContainer: {
     borderRadius: 28,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   welcomeTitle: {
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   welcomeText: {
     color: Colors.textSecondary,
     textAlign: 'center' as const,
     lineHeight: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   welcomeFeatures: {
     alignItems: 'center' as const,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   welcomeFeature: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   welcomeFeatureText: {
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   startChatButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1178,59 +1121,47 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    width: '100%',
-  },
+    width: '100%'},
   startChatButtonDisabled: {
-    opacity: 0.65,
-  },
+    opacity: 0.65},
   startChatText: {
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   quickRepliesContainer: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   quickRepliesContent: {
-    gap: 8,
-  },
+    gap: 8},
   quickReplyButton: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   quickReplyText: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   inputContainer: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     backgroundColor: Colors.background,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   inputWrapper: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
-    gap: 8,
-  },
+    gap: 8},
   attachButton: {
     borderRadius: 25,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   attachmentBar: {
     marginBottom: 8,
-    maxHeight: 70,
-  },
+    maxHeight: 70},
   attachmentBarContent: {
     gap: 8,
-    paddingRight: 8,
-  },
+    paddingRight: 8},
   attachmentChip: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1242,54 +1173,44 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 6,
     paddingRight: 10,
-    maxWidth: 220,
-  },
+    maxWidth: 220},
   attachmentThumb: {
     width: 38,
     height: 38,
     borderRadius: 8,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   attachmentDocIcon: {
     width: 38,
     height: 38,
     borderRadius: 8,
     backgroundColor: Colors.primary + '15',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   attachmentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   attachmentName: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   attachmentStatusRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 4,
-    marginTop: 2,
-  },
+    marginTop: 2},
   attachmentStatus: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   attachmentStatusReady: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   attachmentStatusFailed: {
-    color: '#FF7D7D',
-  },
+    color: '#FF7D7D'},
   attachmentRemove: {
     width: 22,
     height: 22,
     borderRadius: 11,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   input: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -1305,17 +1226,12 @@ const styles = StyleSheet.create({
           touchAction: 'manipulation',
           userSelect: 'text',
           WebkitUserSelect: 'text',
-          outlineStyle: 'none',
-        } as any)
-      : {}),
-  },
+          outlineStyle: 'none'} as any)
+      : {})},
   sendButton: {
     borderRadius: 25,
     backgroundColor: Colors.primary,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   sendButtonDisabled: {
-    backgroundColor: Colors.surface,
-  },
-});
+    backgroundColor: Colors.surface}});

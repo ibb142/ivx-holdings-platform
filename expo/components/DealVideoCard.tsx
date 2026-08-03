@@ -23,8 +23,7 @@ import {
   Hexagon,
   Users,
   Home,
-  Play,
-} from 'lucide-react-native';
+  Play} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { trackProjectShare } from '@/lib/project-engagement';
@@ -355,15 +354,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   avatar: {
     width: 34,
     height: 34,
@@ -372,30 +369,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Colors.primary + '66',
-  },
+    borderColor: Colors.primary + '66'},
   avatarText: {
     color: Colors.black,
     fontSize: 10,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   headerText: {
-    flex: 1,
-  },
+    flex: 1},
   accountName: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   propertyName: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 1,
-  },
+    marginTop: 1},
   media: {
     height: MEDIA_HEIGHT,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   muteBtn: {
     position: 'absolute' as const,
     right: 10,
@@ -405,45 +396,37 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: Colors.overlay,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   actionRail: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 18,
     paddingHorizontal: 12,
-    paddingTop: 10,
-  },
+    paddingTop: 10},
   railSpacer: {
-    flex: 1,
-  },
+    flex: 1},
   likesLine: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
     paddingHorizontal: 12,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   caption: {
     color: Colors.text,
     fontSize: 13,
     paddingHorizontal: 12,
-    paddingTop: 3,
-  },
+    paddingTop: 3},
   captionBold: {
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dealSection: {
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 12,
-    gap: 10,
-  },
+    gap: 10},
   chipsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -453,25 +436,20 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   chipLabel: {
     color: Colors.textTertiary,
-    fontSize: 10,
-  },
+    fontSize: 10},
   chipValue: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   optionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-  },
+    gap: 14},
   optionIcon: {
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   optionIconCircle: {
     width: 36,
     height: 36,
@@ -479,18 +457,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   optionIconLabel: {
     color: Colors.text,
     fontSize: 9,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ctaRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 2,
-  },
+    marginTop: 2},
   viewDealBtn: {
     flex: 1,
     alignItems: 'center',
@@ -499,38 +474,31 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   viewDealText: {
     color: Colors.primary,
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   investNowBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   investNowText: {
     color: Colors.black,
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: Colors.overlay,
-  },
+    backgroundColor: Colors.overlay},
   playCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: Colors.surfaceLight,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-});
+    justifyContent: 'center' as const}});

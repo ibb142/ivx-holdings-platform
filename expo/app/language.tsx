@@ -7,8 +7,7 @@ import {
   ScrollView,
   TextInput,
   Animated,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { Check, Search, X, Globe } from 'lucide-react-native';
@@ -45,8 +44,7 @@ const FLAG_EMOJIS: Record<string, string> = {
   ro: '🇷🇴',
   hu: '🇭🇺',
   sv: '🇸🇪',
-  ms: '🇲🇾',
-};
+  ms: '🇲🇾'};
 
 export default function LanguageScreen() {
   const router = useRouter();
@@ -72,13 +70,11 @@ export default function LanguageScreen() {
         Animated.timing(selectedAnim, {
           toValue: 0.95,
           duration: 80,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
         Animated.timing(selectedAnim, {
           toValue: 1,
           duration: 80,
-          useNativeDriver: true,
-        }),
+          useNativeDriver: true}),
       ]).start();
 
       await setLanguage(code);
@@ -189,31 +185,26 @@ export default function LanguageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   closeBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   currentBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -223,8 +214,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '12',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   currentIconWrap: {
     width: 40,
     height: 40,
@@ -232,24 +222,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '20',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   currentInfo: {
-    flex: 1,
-  },
+    flex: 1},
   currentLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   currentValue: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -261,21 +247,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   searchInput: {
     flex: 1,
     fontSize: 15,
     color: Colors.text,
-    padding: 0,
-  },
+    padding: 0},
   list: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   listContent: {
-    paddingHorizontal: 16,
-  },
+    paddingHorizontal: 16},
   langItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -284,52 +266,40 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   langItemSelected: {
     borderColor: Colors.primary + '60',
-    backgroundColor: Colors.primary + '08',
-  },
+    backgroundColor: Colors.primary + '08'},
   flag: {
     fontSize: 28,
-    marginRight: 14,
-  },
+    marginRight: 14},
   langInfo: {
-    flex: 1,
-  },
+    flex: 1},
   langNative: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   langNativeSelected: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   langName: {
     fontSize: 13,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   checkWrap: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: Colors.primary + '20',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
-    gap: 10,
-  },
+    gap: 10},
   emptyTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   emptySubtitle: {
     fontSize: 14,
-    color: Colors.textTertiary,
-  },
-});
+    color: Colors.textTertiary}});

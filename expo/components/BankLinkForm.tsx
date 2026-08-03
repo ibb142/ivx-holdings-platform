@@ -1,15 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   TextInput,
   StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+  TouchableOpacity} from "react-native";
 import { Building2, Check, Link2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface BankLinkFormProps {
   onBankLinked: (bank: BankData | null) => void;
@@ -48,8 +46,7 @@ export default function BankLinkForm({ onBankLinked, disabled }: BankLinkFormPro
       bankName: bank.name,
       accountType: 'checking',
       last4: bank.last4,
-      isLinked: true,
-    };
+      isLinked: true};
 
     setLinkedBank(bankData);
     onBankLinked(bankData);
@@ -71,8 +68,7 @@ export default function BankLinkForm({ onBankLinked, disabled }: BankLinkFormPro
       bankName: 'Manual Bank Account',
       accountType,
       last4: accountNumber.slice(-4),
-      isLinked: true,
-    };
+      isLinked: true};
 
     setLinkedBank(bankData);
     onBankLinked(bankData);
@@ -119,7 +115,7 @@ export default function BankLinkForm({ onBankLinked, disabled }: BankLinkFormPro
   if (isLinking) {
     return (
       <View style={styles.linkingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.linkingText}>Connecting to your bank...</Text>
         <Text style={styles.linkingSubtext}>This simulates Plaid Link</Text>
       </View>
@@ -251,36 +247,30 @@ export default function BankLinkForm({ onBankLinked, disabled }: BankLinkFormPro
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
-  },
+    gap: 16},
   plaidSection: {
     backgroundColor: Colors.primary + '08',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
+    borderColor: Colors.primary + '20'},
   plaidHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   plaidTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   plaidDescription: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   bankGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
+    gap: 10},
   bankOption: {
     width: '48%',
     backgroundColor: Colors.surface,
@@ -288,51 +278,40 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   bankLogo: {
     fontSize: 24,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   bankName: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.text,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.surfaceBorder,
-  },
+    backgroundColor: Colors.surfaceBorder},
   dividerText: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   manualToggle: {
-    alignSelf: 'center',
-  },
+    alignSelf: 'center'},
   manualToggleText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   manualSection: {
-    gap: 12,
-  },
+    gap: 12},
   inputContainer: {
-    gap: 6,
-  },
+    gap: 6},
   inputLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   input: {
     backgroundColor: Colors.backgroundTertiary,
     borderRadius: 10,
@@ -341,15 +320,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   accountTypeContainer: {
-    gap: 8,
-  },
+    gap: 8},
   accountTypeButtons: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   accountTypeButton: {
     flex: 1,
     paddingVertical: 12,
@@ -357,59 +333,47 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundTertiary,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   accountTypeButtonActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   accountTypeText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   accountTypeTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   linkManualButton: {
     backgroundColor: Colors.primary,
     paddingVertical: 14,
     borderRadius: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   linkManualButtonDisabled: {
-    backgroundColor: Colors.primary + '50',
-  },
+    backgroundColor: Colors.primary + '50'},
   linkManualText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   linkingContainer: {
     alignItems: 'center',
     paddingVertical: 40,
-    gap: 12,
-  },
+    gap: 12},
   linkingText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   linkingSubtext: {
     fontSize: 12,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   linkedContainer: {
     backgroundColor: Colors.success + '10',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
-  },
+    borderColor: Colors.success + '30'},
   linkedHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   linkedIcon: {
     width: 40,
     height: 40,
@@ -417,21 +381,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '20',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   linkedInfo: {
-    flex: 1,
-  },
+    flex: 1},
   linkedBankName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   linkedAccountInfo: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   linkedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -439,21 +399,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '20',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   linkedBadgeText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.success,
-  },
+    color: Colors.success},
   unlinkButton: {
     marginTop: 12,
     paddingVertical: 10,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   unlinkText: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.error,
-  },
-});
+    color: Colors.error}});

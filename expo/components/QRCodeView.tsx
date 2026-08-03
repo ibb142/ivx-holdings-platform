@@ -55,6 +55,4 @@ export default QRCodeView;
 const styles = StyleSheet.create({
   container: {
     overflow: 'hidden' as const,
-    borderRadius: 8,
-  },
-});
+    borderRadius: 8}});

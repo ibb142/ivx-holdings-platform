@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   Animated,
   Dimensions,
   Platform,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
@@ -34,17 +31,16 @@ import {
   ArrowRight,
   Bot,
   MessageCircle,
-  Radar,
-} from 'lucide-react-native';
+  Radar} from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import Colors from '@/constants/colors';
 import {
   runFullHealthCheck,
   type SystemHealthSnapshot,
   type HealthCheck,
-  type HealthStatus,
-} from '@/lib/system-health-checker';
+  type HealthStatus} from '@/lib/system-health-checker';
 import { runAIOpsScan, type AIOpsOverallStatus, type AIOpsSeverity, type AIOpsSnapshot } from '@/lib/ai-ops';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getOwnerAlertFeed,
   getOwnerAlertSettings,
@@ -53,8 +49,7 @@ import {
   syncAIOpsOwnerAlerts,
   type OwnerAlertDispatchResult,
   type OwnerAlertFeedItem,
-  type OwnerAlertSettings,
-} from '@/lib/ai-ops-alerts';
+  type OwnerAlertSettings} from '@/lib/ai-ops-alerts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NODE_SIZE = 72;
@@ -117,20 +112,17 @@ const CONNECTIONS: Connection[] = [
 const STATUS_GLOW: Record<HealthStatus, string> = {
   green: '#00E676',
   yellow: '#FFD600',
-  red: '#FF1744',
-};
+  red: '#FF1744'};
 
 const STATUS_BG: Record<HealthStatus, string> = {
   green: 'rgba(0, 230, 118, 0.08)',
   yellow: 'rgba(255, 214, 0, 0.08)',
-  red: 'rgba(255, 23, 68, 0.12)',
-};
+  red: 'rgba(255, 23, 68, 0.12)'};
 
 const STATUS_BORDER: Record<HealthStatus, string> = {
   green: 'rgba(0, 230, 118, 0.35)',
   yellow: 'rgba(255, 214, 0, 0.35)',
-  red: 'rgba(255, 23, 68, 0.5)',
-};
+  red: 'rgba(255, 23, 68, 0.5)'};
 
 const TIER_LABELS = ['Client Layer', 'Routing & Cache', 'Authentication', 'Data Layer', 'Infrastructure', 'Services'];
 
@@ -161,8 +153,7 @@ function formatOwnerAlertTimestamp(timestamp?: string): string {
 
   return new Date(timestamp).toLocaleString('en-US', {
     dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+    timeStyle: 'short'});
 }
 
 function getNodePosition(node: BlueprintNode, containerWidth: number) {
@@ -193,13 +184,11 @@ function PulseRing({ status, size }: { status: HealthStatus; size: number }) {
 
   const scale = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, status === 'red' ? 1.6 : 1.3],
-  });
+    outputRange: [1, status === 'red' ? 1.6 : 1.3]});
 
   const opacity = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [status === 'red' ? 0.5 : 0.3, 0],
-  });
+    outputRange: [status === 'red' ? 0.5 : 0.3, 0]});
 
   return (
     <Animated.View
@@ -211,8 +200,7 @@ function PulseRing({ status, size }: { status: HealthStatus; size: number }) {
           borderRadius: size / 2,
           borderColor: STATUS_GLOW[status],
           transform: [{ scale }],
-          opacity,
-        },
+          opacity},
       ]}
     />
   );
@@ -227,8 +215,7 @@ function DataFlowDot({ status }: { status: HealthStatus }) {
       Animated.timing(flowAnim, {
         toValue: 1,
         duration: 2500,
-        useNativeDriver: Platform.OS !== 'web',
-      })
+        useNativeDriver: Platform.OS !== 'web'})
     );
     loop.start();
     return () => loop.stop();
@@ -236,13 +223,11 @@ function DataFlowDot({ status }: { status: HealthStatus }) {
 
   const translateY = flowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 20],
-  });
+    outputRange: [0, 20]});
 
   const dotOpacity = flowAnim.interpolate({
     inputRange: [0, 0.3, 0.7, 1],
-    outputRange: [0, 1, 1, 0],
-  });
+    outputRange: [0, 1, 1, 0]});
 
   if (status === 'red') return null;
 
@@ -253,8 +238,7 @@ function DataFlowDot({ status }: { status: HealthStatus }) {
         {
           backgroundColor: STATUS_GLOW[status],
           transform: [{ translateY }],
-          opacity: dotOpacity,
-        },
+          opacity: dotOpacity},
       ]}
     />
   );
@@ -264,8 +248,7 @@ function BlueprintNodeView({
   node,
   healthCheck,
   onPress,
-  containerWidth,
-}: {
+  containerWidth}: {
   node: BlueprintNode;
   healthCheck?: HealthCheck;
   onPress: () => void;
@@ -309,8 +292,7 @@ function BlueprintNodeView({
         {
           left: pos.x - NODE_SIZE / 2,
           top: pos.y - NODE_SIZE / 2,
-          transform: [{ scale: scaleAnim }],
-        },
+          transform: [{ scale: scaleAnim }]},
       ]}
     >
       <PulseRing status={status} size={NODE_SIZE + 20} />
@@ -323,8 +305,7 @@ function BlueprintNodeView({
           styles.nodeContainer,
           {
             backgroundColor: STATUS_BG[status],
-            borderColor: STATUS_BORDER[status],
-          },
+            borderColor: STATUS_BORDER[status]},
         ]}
       >
         <View style={[styles.nodeIconBg, { backgroundColor: `${STATUS_GLOW[status]}20` }]}>
@@ -345,8 +326,7 @@ function ConnectionLine({
   toNode,
   connection,
   healthMap,
-  containerWidth,
-}: {
+  containerWidth}: {
   fromNode: BlueprintNode;
   toNode: BlueprintNode;
   connection: Connection;
@@ -383,8 +363,7 @@ function ConnectionLine({
             top: fromPos.y,
             width: length,
             backgroundColor: lineStatus === 'red' ? 'rgba(255, 23, 68, 0.4)' : lineStatus === 'yellow' ? 'rgba(255, 214, 0, 0.2)' : 'rgba(0, 230, 118, 0.15)',
-            transform: [{ rotate: `${angle}deg` }],
-          },
+            transform: [{ rotate: `${angle}deg` }]},
         ]}
       >
         {lineStatus !== 'red' && <DataFlowDot status={lineStatus} />}
@@ -399,8 +378,7 @@ function ConnectionLine({
               top: fromPos.y,
               width: length,
               borderColor: 'rgba(255, 23, 68, 0.6)',
-              transform: [{ rotate: `${angle}deg` }],
-            },
+              transform: [{ rotate: `${angle}deg` }]},
           ]}
         />
       )}
@@ -409,8 +387,7 @@ function ConnectionLine({
           styles.connectionLabelContainer,
           {
             left: midX - 30,
-            top: midY - 8,
-          },
+            top: midY - 8},
         ]}
       >
         <Text style={[styles.connectionLabelText, { color: STATUS_GLOW[lineStatus] }]} numberOfLines={1}>
@@ -539,8 +516,7 @@ function OwnerAlertHub({
   whatsappPending,
   onSendEmail,
   onOpenWhatsApp,
-  onOpenAutoRepair,
-}: {
+  onOpenAutoRepair}: {
   settings: OwnerAlertSettings | null;
   snapshot: AIOpsSnapshot | null;
   lastDispatch: OwnerAlertDispatchResult | null;
@@ -605,7 +581,7 @@ function OwnerAlertHub({
           activeOpacity={0.85}
           testID="owner-alert-send-email"
         >
-          {emailPending ? <ActivityIndicator size="small" color={Colors.black} /> : <Mail size={16} color={Colors.black} />}
+          {emailPending ? <ShimmerIndicator size="small" color={Colors.black} /> : <Mail size={16} color={Colors.black} />}
           <Text style={styles.ownerPrimaryActionText}>{emailPending ? 'Sending...' : 'Send email'}</Text>
         </TouchableOpacity>
 
@@ -616,7 +592,7 @@ function OwnerAlertHub({
           activeOpacity={0.85}
           testID="owner-alert-open-whatsapp"
         >
-          {whatsappPending ? <ActivityIndicator size="small" color={Colors.text} /> : <MessageCircle size={16} color="#25D366" />}
+          {whatsappPending ? <ShimmerIndicator size="small" color={Colors.text} /> : <MessageCircle size={16} color="#25D366" />}
           <Text style={styles.ownerSecondaryActionText}>{whatsappPending ? 'Opening...' : 'WhatsApp'}</Text>
         </TouchableOpacity>
 
@@ -677,8 +653,7 @@ function OwnerAlertFeedCard({ feed }: { feed: OwnerAlertFeedItem[] }) {
 function OwnerEscalationLanes({
   settings,
   snapshot,
-  lastDispatch,
-}: {
+  lastDispatch}: {
   settings: OwnerAlertSettings | null;
   snapshot: AIOpsSnapshot | null;
   lastDispatch: OwnerAlertDispatchResult | null;
@@ -717,8 +692,7 @@ function OwnerEscalationLanes({
           : hasActiveIssues
             ? Colors.primary
             : '#00E676',
-      Icon: Mail,
-    },
+      Icon: Mail},
     {
       id: 'whatsapp',
       title: 'WhatsApp escalation',
@@ -737,8 +711,7 @@ function OwnerEscalationLanes({
           : hasActiveIssues
             ? '#25D366'
             : 'rgba(37, 211, 102, 0.9)',
-      Icon: MessageCircle,
-    },
+      Icon: MessageCircle},
     {
       id: 'repair',
       title: 'Repair console handoff',
@@ -749,8 +722,7 @@ function OwnerEscalationLanes({
       target: 'Auto Repair control room',
       statusLabel: autoRepairCount > 0 ? `${autoRepairCount} safe path${autoRepairCount === 1 ? '' : 's'}` : 'Standby',
       toneColor: autoRepairCount > 0 ? Colors.primary : Colors.textSecondary,
-      Icon: Zap,
-    },
+      Icon: Zap},
   ];
 
   return (
@@ -838,8 +810,7 @@ export default function SystemBlueprintScreen() {
     },
     onError: (error: Error) => {
       Alert.alert('Owner email alert failed', error.message);
-    },
-  });
+    }});
 
   const whatsappAlertMutation = useMutation({
     mutationFn: async () => {
@@ -855,8 +826,7 @@ export default function SystemBlueprintScreen() {
     },
     onError: (error: Error) => {
       Alert.alert('Owner WhatsApp alert failed', error.message);
-    },
-  });
+    }});
 
   const runScan = useCallback(async (force: boolean = false) => {
     if (scanInFlightRef.current) {
@@ -934,8 +904,7 @@ export default function SystemBlueprintScreen() {
 
   const spinRotation = spinAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+    outputRange: ['0deg', '360deg']});
 
   const diagramHeight = BLUEPRINT_NODES.reduce((max, n) => Math.max(max, n.tier), 0) * 130 + 160;
 
@@ -1030,8 +999,7 @@ export default function SystemBlueprintScreen() {
                 transform: [
                   { perspective: 1200 },
                   { rotateX: '8deg' },
-                ],
-              },
+                ]},
             ]}
           >
             <View style={styles.gridOverlay}>
@@ -1109,8 +1077,7 @@ export default function SystemBlueprintScreen() {
                 subtitle: 'Expo',
                 detail: 'Supabase (database, auth, realtime)',
                 color: '#00E676',
-                arrows: ['Supabase DB', 'Supabase Auth', 'Realtime WS'],
-              },
+                arrows: ['Supabase DB', 'Supabase Auth', 'Realtime WS']},
               {
                 id: 'landing',
                 icon: Globe,
@@ -1118,8 +1085,7 @@ export default function SystemBlueprintScreen() {
                 subtitle: 'ivxholding.com',
                 detail: 'Supabase (realtime subscription, reads deals)',
                 color: '#4FC3F7',
-                arrows: ['Supabase Realtime', 'Reads jv_deals'],
-              },
+                arrows: ['Supabase Realtime', 'Reads jv_deals']},
 
               {
                 id: 'aws',
@@ -1128,8 +1094,7 @@ export default function SystemBlueprintScreen() {
                 subtitle: 'Static hosting',
                 detail: 'Static file hosting only (landing page HTML)',
                 color: '#FFB74D',
-                arrows: ['No direct Supabase'],
-              },
+                arrows: ['No direct Supabase']},
               {
                 id: 'supabase',
                 icon: Database,
@@ -1137,8 +1102,7 @@ export default function SystemBlueprintScreen() {
                 subtitle: 'Central hub',
                 detail: 'PostgreSQL + Auth + Realtime + RLS + Edge Functions',
                 color: '#69F0AE',
-                arrows: [],
-              },
+                arrows: []},
             ].map((item, idx) => {
               const IconComp = item.icon;
               return (
@@ -1269,40 +1233,33 @@ export default function SystemBlueprintScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#050510',
-  },
+    backgroundColor: '#050510'},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
+    borderBottomColor: 'rgba(255,255,255,0.06)'},
   backBtn: {
     padding: 8,
-    marginRight: 8,
-  },
+    marginRight: 8},
   headerCenter: {
     flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   headerRight: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   autoRefreshBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1311,21 +1268,17 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
+    borderColor: 'rgba(255,255,255,0.1)'},
   autoRefreshActive: {
     borderColor: 'rgba(0, 230, 118, 0.4)',
-    backgroundColor: 'rgba(0, 230, 118, 0.08)',
-  },
+    backgroundColor: 'rgba(0, 230, 118, 0.08)'},
   autoRefreshText: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   refreshBtn: {
-    padding: 8,
-  },
+    padding: 8},
   overallBar: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -1336,43 +1289,35 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)',
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
+    justifyContent: 'space-between' as const},
   overallBarInner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   overallDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   overallLabel: {
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
   overallStats: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   overallStatItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 4,
-  },
+    gap: 4},
   miniDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   overallStatText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   trafficLaunchCard: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -1384,8 +1329,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 12,
-  },
+    gap: 12},
   trafficLaunchIconWrap: {
     width: 40,
     height: 40,
@@ -1394,124 +1338,102 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     backgroundColor: 'rgba(79, 195, 247, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.22)',
-  },
+    borderColor: 'rgba(79, 195, 247, 0.22)'},
   trafficLaunchContent: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   trafficLaunchEyebrow: {
     fontSize: 10,
     fontWeight: '800' as const,
     letterSpacing: 1.3,
-    color: '#4FC3F7',
-  },
+    color: '#4FC3F7'},
   trafficLaunchTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   trafficLaunchBody: {
     fontSize: 12,
     lineHeight: 17,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     alignItems: 'center' as const,
-    paddingTop: 16,
-  },
+    paddingTop: 16},
   diagramTitle: {
     alignItems: 'center' as const,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   diagramTitleText: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     letterSpacing: 2,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   diagramSubtitle: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   diagramContainer: {
     position: 'relative' as const,
     overflow: 'hidden' as const,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(10, 10, 30, 0.8)',
-  },
+    backgroundColor: 'rgba(10, 10, 30, 0.8)'},
   gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
+    ...StyleSheet.absoluteFillObject},
   gridLine: {
     position: 'absolute' as const,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.02)'},
   gridLineH: {
     left: 0,
     right: 0,
-    height: 1,
-  },
+    height: 1},
   gridLineV: {
     top: 0,
     bottom: 0,
-    width: 1,
-  },
+    width: 1},
   tierLabel: {
     position: 'absolute' as const,
     left: 4,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 4,
-    zIndex: 1,
-  },
+    zIndex: 1},
   tierLabelLine: {
     width: 2,
     height: 10,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 1,
-  },
+    borderRadius: 1},
   tierLabelText: {
     fontSize: 8,
     fontWeight: '600' as const,
     color: 'rgba(255,255,255,0.2)',
     letterSpacing: 1,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   nodeWrapper: {
     position: 'absolute' as const,
     width: NODE_SIZE,
     alignItems: 'center' as const,
-    zIndex: 10,
-  },
+    zIndex: 10},
   pulseRing: {
     position: 'absolute' as const,
     borderWidth: 2,
     top: -(20 / 2),
-    left: -(20 / 2),
-  },
+    left: -(20 / 2)},
   nodeContainer: {
     width: NODE_SIZE,
     height: NODE_SIZE,
     borderRadius: NODE_SIZE / 2,
     borderWidth: 1.5,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   nodeIconBg: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   statusDotSmall: {
     position: 'absolute' as const,
     top: 2,
@@ -1520,93 +1442,78 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     borderWidth: 2,
-    borderColor: '#050510',
-  },
+    borderColor: '#050510'},
   nodeLabel: {
     marginTop: 6,
     fontSize: 10,
     fontWeight: '600' as const,
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center' as const,
-    width: 80,
-  },
+    width: 80},
   nodeLatency: {
     fontSize: 9,
     fontWeight: '700' as const,
-    marginTop: 1,
-  },
+    marginTop: 1},
   connectionContainer: {
     position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 5,
-  },
+    zIndex: 5},
   connectionLine: {
     position: 'absolute' as const,
     height: 2,
     transformOrigin: 'left center',
-    borderRadius: 1,
-  },
+    borderRadius: 1},
   connectionLineDashed: {
     backgroundColor: 'transparent',
     borderTopWidth: 2,
     borderStyle: 'dashed' as const,
-    height: 0,
-  },
+    height: 0},
   connectionLabelContainer: {
     position: 'absolute' as const,
     zIndex: 6,
     backgroundColor: 'rgba(10, 10, 30, 0.85)',
     paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   connectionLabelText: {
     fontSize: 7,
     fontWeight: '600' as const,
     letterSpacing: 0.5,
-    textAlign: 'center' as const,
-  },
+    textAlign: 'center' as const},
   flowDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
     position: 'absolute' as const,
     left: '50%' as any,
-    top: -1,
-  },
+    top: -1},
   legendSection: {
     marginTop: 24,
     paddingHorizontal: 24,
-    width: '100%',
-  },
+    width: '100%'},
   legendTitle: {
     fontSize: 10,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 2,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   legendRow: {
     flexDirection: 'row' as const,
-    gap: 20,
-  },
+    gap: 20},
   legendItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   legendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   legendText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   alertSection: {
     marginTop: 20,
     marginHorizontal: 16,
@@ -1614,8 +1521,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 23, 68, 0.2)',
-    padding: 16,
-  },
+    padding: 16},
   warningSection: {
     marginTop: 12,
     marginHorizontal: 16,
@@ -1623,59 +1529,49 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 214, 0, 0.15)',
-    padding: 16,
-  },
+    padding: 16},
   alertHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   alertTitle: {
     fontSize: 11,
     fontWeight: '800' as const,
     color: '#FF1744',
-    letterSpacing: 1.5,
-  },
+    letterSpacing: 1.5},
   alertItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 23, 68, 0.1)',
-  },
+    borderTopColor: 'rgba(255, 23, 68, 0.1)'},
   warningItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 214, 0, 0.08)',
-  },
+    borderTopColor: 'rgba(255, 214, 0, 0.08)'},
   alertDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: '#FF1744',
-    marginRight: 10,
-  },
+    marginRight: 10},
   alertContent: {
-    flex: 1,
-  },
+    flex: 1},
   alertName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   alertMsg: {
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   alertLatency: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: '#FF1744',
-  },
+    color: '#FF1744'},
   ownerAlertsCard: {
     alignSelf: 'stretch' as const,
     marginTop: 18,
@@ -1685,14 +1581,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(7, 12, 24, 0.94)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
+    borderColor: 'rgba(255,255,255,0.08)'},
   ownerAlertsHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   ownerAlertsBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1700,65 +1594,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   ownerAlertsBadgeText: {
     fontSize: 11,
     fontWeight: '800' as const,
     letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   ownerAlertsCount: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   ownerAlertsTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   ownerAlertsBody: {
     fontSize: 13,
     lineHeight: 19,
     color: Colors.textSecondary,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   ownerContactRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   ownerContactText: {
     flex: 1,
     fontSize: 13,
     color: Colors.text,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   ownerChipRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 8,
     marginTop: 6,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   ownerChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.06)'},
   ownerChipText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   ownerActionRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 10,
-  },
+    gap: 10},
   ownerPrimaryAction: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1768,13 +1651,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
     backgroundColor: Colors.primary,
-    minWidth: 132,
-  },
+    minWidth: 132},
   ownerPrimaryActionText: {
     fontSize: 13,
     fontWeight: '800' as const,
-    color: Colors.black,
-  },
+    color: Colors.black},
   ownerSecondaryAction: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1786,30 +1667,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    minWidth: 118,
-  },
+    minWidth: 118},
   ownerSecondaryActionText: {
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   ownerDisabledAction: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   ownerDispatchRow: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 8,
-  },
+    gap: 8},
   ownerDispatchText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   ownerFeedSection: {
     alignSelf: 'stretch' as const,
     marginTop: 12,
@@ -1819,56 +1695,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   ownerFeedHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   ownerFeedTitle: {
     fontSize: 13,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   ownerFeedItem: {
     paddingVertical: 12,
-    borderTopWidth: 1,
-  },
+    borderTopWidth: 1},
   ownerFeedTopRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   ownerFeedDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   ownerFeedItemTitle: {
     flex: 1,
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   ownerFeedItemStatus: {
     fontSize: 11,
     fontWeight: '800' as const,
-    textTransform: 'uppercase' as const,
-  },
+    textTransform: 'uppercase' as const},
   ownerFeedItemSummary: {
     fontSize: 12,
     lineHeight: 18,
     color: Colors.textSecondary,
-    marginTop: 6,
-  },
+    marginTop: 6},
   ownerFeedItemMeta: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 6,
-  },
+    marginTop: 6},
   ownerLaneSection: {
     alignSelf: 'stretch' as const,
     marginTop: 12,
@@ -1878,78 +1744,65 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10, 16, 28, 0.88)',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
+    borderColor: 'rgba(255,255,255,0.06)'},
   ownerLaneHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
-  },
+    gap: 8},
   ownerLaneTitle: {
     fontSize: 13,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   ownerLaneSubtitle: {
     marginTop: 8,
     marginBottom: 14,
     fontSize: 12,
     lineHeight: 18,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   ownerLaneCard: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 12,
     paddingVertical: 13,
-    borderTopWidth: 1,
-  },
+    borderTopWidth: 1},
   ownerLaneIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 12,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   ownerLaneContent: {
-    flex: 1,
-  },
+    flex: 1},
   ownerLaneTopRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: 10,
-  },
+    gap: 10},
   ownerLaneCardTitle: {
     flex: 1,
     fontSize: 13,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   ownerLaneStatusPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   ownerLaneStatusText: {
     fontSize: 10,
     fontWeight: '800' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   ownerLaneTarget: {
     marginTop: 5,
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   ownerLaneDescription: {
     marginTop: 6,
     fontSize: 12,
     lineHeight: 18,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   detailPanel: {
     position: 'absolute' as const,
     bottom: 0,
@@ -1967,14 +1820,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
-    elevation: 20,
-  },
+    elevation: 20},
   detailHeader: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   detailStatusBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1982,83 +1833,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   detailStatusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   detailStatusText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 1,
-  },
+    letterSpacing: 1},
   detailClose: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   detailCloseText: {
     fontSize: 20,
     color: Colors.textSecondary,
-    lineHeight: 22,
-  },
+    lineHeight: 22},
   detailName: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   detailMessage: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   detailGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 12,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   detailGridItem: {
     flex: 1,
     minWidth: 80,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   detailGridLabel: {
     fontSize: 9,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
     letterSpacing: 1,
     textTransform: 'uppercase' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   detailGridValue: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   detailExtra: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 8,
     padding: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   detailExtraText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   detailTimestamp: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   systemMapSection: {
     marginTop: 28,
     marginHorizontal: 16,
@@ -2067,31 +1904,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     padding: 20,
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   sysMapHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   sysMapHeaderDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#00E676',
-  },
+    backgroundColor: '#00E676'},
   sysMapHeaderTitle: {
     fontSize: 13,
     fontWeight: '800' as const,
     color: '#00E676',
-    letterSpacing: 2,
-  },
+    letterSpacing: 2},
   sysMapSubtitle: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.35)',
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   sysMapCard: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 14,
@@ -2099,104 +1931,85 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.06)',
     padding: 14,
     marginBottom: 10,
-    position: 'relative' as const,
-  },
+    position: 'relative' as const},
   sysMapCardLeft: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 12,
-  },
+    gap: 12},
   sysMapIconWrap: {
     width: 42,
     height: 42,
     borderRadius: 12,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   sysMapCardInfo: {
-    flex: 1,
-  },
+    flex: 1},
   sysMapCardTitleRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   sysMapCardTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: '#EAEAEA',
-  },
+    color: '#EAEAEA'},
   sysMapBadge: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   sysMapBadgeText: {
     fontSize: 9,
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   sysMapCardDetail: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.45)',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   sysMapArrows: {
     marginTop: 10,
     marginLeft: 54,
-    gap: 4,
-  },
+    gap: 4},
   sysMapArrowRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
-  },
+    gap: 6},
   sysMapArrowText: {
     fontSize: 10,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   sysMapConnectorLine: {
     position: 'absolute' as const,
     bottom: -10,
     left: 34,
     width: 2,
     height: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
+    backgroundColor: 'rgba(255,255,255,0.08)'},
   sysMapKeyPoints: {
     marginTop: 14,
     backgroundColor: 'rgba(0, 230, 118, 0.04)',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(0, 230, 118, 0.12)',
-    padding: 14,
-  },
+    padding: 14},
   sysMapKeyPointsTitle: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: 'rgba(255,255,255,0.5)',
     letterSpacing: 1.5,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   sysMapKeyPointRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   sysMapKeyPointBullet: {
     width: 5,
     height: 5,
     borderRadius: 3,
     backgroundColor: '#00E676',
-    marginTop: 5,
-  },
+    marginTop: 5},
   sysMapKeyPointText: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.6)',
     lineHeight: 18,
-    flex: 1,
-  },
-});
+    flex: 1}});

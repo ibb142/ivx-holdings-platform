@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -416,39 +415,33 @@ export default function SupabaseExportScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
-  },
+    backgroundColor: '#0F172A'},
   safe: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
-  },
+    borderBottomColor: '#2A2A2A'},
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: '#2A2A2A',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
-    color: '#FFFFFF',
-  },
+    color: '#FFFFFF'},
   instructions: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -456,66 +449,54 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderLeftWidth: 3,
-    borderLeftColor: '#00C48C',
-  },
+    borderLeftColor: '#00C48C'},
   instructionTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: '#00C48C',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   instructionText: {
     fontSize: 13,
     color: '#CCCCCC',
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   scroll: {
-    flex: 1,
-  },
+    flex: 1},
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
-    gap: 14,
-  },
+    gap: 14},
   card: {
     backgroundColor: '#2A2A2A',
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#333333',
-  },
+    borderColor: '#333333'},
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   blockBadge: {
     width: 32,
     height: 32,
     borderRadius: 10,
     backgroundColor: '#00C48C',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   blockBadgeText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#fff',
-  },
+    color: '#fff'},
   cardTitleWrap: {
-    flex: 1,
-  },
+    flex: 1},
   cardTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: '#FFFFFF',
-  },
+    color: '#FFFFFF'},
   cardSubtitle: {
     fontSize: 12,
     color: '#909090',
-    marginTop: 2,
-  },
+    marginTop: 2},
   copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -525,17 +506,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 10,
     paddingVertical: 14,
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   copyBtnDone: {
-    backgroundColor: '#059669',
-  },
+    backgroundColor: '#059669'},
   copyBtnText: {
     fontSize: 15,
     fontWeight: '800' as const,
     color: '#fff',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   previewToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -543,37 +521,29 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#333333',
-  },
+    borderTopColor: '#333333'},
   previewToggleText: {
     fontSize: 13,
     color: '#909090',
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   codeWrap: {
     backgroundColor: '#0F172A',
     maxHeight: 200,
     borderTopWidth: 1,
-    borderTopColor: '#333333',
-  },
+    borderTopColor: '#333333'},
   codeScroll: {
-    padding: 12,
-  },
+    padding: 12},
   codeText: {
     fontSize: 11,
     color: '#00C48C',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   footer: {
     marginTop: 8,
     alignItems: 'center',
-    paddingVertical: 16,
-  },
+    paddingVertical: 16},
   footerText: {
     fontSize: 13,
     color: '#555555',
     textAlign: 'center',
-    lineHeight: 20,
-  },
-});
+    lineHeight: 20}});

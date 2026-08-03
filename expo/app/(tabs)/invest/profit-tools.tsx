@@ -6,8 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  Modal,
-} from 'react-native';
+  Modal} from 'react-native';
 import { Stack } from 'expo-router';
 import {
   Building2,
@@ -27,8 +26,7 @@ import {
   Percent,
   Clock,
   Shield,
-  Star,
-} from 'lucide-react-native';
+  Star} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 interface ToolStat {
@@ -73,8 +71,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$25,000',
     expectedReturn: '10–14% APR',
-    term: '6–24 months',
-  },
+    term: '6–24 months'},
   {
     id: 2,
     iconBg: Colors.gold + '20',
@@ -96,8 +93,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$100',
     expectedReturn: '6–9% rental + appreciation',
-    term: 'Ongoing / liquid',
-  },
+    term: 'Ongoing / liquid'},
   {
     id: 3,
     iconBg: Colors.info + '20',
@@ -119,8 +115,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$10,000',
     expectedReturn: '15–22% IRR',
-    term: '12–36 months',
-  },
+    term: '12–36 months'},
   {
     id: 4,
     iconBg: Colors.gold + '20',
@@ -142,8 +137,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$50,000',
     expectedReturn: '30% net profit share',
-    term: '24–36 months',
-  },
+    term: '24–36 months'},
   {
     id: 5,
     iconBg: Colors.teal + '20',
@@ -165,8 +159,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$500',
     expectedReturn: '7–10% annual yield',
-    term: 'Open-ended',
-  },
+    term: 'Open-ended'},
   {
     id: 6,
     iconBg: Colors.coral + '20',
@@ -188,8 +181,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$15,000',
     expectedReturn: '12–16% APR',
-    term: '3–12 months',
-  },
+    term: '3–12 months'},
   {
     id: 7,
     iconBg: Colors.success + '20',
@@ -211,8 +203,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$0 (add-on feature)',
     expectedReturn: '+3.2% annual compound boost',
-    term: 'Continuous',
-  },
+    term: 'Continuous'},
   {
     id: 8,
     iconBg: Colors.purple + '20',
@@ -234,8 +225,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$250',
     expectedReturn: 'Mirrors selected investor',
-    term: 'Flexible',
-  },
+    term: 'Flexible'},
   {
     id: 9,
     iconBg: Colors.gold + '20',
@@ -257,8 +247,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$50 (IVXHOLDINGS tokens)',
     expectedReturn: 'Variable — grows with platform',
-    term: 'Indefinite',
-  },
+    term: 'Indefinite'},
   {
     id: 10,
     iconBg: Colors.warning + '20',
@@ -280,8 +269,7 @@ const TOOLS: ProfitTool[] = [
     ],
     minInvestment: '$500',
     expectedReturn: '15–22% blended annual',
-    term: 'Long-term optimized',
-  },
+    term: 'Long-term optimized'},
 ];
 
 const TOOL_ICONS: Record<number, React.ReactNode> = {
@@ -294,14 +282,12 @@ const TOOL_ICONS: Record<number, React.ReactNode> = {
   7: <RefreshCw size={26} color={Colors.success} />,
   8: <Copy size={26} color={Colors.purple} />,
   9: <TrendingUp size={26} color={Colors.gold} />,
-  10: <Brain size={26} color={Colors.warning} />,
-};
+  10: <Brain size={26} color={Colors.warning} />};
 
 const AUDIENCE_COLORS = {
   lender: { bg: Colors.success + '20', text: Colors.success, label: 'Private Lender' },
   investor: { bg: Colors.gold + '20', text: Colors.gold, label: 'Regular Investor' },
-  both: { bg: Colors.info + '20', text: Colors.info, label: 'Lender & Investor' },
-};
+  both: { bg: Colors.info + '20', text: Colors.info, label: 'Lender & Investor' }};
 
 function ToolCard({ tool, onPress }: { tool: ProfitTool; onPress: () => void }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -504,12 +490,10 @@ export default function ProfitToolsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   scroll: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   heroCard: {
     margin: 20,
     backgroundColor: Colors.backgroundSecondary,
@@ -517,20 +501,17 @@ const styles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: Colors.success + '30',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   heroIconRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   heroTitle: {
     color: Colors.text,
     fontSize: 28,
     fontWeight: '900' as const,
     textAlign: 'center',
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
@@ -538,14 +519,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
     marginBottom: 18,
-    paddingHorizontal: 10,
-  },
+    paddingHorizontal: 10},
   heroBadges: {
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -555,13 +534,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   heroBadgeText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterRow: {
     flexDirection: 'row',
     marginHorizontal: 20,
@@ -570,52 +547,42 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterBtn: {
     flex: 1,
     paddingVertical: 9,
     borderRadius: 11,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   filterBtnActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   filterBtnText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterBtnTextActive: {
     color: Colors.black,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   listSection: {
     paddingHorizontal: 20,
-    gap: 14,
-  },
+    gap: 14},
   toolCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   toolCardTop: {
     flexDirection: 'row',
     gap: 14,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   toolCardLeft: {
-    position: 'relative',
-  },
+    position: 'relative'},
   toolIconBox: {
     width: 54,
     height: 54,
     borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   toolNumberBadge: {
     position: 'absolute',
     bottom: -4,
@@ -625,73 +592,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   toolNumberText: {
     color: Colors.textTertiary,
     fontSize: 9,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   toolCardMeta: {
-    flex: 1,
-  },
+    flex: 1},
   toolBadgeRow: {
     flexDirection: 'row',
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   audienceBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   audienceBadgeText: {
     fontSize: 10,
     fontWeight: '800' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   toolTitle: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: '800' as const,
     marginBottom: 3,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   toolSubtitle: {
     color: Colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
-  },
+    lineHeight: 17},
   toolStats: {
     flexDirection: 'row',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   toolStat: {
     flex: 1,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   toolStatValue: {
     fontSize: 14,
     fontWeight: '800' as const,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   toolStatLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   toolCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   learnMore: {
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disclaimerCard: {
     marginHorizontal: 20,
     marginTop: 20,
@@ -702,76 +655,64 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: 'flex-start',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   disclaimerText: {
     color: Colors.textTertiary,
     fontSize: 11,
     lineHeight: 16,
-    flex: 1,
-  },
+    flex: 1},
   bottomPad: {
-    height: 120,
-  },
+    height: 120},
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: Colors.overlay,
-  },
+    backgroundColor: Colors.overlay},
   modalSheet: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 24,
-    maxHeight: '88%' as const,
-  },
+    maxHeight: '88%' as const},
   modalHandle: {
     width: 40,
     height: 4,
     backgroundColor: Colors.surfaceBorder,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   modalIconBox: {
     width: 58,
     height: 58,
     borderRadius: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   modalClose: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   modalTitle: {
     color: Colors.text,
     fontSize: 22,
     fontWeight: '900' as const,
     marginBottom: 10,
-    lineHeight: 28,
-  },
+    lineHeight: 28},
   modalDesc: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   modalMetaRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   modalMetaCard: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
@@ -779,38 +720,30 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     gap: 6,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   modalMetaLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     textAlign: 'center',
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   modalMetaValue: {
     fontSize: 12,
     fontWeight: '800' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   benefitsTitle: {
     color: Colors.text,
     fontSize: 16,
     fontWeight: '800' as const,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   benefitText: {
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    flex: 1,
-  },
+    flex: 1},
   modalBottomPad: {
-    height: 30,
-  },
-});
+    height: 30}});

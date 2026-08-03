@@ -1,16 +1,13 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
   Animated,
-  ActivityIndicator,
   Alert,
-  useWindowDimensions,
-} from 'react-native';
+  useWindowDimensions} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -33,11 +30,11 @@ import {
   AlertCircle,
   BarChart3,
   MapPin,
-  Sparkles,
-} from 'lucide-react-native';
+  Sparkles} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchIntentDashboard,
   fetchIntentStatus,
@@ -47,8 +44,7 @@ import {
   runPhase4,
   runPhase8,
   type IntentDashboard,
-  type PhaseResult,
-} from '@/lib/intent-engine-api';
+  type PhaseResult} from '@/lib/intent-engine-api';
 
 type TabType = 'overview' | 'keywords' | 'pages' | 'content' | 'visitors' | 'optimization';
 
@@ -68,16 +64,14 @@ const CLUSTER_COLORS: Record<string, string> = {
   FINANCE: '#A855F7',
   PARTNER: '#EC4899',
   SELL: '#FF4D4D',
-  DEVELOP: '#06B6D4',
-};
+  DEVELOP: '#06B6D4'};
 
 function MetricCard({
   icon,
   label,
   value,
   color,
-  delay,
-}: {
+  delay}: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
@@ -90,8 +84,7 @@ function MetricCard({
       toValue: 1,
       duration: 400,
       delay,
-      useNativeDriver: true,
-    }).start();
+      useNativeDriver: true}).start();
   }, [fadeAnim, delay]);
 
   return (
@@ -113,8 +106,7 @@ function PhaseButton({
   onPress,
   loading,
   result,
-  color,
-}: {
+  color}: {
   phase: string;
   title: string;
   description: string;
@@ -153,7 +145,7 @@ function PhaseButton({
             <Text style={styles.phaseDesc}>{description}</Text>
           </View>
           {loading ? (
-            <ActivityIndicator size="small" color={color} />
+            <ShimmerIndicator size="small" color={color} />
           ) : result ? (
             <CheckCircle2 size={20} color={Colors.success} />
           ) : (
@@ -189,14 +181,12 @@ export default function IntentEngineScreen() {
 
   const statusQuery = useQuery({
     queryKey: ['intent-engine-status'],
-    queryFn: fetchIntentStatus,
-  });
+    queryFn: fetchIntentStatus});
 
   const dashboardQuery = useQuery<IntentDashboard>({
     queryKey: ['intent-engine-dashboard'],
     queryFn: fetchIntentDashboard,
-    retry: 1,
-  });
+    retry: 1});
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -233,8 +223,7 @@ export default function IntentEngineScreen() {
           text: 'Run All',
           onPress: async () => {
             await runPhase(8, runPhase8);
-          },
-        },
+          }},
       ],
     );
   }, [runPhase]);
@@ -246,7 +235,7 @@ export default function IntentEngineScreen() {
     if (dashboardQuery.isLoading) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ShimmerIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading intent engine data…</Text>
         </View>
       );
@@ -601,8 +590,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border},
   backButton: { padding: 8 },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerText: { color: Colors.white, fontSize: 17, fontWeight: '700' },
@@ -611,8 +599,7 @@ const styles = StyleSheet.create({
   tabBarContent: { paddingHorizontal: 16, gap: 8 },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
+    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent'},
   tabActive: { borderBottomColor: Colors.primary },
   tabText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: Colors.primary },
@@ -627,14 +614,12 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: Colors.primary, marginTop: 8,
-  },
+    backgroundColor: Colors.primary, marginTop: 8},
   retryButtonText: { color: Colors.black, fontWeight: '700' },
   statusBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: Colors.surface, borderLeftWidth: 3,
-  },
+    backgroundColor: Colors.surface, borderLeftWidth: 3},
   statusBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusText: { color: Colors.text, fontSize: 13, fontWeight: '600' },
   statusLangs: { color: Colors.textSecondary, fontSize: 12 },
@@ -643,28 +628,24 @@ const styles = StyleSheet.create({
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   metricCard: {
     width: '48%', backgroundColor: Colors.surface, borderRadius: 12,
-    padding: 14, alignItems: 'flex-start',
-  },
+    padding: 14, alignItems: 'flex-start'},
   metricIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   metricValue: { color: Colors.white, fontSize: 24, fontWeight: '800' },
   metricLabel: { color: Colors.textSecondary, fontSize: 12, marginTop: 2 },
   clusterScroll: { gap: 10, paddingRight: 16 },
   clusterCard: {
     backgroundColor: Colors.surface, borderRadius: 10, padding: 12,
-    borderLeftWidth: 3, minWidth: 130,
-  },
+    borderLeftWidth: 3, minWidth: 130},
   clusterName: { fontSize: 13, fontWeight: '700', textTransform: 'capitalize' },
   clusterCount: { color: Colors.textSecondary, fontSize: 11, marginTop: 4 },
   clusterVolume: { color: Colors.textTertiary, fontSize: 11 },
   clusterIntent: { color: Colors.primary, fontSize: 11, fontWeight: '600', marginTop: 4 },
   keywordRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.surface, borderRadius: 10, padding: 12,
-  },
+    backgroundColor: Colors.surface, borderRadius: 10, padding: 12},
   keywordRank: {
     width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.primary + '20',
-    justifyContent: 'center', alignItems: 'center',
-  },
+    justifyContent: 'center', alignItems: 'center'},
   keywordRankText: { color: Colors.primary, fontWeight: '700', fontSize: 12 },
   keywordInfo: { flex: 1 },
   keywordText: { color: Colors.white, fontSize: 13, fontWeight: '600' },
@@ -716,5 +697,4 @@ const styles = StyleSheet.create({
   reportSection: { color: Colors.primary, fontSize: 12, fontWeight: '700', marginTop: 8 },
   reportValue: { color: Colors.white, fontSize: 13 },
   recommendationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 },
-  recommendationText: { color: Colors.textSecondary, fontSize: 12, flex: 1, lineHeight: 17 },
-});
+  recommendationText: { color: Colors.textSecondary, fontSize: 12, flex: 1, lineHeight: 17 }});

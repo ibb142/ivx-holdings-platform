@@ -9,15 +9,12 @@
  * access-restricted state instead of CRM data.
  */
 import React, { useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+  RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import { useRouter } from 'expo-router';
@@ -37,8 +34,7 @@ import {
   ChevronRight,
   ShieldAlert,
   Lock,
-  type LucideIcon,
-} from 'lucide-react-native';
+  type LucideIcon} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
@@ -83,8 +79,7 @@ const CRM_SECTIONS: CrmSection[] = [
       { label: 'Buyers', description: 'Buyer prospects & matching', icon: Building2, route: '/ivx/capital-network', testID: 'crm-link-buyers' },
       { label: 'Partners', description: 'Strategic partners network', icon: Handshake, route: '/ivx/capital-network', testID: 'crm-link-partners' },
       { label: 'Lenders', description: 'Financing & private credit', icon: Landmark, route: '/ivx/capital-network', testID: 'crm-link-lenders' },
-    ],
-  },
+    ]},
   {
     title: 'Sales',
     accent: Colors.info,
@@ -93,8 +88,7 @@ const CRM_SECTIONS: CrmSection[] = [
       { label: 'Campaigns', description: 'Automated message campaigns', icon: Megaphone, route: '/ivx/outreach', testID: 'crm-link-campaigns' },
       { label: 'Lead Scores', description: 'Hot / warm / cold scoring', icon: Gauge, route: '/ivx/lead-scoring', testID: 'crm-link-lead-scores' },
       { label: 'Matching', description: 'Deal-to-investor matching', icon: Crosshair, route: '/ivx/deal-matching', testID: 'crm-link-matching' },
-    ],
-  },
+    ]},
   {
     title: 'Execution',
     accent: Colors.success,
@@ -102,8 +96,7 @@ const CRM_SECTIONS: CrmSection[] = [
       { label: 'Pipeline', description: 'Capital pipeline stages', icon: GitBranch, route: '/ivx/capital-pipeline', testID: 'crm-link-pipeline' },
       { label: 'Deal Tracking', description: 'Lifecycle & outcome metrics', icon: ClipboardList, route: '/ivx/deal-tracking', testID: 'crm-link-deal-tracking' },
       { label: 'Active Opportunities', description: "Today's best opportunities", icon: Target, route: '/ivx/opportunity-engine', testID: 'crm-link-active-opportunities' },
-    ],
-  },
+    ]},
 ];
 
 type BadgeData = {
@@ -137,8 +130,7 @@ async function loadCrmBadges(): Promise<BadgeData> {
     buyers: buyersCount,
     activeDeals,
     pendingOutreach,
-    matchesToday,
-  };
+    matchesToday};
 }
 
 type StatTile = { key: keyof BadgeData; label: string };
@@ -169,8 +161,7 @@ export default function CrmScreen() {
     queryFn: loadCrmBadges,
     enabled: isOwner,
     staleTime: 1000 * 30,
-    refetchOnWindowFocus: true,
-  });
+    refetchOnWindowFocus: true});
 
   const openRoute = useCallback(
     (route: CrmRoute) => {
@@ -291,15 +282,12 @@ export default function CrmScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-  },
+    paddingTop: 8},
   header: {
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -309,31 +297,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 6,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   headerBadgeText: {
     color: Colors.black,
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 0.6,
-  },
+    letterSpacing: 0.6},
   title: {
     color: Colors.text,
     fontSize: 32,
     fontWeight: '800' as const,
-    letterSpacing: -0.5,
-  },
+    letterSpacing: -0.5},
   subtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    marginTop: 4,
-  },
+    marginTop: 4},
   statsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   statTile: {
     flexGrow: 1,
     flexBasis: '30%',
@@ -346,66 +329,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 76,
-  },
+    minHeight: 76},
   statValue: {
     color: Colors.gold,
     fontSize: 24,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   statLabel: {
     color: Colors.textSecondary,
     fontSize: 11,
     fontWeight: '600' as const,
     marginTop: 4,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   errorNote: {
     color: Colors.warning,
     fontSize: 12,
     marginTop: -12,
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   section: {
-    marginBottom: 22,
-  },
+    marginBottom: 22},
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 10,
-    marginLeft: 2,
-  },
+    marginLeft: 2},
   sectionDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   sectionTitle: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: '700' as const,
     letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
+    textTransform: 'uppercase'},
   card: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     borderRadius: 16,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   rowLast: {
-    borderBottomWidth: 0,
-  },
+    borderBottomWidth: 0},
   rowIcon: {
     width: 40,
     height: 40,
@@ -413,28 +385,23 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   rowText: {
     flex: 1,
-    marginLeft: 13,
-  },
+    marginLeft: 13},
   rowLabel: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   rowDescription: {
     color: Colors.textSecondary,
     fontSize: 12,
-    marginTop: 2,
-  },
+    marginTop: 2},
   restricted: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
+    paddingHorizontal: 40},
   restrictedIcon: {
     width: 64,
     height: 64,
@@ -443,21 +410,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
-  },
+    marginBottom: 18},
   restrictedTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   restrictedBody: {
     color: Colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 20,
-  },
+    lineHeight: 20},
   footerSpace: {
-    height: 24,
-  },
-});
+    height: 24}});

@@ -1,14 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -23,11 +21,11 @@ import {
   ShieldX,
   Wifi,
   XCircle,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { getIVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type EndpointProbe = {
   label: string;
@@ -78,8 +76,7 @@ export default function IVXAuthDebugScreen() {
     baseUrl: null,
     probes: INITIAL_PROBES.map((p) => ({ ...p })),
     lastRunAt: null,
-    loading: false,
-  });
+    loading: false});
 
   const runDiagnostics = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true }));
@@ -118,9 +115,7 @@ export default function IVXAuthDebugScreen() {
           method: probe.method,
           headers: {
             Accept: 'application/json',
-            ...(tokenPresent ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-        });
+            ...(tokenPresent ? { Authorization: `Bearer ${accessToken}` } : {})}});
         probe.latencyMs = Date.now() - startedAt;
         probe.status = response.status;
         // For owner-only routes, 401 means the route exists but auth is required (not a failure of routing)
@@ -141,8 +136,7 @@ export default function IVXAuthDebugScreen() {
       baseUrl,
       probes,
       lastRunAt: new Date().toISOString(),
-      loading: false,
-    });
+      loading: false});
   }, []);
 
   useEffect(() => {
@@ -168,7 +162,7 @@ export default function IVXAuthDebugScreen() {
     }
     return (
       <View style={styles.badgeUnknown}>
-        <ActivityIndicator size={12} color={Colors.textTertiary} />
+        <ShimmerIndicator size={12} color={Colors.textTertiary} />
         <Text style={styles.badgeUnknownText}>…</Text>
       </View>
     );
@@ -324,8 +318,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: { padding: 4, marginRight: 12 },
   headerTitleWrap: { flex: 1 },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -340,8 +333,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   cardTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' },
   row: {
@@ -350,8 +342,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowLabel: { color: Colors.textSecondary, fontSize: 13 },
   rowHint: { color: Colors.textTertiary, fontSize: 11, marginLeft: 21 },
@@ -362,8 +353,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34,197,94,0.15)',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   badgeOkText: { color: Colors.green, fontSize: 11, fontWeight: '700' },
   badgeFail: {
     flexDirection: 'row',
@@ -372,8 +362,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.15)',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   badgeFailText: { color: Colors.red, fontSize: 11, fontWeight: '700' },
   badgeUnknown: {
     flexDirection: 'row',
@@ -382,23 +371,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   badgeUnknownText: { color: Colors.textTertiary, fontSize: 11, fontWeight: '700' },
   badgeInfo: {
     backgroundColor: 'rgba(59,130,246,0.15)',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   badgeInfoText: { color: Colors.blue, fontSize: 11, fontWeight: '700' },
   baseUrl: { color: Colors.textTertiary, fontSize: 11, marginBottom: 4 },
   probeRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   probeTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   probeLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   probeLabel: { color: Colors.textSecondary, fontSize: 13 },
@@ -408,8 +394,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     minWidth: 44,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statusPillOk: { backgroundColor: 'rgba(34,197,94,0.15)' },
   statusPillAuth: { backgroundColor: 'rgba(245,158,11,0.15)' },
   statusPillFail: { backgroundColor: 'rgba(239,68,68,0.15)' },
@@ -423,5 +408,4 @@ const styles = StyleSheet.create({
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   legendText: { color: Colors.textSecondary, fontSize: 12, flex: 1 },
   safeNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, fontStyle: 'italic' },
-  footer: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 8 },
-});
+  footer: { color: Colors.textTertiary, fontSize: 11, textAlign: 'center', marginTop: 8 }});

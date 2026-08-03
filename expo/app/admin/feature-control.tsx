@@ -10,8 +10,7 @@ import {
   TextInput,
   Animated,
   RefreshControl,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -38,8 +37,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Filter,
-  Layers,
-} from 'lucide-react-native';
+  Layers} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -61,8 +59,7 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Settings,
   ShieldCheck,
   Palette,
-  BarChart3,
-};
+  BarChart3};
 
 type FilterType = 'all' | 'live' | 'off' | 'partial';
 
@@ -203,8 +200,7 @@ export default function FeatureControlScreen() {
         onPress: () => {
           if (Platform.OS !== 'web') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setControlState(getDefaultState());
-        },
-      },
+        }},
     ]);
   }, []);
 
@@ -225,8 +221,7 @@ export default function FeatureControlScreen() {
             state[mod.id] = { enabled: false, features };
           });
           setControlState(state);
-        },
-      },
+        }},
     ]);
   }, []);
 
@@ -478,8 +473,7 @@ export default function FeatureControlScreen() {
               style={[
                 styles.progressBarFill,
                 {
-                  width: `${stats.totalFeatures > 0 ? (stats.liveFeatures / stats.totalFeatures) * 100 : 0}%` as any,
-                },
+                  width: `${stats.totalFeatures > 0 ? (stats.liveFeatures / stats.totalFeatures) * 100 : 0}%` as any},
               ]}
             />
           </View>
@@ -544,14 +538,12 @@ export default function FeatureControlScreen() {
               all: `All (${stats.totalModules})`,
               live: `Live (${stats.liveModules})`,
               partial: `Partial (${stats.partialModules})`,
-              off: `Off (${stats.offModules})`,
-            };
+              off: `Off (${stats.offModules})`};
             const colorMap: Record<FilterType, string> = {
               all: Colors.primary,
               live: Colors.positive,
               partial: Colors.warning,
-              off: '#FF5252',
-            };
+              off: '#FF5252'};
             return (
               <TouchableOpacity
                 key={f}
@@ -597,8 +589,7 @@ export default function FeatureControlScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -606,27 +597,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     backgroundColor: Colors.card,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   headerTitle: {
     fontSize: 17,
     fontWeight: '800' as const,
     color: Colors.text,
-    letterSpacing: -0.3,
-  },
+    letterSpacing: -0.3},
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -634,34 +621,28 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.positive + '15',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   liveIndicator: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.positive,
-  },
+    backgroundColor: Colors.positive},
   liveText: {
     fontSize: 10,
     fontWeight: '800' as const,
     color: Colors.positive,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   scrollView: {
-    flex: 1,
-  },
+    flex: 1},
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 14,
     paddingTop: 14,
-    gap: 8,
-  },
+    gap: 8},
   statBox: {
     flex: 1,
     backgroundColor: Colors.card,
@@ -669,69 +650,56 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   statBoxLive: {
-    borderColor: Colors.positive + '30',
-  },
+    borderColor: Colors.positive + '30'},
   statBoxPartial: {
-    borderColor: Colors.warning + '30',
-  },
+    borderColor: Colors.warning + '30'},
   statBoxOff: {
-    borderColor: '#FF525230',
-  },
+    borderColor: '#FF525230'},
   statBoxFeatures: {
-    borderColor: Colors.primary + '30',
-  },
+    borderColor: Colors.primary + '30'},
   statNumber: {
     fontSize: 18,
     fontWeight: '800' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   statLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   statDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    marginTop: 4,
-  },
+    marginTop: 4},
   progressBarWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
     marginTop: 10,
-    gap: 10,
-  },
+    gap: 10},
   progressBarBg: {
     flex: 1,
     height: 6,
     backgroundColor: '#1A1A1A',
     borderRadius: 3,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressBarFill: {
     height: 6,
     backgroundColor: Colors.positive,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   progressText: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.textSecondary,
     minWidth: 55,
-    textAlign: 'right',
-  },
+    textAlign: 'right'},
   bulkActions: {
     flexDirection: 'row',
     paddingHorizontal: 14,
     marginTop: 12,
-    gap: 8,
-  },
+    gap: 8},
   bulkBtnEnable: {
     flex: 1,
     flexDirection: 'row',
@@ -742,13 +710,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.positive + '25',
-  },
+    borderColor: Colors.positive + '25'},
   bulkBtnEnableText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.positive,
-  },
+    color: Colors.positive},
   bulkBtnDisable: {
     flex: 1,
     flexDirection: 'row',
@@ -759,13 +725,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#FF525225',
-  },
+    borderColor: '#FF525225'},
   bulkBtnDisableText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: '#FF5252',
-  },
+    color: '#FF5252'},
   bulkBtnExpand: {
     flex: 1,
     flexDirection: 'row',
@@ -776,17 +740,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.primary + '25',
-  },
+    borderColor: Colors.primary + '25'},
   bulkBtnExpandText: {
     fontSize: 12,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   searchRow: {
     paddingHorizontal: 14,
-    marginTop: 12,
-  },
+    marginTop: 12},
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -796,21 +757,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
-  },
+    color: Colors.text},
   filterRow: {
     marginTop: 10,
-    maxHeight: 42,
-  },
+    maxHeight: 42},
   filterContent: {
     paddingHorizontal: 14,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -820,110 +777,89 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   filterText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   modulesList: {
     paddingHorizontal: 14,
     paddingTop: 12,
-    gap: 10,
-  },
+    gap: 10},
   moduleCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   moduleCardOff: {
     borderColor: '#FF525225',
-    opacity: 0.75,
-  },
+    opacity: 0.75},
   moduleCardLive: {
-    borderColor: Colors.positive + '25',
-  },
+    borderColor: Colors.positive + '25'},
   moduleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-  },
+    padding: 14},
   moduleHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
-  },
+    flex: 1},
   moduleIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 11,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   moduleInfo: {
-    flex: 1,
-  },
+    flex: 1},
   moduleTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
-  },
+    flexWrap: 'wrap'},
   moduleTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   moduleTitleOff: {
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 5,
-  },
+    borderRadius: 5},
   statusDot: {
     width: 5,
     height: 5,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   statusText: {
     fontSize: 9,
     fontWeight: '800' as const,
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   moduleDesc: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   moduleHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   featuresContainer: {
     paddingHorizontal: 14,
-    paddingBottom: 10,
-  },
+    paddingBottom: 10},
   featuresDivider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -931,67 +867,53 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border + '50',
-  },
+    borderBottomColor: Colors.border + '50'},
   featureLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flex: 1,
-    paddingRight: 10,
-  },
+    paddingRight: 10},
   featureIndicator: {
     width: 4,
     height: 4,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   featureName: {
     fontSize: 13,
     color: Colors.text,
     fontWeight: '500' as const,
-    flex: 1,
-  },
+    flex: 1},
   featureNameOff: {
     color: Colors.textTertiary,
-    textDecorationLine: 'line-through',
-  },
+    textDecorationLine: 'line-through'},
   featureRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   featureStatus: {
     fontSize: 10,
     fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+    letterSpacing: 0.3},
   featureSwitch: {
-    transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }],
-  },
+    transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }]},
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 50,
-  },
+    paddingVertical: 50},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.text,
-    marginTop: 12,
-  },
+    marginTop: 12},
   emptySub: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 4,
-  },
+    marginTop: 4},
   savedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   savedText: {
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
-});
+    color: Colors.textTertiary}});

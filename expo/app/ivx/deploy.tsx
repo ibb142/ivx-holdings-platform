@@ -7,11 +7,12 @@
  * returns full proof. Rollback is also one tap.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Stack } from 'expo-router';
 import { CheckCircle2, ChevronRight, RefreshCw, Rocket, ShieldAlert, Undo2 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = ((process.env.EXPO_PUBLIC_IVX_API_BASE_URL ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.ivxholding.com') as string).replace(/\/$/, '');
 
@@ -156,10 +157,8 @@ export default function IVXDeployScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${bearer}`,
-        },
-        body: JSON.stringify({ clearCache: false, pollTimeoutMs: 5 * 60_000 }),
-      });
+          Authorization: `Bearer ${bearer}`},
+        body: JSON.stringify({ clearCache: false, pollTimeoutMs: 5 * 60_000 })});
       setStage('verifying');
       const json = await response.json().catch(() => ({})) as ApproveAndRunResponse;
       setDeployResult(json);
@@ -203,10 +202,8 @@ export default function IVXDeployScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${bearer}`,
-        },
-        body: JSON.stringify({ reason: 'Owner one-tap rollback from in-app Approve & Deploy screen.' }),
-      });
+          Authorization: `Bearer ${bearer}`},
+        body: JSON.stringify({ reason: 'Owner one-tap rollback from in-app Approve & Deploy screen.' })});
       const json = await response.json().catch(() => ({})) as RollbackResponse;
       setRollbackResult(json);
       if (response.ok && json.ok) setStage('rolled_back');
@@ -249,7 +246,7 @@ export default function IVXDeployScreen() {
           testID="ivx-deploy-approve-button"
         >
           {busy && (stage === 'preparing' || stage === 'deploying' || stage === 'verifying') ? (
-            <ActivityIndicator color="#0B0B0B" />
+            <ShimmerIndicator color="#0B0B0B" />
           ) : (
             <Rocket size={18} color="#0B0B0B" />
           )}
@@ -318,7 +315,7 @@ export default function IVXDeployScreen() {
           style={[styles.secondaryButton, busy ? styles.secondaryButtonDisabled : null]}
           testID="ivx-deploy-rollback-button"
         >
-          {stage === 'rolling_back' ? <ActivityIndicator color={Colors.text} /> : <Undo2 size={16} color={Colors.text} />}
+          {stage === 'rolling_back' ? <ShimmerIndicator color={Colors.text} /> : <Undo2 size={16} color={Colors.text} />}
           <Text style={styles.secondaryButtonText}>One-tap Rollback</Text>
         </Pressable>
 
@@ -360,21 +357,18 @@ const styles = StyleSheet.create({
   header: { gap: 8, marginTop: 8 },
   iconBadge: {
     width: 44, height: 44, borderRadius: 12, borderWidth: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   title: { fontSize: 22, fontWeight: '700' as const, color: Colors.text },
   subtitle: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19 },
   primaryButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 14, paddingHorizontal: 20,
-    backgroundColor: Colors.success, borderRadius: 14,
-  },
+    backgroundColor: Colors.success, borderRadius: 14},
   primaryButtonDisabled: { opacity: 0.6 },
   primaryButtonText: { color: '#0B0B0B', fontSize: 15, fontWeight: '700' as const },
   statusCard: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: 14,
-    padding: 14, backgroundColor: Colors.card, gap: 10,
-  },
+    padding: 14, backgroundColor: Colors.card, gap: 10},
   statusHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   statusLabel: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
@@ -382,8 +376,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     padding: 10, borderRadius: 10,
     backgroundColor: `${Colors.error}14`,
-    borderWidth: 1, borderColor: `${Colors.error}55`,
-  },
+    borderWidth: 1, borderColor: `${Colors.error}55`},
   errorText: { color: Colors.error, fontSize: 12, flex: 1 },
   proofBlock: { gap: 6, marginTop: 4 },
   proofTitle: { color: Colors.textSecondary, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
@@ -394,15 +387,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 12,
     borderWidth: 1, borderColor: Colors.border, borderRadius: 14,
-    backgroundColor: Colors.card,
-  },
+    backgroundColor: Colors.card},
   secondaryButtonDisabled: { opacity: 0.5 },
   secondaryButtonText: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
   policyCard: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: 14,
-    padding: 14, backgroundColor: Colors.card, gap: 8,
-  },
+    padding: 14, backgroundColor: Colors.card, gap: 8},
   policyTitle: { color: Colors.textSecondary, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 4 },
   policyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  policyText: { color: Colors.text, fontSize: 12, flex: 1, lineHeight: 17 },
-});
+  policyText: { color: Colors.text, fontSize: 12, flex: 1, lineHeight: 17 }});

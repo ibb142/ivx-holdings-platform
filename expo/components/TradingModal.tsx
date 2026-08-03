@@ -1,15 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
   TextInput,
   ScrollView,
-  ActivityIndicator,
-  Animated,
-} from 'react-native';
+  Animated} from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, TrendingUp, TrendingDown, Clock, Zap, Shield, AlertCircle, CheckCircle, Info } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -19,6 +16,7 @@ import { formatNumber, formatAmountInput, parseAmountInput, formatCurrencyWithDe
 import { sellShares } from '@/lib/investment-service';
 import { supabase } from '@/lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface TradingModalProps {
   visible: boolean;
@@ -42,8 +40,7 @@ export default function TradingModal({
   initialType = 'buy',
   userBalance,
   userShares = 0,
-  onTradeComplete,
-}: TradingModalProps) {
+  onTradeComplete}: TradingModalProps) {
   const [tradeType, setTradeType] = useState<TradeType>(initialType);
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [shares, setShares] = useState('');
@@ -172,8 +169,7 @@ export default function TradingModal({
           subtotal,
           platformFee: fee,
           netProceeds: total,
-          sellType: 'instant',
-        });
+          sellType: 'instant'});
 
         if (result.success) {
           const order: Order = {
@@ -189,8 +185,7 @@ export default function TradingModal({
             total: total,
             fees: fee,
             createdAt: new Date().toISOString(),
-            filledAt: new Date().toISOString(),
-          };
+            filledAt: new Date().toISOString()};
           setTradeResult({ success: true, order });
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           onTradeComplete(order);
@@ -221,8 +216,7 @@ export default function TradingModal({
           fees: fee,
           status: orderType === 'market' ? 'filled' : 'open',
           created_at: new Date().toISOString(),
-          filled_at: orderType === 'market' ? new Date().toISOString() : null,
-        }).select().single();
+          filled_at: orderType === 'market' ? new Date().toISOString() : null}).select().single();
 
         if (orderError) {
           console.log('[Trading] Order insert failed:', orderError?.message);
@@ -241,8 +235,7 @@ export default function TradingModal({
           total: total,
           fees: fee,
           createdAt: new Date().toISOString(),
-          filledAt: orderType === 'market' ? new Date().toISOString() : undefined,
-        };
+          filledAt: orderType === 'market' ? new Date().toISOString() : undefined};
 
         setTradeResult({ success: true, order });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -396,7 +389,7 @@ export default function TradingModal({
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
+                    <ShimmerIndicator size="small" color={Colors.white} />
                   ) : (
                     <Text style={styles.executeButtonText}>
                       {tradeType === 'buy' ? 'Buy Now' : 'Sell Now'}
@@ -596,159 +589,128 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   container: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '92%',
-  },
+    maxHeight: '92%'},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   headerLeft: {
-    flex: 1,
-  },
+    flex: 1},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   marketStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 4,
-  },
+    marginTop: 4},
   liveIndicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   marketStatusText: {
     color: Colors.success,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   closeButton: {
-    padding: 4,
-  },
+    padding: 4},
   priceSection: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   priceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   priceLabel: {
     color: Colors.textTertiary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   spreadBadge: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+    paddingVertical: 3},
   spreadText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderRadius: 12,
     padding: 12,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   currentPrice: {
     fontSize: 28,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   changeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   changeText: {
     fontSize: 14,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bidAskContainer: {
     flexDirection: 'row',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
-    padding: 12,
-  },
+    padding: 12},
   bidAskItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   bidAskDivider: {
     width: 1,
     backgroundColor: Colors.surfaceBorder,
-    marginHorizontal: 12,
-  },
+    marginHorizontal: 12},
   bidAskLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   bidAskValue: {
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   bidAskShares: {
     color: Colors.textTertiary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   tradeTypeContainer: {
     flexDirection: 'row',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   tradeTypeButton: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 10,
-  },
+    borderRadius: 10},
   tradeTypeBuy: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   tradeTypeSell: {
-    backgroundColor: Colors.error,
-  },
+    backgroundColor: Colors.error},
   tradeTypeText: {
     color: Colors.textSecondary,
     fontWeight: '700' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   tradeTypeTextActive: {
-    color: Colors.white,
-  },
+    color: Colors.white},
   orderTypeContainer: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   orderTypeButton: {
     flex: 1,
     flexDirection: 'row',
@@ -759,38 +721,30 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   orderTypeActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
-  },
+    backgroundColor: Colors.primary + '10'},
   orderTypeText: {
     color: Colors.textTertiary,
     fontWeight: '600' as const,
-    fontSize: 13,
-  },
+    fontSize: 13},
   orderTypeTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   inputSection: {
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   inputLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   inputLabel: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   maxShares: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -798,37 +752,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    paddingHorizontal: 14,
-  },
+    paddingHorizontal: 14},
   inputPrefix: {
     color: Colors.textSecondary,
     fontSize: 18,
     fontWeight: '600' as const,
-    marginRight: 4,
-  },
+    marginRight: 4},
   input: {
     flex: 1,
     color: Colors.text,
     fontSize: 18,
     fontWeight: '600' as const,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   maxButton: {
     backgroundColor: Colors.primary,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   maxButtonText: {
     color: Colors.black,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   quickAmounts: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 8,
-  },
+    marginTop: 8},
   quickAmountButton: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
@@ -836,162 +784,132 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   quickAmountText: {
     color: Colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   summarySection: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 14,
     padding: 14,
     marginBottom: 12,
-    gap: 8,
-  },
+    gap: 8},
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   summaryRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   summaryLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
-  },
+    fontSize: 13},
   summaryValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   summaryLabelTotal: {
     color: Colors.text,
     fontSize: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   summaryValueTotal: {
     color: Colors.primary,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   balanceInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   balanceText: {
     color: Colors.textTertiary,
-    fontSize: 12,
-  },
+    fontSize: 12},
   tradeButton: {
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   buttonDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   tradeButtonText: {
     color: Colors.white,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   disclaimer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   disclaimerText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    flex: 1,
-  },
+    flex: 1},
   taxDisclaimer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
     backgroundColor: Colors.warning + '10',
     borderRadius: 10,
-    padding: 10,
-  },
+    padding: 10},
   taxDisclaimerText: {
     color: Colors.textSecondary,
     fontSize: 11,
     flex: 1,
-    lineHeight: 16,
-  },
+    lineHeight: 16},
   confirmationContainer: {
-    gap: 16,
-  },
+    gap: 16},
   confirmTitle: {
     color: Colors.text,
     fontSize: 20,
     fontWeight: '800' as const,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   confirmCard: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 14,
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   confirmRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   confirmRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   confirmLabel: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   confirmValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   confirmLabelTotal: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   confirmValueTotal: {
     color: Colors.primary,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   warningBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     backgroundColor: Colors.warning + '10',
     borderRadius: 12,
-    padding: 12,
-  },
+    padding: 12},
   warningText: {
     color: Colors.textSecondary,
     fontSize: 13,
     flex: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   confirmButtons: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   cancelButton: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
@@ -999,93 +917,75 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   cancelButtonText: {
     color: Colors.text,
     fontWeight: '600' as const,
-    fontSize: 15,
-  },
+    fontSize: 15},
   executeButton: {
     flex: 2,
     borderRadius: 14,
     paddingVertical: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   executeButtonText: {
     color: Colors.white,
     fontWeight: '700' as const,
-    fontSize: 16,
-  },
+    fontSize: 16},
   resultContainer: {
     alignItems: 'center',
     gap: 16,
-    paddingVertical: 20,
-  },
+    paddingVertical: 20},
   resultIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   resultTitle: {
     color: Colors.text,
     fontSize: 22,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   resultDetails: {
     width: '100%',
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 14,
     padding: 14,
-    gap: 10,
-  },
+    gap: 10},
   resultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   resultRowTotal: {
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceBorder,
     paddingTop: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   resultLabel: {
     color: Colors.textSecondary,
-    fontSize: 14,
-  },
+    fontSize: 14},
   resultValue: {
     color: Colors.text,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   resultLabelTotal: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   resultValueTotal: {
     color: Colors.primary,
     fontSize: 20,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   errorText: {
     color: Colors.error,
     fontSize: 14,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   doneButton: {
     width: '100%',
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   doneButtonText: {
     color: Colors.black,
     fontWeight: '700' as const,
-    fontSize: 16,
-  },
-});
+    fontSize: 16}});

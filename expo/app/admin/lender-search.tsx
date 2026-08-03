@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TextInput,
   Animated,
   Platform,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -40,8 +37,7 @@ import {
   ChevronDown,
   AlertCircle,
   Database,
-  FileText,
-} from 'lucide-react-native';
+  FileText} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { LenderCategory } from '@/types';
 import {
@@ -50,19 +46,18 @@ import {
   recentSearches,
   SEARCH_CATEGORIES,
   SEARCH_REGIONS,
-  SUGGESTED_SEARCHES,
-} from '@/mocks/lender-discovery';
+  SUGGESTED_SEARCHES} from '@/mocks/lender-discovery';
 import { LenderProvider, useLenders } from '@/lib/lender-context';
 import { searchSECEdgar, SECSearchResult } from '@/lib/sec-edgar-service';
 import { formatCurrencyCompact } from '@/lib/formatters';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const formatCurrency = (amount: number): string => formatCurrencyCompact(amount);
 
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   google: { label: 'Google', color: '#4285F4' },
   sec_filing: { label: 'SEC Filing', color: '#00C48C' },
-  sec_edgar: { label: 'SEC EDGAR', color: '#00C48C' },
-};
+  sec_edgar: { label: 'SEC EDGAR', color: '#00C48C' }};
 
 const CATEGORY_LABELS: Record<LenderCategory, string> = {
   bank: 'Bank',
@@ -74,16 +69,14 @@ const CATEGORY_LABELS: Record<LenderCategory, string> = {
   pension_fund: 'Pension Fund',
   insurance: 'Insurance',
   individual: 'Individual',
-  crowdfunding: 'Crowdfunding',
-};
+  crowdfunding: 'Crowdfunding'};
 
 type SearchMode = 'web' | 'sec_edgar';
 
 const DiscoveredCard = React.memo(({
   lender,
   onImport,
-  imported,
-}: {
+  imported}: {
   lender: DiscoveredLender;
   onImport: (id: string) => void;
   imported: boolean;
@@ -115,8 +108,7 @@ const DiscoveredCard = React.memo(({
           <View style={styles.confidenceBadge}>
             <Zap size={10} color={lender.confidence >= 90 ? Colors.success : Colors.warning} />
             <Text style={[styles.confidenceText, {
-              color: lender.confidence >= 90 ? Colors.success : Colors.warning,
-            }]}>
+              color: lender.confidence >= 90 ? Colors.success : Colors.warning}]}>
               {lender.confidence}% match
             </Text>
           </View>
@@ -125,8 +117,7 @@ const DiscoveredCard = React.memo(({
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <View style={[styles.typeIcon, {
-              backgroundColor: lender.type === 'public' ? 'rgba(74,144,217,0.15)' : 'rgba(232,121,249,0.15)',
-            }]}>
+              backgroundColor: lender.type === 'public' ? 'rgba(74,144,217,0.15)' : 'rgba(232,121,249,0.15)'}]}>
               {lender.type === 'public' ? <Globe size={16} color={Colors.accent} /> : <Lock size={16} color="#E879F9" />}
             </View>
             <View style={styles.cardTitleWrap}>
@@ -209,8 +200,7 @@ const DiscoveredCard = React.memo(({
 const SECResultCard = React.memo(({
   result,
   onImport,
-  imported,
-}: {
+  imported}: {
   result: SECSearchResult;
   onImport: (result: SECSearchResult) => void;
   imported: boolean;
@@ -249,8 +239,7 @@ const SECResultCard = React.memo(({
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <View style={[styles.typeIcon, {
-              backgroundColor: result.type === 'public' ? 'rgba(74,144,217,0.15)' : 'rgba(232,121,249,0.15)',
-            }]}>
+              backgroundColor: result.type === 'public' ? 'rgba(74,144,217,0.15)' : 'rgba(232,121,249,0.15)'}]}>
               {result.type === 'public' ? <Globe size={16} color={Colors.accent} /> : <Lock size={16} color="#E879F9" />}
             </View>
             <View style={styles.cardTitleWrap}>
@@ -465,8 +454,7 @@ function LenderSearchScreenContent() {
             importDiscoveredLender(lender);
             setLocalImportedIds(prev => [...prev, id]);
             console.log('[LenderSearch] Lender imported to directory:', lender.name);
-          },
-        },
+          }},
       ]
     );
   }, [searchResults, importDiscoveredLender, notifyImportUnavailable]);
@@ -487,8 +475,7 @@ function LenderSearchScreenContent() {
             importSECLender(result);
             setSecImportedCiks(prev => [...prev, result.cik]);
             console.log('[LenderSearch] SEC entity imported:', result.name);
-          },
-        },
+          }},
       ]
     );
   }, [importSECLender, notifyImportUnavailable]);
@@ -513,8 +500,7 @@ function LenderSearchScreenContent() {
               const count = importMultipleSEC(notImported);
               setSecImportedCiks(prev => [...prev, ...notImported.map(r => r.cik)]);
               console.log('[LenderSearch] Bulk SEC import:', count, 'entities');
-            },
-          },
+            }},
         ]
       );
     } else {
@@ -536,8 +522,7 @@ function LenderSearchScreenContent() {
               const count = importMultipleDiscovered(notImported);
               setLocalImportedIds(prev => [...prev, ...notImported.map(l => l.id)]);
               console.log('[LenderSearch] Bulk import:', count, 'lenders');
-            },
-          },
+            }},
         ]
       );
     }
@@ -629,7 +614,7 @@ function LenderSearchScreenContent() {
             disabled={isSearching}
           >
             {isSearching ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ShimmerIndicator color="#fff" size="small" />
             ) : (
               <>
                 {searchMode === 'sec_edgar' ? <Database size={18} color="#fff" /> : <Search size={18} color={Colors.background} />}
@@ -978,5 +963,4 @@ const styles = StyleSheet.create({
   importBtnDoneText: { color: Colors.textSecondary, fontSize: 13 },
   emptyState: { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '600' as const },
-  emptyText: { color: Colors.textTertiary, fontSize: 14 },
-});
+  emptyText: { color: Colors.textTertiary, fontSize: 14 }});

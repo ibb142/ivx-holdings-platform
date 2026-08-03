@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -11,9 +10,7 @@ import {
   Platform,
   Modal,
   FlatList,
-  Image as RNImage,
-  ActivityIndicator,
-} from 'react-native';
+  Image as RNImage} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -36,13 +33,13 @@ import {
   MapPin,
   TrendingUp,
   Camera,
-  Image as ImageIcon,
-} from 'lucide-react-native';
+  Image as ImageIcon} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { COUNTRIES, Country } from '@/constants/countries';
 import { validateEmail, validatePassword, validatePhone, formatBirthdayInput, parseBirthday } from '@/lib/auth-helpers';
 import { supabase } from '@/lib/supabase';
 import * as MemberService from '@/lib/member-service';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const STEPS = ['Register', 'Verify', 'Dashboard'] as const;
 type Step = (typeof STEPS)[number];
@@ -75,8 +72,7 @@ export default function MemberRegisterScreen() {
     countryCode: 'US',
     dialCode: '+1',
     zipCode: '',
-    acceptTerms: false,
-  });
+    acceptTerms: false});
   const [selectedInterest, setSelectedInterest] = useState<MemberService.MemberRoleInterest | null>(null);
   const [pictureUri, setPictureUri] = useState<string | null>(null);
   const [pictureUploading, setPictureUploading] = useState(false);
@@ -97,8 +93,7 @@ export default function MemberRegisterScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
-      });
+        quality: 0.85});
       if (result.canceled || !result.assets || result.assets.length === 0) return;
       const uri = result.assets[0].uri;
       setPictureUri(uri);
@@ -139,8 +134,7 @@ export default function MemberRegisterScreen() {
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: 'file',
           mimeType: 'image/jpeg',
-          headers,
-        });
+          headers});
         uploadResult = result.status >= 200 && result.status < 300 ? { success: true } : { success: false, error: `HTTP ${result.status}` };
       }
       if (!uploadResult.success) {
@@ -198,8 +192,7 @@ export default function MemberRegisterScreen() {
       ...prev,
       country: country.name,
       countryCode: country.code,
-      dialCode: country.dialCode,
-    }));
+      dialCode: country.dialCode}));
     setShowCountryPicker(false);
     setCountrySearch('');
   };
@@ -264,8 +257,7 @@ export default function MemberRegisterScreen() {
         zipCode: formData.zipCode,
         roles: selectedInterest ? [selectedInterest] : [],
         acceptTerms: formData.acceptTerms,
-        pictureUrl: uploadedPictureUrl ?? undefined,
-      });
+        pictureUrl: uploadedPictureUrl ?? undefined});
 
       if (result.success && result.userId) {
         // Email is auto-confirmed server-side — skip Verify step, go to Dashboard
@@ -536,7 +528,7 @@ export default function MemberRegisterScreen() {
           )}
           {pictureUploading && (
             <View style={styles.pictureLoadingOverlay}>
-              <ActivityIndicator size="small" color={Colors.gold} />
+              <ShimmerIndicator size="small" color={Colors.gold} />
             </View>
           )}
         </View>
@@ -711,8 +703,7 @@ function MemberVerifyContent({
   phone,
   dialCode,
   onComplete,
-  router,
-}: {
+  router}: {
   userId: string;
   email: string;
   phone: string;
@@ -994,8 +985,7 @@ function MemberVerifyContent({
 
 function MemberDashboardContent({
   userId,
-  router,
-}: {
+  router}: {
   userId: string;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -1117,8 +1107,7 @@ function MemberDashboardContent({
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Start KYC',
-                  onPress: () => router.push('/kyc-verification' as Href),
-                },
+                  onPress: () => router.push('/kyc-verification' as Href)},
               ]
             );
           }}
@@ -1143,13 +1132,11 @@ function MemberDashboardContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   flex: { flex: 1 },
   scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
 
   // Step Indicator
   stepIndicator: {
@@ -1157,11 +1144,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   stepDotContainer: {
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   stepDot: {
     width: 28,
     height: 28,
@@ -1170,72 +1155,57 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   stepDotActive: {
     borderColor: Colors.gold,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   stepDotDone: {
     borderColor: Colors.success,
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   stepDotText: {
     color: Colors.muted,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   stepDotTextActive: {
-    color: Colors.gold,
-  },
+    color: Colors.gold},
   stepLine: {
     width: 40,
     height: 2,
     backgroundColor: Colors.surfaceBorder,
     marginHorizontal: 4,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   stepLineDone: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   stepLabel: {
     fontSize: 10,
     color: Colors.muted,
     marginTop: 4,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   stepLabelActive: {
-    color: Colors.gold,
-  },
+    color: Colors.gold},
   stepLabelDone: {
-    color: Colors.success,
-  },
+    color: Colors.success},
 
   // Header
   headerSection: {
     marginTop: 20,
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   title: {
     fontSize: 24,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   subtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+    lineHeight: 20},
 
   // Form
   row: {
     flexDirection: 'row',
-    gap: 12,
-  },
+    gap: 12},
   halfField: {
-    flex: 1,
-  },
+    flex: 1},
   label: {
     fontSize: 13,
     fontWeight: '600' as const,
@@ -1243,8 +1213,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     marginTop: 14,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1253,16 +1222,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.inputBorder,
     paddingHorizontal: 14,
-    height: 48,
-  },
+    height: 48},
   inputIcon: {
-    marginRight: 10,
-  },
+    marginRight: 10},
   genderRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   genderChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1273,44 +1239,35 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inputBackground,
     borderWidth: 1,
     borderColor: Colors.inputBorder,
-    minHeight: 44,
-  },
+    minHeight: 44},
   genderChipActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   genderChipText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   genderChipTextActive: {
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   input: {
     flex: 1,
     color: Colors.text,
     fontSize: 15,
-    height: '100%' as any,
-  },
+    height: '100%' as any},
   countryText: {
-    color: Colors.text,
-  },
+    color: Colors.text},
   placeholderText: {
-    color: Colors.muted,
-  },
+    color: Colors.muted},
   eyeButton: {
-    padding: 8,
-  },
+    padding: 8},
 
   // Terms
   termsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 20,
-    gap: 10,
-  },
+    gap: 10},
   checkbox: {
     width: 22,
     height: 22,
@@ -1318,28 +1275,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   checkboxChecked: {
     backgroundColor: Colors.gold,
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   termsText: {
     flex: 1,
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   termsLink: {
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Market interest (single-select)
   interestList: {
     gap: 10,
-    marginTop: 4,
-  },
+    marginTop: 4},
   interestRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1349,21 +1301,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    backgroundColor: Colors.backgroundSecondary,
-  },
+    backgroundColor: Colors.backgroundSecondary},
   interestRowActive: {
     borderColor: Colors.gold,
-    backgroundColor: 'rgba(255, 215, 0, 0.08)',
-  },
+    backgroundColor: 'rgba(255, 215, 0, 0.08)'},
   interestRowText: {
     flex: 1,
     fontSize: 15,
     color: Colors.textSecondary,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   interestRowTextActive: {
-    color: Colors.gold,
-  },
+    color: Colors.gold},
   radioButton: {
     width: 20,
     height: 20,
@@ -1371,32 +1319,27 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   radioButtonActive: {
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   radioButtonDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.gold,
-  },
+    backgroundColor: Colors.gold},
   helperText: {
     fontSize: 12,
     color: Colors.muted,
     marginTop: -2,
     marginBottom: 6,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
 
   // Member picture upload
   pictureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginTop: 4,
-  },
+    marginTop: 4},
   picturePreview: {
     width: 72,
     height: 72,
@@ -1406,13 +1349,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   pictureImage: {
     width: '100%' as const,
     height: '100%' as const,
-    borderRadius: 36,
-  },
+    borderRadius: 36},
   pictureLoadingOverlay: {
     position: 'absolute' as const,
     top: 0,
@@ -1422,8 +1363,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 36,
-  },
+    borderRadius: 36},
   pictureButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1433,28 +1373,23 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.gold,
-    backgroundColor: 'rgba(255, 215, 0, 0.05)',
-  },
+    backgroundColor: 'rgba(255, 215, 0, 0.05)'},
   pictureButtonText: {
     fontSize: 14,
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   pictureClear: {
-    padding: 8,
-  },
+    padding: 8},
   investorBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   investorBadgeText: {
     fontSize: 11,
     fontWeight: '800' as const,
     color: Colors.gold,
-    letterSpacing: 1.2,
-  },
+    letterSpacing: 1.2},
 
   // Buttons
   submitButton: {
@@ -1464,29 +1399,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    marginTop: 24,
-  },
+    marginTop: 24},
   submitButtonDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   submitButtonText: {
     color: '#000000',
     fontSize: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   linkRow: {
     alignItems: 'center',
     marginTop: 16,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   linkText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   linkHighlight: {
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Verification Cards
   verifyCard: {
@@ -1495,13 +1424,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   verifyCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   verifyIconBox: {
     width: 40,
     height: 40,
@@ -1509,49 +1436,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 215, 0, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
+    marginRight: 12},
   verifyIconBoxDone: {
-    backgroundColor: Colors.success,
-  },
+    backgroundColor: Colors.success},
   verifyCardHeaderText: {
-    flex: 1,
-  },
+    flex: 1},
   verifyCardTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   verifyCardSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   verifyBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 20,
-  },
+    borderRadius: 20},
   verifyBadgePending: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
+    backgroundColor: 'rgba(245, 158, 11, 0.15)'},
   verifyBadgeDone: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-  },
+    backgroundColor: 'rgba(34, 197, 94, 0.15)'},
   verifyBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.warning,
-  },
+    color: Colors.warning},
   verifyBadgeTextDone: {
-    color: Colors.success,
-  },
+    color: Colors.success},
   codeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
-    gap: 8,
-  },
+    gap: 8},
   codeInput: {
     flex: 1,
     height: 52,
@@ -1562,39 +1478,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   codeInputFilled: {
-    borderColor: Colors.gold,
-  },
+    borderColor: Colors.gold},
   codeInputVerified: {
     borderColor: Colors.success,
     backgroundColor: 'rgba(34, 197, 94, 0.05)',
-    color: Colors.success,
-  },
+    color: Colors.success},
   resendButton: {
     alignItems: 'center',
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   resendButtonDisabled: {
-    opacity: 0.5,
-  },
+    opacity: 0.5},
   resendButtonText: {
     fontSize: 13,
     color: Colors.gold,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   errorContainer: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
     borderRadius: 10,
     padding: 12,
-    marginTop: 8,
-  },
+    marginTop: 8},
   errorText: {
     color: Colors.error,
     fontSize: 13,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
 
   // Dashboard
   welcomeBadge: {
@@ -1606,33 +1514,28 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignSelf: 'flex-start',
     marginBottom: 12,
-    gap: 6,
-  },
+    gap: 6},
   welcomeBadgeText: {
     color: '#000000',
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   dashboardCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   cardTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   cardSubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   outlineButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1641,26 +1544,22 @@ const styles = StyleSheet.create({
     borderColor: Colors.gold,
     borderRadius: 10,
     paddingVertical: 12,
-    gap: 8,
-  },
+    gap: 8},
   outlineButtonText: {
     color: Colors.gold,
     fontSize: 15,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
 
   // Opportunities
   opportunityRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   opportunityItem: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 14,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   opportunityIcon: {
     width: 40,
     height: 40,
@@ -1668,55 +1567,45 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   opportunityEmoji: {
-    fontSize: 18,
-  },
+    fontSize: 18},
   opportunityName: {
     fontSize: 11,
     color: Colors.text,
     fontWeight: '600' as const,
     textAlign: 'center',
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   opportunityReturn: {
     fontSize: 13,
     color: Colors.success,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
 
   // Profile Steps
   profileSteps: {
-    gap: 10,
-  },
+    gap: 10},
   profileStep: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10},
   profileStepText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   profileStepTextDone: {
     fontSize: 14,
     color: Colors.text,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   profileStepPending: {
     width: 20,
     height: 20,
     borderRadius: 10,
     backgroundColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   profileStepPendingText: {
     fontSize: 10,
     color: Colors.muted,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
 
   // Invest Card
   investCard: {
@@ -1725,34 +1614,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.2)',
     padding: 24,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   investCardTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: Colors.gold,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   investCardSubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 20,
-  },
+    marginBottom: 20},
   skipButton: {
     alignItems: 'center',
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   skipButtonText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
 
   // Country Picker
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1760,13 +1643,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   modalTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1774,13 +1655,11 @@ const styles = StyleSheet.create({
     margin: 16,
     borderRadius: 10,
     paddingHorizontal: 14,
-    height: 44,
-  },
+    height: 44},
   searchInput: {
     flex: 1,
     color: Colors.text,
-    fontSize: 15,
-  },
+    fontSize: 15},
   countryItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1788,10 +1667,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 0.5,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   countryItemText: {
     fontSize: 15,
-    color: Colors.text,
-  },
-});
+    color: Colors.text}});

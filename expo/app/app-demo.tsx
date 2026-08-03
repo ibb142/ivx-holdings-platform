@@ -6,8 +6,7 @@ import {
   Animated,
   TouchableOpacity,
   Dimensions,
-  Platform,
-} from 'react-native';
+  Platform} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -17,8 +16,7 @@ import {
   SkipForward,
   SkipBack,
   RotateCcw,
-  ChevronRight,
-} from 'lucide-react-native';
+  ChevronRight} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import {
@@ -36,8 +34,7 @@ import {
   SecurityMockup,
   GrowthMockup,
   MetricsMockup,
-  ClosingMockup,
-} from '@/components/ScreenMockups';
+  ClosingMockup} from '@/components/ScreenMockups';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const SLIDE_DURATION = 5000;
@@ -58,120 +55,105 @@ const DEMO_SLIDES: DemoSlide[] = [
     subtitle: 'Premium real estate investment platform accessible to everyone. Start with just $100.',
     highlights: ['Fractional ownership', 'SEC compliant', 'Global properties'],
     accentColor: '#FFD700',
-    Mockup: IntroMockup,
-  },
+    Mockup: IntroMockup},
   {
     id: 'opportunity',
     title: 'Market Opportunity',
     subtitle: 'The $326 trillion real estate market — now accessible through fractional investing.',
     highlights: ['$326T global market', '90% millionaires via RE', '+8.2% annual growth'],
     accentColor: '#4A90D9',
-    Mockup: OpportunityMockup,
-  },
+    Mockup: OpportunityMockup},
   {
     id: 'platform',
     title: 'Platform Overview',
     subtitle: '340+ features across marketplace, analytics, wallet, AI, security, and admin.',
     highlights: ['Cross-platform', 'AI-powered', '340+ features'],
     accentColor: '#00C48C',
-    Mockup: PlatformMockup,
-  },
+    Mockup: PlatformMockup},
   {
     id: 'onboarding',
     title: 'Secure Onboarding',
     subtitle: 'Multi-step KYC verification with AI-powered document scanning and biometric auth.',
     highlights: ['AI document scan', 'Biometric auth', '1-2 day approval'],
     accentColor: '#9B59B6',
-    Mockup: OnboardingMockup,
-  },
+    Mockup: OnboardingMockup},
   {
     id: 'marketplace',
     title: 'Property Marketplace',
     subtitle: 'Browse curated properties worldwide. Filter, compare, and invest instantly.',
     highlights: ['Global listings', 'Smart filters', 'Instant investing'],
     accentColor: '#FF6B6B',
-    Mockup: MarketplaceMockup,
-  },
+    Mockup: MarketplaceMockup},
   {
     id: 'trading',
     title: 'Investment Engine',
     subtitle: 'Buy and sell shares with market or limit orders. Real-time pricing 24/7.',
     highlights: ['Market & limit orders', 'Real-time charts', 'DRIP reinvest'],
     accentColor: '#FFB800',
-    Mockup: TradingMockup,
-  },
+    Mockup: TradingMockup},
   {
     id: 'portfolio',
     title: 'Portfolio Dashboard',
     subtitle: 'Track holdings, performance, gains & losses, and transaction history.',
     highlights: ['Performance charts', 'P&L tracking', 'Activity log'],
     accentColor: '#4A90D9',
-    Mockup: PortfolioMockup,
-  },
+    Mockup: PortfolioMockup},
   {
     id: 'wallet',
     title: 'Digital Wallet',
     subtitle: 'Add funds via card, ACH, or wire. Withdraw anytime with bank-level security.',
     highlights: ['Multiple payment methods', 'Instant deposits', 'Secure withdrawals'],
     accentColor: '#2ECC71',
-    Mockup: WalletMockup,
-  },
+    Mockup: WalletMockup},
   {
     id: 'tokenomics',
     title: 'IVXHOLDINGS Token Economy',
     subtitle: 'Stake IVXHOLDINGS tokens for rewards, governance voting, and exclusive tier benefits.',
     highlights: ['12.5% APY staking', 'Governance votes', 'VIP tiers'],
     accentColor: '#F39C12',
-    Mockup: TokenomicsMockup,
-  },
+    Mockup: TokenomicsMockup},
   {
     id: 'ai',
     title: 'AI Assistant',
     subtitle: '24/7 AI-powered support for portfolio analysis, recommendations, and guidance.',
     highlights: ['Portfolio analysis', 'Smart recommendations', 'Tax optimization'],
     accentColor: '#E91E63',
-    Mockup: AIMockup,
-  },
+    Mockup: AIMockup},
   {
     id: 'admin',
     title: 'Admin Command Center',
     subtitle: 'Full management dashboard — users, properties, transactions, marketing & AI studio.',
     highlights: ['User management', 'Transaction control', 'AI content studio'],
     accentColor: '#FFD700',
-    Mockup: AdminMockup,
-  },
+    Mockup: AdminMockup},
   {
     id: 'security',
     title: 'Enterprise Security',
     subtitle: 'End-to-end encryption, 2FA, SEC compliance, GDPR ready, 24/7 threat monitoring.',
     highlights: ['E2E encryption', 'SEC & GDPR', '98/100 score'],
     accentColor: '#607D8B',
-    Mockup: SecurityMockup,
-  },
+    Mockup: SecurityMockup},
   {
     id: 'growth',
     title: 'Growth Engine',
     subtitle: 'Referral program, influencer network, and tiered commission system.',
     highlights: ['$500/referral', 'Multi-tier rewards', 'Influencer program'],
     accentColor: '#00BCD4',
-    Mockup: GrowthMockup,
-  },
+    Mockup: GrowthMockup},
   {
     id: 'metrics',
     title: 'Performance Analytics',
     subtitle: 'User growth, transaction volume, ROI metrics, and NPS tracking in real-time.',
     highlights: ['+32% user growth', '$4.2M volume', '9.8% avg return'],
     accentColor: '#FF5722',
-    Mockup: MetricsMockup,
-  },
+    Mockup: MetricsMockup},
   {
     id: 'closing',
     title: 'Start Investing Today',
     subtitle: 'Join thousands already building wealth through real estate. Download free.',
     highlights: ['Free to download', 'Start from $100', 'iOS, Android & Web'],
     accentColor: '#FFD700',
-    Mockup: ClosingMockup,
-  },
+    Mockup: ClosingMockup},
 ];
 
 function ProgressSegments({
@@ -179,8 +161,7 @@ function ProgressSegments({
   current,
   progress,
   onPress,
-  accentColor,
-}: {
+  accentColor}: {
   total: number;
   current: number;
   progress: Animated.Value;
@@ -195,8 +176,7 @@ function ProgressSegments({
         const fillWidth = isActive
           ? progress.interpolate({
               inputRange: [0, 1],
-              outputRange: ['0%', '100%'],
-            })
+              outputRange: ['0%', '100%']})
           : filled
           ? '100%'
           : '0%';
@@ -265,39 +245,33 @@ export default function AppDemoScreen() {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 400,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.spring(mockupScale, {
         toValue: 1,
         friction: 8,
         tension: 50,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.spring(mockupTranslateY, {
         toValue: 0,
         friction: 8,
         tension: 50,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(titleTranslateY, {
         toValue: 0,
         duration: 450,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       Animated.timing(subtitleOpacity, {
         toValue: 1,
         duration: 500,
         delay: 200,
-        useNativeDriver: true,
-      }),
+        useNativeDriver: true}),
       ...highlightAnims.map((a, i) =>
         Animated.spring(a, {
           toValue: 1,
           friction: 8,
           tension: 40,
           delay: 400 + i * 150,
-          useNativeDriver: true,
-        })
+          useNativeDriver: true})
       ),
     ]).start();
   }, [fadeAnim, mockupScale, mockupTranslateY, titleTranslateY, subtitleOpacity, highlightAnims]);
@@ -310,8 +284,7 @@ export default function AppDemoScreen() {
     const anim = Animated.timing(slideProgress, {
       toValue: 1,
       duration: SLIDE_DURATION,
-      useNativeDriver: false,
-    });
+      useNativeDriver: false});
     progressAnimRef.current = anim;
     anim.start(({ finished }) => {
       if (finished) {
@@ -440,8 +413,7 @@ export default function AppDemoScreen() {
             styles.mockupContainer,
             {
               opacity: fadeAnim,
-              transform: [{ scale: mockupScale }, { translateY: mockupTranslateY }],
-            },
+              transform: [{ scale: mockupScale }, { translateY: mockupTranslateY }]},
           ]}
         >
           <View style={styles.mockupShadow}>
@@ -457,8 +429,7 @@ export default function AppDemoScreen() {
             styles.textContent,
             {
               opacity: fadeAnim,
-              transform: [{ translateY: titleTranslateY }],
-            },
+              transform: [{ translateY: titleTranslateY }]},
           ]}
         >
           <View style={styles.slideLabel}>
@@ -488,11 +459,8 @@ export default function AppDemoScreen() {
                       {
                         translateY: highlightAnims[i].interpolate({
                           inputRange: [0, 1],
-                          outputRange: [10, 0],
-                        }),
-                      },
-                    ],
-                  },
+                          outputRange: [10, 0]})},
+                    ]},
                 ]}
               >
                 <Text style={[styles.highlightText, { color: slide.accentColor }]}>{h}</Text>
@@ -561,94 +529,77 @@ export default function AppDemoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#060608',
-  },
+    backgroundColor: '#060608'},
   bgGlow: {
-    ...StyleSheet.absoluteFillObject,
-  },
+    ...StyleSheet.absoluteFillObject},
   bgGlowOrb: {
     position: 'absolute',
     width: 200,
     height: 200,
-    borderRadius: 100,
-  },
+    borderRadius: 100},
   safeArea: {
-    zIndex: 10,
-  },
+    zIndex: 10},
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
+    paddingVertical: 8},
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   topBarCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   liveIndicator: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   topBarTitle: {
     fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.text,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   slideCounter: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     minWidth: 50,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   progressBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 3,
     paddingTop: 6,
-    paddingBottom: 4,
-  },
+    paddingBottom: 4},
   progressSegment: {
     flex: 1,
     height: 16,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   progressSegmentBg: {
     height: 3,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 2,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   progressSegmentFill: {
     height: '100%',
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
+    paddingHorizontal: 24},
   mockupContainer: {
     alignItems: 'center',
-    marginBottom: 24,
-  },
+    marginBottom: 24},
   mockupShadow: {
     width: SCREEN_W - 80,
     maxWidth: 320,
-    position: 'relative',
-  },
+    position: 'relative'},
   mockupGlow: {
     position: 'absolute',
     top: 10,
@@ -662,93 +613,76 @@ const styles = StyleSheet.create({
           shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.4,
           shadowRadius: 30,
-          elevation: 20,
-        }),
-  },
+          elevation: 20})},
   mockupWrapper: {
     borderRadius: 20,
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   textContent: {
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 8,
-  },
+    paddingHorizontal: 8},
   slideLabel: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   slideLabelDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-  },
+    borderRadius: 3},
   slideLabelText: {
     fontSize: 11,
     fontWeight: '800' as const,
-    letterSpacing: 1.5,
-  },
+    letterSpacing: 1.5},
   slideTitle: {
     fontSize: 24,
     fontWeight: '900' as const,
     color: Colors.text,
     textAlign: 'center' as const,
-    lineHeight: 30,
-  },
+    lineHeight: 30},
   slideSubtitle: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center' as const,
     lineHeight: 20,
-    maxWidth: 320,
-  },
+    maxWidth: 320},
   highlightsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   highlightChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   highlightText: {
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   controlsArea: {
     paddingHorizontal: 24,
-    paddingBottom: 8,
-  },
+    paddingBottom: 8},
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 32,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   controlBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.06)',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   controlBtnDisabled: {
-    opacity: 0.4,
-  },
+    opacity: 0.4},
   playBtn: {
     width: 60,
     height: 60,
     borderRadius: 30,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -757,11 +691,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
     marginTop: 4,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   ctaText: {
     fontSize: 16,
     fontWeight: '800' as const,
-    color: '#000',
-  },
-});
+    color: '#000'}});

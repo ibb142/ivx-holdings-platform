@@ -8,8 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Image,
-} from 'react-native';
+  Image} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,8 +22,7 @@ import {
   Calendar,
   Globe,
   Check,
-  Edit2,
-} from 'lucide-react-native';
+  Edit2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 import { supabase } from '@/lib/supabase';
@@ -42,8 +40,7 @@ export default function PersonalInfoScreen() {
       if (!user) throw new Error('Not authenticated');
 
       const { error: metaError } = await supabase.auth.updateUser({
-        data: { firstName: input.firstName, lastName: input.lastName, phone: input.phone },
-      });
+        data: { firstName: input.firstName, lastName: input.lastName, phone: input.phone }});
       if (metaError) console.log('[PersonalInfo] Meta update note:', metaError.message);
 
       const { error } = await supabase
@@ -53,13 +50,11 @@ export default function PersonalInfoScreen() {
           first_name: input.firstName,
           last_name: input.lastName,
           phone: input.phone,
-          updated_at: new Date().toISOString(),
-        });
+          updated_at: new Date().toISOString()});
       if (error) console.log('[PersonalInfo] Profile upsert note:', error.message);
 
       return { success: true };
-    },
-  });
+    }});
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -70,16 +65,14 @@ export default function PersonalInfoScreen() {
     phone: profileData.phone || '',
     country: profileData.country || '',
     avatar: profileData.avatar || '',
-    kycStatus: 'pending' as const,
-  } : {
+    kycStatus: 'pending' as const} : {
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
     country: '',
     avatar: '',
-    kycStatus: 'pending' as const,
-  };
+    kycStatus: 'pending' as const};
 
   const [formData, setFormData] = useState({
     firstName: currentUser.firstName,
@@ -92,8 +85,7 @@ export default function PersonalInfoScreen() {
     city: '',
     state: '',
     zipCode: '',
-    avatar: currentUser.avatar || '',
-  });
+    avatar: currentUser.avatar || ''});
 
   const updateForm = (key: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [key]: value }));
@@ -110,8 +102,7 @@ export default function PersonalInfoScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
-    });
+      quality: 0.8});
 
     if (!result.canceled && result.assets[0]) {
       updateForm('avatar', result.assets[0].uri);
@@ -135,8 +126,7 @@ export default function PersonalInfoScreen() {
       {
         firstName: formData.firstName,
         lastName: formData.lastName,
-        phone: formData.phone,
-      },
+        phone: formData.phone},
       {
         onSuccess: () => {
           setIsSaving(false);
@@ -149,8 +139,7 @@ export default function PersonalInfoScreen() {
           setIsSaving(false);
           console.error('[PersonalInfo] Save error:', error);
           Alert.alert('Error', 'Failed to update your information. Please try again.');
-        },
-      }
+        }}
     );
   };
 
@@ -404,8 +393,7 @@ export default function PersonalInfoScreen() {
                   city: '',
                   state: '',
                   zipCode: '',
-                  avatar: currentUser.avatar || '',
-                });
+                  avatar: currentUser.avatar || ''});
                 setIsEditing(false);
               }}
             >
@@ -451,5 +439,4 @@ const styles = StyleSheet.create({
   fieldHint: { color: Colors.textTertiary, fontSize: 11, marginTop: 4 },
   cancelButton: { backgroundColor: Colors.surface, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: Colors.surfaceBorder },
   cancelButtonText: { color: Colors.text, fontWeight: '600' as const, fontSize: 15 },
-  bottomPadding: { height: 120 },
-});
+  bottomPadding: { height: 120 }});

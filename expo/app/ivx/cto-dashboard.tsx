@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -10,8 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   Activity,
   AlertTriangle,
@@ -32,21 +30,19 @@ import {
   Sparkles,
   Timer,
   X,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getIVXAgentLiveActivity,
   type IVXLiveActivityResponse,
-  type IVXLiveAgentJob,
-} from '@/src/modules/ivx-owner-ai/services/ivxAgentJobsService';
+  type IVXLiveAgentJob} from '@/src/modules/ivx-owner-ai/services/ivxAgentJobsService';
 import {
   ivxAIRequestService,
-  type IVXOwnerAIProbeResult,
-} from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
+  type IVXOwnerAIProbeResult} from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
 import {
   getIVXCTODashboardOverview,
   performIVXAutonomousCycleControlAction,
@@ -63,8 +59,7 @@ import {
   type IVXCTOControlAction,
   type IVXCTODashboardOverview,
   type IVXCTOTaskRecord,
-  type IVXIssueKind,
-} from '@/src/modules/ivx-owner-ai/services/ivxCTODashboardService';
+  type IVXIssueKind} from '@/src/modules/ivx-owner-ai/services/ivxCTODashboardService';
 
 const QUERY_KEY = ['ivx-owner-ai', 'cto-dashboard-overview'] as const;
 const AUDIT_QUERY_KEY = ['ivx-owner-ai', 'cto-dashboard-audit'] as const;
@@ -127,8 +122,7 @@ function formatLocalTime(timezone: string): string {
     return new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       dateStyle: 'medium',
-      timeStyle: 'medium',
-    }).format(new Date());
+      timeStyle: 'medium'}).format(new Date());
   } catch {
     return new Date().toLocaleString();
   }
@@ -168,8 +162,7 @@ async function fetchWithDashboardTimeout(url: string, timeoutMs: number = 6_000)
     return await fetch(url, {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      ...(controller ? { signal: controller.signal } : {}),
-    });
+      ...(controller ? { signal: controller.signal } : {})});
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -194,8 +187,7 @@ async function probeBackendHealth(): Promise<IVXBackendHealthProbe> {
         url,
         deploymentMarker: readStringField(record, 'deploymentMarker') ?? readStringField(record, 'marker'),
         timestamp: readStringField(record, 'timestamp'),
-        error: response.ok ? null : readStringField(record, 'error') ?? `HTTP ${response.status}`,
-      };
+        error: response.ok ? null : readStringField(record, 'error') ?? `HTTP ${response.status}`};
       if (response.ok || response.status >= 500) {
         return probe;
       }
@@ -210,8 +202,7 @@ async function probeBackendHealth(): Promise<IVXBackendHealthProbe> {
     url: null,
     deploymentMarker: null,
     timestamp: null,
-    error: lastError,
-  };
+    error: lastError};
 }
 
 async function getIVXAIStatusSnapshot(localTimezone: string): Promise<IVXAIStatusSnapshot> {
@@ -227,8 +218,7 @@ async function getIVXAIStatusSnapshot(localTimezone: string): Promise<IVXAIStatu
         url: null,
         deploymentMarker: null,
         timestamp: null,
-        error: backendHealthResult.reason instanceof Error ? backendHealthResult.reason.message : 'Backend health probe failed.',
-      };
+        error: backendHealthResult.reason instanceof Error ? backendHealthResult.reason.message : 'Backend health probe failed.'};
   return {
     backendHealth,
     ownerAI: ownerAIResult.status === 'fulfilled' ? ownerAIResult.value : null,
@@ -237,8 +227,7 @@ async function getIVXAIStatusSnapshot(localTimezone: string): Promise<IVXAIStatu
       : null,
     localTimezone,
     localTimeLabel: formatLocalTime(localTimezone),
-    checkedAt: new Date().toISOString(),
-  };
+    checkedAt: new Date().toISOString()};
 }
 
 function formatEta(seconds: number | null): string {
@@ -487,7 +476,7 @@ function IVXAIStatusCard({ status, loading, liveActivity, liveActivityError, onR
           <Text style={styles.cardSubtitle}>Live checks for health, GPT-4o vision, timezone routing, background activity, and agent runtime.</Text>
         </View>
         <Pressable onPress={onRefresh} style={styles.refreshButton} testID="cto-ai-status-refresh">
-          {loading ? <ActivityIndicator size="small" color={Colors.black} /> : <RefreshCw size={12} color={Colors.black} />}
+          {loading ? <ShimmerIndicator size="small" color={Colors.black} /> : <RefreshCw size={12} color={Colors.black} />}
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </Pressable>
       </View>
@@ -823,7 +812,7 @@ function ActionButton({ icon, label, onPress, tone, disabled, loading }: {
       style={[styles.actionButton, { backgroundColor: bg, opacity: disabled ? 0.4 : 1 }]}
       testID={`cto-action-${label}`}
     >
-      {loading ? <ActivityIndicator size="small" color={fg} /> : icon}
+      {loading ? <ShimmerIndicator size="small" color={fg} /> : icon}
       <Text style={[styles.actionLabel, { color: fg }]}>{label}</Text>
     </Pressable>
   );
@@ -860,35 +849,29 @@ export default function IVXCTODashboardRoute() {
       confidence: confidenceFilter === 'all' ? undefined : confidenceFilter,
       cycleStatus: cycleStatusFilter === 'all' ? undefined : cycleStatusFilter,
       cycleRisk: cycleRiskFilter === 'all' ? undefined : cycleRiskFilter,
-      limit: 60,
-    }),
-    refetchInterval: 30_000,
-  });
+      limit: 60}),
+    refetchInterval: 30_000});
 
   const liveActivityQuery = useQuery<IVXLiveActivityResponse, Error>({
     queryKey: [...LIVE_ACTIVITY_QUERY_KEY] as const,
     queryFn: () => getIVXAgentLiveActivity(40),
     refetchInterval: 5_000,
-    retry: 1,
-  });
+    retry: 1});
 
   const localTimezone = useMemo<string>(() => resolveDashboardTimezone(), []);
   const aiStatusQuery = useQuery<IVXAIStatusSnapshot, Error>({
     queryKey: [...IVX_AI_STATUS_QUERY_KEY, localTimezone] as const,
     queryFn: () => getIVXAIStatusSnapshot(localTimezone),
     refetchInterval: 15_000,
-    retry: 1,
-  });
+    retry: 1});
 
   const auditQueryResult = useQuery<{ ok: boolean; audit: IVXCTOAuditEntry[]; total: number; marker: string }, Error>({
     queryKey: [...AUDIT_QUERY_KEY, auditQuery, agentFilter] as const,
     queryFn: () => searchIVXCTOAuditLog({
       agentId: agentFilter === 'all' ? undefined : agentFilter,
       q: auditQuery || undefined,
-      limit: 80,
-    }),
-    refetchInterval: 60_000,
-  });
+      limit: 80}),
+    refetchInterval: 60_000});
 
   const controlMutation = useMutation({
     mutationFn: async (input: { action: IVXCTOControlAction; taskId: string; approverEmail?: string; reason?: string }) => {
@@ -901,8 +884,7 @@ export default function IVXCTODashboardRoute() {
     },
     onError: (error: Error) => {
       Alert.alert('Owner control failed', error.message);
-    },
-  });
+    }});
 
   const cycleControlMutation = useMutation({
     mutationFn: async (input: { action: IVXAutonomousCycleControlAction; cycleId: string; approverEmail?: string; reason?: string }) => {
@@ -915,8 +897,7 @@ export default function IVXCTODashboardRoute() {
     },
     onError: (error: Error) => {
       Alert.alert('Autonomous cycle control failed', error.message);
-    },
-  });
+    }});
 
   const handleControlAction = useCallback(async (action: IVXCTOControlAction, taskId: string, opts?: { approverEmail?: string; reason?: string }) => {
     await controlMutation.mutateAsync({ action, taskId, ...opts });
@@ -1070,7 +1051,7 @@ export default function IVXCTODashboardRoute() {
             <Text style={styles.errorText}>{liveActivityQuery.error.message}</Text>
           ) : null}
           {liveActivityQuery.isLoading ? (
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
           ) : (liveActivityQuery.data?.activeJobs.length ?? 0) === 0 ? (
             <Text style={styles.mutedText}>No background jobs running. Create one via POST /api/ivx/agent-jobs to see live progress here.</Text>
           ) : (liveActivityQuery.data?.activeJobs ?? []).map((job) => (
@@ -1102,7 +1083,7 @@ export default function IVXCTODashboardRoute() {
             <Badge label="owner-only controls" color={Colors.success} />
           </View>
           {overviewQuery.isLoading ? (
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
           ) : autonomousCycles.length === 0 ? (
             <Text style={styles.mutedText}>No autonomous cycles match the current filters. Run Block 29 validation to seed sample cycles.</Text>
           ) : autonomousCycles.map((cycle) => (
@@ -1119,7 +1100,7 @@ export default function IVXCTODashboardRoute() {
             </View>
           </View>
           {overviewQuery.isLoading ? (
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
           ) : tasks.length === 0 ? (
             <Text style={styles.mutedText}>No tasks match the current filters.</Text>
           ) : tasks.map((task) => (
@@ -1254,7 +1235,7 @@ export default function IVXCTODashboardRoute() {
             />
           </View>
           {auditQueryResult.isLoading ? (
-            <ActivityIndicator color={Colors.primary} />
+            <ShimmerIndicator color={Colors.primary} />
           ) : audit.length === 0 ? (
             <Text style={styles.mutedText}>No audit entries.</Text>
           ) : audit.slice(0, 30).map((row) => (
@@ -1321,20 +1302,17 @@ export default function IVXCTODashboardRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   content: {
     padding: 14,
-    gap: 12,
-  },
+    gap: 12},
   heroCard: {
     padding: 18,
     borderRadius: 28,
     backgroundColor: '#071019',
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.28)',
-    gap: 12,
-  },
+    gap: 12},
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row' as const,
@@ -1343,32 +1321,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   heroBadgeText: {
     color: Colors.black,
     fontSize: 11,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   heroTitle: {
     color: Colors.text,
     fontSize: 26,
     lineHeight: 30,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   heroSubtitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   metricsGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 10,
-  },
+    gap: 10},
   metricTile: {
     flexBasis: '30%',
     flexGrow: 1,
@@ -1378,58 +1351,48 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    gap: 6,
-  },
+    gap: 6},
   metricIconWrap: {
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+    justifyContent: 'center' as const},
   metricValue: {
     color: Colors.text,
     fontSize: 20,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   metricLabel: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   card: {
     padding: 14,
     borderRadius: 22,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   cardHeaderRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 10,
-  },
+    gap: 10},
   cardHeaderCopy: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   cardTitle: {
     color: Colors.text,
     fontSize: 16,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   cardSubtitle: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   statusGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 8,
-  },
+    gap: 8},
   statusTile: {
     flexBasis: '47%',
     flexGrow: 1,
@@ -1439,40 +1402,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#07131D',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    gap: 6,
-  },
+    gap: 6},
   statusTileHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 7,
-  },
+    gap: 7},
   statusDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   statusLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.45,
-  },
+    letterSpacing: 0.45},
   statusValue: {
     fontSize: 14,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   statusDetail: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 15,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   statusFooter: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   refreshButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1480,50 +1436,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary},
   refreshButtonText: {
     color: Colors.black,
     fontSize: 11,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   subLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   filterRow: {
     flexDirection: 'row' as const,
     gap: 7,
-    paddingVertical: 4,
-  },
+    paddingVertical: 4},
   filterPill: {
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: 'transparent',
-  },
+    backgroundColor: 'transparent'},
   filterPillActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterPillText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   filterPillTextActive: {
-    color: Colors.black,
-  },
+    color: Colors.black},
   agentGrid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 8,
-  },
+    gap: 8},
   agentTile: {
     flexBasis: '47%',
     flexGrow: 1,
@@ -1533,157 +1480,128 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
-  },
+    gap: 4},
   agentDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   agentName: {
     color: Colors.text,
     fontSize: 13,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   agentMeta: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   taskCard: {
     padding: 12,
     borderRadius: 16,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   cycleCard: {
     padding: 13,
     borderRadius: 18,
     backgroundColor: '#0B1621',
     borderWidth: 1,
     borderColor: 'rgba(52,211,153,0.24)',
-    gap: 9,
-  },
+    gap: 9},
   cycleSummaryRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 6,
-  },
+    gap: 6},
   liveJobCard: {
     padding: 12,
     borderRadius: 16,
     backgroundColor: '#0A1622',
     borderWidth: 1,
     borderColor: 'rgba(56,189,248,0.24)',
-    gap: 8,
-  },
+    gap: 8},
   progressTrack: {
     height: 6,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden' as const,
-  },
+    overflow: 'hidden' as const},
   progressFill: {
     height: 6,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   liveMetaRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 12,
-  },
+    gap: 12},
   liveMetaText: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   liveChatMessage: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   liveFeed: {
-    gap: 3,
-  },
+    gap: 3},
   liveFeedLine: {
     color: Colors.textSecondary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   liveFeedAt: {
     color: Colors.textTertiary,
-    fontSize: 10,
-  },
+    fontSize: 10},
   recentBlock: {
     gap: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   recentLine: {
     color: Colors.textSecondary,
-    fontSize: 11,
-  },
+    fontSize: 11},
   taskHeader: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
-    gap: 8,
-  },
+    gap: 8},
   taskTitleBlock: {
     flex: 1,
-    gap: 3,
-  },
+    gap: 3},
   taskGoal: {
     color: Colors.text,
     fontSize: 14,
     lineHeight: 19,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   taskMeta: {
     color: Colors.textTertiary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   badgeRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 6,
-  },
+    gap: 6},
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   badgeText: {
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+    letterSpacing: 0.4},
   blockedReason: {
     color: Colors.warning,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorReason: {
     color: Colors.error,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   parentCard: {
     padding: 12,
     borderRadius: 16,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
-  },
+    gap: 8},
   aggregationText: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   proposalRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -1692,42 +1610,34 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   auditRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 8,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   auditCopy: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   auditAction: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   auditDetail: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   auditAt: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   handoffRow: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   searchRow: {
     flexDirection: 'row' as const,
-    gap: 8,
-  },
+    gap: 8},
   searchInput: {
     flex: 1,
     backgroundColor: Colors.backgroundSecondary,
@@ -1738,22 +1648,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600' as const,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   mutedText: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorText: {
     color: Colors.error,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   modalHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1761,126 +1667,103 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+    borderBottomColor: Colors.border},
   modalTitle: {
     color: Colors.text,
     fontSize: 17,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   modalContent: {
     padding: 16,
-    gap: 14,
-  },
+    gap: 14},
   modalGoal: {
     color: Colors.text,
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   detailBlock: {
     padding: 11,
     borderRadius: 14,
     backgroundColor: Colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 5,
-  },
+    gap: 5},
   detailLabel: {
     color: Colors.textTertiary,
     fontSize: 10,
     fontWeight: '900' as const,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   detailText: {
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   detailMono: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   warningBlock: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 8,
     backgroundColor: 'rgba(245,158,11,0.12)',
-    borderColor: 'rgba(245,158,11,0.3)',
-  },
+    borderColor: 'rgba(245,158,11,0.3)'},
   warningText: {
     flex: 1,
     color: Colors.warning,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   errorBlock: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 8,
     backgroundColor: 'rgba(239,68,68,0.12)',
-    borderColor: 'rgba(239,68,68,0.3)',
-  },
+    borderColor: 'rgba(239,68,68,0.3)'},
   sectionTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '900' as const,
-    marginTop: 4,
-  },
+    marginTop: 4},
   timelineRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: 8,
-    paddingVertical: 5,
-  },
+    paddingVertical: 5},
   timelineDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginTop: 5,
-  },
+    marginTop: 5},
   timelineCopy: {
     flex: 1,
-    gap: 2,
-  },
+    gap: 2},
   timelineAction: {
     color: Colors.text,
     fontSize: 12,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   timelineDetail: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   timelineAt: {
     color: Colors.textTertiary,
     fontSize: 10,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   actionRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 8,
-  },
+    gap: 8},
   actionButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 999,
-  },
+    borderRadius: 999},
   actionLabel: {
     fontSize: 12,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   highRiskNote: {
     color: Colors.error,
     fontSize: 11,
     fontWeight: '800' as const,
-    marginTop: 6,
-  },
-});
+    marginTop: 6}});

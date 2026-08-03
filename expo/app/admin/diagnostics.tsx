@@ -6,8 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import {
@@ -27,8 +26,7 @@ import {
   Server,
   Shield,
   Smartphone,
-  XCircle,
-} from 'lucide-react-native';
+  XCircle} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -55,8 +53,7 @@ function useBackendHealth(): { state: BackendHealthState; refresh: () => void } 
     routes: null,
     aiEnabled: null,
     error: null,
-    lastChecked: null,
-  });
+    lastChecked: null});
   const mountedRef = useRef(true);
   const inFlightRef = useRef(false);
 
@@ -69,8 +66,7 @@ function useBackendHealth(): { state: BackendHealthState; refresh: () => void } 
       const timeout = setTimeout(() => controller.abort(), 5000);
       const resp = await fetch(`${IVX_CANONICAL_API_BASE_URL}/health`, {
         signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
+        headers: { Accept: 'application/json' }});
       clearTimeout(timeout);
       if (!mountedRef.current) return;
       if (!resp.ok) {
@@ -80,8 +76,7 @@ function useBackendHealth(): { state: BackendHealthState; refresh: () => void } 
           routes: null,
           aiEnabled: null,
           error: `HTTP ${resp.status}`,
-          lastChecked: new Date().toISOString(),
-        });
+          lastChecked: new Date().toISOString()});
         return;
       }
       const data = await resp.json();
@@ -92,8 +87,7 @@ function useBackendHealth(): { state: BackendHealthState; refresh: () => void } 
         routes: Array.isArray(data.routes) ? data.routes.length : null,
         aiEnabled: typeof data.aiEnabled === 'boolean' ? data.aiEnabled : null,
         error: null,
-        lastChecked: new Date().toISOString(),
-      });
+        lastChecked: new Date().toISOString()});
     } catch (error) {
       if (!mountedRef.current) return;
       setState({
@@ -102,8 +96,7 @@ function useBackendHealth(): { state: BackendHealthState; refresh: () => void } 
         routes: null,
         aiEnabled: null,
         error: error instanceof Error ? error.message : 'Network error',
-        lastChecked: new Date().toISOString(),
-      });
+        lastChecked: new Date().toISOString()});
     } finally {
       inFlightRef.current = false;
     }
@@ -165,8 +158,7 @@ function Row({
   label,
   value,
   tone = 'default',
-  testId,
-}: {
+  testId}: {
   icon: React.ReactNode;
   label: string;
   value: string;
@@ -297,8 +289,7 @@ function DiagnosticsContent() {
           title: 'IVX Diagnostics',
           headerStyle: { backgroundColor: Colors.background },
           headerTintColor: Colors.text,
-          headerShadowVisible: false,
-        }}
+          headerShadowVisible: false}}
       />
       <ScrollView
         style={styles.scroll}
@@ -463,8 +454,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     padding: 14,
-    marginBottom: 14,
-  },
+    marginBottom: 14},
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   cardTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' as const },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: 8 },
@@ -478,15 +468,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
     marginTop: 8,
-    gap: 8,
-  },
+    gap: 8},
   warningText: { color: Colors.error, fontSize: 11, flex: 1, lineHeight: 15 },
   errorBox: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 10,
     padding: 10,
-    marginTop: 8,
-  },
+    marginTop: 8},
   errorLabel: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600' as const, marginBottom: 4 },
   errorText: { color: Colors.text, fontSize: 11, lineHeight: 16, fontFamily: 'monospace' },
   refreshBtn: {
@@ -500,11 +488,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    marginTop: 10,
-  },
+    marginTop: 10},
   refreshBtnText: { color: Colors.text, fontSize: 12, fontWeight: '600' as const },
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
   actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: 46, borderRadius: 12 },
   actionPrimary: { backgroundColor: Colors.primary },
-  actionPrimaryText: { color: Colors.black, fontSize: 13, fontWeight: '700' as const },
-});
+  actionPrimaryText: { color: Colors.black, fontSize: 13, fontWeight: '700' as const }});

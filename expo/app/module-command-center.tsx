@@ -13,17 +13,14 @@
  * Auto-refreshes every 30s + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   Modal,
-  TextInput,
-} from 'react-native';
+  TextInput} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -42,9 +39,9 @@ import {
   Search,
   ShieldCheck,
   X,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   IVX_MODULE_REGISTRY,
   MODULE_COUNT,
@@ -53,8 +50,7 @@ import {
   CATEGORY_NAMES,
   TEAM_NAMES,
   type IVXModule,
-  type ModuleCategory,
-} from '@/lib/ivx-module-registry';
+  type ModuleCategory} from '@/lib/ivx-module-registry';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const STATUS_URL = `${API_BASE}/api/ivx/engineering-os/status`;
@@ -248,8 +244,7 @@ export default function ModuleCommandCenterScreen() {
       category: activeCategory,
       status: activeStatus,
       team: activeTeam,
-      search: searchQuery,
-    }),
+      search: searchQuery}),
     [activeCategory, activeStatus, activeTeam, searchQuery],
   );
 
@@ -257,8 +252,7 @@ export default function ModuleCommandCenterScreen() {
     { key: 'ALL', label: 'All' },
     ...(Object.entries(CATEGORY_NAMES) as Array<[ModuleCategory, string]>).map(([key, name]) => ({
       key,
-      label: `${key}. ${name.split(' ')[0]}`,
-    })),
+      label: `${key}. ${name.split(' ')[0]}`})),
   ];
 
   const statusChips = [
@@ -302,7 +296,7 @@ export default function ModuleCommandCenterScreen() {
 
       {isLoading ? (
         <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color="#FBBF24" />
+          <ShimmerIndicator size="large" color="#FBBF24" />
           <Text style={styles.loadingText}>Loading live production data…</Text>
         </View>
       ) : isUnauthorized ? (
@@ -604,8 +598,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1E293B',
-  },
+    borderBottomColor: '#1E293B'},
   backButton: { padding: 6, marginRight: 6 },
   headerTitleWrap: { flex: 1 },
   headerTitle: { color: '#F1F5F9', fontSize: 18, fontWeight: '700' as const },
@@ -680,5 +673,4 @@ const styles = StyleSheet.create({
   modalScrollContent: { padding: 14, gap: 8 },
   detailRow: { flexDirection: 'row', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B' },
   detailLabel: { color: '#64748B', fontSize: 12, minWidth: 120 },
-  detailValue: { color: '#E2E8F0', fontSize: 12, flex: 1 },
-});
+  detailValue: { color: '#E2E8F0', fontSize: 12, flex: 1 }});

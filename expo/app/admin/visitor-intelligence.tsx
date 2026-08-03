@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Dimensions,
-} from 'react-native';
+  Dimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -31,8 +30,7 @@ import {
   Shield,
   RefreshCw,
   Sparkles,
-  Bell,
-} from 'lucide-react-native';
+  Bell} from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Colors from '@/constants/colors';
 import { fetchRawEvents, computeVisitorIntelligence, type RawEvent } from '@/lib/analytics-compute';
@@ -66,22 +64,19 @@ const INTENT_COLORS: Record<string, { bg: string; text: string; label: string }>
   hot_lead: { bg: '#FF4D4D20', text: '#FF4D4D', label: 'HOT LEAD' },
   warm: { bg: '#FFB80020', text: '#FFB800', label: 'WARM' },
   interested: { bg: '#4A90D920', text: '#4A90D9', label: 'INTERESTED' },
-  browsing: { bg: '#6A6A6A20', text: '#9A9A9A', label: 'BROWSING' },
-};
+  browsing: { bg: '#6A6A6A20', text: '#9A9A9A', label: 'BROWSING' }};
 
 const SEVERITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   critical: { bg: '#FF4D4D15', text: '#FF4D4D', border: '#FF4D4D40' },
   high: { bg: '#FFB80015', text: '#FFB800', border: '#FFB80040' },
   medium: { bg: '#4A90D915', text: '#4A90D9', border: '#4A90D940' },
-  info: { bg: '#00C48C15', text: '#00C48C', border: '#00C48C40' },
-};
+  info: { bg: '#00C48C15', text: '#00C48C', border: '#00C48C40' }};
 
 const COUNTRY_FLAGS: Record<string, string> = {
   'United States': '🇺🇸', 'United Kingdom': '🇬🇧', 'Canada': '🇨🇦', 'Germany': '🇩🇪',
   'France': '🇫🇷', 'Australia': '🇦🇺', 'India': '🇮🇳', 'Brazil': '🇧🇷',
   'Japan': '🇯🇵', 'Mexico': '🇲🇽', 'Spain': '🇪🇸', 'Italy': '🇮🇹',
-  'UAE': '🇦🇪', 'Saudi Arabia': '🇸🇦', 'Singapore': '🇸🇬', 'Colombia': '🇨🇴',
-};
+  'UAE': '🇦🇪', 'Saudi Arabia': '🇸🇦', 'Singapore': '🇸🇬', 'Colombia': '🇨🇴'};
 
 function formatDuration(sec: number): string {
   if (sec < 60) return `${sec}s`;
@@ -109,8 +104,7 @@ function PulseIndicator({ active, color = '#00C48C' }: { active: boolean; color?
         <Animated.View style={{
           position: 'absolute', width: 12, height: 12, borderRadius: 6,
           borderWidth: 1.5, borderColor: color + '40',
-          transform: [{ scale: pulse }],
-        }} />
+          transform: [{ scale: pulse }]}} />
       )}
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? color : '#555' }} />
     </View>
@@ -154,8 +148,7 @@ function buildVisitorAlerts(rawEvents: RawEvent[]): { alerts: VisitorAlert[]; ac
         severity: 'critical',
         title: 'Hot Lead Detected',
         message: `Active session ${sessionId.slice(0, 8)} submitted a form`,
-        timestamp: new Date(lastTime).toISOString(),
-      });
+        timestamp: new Date(lastTime).toISOString()});
       return;
     }
 
@@ -165,8 +158,7 @@ function buildVisitorAlerts(rawEvents: RawEvent[]): { alerts: VisitorAlert[]; ac
         severity: 'high',
         title: 'High Engagement',
         message: `Session ${sessionId.slice(0, 8)} clicked CTA`,
-        timestamp: new Date(lastTime).toISOString(),
-      });
+        timestamp: new Date(lastTime).toISOString()});
       return;
     }
 
@@ -175,8 +167,7 @@ function buildVisitorAlerts(rawEvents: RawEvent[]): { alerts: VisitorAlert[]; ac
       severity: 'info',
       title: 'Live Visitor',
       message: `Active session from ${events[0]?.geo?.country || 'unknown location'}`,
-      timestamp: new Date(lastTime).toISOString(),
-    });
+      timestamp: new Date(lastTime).toISOString()});
   });
 
   return { alerts, activeVisitors };
@@ -231,15 +222,13 @@ export default function VisitorIntelligenceScreen() {
           hotLeads: computed.summary?.hotLeads,
           events: computed.summary?.totalEvents,
           alerts: alertsData.alerts.length,
-          activeVisitors: alertsData.activeVisitors,
-        });
+          activeVisitors: alertsData.activeVisitors});
         return { ...computed, alertsData };
       } catch (err) {
         console.error('[VisitorIntel] Query error:', (err as Error)?.message);
         return {
           ...computeVisitorIntelligence([], period),
-          alertsData: { alerts: [] as VisitorAlert[], activeVisitors: 0 },
-        };
+          alertsData: { alerts: [] as VisitorAlert[], activeVisitors: 0 }};
       }
     },
     staleTime: VISITOR_INTELLIGENCE_STALE_TIME_MS,
@@ -249,8 +238,7 @@ export default function VisitorIntelligenceScreen() {
     retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 10000),
     refetchOnMount: false,
     refetchOnWindowFocus: false,
-    throwOnError: false,
-  });
+    throwOnError: false});
 
   const data = intelQuery.data;
   const alertsData = data?.alertsData;
@@ -263,8 +251,7 @@ export default function VisitorIntelligenceScreen() {
         warmLeads: data.summary.warmLeads,
         engagement: data.summary.avgEngagement,
         highIntent: data.highIntentVisitors.length,
-        recent: data.recentVisitors.length,
-      });
+        recent: data.recentVisitors.length});
     }
     if (intelQuery.isError) {
       console.error('[VisitorIntel] Query error:', intelQuery.error?.message);
@@ -385,8 +372,7 @@ export default function VisitorIntelligenceScreen() {
                 s.engagementBarFill,
                 {
                   width: `${Math.min(summary.avgEngagement, 100)}%` as any,
-                  backgroundColor: summary.avgEngagement >= 60 ? '#00C48C' : summary.avgEngagement >= 30 ? '#FFB800' : '#FF4D4D',
-                },
+                  backgroundColor: summary.avgEngagement >= 60 ? '#00C48C' : summary.avgEngagement >= 30 ? '#FFB800' : '#FF4D4D'},
               ]} />
             </View>
             <Text style={s.engagementScore}>{summary.avgEngagement}/100</Text>
@@ -463,8 +449,7 @@ export default function VisitorIntelligenceScreen() {
                 </View>
                 <View style={s.countryEngBadge}>
                   <Text style={[s.countryEngText, {
-                    color: c.avgEngagement >= 60 ? '#00C48C' : c.avgEngagement >= 30 ? '#FFB800' : '#9A9A9A',
-                  }]}>{c.avgEngagement}</Text>
+                    color: c.avgEngagement >= 60 ? '#00C48C' : c.avgEngagement >= 30 ? '#FFB800' : '#9A9A9A'}]}>{c.avgEngagement}</Text>
                   <Text style={s.countryEngLabel}>score</Text>
                 </View>
               </View>
@@ -624,8 +609,7 @@ export default function VisitorIntelligenceScreen() {
               <View style={s.sourceConvBarWrap}>
                 <View style={[s.sourceConvBarFill, {
                   width: `${Math.min(src.conversionRate * 5, 100)}%` as any,
-                  backgroundColor: src.conversionRate > 5 ? '#00C48C' : src.conversionRate > 2 ? '#FFB800' : '#4A90D9',
-                }]} />
+                  backgroundColor: src.conversionRate > 5 ? '#00C48C' : src.conversionRate > 2 ? '#FFB800' : '#4A90D9'}]} />
               </View>
               <Text style={s.sourceConvRate}>{src.conversionRate}%</Text>
             </View>
@@ -809,8 +793,7 @@ const s = StyleSheet.create({
   safeTop: { backgroundColor: Colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
+    borderBottomWidth: 1, borderBottomColor: Colors.border},
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, marginLeft: 12 },
   headerTitle: { fontSize: 18, fontWeight: '700' as const, color: Colors.text },
@@ -820,28 +803,23 @@ const s = StyleSheet.create({
 
   tabBar: {
     flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8,
-    gap: 4, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
+    gap: 4, borderBottomWidth: 1, borderBottomColor: Colors.border},
   tab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 8, borderRadius: 8, gap: 4,
-  },
+    paddingVertical: 8, borderRadius: 8, gap: 4},
   tabActive: { backgroundColor: Colors.surface },
   tabLabel: { fontSize: 12, fontWeight: '600' as const, color: Colors.textTertiary },
   tabLabelActive: { color: Colors.text },
   alertBadge: {
     backgroundColor: '#FF4D4D', borderRadius: 8, minWidth: 16, height: 16,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
-  },
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4},
   alertBadgeText: { fontSize: 9, fontWeight: '700' as const, color: '#fff' },
 
   periodBar: {
-    flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 6,
-  },
+    flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 6},
   periodBtn: {
     flex: 1, paddingVertical: 6, borderRadius: 16, alignItems: 'center',
-    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
-  },
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border},
   periodBtnActive: { backgroundColor: Colors.primary + '20', borderColor: Colors.primary },
   periodText: { fontSize: 12, fontWeight: '600' as const, color: Colors.textTertiary },
   periodTextActive: { color: Colors.primary },
@@ -857,27 +835,23 @@ const s = StyleSheet.create({
   liveBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: Colors.surface, borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+    borderWidth: 1, borderColor: Colors.border},
   liveText: { flex: 1, fontSize: 13, fontWeight: '600' as const, color: Colors.text },
   liveBadge: {
-    backgroundColor: '#00C48C20', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2,
-  },
+    backgroundColor: '#00C48C20', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2},
   liveBadgeText: { fontSize: 10, fontWeight: '800' as const, color: '#00C48C', letterSpacing: 1 },
 
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   kpiCard: {
     flex: 1, minWidth: (SCREEN_W - 48) / 2, backgroundColor: Colors.surface,
-    borderRadius: 10, padding: 14, borderWidth: 1, borderColor: Colors.border,
-  },
+    borderRadius: 10, padding: 14, borderWidth: 1, borderColor: Colors.border},
   kpiIconWrap: { marginBottom: 8 },
   kpiValue: { fontSize: 22, fontWeight: '800' as const, color: Colors.text },
   kpiLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
 
   engagementCard: {
     backgroundColor: Colors.surface, borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+    borderWidth: 1, borderColor: Colors.border},
   engagementHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   engagementTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
   engagementBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -891,8 +865,7 @@ const s = StyleSheet.create({
 
   insightsCard: {
     backgroundColor: '#FFD70008', borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: Colors.primary + '30',
-  },
+    borderWidth: 1, borderColor: Colors.primary + '30'},
   insightsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   insightsTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.primary },
   insightRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
@@ -901,20 +874,17 @@ const s = StyleSheet.create({
 
   sectionCard: {
     backgroundColor: Colors.surface, borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+    borderWidth: 1, borderColor: Colors.border},
   sectionTitle: { fontSize: 15, fontWeight: '700' as const, color: Colors.text, marginBottom: 12 },
   sectionSubtitle: { fontSize: 12, color: Colors.textSecondary, marginTop: -8, marginBottom: 4 },
   sectionHeader: { fontSize: 16, fontWeight: '700' as const, color: Colors.text, marginBottom: 8 },
 
   sourceRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: Colors.border + '40',
-  },
+    borderBottomWidth: 1, borderBottomColor: Colors.border + '40'},
   sourceRank: {
     width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.backgroundTertiary,
-    alignItems: 'center', justifyContent: 'center',
-  },
+    alignItems: 'center', justifyContent: 'center'},
   sourceRankText: { fontSize: 11, fontWeight: '700' as const, color: Colors.textSecondary },
   sourceInfo: { flex: 1 },
   sourceName: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
@@ -924,8 +894,7 @@ const s = StyleSheet.create({
 
   countryRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: Colors.border + '40',
-  },
+    borderBottomWidth: 1, borderBottomColor: Colors.border + '40'},
   countryFlag: { fontSize: 20 },
   countryInfo: { flex: 1 },
   countryName: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
@@ -939,42 +908,36 @@ const s = StyleSheet.create({
   emptyCard: {
     backgroundColor: Colors.surface, borderRadius: 12, padding: 32,
     alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+    borderWidth: 1, borderColor: Colors.border},
   emptyText: { fontSize: 15, fontWeight: '600' as const, color: Colors.text },
   emptySubText: { fontSize: 12, color: Colors.textSecondary, textAlign: 'center' as const },
 
   diagnosticCard: {
     backgroundColor: '#FFB80008', borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: '#FFB80030', marginBottom: 4,
-  },
+    borderWidth: 1, borderColor: '#FFB80030', marginBottom: 4},
   diagnosticHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginBottom: 8 },
   diagnosticTitle: { fontSize: 15, fontWeight: '700' as const, color: '#FFB800' },
   diagnosticDesc: { fontSize: 12, color: Colors.textSecondary, marginBottom: 12, lineHeight: 18 },
   diagnosticGrid: { gap: 8 },
   diagnosticRow: {
     flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const,
-    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border + '30',
-  },
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border + '30'},
   diagnosticLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' as const },
   diagnosticValue: { fontSize: 13, color: Colors.text, fontWeight: '700' as const },
   diagnosticBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   diagnosticBadgeText: { fontSize: 11, fontWeight: '700' as const },
   diagnosticWarning: {
     backgroundColor: '#FF4D4D10', borderRadius: 8, padding: 10, marginTop: 12,
-    borderWidth: 1, borderColor: '#FF4D4D20',
-  },
+    borderWidth: 1, borderColor: '#FF4D4D20'},
   diagnosticWarningText: { fontSize: 11, color: '#FF6B6B', lineHeight: 16 },
   diagnosticInfo: {
     backgroundColor: '#4A90D910', borderRadius: 8, padding: 10, marginTop: 12,
-    borderWidth: 1, borderColor: '#4A90D920',
-  },
+    borderWidth: 1, borderColor: '#4A90D920'},
   diagnosticInfoText: { fontSize: 11, color: '#6AADEE', lineHeight: 16 },
 
   leadCard: {
     backgroundColor: Colors.surface, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: Colors.border, marginBottom: 8,
-  },
+    borderWidth: 1, borderColor: Colors.border, marginBottom: 8},
   leadHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   intentBadge: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 },
   intentText: { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.5 },
@@ -988,8 +951,7 @@ const s = StyleSheet.create({
 
   recentRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: Colors.border + '40',
-  },
+    borderBottomWidth: 1, borderBottomColor: Colors.border + '40'},
   recentDot: { width: 8, height: 8, borderRadius: 4 },
   recentInfo: { flex: 1 },
   recentLocation: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
@@ -1021,29 +983,25 @@ const s = StyleSheet.create({
   patternKpi: {
     flex: 1, minWidth: (SCREEN_W - 48) / 2, backgroundColor: Colors.surface,
     borderRadius: 10, padding: 14, alignItems: 'center', gap: 6,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+    borderWidth: 1, borderColor: Colors.border},
   patternKpiValue: { fontSize: 18, fontWeight: '800' as const, color: Colors.text },
   patternKpiLabel: { fontSize: 11, color: Colors.textSecondary },
 
   alertSummary: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: Colors.surface, borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: Colors.border, marginBottom: 4,
-  },
+    borderWidth: 1, borderColor: Colors.border, marginBottom: 4},
   alertSummaryLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   alertSummaryText: { fontSize: 13, fontWeight: '600' as const, color: Colors.text },
   alertCount: { backgroundColor: Colors.backgroundTertiary, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   alertCountText: { fontSize: 11, fontWeight: '600' as const, color: Colors.textSecondary },
 
   alertCard: {
-    borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1,
-  },
+    borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1},
   alertHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   alertHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   alertTitle: { fontSize: 14, fontWeight: '700' as const },
   severityBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   severityText: { fontSize: 9, fontWeight: '800' as const, letterSpacing: 0.5 },
   alertMessage: { fontSize: 13, color: Colors.text, lineHeight: 18, marginBottom: 6 },
-  alertTime: { fontSize: 11, color: Colors.textTertiary },
-});
+  alertTime: { fontSize: 11, color: Colors.textTertiary }});

@@ -7,20 +7,17 @@
  * taps Add, and the reel goes live across iOS, Android, and web instantly.
  */
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Alert,
   TextInput,
   Modal,
   Switch,
-  FlatList,
-} from 'react-native';
+  FlatList} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -35,19 +32,18 @@ import {
   TrendingUp,
   CheckCircle,
   XCircle,
-  RefreshCw,
-} from 'lucide-react-native';
+  RefreshCw} from 'lucide-react-native';
 import { Image } from 'expo-image';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   fetchAllVideos,
   addVideo,
   deleteVideo,
   toggleVideoVisibility,
   toggleVideoFeatured,
-  type AdminVideo,
-} from '@/lib/admin-reels';
+  type AdminVideo} from '@/lib/admin-reels';
 
 export default function AdminReelsScreen() {
   const router = useRouter();
@@ -68,8 +64,7 @@ export default function AdminReelsScreen() {
   const videosQuery = useQuery({
     queryKey: ['admin-reels', filterType],
     queryFn: () => fetchAllVideos(filterType !== 'all' ? filterType : undefined),
-    staleTime: 30_000,
-  });
+    staleTime: 30_000});
 
   const videos = useMemo(() => videosQuery.data ?? [], [videosQuery.data]);
 
@@ -80,8 +75,7 @@ export default function AdminReelsScreen() {
       reels: all.filter(v => v.video_type === 'reel').length,
       deals: all.filter(v => v.video_type === 'deal').length,
       hidden: all.filter(v => v.is_hidden).length,
-      featured: all.filter(v => v.is_featured).length,
-    };
+      featured: all.filter(v => v.is_featured).length};
   }, [videos]);
 
   const onRefresh = useCallback(async () => {
@@ -106,8 +100,7 @@ export default function AdminReelsScreen() {
         videoUrl: newVideoUrl.trim(),
         title: newTitle.trim(),
         videoType: newType,
-        posterUrl: newPosterUrl.trim() || undefined,
-      });
+        posterUrl: newPosterUrl.trim() || undefined});
       if (result.ok) {
         setAddResult(`Added: ${result.title || newTitle}`);
         setNewVideoUrl('');
@@ -145,8 +138,7 @@ export default function AdminReelsScreen() {
             } catch (err) {
               Alert.alert('Error', (err as Error).message);
             }
-          },
-        },
+          }},
       ],
     );
   }, [queryClient]);
@@ -319,7 +311,7 @@ export default function AdminReelsScreen() {
           {/* Video List */}
           {videosQuery.isLoading ? (
             <View style={styles.centerState}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+              <ShimmerIndicator size="large" color={Colors.primary} />
               <Text style={styles.centerStateText}>Loading videos…</Text>
             </View>
           ) : videosQuery.isError ? (
@@ -453,7 +445,7 @@ export default function AdminReelsScreen() {
                   testID="add-video-submit"
                 >
                   {isAdding ? (
-                    <ActivityIndicator size="small" color="#000" />
+                    <ShimmerIndicator size="small" color="#000" />
                   ) : (
                     <Text style={styles.submitBtnText}>Add Video</Text>
                   )}
@@ -470,18 +462,15 @@ export default function AdminReelsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   safeArea: {
-    flex: 1,
-  },
+    flex: 1},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
+    paddingVertical: 12},
   backBtn: {
     width: 40,
     height: 40,
@@ -490,13 +479,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   headerTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   addBtn: {
     width: 40,
     height: 40,
@@ -505,72 +492,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   statsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   statItem: {
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   statValue: {
     color: Colors.text,
     fontSize: 28,
-    fontWeight: '900' as const,
-  },
+    fontWeight: '900' as const},
   statLabel: {
     color: Colors.textTertiary,
     fontSize: 11,
     fontWeight: '600' as const,
-    marginTop: 2,
-  },
+    marginTop: 2},
   syncBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 20,
     paddingVertical: 8,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   syncBannerText: {
     color: Colors.success,
     fontSize: 12,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   filterBar: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     marginBottom: 16,
-    gap: 8,
-  },
+    gap: 8},
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   filterChipActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     color: Colors.textTertiary,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   filterChipTextActive: {
     color: '#000',
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   videoList: {
-    paddingHorizontal: 20,
-  },
+    paddingHorizontal: 20},
   videoCard: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
@@ -579,8 +553,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     padding: 12,
     marginBottom: 10,
-    gap: 12,
-  },
+    gap: 12},
   // Instagram-style 9:16 vertical thumbnail (40.5 × 72)
   videoThumb: {
     width: 54,
@@ -590,113 +563,91 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    overflow: 'hidden',
-  },
+    overflow: 'hidden'},
   thumbPlaceholder: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   typeBadge: {
     position: 'absolute',
     bottom: 4,
     left: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   reelBadge: {
-    backgroundColor: 'rgba(255,215,0,0.25)',
-  },
+    backgroundColor: 'rgba(255,215,0,0.25)'},
   dealBadge: {
-    backgroundColor: 'rgba(0,150,255,0.25)',
-  },
+    backgroundColor: 'rgba(0,150,255,0.25)'},
   typeBadgeText: {
     color: '#fff',
     fontSize: 8,
     fontWeight: '900' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   featuredBadge: {
     position: 'absolute',
     top: 4,
-    right: 4,
-  },
+    right: 4},
   videoInfo: {
-    flex: 1,
-  },
+    flex: 1},
   videoTitle: {
     color: Colors.text,
     fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 4,
-  },
+    marginBottom: 4},
   videoMeta: {
     color: Colors.textTertiary,
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   videoDate: {
     color: Colors.textTertiary,
     fontSize: 11,
-    marginTop: 2,
-  },
+    marginTop: 2},
   videoActions: {
     flexDirection: 'row',
     marginTop: 10,
-    gap: 12,
-  },
+    gap: 12},
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
+    gap: 4},
   actionBtnText: {
     color: Colors.textSecondary,
     fontSize: 11,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   deleteBtn: {
-    marginLeft: 'auto',
-  },
+    marginLeft: 'auto'},
   centerState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    gap: 12,
-  },
+    gap: 12},
   centerStateTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   centerStateText: {
     color: Colors.textTertiary,
     fontSize: 14,
-    textAlign: 'center',
-  },
+    textAlign: 'center'},
   retryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   retryBtnText: {
     color: '#000',
     fontSize: 14,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
+    justifyContent: 'flex-end'},
   modalSheet: {
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '85%',
-  },
+    maxHeight: '85%'},
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -704,25 +655,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.surfaceBorder,
-  },
+    borderBottomColor: Colors.surfaceBorder},
   modalTitle: {
     color: Colors.text,
     fontSize: 18,
-    fontWeight: '700' as const,
-  },
+    fontWeight: '700' as const},
   modalBody: {
-    padding: 20,
-  },
+    padding: 20},
   inputGroup: {
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   inputLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontWeight: '600' as const,
-    marginBottom: 6,
-  },
+    marginBottom: 6},
   textInput: {
     backgroundColor: Colors.background,
     borderRadius: 12,
@@ -731,12 +677,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: Colors.text,
-    fontSize: 15,
-  },
+    fontSize: 15},
   typeSelector: {
     flexDirection: 'row',
-    gap: 10,
-  },
+    gap: 10},
   typeOption: {
     flex: 1,
     flexDirection: 'row',
@@ -747,21 +691,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.background,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   typeOptionActive: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '15',
-  },
+    backgroundColor: Colors.primary + '15'},
   typeOptionText: {
     color: Colors.textTertiary,
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   typeOptionTextActive: {
     color: Colors.text,
-    fontWeight: '800' as const,
-  },
+    fontWeight: '800' as const},
   resultBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -769,25 +709,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderRadius: 10,
     padding: 12,
-    marginBottom: 16,
-  },
+    marginBottom: 16},
   resultText: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   submitBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   submitBtnDisabled: {
-    opacity: 0.6,
-  },
+    opacity: 0.6},
   submitBtnText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: '800' as const,
-  },
-});
+    fontWeight: '800' as const}});

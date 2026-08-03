@@ -1,15 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   RefreshControl,
-  Alert,
-} from 'react-native';
+  Alert} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -28,14 +25,14 @@ import {
   ShieldX,
   BarChart3,
   RefreshCw,
-  Calendar,
-} from 'lucide-react-native';
+  Calendar} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Colors from '@/constants/colors';
 import { fetchWaitlistStats, fetchWaitlistEntries, type WaitlistEntry } from '@/lib/waitlist-service';
 import { exportCSV } from '@/lib/csv-export';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
@@ -47,15 +44,13 @@ const STATUS_FILTERS = [
 
 const INVESTOR_TYPE_LABELS: Record<string, string> = {
   individual: 'Individual investor',
-  corporate: 'Company / entity investor',
-};
+  corporate: 'Company / entity investor'};
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   drivers_license: 'Driver\'s license',
   passport: 'Passport',
   national_id: 'National ID',
-  tax_id: 'Tax ID / residency card',
-};
+  tax_id: 'Tax ID / residency card'};
 
 interface DetailRowConfig {
   label: string;
@@ -166,8 +161,7 @@ function EntryCard({ entry }: { entry: WaitlistEntry }) {
     if (!dateStr) return '—';
     try {
       return new Date(dateStr).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-      });
+        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'});
     } catch {
       return dateStr;
     }
@@ -408,14 +402,12 @@ export default function WaitlistAdminScreen() {
   const statsQuery = useQuery({
     queryKey: ['waitlist-admin-stats'],
     queryFn: fetchWaitlistStats,
-    staleTime: 15000,
-  });
+    staleTime: 15000});
 
   const entriesQuery = useQuery({
     queryKey: ['waitlist-admin-entries', searchText, statusFilter],
     queryFn: () => fetchWaitlistEntries({ search: searchText, status: statusFilter, limit: 100 }),
-    staleTime: 10000,
-  });
+    staleTime: 10000});
 
   const stats = statsQuery.data ?? { total: 0, today: 0, verified: 0, unverified: 0, topCampaigns: [] };
   const entries = entriesQuery.data?.entries ?? [];
@@ -564,8 +556,7 @@ export default function WaitlistAdminScreen() {
                   <Text style={styles.campaignName}>{c.campaign}</Text>
                   <View style={styles.campaignBar}>
                     <View style={[styles.campaignBarFill, {
-                      width: `${Math.min(100, (c.count / Math.max(stats.topCampaigns[0]?.count ?? 1, 1)) * 100)}%`,
-                    }]} />
+                      width: `${Math.min(100, (c.count / Math.max(stats.topCampaigns[0]?.count ?? 1, 1)) * 100)}%`}]} />
                   </View>
                 </View>
                 <Text style={styles.campaignCount}>{c.count}</Text>
@@ -636,7 +627,7 @@ export default function WaitlistAdminScreen() {
 
         {entriesQuery.isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="small" color={Colors.primary} />
+            <ShimmerIndicator size="small" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading entries...</Text>
           </View>
         ) : entries.length === 0 ? (
@@ -670,34 +661,29 @@ const cardStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
-    minWidth: 80,
-  },
+    minWidth: 80},
   statIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   statValue: {
     fontSize: 20,
     fontWeight: '800' as const,
     color: Colors.text,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   statLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   statSub: {
     fontSize: 10,
     color: Colors.textTertiary,
-    marginTop: 2,
-  },
+    marginTop: 2},
   entryCard: {
     backgroundColor: Colors.card,
     borderRadius: 14,
@@ -705,137 +691,111 @@ const cardStyles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   entryTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   entryLeft: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   entryRight: {
     alignItems: 'flex-end',
-    gap: 6,
-  },
+    gap: 6},
   entryName: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   entryMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
+    gap: 5},
   entryMetaText: {
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   statusText: {
     fontSize: 10,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   entryDate: {
     fontSize: 10,
-    color: Colors.textTertiary,
-  },
+    color: Colors.textTertiary},
   entryExpanded: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 10,
-  },
+    gap: 10},
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
+    gap: 8},
   detailBadge: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   detailBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   detailSection: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: 12,
     padding: 12,
-    gap: 8,
-  },
+    gap: 8},
   detailSectionTitle: {
     fontSize: 12,
     fontWeight: '800' as const,
     color: Colors.text,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.6,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
-  },
+    gap: 12},
   detailRowTop: {
-    alignItems: 'flex-start',
-  },
+    alignItems: 'flex-start'},
   detailLabel: {
     flex: 0.95,
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   detailValue: {
     flex: 1.2,
     fontSize: 12,
     color: Colors.text,
     fontWeight: '600' as const,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   detailValueWrap: {
     flexShrink: 1,
-    lineHeight: 18,
-  },
+    lineHeight: 18},
   detailActionGroup: {
     flex: 1.2,
     alignItems: 'flex-end',
-    gap: 8,
-  },
+    gap: 8},
   detailLinkButton: {
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: Colors.primary + '18',
     borderWidth: 1,
-    borderColor: Colors.primary + '35',
-  },
+    borderColor: Colors.primary + '35'},
   detailLinkButtonText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.primary,
-  },
-});
+    color: Colors.primary}});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
+    backgroundColor: Colors.background},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -843,27 +803,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
-  },
+    gap: 12},
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
     backgroundColor: Colors.card,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   headerTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   refreshBtn: {
     width: 38,
     height: 38,
@@ -872,18 +828,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   content: {
-    flex: 1,
-  },
+    flex: 1},
   statsGrid: {
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 12,
-  },
+    paddingBottom: 12},
   campaignsCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -891,61 +844,50 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   campaignsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   campaignsTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   campaignRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   campaignRank: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: Colors.textTertiary,
-    width: 24,
-  },
+    width: 24},
   campaignInfo: {
     flex: 1,
-    gap: 4,
-  },
+    gap: 4},
   campaignName: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   campaignBar: {
     height: 4,
     backgroundColor: Colors.backgroundTertiary,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   campaignBarFill: {
     height: 4,
     backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
+    borderRadius: 2},
   campaignCount: {
     fontSize: 13,
     fontWeight: '700' as const,
     color: Colors.primary,
     width: 30,
-    textAlign: 'right' as const,
-  },
+    textAlign: 'right' as const},
   searchSection: {
     paddingHorizontal: 16,
-    marginBottom: 12,
-  },
+    marginBottom: 12},
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -956,19 +898,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 44,
     gap: 10,
-    marginBottom: 8,
-  },
+    marginBottom: 8},
   searchInput: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
     fontWeight: '500' as const,
-    height: 44,
-  },
+    height: 44},
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
+    gap: 8},
   filterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -978,14 +917,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.text,
-    textTransform: 'capitalize' as const,
-  },
+    textTransform: 'capitalize' as const},
   exportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -995,82 +932,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#00C48C30',
-  },
+    borderColor: '#00C48C30'},
   exportBtnText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: '#00C48C',
-  },
+    color: '#00C48C'},
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 8,
-  },
+    marginTop: 8},
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
+    borderColor: Colors.border},
   filterChipActive: {
     backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+    borderColor: Colors.primary},
   filterChipText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   filterChipTextActive: {
-    color: Colors.primary,
-  },
+    color: Colors.primary},
   entriesHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 10,
-  },
+    marginBottom: 10},
   entriesTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   entriesCount: {
     fontSize: 12,
     color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   loadingWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 40,
-  },
+    paddingVertical: 40},
   loadingText: {
     fontSize: 13,
-    color: Colors.textSecondary,
-  },
+    color: Colors.textSecondary},
   emptyWrap: {
     alignItems: 'center',
     paddingVertical: 50,
-    gap: 8,
-  },
+    gap: 8},
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   emptyText: {
     fontSize: 13,
     color: Colors.textTertiary,
     textAlign: 'center' as const,
     paddingHorizontal: 40,
-    lineHeight: 19,
-  },
-});
+    lineHeight: 19}});

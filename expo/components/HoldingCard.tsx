@@ -124,86 +124,68 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   containerCompact: {
-    padding: 10,
-  },
+    padding: 10},
   image: {
     width: 70,
     height: 70,
-    borderRadius: 8,
-  },
+    borderRadius: 8},
   imageCompact: {
     width: 56,
     height: 56,
-    borderRadius: 6,
-  },
+    borderRadius: 6},
   content: {
     flex: 1,
     marginLeft: 12,
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between'},
   contentCompact: {
-    marginLeft: 10,
-  },
+    marginLeft: 10},
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    alignItems: 'center'},
   name: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.text,
     flex: 1,
-    marginRight: 8,
-  },
+    marginRight: 8},
   nameCompact: {
     fontSize: 13,
-    marginRight: 4,
-  },
+    marginRight: 4},
   shares: {
     fontSize: 12,
     color: Colors.textSecondary,
     backgroundColor: Colors.backgroundTertiary,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
-  },
+    borderRadius: 4},
   sharesCompact: {
     fontSize: 10,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
+    paddingVertical: 2},
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
+    alignItems: 'flex-end'},
   valueContainer: {
-    flexShrink: 1,
-  },
+    flexShrink: 1},
   valueLabel: {
     fontSize: 11,
     color: Colors.textTertiary,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   valueLabelCompact: {
-    fontSize: 10,
-  },
+    fontSize: 10},
   value: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: Colors.text,
-  },
+    color: Colors.text},
   valueCompact: {
-    fontSize: 14,
-  },
+    fontSize: 14},
   pnlContainer: {
     alignItems: 'flex-end',
-    flexShrink: 0,
-  },
+    flexShrink: 0},
   pnlBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -211,25 +193,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    marginBottom: 2,
-  },
+    marginBottom: 2},
   pnlBadgeCompact: {
     paddingHorizontal: 6,
     paddingVertical: 3,
-    gap: 2,
-  },
+    gap: 2},
   pnlText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-  },
+    fontWeight: '600' as const},
   pnlTextCompact: {
-    fontSize: 10,
-  },
+    fontSize: 10},
   pnlAmount: {
     fontSize: 12,
-    fontWeight: '500' as const,
-  },
+    fontWeight: '500' as const},
   pnlAmountCompact: {
-    fontSize: 10,
-  },
-});
+    fontSize: 10}});

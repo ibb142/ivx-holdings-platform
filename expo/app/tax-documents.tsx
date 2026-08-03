@@ -6,8 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-} from 'react-native';
+  Alert} from 'react-native';
 import {
   FileText,
   Download,
@@ -15,8 +14,7 @@ import {
   Clock,
   Calendar,
   Info,
-  Shield,
-} from 'lucide-react-native';
+  Shield} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAnalytics } from '@/lib/analytics-context';
@@ -39,8 +37,7 @@ const TAX_DOCUMENTS: TaxDocument[] = [
     year: '2024',
     date: '2025-01-31',
     status: 'available',
-    description: 'Dividend income from real estate investments',
-  },
+    description: 'Dividend income from real estate investments'},
   {
     id: '2',
     name: '1099-B',
@@ -48,8 +45,7 @@ const TAX_DOCUMENTS: TaxDocument[] = [
     year: '2024',
     date: '2025-02-15',
     status: 'available',
-    description: 'Proceeds from property share sales',
-  },
+    description: 'Proceeds from property share sales'},
   {
     id: '3',
     name: 'K-1 Schedule',
@@ -57,8 +53,7 @@ const TAX_DOCUMENTS: TaxDocument[] = [
     year: '2024',
     date: '2025-03-15',
     status: 'processing',
-    description: 'Partnership income allocation',
-  },
+    description: 'Partnership income allocation'},
   {
     id: '4',
     name: 'Annual Tax Summary',
@@ -66,8 +61,7 @@ const TAX_DOCUMENTS: TaxDocument[] = [
     year: '2024',
     date: '2025-01-31',
     status: 'available',
-    description: 'Complete summary of all taxable events',
-  },
+    description: 'Complete summary of all taxable events'},
   {
     id: '5',
     name: '1099-DIV',
@@ -75,8 +69,7 @@ const TAX_DOCUMENTS: TaxDocument[] = [
     year: '2023',
     date: '2024-01-31',
     status: 'available',
-    description: 'Dividend income from real estate investments',
-  },
+    description: 'Dividend income from real estate investments'},
   {
     id: '6',
     name: 'Annual Tax Summary',
@@ -84,8 +77,7 @@ const TAX_DOCUMENTS: TaxDocument[] = [
     year: '2023',
     date: '2024-01-31',
     status: 'available',
-    description: 'Complete summary of all taxable events',
-  },
+    description: 'Complete summary of all taxable events'},
 ];
 
 export default function TaxDocumentsScreen() {
@@ -246,5 +238,4 @@ const styles = StyleSheet.create({
   infoCard: { backgroundColor: Colors.info + '10', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.info + '20' },
   infoText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

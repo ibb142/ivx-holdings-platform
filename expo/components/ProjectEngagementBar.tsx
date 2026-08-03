@@ -39,8 +39,7 @@ function AnimatedIconButton({
   isActive = false,
   compact = false,
   light = false,
-  testID,
-}: {
+  testID}: {
   onPress: () => void;
   icon: React.ElementType;
   count: number;
@@ -105,8 +104,7 @@ const ProjectEngagementBar = memo(function ProjectEngagementBar({
   onSharePress,
   onSavePress,
   compact = false,
-  light = false,
-}: EngagementBarProps) {
+  light = false}: EngagementBarProps) {
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
       <View style={styles.leftActions}>
@@ -163,17 +161,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    paddingVertical: 10,
-  },
+    paddingVertical: 10},
   containerCompact: {
     paddingHorizontal: 4,
-    paddingVertical: 6,
-  },
+    paddingVertical: 6},
   leftActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
+    gap: 8},
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -182,10 +177,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     minWidth: 44,
     minHeight: 36,
-    justifyContent: 'center',
-  },
+    justifyContent: 'center'},
   actionCount: {
     fontWeight: '600' as const,
-    minWidth: 20,
-  },
-});
+    minWidth: 20}});

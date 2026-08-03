@@ -11,8 +11,7 @@ import {
   User,
   Briefcase,
   Crown,
-  type LucideIcon,
-} from 'lucide-react-native';
+  type LucideIcon} from 'lucide-react-native';
 import { type MemberTier, type InvestorStatus, TIER_META, INVESTOR_STATUS_META } from '@/lib/classification-service';
 
 interface MemberBadgeProps {
@@ -26,8 +25,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   clock: Clock,
   user: User,
   briefcase: Briefcase,
-  crown: Crown,
-};
+  crown: Crown};
 
 export function MemberBadge({ tier, investorStatus, size = 'medium', showStatus = false }: MemberBadgeProps) {
   const meta = TIER_META[tier];
@@ -36,8 +34,7 @@ export function MemberBadge({ tier, investorStatus, size = 'medium', showStatus 
   const sizeConfig = {
     small: { iconSize: 12, fontSize: 10, paddingH: 8, paddingV: 4, radius: 6 },
     medium: { iconSize: 14, fontSize: 12, paddingH: 12, paddingV: 6, radius: 8 },
-    large: { iconSize: 18, fontSize: 14, paddingH: 16, paddingV: 8, radius: 10 },
-  };
+    large: { iconSize: 18, fontSize: 14, paddingH: 16, paddingV: 8, radius: 10 }};
   const cfg = sizeConfig[size];
 
   return (
@@ -50,8 +47,7 @@ export function MemberBadge({ tier, investorStatus, size = 'medium', showStatus 
             borderColor: meta.borderColor,
             paddingHorizontal: cfg.paddingH,
             paddingVertical: cfg.paddingV,
-            borderRadius: cfg.radius,
-          },
+            borderRadius: cfg.radius},
         ]}
       >
         <Icon size={cfg.iconSize} color={meta.color} />
@@ -72,18 +68,13 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
+    gap: 6},
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-  },
+    borderWidth: 1},
   label: {
     fontWeight: '700' as const,
-    letterSpacing: 0.5,
-  },
+    letterSpacing: 0.5},
   status: {
-    fontWeight: '500' as const,
-  },
-});
+    fontWeight: '500' as const}});

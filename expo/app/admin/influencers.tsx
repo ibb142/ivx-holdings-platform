@@ -8,8 +8,7 @@ import {
   TextInput,
   Image,
   Alert,
-  Modal,
-} from 'react-native';
+  Modal} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -35,8 +34,7 @@ import {
   Pause,
   XCircle,
   Sparkles,
-  ArrowLeft,
-} from 'lucide-react-native';
+  ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import {
@@ -49,8 +47,7 @@ import {
   getStatusColor,
   getPlatformColor,
   getApplicationStatusColor,
-  getSourceLabel,
-} from '@/mocks/marketing';
+  getSourceLabel} from '@/mocks/marketing';
 import { Influencer, InfluencerApplication, SocialPlatform } from '@/types';
 
 type TabType = 'overview' | 'influencers' | 'applications' | 'referrals' | 'payouts';
@@ -134,8 +131,7 @@ export default function InfluencersScreen() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-    });
+      year: 'numeric'});
   };
 
   const copyToClipboard = useCallback((text: string, label: string) => {
@@ -169,8 +165,7 @@ export default function InfluencersScreen() {
             );
             setShowApplicationModal(false);
             Alert.alert('Success', `${application.name} has been approved as an influencer!`);
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -194,8 +189,7 @@ export default function InfluencersScreen() {
             );
             setShowApplicationModal(false);
             Alert.alert('Rejected', `${application.name}'s application has been rejected.`);
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -1261,5 +1255,4 @@ const styles = StyleSheet.create({
   approveButtonLarge: { gap: 4 },
   approveButtonLargeText: { color: Colors.textSecondary, fontSize: 13 },
   rejectButtonLarge: { gap: 4 },
-  rejectButtonLargeText: { color: Colors.textSecondary, fontSize: 13 },
-});
+  rejectButtonLargeText: { color: Colors.textSecondary, fontSize: 13 }});

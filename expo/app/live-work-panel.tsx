@@ -11,16 +11,13 @@
  * Auto-refreshes every 15s (faster than other dashboards for live work) + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  Modal,
-} from 'react-native';
+  Modal} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -38,10 +35,10 @@ import {
   RefreshCw,
   Terminal,
   X,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { TEAM_NAMES } from '@/lib/ivx-module-registry';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const LIVE_WORK_URL = `${API_BASE}/api/ivx/live-work/feed`;
@@ -269,8 +266,7 @@ export default function LiveWorkPanelScreen() {
       QUEUED: 3,
       BLOCKED: 4,
       FAILED: 5,
-      VERIFIED: 6,
-    };
+      VERIFIED: 6};
     return [...tasks].sort((a, b) => {
       const sa = order[a.status] ?? 9;
       const sb = order[b.status] ?? 9;
@@ -310,7 +306,7 @@ export default function LiveWorkPanelScreen() {
 
       {isLoading ? (
         <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color="#FBBF24" />
+          <ShimmerIndicator size="large" color="#FBBF24" />
           <Text style={styles.loadingText}>Loading live execution…</Text>
         </View>
       ) : isUnauthorized ? (
@@ -637,8 +633,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1E293B',
-  },
+    borderBottomColor: '#1E293B'},
   backButton: { padding: 6, marginRight: 6 },
   headerTitleWrap: { flex: 1 },
   headerTitle: { color: '#F1F5F9', fontSize: 18, fontWeight: '700' as const },
@@ -714,5 +709,4 @@ const styles = StyleSheet.create({
   detailValue: { color: '#E2E8F0', fontSize: 12, flex: 1 },
   evidenceBox: { marginTop: 8, backgroundColor: '#0B1220', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#1E293B' },
   evidenceLabel: { color: '#34D399', fontSize: 11, fontWeight: '700' as const, marginBottom: 4 },
-  evidenceText: { color: '#94A3B8', fontSize: 11, fontFamily: 'monospace' },
-});
+  evidenceText: { color: '#94A3B8', fontSize: 11, fontFamily: 'monospace' }});

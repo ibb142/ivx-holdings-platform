@@ -11,18 +11,15 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -38,13 +35,13 @@ import {
   Loader2,
   Handshake,
   Building2,
-  Percent,
-} from 'lucide-react-native';
+  Percent} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { submitJVApplication, formatCents } from '@/lib/payment-api-client';
 import { useQuery } from '@tanstack/react-query';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface DealData {
   id: string;
@@ -88,8 +85,7 @@ export default function JVApplicationPage() {
       const data = await res.json();
       return data.deal as DealData;
     },
-    enabled: !!slug,
-  });
+    enabled: !!slug});
 
   const minContribution = dealData?.jv_minimum_contribution || 20000;
   const amountNum = parseFloat(amount.replace(/[^0-9.]/g, '')) || 0;
@@ -121,8 +117,7 @@ export default function JVApplicationPage() {
         requestedOwnership: parseFloat(requestedOwnership) || 0,
         projectRole: projectRole.trim(),
         proofOfFundsUrl: proofOfFundsUrl.trim(),
-        acceptedTerms: true,
-      });
+        acceptedTerms: true});
 
       if (result.ok) {
         setApplicationId(result.application?.id || null);
@@ -143,7 +138,7 @@ export default function JVApplicationPage() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ShimmerIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading deal...</Text>
       </View>
     );
@@ -464,15 +459,13 @@ const styles = StyleSheet.create({
   loadingText: { color: '#909090', marginTop: 12, fontSize: 14 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A',
-  },
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A'},
   backButton: { padding: 4 },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   scrollContent: { padding: 16, paddingBottom: 40 },
   dealCard: {
     backgroundColor: '#141414', borderRadius: 16, padding: 20, marginBottom: 16,
-    borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    borderWidth: 1, borderColor: '#2A2A2A'},
   dealTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginBottom: 4 },
   dealLocation: { color: '#909090', fontSize: 14, marginBottom: 16 },
   dealMetrics: { flexDirection: 'row', alignItems: 'center' },
@@ -482,41 +475,35 @@ const styles = StyleSheet.create({
   metricDivider: { width: 1, height: 32, backgroundColor: '#2A2A2A' },
   sectionCard: {
     backgroundColor: '#141414', borderRadius: 16, padding: 20, marginBottom: 16,
-    borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    borderWidth: 1, borderColor: '#2A2A2A'},
   sectionTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 16 },
   inputGroup: { marginBottom: 16 },
   inputLabel: { color: '#909090', fontSize: 13, fontWeight: '600', marginBottom: 6 },
   inputError: { color: '#FF4D4D', fontSize: 12, marginTop: 4 },
   textInput: {
     backgroundColor: '#1A1A1A', borderRadius: 10, padding: 14, color: '#FFFFFF',
-    fontSize: 15, borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    fontSize: 15, borderWidth: 1, borderColor: '#2A2A2A'},
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   amountInputWrap: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A',
-    borderRadius: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    borderRadius: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: '#2A2A2A'},
   amountInput: { flex: 1, paddingVertical: 14, color: '#FFFFFF', fontSize: 15, marginLeft: 8 },
   chipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
-    backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A',
-  },
+    backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A'},
   chipActive: { borderColor: '#E6C200', backgroundColor: 'rgba(230,194,0,0.1)' },
   chipText: { color: '#909090', fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: '#E6C200' },
   termsContainer: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, marginBottom: 8 },
   checkbox: {
     width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#2A2A2A',
-    marginRight: 12, marginTop: 2, justifyContent: 'center', alignItems: 'center',
-  },
+    marginRight: 12, marginTop: 2, justifyContent: 'center', alignItems: 'center'},
   checkboxActive: { backgroundColor: '#E6C200', borderColor: '#E6C200' },
   termsText: { color: '#909090', fontSize: 13, flex: 1, lineHeight: 18 },
   submitButton: {
     flexDirection: 'row', backgroundColor: '#E6C200', borderRadius: 16, paddingVertical: 16,
-    alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12,
-  },
+    alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12},
   submitButtonDisabled: { backgroundColor: '#1A1A1A' },
   submitButtonText: { color: '#000000', fontSize: 16, fontWeight: '700' },
   submitButtonTextDisabled: { color: '#666' },
@@ -545,5 +532,4 @@ const styles = StyleSheet.create({
   failedTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginTop: 16, marginBottom: 8 },
   failedSubtitle: { color: '#909090', fontSize: 14, textAlign: 'center', marginBottom: 24 },
   retryButton: { backgroundColor: '#E6C200', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
-  retryButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
-});
+  retryButtonText: { color: '#000', fontSize: 16, fontWeight: '700' }});

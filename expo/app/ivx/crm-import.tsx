@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Stack, router } from 'expo-router';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,8 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
-} from 'react-native';
+  View} from "react-native";
 import {
   AlertTriangle,
   ArrowRight,
@@ -23,16 +21,15 @@ import {
   ShoppingBag,
   TrendingUp,
   Upload,
-  Users,
-} from 'lucide-react-native';
+  Users} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   importContacts,
   type ImportReceipt,
-  type PartyType,
-} from '@/src/modules/ivx-developer/investorCrmService';
+  type PartyType} from '@/src/modules/ivx-developer/investorCrmService';
 
 type PartyTab = {
   type: Extract<PartyType, 'investor' | 'buyer' | 'broker' | 'lender' | 'developer'>;
@@ -183,7 +180,7 @@ function ImportScreenInner() {
               testID="ivx-import-submit"
             >
               {busy ? (
-                <ActivityIndicator color={Colors.black} />
+                <ShimmerIndicator color={Colors.black} />
               ) : (
                 <>
                   <FileSpreadsheet size={16} color={Colors.black} />
@@ -289,8 +286,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 8,
-  },
+    gap: 8},
   heroHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroTitle: { color: Colors.text, fontSize: 18, fontWeight: '700' as const },
   heroSubtitle: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
@@ -304,8 +300,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   tabChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   tabChipText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' as const },
   tabChipTextActive: { color: Colors.black },
@@ -315,8 +310,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    gap: 10,
-  },
+    gap: 10},
   cardTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' as const },
   cardSubtitle: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   fieldLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' as const, marginTop: 2 },
@@ -328,8 +322,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: Colors.text,
-    fontSize: 14,
-  },
+    fontSize: 14},
   textArea: { minHeight: 130, textAlignVertical: 'top' as const, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   errorText: { color: Colors.error, fontSize: 13, flex: 1 },
@@ -341,8 +334,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
-    marginTop: 4,
-  },
+    marginTop: 4},
   primaryButtonDisabled: { opacity: 0.6 },
   primaryButtonText: { color: Colors.black, fontSize: 15, fontWeight: '700' as const },
   metricGrid: { flexDirection: 'row', gap: 8 },
@@ -352,8 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
-    gap: 3,
-  },
+    gap: 3},
   metricValue: { color: Colors.text, fontSize: 20, fontWeight: '800' as const },
   metricLabel: { color: Colors.textTertiary, fontSize: 11 },
   totalRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
@@ -362,8 +353,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 4,
-  },
+    marginTop: 4},
   breakdownItem: {
     flexGrow: 1,
     minWidth: 88,
@@ -371,8 +361,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
-    gap: 2,
-  },
+    gap: 2},
   breakdownValue: { color: Colors.primary, fontSize: 16, fontWeight: '700' as const },
   breakdownLabel: { color: Colors.textTertiary, fontSize: 11 },
   noteBlock: {
@@ -380,8 +369,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     gap: 4,
-    marginTop: 4,
-  },
+    marginTop: 4},
   noteTitle: { color: Colors.text, fontSize: 13, fontWeight: '600' as const },
   noteRow: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16 },
   engineRow: {
@@ -391,7 +379,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 10,
-  },
-  engineRowText: { color: Colors.text, fontSize: 14, fontWeight: '600' as const },
-});
+    borderRadius: 10},
+  engineRowText: { color: Colors.text, fontSize: 14, fontWeight: '600' as const }});

@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+  Platform} from "react-native";
 import { Stack, useRouter } from 'expo-router';
 import {
   Building2,
@@ -32,12 +29,12 @@ import {
   Home,
   Percent,
   Clock,
-  Star,
-} from 'lucide-react-native';
+  Star} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { useMutation } from '@tanstack/react-query';
 import { useAnalytics } from '@/lib/analytics-context';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 type ExperienceLevelType = 'junior' | 'mid' | 'senior' | 'broker';
 type SpecializationType = 'residential' | 'commercial' | 'luxury' | 'industrial' | 'mixed';
@@ -84,8 +81,7 @@ export default function AgentApplyScreen() {
     propertiesPerYear: '',
     motivation: '',
     taxAgreement: false,
-    termsAgreement: false,
-  });
+    termsAgreement: false});
 
   const experienceLevels: { id: ExperienceLevelType; label: string; desc: string }[] = [
     { id: 'junior', label: 'Junior Agent', desc: '0-2 years' },
@@ -174,8 +170,7 @@ export default function AgentApplyScreen() {
       const { error } = await supabase.from('applications').insert(input);
       if (error) console.log('[Agent] Application insert note:', error.message);
       return { success: true };
-    },
-  });
+    }});
   const { trackAction } = useAnalytics();
 
   const handleSubmit = useCallback(async () => {
@@ -197,8 +192,7 @@ export default function AgentApplyScreen() {
         license_number: formData.licenseNumber,
         motivation: formData.motivation,
         status: 'pending',
-        created_at: new Date().toISOString(),
-      },
+        created_at: new Date().toISOString()},
       {
         onSuccess: () => {
           setIsSubmitting(false);
@@ -215,8 +209,7 @@ export default function AgentApplyScreen() {
             'Thank you for applying to the IVXHOLDINGS Real Estate Agent Program. Our partnerships team will review your application and contact you within 3-5 business days.\n\nYou will receive a confirmation email shortly.',
             [{ text: 'OK', onPress: () => router.back() }]
           );
-        },
-      }
+        }}
     );
   }, [router, formData, submitMutation, trackAction]);
 
@@ -647,8 +640,7 @@ export default function AgentApplyScreen() {
         options={{
           title: 'Join Our Agent Team',
           headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
-        }}
+          headerTintColor: Colors.text}}
       />
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -741,7 +733,7 @@ export default function AgentApplyScreen() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
+                  <ShimmerIndicator size="small" color={Colors.white} />
                 ) : (
                   <Text style={styles.submitButtonText}>Submit Application</Text>
                 )}
@@ -873,5 +865,4 @@ const styles = StyleSheet.create({
   contactButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
   contactButtonText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
   bottomPadding: { height: 120 },
-  scrollView: { backgroundColor: Colors.background },
-});
+  scrollView: { backgroundColor: Colors.background }});

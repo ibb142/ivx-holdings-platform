@@ -6,8 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
   Activity,
@@ -25,8 +24,7 @@ import {
   Sparkles,
   Timer,
   TriangleAlert,
-  Zap,
-} from 'lucide-react-native';
+  Zap} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -64,8 +62,7 @@ function readMemorySample(): MemorySample {
         usedMb: toMb(mem.usedJSHeapSize),
         totalMb: toMb(mem.totalJSHeapSize),
         limitMb: toMb(mem.jsHeapSizeLimit),
-        available: true,
-      };
+        available: true};
     }
   } catch {
     // ignore
@@ -196,8 +193,7 @@ function useMetricsSnapshot(): { state: MetricsState; refresh: () => void } {
         status: 'error',
         data: prev.data,
         error: error instanceof Error ? error.message : 'Failed to load metrics.',
-        lastUpdatedAt: prev.lastUpdatedAt,
-      }));
+        lastUpdatedAt: prev.lastUpdatedAt}));
     } finally {
       inFlightRef.current = false;
     }
@@ -292,8 +288,7 @@ function MetricCard({
   value,
   unit,
   tone,
-  hint,
-}: {
+  hint}: {
   icon: React.ReactNode;
   label: string;
   value: string;
@@ -676,8 +671,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
-  },
+    borderColor: Colors.surfaceBorder},
   headerCopy: { flex: 1 },
   headerEyebrow: { color: Colors.primary, fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.6, textTransform: 'uppercase' as const },
   headerTitle: { color: Colors.text, fontSize: 20, fontWeight: '700' as const, marginTop: 2 },
@@ -689,8 +683,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   metricHeader: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   metricIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   metricLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' as const },
@@ -710,8 +703,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   logTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const, marginBottom: 10 },
   logEmpty: { color: Colors.textTertiary, fontSize: 12, lineHeight: 17 },
   logRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.surfaceBorder },
@@ -725,8 +717,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
-    padding: 14,
-  },
+    padding: 14},
   opHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   opTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' as const },
   opWindowsHint: { color: Colors.textTertiary, fontSize: 10.5, fontWeight: '600' as const, letterSpacing: 0.4 },
@@ -754,5 +745,4 @@ const styles = StyleSheet.create({
   buildRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   buildLabel: { color: Colors.textSecondary, fontSize: 12 },
   buildValue: { color: Colors.text, fontSize: 12, fontWeight: '600' as const, flexShrink: 1, textAlign: 'right' },
-  buildHint: { color: Colors.textTertiary, fontSize: 10.5, lineHeight: 14, marginTop: 4 },
-});
+  buildHint: { color: Colors.textTertiary, fontSize: 10.5, lineHeight: 14, marginTop: 4 }});

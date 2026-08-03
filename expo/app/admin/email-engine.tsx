@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
+import {View,
   Text,
   StyleSheet,
   ScrollView,
@@ -8,9 +7,7 @@ import {
   TextInput,
   Animated,
   Alert,
-  Modal,
-  ActivityIndicator,
-} from 'react-native';
+  Modal} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -51,31 +48,28 @@ import {
   Layers,
   FileText,
   Target,
-  CircleDot,
-} from 'lucide-react-native';
+  CircleDot} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   SMTPConfig,
   EmailCampaign,
   DomainHealth,
   getWarmupLimit,
   getOptimalSendingHours,
-  ANTI_BLACKLIST_RULES,
-} from '@/lib/email-engine';
+  ANTI_BLACKLIST_RULES} from '@/lib/email-engine';
 import {
   smtpConfigs as mockSmtpConfigs,
   domainHealth as mockDomainHealth,
   emailCampaigns as mockCampaigns,
   emailRecipients,
-  getEngineStats,
-} from '@/mocks/email-engine';
+  getEngineStats} from '@/mocks/email-engine';
 import {
   emailLogs as initialEmailLogs,
   getEmailLogStats,
   type EmailLog,
   type EmailLogType,
-  type EmailLogStatus,
-} from '@/mocks/email-logs';
+  type EmailLogStatus} from '@/mocks/email-logs';
 
 type TabType = 'dashboard' | 'campaigns' | 'smtp' | 'protection' | 'sent_log';
 type LogFilter = 'all' | 'automatic' | 'manual';
@@ -93,32 +87,27 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
     id: 'intro',
     name: 'Introduction',
     subject: 'Intro — IVX HOLDINGS tokenized mortgage opportunity',
-    body: `Dear {{name}},\n\nI'm reaching out from IVX HOLDINGS LLC to introduce an exclusive investment opportunity that I believe aligns with {{company}}'s portfolio strategy.\n\nWe specialize in tokenized first-lien mortgage investments offering:\n\n• 6-9% annual yields\n• Blockchain-verified ownership\n• Institutional-grade due diligence\n• 24/7 secondary market liquidity\n\nWould you have 15 minutes this week for a brief overview?\n\nBest regards,\nIVX HOLDINGS LLC`,
-  },
+    body: `Dear {{name}},\n\nI'm reaching out from IVX HOLDINGS LLC to introduce an exclusive investment opportunity that I believe aligns with {{company}}'s portfolio strategy.\n\nWe specialize in tokenized first-lien mortgage investments offering:\n\n• 6-9% annual yields\n• Blockchain-verified ownership\n• Institutional-grade due diligence\n• 24/7 secondary market liquidity\n\nWould you have 15 minutes this week for a brief overview?\n\nBest regards,\nIVX HOLDINGS LLC`},
   {
     id: 'followup',
     name: 'Follow-Up',
     subject: 'Following up — {{company}} + IVX HOLDINGS',
-    body: `Hi {{name}},\n\nI wanted to follow up on my previous email regarding our tokenized real estate investment opportunities.\n\nI understand you're busy, so I'll keep this brief — we currently have 3 properties yielding 6-9% with full transparency and blockchain-verified ownership.\n\nWould a quick 10-minute call work for you this week?\n\nBest,\nIVX HOLDINGS Investment Team`,
-  },
+    body: `Hi {{name}},\n\nI wanted to follow up on my previous email regarding our tokenized real estate investment opportunities.\n\nI understand you're busy, so I'll keep this brief — we currently have 3 properties yielding 6-9% with full transparency and blockchain-verified ownership.\n\nWould a quick 10-minute call work for you this week?\n\nBest,\nIVX HOLDINGS Investment Team`},
   {
     id: 'property',
     name: 'Property Alert',
     subject: 'New Listing Alert — High-Yield Tokenized Property',
-    body: `Dear {{name}},\n\nA premium new property has just been listed on IVX HOLDINGS that matches {{company}}'s investment criteria.\n\nKey highlights:\n• Location: Miami, FL\n• Projected Yield: 8.2%\n• Type: Mixed-Use (Residential + Commercial)\n• Structure: First-lien secured tokenized mortgage\n\nEarly access is available for a limited time.\n\nBest regards,\nIVX HOLDINGS LLC`,
-  },
+    body: `Dear {{name}},\n\nA premium new property has just been listed on IVX HOLDINGS that matches {{company}}'s investment criteria.\n\nKey highlights:\n• Location: Miami, FL\n• Projected Yield: 8.2%\n• Type: Mixed-Use (Residential + Commercial)\n• Structure: First-lien secured tokenized mortgage\n\nEarly access is available for a limited time.\n\nBest regards,\nIVX HOLDINGS LLC`},
   {
     id: 'partnership',
     name: 'Partnership',
     subject: 'Partnership proposal — tokenized RE for {{company}}',
-    body: `Dear {{name}},\n\nI'm writing to explore a potential partnership between {{company}} and IVX HOLDINGS LLC.\n\nOur platform offers:\n• White-label tokenized investment products\n• Institutional co-investment opportunities\n• Revenue sharing on referrals\n• Full regulatory compliance (SEC/FinCEN)\n\nI'd love to discuss how we can create value together.\n\nBest regards,\nIVX HOLDINGS LLC`,
-  },
+    body: `Dear {{name}},\n\nI'm writing to explore a potential partnership between {{company}} and IVX HOLDINGS LLC.\n\nOur platform offers:\n• White-label tokenized investment products\n• Institutional co-investment opportunities\n• Revenue sharing on referrals\n• Full regulatory compliance (SEC/FinCEN)\n\nI'd love to discuss how we can create value together.\n\nBest regards,\nIVX HOLDINGS LLC`},
   {
     id: 'blank',
     name: 'Blank',
     subject: '',
-    body: '',
-  },
+    body: ''},
 ];
 
 const LOG_STATUS_COLORS: Record<EmailLogStatus, string> = {
@@ -129,8 +118,7 @@ const LOG_STATUS_COLORS: Record<EmailLogStatus, string> = {
   bounced: Colors.error,
   failed: '#6B7280',
   pending: Colors.warning,
-  sending: '#6366F1',
-};
+  sending: '#6366F1'};
 
 const LOG_STATUS_LABELS: Record<EmailLogStatus, string> = {
   delivered: 'Delivered',
@@ -140,8 +128,7 @@ const LOG_STATUS_LABELS: Record<EmailLogStatus, string> = {
   bounced: 'Bounced',
   failed: 'Failed',
   pending: 'Pending',
-  sending: 'Sending',
-};
+  sending: 'Sending'};
 
 const STATUS_COLORS: Record<string, string> = {
   draft: Colors.textTertiary,
@@ -150,8 +137,7 @@ const STATUS_COLORS: Record<string, string> = {
   sending: Colors.accent,
   paused: Colors.warning,
   completed: Colors.success,
-  failed: Colors.error,
-};
+  failed: Colors.error};
 
 export default function EmailEngineScreen() {
   const router = useRouter();
@@ -230,8 +216,7 @@ export default function EmailEngineScreen() {
       Animated.timing(progressAnim, {
         toValue: progress,
         duration: 600,
-        useNativeDriver: false,
-      }).start();
+        useNativeDriver: false}).start();
     }
   }, [activeSendingCampaign, progressAnim]);
 
@@ -262,8 +247,7 @@ export default function EmailEngineScreen() {
       warmupDay: 0,
       reputationScore: 50,
       lastUsed: null,
-      domain,
-    };
+      domain};
     setSmtpConfigs(prev => [...prev, newConfig]);
     setShowAddSmtp(false);
     setNewSmtpName('');
@@ -279,8 +263,7 @@ export default function EmailEngineScreen() {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => setSmtpConfigs(prev => prev.filter(s => s.id !== smtpId)),
-      },
+        onPress: () => setSmtpConfigs(prev => prev.filter(s => s.id !== smtpId))},
     ]);
   }, []);
 
@@ -289,8 +272,7 @@ export default function EmailEngineScreen() {
       start: 'sending',
       pause: 'paused',
       resume: 'sending',
-      cancel: 'draft',
-    };
+      cancel: 'draft'};
     setCampaigns(prev => prev.map(c =>
       c.id === campaignId ? { ...c, status: statusMap[action] } : c
     ));
@@ -348,8 +330,7 @@ export default function EmailEngineScreen() {
         openedAt: null,
         clickedAt: null,
         repliedAt: null,
-        bouncedAt: null,
-      };
+        bouncedAt: null};
       setAllLogs(prev => [newLog, ...prev]);
       setIsSending(false);
       resetCompose();
@@ -376,8 +357,7 @@ export default function EmailEngineScreen() {
           style: 'destructive',
           onPress: () => {
             setAllLogs(prev => prev.filter(l => l.id !== logId));
-          },
-        },
+          }},
       ]
     );
   }, []);
@@ -399,8 +379,7 @@ export default function EmailEngineScreen() {
           onPress: () => {
             setAllLogs(prev => prev.filter(l => l.status !== 'bounced'));
             Alert.alert('Cleaned', `${bouncedCount} bounced email${bouncedCount > 1 ? 's' : ''} removed.`);
-          },
-        },
+          }},
       ]
     );
   }, [allLogs]);
@@ -426,8 +405,7 @@ export default function EmailEngineScreen() {
             status: 'completed',
             sentCount: total,
             deliveredCount: Math.round(total * 0.97),
-            completedAt: new Date().toISOString(),
-          } : c
+            completedAt: new Date().toISOString()} : c
         ));
         setSimulatingSend(null);
         Alert.alert('Campaign Complete', `${total} emails delivered successfully`);
@@ -458,9 +436,7 @@ export default function EmailEngineScreen() {
             <Animated.View style={[styles.liveProgressInner, {
               width: progressAnim.interpolate({
                 inputRange: [0, 100],
-                outputRange: ['0%', '100%'],
-              }),
-            }]} />
+                outputRange: ['0%', '100%']})}]} />
           </View>
           <View style={styles.liveStatsRow}>
             <Text style={styles.liveStat}>
@@ -576,8 +552,7 @@ export default function EmailEngineScreen() {
                   <View style={[styles.scheduleBarFill, {
                     height: `${(slot.maxEmails / 1800) * 100}%`,
                     backgroundColor: slot.priority === 'high' ? Colors.success :
-                      slot.priority === 'medium' ? Colors.primary : Colors.textTertiary,
-                  }]} />
+                      slot.priority === 'medium' ? Colors.primary : Colors.textTertiary}]} />
                 </View>
                 <Text style={styles.scheduleCount}>{formatNumber(slot.maxEmails)}</Text>
               </View>
@@ -595,12 +570,10 @@ export default function EmailEngineScreen() {
               <Text style={styles.domainName}>{domain.domain}</Text>
               <View style={[styles.domainScoreBadge, {
                 backgroundColor: domain.reputationScore >= 90 ? 'rgba(0,196,140,0.15)' :
-                  domain.reputationScore >= 80 ? 'rgba(255,184,0,0.15)' : 'rgba(255,77,77,0.15)',
-              }]}>
+                  domain.reputationScore >= 80 ? 'rgba(255,184,0,0.15)' : 'rgba(255,77,77,0.15)'}]}>
                 <Text style={[styles.domainScoreText, {
                   color: domain.reputationScore >= 90 ? Colors.success :
-                    domain.reputationScore >= 80 ? Colors.warning : Colors.error,
-                }]}>{domain.reputationScore}</Text>
+                    domain.reputationScore >= 80 ? Colors.warning : Colors.error}]}>{domain.reputationScore}</Text>
               </View>
             </View>
             <View style={styles.domainChecks}>
@@ -660,8 +633,7 @@ export default function EmailEngineScreen() {
                 <Text style={styles.campaignSubject} numberOfLines={1}>{campaign.subject}</Text>
               </View>
               <View style={[styles.campaignStatusBadge, {
-                backgroundColor: `${STATUS_COLORS[campaign.status]}20`,
-              }]}>
+                backgroundColor: `${STATUS_COLORS[campaign.status]}20`}]}>
                 <Text style={[styles.campaignStatusText, { color: STATUS_COLORS[campaign.status] }]}>
                   {campaign.status}
                 </Text>
@@ -673,8 +645,7 @@ export default function EmailEngineScreen() {
                 <View style={styles.campaignProgressBarOuter}>
                   <View style={[styles.campaignProgressBarInner, {
                     width: `${progress}%`,
-                    backgroundColor: campaign.status === 'completed' ? Colors.success : Colors.accent,
-                  }]} />
+                    backgroundColor: campaign.status === 'completed' ? Colors.success : Colors.accent}]} />
                 </View>
                 <Text style={styles.campaignProgressText}>{progress}%</Text>
               </View>
@@ -752,7 +723,7 @@ export default function EmailEngineScreen() {
                       disabled={simulatingSend !== null}
                     >
                       {simulatingSend === campaign.id ? (
-                        <ActivityIndicator color={Colors.background} size="small" />
+                        <ShimmerIndicator color={Colors.background} size="small" />
                       ) : (
                         <>
                           <Play size={14} color={Colors.background} />
@@ -816,8 +787,7 @@ export default function EmailEngineScreen() {
           >
             <View style={styles.smtpCardHeader}>
               <View style={[styles.smtpStatusIndicator, {
-                backgroundColor: smtp.isActive ? Colors.success : Colors.textTertiary,
-              }]} />
+                backgroundColor: smtp.isActive ? Colors.success : Colors.textTertiary}]} />
               <View style={styles.smtpCardInfo}>
                 <Text style={styles.smtpCardName} numberOfLines={1}>{smtp.name}</Text>
                 <Text style={styles.smtpCardEmail}>{smtp.fromEmail}</Text>
@@ -831,12 +801,10 @@ export default function EmailEngineScreen() {
                 )}
                 <View style={[styles.smtpRepBadge, {
                   backgroundColor: smtp.reputationScore >= 90 ? 'rgba(0,196,140,0.15)' :
-                    smtp.reputationScore >= 80 ? 'rgba(255,184,0,0.15)' : 'rgba(255,77,77,0.15)',
-                }]}>
+                    smtp.reputationScore >= 80 ? 'rgba(255,184,0,0.15)' : 'rgba(255,77,77,0.15)'}]}>
                   <Text style={[styles.smtpRepText, {
                     color: smtp.reputationScore >= 90 ? Colors.success :
-                      smtp.reputationScore >= 80 ? Colors.warning : Colors.error,
-                  }]}>{smtp.reputationScore}</Text>
+                      smtp.reputationScore >= 80 ? Colors.warning : Colors.error}]}>{smtp.reputationScore}</Text>
                 </View>
               </View>
             </View>
@@ -846,8 +814,7 @@ export default function EmailEngineScreen() {
                 <View style={[styles.smtpUsageBarInner, {
                   width: `${usagePercent}%`,
                   backgroundColor: usagePercent > 90 ? Colors.error :
-                    usagePercent > 70 ? Colors.warning : Colors.accent,
-                }]} />
+                    usagePercent > 70 ? Colors.warning : Colors.accent}]} />
               </View>
               <Text style={styles.smtpUsageText}>
                 {formatNumber(smtp.sentToday)} / {formatNumber(smtp.dailyLimit)} ({usagePercent}%)
@@ -868,8 +835,7 @@ export default function EmailEngineScreen() {
                   <Text style={styles.smtpDetailLabel}>Warm-up Phase</Text>
                   <Text style={[styles.smtpDetailValue, {
                     color: smtp.warmupPhase === 'ready' ? Colors.success :
-                      smtp.warmupPhase === 'warming' ? Colors.warning : Colors.textTertiary,
-                  }]}>{smtp.warmupPhase}</Text>
+                      smtp.warmupPhase === 'warming' ? Colors.warning : Colors.textTertiary}]}>{smtp.warmupPhase}</Text>
                 </View>
                 {smtp.warmupPhase === 'warming' && (
                   <View style={styles.smtpDetailRow}>
@@ -938,8 +904,7 @@ export default function EmailEngineScreen() {
           >
             <View style={styles.ruleHeader}>
               <View style={[styles.ruleIcon, {
-                backgroundColor: rule.critical ? 'rgba(0,196,140,0.12)' : 'rgba(74,144,217,0.12)',
-              }]}>
+                backgroundColor: rule.critical ? 'rgba(0,196,140,0.12)' : 'rgba(74,144,217,0.12)'}]}>
                 {rule.critical ? (
                   <ShieldCheck size={16} color={Colors.success} />
                 ) : (
@@ -1127,20 +1092,17 @@ export default function EmailEngineScreen() {
           >
             <View style={styles.logCardHeader}>
               <View style={[styles.logTypeBadge, {
-                backgroundColor: log.type === 'automatic' ? 'rgba(99,102,241,0.12)' : 'rgba(232,121,249,0.12)',
-              }]}>
+                backgroundColor: log.type === 'automatic' ? 'rgba(99,102,241,0.12)' : 'rgba(232,121,249,0.12)'}]}>
                 {log.type === 'automatic' ? (
                   <Zap size={11} color="#6366F1" />
                 ) : (
                   <FileText size={11} color="#E879F9" />
                 )}
                 <Text style={[styles.logTypeBadgeText, {
-                  color: log.type === 'automatic' ? '#6366F1' : '#E879F9',
-                }]}>{log.type === 'automatic' ? 'AUTO' : 'MANUAL'}</Text>
+                  color: log.type === 'automatic' ? '#6366F1' : '#E879F9'}]}>{log.type === 'automatic' ? 'AUTO' : 'MANUAL'}</Text>
               </View>
               <View style={[styles.logStatusBadge, {
-                backgroundColor: `${LOG_STATUS_COLORS[log.status]}18`,
-              }]}>
+                backgroundColor: `${LOG_STATUS_COLORS[log.status]}18`}]}>
                 <View style={[styles.logStatusDotSmall, { backgroundColor: LOG_STATUS_COLORS[log.status] }]} />
                 <Text style={[styles.logStatusBadgeText, { color: LOG_STATUS_COLORS[log.status] }]}>
                   {LOG_STATUS_LABELS[log.status]}
@@ -1381,8 +1343,7 @@ export default function EmailEngineScreen() {
                           onPress={() => setComposeSmtp(smtp.id)}
                         >
                           <View style={[styles.smtpChipDot, {
-                            backgroundColor: smtp.reputationScore >= 90 ? Colors.success : Colors.warning,
-                          }]} />
+                            backgroundColor: smtp.reputationScore >= 90 ? Colors.success : Colors.warning}]} />
                           <Text style={[
                             styles.smtpChipText,
                             composeSmtp === smtp.id && styles.smtpChipTextActive,
@@ -1476,7 +1437,7 @@ export default function EmailEngineScreen() {
                       disabled={!composeSubject.trim() || isSending}
                     >
                       {isSending ? (
-                        <ActivityIndicator color={Colors.background} size="small" />
+                        <ShimmerIndicator color={Colors.background} size="small" />
                       ) : (
                         <>
                           <Send size={14} color={Colors.background} />
@@ -1802,5 +1763,4 @@ const styles = StyleSheet.create({
   composeBackBtnText: { color: Colors.text, fontWeight: '600' as const, fontSize: 15 },
   composeSendBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   composeSendBtnDisabled: { opacity: 0.4 },
-  composeSendBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 },
-});
+  composeSendBtnText: { color: Colors.black, fontWeight: '700' as const, fontSize: 15 }});
