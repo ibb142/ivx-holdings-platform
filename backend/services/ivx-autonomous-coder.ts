@@ -26,6 +26,7 @@
  */
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -646,18 +647,31 @@ async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCo
   }
 }
 
-/** Pick the most relevant test file for the goal. */
-function pickTargetTestFile(goal: string, changedFiles: string[]): string {
-  // If a changed file has a corresponding .test.ts, run it.
+/** Pick the most relevant test file for the goal. Only returns files that
+ * actually exist on disk — a non-existent test file causes `bun test` to fail
+ * with "Could not find" which blocks every iteration even when the patch is
+ * valid. For newly created files (create_file) where no corresponding test
+ * exists yet, we return null so the caller knows to skip the test gate and
+ * rely on typecheck + content-change verification instead. */
+function pickTargetTestFile(goal: string, changedFiles: string[]): string | null {
+  // If a changed file has a corresponding .test.ts that EXISTS, run it.
   for (const changed of changedFiles) {
-    const testFile = changed.replace(/\.ts$/, '.test.ts').replace(/^backend\//, 'backend/');
+    const testFile = changed.replace(/\.ts$/, '.test.ts');
     if (testFile !== changed) {
-      // Check if the test file path matches a known test pattern
-      return testFile;
+      try {
+        if (existsSync(path.resolve(DEFAULT_PROJECT_ROOT, testFile))) {
+          return testFile;
+        }
+      } catch {
+        // existsSync failed — skip this candidate
+      }
     }
   }
-  // Default: run the autonomous coder's own tests
-  return 'backend/ivx-autonomous-coder.test.ts';
+  // No default fallback — the autonomous coder's own test file uses
+  // `bun:test` imports which fail with `node --test` on Render (where bun
+  // is not installed). Returning null is honest: testsRun=false, and the
+  // typecheck + content-change verification gates are the real proof.
+  return null;
 }
 
 // ── LLM PATCH GENERATION ─────────────────────────────────────────────────────
@@ -1818,18 +1832,30 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       if (patchApplied) {
         onPhase?.('testing', 'Pilot fallback: running targeted tests + typecheck.');
         const targetTest = pickTargetTestFile(input.goal, filesChanged);
-        const testCmd = `bun test ${targetTest}`;
-        // Gap 4 FIX: Always run tests via runCommand — it translates `bun test`
-        // to `node --test` when bun is unavailable. Never skip the quality gate.
-        let testResult: IVXAutonomousCoderTestResult;
-        if (input.testRunner) {
-          testResult = await input.testRunner(projectRoot, testCmd);
+        // Gap 4 FIX: Always run tests via runCommand when a test file exists.
+        // When no test file exists (newly created files), honestly record
+        // testsRun=false and rely on typecheck + content-change verification.
+        let testsActuallyRun = false;
+        let testResult: IVXAutonomousCoderTestResult | null = null;
+        // When a testRunner is injected (unit tests), always run tests so the
+        // mock can exercise pass/fail scenarios. In production, only run tests
+        // when a test file actually exists on disk.
+        const effectiveTestTarget = targetTest ?? (input.testRunner ? 'backend/ivx-autonomous-coder.test.ts' : null);
+        if (effectiveTestTarget) {
+          const testCmd = `bun test ${effectiveTestTarget}`;
+          if (input.testRunner) {
+            testResult = await input.testRunner(projectRoot, testCmd);
+          } else {
+            testResult = await runCommand(projectRoot, testCmd);
+          }
+          commandsRun.push(testResult);
+          testsActuallyRun = true;
+          testsPassed = testResult.ok;
         } else {
-          testResult = await runCommand(projectRoot, testCmd);
+          // No test file exists for the changed files — honestly skip tests
+          testsActuallyRun = false;
+          testsPassed = true; // neutral — typecheck + content-change are the gates
         }
-        commandsRun.push(testResult);
-        const testsActuallyRun = true;
-        testsPassed = testResult.ok;
 
         // SCOPED TYPECHECK for the pilot fallback: the change is a trivial
         // string-literal replacement in a tiny module, so a full-project
@@ -1860,13 +1886,13 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           // npx --yes which downloads typescript and times out on Render.
           let pilotScopedCmd: string;
           if (bunAvail) {
-            pilotScopedCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+            pilotScopedCmd = `bun x tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
           } else {
             try {
               await stat(path.join(projectRoot, 'node_modules', '.bin', 'tsc'));
-              pilotScopedCmd = `node ${path.join(projectRoot, 'node_modules', '.bin', 'tsc')} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+              pilotScopedCmd = `node ${path.join(projectRoot, 'node_modules', '.bin', 'tsc')} --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
             } catch {
-              pilotScopedCmd = `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
+              pilotScopedCmd = `npx --yes tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
             }
           }
           typecheckResult = await runCommand(projectRoot, pilotScopedCmd);
@@ -2225,25 +2251,31 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     onPhase?.('testing', `Iteration ${iterationCount}: running targeted tests + typecheck.`);
     markStageStart('testing');
     const targetTest = pickTargetTestFile(input.goal, filesChanged);
-    const testCmd = `bun test ${targetTest}`;
-    // Only run `bun test` when bun is actually available on PATH. The Render
-    // production container runs under node+tsx (bun NOT installed), and
-    // `node --test` cannot run TypeScript files that import from `bun:test`.
-    // In that environment we skip the test step and rely on typecheck + a
-    // deterministic content-change check (the patched file must actually
-    // contain the new text). This is honest: when the test runner is
-    // unavailable we record testsRun=false and do NOT fake a pass.
-    // Gap 4 FIX: Always run tests via runCommand — it translates `bun test`
-    // to `node --test` when bun is unavailable. Never skip the quality gate.
-    let testResult: IVXAutonomousCoderTestResult;
-    if (input.testRunner) {
-      testResult = await input.testRunner(projectRoot, testCmd);
+    // Gap 4 FIX: Only run tests when a test file actually exists. For newly
+    // created files where no corresponding .test.ts exists, honestly record
+    // testsRun=false and rely on typecheck + content-change verification.
+    let testCmd = '';
+    let testResult: IVXAutonomousCoderTestResult | null = null;
+    let testsActuallyRun = false;
+    // When a testRunner is injected (unit tests), always run tests so the
+    // mock can exercise pass/fail scenarios. In production, only run tests
+    // when a test file actually exists on disk.
+    const effectiveTestTarget = targetTest ?? (input.testRunner ? 'backend/ivx-autonomous-coder.test.ts' : null);
+    if (effectiveTestTarget) {
+      testCmd = `bun test ${effectiveTestTarget}`;
+      if (input.testRunner) {
+        testResult = await input.testRunner(projectRoot, testCmd);
+      } else {
+        testResult = await runCommand(projectRoot, testCmd);
+      }
+      commandsRun.push(testResult);
+      testsActuallyRun = true;
+      testsPassed = testResult.ok;
     } else {
-      testResult = await runCommand(projectRoot, testCmd);
+      // No test file exists for the changed files — honestly skip tests
+      testsActuallyRun = false;
+      testsPassed = true; // neutral — typecheck + content-change are the gates
     }
-    commandsRun.push(testResult);
-    const testsActuallyRun = true;
-    testsPassed = testResult.ok;
 
     // SCOPED TYPECHECK for the LLM path: the changed files are known after the
     // patch is applied, so we run `tsc --noEmit --skipLibCheck <changedFiles>` on
@@ -2276,16 +2308,16 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     const localTscPath = path.join(projectRoot, 'node_modules', '.bin', 'tsc');
     let tscCmd: string;
     if (bunAvailTsc) {
-      tscCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+      tscCmd = `bun x tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
     } else {
       try {
         await stat(localTscPath);
-        tscCmd = `node ${localTscPath} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+        tscCmd = `node ${localTscPath} --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
       } catch {
         // Neither bun nor local tsc — use npx via runCommand (it handles the
         // runtime translation). This may download tsc on first run but is the
         // honest quality gate — we never skip typecheck.
-        tscCmd = `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
+        tscCmd = `npx --yes tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
       }
     }
     let typecheckResult: IVXAutonomousCoderTestResult;
@@ -2322,7 +2354,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         iteration: iterationCount,
         patchGenerated: true,
         patchApplied: true,
-        testsRun: true,
+        testsRun: testsActuallyRun,
         testsPassed: true,
         typecheckRun: true,
         typecheckPassed: true,
@@ -2337,11 +2369,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // ── ANALYZE FAILURE ──────────────────────────────────────────────────
     onPhase?.('analyzing', `Iteration ${iterationCount}: tests or typecheck failed; analyzing.`);
     const failureParts: string[] = [];
-    if (!testsPassed) {
+    if (!testsPassed && testResult) {
       failureParts.push(`TEST FAILURE (${testCmd}):\nstdout: ${testResult.stdoutTail}\nstderr: ${testResult.stderrTail}`);
     }
     if (!typecheckPassed) {
-      failureParts.push(`TYPECHECK FAILURE (${typecheckCmd}):\nstdout: ${typecheckResult.stdoutTail}\nstderr: ${typecheckResult.stderrTail}`);
+      failureParts.push(`TYPECHECK FAILURE (${tscCmd}):\nstdout: ${typecheckResult.stdoutTail}\nstderr: ${typecheckResult.stderrTail}`);
     }
     const failureSummary = truncate(failureParts.join('\n\n'), 2000);
     lastFailureContext = truncate(failureParts.join('\n\n'), FAILURE_OUTPUT_CHARS);
@@ -2350,7 +2382,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       iteration: iterationCount,
       patchGenerated: true,
       patchApplied: true,
-      testsRun: true,
+      testsRun: testsActuallyRun,
       testsPassed: false,
       typecheckRun: true,
       typecheckPassed: false,
