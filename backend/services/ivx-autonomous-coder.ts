@@ -1155,9 +1155,21 @@ async function readOwnerRuntimeVariable(name: string): Promise<string> {
   const envValue = readEnv(name);
   if (envValue) return envValue;
   try {
-    const ownerVariables = await import('../api/ivx-owner-variables');
+    const ownerVariables = await Promise.race([
+      import('../api/ivx-owner-variables'),
+      new Promise<never>((_resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Owner Variables import timed out')), 5000);
+        timer.unref?.();
+      }),
+    ]);
     if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue === 'function') {
-      const stored = await ownerVariables.getIVXOwnerVariableRuntimeValue(name as never);
+      const stored = await Promise.race([
+        ownerVariables.getIVXOwnerVariableRuntimeValue(name as never),
+        new Promise<null>((resolve) => {
+          const timer = setTimeout(() => resolve(null), 5000);
+          timer.unref?.();
+        }),
+      ]);
       return (stored || '').trim();
     }
   } catch (error) {
