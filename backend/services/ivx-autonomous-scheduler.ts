@@ -41,6 +41,7 @@ import {
   type ArchitectureDriftReport,
 } from './ivx-architecture-drift';
 import { remember } from './ivx-unified-memory-store';
+import { enqueueOrAttachSeniorDeveloperJob } from './ivx-senior-developer-worker';
 import {
   recordRecommendation,
   recordExecution,
@@ -418,7 +419,40 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
 
     await driveSelfAuditActionLoop(audit, safeCount);
 
-    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe.`;
+    // Gap 5: Connect the scheduler to the autonomous developer worker queue.
+    // When the self-audit discovers safe-to-auto-apply code improvements,
+    // submit them to the senior developer worker as code_change tasks. This
+    // closes the loop: scheduler discovers → worker fixes → coder commits →
+    // PR created → (auto-merge or owner approval) → production.
+    let codeFixJobsSubmitted = 0;
+    for (const proposal of plan.safeProposals) {
+      try {
+        const goal = `Fix ${proposal.category} in ${proposal.evidence[0]?.relativePath ?? 'unknown file'}: ${proposal.recommendedAction}`;
+        await enqueueOrAttachSeniorDeveloperJob({
+          goal,
+          ownerApproved: true,
+          approvePatch: false,
+          approveGitDeploy: false,
+          validationMode: 'focused',
+          systemMode: true,
+          ownerApprovedAction: {
+            type: 'autonomous_self_heal',
+            source: 'daily_self_audit',
+            auditId: audit.auditId,
+            proposalId: proposal.id,
+            category: proposal.category,
+            severity: proposal.severity,
+          },
+          ownerId: 'autonomous-scheduler',
+          executionMode: 'code_change',
+        });
+        codeFixJobsSubmitted++;
+      } catch {
+        // Best-effort: a failed enqueue must never break the scheduler.
+      }
+    }
+
+    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} code-fix job(s) submitted to worker queue.`;
     return { kind: 'daily_self_audit', ok: true, durationMs: Date.now() - start, summary };
   } catch (error) {
     return {

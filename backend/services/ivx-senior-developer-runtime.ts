@@ -433,16 +433,35 @@ async function readRuntimeVariable(name: OwnerVariableName): Promise<string> {
   if (envValue) return envValue;
 
   // process.env is empty — try encrypted store as last resort.
+  // CRITICAL FIX: wrap both the dynamic import and the value read in
+  // Promise.race with a 5-second timeout, matching the pattern in
+  // ivx-autonomous-coder.ts readOwnerRuntimeVariable(). Without this,
+  // a hanging import or Supabase connection stall blocks the entire
+  // senior developer runtime indefinitely (the same class of stall
+  // that caused the autonomous coder to hang at 65% COMMITTING).
   try {
-    const ownerVariables = await import('../api/ivx-owner-variables');
-    const storedValue = await ownerVariables.getIVXOwnerVariableRuntimeValue(name);
+    const ownerVariables = await Promise.race([
+      import('../api/ivx-owner-variables'),
+      new Promise<never>((_resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Owner Variables import timed out (5s)')), 5000);
+        timer.unref?.();
+      }),
+    ]);
+    if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue !== 'function') return '';
+    const storedValue = await Promise.race([
+      ownerVariables.getIVXOwnerVariableRuntimeValue(name),
+      new Promise<null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), 5000);
+        timer.unref?.();
+      }),
+    ]);
     if (storedValue) {
       console.log('[IVXSeniorDeveloperRuntime] WARNING: process.env.' + name + ' is empty — falling back to encrypted owner-variables store. If this token is stale, GitHub API calls will return 401. Update the Render env var to fix.', {
         name,
         source: 'owner_variables_store',
       });
     }
-    return storedValue;
+    return (storedValue || '').trim();
   } catch (error) {
     console.log('[IVXSeniorDeveloperRuntime] Owner Variables bridge unavailable:', {
       name,
