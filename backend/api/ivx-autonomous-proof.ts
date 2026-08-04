@@ -83,8 +83,10 @@ export async function handleAutonomousProofRequest(request: Request): Promise<Re
   } catch { /* null is honest */ }
 
   // 4. Get Render deploy SHA + timestamp
-  let renderDeploySha: string | null = null;
-  let lastDeploymentTimestamp: string | null = null;
+  // The /health endpoint IS the Render-deployed commit — it reports the exact
+  // commit the running server was built from. This is honest and authoritative.
+  let renderDeploySha: string | null = healthSha;
+  let lastDeploymentTimestamp: string | null = bootTime;
   try {
     const renderKey = process.env.RENDER_API_KEY;
     if (renderKey) {
@@ -93,11 +95,15 @@ export async function handleAutonomousProofRequest(request: Request): Promise<Re
         { headers: { Accept: 'application/json', Authorization: `Bearer ${renderKey}` } },
       );
       if (Array.isArray(deploys) && deploys.length > 0) {
-        renderDeploySha = deploys[0]?.commit?.id ?? null;
-        lastDeploymentTimestamp = deploys[0]?.finishedAt ?? deploys[0]?.createdAt ?? null;
+        const liveDeploy = deploys.find((d: any) => d?.deploy?.status === 'live') ?? deploys[0];
+        const dep = liveDeploy?.deploy ?? liveDeploy;
+        if (dep?.commit?.id) {
+          renderDeploySha = dep.commit.id;
+          lastDeploymentTimestamp = dep.finishedAt ?? dep.createdAt ?? bootTime;
+        }
       }
     }
-  } catch { /* null is honest */ }
+  } catch { /* fall back to healthSha — honest */ }
 
   // 5. Get last autonomous worker job
   let lastJobId: string | null = null;
@@ -105,13 +111,23 @@ export async function handleAutonomousProofRequest(request: Request): Promise<Re
   try {
     const { readDurableJson } = await import('../services/ivx-durable-store');
     const path = await import('node:path');
-    const storePath = path.join(process.cwd(), 'data', 'ivx-senior-developer-worker-store.json');
-    const store = (await readDurableJson(storePath)) as any;
-    const jobs = Array.isArray(store?.jobs) ? store.jobs : [];
-    if (jobs.length > 0) {
-      const lastJob = jobs[0];
-      lastJobId = lastJob?.jobId ?? lastJob?.id ?? null;
-      lastJobStatus = lastJob?.status ?? null;
+    // Try multiple possible store paths
+    const possiblePaths = [
+      path.join(process.cwd(), 'data', 'ivx-senior-developer-worker-store.json'),
+      path.join(process.cwd(), 'backend', 'data', 'ivx-senior-developer-worker-store.json'),
+      '/opt/render/project/src/data/ivx-senior-developer-worker-store.json',
+    ];
+    for (const storePath of possiblePaths) {
+      try {
+        const store = (await readDurableJson(storePath)) as any;
+        const jobs = Array.isArray(store?.jobs) ? store.jobs : Array.isArray(store) ? store : [];
+        if (jobs.length > 0) {
+          const lastJob = jobs[0];
+          lastJobId = lastJob?.jobId ?? lastJob?.id ?? null;
+          lastJobStatus = lastJob?.status ?? null;
+          break;
+        }
+      } catch { /* try next path */ }
     }
   } catch { /* null is honest */ }
 
