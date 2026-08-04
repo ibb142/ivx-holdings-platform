@@ -1,9 +1,23 @@
 name: "IVX IA + Aura — end-to-end finish, free APK, iOS later"
 overview: "User clarified the app is Expo Go (not Swift). Finish IVX IA and Aura end-to-end, rebuild the Android APK, make it free for testing, and mark iOS for a later version."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-04T01:35:00.000Z
+updatedAt: 2026-08-04T10:00:00.000Z
 ---
-# 2026-08-04 Instant Loading Deploy + QA APK (Current Session)
+# 2026-08-04 Honest QA Audit + Deploy Catch-Up (Current Session)
+
+> **STATUS: IN PROGRESS — LOCAL QA GATES GREEN, FRESH APK v1.9.5 BUILT, RENDER DEPLOYMENT STALE DUE TO EXPIRED GITHUB TOKEN (OWNER CONTROL).**
+>
+> **2026-08-04T10:00Z CURRENT REALITY:**
+> - **GitHub main:** `1fc15f3640001dc697d97769ed1c6d6c1703b620` (verified via `git ls-remote`)
+> - **Render /health:** `6f28a2de08b2794ed7d5a94bf3414e6ccccc728f` — **STALE MISMATCH**
+> - **Local QA gates:** Backend tests 2,551 pass / 0 fail / 29 skip; TypeScript 0 errors; APK release consistency v1.9.5 PASS.
+> - **Fresh APK:** Built with disposable QA keystore (debug keystore generated at `/home/user/.android/debug.keystore`, release keystore at `/tmp/ivx-release.keystore`), version 1.9.5, versionCode 93, 84,066,687 bytes, SHA-256 `481e89d42f3147b75a22c562639a000730301731f899a6eb0d572777b1135cd9`.
+> - **APK download:** `https://tmpfiles.org/whw6I47Q9Vno/app-release.apk` (page); direct download `https://tmpfiles.org/dl/1785837913.8eea4ffe7c376d30/whw6I47Q9Vno/app-release.apk` (verified: 200 OK, content-type `application/vnd.android.package-archive`, download SHA-256 matches original).
+> - **Render blocker:** Production `seniorDeveloperRuntime` reports `github.canReadRepo: false`, `github.canPush: false`, with `HTTP 401 Bad credentials` on the Render-side `GITHUB_TOKEN`. This prevents the IVX autonomous worker from committing and appears to block Render from pulling the latest GitHub commit.
+> - **Honest correction:** Per the 2026-07-31 plan section, IVX IA is NOT the same as Rork or ChatGPT. I will not claim senior-developer equivalence again without a completed, verified task.
+> - **Owner action required:** Update the `GITHUB_TOKEN` environment variable in the Render dashboard and trigger a manual redeploy so production matches GitHub HEAD `1fc15f36`.
+
+# 2026-08-04 Instant Loading Deploy + QA APK (Previous Session)
 
 > **STATUS: ✅ FULLY RESOLVED — INSTANT LOADING CHANGES MERGED TO CANONICAL GITHUB VIA PR #19, RENDER AUTO-DEPLOYED, SHA PARITY ACHIEVED, VIDEO CONTENT REGENERATED AND RESTORED TO S3.**
 >
