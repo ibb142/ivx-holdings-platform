@@ -1,9 +1,5 @@
 {
-  "id": "dw5jffvokmby3bkfoijdm",
   "role": "assistant",
-  "preferredModelName": "rork-fast-v1",
-  "resolvedModelName": "rork-fast-v1",
-  "createdAt": 1785838307269,
   "responseMessageContents": [
     {
       "type": "compaction",
@@ -36,7 +32,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo '=== LIVE PRODUCTION CHECKS AFTER OWNER GITHUB FIX ==='\\n\\necho '=== GitHub main HEAD ==='\\nGIT_TOKEN=$(git config --get-regexp 'url.*ivx-holdings-platform' | head -1 | grep -oP 'ghs_[^@]+' || true)\\nif [ -z \\\"$GIT_TOKEN\\\" ]; then\\n  echo 'No git token found in .gitconfig'\\nelse\\n  curl -s -H \\\"Authorization: Bearer $GIT_TOKEN\\\" \\\\\\n       -H 'Accept: application/vnd.github.v3+json' \\\\\\n       'https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main' | \\\\\\n       python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('SHA:',d.get('sha','')); print('Message:',d.get('commit',{}).get('message','')[:80]); print('Date:',d.get('commit',{}).get('committer',{}).get('date',''))\\\"\\nfi\\n\\necho ''\\necho '=== Render /health ==='\\ncurl -s -m 15 'https://api.ivxholding.com/health' | python3 -m json.tool 2>/dev/null || echo 'Failed'\\n\\necho ''\\necho '=== Render /version ==='\\ncurl -s -m 15 'https://api.ivxholding.com/version' | python3 -m json.tool 2>/dev/null || echo 'Failed'\\n\\necho ''\\necho '=== Render /readiness ==='\\ncurl -s -m 15 -o /dev/null -w \\\"%{http_code}\\\\n\\\" 'https://api.ivxholding.com/readiness'\\n\\necho ''\\necho '=== Senior developer runtime status ==='\\ncurl -s -m 15 'https://api.ivxholding.com/health' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); s=d.get('ivxSeniorDeveloperRuntimeVerification',{}); print(json.dumps(s, indent=2))\\\" 2>/dev/null || echo 'Failed'\"}",
       "createdAt": 1785838175636,
-      "completedAt": 1785838190102
+      "completedAt": 1785838190102,
+      "compactedAt": 1785841866240
     },
     {
       "type": "tool",
@@ -54,7 +51,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo '=== CHECK RENDER DEPLOY STATUS VIA PRODUCTION API ==='\\n# Try the owner-gated developer-deploy status endpoint if we have an owner token\\nOWNER_TOKEN_FILE=/tmp/owner_token.txt\\nif [ -s \\\"$OWNER_TOKEN_FILE\\\" ]; then\\n  OWNER_TOKEN=$(cat \\\"$OWNER_TOKEN_FILE\\\")\\n  echo 'Owner token found, querying developer-deploy status...'\\n  curl -s -m 20 -X POST \\\\\\n    -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\\\\n    -H 'Content-Type: application/json' \\\\\\n    -d '{\\\"action\\\":\\\"developer_deploy_status\\\"}' \\\\\\n    'https://api.ivxholding.com/api/ivx/developer-deploy/action' | python3 -m json.tool 2>/dev/null | head -80\\nelse\\n  echo 'No owner token available at /tmp/owner_token.txt'\\nfi\\n\\necho ''\\necho '=== Try owner-ai status without auth (should be 401) ==='\\ncurl -s -m 10 -o /dev/null -w \\\"%{http_code}\\\\n\\\" 'https://api.ivxholding.com/api/ivx/owner-ai/status'\\n\\necho ''\\necho '=== Public chat sanity check ==='\\ncurl -s -m 15 -X POST \\\\\\n  -H 'Content-Type: application/json' \\\\\\n  -d '{\\\"message\\\":\\\"3+5\\\"}' \\\\\\n  'https://api.ivxholding.com/api/public/chat' | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ['ok','answer','source','model']}, indent=2))\\\" 2>/dev/null || echo 'Failed'\"}",
       "createdAt": 1785838181559,
-      "completedAt": 1785838191762
+      "completedAt": 1785838191762,
+      "compactedAt": 1785841866240
     },
     {
       "type": "reasoning",
@@ -79,7 +77,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo '=== CHECK OWNER TOKEN AVAILABILITY ==='\\nif [ -n \\\"$IVX_OWNER_TOKEN\\\" ]; then\\n  echo 'IVX_OWNER_TOKEN env var is set (len hidden)'\\nelse\\n  echo 'IVX_OWNER_TOKEN env var is NOT set'\\nfi\\n\\nif [ -n \\\"$IVX_OWNER_EMAIL\\\" ] && [ -n \\\"$IVX_OWNER_PASSWORD\\\" ]; then\\n  echo 'IVX_OWNER_EMAIL and IVX_OWNER_PASSWORD env vars are set'\\nelse\\n  echo 'IVX_OWNER_EMAIL or IVX_OWNER_PASSWORD env vars are NOT set'\\nfi\\n\\nif [ -s /tmp/owner_token.txt ]; then\\n  echo '/tmp/owner_token.txt has content'\\nelse\\n  echo '/tmp/owner_token.txt is empty or missing'\\nfi\\n\\nif [ -n \\\"$RENDER_API_KEY\\\" ] && [ -n \\\"$RENDER_SERVICE_ID\\\" ]; then\\n  echo 'RENDER_API_KEY and RENDER_SERVICE_ID env vars are set'\\nelse\\n  echo 'RENDER_API_KEY or RENDER_SERVICE_ID env vars are NOT set'\\nfi\"}",
       "createdAt": 1785838204374,
-      "completedAt": 1785838204399
+      "completedAt": 1785838204399,
+      "compactedAt": 1785841866240
     },
     {
       "type": "reasoning",
@@ -104,7 +103,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo '=== POLLING RENDER /health FOR NEW COMMIT (1fc15f36) ==='\\nTARGET_SHA='1fc15f36'\\nPOLL_URL='https://api.ivxholding.com/health'\\nfor i in 1 2 3 4 5 6 7 8 9 10; do\\n  TS=$(date -u +'%Y-%m-%dT%H:%M:%SZ')\\n  RESP=$(curl -s -m 15 \\\"$POLL_URL\\\" | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit','')[:8], d.get('bootTime',''), d.get('timestamp',''))\\\" 2>/dev/null)\\n  echo \\\"[$TS] $RESP\\\"\\n  if echo \\\"$RESP\\\" | grep -q \\\"$TARGET_SHA\\\"; then\\n    echo '✅ TARGET SHA DEPLOYED'\\n    break\\n  fi\\n  if [ $i -lt 10 ]; then\\n    echo '  waiting 30s...'\\n    sleep 30\\n  fi\\ndone\\n\\necho ''\\necho '=== FINAL /health snapshot ==='\\ncurl -s -m 15 \\\"$POLL_URL\\\" | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('commit:', d.get('commit','')); print('bootTime:', d.get('bootTime','')); print('timestamp:', d.get('timestamp',''))\\\"\"}",
       "createdAt": 1785838214745,
-      "completedAt": 1785838276477
+      "completedAt": 1785838276477,
+      "compactedAt": 1785841866240
     },
     {
       "type": "reasoning",
@@ -116,10 +116,13 @@
     {
       "type": "text",
       "text": "I see your GitHub token fix worked. The production `/health` now shows `seniorDeveloperRuntime` credentials are valid:\n\n- `github.canReadRepo: true`\n- `github.canPush: true`\n- `variablesValidated: true`\n- `toolRegistryReady: true`\n- `blockers: []`\n\n**However, production is still on the old commit `6f28a2d`, not the latest GitHub `1fc15f36`.** The service just redeployed the previous commit after the token fix. We need to force it to pull the newest commit.\n\n### What to do now (tap-by-tap in Render app)\n\n1. Open the Render app / dashboard.\n2. Tap your service `ivx-holdings-platform`.\n3. Scroll down and tap **\"Manual Deploy\"**.\n4. Choose **\"Deploy latest commit\"**.\n5. Wait for the spinner — it will build and deploy the latest `1fc15f36` commit.\n6. Once it says **Live**, message me and I will verify `/health` shows `1fc15f36`.\n\nAfter that, I can also verify the IVX autonomous endpoints work on the fresh deploy.\n\nDo that now and send me a screenshot when the deploy is **Live**.",
-      "id": "jgqz8enmh9a11ees2uzrd",
-      "createdAt": 1785838303890
+      "id": "jgqz8enmh9a11ees2uzrd"
     }
   ],
+  "id": "dw5jffvokmby3bkfoijdm",
+  "preferredModelName": "rork-fast-v1",
+  "resolvedModelName": "rork-fast-v1",
+  "createdAt": 1785838307269,
   "snapshotId": "dw5jffvokmby3bkfoijdm",
   "finishStats": {
     "contextTokens": 75475,

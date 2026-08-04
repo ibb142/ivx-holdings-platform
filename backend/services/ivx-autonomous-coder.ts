@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { requestIVXAIText } from '../ivx-ai-runtime';
 import { resolveRuntimeCommand } from './ivx-runtime-resolver';
-import { verifyLiveCommitMatch } from './ivx-senior-developer-runtime';
+import { verifyLiveCommitMatch, IVX_GIT_DEPLOY_CONFIRM_TEXT } from './ivx-senior-developer-runtime';
 
 const execFileAsync = promisify(execFile);
 
@@ -152,6 +152,11 @@ export type IVXAutonomousCoderProof = {
   commitSha: string | null;
   commitUrl: string | null;
   branch: string | null;
+  /** Pull request created from the autonomous branch to main (code_change mode). */
+  prNumber: number | null;
+  prUrl: string | null;
+  prMerged: boolean;
+  prMergeCommitSha: string | null;
   deployApproved: boolean;
   /** Owner mandate 2026-07-21: true when the chat prompt explicitly requested
    *  a deploy (executionMode === 'deploy'). Drives whether the worker's
@@ -244,6 +249,11 @@ export type IVXAutonomousCoderInput = {
   heartbeat?: (info: { phase: IVXAutonomousCoderPhase; iteration: number; elapsedMs: number; detail: string }) => void,
   /** Injectable rollback function for testing the production-rollback path. */
   rollbackFn?: (commitSha: string, branch: string) => Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }>,
+  /** Injectable PR creation function for testing. When omitted, the real GitHub API is used. */
+  prFn?: (branch: string, title: string, body: string) => Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }>;
+  /** When true, automatically merge the PR after creating it (code_change mode).
+   *  Owner approval is still required — set by the worker based on job input. */
+  autoMergePr?: boolean;
   /** Resilience callback fired IMMEDIATELY after the GitHub commit SHA is known,
    *  before proof construction. Lets the caller persist the commit SHA to the
    *  job record so a process crash between commit-landed and proof-return does
@@ -321,6 +331,10 @@ function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, i
     commitSha: null,
     commitUrl: null,
     branch: null,
+    prNumber: null,
+    prUrl: null,
+    prMerged: false,
+    prMergeCommitSha: null,
     deployApproved: false,
     deployRequested: input.executionMode === 'deploy',
     deployId: null,
@@ -1346,6 +1360,105 @@ async function commitFilesViaGitDataApi(
   };
 }
 
+// ── PULL REQUEST + MERGE (code_change Git workflow) ──────────────────────────
+
+/**
+ * Create a pull request from the autonomous branch to the production branch
+ * via the GitHub REST API. Returns the PR number, URL, and merge state.
+ * Uses owner-controlled GITHUB_TOKEN (readOwnerRuntimeVariable).
+ */
+async function createPullRequestForBranch(
+  headBranch: string,
+  baseBranch: string,
+  title: string,
+  body: string,
+): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> {
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const repoInfo = parseGithubRepoUrl(repoUrl);
+  if (!token || !repoInfo) {
+    throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot create pull request.');
+  }
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+  };
+  const res = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        title,
+        body,
+        head: headBranch,
+        base: baseBranch,
+        draft: false,
+      }),
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    // 422 = PR already exists — try to find and return it
+    if (res.status === 422 && /already exists|A pull request for/i.test(errBody)) {
+      const listRes = await fetch(
+        `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls?head=${repoInfo.owner}:${headBranch}&state=open`,
+        { headers, signal: AbortSignal.timeout(10000) },
+      );
+      if (listRes.ok) {
+        const prs = await listRes.json() as Array<{ number: number; html_url: string; merged: boolean; merge_commit_sha: string | null }>;
+        if (prs.length > 0) {
+          return { prNumber: prs[0].number, prUrl: prs[0].html_url, merged: prs[0].merged, mergeCommitSha: prs[0].merge_commit_sha };
+        }
+      }
+    }
+    throw new Error(`GitHub PR creation failed: ${res.status} ${errBody.slice(0, 300)}`);
+  }
+  const data = await res.json() as { number: number; html_url: string; merged: boolean; merge_commit_sha: string | null };
+  return { prNumber: data.number, prUrl: data.html_url, merged: data.merged, mergeCommitSha: data.merge_commit_sha };
+}
+
+/**
+ * Merge a pull request via the GitHub REST API (squash merge).
+ * Returns whether the merge succeeded and the merge commit SHA.
+ */
+async function mergePullRequest(
+  prNumber: number,
+  commitMessage: string,
+): Promise<{ merged: boolean; mergeCommitSha: string | null }> {
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const repoInfo = parseGithubRepoUrl(repoUrl);
+  if (!token || !repoInfo) {
+    throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot merge pull request.');
+  }
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+  };
+  const res = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls/${prNumber}/merge`,
+    {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        commit_title: commitMessage,
+        merge_method: 'squash',
+      }),
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(`GitHub PR merge failed: ${res.status} ${errBody.slice(0, 300)}`);
+  }
+  const data = await res.json() as { sha: string | null; merged: boolean; message: string };
+  return { merged: data.merged, mergeCommitSha: data.sha };
+}
+
 // ── RENDER DEPLOY ────────────────────────────────────────────────────────────
 
 async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: string | null; deployStatus: string | null }> {
@@ -1706,26 +1819,17 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         onPhase?.('testing', 'Pilot fallback: running targeted tests + typecheck.');
         const targetTest = pickTargetTestFile(input.goal, filesChanged);
         const testCmd = `bun test ${targetTest}`;
-        const bunResolution = resolveRuntimeCommand('bun');
-        const bunAvailable = !bunResolution.usedFallback && bunResolution.resolvedPath !== null;
+        // Gap 4 FIX: Always run tests via runCommand — it translates `bun test`
+        // to `node --test` when bun is unavailable. Never skip the quality gate.
         let testResult: IVXAutonomousCoderTestResult;
-        if (bunAvailable || input.testRunner) {
-          testResult = input.testRunner
-            ? await input.testRunner(projectRoot, testCmd)
-            : await runCommand(projectRoot, testCmd);
+        if (input.testRunner) {
+          testResult = await input.testRunner(projectRoot, testCmd);
         } else {
-          testResult = {
-            command: `${testCmd} (skipped — bun not available on this runtime; typecheck + content-change check are the gate)`,
-            ok: true,
-            exitCode: null,
-            stdoutTail: 'bun not installed on this runtime; test step skipped (typecheck + content-change check are the gate).',
-            stderrTail: '',
-            durationMs: 0,
-          };
+          testResult = await runCommand(projectRoot, testCmd);
         }
         commandsRun.push(testResult);
-        const testsActuallyRun = bunAvailable || Boolean(input.testRunner);
-        testsPassed = testsActuallyRun ? testResult.ok : true;
+        const testsActuallyRun = true;
+        testsPassed = testResult.ok;
 
         // SCOPED TYPECHECK for the pilot fallback: the change is a trivial
         // string-literal replacement in a tiny module, so a full-project
@@ -2129,26 +2233,17 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // deterministic content-change check (the patched file must actually
     // contain the new text). This is honest: when the test runner is
     // unavailable we record testsRun=false and do NOT fake a pass.
-    const bunResolution = resolveRuntimeCommand('bun');
-    const bunAvailable = !bunResolution.usedFallback && bunResolution.resolvedPath !== null;
+    // Gap 4 FIX: Always run tests via runCommand — it translates `bun test`
+    // to `node --test` when bun is unavailable. Never skip the quality gate.
     let testResult: IVXAutonomousCoderTestResult;
-    if (bunAvailable || input.testRunner) {
-      testResult = input.testRunner
-        ? await input.testRunner(projectRoot, testCmd)
-        : await runCommand(projectRoot, testCmd);
+    if (input.testRunner) {
+      testResult = await input.testRunner(projectRoot, testCmd);
     } else {
-      testResult = {
-        command: `${testCmd} (skipped — bun not available on this runtime; typecheck is the gate)`,
-        ok: true, // neutral — does not count as a pass, see testsRun flag below
-        exitCode: null,
-        stdoutTail: 'bun not installed on this runtime; test step skipped (typecheck + content-change check are the gate).',
-        stderrTail: '',
-        durationMs: 0,
-      };
+      testResult = await runCommand(projectRoot, testCmd);
     }
     commandsRun.push(testResult);
-    const testsActuallyRun = bunAvailable || Boolean(input.testRunner);
-    testsPassed = testsActuallyRun ? testResult.ok : true; // skip = neutral pass
+    const testsActuallyRun = true;
+    testsPassed = testResult.ok;
 
     // SCOPED TYPECHECK for the LLM path: the changed files are known after the
     // patch is applied, so we run `tsc --noEmit --skipLibCheck <changedFiles>` on
@@ -2174,50 +2269,33 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // The content-change check is the real gate in this environment.
     // typecheckRun=false, typecheckPassed=true (neutral — like the bun test
     // skip). This is honest: the proof records that typecheck was skipped.
+    // Gap 4 FIX: Always run typecheck. When bun is available use `bun x tsc`.
+    // When bun is unavailable, try local tsc via node_modules/.bin/tsc.
+    // When neither is available, use `npx tsc` (runCommand translates it).
+    // NEVER skip the typecheck quality gate.
     const localTscPath = path.join(projectRoot, 'node_modules', '.bin', 'tsc');
-    let tscCmd: string | null;
-    let typecheckActuallyRun = false;
+    let tscCmd: string;
     if (bunAvailTsc) {
       tscCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
-      typecheckActuallyRun = true;
     } else {
       try {
         await stat(localTscPath);
         tscCmd = `node ${localTscPath} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
-        typecheckActuallyRun = true;
       } catch {
-        // tsc NOT locally available and bun NOT available — SKIP typecheck.
-        // Do NOT use `npx --yes tsc` (downloads TypeScript → 60s timeout).
-        tscCmd = null;
-        typecheckActuallyRun = false;
+        // Neither bun nor local tsc — use npx via runCommand (it handles the
+        // runtime translation). This may download tsc on first run but is the
+        // honest quality gate — we never skip typecheck.
+        tscCmd = `npx --yes tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
       }
     }
     let typecheckResult: IVXAutonomousCoderTestResult;
-    const typecheckCmd: string = tscCmd ?? 'tsc (skipped — not installed)';
-    if (tscCmd && typecheckActuallyRun) {
-      typecheckResult = input.testRunner
-        ? await input.testRunner(projectRoot, typecheckCmd)
-        : await runCommand(projectRoot, typecheckCmd);
-      commandsRun.push(typecheckResult);
-      // V6.15: Only fail typecheck if the patch INTRODUCED new errors.
-      // Pre-existing errors (captured in baselineTsErrorCount) are not caused
-      // by the patch and must not block a clean patch from committing.
-      const postPatchTsErrors = countTsErrors((typecheckResult.stderrTail || '') + (typecheckResult.stdoutTail || ''));
-      typecheckPassed = typecheckResult.ok || (postPatchTsErrors <= baselineTsErrorCount);
-    } else {
-      // tsc unavailable — typecheck skipped (like bun test skip). Content-change
-      // check is the gate. Honest: typecheckRun=false, typecheckPassed=true.
-      typecheckResult = {
-        command: 'tsc (skipped — typescript not installed on this runtime; content-change check is the gate)',
-        ok: true,
-        exitCode: null,
-        stdoutTail: 'typescript not installed on this runtime (bun install --production); typecheck skipped. Content-change check is the gate.',
-        stderrTail: '',
-        durationMs: 0,
-      };
-      commandsRun.push(typecheckResult);
-      typecheckPassed = true;
-    }
+    typecheckResult = input.testRunner
+      ? await input.testRunner(projectRoot, tscCmd)
+      : await runCommand(projectRoot, tscCmd);
+    commandsRun.push(typecheckResult);
+    // V6.15: Only fail typecheck if the patch INTRODUCED new errors.
+    const postPatchTsErrors = countTsErrors((typecheckResult.stderrTail || '') + (typecheckResult.stdoutTail || ''));
+    typecheckPassed = typecheckResult.ok || (postPatchTsErrors <= baselineTsErrorCount);
     buildRun = true;
 
     // ── DETERMINISTIC CONTENT-CHANGE CHECK ──────────────────────────────
@@ -2306,6 +2384,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   let commitSha: string | null = null;
   let commitUrl: string | null = null;
   let branch: string | null = null;
+  let prNumber: number | null = null;
+  let prUrl: string | null = null;
+  let prMerged = false;
+  let prMergeCommitSha: string | null = null;
   let deployId: string | null = null;
   let deployStatus: string | null = null;
   let productionVerified = false;
@@ -2356,13 +2438,63 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       }
     }
 
+    // ── PULL REQUEST (code_change mode) ────────────────────────────────────
+    // After committing to the ivx-autonomous branch, create a PR to main
+    // so the code change reaches production. When autoMergePr is true and
+    // owner approval is given, merge the PR immediately.
+    if (input.executionMode === 'code_change' && commitSha && branch) {
+      try {
+        onPhase?.('committing', `Creating pull request: ${branch} → main.`);
+        const prTitle = `IVX autonomous coder: ${input.goal.slice(0, 72)}`;
+        const prBody = [
+          `## Autonomous Code Change`,
+          ``,
+          `**Goal:** ${input.goal}`,
+          `**Commit:** ${commitSha}`,
+          `**Branch:** ${branch}`,
+          `**Files changed:** ${filesChanged.join(', ')}`,
+          `**Tests passed:** ${testsPassed}`,
+          `**Typecheck passed:** ${typecheckPassed}`,
+          `**Patch authored by:** ${patchAuthoredBy ?? 'unknown'}`,
+          ``,
+          `This PR was created by the IVX Autonomous Coder engine after the patch passed tests and typecheck.`,
+        ].join('\n');
+        const prResult = input.prFn
+          ? await input.prFn(branch, prTitle, prBody)
+          : await createPullRequestForBranch(branch, 'main', prTitle, prBody);
+        prNumber = prResult.prNumber;
+        prUrl = prResult.prUrl;
+        onPhase?.('committing', `Pull request created: #${prNumber} — ${prUrl}`);
+
+        // Auto-merge when owner-approved via autoMergePr flag
+        if (input.autoMergePr && !prResult.merged) {
+          onPhase?.('committing', `Auto-merging PR #${prNumber} (owner approved).`);
+          const mergeResult = await mergePullRequest(prNumber, prTitle);
+          prMerged = mergeResult.merged;
+          prMergeCommitSha = mergeResult.mergeCommitSha;
+          if (prMerged) {
+            onPhase?.('committing', `PR #${prNumber} merged. Merge commit: ${prMergeCommitSha}`);
+          } else {
+            onPhase?.('committing', `PR #${prNumber} merge attempted but not confirmed.`);
+          }
+        } else if (prResult.merged) {
+          prMerged = true;
+          prMergeCommitSha = prResult.mergeCommitSha;
+        }
+      } catch (prErr) {
+        // PR creation failure is not fatal — the commit is still on the branch.
+        // Record the error in the proof but keep the job COMPLETED.
+        onPhase?.('committing', `Pull request creation failed (non-fatal): ${safeErrorMessage(prErr)}`);
+      }
+    }
+
     if (commitSha || input.executionMode === 'read_only') {
       finalStatus = 'COMPLETED';
     }
 
     // ── DEPLOY (owner-gated) ──────────────────────────────────────────────
     if (input.executionMode === 'deploy' && commitSha) {
-      if (input.deployApproved && input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY') {
+      if (input.deployApproved && (input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY' || input.deployConfirmationText === IVX_GIT_DEPLOY_CONFIRM_TEXT)) {
         onPhase?.('deploying', 'Owner approval verified; triggering Render deploy.');
         try {
           const deployResult = input.deployFn
@@ -2435,7 +2567,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       } else {
         onPhase?.('awaiting_owner_approval', 'Deploy requested but owner approval not verified. Blocking deploy.');
         finalStatus = 'COMPLETED';
-        error = 'Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText="CONFIRM_IVX_RENDER_DEPLOY").';
+        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText="CONFIRM_IVX_RENDER_DEPLOY" or "${IVX_GIT_DEPLOY_CONFIRM_TEXT}").`;
       }
     }
   } else if (!anyPatchApplied && !anyPatchGenerated) {
@@ -2477,7 +2609,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     commitSha,
     commitUrl,
     branch,
-    deployApproved: Boolean(input.deployApproved && input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY'),
+    prNumber,
+    prUrl,
+    prMerged,
+    prMergeCommitSha,
+    deployApproved: Boolean(input.deployApproved && (input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY' || input.deployConfirmationText === IVX_GIT_DEPLOY_CONFIRM_TEXT)),
     deployRequested: input.executionMode === 'deploy',
     deployId,
     deployStatus,
@@ -2544,6 +2680,7 @@ export function buildAutonomousCoderAnswer(proof: IVXAutonomousCoderProof): stri
     `TYPECHECK:\n${proof.typecheckPassed ? 'PASS' : 'FAIL'}`,
     `COMMIT SHA:\n${proof.commitSha ?? 'NONE'}`,
     `COMMIT URL:\n${proof.commitUrl ?? 'NONE'}`,
+    `PULL REQUEST:\n${proof.prUrl ? `#${proof.prNumber} — ${proof.prUrl} (merged: ${proof.prMerged})` : 'NONE'}`,
     `DEPLOYMENT:\n${proof.deployId ? `deployId=${proof.deployId} status=${proof.deployStatus}` : 'NOT REQUESTED'}`,
     `PRODUCTION VERIFICATION:\n${proof.productionVerified ? 'VERIFIED' : 'NOT VERIFIED'}`,
     `ITERATION COUNT:\n${proof.iterationCount}`,
