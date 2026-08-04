@@ -302,7 +302,7 @@ describe('Mixed Feed Card Routing', () => {
     it('InvestorFirstFeed has loading state', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
       expect(content).toContain('isLoading');
-      expect(content).toContain('ActivityIndicator');
+      expect(content).toContain('ShimmerIndicator');
     });
 
     it('InvestorFirstFeed has error boundary', () => {
