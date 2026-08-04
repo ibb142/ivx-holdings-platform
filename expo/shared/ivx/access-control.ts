@@ -605,7 +605,10 @@ export async function resolveIVXAuthenticatedRequest(
       client.auth.getUser(accessToken),
       new Promise<never>((_resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('IVX auth guard failed: Supabase session lookup timed out.')), 4000);
-        timer.unref?.();
+        // timer may be a NodeJS.Timeout or a number depending on the platform
+        if (typeof timer === 'object' && timer && 'unref' in timer) {
+          (timer as { unref?: () => void }).unref?.();
+        }
       }),
     ]);
   } catch (timeoutError) {

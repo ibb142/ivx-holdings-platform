@@ -386,7 +386,7 @@ export type ScheduledJobResult = {
 /** Optional injectable dependencies so the runner is unit-testable without real scans. */
 export type SelfAuditDeps = {
   runDailySelfAudit?: () => Promise<DailySelfAuditRun>;
-  planSafeAutoImprovements?: (opts: { audit: DailySelfAuditRun }) => Promise<{ safeProposals: unknown[] }>;
+  planSafeAutoImprovements?: (opts: { audit: DailySelfAuditRun }) => Promise<{ safeProposals: Array<{ id: string; category: string; severity: string; recommendedAction: string; evidence: Array<{ relativePath?: string }> }> }>;
 };
 
 export type DriftDeps = {
@@ -436,12 +436,13 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
           validationMode: 'focused',
           systemMode: true,
           ownerApprovedAction: {
-            type: 'autonomous_self_heal',
-            source: 'daily_self_audit',
-            auditId: audit.auditId,
-            proposalId: proposal.id,
-            category: proposal.category,
-            severity: proposal.severity,
+            proposedPlan: `Fix ${proposal.category}: ${proposal.recommendedAction}`,
+            filesAffected: proposal.evidence[0]?.relativePath ? [proposal.evidence[0].relativePath] : [],
+            riskLevel: 'low' as const,
+            rollbackOption: 'Revert the autonomous fix commit',
+            rollbackAvailable: true,
+            auditLog: [`autonomous_self_heal from daily_self_audit ${audit.auditId}`, `proposalId: ${proposal.id}`, `category: ${proposal.category}`, `severity: ${proposal.severity}`],
+            secretValuesReturned: false as const,
           },
           ownerId: 'autonomous-scheduler',
           executionMode: 'code_change',

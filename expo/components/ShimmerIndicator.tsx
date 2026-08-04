@@ -12,7 +12,7 @@ import { View, Animated, StyleSheet, Platform } from 'react-native';
 import Colors from '@/constants/colors';
 
 type ShimmerIndicatorProps = {
-  size?: 'small' | 'large';
+  size?: 'small' | 'large' | number;
   color?: string;
   style?: any;
   animating?: boolean;
@@ -29,7 +29,7 @@ export function ShimmerIndicator({
   animating = true}: ShimmerIndicatorProps) {
   const scale = useRef(new Animated.Value(0.85)).current;
   const opacity = useRef(new Animated.Value(0.4)).current;
-  const dotSize = SIZE_MAP[size];
+  const dotSize = typeof size === 'number' ? size : SIZE_MAP[size];
 
   useEffect(() => {
     if (!animating) return;
