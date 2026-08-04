@@ -55,7 +55,7 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
   if (detectDefinitionQuestion(compact)) return 'definition';
 
   // Greetings
-  const greetings = ['hello', 'hi ', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening', 'buenos dias', 'buenas tardes'];
+  const greetings = ['hello', 'hi ', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening', 'buenos dias', 'buenas tardes', 'good night', 'buenas noches'];
   if (greetings.some((g) => compact === g.trim() || compact.startsWith(g) || compact === g.trim())) return 'greeting';
 
   // Thanks
