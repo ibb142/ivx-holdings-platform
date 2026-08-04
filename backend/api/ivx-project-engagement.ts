@@ -22,7 +22,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
-  try { return await req.json() as Record<string, unknown>; } catch { return {}; }
+  try { return await req.json() as Record<string, unknown>; } catch (err) { console.error('[ivx-project-engagement] Swallowed error caught:', err); return {}; }
 }
 
 function safeStr(v: unknown): string { return typeof v === 'string' ? v.trim() : ''; }
