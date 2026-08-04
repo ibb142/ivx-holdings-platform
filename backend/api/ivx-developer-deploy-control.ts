@@ -1334,7 +1334,7 @@ async function runGithubMergePullRequest(input: Record<string, unknown>): Promis
   const baseUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`;
 
   // Guard: never merge unless checks pass and PR is mergeable, unless explicitly forced by owner.
-  const status = await runGithubPullRequestStatus({ ...input, number });
+  const status = await runGithubPullRequestStatus({ ...input, number: String(number) });
   const requireGreenChecks = !parseBoolean(input.allowFailedChecks);
   if (requireGreenChecks && status.readyToMerge !== true) {
     throw new Error(`Refusing to merge PR #${number}: status checks/mergeability not green (checks=${status.checksConclusion ?? 'unknown'}, mergeableState=${status.mergeableState ?? 'unknown'}). Pass allowFailedChecks=true only to override.`);
