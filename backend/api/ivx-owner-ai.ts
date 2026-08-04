@@ -8126,7 +8126,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           genMsgId = m.id;
           await safeUpdateConversationSummary(ownerContext.client, tables, conversation.id, generatorAnswer);
           await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
-        } catch (e) { console.log('[IVXOwnerAIBackend] generator msg persist failed:', e instanceof Error ? e.message : 'unknown'); }
+        } catch (err) { console.error('[ivx-owner-ai] Swallowed error caught:', err); }
       }
       await safeUpsertAIRequest(ownerContext.client, tables, { requestId, conversationId: conversation.id, userId: ownerContext.userId, prompt, responseText: generatorAnswer, responseMessageId: genMsgId, status: 'completed', model: 'ivx_app_generator' });
       logOwnerAuditRouting({ promptText: prompt, detectedIntent: 'development_action' as const, selectedRoute: 'ivx_app_generator', auditEndpointCalled: false, renderedFinalAnswer: generatorAnswer });
