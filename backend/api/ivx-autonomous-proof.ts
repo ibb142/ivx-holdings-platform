@@ -58,7 +58,7 @@ async function fetchJson(url: string, init?: RequestInit): Promise<any | null> {
 }
 
 export async function handleAutonomousProofRequest(request: Request): Promise<Response> {
-  await assertIVXOwnerOnly(request, 'autonomous-proof-diagnostics');
+  await assertIVXOwnerOnly(request);
 
   // 1. Get /health SHA + bootTime
   const health = await fetchJson('https://api.ivxholding.com/health');
@@ -111,18 +111,28 @@ export async function handleAutonomousProofRequest(request: Request): Promise<Re
   try {
     const { readDurableJson } = await import('../services/ivx-durable-store');
     const path = await import('node:path');
-    // Try multiple possible store paths
+    // The worker queue file is at logs/audit/senior-developer-worker/queue.json
+    // Try multiple possible paths relative to cwd and absolute Render paths
     const possiblePaths = [
+      path.join(process.cwd(), 'logs', 'audit', 'senior-developer-worker', 'queue.json'),
+      path.join(process.cwd(), 'backend', 'logs', 'audit', 'senior-developer-worker', 'queue.json'),
+      '/opt/render/project/src/logs/audit/senior-developer-worker/queue.json',
       path.join(process.cwd(), 'data', 'ivx-senior-developer-worker-store.json'),
       path.join(process.cwd(), 'backend', 'data', 'ivx-senior-developer-worker-store.json'),
       '/opt/render/project/src/data/ivx-senior-developer-worker-store.json',
     ];
     for (const storePath of possiblePaths) {
       try {
-        const store = (await readDurableJson(storePath)) as any;
+        const store = (await readDurableJson(storePath, { jobs: [] })) as any;
         const jobs = Array.isArray(store?.jobs) ? store.jobs : Array.isArray(store) ? store : [];
         if (jobs.length > 0) {
-          const lastJob = jobs[0];
+          // Find the most recent job by createdAt
+          const sorted = [...jobs].sort((a: any, b: any) => {
+            const aT = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bT = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bT - aT;
+          });
+          const lastJob = sorted[0];
           lastJobId = lastJob?.jobId ?? lastJob?.id ?? null;
           lastJobStatus = lastJob?.status ?? null;
           break;

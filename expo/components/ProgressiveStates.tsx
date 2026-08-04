@@ -149,6 +149,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600' as const},
+  footerSkeleton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
