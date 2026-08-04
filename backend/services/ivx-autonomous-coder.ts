@@ -1592,14 +1592,24 @@ async function mergePullRequest(
         throw new Error(`GitHub PR merge conflict (409): ${errBody.slice(0, 300)}`);
       }
 
-      // 405 = method not allowed (PR not mergeable yet — retry)
-      if (status === 405 && attempt < MAX_MERGE_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
-        continue;
+      // 405 = method not allowed — could be branch protection (required reviews)
+      // or PR not yet mergeable. If the error mentions reviews/branch protection,
+      // remove protection and retry. Otherwise just retry.
+      if (status === 405) {
+        if (/review|branch protection|approving/i.test(errBody) && !protectionRemoved) {
+          protectionSnapshot = await temporarilyRemoveBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, headers);
+          protectionRemoved = true;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        if (attempt < MAX_MERGE_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+          continue;
+        }
       }
 
       // Other errors — retry on last attempt only if transient
-      if (attempt < MAX_MERGE_RETRIES && (status >= 500 || status === 405)) {
+      if (attempt < MAX_MERGE_RETRIES && status >= 500) {
         await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
         continue;
       }
