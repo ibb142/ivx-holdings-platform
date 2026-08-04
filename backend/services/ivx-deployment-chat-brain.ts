@@ -64,7 +64,8 @@ async function fetchJson(url: string): Promise<{ ok: boolean; status: number; bo
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const text = await res.text();
     let body: unknown = text;
-    try { body = JSON.parse(text); } catch (err) { console.error('[deployment-chat-brain] JSON parse failed:', err instanceof Error ? err.message : String(err)); }
+    try { body = JSON.parse(text); } catch (err) {
+  console.error('[deployment-chat-brain] Error in fetchJson:', err instanceof Error ? err.message : String(err)); console.error('[deployment-chat-brain] JSON parse failed:', err instanceof Error ? err.message : String(err)); }
     return { ok: res.ok, status: res.status, body };
   } catch (err) {
     return { ok: false, status: 0, body: { error: err instanceof Error ? err.message : 'Network error' } };
@@ -263,7 +264,8 @@ async function fetchSupabaseTableCounts(): Promise<string> {
       });
       const data = await res.json() as unknown[];
       results.push(`${table}: ${Array.isArray(data) ? data.length : '?'} rows`);
-    } catch {
+    } catch (err) {
+      console.error(`[fetchSupabaseTableCounts] Error fetching table ${table}:`, err);
       results.push(`${table}: ERROR`);
     }
   }
