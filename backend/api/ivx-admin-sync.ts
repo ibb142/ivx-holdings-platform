@@ -102,7 +102,7 @@ function runSyncGithubScript(env: NodeJS.ProcessEnv, message: string, timeoutMs:
     let stdout = '';
     let stderr = '';
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; try { child.kill('SIGKILL'); } catch {} }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; try { child.kill('SIGKILL'); } catch (err) { console.error('[ivx-admin-sync] Failed to kill timed-out child process:', err); } }, timeoutMs);
     child.stdout.on('data', (chunk) => { stdout += String(chunk); if (stdout.length > 200_000) stdout = stdout.slice(-200_000); });
     child.stderr.on('data', (chunk) => { stderr += String(chunk); if (stderr.length > 50_000) stderr = stderr.slice(-50_000); });
     child.on('close', (code) => { clearTimeout(timer); resolve({ exitCode: code ?? -1, stdout, stderr, timedOut }); });
