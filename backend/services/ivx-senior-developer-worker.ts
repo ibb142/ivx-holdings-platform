@@ -274,6 +274,11 @@ export type IVXWorkerJobResult = {
   commitUrl: string | null;
   pushed: boolean;
   branch: string | null;
+  /** Pull request created from autonomous branch to main (code_change mode). */
+  prNumber: number | null;
+  prUrl: string | null;
+  prMerged: boolean;
+  prMergeCommitSha: string | null;
   deployId: string | null;
   deployStatus: string | null;
   deployVerified: boolean;
@@ -615,6 +620,10 @@ export function summarizeReadOnlyInspectionProof(
     commitUrl: null,
     pushed: false,
     branch: null,
+    prNumber: null,
+    prUrl: null,
+    prMerged: false,
+    prMergeCommitSha: null,
     deployId: null,
     deployStatus: null,
     deployVerified: false,
@@ -660,6 +669,10 @@ export function summarizeFactoryJobProof(
     commitUrl: null,
     pushed: false,
     branch: null,
+    prNumber: null,
+    prUrl: null,
+    prMerged: false,
+    prMergeCommitSha: null,
     deployId: null,
     deployStatus: null,
     deployVerified: false,
@@ -712,6 +725,10 @@ export function summarizeQAOnlyProof(
     commitUrl: null,
     pushed: false,
     branch: null,
+    prNumber: null,
+    prUrl: null,
+    prMerged: false,
+    prMergeCommitSha: null,
     deployId: null,
     deployStatus: null,
     deployVerified: false,
@@ -816,6 +833,10 @@ export function summarizeAutonomousCoderProof(
     commitUrl: proof.commitUrl,
     pushed: Boolean(proof.commitSha),
     branch: proof.branch,
+    prNumber: proof.prNumber ?? null,
+    prUrl: proof.prUrl ?? null,
+    prMerged: proof.prMerged ?? false,
+    prMergeCommitSha: proof.prMergeCommitSha ?? null,
     deployId: proof.deployId,
     deployStatus: proof.deployStatus,
     deployVerified: completed && proof.productionVerified,
@@ -880,6 +901,10 @@ export function summarizeProof(
     commitUrl: proof.gitDeployOperator.github.commitUrl,
     pushed: commitCreated,
     branch: proof.gitDeployOperator.github.branch,
+    prNumber: null,
+    prUrl: null,
+    prMerged: false,
+    prMergeCommitSha: null,
     deployId,
     deployStatus,
     deployVerified: match?.match ?? false,
@@ -1076,6 +1101,10 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
       commitUrl,
       pushed: true,
       branch,
+      prNumber: null,
+      prUrl: null,
+      prMerged: false,
+      prMergeCommitSha: null,
       deployId: null,
       deployStatus: null,
       deployVerified: false,
@@ -2141,6 +2170,10 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
               commitUrl,
               pushed: true,
               branch,
+              prNumber: null,
+              prUrl: null,
+              prMerged: false,
+              prMergeCommitSha: null,
               deployId: null,
               deployStatus: null,
               deployVerified: false,
@@ -2239,6 +2272,10 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
             commitUrl,
             pushed: true,
             branch,
+            prNumber: null,
+            prUrl: null,
+            prMerged: false,
+            prMergeCommitSha: null,
             deployId: null,
             deployStatus: null,
             deployVerified: false,
