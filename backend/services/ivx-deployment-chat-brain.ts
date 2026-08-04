@@ -64,7 +64,7 @@ async function fetchJson(url: string): Promise<{ ok: boolean; status: number; bo
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const text = await res.text();
     let body: unknown = text;
-    try { body = JSON.parse(text); } catch (err) { console.error('[deployment-chat-brain] JSON parse failed:', err instanceof Error ? err.message : String(err)); }
+    try { body = JSON.parse(text); } catch (e) { console.error("[ivx-deployment-chat-brain] JSON parse failed:", e); }
     return { ok: res.ok, status: res.status, body };
   } catch (err) {
     return { ok: false, status: 0, body: { error: err instanceof Error ? err.message : 'Network error' } };
