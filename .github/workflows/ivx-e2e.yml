@@ -22,8 +22,8 @@ jobs:
           bun-version: 1.3.9
       - name: Install deps (root + expo)
         run: |
-          bun install --frozen-lockfile
-          bun install --frozen-lockfile --cwd expo
+          bun install
+          bun install --cwd expo
       - name: Typecheck (root)
         run: bunx tsc --noEmit
       - name: Typecheck (expo)
@@ -39,7 +39,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - run: bun install --frozen-lockfile --cwd expo
+      - run: bun install --cwd expo
       - run: bun run --cwd expo lint
 
   e2e-playwright:
@@ -51,7 +51,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - run: bun install --frozen-lockfile --cwd expo
+      - run: bun install --cwd expo
       - name: Install Playwright browsers
         working-directory: expo
         run: bunx playwright install --with-deps chromium
@@ -73,7 +73,19 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - run: bun install --frozen-lockfile --cwd expo
+      - run: bun install --cwd expo
+      - name: Start the Expo development server
+        working-directory: expo
+        run: |
+          nohup bunx expo start --dev-client --non-interactive --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:8081/status | rg -q 'packager-status:running'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/expo-metro.log"
+          exit 1
       - name: Build and launch the iOS simulator app
         working-directory: expo
         timeout-minutes: 45
