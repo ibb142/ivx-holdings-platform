@@ -222,7 +222,7 @@ async function triggerRenderDeploy(): Promise<{ ok: boolean; deployId: string | 
     });
     const text = await res.text();
     let body: Record<string, unknown> = {};
-    try { body = JSON.parse(text) as Record<string, unknown>; } catch {}
+    try { body = JSON.parse(text) as Record<string, unknown>; } catch (err) { console.error('[deployment-chat-brain] JSON parse failed:', err instanceof Error ? err.message : String(err)); }
 
     let deployId: string | null = (body.id as string)
       ?? ((body.deploy as Record<string, unknown> | undefined)?.id as string)
@@ -625,7 +625,7 @@ export async function handleDeployRollback(): Promise<string> {
     });
     const text = await rollbackRes.text();
     let body: Record<string, unknown> = {};
-    try { body = JSON.parse(text) as Record<string, unknown>; } catch {}
+    try { body = JSON.parse(text) as Record<string, unknown>; } catch (err) { console.error('[deployment-chat-brain] JSON parse failed:', err instanceof Error ? err.message : String(err)); }
 
     return [
       `## Deploy Rollback — ${rollbackRes.ok ? 'TRIGGERED' : 'FAILED'}`,
