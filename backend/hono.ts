@@ -726,6 +726,7 @@ import {
   handleUpdateOwnerActionStatus,
 } from './api/ivx-owner-action-requests';
 import { OPTIONS as autonomousOpsDashboardOptions, handleAutonomousOpsDashboardRequest } from './api/ivx-autonomous-ops-dashboard';
+import { OPTIONS as autonomousProofOptions, handleAutonomousProofRequest } from './api/ivx-autonomous-proof';
 import {
   OPTIONS as agentAuditOptions,
   handleAgentAuditOverview,
@@ -6169,6 +6170,8 @@ app.post('/api/ivx/owner-action/:traceId/status', async (context) => handleUpdat
 // ============================================================================
 app.options('/api/ivx/autonomous-ops/dashboard', () => autonomousOpsDashboardOptions());
 app.get('/api/ivx/autonomous-ops/dashboard', async (context) => handleAutonomousOpsDashboardRequest(context.req.raw));
+app.options('/api/ivx/autonomous-proof', () => autonomousProofOptions());
+app.get('/api/ivx/autonomous-proof', async (context) => handleAutonomousProofRequest(context.req.raw));
 
 // ============================================================================
 // IVX Landing Full Deploy — push all landing static files to S3 + invalidate CloudFront
