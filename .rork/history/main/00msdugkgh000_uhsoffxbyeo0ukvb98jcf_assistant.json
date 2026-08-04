@@ -2065,7 +2065,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check the backend-audit screen for landing deploy references\\ngrep -n \\\"landing\\\\|deploy.*audit\\\\|aws-landing\\\" expo/app/backend-audit.tsx 2>/dev/null | head -20\"}",
       "createdAt": 1785798271738,
-      "completedAt": 1785798274333
+      "completedAt": 1785798274333,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2094,7 +2095,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/lib/landing-readiness-audit.ts\"}",
       "createdAt": 1785798292110,
-      "completedAt": 1785798295932
+      "completedAt": 1785798295932,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2112,7 +2114,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed with our fixes (d237bd6d)\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on old commit 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798292112,
-      "completedAt": 1785798296896
+      "completedAt": 1785798296896,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2130,7 +2133,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Test S3 access\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\"}",
       "createdAt": 1785798293167,
-      "completedAt": 1785798297454
+      "completedAt": 1785798297454,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2160,7 +2164,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed with our new commit d237bd6d\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798311414,
-      "completedAt": 1785798324236
+      "completedAt": 1785798324236,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2178,7 +2183,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Final S3 access test\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\"}",
       "createdAt": 1785798315216,
-      "completedAt": 1785798324801
+      "completedAt": 1785798324801,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2196,7 +2202,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Verify our local fixes are correct — final spinner check\\necho \\\"=== Final QA: All landing files spinner check ===\\\"\\nfor f in expo/ivxholding-landing/index.html expo/ivxholding-landing/enterprise-register.html expo/ivxholding-landing/capture.html expo/ivxholding-landing/reset-password.html; do\\n    if [ -f \\\"$f\\\" ]; then\\n        spinners=$(grep -ci \\\"spinner\\\\|ActivityIndicator\\\\|@keyframes spin\\\" \\\"$f\\\" 2>/dev/null || echo 0)\\n        pulses=$(grep -ci \\\"ivx-pulse\\\\|shimmer\\\" \\\"$f\\\" 2>/dev/null || echo 0)\\n        echo \\\"$f: spinners=$spinners, ivx-pulse=$pulses\\\"\\n    fi\\ndone\\necho \\\"\\\"\\necho \\\"=== Dockerfile brand assets ===\\\"\\ngrep -n \\\"assets/images\\\" Dockerfile 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== Git status ===\\\"\\ncd /home/user/rork-app && git log --oneline -3 2>/dev/null\"}",
       "createdAt": 1785798318213,
-      "completedAt": 1785798324862
+      "completedAt": 1785798324862,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2226,7 +2233,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed with our new commit d237bd6d\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798333427,
-      "completedAt": 1785798343223
+      "completedAt": 1785798343223,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2244,7 +2252,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Try the backend landing deploy one more time\\ncurl -s --max-time 90 -X POST https://api.ivxholding.com/api/ivx/landing-deploy \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"confirm\\\":\\\"DEPLOY_IVX_LANDING_FULL\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys,json\\ntry:\\n    d=json.load(sys.stdin)\\n    ok = sum(1 for u in d.get('uploads',[]) if u.get('ok'))\\n    fail = sum(1 for u in d.get('uploads',[]) if not u.get('ok'))\\n    total = len(d.get('uploads',[]))\\n    print(f'Uploads: {ok} ok, {fail} failed (total {total})')\\n    cf = d.get('cloudFront',{})\\n    print(f'CloudFront: attempted={cf.get(\\\\\\\"attempted\\\\\\\")}, ok={cf.get(\\\\\\\"ok\\\\\\\")}')\\n    if fail > 0:\\n        first = [u for u in d.get('uploads',[]) if not u.get('ok')][0]\\n        print(f'First error: {first.get(\\\\\\\"key\\\\\\\")} — {first.get(\\\\\\\"error\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785798335428,
-      "completedAt": 1785798348305
+      "completedAt": 1785798348305,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2262,7 +2271,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Final S3 test\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\"}",
       "createdAt": 1785798337734,
-      "completedAt": 1785798348901
+      "completedAt": 1785798348901,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2292,7 +2302,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed with our fixes (d237bd6d)\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798370606,
-      "completedAt": 1785798383241
+      "completedAt": 1785798383241,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2310,7 +2321,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Test S3 access\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\"}",
       "createdAt": 1785798373038,
-      "completedAt": 1785798383808
+      "completedAt": 1785798383808,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2328,7 +2340,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Try backend landing deploy\\ncurl -s --max-time 90 -X POST https://api.ivxholding.com/api/ivx/landing-deploy \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"confirm\\\":\\\"DEPLOY_IVX_LANDING_FULL\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys,json\\ntry:\\n    d=json.load(sys.stdin)\\n    ok = sum(1 for u in d.get('uploads',[]) if u.get('ok'))\\n    fail = sum(1 for u in d.get('uploads',[]) if not u.get('ok'))\\n    total = len(d.get('uploads',[]))\\n    print(f'Uploads: {ok} ok, {fail} failed (total {total})')\\n    cf = d.get('cloudFront',{})\\n    print(f'CloudFront: attempted={cf.get(\\\\\\\"attempted\\\\\\\")}, ok={cf.get(\\\\\\\"ok\\\\\\\")}')\\n    if ok > 0:\\n        print('LANDING DEPLOY SUCCESS!')\\n    if fail > 0:\\n        first = [u for u in d.get('uploads',[]) if not u.get('ok')][0]\\n        print(f'First error: {first.get(\\\\\\\"key\\\\\\\")} — {first.get(\\\\\\\"error\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785798377104,
-      "completedAt": 1785798390278
+      "completedAt": 1785798390278,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2358,7 +2371,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed with our fixes (d237bd6d)\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798410852,
-      "completedAt": 1785798423950
+      "completedAt": 1785798423950,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2376,7 +2390,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if S3_BUCKET_NAME env var is set on Render — try to set it via owner-gated endpoint\\nOWNER_TOKEN=$(cat /tmp/owner_token.txt 2>/dev/null)\\necho \\\"=== Setting S3_BUCKET_NAME on Render ===\\\"\\ncurl -s --max-time 30 -X POST https://api.ivxholding.com/api/ivx/developer-deploy/action \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -H \\\"Authorization: Bearer $OWNER_TOKEN\\\" \\\\\\n  -d '{\\\"action\\\":\\\"render_upsert_env_var\\\",\\\"input\\\":{\\\"key\\\":\\\"S3_BUCKET_NAME\\\",\\\"value\\\":\\\"ivxholding.com\\\"},\\\"confirmText\\\":\\\"CONFIRM_IVX_RENDER_SERVICE_UPDATE\\\",\\\"confirm\\\":true}' 2>/dev/null | python3 -c \\\"\\nimport sys,json\\ntry:\\n    d=json.load(sys.stdin)\\n    r = d.get('result',{})\\n    print(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\n    print(f'action: {d.get(\\\\\\\"action\\\\\\\")}')\\n    print(f'result: {json.dumps(r)[:500]}')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785798411899,
-      "completedAt": 1785798424595
+      "completedAt": 1785798424595,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2394,7 +2409,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Try backend landing deploy one more time\\ncurl -s --max-time 90 -X POST https://api.ivxholding.com/api/ivx/landing-deploy \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"confirm\\\":\\\"DEPLOY_IVX_LANDING_FULL\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys,json\\ntry:\\n    d=json.load(sys.stdin)\\n    ok = sum(1 for u in d.get('uploads',[]) if u.get('ok'))\\n    fail = sum(1 for u in d.get('uploads',[]) if not u.get('ok'))\\n    total = len(d.get('uploads',[]))\\n    print(f'Uploads: {ok} ok, {fail} failed (total {total})')\\n    cf = d.get('cloudFront',{})\\n    print(f'CloudFront: attempted={cf.get(\\\\\\\"attempted\\\\\\\")}, ok={cf.get(\\\\\\\"ok\\\\\\\")}')\\n    www = d.get('wwwRedirect',{})\\n    print(f'WWW redirect: attempted={www.get(\\\\\\\"attempted\\\\\\\")}, ok={www.get(\\\\\\\"ok\\\\\\\")}')\\n    if ok > 0:\\n        print('\\\\\\\\nSUCCESSFUL UPLOADS:')\\n        for u in d.get('uploads',[]):\\n            if u.get('ok'): print(f'  OK {u[\\\\\\\"key\\\\\\\"]} ({u.get(\\\\\\\"bytes\\\\\\\",0)} bytes)')\\n    if fail > 0:\\n        errors = set()\\n        for u in d.get('uploads',[]):\\n            if not u.get('ok'): errors.add(u.get('error',''))\\n        print(f'\\\\\\\\nAll {fail} failed with error: {list(errors)[0] if errors else \\\\\\\"unknown\\\\\\\"}')\\n    print(f'Duration: {d.get(\\\\\\\"durationMs\\\\\\\",0)}ms')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785798415354,
-      "completedAt": 1785798430894
+      "completedAt": 1785798430894,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2424,7 +2440,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Comprehensive status check\\necho \\\"=== 1. Render deploy status ===\\\"\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 2. S3 access test ===\\\"\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\\n\\necho \\\"\\\"\\necho \\\"=== 3. Backend landing deploy status ===\\\"\\ncurl -s --max-time 15 https://api.ivxholding.com/api/ivx/landing-deploy 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint(f'awsCredentialsConfigured: {d.get(\\\\\\\"awsCredentialsConfigured\\\\\\\")}')\\nprint(f'cloudFrontConfigured: {d.get(\\\\\\\"cloudFrontConfigured\\\\\\\")}')\\nprint(f'bucket: {d.get(\\\\\\\"bucket\\\\\\\")}')\\nprint(f'region: {d.get(\\\\\\\"region\\\\\\\")}')\\nprint(f'fileCount: {d.get(\\\\\\\"fileCount\\\\\\\")}')\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 4. Live landing page state ===\\\"\\ncurl -sI --max-time 10 https://ivxholding.com 2>/dev/null | grep -i \\\"last-modified\\\\|content-length\\\\|x-cache\\\"\\necho \\\"\\\"\\ncurl -s --max-time 15 https://ivxholding.com 2>/dev/null | python3 -c \\\"\\nimport sys\\nhtml = sys.stdin.read()\\nspinners = html.lower().count('spinner')\\npulses = html.lower().count('ivx-pulse')\\nprint(f'Size: {len(html)} bytes')\\nprint(f'Spinner refs: {spinners}')\\nprint(f'ivx-pulse refs: {pulses}')\\nprint(f'Instant loading: {\\\\\\\"YES\\\\\\\" if pulses > 0 and spinners == 0 else \\\\\\\"NO\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798487585,
-      "completedAt": 1785798502786
+      "completedAt": 1785798502786,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2454,7 +2471,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Comprehensive end-to-end status check\\necho \\\"=== 1. Render deploy status (did d237bd6d go live?) ===\\\"\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 2. S3 access test ===\\\"\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\\n\\necho \\\"\\\"\\necho \\\"=== 3. Backend landing deploy endpoint status ===\\\"\\ncurl -s --max-time 15 https://api.ivxholding.com/api/ivx/landing-deploy 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint(f'awsCredentialsConfigured: {d.get(\\\\\\\"awsCredentialsConfigured\\\\\\\")}')\\nprint(f'cloudFrontConfigured: {d.get(\\\\\\\"cloudFrontConfigured\\\\\\\")}')\\nprint(f'bucket: {d.get(\\\\\\\"bucket\\\\\\\")}')\\nprint(f'region: {d.get(\\\\\\\"region\\\\\\\")}')\\nprint(f'fileCount: {d.get(\\\\\\\"fileCount\\\\\\\")}')\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 4. Live landing page state ===\\\"\\ncurl -s --max-time 15 https://ivxholding.com 2>/dev/null | python3 -c \\\"\\nimport sys\\nhtml = sys.stdin.read()\\nspinners = html.lower().count('spinner')\\npulses = html.lower().count('ivx-pulse')\\nprint(f'Size: {len(html)} bytes')\\nprint(f'Spinner refs: {spinners}')\\nprint(f'ivx-pulse refs: {pulses}')\\nprint(f'Instant loading: {\\\\\\\"YES\\\\\\\" if pulses > 0 and spinners == 0 else \\\\\\\"NO\\\\\\\"}')\\\" 2>/dev/null\\necho \\\"\\\"\\ncurl -sI --max-time 10 https://ivxholding.com 2>/dev/null | grep -i \\\"last-modified\\\\|x-cache\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 5. Code fixes pushed (commit d237bd6d) ===\\\"\\ncd /home/user/rork-app && git log --oneline -3 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== 6. Local landing files — spinner-free check ===\\\"\\nfor f in expo/ivxholding-landing/index.html expo/ivxholding-landing/enterprise-register.html expo/ivxholding-landing/capture.html expo/ivxholding-landing/reset-password.html; do\\n    if [ -f \\\"$f\\\" ]; then\\n        spinners=$(grep -ci \\\"spinner\\\\|@keyframes spin\\\" \\\"$f\\\" 2>/dev/null || echo 0)\\n        pulses=$(grep -ci \\\"ivx-pulse\\\" \\\"$f\\\" 2>/dev/null || echo 0)\\n        echo \\\"  $f: spinners=$spinners, ivx-pulse=$pulses\\\"\\n    fi\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== 7. Dockerfile brand assets ===\\\"\\ngrep -n \\\"assets/images\\\" Dockerfile 2>/dev/null\"}",
       "createdAt": 1785798546437,
-      "completedAt": 1785798561753
+      "completedAt": 1785798561753,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
@@ -2484,7 +2502,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check if Render deploy completed with our fixes (d237bd6d)\\ncurl -s --max-time 15 https://api.ivxholding.com/health 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\ncommit = d.get('commit','?')[:12]\\nboot = d.get('bootTime','?')\\nstatus = d.get('status','?')\\nprint(f'commit: {commit}')\\nprint(f'bootTime: {boot}')\\nprint(f'status: {status}')\\nprint(f'expected: d237bd6d (our fix commit)')\\nprint(f'parity: {\\\\\\\"YES\\\\\\\" if commit.startswith(\\\\\\\"d237bd6d\\\\\\\") else \\\\\\\"NO — still on 21e4cd26\\\\\\\"}')\\\" 2>/dev/null\"}",
       "createdAt": 1785798678909,
-      "completedAt": 1785798689142
+      "completedAt": 1785798689142,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2502,7 +2521,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Test S3 access\\npython3 -c \\\"\\nimport boto3, time\\ns3 = boto3.client('s3', aws_access_key_id='AKIASAJBIV7CECCECRRV', aws_secret_access_key='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', region_name='us-east-1')\\nprint(f'S3 test at {time.strftime(\\\\\\\"%H:%M:%S\\\\\\\")}')\\ntry:\\n    s3.put_object(Bucket='ivxholding.com', Key='_test.txt', Body=b'IVX test')\\n    print('PutObject: SUCCESS!')\\n    s3.delete_object(Bucket='ivxholding.com', Key='_test.txt')\\n    print('READY TO DEPLOY')\\nexcept Exception as e:\\n    code = e.response.get('Error', {}).get('Code', 'N/A')\\n    print(f'PutObject: FAILED — {code}')\\n\\\" 2>&1\"}",
       "createdAt": 1785798680829,
-      "completedAt": 1785798689705
+      "completedAt": 1785798689705,
+      "compactedAt": 1785809564897
     },
     {
       "type": "tool",
@@ -2520,7 +2540,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Try backend landing deploy one more time\\ncurl -s --max-time 90 -X POST https://api.ivxholding.com/api/ivx/landing-deploy \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"confirm\\\":\\\"DEPLOY_IVX_LANDING_FULL\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys,json\\ntry:\\n    d=json.load(sys.stdin)\\n    ok = sum(1 for u in d.get('uploads',[]) if u.get('ok'))\\n    fail = sum(1 for u in d.get('uploads',[]) if not u.get('ok'))\\n    total = len(d.get('uploads',[]))\\n    print(f'Uploads: {ok} ok, {fail} failed (total {total})')\\n    cf = d.get('cloudFront',{})\\n    print(f'CloudFront: attempted={cf.get(\\\\\\\"attempted\\\\\\\")}, ok={cf.get(\\\\\\\"ok\\\\\\\")}')\\n    # Group errors\\n    errors = {}\\n    for u in d.get('uploads',[]):\\n        if not u.get('ok'):\\n            err = u.get('error','')\\n            errors[err] = errors.get(err, 0) + 1\\n    for err, count in errors.items():\\n        print(f'  Error ({count}x): {err}')\\n    print(f'Duration: {d.get(\\\\\\\"durationMs\\\\\\\",0)}ms')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>/dev/null\"}",
       "createdAt": 1785798685534,
-      "completedAt": 1785798696430
+      "completedAt": 1785798696430,
+      "compactedAt": 1785809564897
     },
     {
       "type": "reasoning",
