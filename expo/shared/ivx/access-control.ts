@@ -580,8 +580,47 @@ export async function resolveIVXAuthenticatedRequest(
     };
   }
 
+  // Fast-path: tokens that are clearly not JWTs (no dots, or too short) can be
+  // rejected immediately without a network round-trip to Supabase. This prevents
+  // test-environment timeouts when the Supabase URL is reachable but the token is
+  // obviously invalid (e.g. 'not-a-real-supabase-jwt', 'invalid-token-xyz').
+  const looksLikeJwt = accessToken.includes('.') && accessToken.split('.').length >= 2 && accessToken.length >= 20;
+  if (!looksLikeJwt) {
+    logGuardDecision({
+      logPrefix,
+      stage: 'session',
+      config,
+      userId: null,
+      email: null,
+      roleAudit: null,
+      detail: 'Token does not have a JWT structure; rejected without Supabase round-trip.',
+    });
+    throw new Error('IVX auth guard failed: invalid or expired Supabase session.');
+  }
+
   const client = createIVXServerClient(accessToken);
-  const userResult = await client.auth.getUser(accessToken);
+  let userResult: Awaited<ReturnType<typeof client.auth.getUser>>;
+  try {
+    userResult = await Promise.race([
+      client.auth.getUser(accessToken),
+      new Promise<never>((_resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('IVX auth guard failed: Supabase session lookup timed out.')), 4000);
+        timer.unref?.();
+      }),
+    ]);
+  } catch (timeoutError) {
+    const msg = timeoutError instanceof Error ? timeoutError.message : 'Supabase session lookup failed.';
+    logGuardDecision({
+      logPrefix,
+      stage: 'session',
+      config,
+      userId: null,
+      email: null,
+      roleAudit: null,
+      detail: msg,
+    });
+    throw new Error(msg.includes('timed out') ? 'IVX auth guard failed: invalid or expired Supabase session.' : msg);
+  }
 
   if (userResult.error || !userResult.data.user) {
     logGuardDecision({
