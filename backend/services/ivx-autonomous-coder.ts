@@ -1245,18 +1245,9 @@ async function ensureBranchExists(
   branch: string,
   headers: Record<string, string>,
 ): Promise<string> {
-  // Fast path: branch already exists — return its current HEAD SHA.
-  const refRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
-    { headers, signal: AbortSignal.timeout(10000) },
-  );
-  if (refRes.ok) {
-    const refData = await refRes.json() as { object?: { sha?: string } };
-    const existingSha = refData.object?.sha;
-    if (existingSha) return existingSha;
-  }
-  if (refRes.status !== 404) throw new Error(`GitHub branch ref lookup failed: ${refRes.status}`);
-  // Branch does not exist — create it from the default branch HEAD.
+  // Always fetch the current default branch HEAD so the autonomous branch
+  // is rebased onto the latest main before each commit. This prevents the
+  // branch from diverging and causing merge conflicts on PRs.
   const defaultBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
   const baseRefRes = await fetch(
     `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(defaultBranch)}`,
@@ -1266,6 +1257,32 @@ async function ensureBranchExists(
   const baseRefData = await baseRefRes.json() as { object?: { sha?: string } };
   const baseSha = baseRefData.object?.sha;
   if (!baseSha) throw new Error('GitHub default branch ref did not include a commit SHA.');
+
+  // Check if the autonomous branch already exists.
+  const refRes = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+    { headers, signal: AbortSignal.timeout(10000) },
+  );
+  if (refRes.ok) {
+    // Branch exists — force-update it to the current main HEAD to prevent
+    // divergence and merge conflicts. Without this, stale commits accumulate
+    // on the branch and every PR becomes unmergeable.
+    const forceUpdateRes = await fetch(
+      `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ sha: baseSha, force: true }),
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+    if (!forceUpdateRes.ok) {
+      throw new Error(`GitHub branch force-update failed: ${forceUpdateRes.status}`);
+    }
+    return baseSha;
+  }
+  if (refRes.status !== 404) throw new Error(`GitHub branch ref lookup failed: ${refRes.status}`);
+  // Branch does not exist — create it from the default branch HEAD.
   const createRefRes = await fetch(
     `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/refs`,
     {
