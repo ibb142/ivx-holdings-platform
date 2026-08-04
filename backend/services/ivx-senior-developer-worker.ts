@@ -2136,6 +2136,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         approvalPolicy: 'owner_gated',
         deployApproved: job.input.approveGitDeploy,
         deployConfirmationText: job.input.gitDeployConfirmationText,
+        autoMergePr: true,
         onPhase: (phase: IVXAutonomousCoderPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
