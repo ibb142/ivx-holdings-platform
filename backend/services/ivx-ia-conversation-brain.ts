@@ -77,6 +77,8 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
  * Handles: plus, minus, multiplied by, times, divided by, x, *, /, +, -, sqrt.
  */
 function detectMathQuestion(compact: string): boolean {
+  // Exclude 24/7 idiom for exclusion from math parsing
+  if (/\b(24\s*7|24\/7)\b.*\b(work|operate|run|available)\b/.test(compact)) return false;
   // Word-form arithmetic
   const wordMath = /\b(\d+(?:\.\d+)?)\s+(plus|minus|multiplied by|times|divided by|added to|subtracted from)\s+(\d+(?:\.\d+)?)/;
   if (wordMath.test(compact)) return true;
