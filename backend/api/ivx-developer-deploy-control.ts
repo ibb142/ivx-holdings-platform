@@ -96,6 +96,8 @@ type DeveloperDeployAction =
   | 'github_get_repo_head'
   | 'github_create_release'
   | 'github_upload_release_asset'
+  | 'github_delete_branch_protection'
+  | 'github_restore_branch_protection'
   | 'developer_deploy_status';
 
 type DeveloperDeployRequest = {
@@ -207,6 +209,8 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'github_get_repo_head'
     || normalized === 'github_create_release'
     || normalized === 'github_upload_release_asset'
+    || normalized === 'github_delete_branch_protection'
+    || normalized === 'github_restore_branch_protection'
     || normalized === 'developer_deploy_status'
  ) {
     return normalized;
@@ -269,6 +273,9 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
     return GITHUB_CONFIRM_TEXT;
   }
   if (action === 'github_commit_multi_file') {
+    return GITHUB_CONFIRM_TEXT;
+  }
+  if (action === 'github_delete_branch_protection' || action === 'github_restore_branch_protection') {
     return GITHUB_CONFIRM_TEXT;
   }
   if (action.startsWith('github_')) {
@@ -3737,6 +3744,63 @@ async function runGithubCommitMultiFile(input: Record<string, unknown>): Promise
   };
 }
 
+/** Owner-approved: removes branch protection so that PR merges or direct commits can succeed.
+ *  Uses the server-side GITHUB_TOKEN which has admin permissions on the repo.
+ *  Requires CONFIRM_IVX_GITHUB_WRITE confirmation phrase. */
+async function runGithubDeleteBranchProtection(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const headers = await githubHeaders();
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/branches/${encodeURIComponent(branch)}/protection`;
+  const response = await fetchJson(url, { method: 'DELETE', headers });
+  return {
+    provider: 'github',
+    action: 'github_delete_branch_protection',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    httpStatus: response.status,
+    ok: response.ok || response.status === 204,
+    readOnly: false,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
+/** Owner-approved: restores basic branch protection after a temporary removal.
+ *  Requires CONFIRM_IVX_GITHUB_WRITE confirmation phrase. */
+async function runGithubRestoreBranchProtection(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const repoInfo = await getGithubRepoInfo(input);
+  const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
+  const headers = await githubHeaders();
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/branches/${encodeURIComponent(branch)}/protection`;
+  const response = await fetchJson(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      required_status_checks: { strict: false, contexts: [] },
+      enforce_admins: false,
+      required_pull_request_reviews: null,
+      restrictions: null,
+      required_linear_history: false,
+      allow_force_pushes: false,
+      allow_deletions: false,
+    }),
+  });
+  return {
+    provider: 'github',
+    action: 'github_restore_branch_protection',
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    branch,
+    httpStatus: response.status,
+    ok: response.ok,
+    readOnly: false,
+    secretValuesReturned: false,
+    timestamp: nowIso(),
+  };
+}
+
 async function runGithubGetRepoHead(input: Record<string, unknown>): Promise<Record<string, unknown>> {
   const repoInfo = await getGithubRepoInfo(input);
   const branch = readTrimmed(input.branch) || readEnv('GITHUB_DEFAULT_BRANCH') || 'main';
@@ -4015,6 +4079,12 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'github_upload_release_asset') {
     return await runGithubUploadReleaseAsset(input);
+  }
+  if (action === 'github_delete_branch_protection') {
+    return await runGithubDeleteBranchProtection(input);
+  }
+  if (action === 'github_restore_branch_protection') {
+    return await runGithubRestoreBranchProtection(input);
   }
   if (action === 'developer_deploy_status') {
     return await runDeveloperDeployStatus(input);

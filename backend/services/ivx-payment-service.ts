@@ -311,8 +311,9 @@ export async function getOrCreateStripeCustomer(
     });
 
     return { customerId: customer.id, ok: true };
-  } catch (err: any) {
-    return { customerId: '', ok: false, error: err.message };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { customerId: '', ok: false, error: message };
   }
 }
 
@@ -455,14 +456,15 @@ export async function createPaymentIntent(
         traceId,
         testMode,
       };
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       await sb.from('payment_intents').update({
         state: 'FAILED',
-        error_message: err.message,
+        error_message: message,
         updated_at: new Date().toISOString(),
       }).eq('id', paymentId);
 
-      return { ok: false, amountCents, state: 'FAILED', traceId, code: 'STRIPE_ERROR', error: err.message, testMode };
+      return { ok: false, amountCents, state: 'FAILED', traceId, code: 'STRIPE_ERROR', error: message, testMode };
     }
   }
 
@@ -503,8 +505,9 @@ export async function processStripeWebhook(
   if (stripe && webhookSecret) {
     try {
       event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-    } catch (err: any) {
-      return { ok: false, processed: false, traceId, error: `Signature verification failed: ${err.message}` };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, processed: false, traceId, error: `Signature verification failed: ${message}` };
     }
   } else {
     // Test mode — parse body directly (no signature verification)
@@ -708,13 +711,15 @@ async function finalizeInvestment(paymentId: string, traceId: string): Promise<b
         await onTransactionSettled(memberId, paymentId, Number(payment.amount_cents));
         console.log(`[PaymentService] Classification trigger fired for member ${memberId} after settlement`);
       }
-    } catch (classErr: any) {
-      console.error('[PaymentService] Classification trigger failed (non-fatal):', classErr.message);
+    } catch (classErr) {
+      const classMessage = classErr instanceof Error ? classErr.message : String(classErr);
+      console.error('[PaymentService] Classification trigger failed (non-fatal):', classMessage);
     }
 
     return true;
-  } catch (err: any) {
-    console.error('[PaymentService] Finalization failed:', err.message);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[PaymentService] Finalization failed:', message);
     return false;
   }
 }
@@ -798,8 +803,9 @@ export async function refundPayment(
           reason: reason || 'customer_request',
         },
       });
-    } catch (err: any) {
-      return { ok: false, traceId, error: err.message };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, traceId, error: message };
     }
   }
 
@@ -843,8 +849,9 @@ export async function refundPayment(
       await onRefundProcessed(memberId, paymentId, refundAmount);
       console.log(`[PaymentService] Classification trigger fired for member ${memberId} after refund`);
     }
-  } catch (classErr: any) {
-    console.error('[PaymentService] Refund classification trigger failed (non-fatal):', classErr.message);
+  } catch (classErr) {
+    const classMessage = classErr instanceof Error ? classErr.message : String(classErr);
+    console.error('[PaymentService] Refund classification trigger failed (non-fatal):', classMessage);
   }
 
   return { ok: true, traceId };
@@ -891,8 +898,9 @@ export async function createBankLinkSession(
       traceId,
       testMode,
     };
-  } catch (err: any) {
-    return { ok: false, traceId, error: err.message, testMode };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, traceId, error: message, testMode };
   }
 }
 
