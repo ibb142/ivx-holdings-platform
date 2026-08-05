@@ -3490,7 +3490,7 @@ function resolveOwnerDevelopmentActionIntent(prompt: string): OwnerDevelopmentAc
     return 'keyboard_overlap_fix';
   }
 
-  if (/(?:own\s+brains?|real\s+brain|use\s+(?:the\s+)?(?:own\s+)?brains?|fake\s+statements?|real\s+proof|proof\s+now)/.test(normalized) && /\b(audit|fix|prove|proof|ia|ai|ivx|owner\s+ai)\b/.test(normalized)) {
+  if (/(?:own\s+brains?|real\s+brain|use\s+(?:the\s+)?(?:own\s+)?brains?|fake\s+statements?|real\s+proof|proof\s+now|proof\s+that\s+you\s+are|evidence\s+that\s+you\s+are|show\s+me\s+(?:the\s+)?(?:test|testing|evidence|proof|audit)|audit\s+you\s+are|you\s+are\s+(?:a\s+)?real\s+senior\s+developer|you\s+are\s+(?:a\s+)?senior\s+developer|senior\s+developer\s+(?:proof|evidence|test|audit))/.test(normalized) && /\b(audit|fix|prove|proof|ia|ai|ivx|owner\s+ai|developer|senior)\b/.test(normalized)) {
     return 'owner_brain_proof';
   }
 
@@ -9041,11 +9041,13 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, body.devTestModeActive === true), autonomousHttpStatus);
     }
 
-    if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor' || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER') {
+    if (plannerDecision.route === 'self_developer' || unifiedRoute.branch === 'developer_executor' || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER' || initialDevelopmentActionIntent === 'owner_brain_proof') {
       // When the authoritative intent router or unified router selected
       // developer_executor but the legacy planner did not, log the routing
       // reconciliation so the audit trail is explicit about which classifier
-      // fired the execution branch.
+      // fired the execution branch. Also force owner_brain_proof prompts into
+      // real senior-developer execution so "prove you are a senior developer"
+      // returns a live task instead of a canned audit report.
       if (plannerDecision.route !== 'self_developer' && (unifiedRoute.branch === 'developer_executor' || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER')) {
         console.log('[IVXOwnerAIBackend] chat→worker: authoritative/unified router fired developer_executor (legacy planner route=' + plannerDecision.route + ', authoritativeRoute=' + authoritativeDecision.selectedRoute + ', unifiedIntent=' + unifiedRoute.intent + ')');
       }
