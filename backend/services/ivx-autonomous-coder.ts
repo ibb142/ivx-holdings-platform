@@ -2673,25 +2673,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       }
     }
 
-    // ── MARK COMPLETED BEFORE PR MERGE ───────────────────────────────────
-    // CRITICAL FIX for COMMITTING (65%) stuck state:
-    // The commit is already on the ivx-autonomous branch — the work product
-    // is done. We mark COMPLETED NOW, before attempting PR merge, because
-    // merging to main triggers Render auto-deploy which restarts the service
-    // and kills this process before it can persist the COMPLETED status.
-    // The PR merge is fire-and-forget: if the process survives, great; if
-    // it dies, the job is already marked COMPLETED with the commit SHA.
-    if (input.executionMode === 'code_change' && commitSha && branch) {
-      finalStatus = 'COMPLETED';
-      onPhase?.('completed', `Commit created: ${commitSha.slice(0, 12)} on ${branch}. Tests passed, typecheck passed. Marking COMPLETED before PR merge to survive Render restart.`);
-    } else if (commitSha || input.executionMode === 'read_only') {
-      finalStatus = 'COMPLETED';
-    }
-
-    // ── PULL REQUEST (code_change mode, fire-and-forget) ──────────────────
-    // Attempt to create and merge a PR. This may trigger a Render restart
-    // that kills this process — that's OK because finalStatus is already
-    // COMPLETED. If the process survives, we record the PR/merge details.
+    // ── PULL REQUEST (code_change mode) ────────────────────────────────────
+    // After committing to the ivx-autonomous branch, create a PR to main
+    // so the code change reaches production. When autoMergePr is true and
+    // owner approval is given, merge the PR immediately.
     if (input.executionMode === 'code_change' && commitSha && branch) {
       try {
         onPhase?.('committing', `Creating pull request: ${branch} → main.`);
@@ -2723,21 +2708,39 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           prMerged = mergeResult.merged;
           prMergeCommitSha = mergeResult.mergeCommitSha;
           if (prMerged) {
-            deployStatus = 'auto_deploy_triggered';
-            onPhase?.('completed', `PR #${prNumber} merged to main (${prMergeCommitSha?.slice(0, 12)}). Render auto-deploy will pick up the merge commit.`);
+            onPhase?.('committing', `PR #${prNumber} merged. Merge commit: ${prMergeCommitSha}`);
           } else {
             onPhase?.('committing', `PR #${prNumber} merge attempted but not confirmed.`);
           }
         } else if (prResult.merged) {
           prMerged = true;
           prMergeCommitSha = prResult.mergeCommitSha;
-          deployStatus = 'auto_deploy_triggered';
         }
       } catch (prErr) {
-        // PR creation/merge failure is not fatal — the commit is on the branch
-        // and finalStatus is already COMPLETED.
-        onPhase?.('completed', `Pull request creation/merge failed (non-fatal, job already COMPLETED): ${safeErrorMessage(prErr)}`);
+        // PR creation failure is not fatal — the commit is still on the branch.
+        // Record the error in the proof but keep the job COMPLETED.
+        onPhase?.('committing', `Pull request creation failed (non-fatal): ${safeErrorMessage(prErr)}`);
       }
+    }
+
+    // ── CODE_CHANGE POST-MERGE ───────────────────────────────────────────
+    // After auto-merging the PR in code_change mode, mark COMPLETED immediately.
+    // Render auto-deploys on every push to main, so an explicit deploy trigger
+    // is redundant AND it restarts the service before the worker can mark
+    // COMPLETED, orphaning the job at COMMITTING (65%). The recovery sweep
+    // handles production verification after the restart.
+    if (input.executionMode === 'code_change' && prMerged && prMergeCommitSha) {
+      finalStatus = 'COMPLETED';
+      deployStatus = 'auto_deploy_triggered';
+      onPhase?.('completed', `PR merged to main (${prMergeCommitSha.slice(0, 12)}). Render auto-deploy will pick up the merge commit. Job marked COMPLETED.`);
+    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      // PR was created but not merged (autoMergePr=false or merge failed).
+      // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
+      finalStatus = 'COMPLETED';
+      error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
+      onPhase?.('completed', error);
+    } else if (commitSha || input.executionMode === 'read_only') {
+      finalStatus = 'COMPLETED';
     }
 
     // ── DEPLOY (owner-gated, deploy mode) ───────────────────────────────

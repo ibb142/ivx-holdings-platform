@@ -40,6 +40,7 @@ import { formatCurrencyCompact } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
+import { IVXAutonomousProofCard } from '@/components/IVXAutonomousProofCard';
 
 interface DashboardStatsShape {
   totalInvested?: number;
@@ -592,6 +593,8 @@ export default function AdminDashboardScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <IVXAutonomousProofCard />
 
         {kpis.length > 0 && (
           <View style={styles.section}>

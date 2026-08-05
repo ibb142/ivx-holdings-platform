@@ -65,63 +65,6 @@ async function fetchJson(url: string, opts?: RequestInit): Promise<Record<string
   return (await res.json()) as Record<string, unknown>;
 }
 
-let qaOwnerTokenPromise: Promise<string> | null = null;
-
-/**
- * Gets one fresh owner session for the whole QA run.
- *
- * QA previously reused a local token file that could be expired, causing
- * misleading 401 results midway through an otherwise healthy audit.
- */
-async function resolveQAToken(): Promise<string> {
-  const configuredToken = (process.env.IVX_QA_OWNER_TOKEN ?? process.env.IVX_OWNER_TOKEN ?? '').trim();
-  if (configuredToken) return configuredToken;
-
-  const ownerEmail = (process.env.IVX_QA_OWNER_EMAIL ?? process.env.IVX_OWNER_EMAIL ?? '').trim();
-  if (!ownerEmail) {
-    throw new Error('QA owner authentication is not configured. Set IVX_QA_OWNER_TOKEN or IVX_QA_OWNER_EMAIL in the protected runner environment.');
-  }
-
-  const session = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-passwordless-login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: ownerEmail, emergency: 'ivx_emergency_recovery' }),
-  });
-  const token = typeof session.accessToken === 'string' ? session.accessToken.trim() : '';
-  if (token.length < 100) {
-    throw new Error('QA owner authentication did not return a valid access token.');
-  }
-  return token;
-}
-
-async function getQAToken(): Promise<string> {
-  qaOwnerTokenPromise ??= resolveQAToken();
-  return qaOwnerTokenPromise;
-}
-
-async function fetchOwnerJson(url: string, init?: RequestInit): Promise<Record<string, unknown>> {
-  const token = await getQAToken();
-  return fetchJson(url, {
-    ...init,
-    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
-  });
-}
-
-function isOwnerAuthenticationUnavailable(error: unknown): boolean {
-  return error instanceof Error && error.message.startsWith('QA owner authentication');
-}
-
-async function runOwnerTest(fn: () => Promise<{ actual: string; status: TestStatus; errorDetail?: string; evidenceRef: string }>): Promise<{ actual: string; status: TestStatus; errorDetail?: string; evidenceRef: string }> {
-  try {
-    return await fn();
-  } catch (error) {
-    if (isOwnerAuthenticationUnavailable(error)) {
-      return { actual: 'Owner QA authentication unavailable', status: 'SKIP', errorDetail: error.message, evidenceRef: 'owner-auth-unavailable' };
-    }
-    throw error;
-  }
-}
-
 function hashString(s: string): string {
   let h = 0;
   for (let i = 0; i < s.length; i++) {
@@ -159,15 +102,15 @@ const TESTS: TestDef[] = [
     name: 'Multi-turn context preservation',
     expected: 'Follow-up question references prior context',
     fn: async () => {
-      return runOwnerTest(async () => {
-      const r1 = await fetchOwnerJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
+      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
+      const r1 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ message: 'How many properties do we have?' }),
       });
-      const r2 = await fetchOwnerJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
+      const r2 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ message: 'Show me the active ones' }),
       });
       const a2 = String(r2.answer || '');
@@ -176,7 +119,6 @@ const TESTS: TestDef[] = [
         status: a2.length > 0 ? 'PASS' : 'FAIL',
         evidenceRef: 'multi-turn-context',
       };
-      });
     },
   },
   {
@@ -185,7 +127,7 @@ const TESTS: TestDef[] = [
     name: 'Context preserved across approval flow',
     expected: 'Approval executes pending action, not losing thread',
     fn: async () => {
-      const token = await getQAToken();
+      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
       const r1 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -208,7 +150,7 @@ const TESTS: TestDef[] = [
     name: 'Intent router classifies property question',
     expected: 'Provider is ivx_readonly_inspection_runtime or ivx_conversation_state_machine',
     fn: async () => {
-      const token = await getQAToken();
+      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
       const d = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -230,7 +172,7 @@ const TESTS: TestDef[] = [
     name: 'Owner memory recall — where did we leave off',
     expected: 'Returns most recent conversation action',
     fn: async () => {
-      const token = await getQAToken();
+      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
       const d = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -251,14 +193,19 @@ const TESTS: TestDef[] = [
     category: 'owner_auth',
     name: 'Owner passwordless login works',
     expected: 'accessToken returned from emergency login',
-    fn: async () => runOwnerTest(async () => {
-      const token = await getQAToken();
+    fn: async () => {
+      const d = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-passwordless-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'iperez4242@gmail.com', emergency: 'ivx_emergency_recovery' }),
+      });
+      const token = String(d.accessToken || '');
       return {
-        actual: `fresh session token length=${token.length}`,
+        actual: `token length=${token.length}, success=${d.success}`,
         status: token.length > 100 ? 'PASS' : 'FAIL',
         evidenceRef: 'owner-login',
       };
-    }),
+    },
   },
 
   // === Deployment ===
@@ -552,7 +499,7 @@ const TESTS: TestDef[] = [
     expected: 'No worker jobs stuck in running/patching for > 20 min',
     fn: async () => {
       try {
-        const token = await getQAToken();
+        const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
         const d = await fetchJson(`${PRODUCTION_API}/api/ivx/senior-developer/worker/jobs`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: AbortSignal.timeout(10000),

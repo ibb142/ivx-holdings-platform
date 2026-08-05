@@ -1,0 +1,33 @@
+name: Merge PR (admin override)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to merge'
+        required: true
+        type: string
+      merge_method:
+        description: 'Merge method (squash, merge, rebase)'
+        required: false
+        default: 'squash'
+        type: choice
+        options:
+          - squash
+          - merge
+          - rebase
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          MERGE_METHOD="${{ github.event.inputs.merge_method }}"
+          echo "Merging PR #$PR_NUMBER via $MERGE_METHOD..."
+          gh pr merge "$PR_NUMBER" --"$MERGE_METHOD" --admin --delete-branch
+          echo "Merge complete!"

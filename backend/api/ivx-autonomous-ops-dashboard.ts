@@ -198,7 +198,8 @@ function isToday(iso: string | null): boolean {
   if (!iso) return false;
   try {
     return new Date(iso).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
-  } catch {
+  } catch (error) {
+    console.error('Date parsing error:', error);
     return false;
   }
 }

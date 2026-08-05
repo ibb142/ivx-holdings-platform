@@ -18,7 +18,7 @@
 // IVX convergence proof 2026-07-21
 // IVX convergence proof 2026-07-21
 // IVX convergence proof 2026-07-21 final
-export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-1';
+export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-4';
 export const PILOT_LABEL_TARGET = 'AUTONOMOUS-CODER-PILOT-2';
 
 export type PilotSentinel = {

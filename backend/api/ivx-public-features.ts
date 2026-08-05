@@ -53,7 +53,7 @@ export async function handleFeaturedProperties(req: Request): Promise<Response> 
       return json({ properties: allProps || [], count: allProps?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
     }
     return json({ properties: data || [], count: data?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Property Details ──────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export async function handlePropertyDetails(req: Request, propertyId: string): P
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 404);
     if (!data) return json({ error: 'Property not found', propertyId, deploymentMarker: DEPLOYMENT_MARKER }, 404);
     return json({ property: data, deploymentMarker: DEPLOYMENT_MARKER, source: 'properties' });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Members Dashboard ─────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ export async function handleMembersDashboard(req: Request): Promise<Response> {
       totalWallets: walletsRes.count || 0,
       deploymentMarker: DEPLOYMENT_MARKER,
     });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Investors Dashboard ───────────────────────────────────────────────────
@@ -109,7 +109,7 @@ export async function handleInvestorsDashboard(req: Request): Promise<Response> 
       totalDeals: dealsRes.count || 0,
       deploymentMarker: DEPLOYMENT_MARKER,
     });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── CRM Main ──────────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ export async function handleCRMMain(req: Request): Promise<Response> {
       totalLeads: leadsRes.count || 0,
       deploymentMarker: DEPLOYMENT_MARKER,
     });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── JV Deals ──────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
     const { data, error, count } = await sb.from('jv_deals').select('*', { count: 'exact', head: false }).eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(50);
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ deals: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Property Admin ────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ export async function handlePropertyAdminList(req: Request): Promise<Response> {
     const { data, error, count } = await sb.from('properties').select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(100);
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ properties: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 export async function handlePropertyAdminCreate(req: Request): Promise<Response> {
@@ -157,7 +157,7 @@ export async function handlePropertyAdminCreate(req: Request): Promise<Response>
     const { data, error } = await sb.from('properties').insert(body).select().single();
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ property: data, deploymentMarker: DEPLOYMENT_MARKER }, 201);
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Media Upload ──────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ export async function handleMediaUpload(req: Request): Promise<Response> {
     const { data, error } = await sb.from('project_media').insert({ project_id: projectId, media_url: mediaUrl, media_type: mediaType, is_approved: true }).select().single();
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ media: data, deploymentMarker: DEPLOYMENT_MARKER }, 201);
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Instagram Cards ───────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ export async function handleInstagramCards(req: Request): Promise<Response> {
     const { data, error } = await sb.from('project_media').select('id,project_id,media_type,url,media_url,thumbnail_url,title,description,position,is_approved,created_at').eq('media_type', 'instagram_card').eq('is_approved', true).order('created_at', { ascending: false }).limit(50);
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ cards: data || [], count: data?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err: any) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
 }
 
 // ── Engagement Aliases (delegate to project engagement with query params) ──

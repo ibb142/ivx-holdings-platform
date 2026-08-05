@@ -13,7 +13,6 @@
  * evidence — never fabricated.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 
 // IVX canonical API base. Reads EXPO_PUBLIC_IVX_API_BASE_URL (owner-AI routing
 // env) with a fallback to the production host, matching the rest of the app
@@ -149,22 +148,19 @@ export function useExecutionStatusPoll(
       ? current.statusUrl
       : `${BASE_URL}${current.statusUrl}`;
     try {
-      const sessionToken = authTokenRef.current ?? await getIVXAccessToken();
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          ...(authTokenRef.current ? { Authorization: `Bearer ${authTokenRef.current}` } : {}),
         },
       });
       if (!response.ok) {
-        const error = response.status === 401 || response.status === 403
-          ? 'Tu sesión de propietario expiró. Inicia sesión de nuevo para ver el resultado real de esta tarea.'
-          : `status endpoint returned ${response.status}`;
+        // 404/401 → keep the last status but stop polling to avoid a loop.
         setState((prev) => ({
           ...prev,
           polling: false,
-          error,
+          error: `status endpoint returned ${response.status}`,
           attempts: prev.attempts + 1,
         }));
         stoppedRef.current = true;
@@ -219,31 +215,7 @@ export function useExecutionStatusPoll(
   // Hard stop after maxAttempts to prevent unbounded polling.
   useEffect(() => {
     if (state.attempts >= maxAttempts && state.polling) {
-      setState((prev) => ({
-        ...prev,
-        polling: false,
-        status: prev.status ? {
-          ...prev.status,
-          status: 'blocked',
-          stage: 'FAILED',
-          evidence: {
-            ...(prev.status.evidence ?? {
-              deployedToProduction: false,
-              liveCommit: null,
-              commitMatch: false,
-              healthOk: false,
-              typecheck: { run: false, passed: false },
-              buildRun: false,
-              finalStatus: 'FAILED',
-              error: null,
-              answerBlock: '',
-            }),
-            finalStatus: 'FAILED',
-            error: prev.error ?? 'La ejecución no alcanzó un estado final dentro del tiempo permitido.',
-          },
-        } : null,
-        error: prev.error ?? 'La ejecución no alcanzó un estado final dentro del tiempo permitido.',
-      }));
+      setState((prev) => ({ ...prev, polling: false, error: prev.error ?? 'poll timeout' }));
       stoppedRef.current = true;
     }
   }, [state.attempts, state.polling, maxAttempts]);

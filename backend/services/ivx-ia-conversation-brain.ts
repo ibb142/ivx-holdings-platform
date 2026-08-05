@@ -55,7 +55,7 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
   if (detectDefinitionQuestion(compact)) return 'definition';
 
   // Greetings
-  const greetings = ['hello', 'hi ', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening', 'buenos dias', 'buenas tardes'];
+  const greetings = ['hello', 'hi ', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening', 'buenos dias', 'buenas tardes', 'good night', 'buenas noches'];
   if (greetings.some((g) => compact === g.trim() || compact.startsWith(g) || compact === g.trim())) return 'greeting';
 
   // Thanks
@@ -77,6 +77,8 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
  * Handles: plus, minus, multiplied by, times, divided by, x, *, /, +, -, sqrt.
  */
 function detectMathQuestion(compact: string): boolean {
+  // Exclude 24/7 idiom for exclusion from math parsing
+  if (/\b(work|operate|run|available)\b.*\b(24\s*7|24\/7)\b|\b(24\s*7|24\/7)\b.*\b(work|operate|run|available)\b/.test(compact)) return false;
   // Word-form arithmetic
   const wordMath = /\b(\d+(?:\.\d+)?)\s+(plus|minus|multiplied by|times|divided by|added to|subtracted from)\s+(\d+(?:\.\d+)?)/;
   if (wordMath.test(compact)) return true;

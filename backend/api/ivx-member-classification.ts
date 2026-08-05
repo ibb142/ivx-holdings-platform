@@ -493,7 +493,7 @@ CREATE INDEX IF NOT EXISTS idx_classification_audit_member_id ON public.classifi
       message: 'Migration applied successfully',
       statements_executed: executed,
     });
-  } catch (err: any) {
+  } catch (err) {
     return ownerOnlyJson({
       ok: false,
       error: err.message,
