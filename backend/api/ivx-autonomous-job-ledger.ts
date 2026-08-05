@@ -170,7 +170,7 @@ async function loadLedger(): Promise<LedgerDocument> {
   const baseline = buildBaselineDocument();
   try {
     await writeDurableJson(LEDGER_FILE, baseline);
-  } catch {
+  } catch (error) { console.error('Failed to write ledger:', error);
     // Non-fatal: serve the baseline even if persistence is unavailable.
   }
   return baseline;
