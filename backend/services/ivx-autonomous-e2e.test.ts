@@ -70,14 +70,6 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
       merged: false, mergeCommitSha: null,
     });
 
-    // ── Mock merge function ────────────────────────────────────────────────
-    const mergeFn = async (_prNumber: number, _prTitle: string): Promise<{
-      merged: boolean; mergeCommitSha: string | null;
-    }> => ({
-      merged: true,
-      mergeCommitSha: 'mergeabc1234567890abcdef1234567890abcdef12',
-    });
-
     // ── Track phases ───────────────────────────────────────────────────────
     const phases: Array<{ phase: string; detail: string }> = [];
     const onPhase = (phase: string, detail: string): void => {
@@ -91,7 +83,7 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
       executionMode: 'code_change',
       ownerId: 'test-owner',
       approvalPolicy: 'owner_gated',
-      llmCaller, testRunner, commitFn, prFn, mergeFn,
+      llmCaller, testRunner, commitFn, prFn,
       autoMergePr: true,
       fileWriter, fileReader,
       onPhase: onPhase as never,

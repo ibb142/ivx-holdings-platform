@@ -252,8 +252,6 @@ export type IVXAutonomousCoderInput = {
   rollbackFn?: (commitSha: string, branch: string) => Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }>,
   /** Injectable PR creation function for testing. When omitted, the real GitHub API is used. */
   prFn?: (branch: string, title: string, body: string) => Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }>;
-  /** Injectable PR merge function for testing. When omitted, the real GitHub API is used. */
-  mergeFn?: (prNumber: number, prTitle: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
   /** When true, automatically merge the PR after creating it (code_change mode).
    *  Owner approval is still required — set by the worker based on job input. */
   autoMergePr?: boolean;
@@ -2679,7 +2677,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // After committing to the ivx-autonomous branch, create a PR to main
     // so the code change reaches production. When autoMergePr is true and
     // owner approval is given, merge the PR immediately.
-    if (input.executionMode === 'code_change' && commitSha && branch && input.prFn) {
+    if (input.executionMode === 'code_change' && commitSha && branch) {
       try {
         onPhase?.('committing', `Creating pull request: ${branch} → main.`);
         const prTitle = `IVX autonomous coder: ${input.goal.slice(0, 72)}`;
@@ -2706,9 +2704,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // Auto-merge when owner-approved via autoMergePr flag
         if (input.autoMergePr && !prResult.merged) {
           onPhase?.('committing', `Auto-merging PR #${prNumber} (owner approved).`);
-          const mergeResult = input.mergeFn
-            ? await input.mergeFn(prNumber, prTitle)
-            : await mergePullRequest(prNumber, prTitle);
+          const mergeResult = await mergePullRequest(prNumber, prTitle);
           prMerged = mergeResult.merged;
           prMergeCommitSha = mergeResult.mergeCommitSha;
           if (prMerged) {
@@ -2737,8 +2733,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       finalStatus = 'COMPLETED';
       deployStatus = 'auto_deploy_triggered';
       onPhase?.('completed', `PR merged to main (${prMergeCommitSha.slice(0, 12)}). Render auto-deploy will pick up the merge commit. Job marked COMPLETED.`);
-    } else if (input.executionMode === 'code_change' && commitSha && !prMerged && input.prFn) {
-      // PR was created (via prFn) but not merged (autoMergePr=false or merge failed).
+    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      // PR was created but not merged (autoMergePr=false or merge failed).
       // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
       finalStatus = 'COMPLETED';
       error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
