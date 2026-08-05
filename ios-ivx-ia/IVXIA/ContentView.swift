@@ -2,12 +2,12 @@
 //  ContentView.swift
 //  IVXIA
 //
-//  Created by IVX Holdings on July 17, 2026.
+//  Created by Rork on August 5, 2026.
 //
 
 import SwiftUI
 
-/// Placeholder shown until the real app UI is generated.
+/// Placeholder shown until Rork replaces it with the real app UI.
 /// This view is intentionally minimal: it must never ship as a final screen.
 struct ContentView: View {
     var body: some View {

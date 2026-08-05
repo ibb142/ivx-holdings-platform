@@ -2,7 +2,7 @@
 //  IVXIAApp.swift
 //  IVXIA
 //
-//  Created by IVX Holdings on July 17, 2026.
+//  Created by Rork on August 5, 2026.
 //
 
 import SwiftUI
