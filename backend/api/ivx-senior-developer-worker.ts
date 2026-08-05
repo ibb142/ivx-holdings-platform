@@ -39,6 +39,7 @@ type WorkerEnqueueRequest = {
   approvePatch?: unknown;
   approveGitDeploy?: unknown;
   validationMode?: unknown;
+  autoMergePr?: unknown;
 };
 
 const TEMPLATE_MODES = [
