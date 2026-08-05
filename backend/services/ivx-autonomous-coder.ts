@@ -2723,77 +2723,22 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       }
     }
 
-    // ── CODE_CHANGE DEPLOY + VERIFY (autonomous) ───────────────────────
-    // After auto-merging the PR in code_change mode, trigger a Render deploy
-    // of the merge commit and verify production health matches. This closes
-    // the full autonomous loop: code → test → commit → PR → merge → deploy → verify.
+    // ── CODE_CHANGE POST-MERGE ───────────────────────────────────────────
+    // After auto-merging the PR in code_change mode, mark COMPLETED immediately.
+    // Render auto-deploys on every push to main, so an explicit deploy trigger
+    // is redundant AND it restarts the service before the worker can mark
+    // COMPLETED, orphaning the job at COMMITTING (65%). The recovery sweep
+    // handles production verification after the restart.
     if (input.executionMode === 'code_change' && prMerged && prMergeCommitSha) {
-      onPhase?.('deploying', `PR merged; triggering Render deploy of merge commit ${prMergeCommitSha.slice(0, 12)}.`);
-      try {
-        const deployResult = input.deployFn
-          ? await input.deployFn(prMergeCommitSha)
-          : await triggerRenderDeploy(prMergeCommitSha);
-        deployId = deployResult.deployId;
-        deployStatus = deployResult.deployStatus;
-        onPhase?.('deploying', `Deploy triggered: ${deployId ?? deployStatus}`);
-
-        // ── PRODUCTION VERIFY (code_change) ──────────────────────────────
-        if (deployId) {
-          onPhase?.('production_verifying', 'Waiting for Render live status and verifying production /health + /version.');
-          // Self-recovery: retry verification up to 3 times with increasing delays
-          const MAX_VERIFY_RETRIES = 3;
-          for (let verifyAttempt = 1; verifyAttempt <= MAX_VERIFY_RETRIES; verifyAttempt++) {
-            try {
-              const verification = input.productionVerifier
-                ? await input.productionVerifier(prMergeCommitSha, deployId)
-                : await verifyProductionDeployment(prMergeCommitSha, deployId);
-              deployStatus = verification.deployStatus;
-              healthResponse = verification.health;
-              versionResponse = verification.version;
-              healthOk = healthResponse.ok;
-              liveCommit = versionResponse.commitSha;
-              productionVerified = deployStatus === 'live'
-                && healthResponse.ok
-                && versionResponse.ok
-                && healthResponse.commitSha === prMergeCommitSha
-                && versionResponse.commitSha === prMergeCommitSha;
-              if (productionVerified) {
-                finalStatus = 'COMPLETED';
-                onPhase?.('production_verifying', `Production verified: deployStatus=live, commit=${prMergeCommitSha.slice(0, 12)}.`);
-                break;
-              }
-              // Not yet verified — retry if attempts remaining
-              if (verifyAttempt < MAX_VERIFY_RETRIES) {
-                const delayMs = 15000 * verifyAttempt; // 15s, 30s, 45s
-                onPhase?.('production_verifying', `Verification attempt ${verifyAttempt}/${MAX_VERIFY_RETRIES} not yet live (deployStatus=${deployStatus}, healthCommit=${healthResponse.commitSha?.slice(0, 12) ?? 'none'}); retrying in ${delayMs / 1000}s.`);
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-              } else {
-                // Final attempt failed — mark as COMPLETED with warning (code is merged, deploy is in progress)
-                finalStatus = 'COMPLETED';
-                error = `PR merged and deploy triggered (${deployId}), but production verification could not confirm SHA parity after ${MAX_VERIFY_RETRIES} attempts. Deploy may still be in progress. healthOk=${healthOk}, liveCommit=${liveCommit?.slice(0, 12) ?? 'none'}, expected=${prMergeCommitSha.slice(0, 12)}.`;
-                onPhase?.('production_verifying', error);
-              }
-            } catch (verifyErr) {
-              if (verifyAttempt < MAX_VERIFY_RETRIES) {
-                const delayMs = 15000 * verifyAttempt;
-                onPhase?.('production_verifying', `Verification attempt ${verifyAttempt}/${MAX_VERIFY_RETRIES} failed: ${safeErrorMessage(verifyErr)}; retrying in ${delayMs / 1000}s.`);
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-              } else {
-                // Self-recovery failed — mark COMPLETED with warning (code is merged)
-                finalStatus = 'COMPLETED';
-                error = `PR merged and deploy triggered (${deployId}), but production verification threw after ${MAX_VERIFY_RETRIES} attempts: ${safeErrorMessage(verifyErr)}. Code is merged to main; deploy may still be building.`;
-                onPhase?.('production_verifying', error);
-              }
-            }
-          }
-        }
-      } catch (deployErr) {
-        // Deploy trigger failed — code is still merged to main, so mark COMPLETED
-        // with a warning. The owner can manually trigger a deploy if needed.
-        finalStatus = 'COMPLETED';
-        error = `PR merged (${prMergeCommitSha?.slice(0, 12)}) but Render deploy trigger failed: ${safeErrorMessage(deployErr)}. Code is on main; manual deploy may be needed.`;
-        onPhase?.('deploying', error);
-      }
+      finalStatus = 'COMPLETED';
+      deployStatus = 'auto_deploy_triggered';
+      onPhase?.('completed', `PR merged to main (${prMergeCommitSha.slice(0, 12)}). Render auto-deploy will pick up the merge commit. Job marked COMPLETED.`);
+    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      // PR was created but not merged (autoMergePr=false or merge failed).
+      // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
+      finalStatus = 'COMPLETED';
+      error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
+      onPhase?.('completed', error);
     } else if (commitSha || input.executionMode === 'read_only') {
       finalStatus = 'COMPLETED';
     }
