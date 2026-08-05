@@ -17,44 +17,17 @@ on:
           - merge
           - rebase
 
-permissions:
-  contents: write
-  pull-requests: write
-  administration: write
-
 jobs:
   merge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Remove branch protection
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -s -X DELETE \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/branches/main/protection || true
       - name: Merge PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.inputs.pr_number }}
-          MERGE_METHOD: ${{ github.event.inputs.merge_method }}
         run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          MERGE_METHOD="${{ github.event.inputs.merge_method }}"
+          echo "Merging PR #$PR_NUMBER via $MERGE_METHOD..."
           gh pr merge "$PR_NUMBER" --"$MERGE_METHOD" --admin --delete-branch
-      - name: Restore branch protection
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -s -X PUT \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/branches/main/protection \
-            -d '{"required_status_checks":{"strict":false,"contexts":[]},"enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null,"required_linear_history":false,"allow_force_pushes":false,"allow_deletions":false}' || true
-      - name: Verify main HEAD
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -s -H "Authorization: token $GH_TOKEN" https://api.github.com/repos/${{ github.repository }}/branches/main | jq -r '.commit.sha + " " + .commit.commit.message[:80]'
+          echo "Merge complete!"

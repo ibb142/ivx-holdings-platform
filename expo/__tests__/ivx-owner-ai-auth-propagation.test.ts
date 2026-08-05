@@ -1,5 +1,18 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
+// Mock react-native before any module that imports it
+mock.module('react-native', () => ({
+  Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
+}));
+
+// Mock @supabase/supabase-js before any transitive import
+mock.module('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    auth: { getSession: async () => ({ data: { session: null }, error: null }) },
+    from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }) }),
+  }),
+}));
+
 const asyncStorageMemory = new Map<string, string>();
 
 mock.module('@react-native-async-storage/async-storage', () => ({

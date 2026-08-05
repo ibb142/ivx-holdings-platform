@@ -1,4 +1,12 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, mock, test } from 'bun:test';
+
+// Mock @supabase/supabase-js before any imports that reference it
+mock.module('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    auth: { getSession: async () => ({ data: { session: null }, error: null }) },
+    from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }) }),
+  }),
+}));
 
 // Force strict (non-open-access) mode and a configured owner email BEFORE the
 // modules under test are imported, since the owner email is captured at module
