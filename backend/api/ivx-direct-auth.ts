@@ -3,13 +3,11 @@
  *
  * When Supabase GoTrue (auth/v1) is degraded or unreachable (522/timeout),
  * this endpoint authenticates the owner by querying the auth.users table
- * via the Supabase REST API (using SUPABASE_SERVICE_ROLE_KEY), verifying
- * the bcrypt password hash, and minting a Supabase-compatible JWT using
- * JWT_SECRET.
+ * via a custom RPC function, verifying the bcrypt password hash, and
+ * minting a Supabase-compatible JWT using JWT_SECRET.
  *
- * This uses the SAME REST API pattern as the IVX durable store — no direct
- * Postgres connection (SUPABASE_DB_URL) is needed. The REST API works even
- * when GoTrue is down.
+ * Uses the Supabase REST API with SUPABASE_SERVICE_ROLE_KEY — same pattern
+ * as the IVX durable store. No SUPABASE_DB_URL needed.
  *
  * Route: POST /api/ivx/auth/direct-sign-in
  * Body: { email, password }
@@ -143,79 +141,124 @@ function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow,
   return jwt.sign(payload, jwtSecret, { algorithm: 'HS256' });
 }
 
-// ── Query auth.users via REST API ───────────────────────────────────────────
+// ── RPC function deployment + query ─────────────────────────────────────────
 
 /**
- * Query auth.users by email using the Supabase REST API + ivx_exec_sql RPC.
- * This is the same pattern the durable store uses — no direct Postgres needed.
- * Falls back to direct PostgREST query if ivx_exec_sql is not available.
+ * The SQL to create a function that queries auth.users by email and returns JSON.
+ * This function is SECURITY DEFINER so it can access the auth schema.
+ * It's deployed via ivx_exec_sql (which returns VOID but can execute DDL).
  */
-async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
+const DEPLOY_QUERY_FUNCTION_SQL = `
+CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT)
+RETURNS JSON AS $fn$
+BEGIN
+  RETURN (
+    SELECT json_build_object(
+      'id', u.id::text,
+      'email', u.email,
+      'encrypted_password', u.encrypted_password,
+      'email_confirmed_at', u.email_confirmed_at,
+      'raw_user_meta_data', u.raw_user_meta_data,
+      'raw_app_meta_data', u.raw_app_meta_data,
+      'aud', u.aud,
+      'role', u.role,
+      'created_at', u.created_at::text,
+      'updated_at', u.updated_at::text
+    )
+    FROM auth.users u
+    WHERE u.email = user_email
+    LIMIT 1
+  );
+END;
+$fn$ LANGUAGE plpgsql SECURITY DEFINER;
+`;
+
+let _functionDeployed = false;
+
+/**
+ * Deploy the ivx_query_auth_user_by_email function via ivx_exec_sql.
+ * This only needs to run once — the function persists in the database.
+ */
+async function ensureQueryFunctionDeployed(): Promise<void> {
+  if (_functionDeployed) return;
+
   const supabaseUrl = getSupabaseUrl();
-  const serviceKey = getServiceRoleKey();
-  if (!supabaseUrl || !serviceKey) {
-    throw new Error('Supabase URL or service role key is not configured.');
-  }
-
-  // Try ivx_exec_sql RPC first (same as durable store)
-  const sql = `SELECT id, email, encrypted_password, email_confirmed_at, raw_user_meta_data, raw_app_meta_data, aud, role, created_at, updated_at FROM auth.users WHERE email = '${email.replace(/'/g, "''")}' LIMIT 1`;
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_exec_sql`, {
       method: 'POST',
       headers: buildHeaders(),
-      body: JSON.stringify({ sql_text: sql }),
+      body: JSON.stringify({ sql_text: DEPLOY_QUERY_FUNCTION_SQL }),
+      signal: controller.signal,
+    });
+    if (response.ok) {
+      _functionDeployed = true;
+      console.log('[IVX Direct Auth] Deployed ivx_query_auth_user_by_email function via ivx_exec_sql');
+    } else {
+      const text = await response.text().catch(() => '');
+      // Function might already exist — that's fine
+      if (text.includes('already exists') || response.status === 409) {
+        _functionDeployed = true;
+        console.log('[IVX Direct Auth] ivx_query_auth_user_by_email function already exists');
+      } else {
+        throw new Error(`Failed to deploy query function: HTTP ${response.status} ${text.slice(0, 200)}`);
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Query auth.users by email using the custom RPC function.
+ */
+async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
+  const supabaseUrl = getSupabaseUrl();
+
+  // Ensure the query function is deployed
+  await ensureQueryFunctionDeployed();
+
+  // Call the function via REST API
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_query_auth_user_by_email`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ user_email: email }),
       signal: controller.signal,
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      // ivx_exec_sql returns the query result — parse it
-      if (data && typeof data === 'object') {
-        // The RPC may return the result in various formats
-        // Check for common patterns
-        const result = Array.isArray(data) ? data[0] : data;
-        if (result && typeof result === 'object') {
-          // If the RPC returns the raw row data
-          const rows = (result as Record<string, unknown>).rows ?? (Array.isArray(data) ? data : [data]);
-          if (Array.isArray(rows) && rows.length > 0) {
-            return rows[0] as AuthUserRow;
-          }
-          // If data itself is the row (single object returned)
-          if ((result as Record<string, unknown>).id) {
-            return result as AuthUserRow;
-          }
-        }
-      }
-      // If ivx_exec_sql didn't return user data, try direct query
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`[IVX Direct Auth] Query RPC failed: HTTP ${response.status} ${text.slice(0, 200)}`);
+      throw new Error(`Query RPC returned HTTP ${response.status}`);
     }
 
-    // Fallback: try querying auth.users directly via PostgREST
-    // This works if the service role has access to the auth schema
-    const directController = new AbortController();
-    const directTimeout = setTimeout(() => directController.abort(), 10_000);
-    try {
-      const directResponse = await fetch(`${supabaseUrl}/rest/v1/users?email=eq.${encodeURIComponent(email)}&limit=1&select=id,email,encrypted_password,email_confirmed_at,raw_user_meta_data,raw_app_meta_data,aud,role,created_at,updated_at`, {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        signal: directController.signal,
-      });
-      if (directResponse.ok) {
-        const directData = await directResponse.json();
-        if (Array.isArray(directData) && directData.length > 0) {
-          return directData[0] as AuthUserRow;
-        }
-      }
-    } finally {
-      clearTimeout(directTimeout);
+    const data = await response.json();
+    if (!data || typeof data !== 'object') {
+      return null;
     }
 
-    return null;
+    // The function returns a JSON object or null
+    const userRow = data as Record<string, unknown>;
+    if (!userRow.id) {
+      return null;
+    }
+
+    return {
+      id: String(userRow.id),
+      email: String(userRow.email ?? ''),
+      encrypted_password: String(userRow.encrypted_password ?? ''),
+      email_confirmed_at: userRow.email_confirmed_at ? String(userRow.email_confirmed_at) : null,
+      raw_user_meta_data: (userRow.raw_user_meta_data as Record<string, unknown>) ?? null,
+      raw_app_meta_data: (userRow.raw_app_meta_data as Record<string, unknown>) ?? null,
+      aud: String(userRow.aud ?? 'authenticated'),
+      role: String(userRow.role ?? 'authenticated'),
+      created_at: String(userRow.created_at ?? ''),
+      updated_at: String(userRow.updated_at ?? ''),
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -272,7 +315,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   }
 
   try {
-    // 1. Query auth.users via REST API
+    // 1. Query auth.users via custom RPC function
     const userRow = await queryAuthUserByEmail(email);
 
     if (!userRow) {
@@ -353,7 +396,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     console.error('[IVX Direct Auth] Error:', message);
     let errorCode = 'unknown_error';
     let safeMessage = 'Sign-in failed. Please try again or contact support.';
-    if (message.includes('connect') || message.includes('timeout') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('aborted')) {
+    if (message.includes('connect') || message.includes('timeout') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('aborted') || message.includes('Query RPC')) {
       errorCode = 'rest_connection_failed';
       safeMessage = 'Authentication service is temporarily unavailable. Please try again.';
     } else if (message.includes('Supabase URL') || message.includes('service role')) {
@@ -368,6 +411,9 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     } else if (message.includes('jwt') || message.includes('JWT_SECRET')) {
       errorCode = 'jwt_error';
       safeMessage = 'Token generation error. Contact your administrator.';
+    } else if (message.includes('query function')) {
+      errorCode = 'function_deploy_failed';
+      safeMessage = 'Server could not deploy the auth query function. Contact your administrator.';
     }
     return Response.json(
       { ok: false, error: safeMessage, errorCode, deploymentMarker: DEPLOYMENT_MARKER },
