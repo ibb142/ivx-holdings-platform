@@ -268,6 +268,9 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'github_create_repository') {
     return CREATE_REPOSITORY_CONFIRM_TEXT;
   }
+  if (action === 'senior_dev_end_to_end_proof') {
+    return GITHUB_CONFIRM_TEXT;
+  }
   if (action === 'autonomous_fix_cycle') {
     return GITHUB_CONFIRM_TEXT;
   }
@@ -3937,12 +3940,35 @@ export async function runIVXSeniorDevProof(): Promise<Record<string, unknown>> {
   evidence.steps.push({ step: 'deploy', status: 'running' });
   const deployResult = await runRenderTriggerDeploy({ ...input, commitId: commitResult.commitSha });
   evidence.deploy = deployResult;
-  evidence.steps.push({ step: 'deploy', status: 'triggered', deployId: deployResult.deployId, status: deployResult.status });
+  const deployTriggered = Boolean(deployResult.deployId) || deployResult.status === 'accepted' || deployResult.status === 'build_in_progress';
+  evidence.steps.push({ step: 'deploy', status: 'triggered', deployId: deployResult.deployId, deployStatus: deployResult.status });
+
+  // Step 4: wait for deploy to go live and verify SHA parity
+  evidence.steps.push({ step: 'verify_live', status: 'running' });
+  let afterHealth: Record<string, unknown> = {};
+  let shaParity = false;
+  try {
+    // Poll health up to 6 times (60s total) for the new commit to appear
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      afterHealth = await fetchProductionHealth();
+      const liveCommit = afterHealth.commitSha || afterHealth.commit;
+      if (typeof liveCommit === 'string' && liveCommit === commitResult.commitSha) {
+        shaParity = true;
+        break;
+      }
+    }
+  } catch (verifyError) {
+    evidence.verifyError = verifyError instanceof Error ? verifyError.message : 'unknown';
+  }
+  evidence.afterHealth = afterHealth;
+  evidence.shaParity = shaParity;
+  evidence.steps.push({ step: 'verify_live', status: shaParity ? 'completed' : 'timeout', shaParity });
 
   return {
     provider: 'ivx',
     action: 'senior_dev_end_to_end_proof',
-    ok: Boolean(commitResult.ok) && Boolean(deployResult.deployId),
+    ok: Boolean(commitResult.commitSha) && deployTriggered && shaParity,
     readOnly: false,
     secretValuesReturned: false,
     evidence,
