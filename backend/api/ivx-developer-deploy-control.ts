@@ -268,6 +268,9 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'github_create_repository') {
     return CREATE_REPOSITORY_CONFIRM_TEXT;
   }
+  if (action === 'senior_dev_end_to_end_proof') {
+    return GITHUB_CONFIRM_TEXT;
+  }
   if (action === 'autonomous_fix_cycle') {
     return GITHUB_CONFIRM_TEXT;
   }
@@ -3942,7 +3945,7 @@ export async function runIVXSeniorDevProof(): Promise<Record<string, unknown>> {
   return {
     provider: 'ivx',
     action: 'senior_dev_end_to_end_proof',
-    ok: Boolean(commitResult.ok) && Boolean(deployResult.deployId),
+    ok: Boolean(commitResult.commitSha) && Boolean(deployResult.deployId),
     readOnly: false,
     secretValuesReturned: false,
     evidence,
