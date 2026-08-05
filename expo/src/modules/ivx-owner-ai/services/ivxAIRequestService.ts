@@ -756,7 +756,7 @@ function resolveOwnerDevelopmentActionIntent(value: unknown): OwnerDevelopmentAc
     return 'keyboard_overlap_fix';
   }
 
-  if (/(?:own\s+brains?|real\s+brain|use\s+(?:the\s+)?(?:own\s+)?brains?|fake\s+statements?|real\s+proof|proof\s+now)/.test(text) && /\b(audit|fix|prove|proof|ia|ai|ivx|owner\s+ai)\b/.test(text)) {
+  if (/(?:own\s+brains?|real\s+brain|use\s+(?:the\s+)?(?:own\s+)?brains?|fake\s+statements?|real\s+proof|proof\s+now|proof\s+that\s+you\s+are|evidence\s+that\s+you\s+are|show\s+me\s+(?:the\s+)?(?:test|testing|evidence|proof|audit)|audit\s+you\s+are|you\s+are\s+(?:a\s+)?real\s+senior\s+developer|you\s+are\s+(?:a\s+)?senior\s+developer|senior\s+developer\s+(?:proof|evidence|test|audit))/.test(text) && /\b(audit|fix|prove|proof|ia|ai|ivx|owner\s+ai|developer|senior)\b/.test(text)) {
     return 'owner_brain_proof';
   }
 
