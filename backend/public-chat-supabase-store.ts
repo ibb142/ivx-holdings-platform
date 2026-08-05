@@ -135,6 +135,7 @@ export class PublicChatSupabaseStore {
         ...buildHeaders(prefer),
         ...(init.headers ?? {}),
       },
+      signal: AbortSignal.timeout(8_000),
     });
     const payload = await parseResponsePayload(response);
 
@@ -162,6 +163,7 @@ export class PublicChatSupabaseStore {
       method: 'POST',
       headers: buildHeaders(),
       body: JSON.stringify({ sql_text: statement }),
+      signal: AbortSignal.timeout(8_000),
     });
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
