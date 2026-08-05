@@ -1802,12 +1802,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           : '';
         console.log('[Auth] Supabase signInWithPassword error (full):', serializeSupabaseAuthErrorForLog(error));
         const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
-        // Prefer the normalized message when the failure is expected (timeout, 522, network, etc).
-        // The raw authErrorMessage may be an unhelpful string like "Aborted" that confuses users.
-        const displayMessage = (normalizedFailure.isExpectedFailure
-          ? normalizedFailure.message
-          : (authErrorMessage?.trim() || normalizedFailure.message)
-        ).trim();
+        const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
         if (normalizedFailure.isExpectedFailure) {
           console.log('[Auth] Login rejected:', normalizedFailure.failureReason, 'email:', credentials.email, 'displayMessage:', displayMessage);
         } else {

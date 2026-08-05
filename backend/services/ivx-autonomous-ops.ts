@@ -501,8 +501,8 @@ async function loadTasks(): Promise<TaskRecord[]> {
     try {
       taskCache = await readDurableJson<TaskRecord[]>(TASKS_FILE, []);
       return taskCache;
-    } catch (err) {
-      console.warn('[loadTasks] Durable store failed, falling back to local file:', err instanceof Error ? err.message : String(err));
+    } catch (error) {
+      console.error('[AutonomousOps] Durable store read failed, falling back to local file:', error);
     }
   }
   try {

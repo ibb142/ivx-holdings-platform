@@ -214,6 +214,15 @@ app.post('/api/ivx/failure-recovery/inject-failure', async (context) => handleRe
 app.options('/api/ivx/failure-recovery/execute', () => failureRecoveryOptions());
 app.post('/api/ivx/failure-recovery/execute', async (context) => handleRecoveryExecuteRequest(context.req.raw));
 
+// ── Direct Auth (GoTrue bypass) ─────────────────────────────────────────────
+// Authenticates via direct Postgres + bcrypt when Supabase GoTrue is degraded.
+import { ivxDirectAuthOptions, handleIVXDirectAuthSignIn } from './api/ivx-direct-auth';
+import { ivxSupabaseRestartOptions, handleIVXSupabaseRestart } from './api/ivx-supabase-restart';
+app.options('/api/ivx/auth/direct-sign-in', () => ivxDirectAuthOptions());
+app.post('/api/ivx/auth/direct-sign-in', async (context) => handleIVXDirectAuthSignIn(context.req.raw));
+app.options('/api/ivx/auth/restart-supabase', () => ivxSupabaseRestartOptions());
+app.post('/api/ivx/auth/restart-supabase', async (context) => handleIVXSupabaseRestart(context.req.raw));
+
 startAutonomousQAScheduler();
 
 export default app;
