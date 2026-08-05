@@ -181,6 +181,7 @@ async function fetchRenderDeploy(deployId: string): Promise<{ id: string; status
       error: null,
     };
   } catch (err) {
+    console.error('[fetchRenderDeploy] JSON parse or fetch failed:', err instanceof Error ? err.message : String(err));
     return { id: deployId, status: null, sha: null, error: err instanceof Error ? err.message : 'Render API unreachable' };
   }
 }
