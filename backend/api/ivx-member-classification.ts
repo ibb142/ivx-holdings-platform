@@ -67,8 +67,8 @@ async function requireOwner(request: Request): Promise<Response | null> {
   try {
     await assertIVXOwnerOnly(request);
     return null;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'IVX owner authentication required.';
+  } catch (err: unknown) {
+    const message = err instanceof Error ? (err instanceof Error ? err.message : String(err)) : 'IVX owner authentication required.';
     const status = /required|missing|unauthorized|invalid|no bearer/i.test(message) ? 401 : 403;
     return ownerOnlyJson({ ok: false, error: message }, status);
   }
@@ -493,10 +493,10 @@ CREATE INDEX IF NOT EXISTS idx_classification_audit_member_id ON public.classifi
       message: 'Migration applied successfully',
       statements_executed: executed,
     });
-  } catch (err) {
+  } catch (err: unknown) {
     return ownerOnlyJson({
       ok: false,
-      error: err.message,
+      error: (err instanceof Error ? err.message : String(err)),
       hint: 'Run the migration SQL directly in Supabase SQL Editor',
       migration_file: 'backend/supabase/migrations/20260728080000_member_classification_system.sql',
     }, 500);

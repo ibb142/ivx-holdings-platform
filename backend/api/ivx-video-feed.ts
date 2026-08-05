@@ -169,8 +169,8 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
     }));
 
     return json({ videos: feed, count: feed.length, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err) {
-    return json({ error: err?.message || 'feed failed', deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) || 'feed failed', deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
 
@@ -232,7 +232,7 @@ export async function handleVideoDownload(req: Request, videoId: string): Promis
     headers.set('Cache-Control', 'public, max-age=3600');
 
     return new Response(upstream.body, { status: upstream.status, headers });
-  } catch (err) {
-    return json({ error: err?.message || 'download failed', deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) || 'download failed', deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
