@@ -2,16 +2,12 @@
  * IVX Direct Auth — GoTrue Bypass Endpoint
  *
  * When Supabase GoTrue (auth/v1) is degraded or unreachable (522/timeout),
- * this endpoint authenticates the owner by querying the auth.users table
- * via a temp table pattern: ivx_exec_sql writes user data to a public temp
- * table, then PostgREST reads it. This avoids both GoTrue AND direct Postgres.
+ * this endpoint authenticates the owner by querying auth.users via a custom
+ * RPC function, verifying the bcrypt password hash, and minting a
+ * Supabase-compatible JWT using JWT_SECRET.
  *
- * Steps:
- * 1. ivx_exec_sql: INSERT user data into public.ivx_auth_temp
- * 2. PostgREST: SELECT user_data FROM public.ivx_auth_temp WHERE token = ?
- * 3. bcrypt.compare(password, stored_hash)
- * 4. Mint JWT with JWT_SECRET
- * 5. ivx_exec_sql: DELETE from public.ivx_auth_temp
+ * Uses SUPABASE_SERVICE_ROLE_KEY + REST API — same pattern as durable store.
+ * No SUPABASE_DB_URL or direct Postgres needed.
  *
  * Route: POST /api/ivx/auth/direct-sign-in
  * Body: { email, password }
@@ -20,7 +16,7 @@ import { ownerOnlyOptions } from './owner-only';
 
 const DEPLOYMENT_MARKER = 'ivx-direct-auth-gotrue-bypass-2026-08-05';
 
-// ── Env resolution (same pattern as ivx-durable-store.ts) ───────────────────
+// ── Env resolution ──────────────────────────────────────────────────────────
 
 const SERVICE_ROLE_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'] as const;
 const SUPABASE_URL_NAMES = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
@@ -86,136 +82,6 @@ async function getJwtModule(): Promise<typeof import('jsonwebtoken')> {
   return _jwtModule;
 }
 
-// ── REST API helpers ────────────────────────────────────────────────────────
-
-/** Call ivx_exec_sql RPC (returns VOID — used for DDL and DML). */
-async function execSql(sql: string): Promise<void> {
-  const supabaseUrl = getSupabaseUrl();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
-  try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_exec_sql`, {
-      method: 'POST',
-      headers: buildHeaders(),
-      body: JSON.stringify({ sql_text: sql }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`ivx_exec_sql failed: HTTP ${response.status} ${text.slice(0, 300)}`);
-    }
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-/** Query a public table via PostgREST GET. */
-async function restGet<T>(path: string): Promise<T | null> {
-  const supabaseUrl = getSupabaseUrl();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
-      headers: buildHeaders(),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`PostgREST GET failed: HTTP ${response.status} ${text.slice(0, 200)}`);
-    }
-    const data = await response.json();
-    return data as T;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-// ── Temp table pattern for reading auth.users ───────────────────────────────
-
-const TEMP_TABLE_SQL = `CREATE TABLE IF NOT EXISTS public.ivx_auth_temp (
-  token TEXT PRIMARY KEY,
-  user_data JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-ALTER TABLE public.ivx_auth_temp ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS ivx_auth_temp_service_role_all ON public.ivx_auth_temp;
-CREATE POLICY ivx_auth_temp_service_role_all ON public.ivx_auth_temp FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
-SELECT pg_notify('pgrst','reload schema');`;
-
-let _tempTableReady = false;
-
-async function ensureTempTable(): Promise<void> {
-  if (_tempTableReady) return;
-  await execSql(TEMP_TABLE_SQL);
-  _tempTableReady = true;
-  console.log('[IVX Direct Auth] Temp table ready');
-}
-
-/**
- * Write auth user data to the temp table using ivx_exec_sql,
- * then read it back via PostgREST.
- */
-async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
-  const sanitizedEmail = email.replace(/'/g, "''");
-  const token = crypto.randomUUID();
-
-  // 1. Ensure temp table exists
-  await ensureTempTable();
-
-  // 2. Clean up any old entries for this token (shouldn't exist but safe)
-  await execSql(`DELETE FROM public.ivx_auth_temp WHERE token = '${token}';`);
-
-  // 3. Insert the user data from auth.users into the temp table
-  await execSql(`
-    INSERT INTO public.ivx_auth_temp (token, user_data)
-    SELECT '${token}', json_build_object(
-      'id', u.id::text,
-      'email', u.email,
-      'encrypted_password', u.encrypted_password,
-      'email_confirmed_at', u.email_confirmed_at,
-      'raw_user_meta_data', u.raw_user_meta_data,
-      'raw_app_meta_data', u.raw_app_meta_data,
-      'aud', u.aud,
-      'role', u.role,
-      'created_at', u.created_at::text,
-      'updated_at', u.updated_at::text
-    )
-    FROM auth.users u
-    WHERE u.email = '${sanitizedEmail}'
-    LIMIT 1;
-  `);
-
-  // 4. Read the temp table via PostgREST
-  const rows = await restGet<{ token: string; user_data: Record<string, unknown> }[]>(
-    `ivx_auth_temp?token=eq.${encodeURIComponent(token)}&select=user_data`,
-  );
-
-  // 5. Clean up the temp entry
-  await execSql(`DELETE FROM public.ivx_auth_temp WHERE token = '${token}';`);
-
-  if (!rows || rows.length === 0) {
-    return null;
-  }
-
-  const userData = rows[0].user_data;
-  if (!userData || !userData.id) {
-    return null;
-  }
-
-  return {
-    id: String(userData.id),
-    email: String(userData.email ?? ''),
-    encrypted_password: String(userData.encrypted_password ?? ''),
-    email_confirmed_at: userData.email_confirmed_at ? String(userData.email_confirmed_at) : null,
-    raw_user_meta_data: (userData.raw_user_meta_data as Record<string, unknown>) ?? null,
-    raw_app_meta_data: (userData.raw_app_meta_data as Record<string, unknown>) ?? null,
-    aud: String(userData.aud ?? 'authenticated'),
-    role: String(userData.role ?? 'authenticated'),
-    created_at: String(userData.created_at ?? ''),
-    updated_at: String(userData.updated_at ?? ''),
-  };
-}
-
 // ── Types ───────────────────────────────────────────────────────────────────
 
 interface AuthUserRow {
@@ -276,6 +142,99 @@ function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow,
   return jwt.sign(payload, jwtSecret, { algorithm: 'HS256' });
 }
 
+// ── RPC function deployment + query ─────────────────────────────────────────
+
+/**
+ * Single-statement SQL to create a function that queries auth.users by email.
+ * This is a SINGLE statement so ivx_exec_sql's EXECUTE can handle it.
+ * SECURITY DEFINER allows it to access the auth schema.
+ */
+const CREATE_FUNCTION_SQL = `CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT) RETURNS JSON AS $fn$ BEGIN RETURN (SELECT json_build_object('id', u.id::text, 'email', u.email, 'encrypted_password', u.encrypted_password, 'email_confirmed_at', u.email_confirmed_at, 'raw_user_meta_data', u.raw_user_meta_data, 'raw_app_meta_data', u.raw_app_meta_data, 'aud', u.aud, 'role', u.role, 'created_at', u.created_at::text, 'updated_at', u.updated_at::text) FROM auth.users u WHERE u.email = user_email LIMIT 1); END; $fn$ LANGUAGE plpgsql SECURITY DEFINER`;
+
+let _functionDeployed = false;
+
+/** Deploy the query function via ivx_exec_sql (one-time, persists in DB). */
+async function ensureQueryFunction(): Promise<void> {
+  if (_functionDeployed) return;
+  const supabaseUrl = getSupabaseUrl();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_exec_sql`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ sql_text: CREATE_FUNCTION_SQL }),
+      signal: controller.signal,
+    });
+    if (response.ok) {
+      _functionDeployed = true;
+      console.log('[IVX Direct Auth] Query function deployed successfully');
+    } else {
+      const text = await response.text().catch(() => '');
+      // If function already exists, that's fine
+      if (text.includes('already exists') || response.status === 409 || response.ok) {
+        _functionDeployed = true;
+        console.log('[IVX Direct Auth] Query function already exists');
+      } else {
+        throw new Error(`Failed to deploy query function: HTTP ${response.status} ${text.slice(0, 300)}`);
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Query auth.users by email via the custom RPC function. */
+async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
+  const supabaseUrl = getSupabaseUrl();
+
+  // Ensure the function exists (one-time, cached)
+  await ensureQueryFunction();
+
+  // Call the function via REST API
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_query_auth_user_by_email`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ user_email: email }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`[IVX Direct Auth] Query RPC failed: HTTP ${response.status} ${text.slice(0, 300)}`);
+      throw new Error(`Query RPC returned HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = await response.json();
+    if (!data || typeof data !== 'object') {
+      return null;
+    }
+
+    const userRow = data as Record<string, unknown>;
+    if (!userRow.id) {
+      return null;
+    }
+
+    return {
+      id: String(userRow.id),
+      email: String(userRow.email ?? ''),
+      encrypted_password: String(userRow.encrypted_password ?? ''),
+      email_confirmed_at: userRow.email_confirmed_at ? String(userRow.email_confirmed_at) : null,
+      raw_user_meta_data: (userRow.raw_user_meta_data as Record<string, unknown>) ?? null,
+      raw_app_meta_data: (userRow.raw_app_meta_data as Record<string, unknown>) ?? null,
+      aud: String(userRow.aud ?? 'authenticated'),
+      role: String(userRow.role ?? 'authenticated'),
+      created_at: String(userRow.created_at ?? ''),
+      updated_at: String(userRow.updated_at ?? ''),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── Main handler ────────────────────────────────────────────────────────────
 
 export function ivxDirectAuthOptions(): Response {
@@ -327,7 +286,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   }
 
   try {
-    // 1. Query auth.users via temp table pattern
+    // 1. Query auth.users via custom RPC function
     const userRow = await queryAuthUserByEmail(email);
 
     if (!userRow) {
@@ -411,12 +370,12 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     if (message.includes('timeout') || message.includes('aborted') || message.includes('AbortError')) {
       errorCode = 'rest_timeout';
       safeMessage = 'Authentication service is temporarily unavailable. Please try again.';
-    } else if (message.includes('ivx_exec_sql')) {
-      errorCode = 'exec_sql_failed';
-      safeMessage = 'Server could not execute the auth query. Please try again.';
-    } else if (message.includes('PostgREST')) {
-      errorCode = 'postgrest_failed';
-      safeMessage = 'Server could not read the auth data. Please try again.';
+    } else if (message.includes('Query RPC')) {
+      errorCode = 'query_rpc_failed';
+      safeMessage = 'Server could not query the auth database. Please try again.';
+    } else if (message.includes('query function') || message.includes('deploy')) {
+      errorCode = 'function_deploy_failed';
+      safeMessage = 'Server could not initialize the auth query. Please try again.';
     } else if (message.includes('Cannot find module') || message.includes('MODULE_NOT_FOUND')) {
       errorCode = 'module_not_found';
       safeMessage = 'Server module loading error. Contact your administrator.';
