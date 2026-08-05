@@ -838,7 +838,7 @@ import {
 } from './api/ivx-incidents';
 import { recordIncident } from './services/ivx-incident-store';
 import { evaluateAndMaybeRollback } from './services/ivx-production-guard';
-import { OPTIONS as agentJobsOptions, handleIVXAgentJobActionRequest, handleIVXAgentJobsCreateRequest, handleIVXAgentJobsListRequest, handleIVXAgentJobsLiveActivityRequest, handleIVXAgentJobsStatusRequest, handleIVXAgentWorkerRunOnceRequest } from './api/ivx-agent-jobs';
+import { OPTIONS as agentJobsOptions, handleIVXAgentJobActionRequest, handleIVXAgentJobGetRequest, handleIVXAgentJobsCreateRequest, handleIVXAgentJobsListRequest, handleIVXAgentJobsLiveActivityRequest, handleIVXAgentJobsStatusRequest, handleIVXAgentWorkerRunOnceRequest } from './api/ivx-agent-jobs';
 import { OPTIONS as agentTestTokenOptions, handleIVXAgentTestRunRequest, handleIVXAgentTestTokenMintRequest } from './api/ivx-agent-test-token';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
@@ -4502,6 +4502,8 @@ app.get('/api/ivx/agent-jobs/status', async (context) => handleIVXAgentJobsStatu
 app.options('/api/ivx/agent-jobs', () => agentJobsOptions());
 app.get('/api/ivx/agent-jobs', async (context) => handleIVXAgentJobsListRequest(context.req.raw));
 app.post('/api/ivx/agent-jobs', async (context) => handleIVXAgentJobsCreateRequest(context.req.raw));
+app.options('/api/ivx/agent-jobs/:jobId', () => agentJobsOptions());
+app.get('/api/ivx/agent-jobs/:jobId', async (context) => handleIVXAgentJobGetRequest(context.req.raw, context.req.param('jobId')));
 app.options('/api/ivx/agent-jobs/:jobId/retry', () => agentJobsOptions());
 app.post('/api/ivx/agent-jobs/:jobId/retry', async (context) => handleIVXAgentJobActionRequest(context.req.raw, context.req.param('jobId'), 'retry'));
 app.options('/api/ivx/agent-jobs/:jobId/cancel', () => agentJobsOptions());
