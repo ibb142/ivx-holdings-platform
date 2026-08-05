@@ -72,7 +72,7 @@ export async function handleAutonomousProofRequest(request: Request): Promise<Re
   // 3. Get GitHub main HEAD
   let githubHead: string | null = null;
   try {
-    const ghToken = process.env.GITHUB_TOKEN || process.env.RORK_PUBLIC_GITHUB_TOKEN;
+    const ghToken = process.env.GITHUB_TOKEN;
     if (ghToken) {
       const ghData = await fetchJson(
         'https://api.github.com/repos/ibb142/ivx-holdings-platform/git/refs/heads/main',
