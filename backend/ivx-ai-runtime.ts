@@ -630,6 +630,16 @@ async function requestIVXAITextInternal(input: {
   const adaptiveTimeoutMs = computeAdaptiveTimeoutMs({ promptChars, maxOutputTokens: input.maxOutputTokens });
   const queueLane: IVXAIQueueLane = classifyRequestLane({ promptChars, maxOutputTokens: input.maxOutputTokens });
   const queueSlot = await acquireAIQueueSlot(queueLane);
+
+  // Implement cached shell load
+  cacheShellLoad();
+  // Optimize startup calls with parallel execution
+  const startupResults = await Promise.all([callA(), callB(), callC()]);
+  // Handle startup results
+  handleStartupResults(startupResults);
+  let cachedMessages = loadCachedMessages();
+  // Set up background checks
+  setupBackgroundChecks();
   const callStartedAt = Date.now();
 
   let result: Awaited<ReturnType<typeof generateText>> | null = null;
