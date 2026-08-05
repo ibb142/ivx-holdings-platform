@@ -505,7 +505,8 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
       rawAttachments: body,
     });
 
-    const assistantPersistence = await persistPublicTurn({
+    // Fire-and-forget assistant persistence too — never block the response.
+    const assistantPersistencePromise = persistPublicTurn({
       sessionId,
       clientId,
       role: 'assistant',
@@ -513,8 +514,11 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
       source: result.source,
       model: result.model,
     }).catch(() => 'none' as const);
-    const userPersistence = await userPersistencePromise;
-    const persistence = assistantPersistence !== 'none' ? assistantPersistence : userPersistence;
+    const userPersistence = await Promise.race([
+      userPersistencePromise,
+      Promise.resolve('none' as const),
+    ]);
+    const persistence = userPersistence;
 
     const payload: PublicChatSuccessResponse = {
       ok: true,

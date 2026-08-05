@@ -59,8 +59,8 @@ export async function handleGetDealPathways(req: Request, dealId: string): Promi
       .single();
     if (error) return json({ error: error.message }, 404);
     return json({ deal: data, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err) {
-    return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
 
@@ -149,8 +149,8 @@ export async function handleUpdateDealPathways(req: Request, dealId: string, adm
       auditEntries: auditEntries.length,
       deploymentMarker: DEPLOYMENT_MARKER,
     });
-  } catch (err) {
-    return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
 
@@ -235,8 +235,8 @@ export async function handlePublishDeal(req: Request, dealId: string, adminUserI
       },
       deploymentMarker: DEPLOYMENT_MARKER,
     });
-  } catch (err) {
-    return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
 
@@ -255,8 +255,8 @@ export async function handleGetSyncReport(req: Request, dealId: string): Promise
       .limit(10);
     if (error) return json({ error: error.message }, 500);
     return json({ reports: data || [], deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err) {
-    return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
 
@@ -275,8 +275,8 @@ export async function handleGetAuditTrail(req: Request, dealId: string): Promise
       .limit(50);
     if (error) return json({ error: error.message }, 500);
     return json({ events: data || [], deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err) {
-    return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }
 
@@ -294,7 +294,7 @@ export async function handleListDealPathways(req: Request): Promise<Response> {
       .limit(50);
     if (error) return json({ error: error.message }, 500);
     return json({ deals: data || [], deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err) {
-    return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500);
   }
 }

@@ -22,7 +22,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
-  try { return await req.json() as Record<string, unknown>; } catch (err) { console.error('[ivx-project-engagement] Swallowed error caught:', err); return {}; }
+  try { return await req.json() as Record<string, unknown>; } catch (err: unknown) { console.error('[ivx-project-engagement] Swallowed error caught:', err); return {}; }
 }
 
 function safeStr(v: unknown): string { return typeof v === 'string' ? v.trim() : ''; }
@@ -95,8 +95,8 @@ export async function handleProjectMediaGet(c: Context): Promise<Response> {
       limits: { max_images: MAX_POST_IMAGES, max_videos: MAX_POST_VIDEOS },
       counts: { images: images.length, videos: videos.length },
     });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -161,8 +161,8 @@ export async function handleProjectMediaUpload(c: Context): Promise<Response> {
     }
 
     return json({ success: true, media: data, video: videoRecord });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -177,8 +177,8 @@ export async function handleProjectMediaDelete(c: Context): Promise<Response> {
     const { error } = await sb.from('project_media').delete().eq('id', mediaId).eq('project_id', projectId);
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -192,8 +192,8 @@ export async function handleProjectVideoPin(c: Context): Promise<Response> {
     const { error } = await sb.from('project_videos').update({ is_pinned: true }).eq('id', videoId);
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -229,8 +229,8 @@ export async function handleProjectLikeToggle(c: Context): Promise<Response> {
 
     const { count } = await sb.from('project_likes').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
     return json({ liked, like_count: count ?? 0 });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -253,8 +253,8 @@ export async function handleProjectCommentsGet(c: Context): Promise<Response> {
       .range(offset, offset + limit - 1);
 
     return json({ comments: data || [], total: count ?? 0 });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -280,8 +280,8 @@ export async function handleProjectCommentAdd(c: Context): Promise<Response> {
 
     if (error) return json({ error: error.message }, 500);
     return json({ success: true, comment: data });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -293,8 +293,8 @@ export async function handleProjectCommentDelete(c: Context): Promise<Response> 
     const sb = await getSupabaseAdmin();
     await sb.from('project_comments').update({ deleted_at: new Date().toISOString() }).eq('id', commentId).eq('project_id', projectId);
     return json({ success: true });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -308,8 +308,8 @@ export async function handleProjectCommentApprove(c: Context): Promise<Response>
     const sb = await getSupabaseAdmin();
     await sb.from('project_comments').update({ is_approved: approved }).eq('id', commentId).eq('project_id', projectId);
     return json({ success: true });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -347,8 +347,8 @@ export async function handleProjectEngagementGet(c: Context): Promise<Response> 
       user_liked: userLiked,
       user_saved: userSaved,
     });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -373,8 +373,8 @@ export async function handleProjectBulkEngagementGet(c: Context): Promise<Respon
       };
     }
     return json({ engagements: result });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -397,8 +397,8 @@ export async function handleProjectAnalyticsGet(c: Context): Promise<Response> {
       .order('date', { ascending: false });
 
     return json({ analytics: data || [] });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -432,8 +432,8 @@ export async function handleProjectTrackClick(c: Context): Promise<Response> {
     } catch (analyticsError) { console.log("[ProjectEngagement] analytics tracking failed:", analyticsError instanceof Error ? analyticsError.message : "unknown"); }
 
     return json({ success: true });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -459,8 +459,8 @@ export async function handleProjectShareTrack(c: Context): Promise<Response> {
 
     const { count } = await sb.from('project_shares').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
     return json({ success: true, share_count: count ?? 0 });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
 
@@ -493,7 +493,7 @@ export async function handleProjectSaveToggle(c: Context): Promise<Response> {
 
     const { count } = await sb.from('project_saves').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
     return json({ saved, save_count: count ?? 0 });
-  } catch (err) {
-    return json({ error: err.message }, 500);
+  } catch (err: unknown) {
+    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
   }
 }
