@@ -498,8 +498,12 @@ let taskCache: TaskRecord[] | null = null;
 async function loadTasks(): Promise<TaskRecord[]> {
   if (taskCache) return taskCache;
   if (isDurableStoreConfigured()) {
-    taskCache = await readDurableJson<TaskRecord[]>(TASKS_FILE, []);
-    return taskCache;
+    try {
+      taskCache = await readDurableJson<TaskRecord[]>(TASKS_FILE, []);
+      return taskCache;
+    } catch (error) {
+      console.error('[AutonomousOps] Durable store read failed, falling back to local file:', error);
+    }
   }
   try {
     taskCache = JSON.parse(await readFile(TASKS_FILE, 'utf8')) as TaskRecord[];
