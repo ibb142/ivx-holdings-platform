@@ -219,17 +219,47 @@ function buildSupabaseClient(url: string, key: string): SupabaseClient {
         ...(selfHosted ? {} : { 'x-connection-pool': 'true' }),
         'x-client-info': `ivx-app/${Platform.OS}`,
       },
-      fetch: ((url: RequestInfo | URL, options?: RequestInit) => {
+      fetch: (async (url: RequestInfo | URL, options?: RequestInit) => {
         const urlStr = requestUrlString(url);
         const nextOptions = stripConnectionPoolHeaderForAuth(urlStr, options);
         logAuthTokenRequestIfDev(urlStr, nextOptions);
-        const controller = new AbortController();
-        const timeoutMs = selfHosted ? 20000 : 15000;
-        const timeout = setTimeout(() => controller.abort(), timeoutMs);
-        return fetch(url, {
-          ...nextOptions,
-          signal: controller.signal,
-        }).finally(() => clearTimeout(timeout));
+        const isAuthRequest = urlStr.includes('/auth/v1/');
+        const maxRetries = isAuthRequest ? 3 : 1;
+        const baseTimeoutMs = selfHosted ? 20000 : 15000;
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          const controller = new AbortController();
+          const timeoutMs = baseTimeoutMs + (attempt * 5000);
+          const timeout = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const response = await fetch(url, {
+              ...nextOptions,
+              signal: controller.signal,
+            });
+            clearTimeout(timeout);
+            if (response.status === 522 || response.status === 524 || response.status === 502) {
+              if (attempt < maxRetries - 1) {
+                const backoff = 1000 * (attempt + 1);
+                console.warn(`[Supabase] HTTP ${response.status} on attempt ${attempt + 1}/${maxRetries}, retrying in ${backoff}ms`);
+                await new Promise(resolve => setTimeout(resolve, backoff));
+                continue;
+              }
+            }
+            return response;
+          } catch (error) {
+            clearTimeout(timeout);
+            lastError = error as Error;
+            const isAbort = lastError.name === 'AbortError';
+            if (attempt < maxRetries - 1 && (isAbort || lastError.message === 'Network request failed')) {
+              const backoff = 1500 * (attempt + 1);
+              console.warn(`[Supabase] ${isAbort ? 'Timeout' : 'Network error'} on attempt ${attempt + 1}/${maxRetries}, retrying in ${backoff}ms`);
+              await new Promise(resolve => setTimeout(resolve, backoff));
+              continue;
+            }
+            throw lastError;
+          }
+        }
+        throw lastError ?? new Error('Supabase request failed after all retries');
       }) as typeof fetch,
     },
     realtime: {
