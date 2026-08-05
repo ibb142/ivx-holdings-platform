@@ -462,6 +462,12 @@ export function detectIdentityOrCapabilityQuestion(message: string): { direct: t
   const normalized = asTrimmedString(message).toLowerCase();
   if (!normalized) return null;
 
+  // V6.15: If the owner is asking for PROOF / EVIDENCE / TEST / AUDIT, do NOT
+  // return a canned identity answer. Let the routing send it to real senior-
+  // developer execution so the response contains live task evidence.
+  const asksForEvidence = /\b(proof|evidence|test|testing|audit|verify|demonstrate|show\s+me|prove)\b/i.test(normalized);
+  if (asksForEvidence) return null;
+
   const asksIdentity = /\b(eres|es|is|are|soy|am)\b.{0,60}\b(ivx|t[uú]|yo)\b.{0,60}\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior|developer\s+senior|engineer\s+senior)\b/i.test(normalized)
     || /\b(ivx|t[uú])\b.{0,60}\b(eres|es|is|are)\b.{0,60}\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior)\b/i.test(normalized)
     || /\b(senior\s+developer|senior\s+engineer|ingeniero\s+senior|desarrollador\s+senior)\b.{0,40}\b(yes\s+or\s+no|s[ií]\s+o\s+no|o\s+no|or\s+no)\b/i.test(normalized)
