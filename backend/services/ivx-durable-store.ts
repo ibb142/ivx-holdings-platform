@@ -126,6 +126,7 @@ class DurableStore {
       method: 'POST',
       headers: buildHeaders(),
       body: JSON.stringify({ sql_text: statement }),
+      signal: AbortSignal.timeout(8000),
     });
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
@@ -181,6 +182,7 @@ class DurableStore {
     const response = await fetch(`${this.restBaseUrl()}${pathName}`, {
       ...init,
       headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
+      signal: AbortSignal.timeout(8000),
     });
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
