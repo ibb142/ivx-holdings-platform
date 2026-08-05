@@ -6011,7 +6011,7 @@ function detectProofOfSeniorDeveloperRequest(message: string): boolean {
   const normalized = (message ?? '').trim().toLowerCase();
   if (!normalized) return false;
   const asksForEvidence = /\b(proof|evidence|test|testing|audit|verify|demonstrate|show\s+me|prove)\b/i.test(normalized);
-  const mentionsSeniorDev = /\b(senior\s+developer|senior\s+engineer|real\s+developer|real\s+engineer|desarrollador\s+senior|ingeniero\s+senior|tu\s+eres|eres\s+(un\s+)?senior|you\s+are\s+(a\s+)?senior|developer\s+senior)\b/i.test(normalized);
+  const mentionsSeniorDev = /\b(senior\s+developer|senior\s+engineer|real\s+developer|real\s+engineer|desarrollador\s+senior|ingeniero\s+senior|tu\s+eres|eres\s+(un\s+)?senior|you\s+are\s+(a\s+)?senior|developer\s+senior|developer|engineer|desarrollador|ingeniero)\b/i.test(normalized);
   return asksForEvidence && mentionsSeniorDev;
 }
 
