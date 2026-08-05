@@ -77,7 +77,7 @@ COPY expo/ivxholding-landing ./expo/ivxholding-landing
 COPY expo/assets/images ./expo/assets/images
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=5 \
   CMD wget -qO- "http://127.0.0.1:3000/health" || exit 1
 
 CMD ["node", "/app/node_modules/tsx/dist/cli.mjs", "/app/server.ts"]

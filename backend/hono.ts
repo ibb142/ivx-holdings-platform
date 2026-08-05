@@ -6375,8 +6375,8 @@ app.post('/api/ivx/growth/prospects/:id/qualify', async (c) => {
   try {
     const updated = await updateQualificationStatus(id, body.status);
     return c.json({ ok: true, prospect: updated });
-  } catch (err: any) {
-    return c.json({ ok: false, error: err.message }, 400);
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 400);
   }
 });
 
@@ -6517,8 +6517,8 @@ app.post('/api/ivx/autonomous/tasks/:id/cancel', async (c) => {
   try {
     const task = await cancelTask(id);
     return c.json({ ok: true, task });
-  } catch (err: any) {
-    return c.json({ ok: false, error: err.message }, 404);
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 404);
   }
 });
 
