@@ -671,6 +671,21 @@ export async function handleIVXAgentJobsCreateRequest(request: Request): Promise
   }
 }
 
+export async function handleIVXAgentJobGetRequest(request: Request, jobId: string): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    await ensureAgentSchema();
+    const job = await loadJob(jobId);
+    if (!job) {
+      return ownerOnlyJson({ ok: false, error: 'IVX agent job was not found.', marker: BLOCK22_MARKER, timestamp: nowIso() }, 404);
+    }
+    const logs = await loadJobLogs(jobId);
+    return ownerOnlyJson({ ok: true, marker: BLOCK22_MARKER, job, logs, timestamp: nowIso() });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 export async function handleIVXAgentJobActionRequest(request: Request, jobId: string, action: 'retry' | 'cancel' | 'approve'): Promise<Response> {
   try {
     const ownerContext = await assertIVXOwnerOnly(request);
