@@ -375,7 +375,10 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
       deploymentMarker: DEPLOYMENT_MARKER,
     });
 
-    const userPersistence = await persistPublicTurn({
+    // Fire-and-forget persistence — never block the chat response on Supabase.
+    // When Supabase is unreachable, persistence falls back to JSON or skips
+    // silently, but the user always gets their answer without waiting.
+    const userPersistencePromise = persistPublicTurn({
       sessionId,
       clientId,
       role: 'user',
@@ -385,17 +388,20 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
         (documents.length > 0 ? `[deal document x${documents.length}]` : ''),
       source: 'user',
       model: null,
-    });
+    }).catch(() => 'none' as const);
 
     // ─── Pre-Execution Feasibility Gate (Stage 0) ───────────────────────────
     // Runs BEFORE the AI model, deployment brain, or any tool execution. Public
     // chat has no owner session, so ownerSessionPresent is always false here —
     // the gate will block any prompt that requires owner-only capabilities.
+    // skipLiveProbes: true — public chat does not need live credential probes
+    // (GitHub/Render/Supabase) which add latency and can hang when services are down.
     try {
       const gate = await checkPreExecutionGate(request, {
         prompt: message,
         ownerSessionPresent: false,
         entryPoint: 'public-chat',
+        skipLiveProbes: true,
       });
       if (gate.blocked && gate.result.state === 'BLOCKED') {
         // A policy block is a completed chat turn, not a transport failure. Returning
@@ -410,7 +416,8 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
           content: answer,
           source: 'system',
           model: 'ivx-pre-execution-gate',
-        });
+        }).catch(() => 'none' as const);
+        const userPersistence = await userPersistencePromise;
         return jsonResponse({
           ok: true,
           requestId,
@@ -466,7 +473,8 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
           content: brainResult,
           source: 'deployment-brain',
           model: 'ivx-deployment-brain',
-        });
+        }).catch(() => undefined);
+        const userPersistence = await userPersistencePromise;
 
         return jsonResponse({
           ok: true,
@@ -504,7 +512,8 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
       content: result.answer,
       source: result.source,
       model: result.model,
-    });
+    }).catch(() => 'none' as const);
+    const userPersistence = await userPersistencePromise;
     const persistence = assistantPersistence !== 'none' ? assistantPersistence : userPersistence;
 
     const payload: PublicChatSuccessResponse = {
