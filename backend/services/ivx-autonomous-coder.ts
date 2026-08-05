@@ -2737,8 +2737,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       // PR was created but not merged (autoMergePr=false or merge failed).
       // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
       finalStatus = 'COMPLETED';
-      error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
-      onPhase?.('completed', error);
+      const prInfo = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
+      onPhase?.('completed', prInfo);
     } else if (commitSha || input.executionMode === 'read_only') {
       finalStatus = 'COMPLETED';
     }

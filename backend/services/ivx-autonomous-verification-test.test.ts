@@ -1,3 +1,5 @@
-import { strict as assert } from 'node:test';
+import { expect, test } from "bun:test";
 
-assert.strictEqual(1 + 1, 2);
+test("node:test compatibility — basic assertion", () => {
+  expect(1 + 1).toBe(2);
+});
