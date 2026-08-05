@@ -720,6 +720,25 @@ export function buildIVXOwnerAIPlannerDecision(prompt: string): IVXOwnerAIPlanne
     || /\b(prioritized\s+bug\s+list|full\s+bug\s+list|complete\s+bug\s+list)\b/.test(normalized);
   const requiresTaskDecomposition = asksForMultiStepTask(normalized);
 
+  // V6.15: Owner asks for proof/evidence/test/audit of senior developer capability.
+  // Do NOT answer with a narrative description. Force a real senior-developer task so
+  // the response contains a live task ID, status, and execution evidence.
+  const asksForSeniorDevProof = /\b(proof|evidence|test|testing|audit|verify|demonstrate|show\s+me)\b/i.test(normalized)
+    && /\b(senior\s+developer|senior\s+engineer|real\s+developer|real\s+engineer|desarrollador\s+senior|ingeniero\s+senior|tu\s+eres|eres\s+(un\s+)?senior|you\s+are\s+(a\s+)?senior)\b/i.test(normalized);
+  if (asksForSeniorDevProof) {
+    return {
+      semanticIntent: 'self_developer_execution',
+      route: 'self_developer',
+      useTools: true,
+      toolHints: ['run_ivx_senior_developer_task'],
+      requiresLongResponse: false,
+      requiresTaskDecomposition: true,
+      memoryMode: 'load_recent_and_persist_turn',
+      fallbackPolicy: 'fail_visible_not_canned',
+      reason: 'Owner explicitly requested proof/evidence/test/audit of senior developer capability. Force route to the senior developer runtime to EXECUTE a real task and return live evidence (task ID, status, commit, deploy) instead of a narrative answer.',
+    };
+  }
+
   if (asksToImproveIVXToday(prompt)) {
     return {
       semanticIntent: 'daily_self_improvement',
