@@ -40,24 +40,9 @@ function sanitizeEmail(raw: string): string {
   return readTrimmed(raw).toLowerCase();
 }
 
-function getSupabaseDatabaseUrl(): string {
-  const direct = readTrimmed(process.env.SUPABASE_DB_URL)
-    || readTrimmed(process.env.DATABASE_URL)
-    || readTrimmed(process.env.POSTGRES_URL);
-  if (direct) return direct;
-
-  const password = readTrimmed(process.env.SUPABASE_DB_PASSWORD);
-  if (!password) {
-    throw new Error('SUPABASE_DB_URL, DATABASE_URL, POSTGRES_URL, or SUPABASE_DB_PASSWORD is required for direct auth.');
-  }
-  const projectRef = (readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) || readTrimmed(process.env.SUPABASE_URL))
-    .match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1] ?? '';
-  if (!projectRef) {
-    throw new Error('Could not determine Supabase project ref for direct DB connection.');
-  }
-  const dbHost = readTrimmed(process.env.SUPABASE_DB_HOST) || `db.${projectRef}.supabase.co`;
-  const dbPort = readTrimmed(process.env.SUPABASE_DB_PORT) || '5432';
-  return `postgres://${encodeURIComponent('postgres')}:${encodeURIComponent(password)}@${dbHost}:${dbPort}/postgres?sslmode=require`;
+function getSupabaseProjectRef(): string {
+  return (readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) || readTrimmed(process.env.SUPABASE_URL))
+    .match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1] ?? 'kvclcdjmjghndxsngfzb';
 }
 
 function maskEmail(email: string): string {
@@ -68,7 +53,103 @@ function maskEmail(email: string): string {
   return `${maskedLocal}@${domain}`;
 }
 
-// ── Lazy module loading (pg and bcryptjs are root-level deps) ───────────────
+// ── DB URL resolution (with Management API fallback) ────────────────────────
+
+let _cachedDbUrl: string | null = null;
+let _cachedDbUrlTime = 0;
+const DB_URL_CACHE_MS = 300_000; // 5 minutes
+
+/**
+ * Fetch the database connection string from the Supabase Management API.
+ * Uses SUPABASE_ACCESS_TOKEN (configured on Render) to call
+ * GET https://api.supabase.com/v1/projects/{ref}/database/connection
+ */
+async function fetchDbUrlFromManagementApi(): Promise<string> {
+  const accessToken = readTrimmed(process.env.SUPABASE_ACCESS_TOKEN);
+  if (!accessToken) {
+    throw new Error('SUPABASE_ACCESS_TOKEN is not configured — cannot fetch DB URL from Management API.');
+  }
+  const projectRef = getSupabaseProjectRef();
+  const endpoint = `https://api.supabase.com/v1/projects/${projectRef}/database/connection`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Management API returned HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+    const data = await response.json() as {
+      host?: string;
+      port?: string | number;
+      database?: string;
+      user?: string;
+      password?: string;
+      pooler_host?: string;
+    };
+    const host = readTrimmed(data.host) || `db.${projectRef}.supabase.co`;
+    const port = String(data.port || '5432');
+    const dbName = readTrimmed(data.database) || 'postgres';
+    const user = readTrimmed(data.user) || 'postgres';
+    const password = readTrimmed(data.password);
+    if (!password) {
+      throw new Error('Management API response did not include a database password.');
+    }
+    const connStr = `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${encodeURIComponent(dbName)}?sslmode=require`;
+    console.log('[IVX Direct Auth] Fetched DB connection string from Management API, host=' + host);
+    return connStr;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getSupabaseDatabaseUrl(): Promise<string> {
+  if (_cachedDbUrl && Date.now() - _cachedDbUrlTime < DB_URL_CACHE_MS) {
+    return _cachedDbUrl;
+  }
+
+  // 1. Direct connection string env vars (preferred)
+  const direct = readTrimmed(process.env.SUPABASE_DB_URL)
+    || readTrimmed(process.env.POSTGRES_URL);
+  const databaseUrl = readTrimmed(process.env.DATABASE_URL);
+  // Only use DATABASE_URL if it looks like a Supabase connection (not a Render internal DB)
+  if (databaseUrl && (databaseUrl.includes('supabase') || databaseUrl.includes(getSupabaseProjectRef()))) {
+    _cachedDbUrl = databaseUrl;
+    _cachedDbUrlTime = Date.now();
+    return _cachedDbUrl;
+  }
+  if (direct) {
+    _cachedDbUrl = direct;
+    _cachedDbUrlTime = Date.now();
+    return _cachedDbUrl;
+  }
+
+  // 2. Build from SUPABASE_DB_PASSWORD + project ref
+  const password = readTrimmed(process.env.SUPABASE_DB_PASSWORD);
+  if (password) {
+    const projectRef = getSupabaseProjectRef();
+    const dbHost = readTrimmed(process.env.SUPABASE_DB_HOST) || `db.${projectRef}.supabase.co`;
+    const dbPort = readTrimmed(process.env.SUPABASE_DB_PORT) || '5432';
+    const connStr = `postgres://${encodeURIComponent('postgres')}:${encodeURIComponent(password)}@${dbHost}:${dbPort}/postgres?sslmode=require`;
+    _cachedDbUrl = connStr;
+    _cachedDbUrlTime = Date.now();
+    return _cachedDbUrl;
+  }
+
+  // 3. Fetch from Supabase Management API using SUPABASE_ACCESS_TOKEN
+  _cachedDbUrl = await fetchDbUrlFromManagementApi();
+  _cachedDbUrlTime = Date.now();
+  return _cachedDbUrl;
+}
+
+// ── Lazy module loading ─────────────────────────────────────────────────────
 
 let _pgModule: typeof import('pg') | null = null;
 async function getPgModule(): Promise<typeof import('pg')> {
@@ -125,9 +206,8 @@ interface SupabaseJwtPayload {
 
 function mintAccessToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow, jwtSecret: string): string {
   const now = Math.floor(Date.now() / 1000);
-  const expiresIn = 3600; // 1 hour — matches Supabase default
-  const projectRef = (readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) || readTrimmed(process.env.SUPABASE_URL))
-    .match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1] ?? 'kvclcdjmjghndxsngfzb';
+  const expiresIn = 3600;
+  const projectRef = getSupabaseProjectRef();
 
   const payload: SupabaseJwtPayload = {
     iss: `https://${projectRef}.supabase.co/auth/v1/`,
@@ -151,9 +231,8 @@ function mintAccessToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow, 
 
 function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow, jwtSecret: string): string {
   const now = Math.floor(Date.now() / 1000);
-  const expiresIn = 86400 * 30; // 30 days — matches Supabase default
-  const projectRef = (readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) || readTrimmed(process.env.SUPABASE_URL))
-    .match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1] ?? 'kvclcdjmjghndxsngfzb';
+  const expiresIn = 86400 * 30;
+  const projectRef = getSupabaseProjectRef();
 
   const payload = {
     iss: `https://${projectRef}.supabase.co/auth/v1/`,
@@ -208,9 +287,11 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     );
   }
 
-  // Pre-check DB URL availability and return a specific error code if missing.
-  let dbUrlForCheck = '';
-  try { dbUrlForCheck = getSupabaseDatabaseUrl(); } catch (e) {
+  // Pre-check DB URL availability (async — may fetch from Management API)
+  let connectionString = '';
+  try {
+    connectionString = await getSupabaseDatabaseUrl();
+  } catch (e) {
     const msg = (e as Error)?.message ?? '';
     console.error('[IVX Direct Auth] DB URL resolution failed:', msg);
     return Response.json(
@@ -225,7 +306,6 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   try {
     // 1. Connect to Postgres directly
     const pg = await getPgModule();
-    const connectionString = getSupabaseDatabaseUrl();
     pool = new pg.Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
@@ -322,8 +402,6 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error during direct auth.';
     console.error('[IVX Direct Auth] Error:', message);
-    // Return a diagnostic code so the client can distinguish failure modes.
-    // Never expose the full error message (may contain connection strings).
     let errorCode = 'unknown_error';
     let safeMessage = 'Sign-in failed. Please try again or contact support.';
     if (message.includes('connect') || message.includes('timeout') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND')) {
@@ -341,6 +419,9 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     } else if (message.includes('jwt') || message.includes('JWT_SECRET')) {
       errorCode = 'jwt_error';
       safeMessage = 'Token generation error. Contact your administrator.';
+    } else if (message.includes('Management API') || message.includes('SUPABASE_ACCESS_TOKEN')) {
+      errorCode = 'mgmt_api_failed';
+      safeMessage = 'Server cannot reach the database management API. Contact your administrator.';
     }
     return Response.json(
       { ok: false, error: safeMessage, errorCode, deploymentMarker: DEPLOYMENT_MARKER },
