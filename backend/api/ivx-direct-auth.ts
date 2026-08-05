@@ -203,7 +203,18 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   if (!jwtSecret) {
     console.error('[IVX Direct Auth] JWT_SECRET is not configured on the backend.');
     return Response.json(
-      { ok: false, error: 'Server is not configured for direct authentication. Contact your administrator.', deploymentMarker: DEPLOYMENT_MARKER },
+      { ok: false, error: 'Server is not configured for direct authentication. Contact your administrator.', errorCode: 'jwt_secret_missing', deploymentMarker: DEPLOYMENT_MARKER },
+      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },
+    );
+  }
+
+  // Pre-check DB URL availability and return a specific error code if missing.
+  let dbUrlForCheck = '';
+  try { dbUrlForCheck = getSupabaseDatabaseUrl(); } catch (e) {
+    const msg = (e as Error)?.message ?? '';
+    console.error('[IVX Direct Auth] DB URL resolution failed:', msg);
+    return Response.json(
+      { ok: false, error: 'Database connection is not configured. Contact your administrator.', errorCode: 'db_url_not_configured', deploymentMarker: DEPLOYMENT_MARKER },
       { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },
     );
   }
@@ -311,12 +322,28 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error during direct auth.';
     console.error('[IVX Direct Auth] Error:', message);
-    // Don't expose internal errors to the client
-    const safeMessage = message.includes('connect') || message.includes('timeout')
-      ? 'Authentication service is temporarily unavailable. Please try again.'
-      : 'Sign-in failed. Please try again or contact support.';
+    // Return a diagnostic code so the client can distinguish failure modes.
+    // Never expose the full error message (may contain connection strings).
+    let errorCode = 'unknown_error';
+    let safeMessage = 'Sign-in failed. Please try again or contact support.';
+    if (message.includes('connect') || message.includes('timeout') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND')) {
+      errorCode = 'db_connection_failed';
+      safeMessage = 'Authentication service is temporarily unavailable. Please try again.';
+    } else if (message.includes('SUPABASE_DB_URL') || message.includes('SUPABASE_DB_PASSWORD') || message.includes('DATABASE_URL')) {
+      errorCode = 'db_url_not_configured';
+      safeMessage = 'Server database connection is not configured. Contact your administrator.';
+    } else if (message.includes('Cannot find module') || message.includes('MODULE_NOT_FOUND')) {
+      errorCode = 'module_not_found';
+      safeMessage = 'Server module loading error. Contact your administrator.';
+    } else if (message.includes('bcrypt')) {
+      errorCode = 'bcrypt_error';
+      safeMessage = 'Password verification error. Contact your administrator.';
+    } else if (message.includes('jwt') || message.includes('JWT_SECRET')) {
+      errorCode = 'jwt_error';
+      safeMessage = 'Token generation error. Contact your administrator.';
+    }
     return Response.json(
-      { ok: false, error: safeMessage, deploymentMarker: DEPLOYMENT_MARKER },
+      { ok: false, error: safeMessage, errorCode, deploymentMarker: DEPLOYMENT_MARKER },
       { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } },
     );
   } finally {
