@@ -1,1 +1,251 @@
-LyoqCiAqIElWWCBQdWJsaWMgRmVhdHVyZSBIYW5kbGVycyDigJQgcmVnaXN0ZXJlZCB1bmRlciAvYXBpL2l2eC8qCiAqCiAqIENvdmVyczogcHJvcGVydGllcywgbWVtYmVycyBkYXNoYm9hcmQsIGludmVzdG9ycyBkYXNoYm9hcmQsCiAqIENSTSwgSlYgZGVhbHMsIHByb3BlcnR5IGFkbWluLCBtZWRpYSwgaW5zdGFncmFtIGNhcmRzLgogKi8KY29uc3QgREVQTE9ZTUVOVF9NQVJLRVIgPSAnaXZ4LXB1YmxpYy1mZWF0dXJlcy1hcGktdjEtMjAyNi0wNy0wMSc7CgovLyDilIDilIAgU3VwYWJhc2Ug4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACmxldCBfc2I6IGFueSA9IG51bGw7CmFzeW5jIGZ1bmN0aW9uIGdldFNCKCkgewogIGlmIChfc2IpIHJldHVybiBfc2I7CiAgY29uc3QgeyBjcmVhdGVDbGllbnQgfSA9IGF3YWl0IGltcG9ydCgnQHN1cGFiYXNlL3N1cGFiYXNlLWpzJyk7CiAgY29uc3QgdXJsID0gKHByb2Nlc3MuZW52LkVYUE9fUFVCTElDX1NVUEFCQVNFX1VSTCB8fCBwcm9jZXNzLmVudi5TVVBBQkFTRV9VUkwgfHwgJycpLnRyaW0oKTsKICBjb25zdCBrZXkgPSAocHJvY2Vzcy5lbnYuU1VQQUJBU0VfU0VSVklDRV9ST0xFX0tFWSB8fCBwcm9jZXNzLmVudi5TVVBBQkFTRV9TRVJWSUNFX0tFWSB8fCBwcm9jZXNzLmVudi5FWFBPX1BVQkxJQ19TVVBBQkFTRV9BTk9OX0tFWSB8fCBwcm9jZXNzLmVudi5TVVBBQkFTRV9BTk9OX0tFWSB8fCAnJykudHJpbSgpOwogIF9zYiA9IGNyZWF0ZUNsaWVudCh1cmwsIGtleSwgeyBhdXRoOiB7IGF1dG9SZWZyZXNoVG9rZW46IGZhbHNlLCBwZXJzaXN0U2Vzc2lvbjogZmFsc2UgfSB9KTsKICByZXR1cm4gX3NiOwp9CgpmdW5jdGlvbiBqc29uKGRhdGE6IHVua25vd24sIHN0YXR1cyA9IDIwMCk6IFJlc3BvbnNlIHsKICByZXR1cm4gbmV3IFJlc3BvbnNlKEpTT04uc3RyaW5naWZ5KGRhdGEpLCB7CiAgICBzdGF0dXMsCiAgICBoZWFkZXJzOiB7ICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicsICdDYWNoZS1Db250cm9sJzogJ25vLXN0b3JlJywgJ0FjY2Vzcy1Db250cm9sLUFsbG93LU9yaWdpbic6ICdodHRwczovL2l2eGhvbGRpbmcuY29tJywgJ0FjY2Vzcy1Db250cm9sLUFsbG93LUhlYWRlcnMnOiAnQ29udGVudC1UeXBlLCBBdXRob3JpemF0aW9uLCBhcGlrZXknLCAnQWNjZXNzLUNvbnRyb2wtQWxsb3ctTWV0aG9kcyc6ICdHRVQsIFBPU1QsIFBVVCwgREVMRVRFLCBPUFRJT05TJyB9LAogIH0pOwp9Cgphc3luYyBmdW5jdGlvbiByZWFkQm9keShyZXE6IFJlcXVlc3QpOiBQcm9taXNlPFJlY29yZDxzdHJpbmcsIHVua25vd24+PiB7CiAgdHJ5IHsgcmV0dXJuIGF3YWl0IHJlcS5qc29uKCkgYXMgUmVjb3JkPHN0cmluZywgdW5rbm93bj47IH0gY2F0Y2ggeyByZXR1cm4ge307IH0KfQoKZnVuY3Rpb24gc2FmZVN0cih2OiB1bmtub3duLCBmYWxsYmFjayA9ICcnKTogc3RyaW5nIHsgcmV0dXJuIHR5cGVvZiB2ID09PSAnc3RyaW5nJyA/IHYudHJpbSgpIDogZmFsbGJhY2s7IH0KCmV4cG9ydCBjb25zdCBwdWJsaWNGZWF0dXJlT3B0aW9ucyA9ICgpOiBSZXNwb25zZSA9PiB7CiAgcmV0dXJuIG5ldyBSZXNwb25zZShudWxsLCB7IHN0YXR1czogMjA0LCBoZWFkZXJzOiB7ICdBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW4nOiAnaHR0cHM6Ly9pdnhob2xkaW5nLmNvbScsICdBY2Nlc3MtQ29udHJvbC1BbGxvdy1IZWFkZXJzJzogJ0NvbnRlbnQtVHlwZSwgQXV0aG9yaXphdGlvbiwgYXBpa2V5JywgJ0FjY2Vzcy1Db250cm9sLUFsbG93LU1ldGhvZHMnOiAnR0VULCBQT1NULCBQVVQsIERFTEVURSwgT1BUSU9OUycgfSB9KTsKfTsKCi8vIOKUgOKUgCBGZWF0dXJlZCBQcm9wZXJ0aWVzIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlRmVhdHVyZWRQcm9wZXJ0aWVzKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICB0cnkgewogICAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogICAgLy8gUXVlcnkganZfZGVhbHMgd2l0aCBwdWJsaXNoZWQ9dHJ1ZSBhcyBmZWF0dXJlZCwgZmFsbCBiYWNrIHRvIHByb3BlcnRpZXMKICAgIGNvbnN0IHsgZGF0YSwgZXJyb3IgfSA9IGF3YWl0IHNiLmZyb20oJ2p2X2RlYWxzJykuc2VsZWN0KCdpZCx0aXRsZSxwcm9qZWN0X25hbWUsdHlwZSxkZXNjcmlwdGlvbix0b3RhbF9pbnZlc3RtZW50LGV4cGVjdGVkX3JvaSxtaW5faW52ZXN0bWVudCxzdGF0dXMscHVibGlzaGVkLHByb3BlcnR5X2FkZHJlc3MsY2l0eSxzdGF0ZSx6aXBfY29kZSxjb3VudHJ5LHByb3BlcnR5X3R5cGUscGhvdG9zLGRpc3BsYXlfb3JkZXIsY3JlYXRlZF9hdCx1cGRhdGVkX2F0JykuZXEoJ3B1Ymxpc2hlZCcsIHRydWUpLmVxKCdzdGF0dXMnLCAnYWN0aXZlJykub3JkZXIoJ2Rpc3BsYXlfb3JkZXInLCB7IGFzY2VuZGluZzogdHJ1ZSwgbnVsbHNGaXJzdDogZmFsc2UgfSkub3JkZXIoJ3VwZGF0ZWRfYXQnLCB7IGFzY2VuZGluZzogZmFsc2UgfSkubGltaXQoMjApOwogICAgaWYgKGVycm9yKSB7CiAgICAgIC8vIEZhbGxiYWNrOiB0cnkgcHJvcGVydHlfY29udHJvbHMgZm9yIGZlYXR1cmVkIElEcwogICAgICBjb25zdCB7IGRhdGE6IGZlYXR1cmVkSWRzIH0gPSBhd2FpdCBzYi5mcm9tKCdwcm9wZXJ0eV9jb250cm9scycpLnNlbGVjdCgncHJvcGVydHlfaWQnKS5lcSgnaXNfZmVhdHVyZWQnLCB0cnVlKTsKICAgICAgaWYgKGZlYXR1cmVkSWRzICYmIGZlYXR1cmVkSWRzLmxlbmd0aCA+IDApIHsKICAgICAgICBjb25zdCBpZHMgPSBmZWF0dXJlZElkcy5tYXAoKHI6IGFueSkgPT4gci5wcm9wZXJ0eV9pZCk7CiAgICAgICAgY29uc3QgeyBkYXRhOiBwcm9wcyB9ID0gYXdhaXQgc2IuZnJvbSgncHJvcGVydGllcycpLnNlbGVjdCgnaWQsbmFtZSxsb2NhdGlvbixjaXR5LGNvdW50cnkscHJpY2VfcGVyX3NoYXJlLHRvdGFsX3NoYXJlcyxhdmFpbGFibGVfc2hhcmVzLG1pbl9pbnZlc3RtZW50LHRhcmdldF9yYWlzZSxjdXJyZW50X3JhaXNlLHlpZWxkLHByb3BlcnR5X3R5cGUsc3RhdHVzLGRlc2NyaXB0aW9uLGNyZWF0ZWRfYXQnKS5pbignaWQnLCBpZHMpLm9yZGVyKCdjcmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDIwKTsKICAgICAgICByZXR1cm4ganNvbih7IHByb3BlcnRpZXM6IHByb3BzIHx8IFtdLCBjb3VudDogcHJvcHM/Lmxlbmd0aCB8fCAwLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9KTsKICAgICAgfQogICAgICAvLyBMYXN0IGZhbGxiYWNrOiBhbGwgcHJvcGVydGllcwogICAgICBjb25zdCB7IGRhdGE6IGFsbFByb3BzIH0gPSBhd2FpdCBzYi5mcm9tKCdwcm9wZXJ0aWVzJykuc2VsZWN0KCdpZCxuYW1lLGxvY2F0aW9uLGNpdHksY291bnRyeSxwcmljZV9wZXJfc2hhcmUsdG90YWxfc2hhcmVzLGF2YWlsYWJsZV9zaGFyZXMsbWluX2ludmVzdG1lbnQsdGFyZ2V0X3JhaXNlLGN1cnJlbnRfcmFpc2UseWllbGQscHJvcGVydHlfdHlwZSxzdGF0dXMsZGVzY3JpcHRpb24sY3JlYXRlZF9hdCcpLm9yZGVyKCdjcmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDIwKTsKICAgICAgcmV0dXJuIGpzb24oeyBwcm9wZXJ0aWVzOiBhbGxQcm9wcyB8fCBbXSwgY291bnQ6IGFsbFByb3BzPy5sZW5ndGggfHwgMCwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSk7CiAgICB9CiAgICByZXR1cm4ganNvbih7IHByb3BlcnRpZXM6IGRhdGEgfHwgW10sIGNvdW50OiBkYXRhPy5sZW5ndGggfHwgMCwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSk7CiAgfSBjYXRjaCAoZXJyKSB7IHJldHVybiBqc29uKHsgZXJyb3I6IGVyci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA1MDApOyB9Cn0KCi8vIOKUgOKUgCBQcm9wZXJ0eSBEZXRhaWxzIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlUHJvcGVydHlEZXRhaWxzKHJlcTogUmVxdWVzdCwgcHJvcGVydHlJZDogc3RyaW5nKTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBjb25zdCBzYiA9IGF3YWl0IGdldFNCKCk7CiAgICAvLyBUaGUgbGFuZGluZyBwYWdlIGZlYXR1cmVkIHByb3BlcnRpZXMgY29tZSBmcm9tIGp2X2RlYWxzIChub3QgcHJvcGVydGllcyB0YWJsZSkuCiAgICAvLyBUcnkganZfZGVhbHMgZmlyc3QgYnkgc3RyaW5nIElELCB0aGVuIGZhbGwgYmFjayB0byBwcm9wZXJ0aWVzIGJ5IG51bWVyaWMvc3RyaW5nIElELgogICAgY29uc3QgeyBkYXRhOiBkZWFsRGF0YSwgZXJyb3I6IGRlYWxFcnJvciB9ID0gYXdhaXQgc2IuZnJvbSgnanZfZGVhbHMnKS5zZWxlY3QoJ2lkLHRpdGxlLHByb2plY3RfbmFtZSx0eXBlLGRlc2NyaXB0aW9uLHRvdGFsX2ludmVzdG1lbnQsZXhwZWN0ZWRfcm9pLG1pbl9pbnZlc3RtZW50LHN0YXR1cyxwdWJsaXNoZWQscHJvcGVydHlfYWRkcmVzcyxjaXR5LHN0YXRlLHppcF9jb2RlLGNvdW50cnkscHJvcGVydHlfdHlwZSxwaG90b3MsY3JlYXRlZF9hdCcpLmVxKCdpZCcsIHByb3BlcnR5SWQpLm1heWJlU2luZ2xlKCk7CiAgICBpZiAoZGVhbERhdGEpIHJldHVybiBqc29uKHsgcHJvcGVydHk6IGRlYWxEYXRhLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiwgc291cmNlOiAnanZfZGVhbHMnIH0pOwoKICAgIC8vIEZhbGxiYWNrOiB0cnkgcHJvcGVydGllcyB0YWJsZQogICAgY29uc3QgbnVtZXJpY0lkID0gTnVtYmVyKHByb3BlcnR5SWQpOwogICAgY29uc3QgaXNOdW1lcmljID0gIWlzTmFOKG51bWVyaWNJZCkgJiYgU3RyaW5nKG51bWVyaWNJZCkgPT09IHByb3BlcnR5SWQ7CiAgICBjb25zdCBxdWVyeSA9IHNiLmZyb20oJ3Byb3BlcnRpZXMnKS5zZWxlY3QoJ2lkLG5hbWUsbG9jYXRpb24sY2l0eSxjb3VudHJ5LHByaWNlX3Blcl9zaGFyZSx0b3RhbF9zaGFyZXMsYXZhaWxhYmxlX3NoYXJlcyxtaW5faW52ZXN0bWVudCx0YXJnZXRfcmFpc2UsY3VycmVudF9yYWlzZSx5aWVsZCxwcm9wZXJ0eV90eXBlLHN0YXR1cyxkZXNjcmlwdGlvbixjcmVhdGVkX2F0Jyk7CiAgICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBpc051bWVyaWMKICAgICAgPyBhd2FpdCBxdWVyeS5lcSgnaWQnLCBudW1lcmljSWQpLm1heWJlU2luZ2xlKCkKICAgICAgOiBhd2FpdCBxdWVyeS5lcSgnaWQnLCBwcm9wZXJ0eUlkKS5tYXliZVNpbmdsZSgpOwogICAgaWYgKGVycm9yKSByZXR1cm4ganNvbih7IGVycm9yOiBlcnJvci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA0MDQpOwogICAgaWYgKCFkYXRhKSByZXR1cm4ganNvbih7IGVycm9yOiAnUHJvcGVydHkgbm90IGZvdW5kJywgcHJvcGVydHlJZCwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNDA0KTsKICAgIHJldHVybiBqc29uKHsgcHJvcGVydHk6IGRhdGEsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSLCBzb3VyY2U6ICdwcm9wZXJ0aWVzJyB9KTsKICB9IGNhdGNoIChlcnIpIHsgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7IH0KfQoKLy8g4pSA4pSAIE1lbWJlcnMgRGFzaGJvYXJkIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlTWVtYmVyc0Rhc2hib2FyZChyZXE6IFJlcXVlc3QpOiBQcm9taXNlPFJlc3BvbnNlPiB7CiAgdHJ5IHsKICAgIGNvbnN0IHNiID0gYXdhaXQgZ2V0U0IoKTsKICAgIGNvbnN0IFttZW1iZXJzUmVzLCB3YWxsZXRzUmVzXSA9IGF3YWl0IFByb21pc2UuYWxsKFsKICAgICAgc2IuZnJvbSgnbWVtYmVycycpLnNlbGVjdCgnKicsIHsgY291bnQ6ICdleGFjdCcsIGhlYWQ6IGZhbHNlIH0pLm9yZGVyKCdjcmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDUwKSwKICAgICAgc2IuZnJvbSgnd2FsbGV0cycpLnNlbGVjdCgnKicsIHsgY291bnQ6ICdleGFjdCcsIGhlYWQ6IHRydWUgfSksCiAgICBdKTsKICAgIHJldHVybiBqc29uKHsKICAgICAgbWVtYmVyczogbWVtYmVyc1Jlcy5kYXRhIHx8IFtdLAogICAgICB0b3RhbE1lbWJlcnM6IG1lbWJlcnNSZXMuY291bnQgfHwgMCwKICAgICAgdG90YWxXYWxsZXRzOiB3YWxsZXRzUmVzLmNvdW50IHx8IDAsCiAgICAgIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSLAogICAgfSk7CiAgfSBjYXRjaCAoZXJyKSB7IHJldHVybiBqc29uKHsgZXJyb3I6IGVyci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA1MDApOyB9Cn0KCi8vIOKUgOKUgCBJbnZlc3RvcnMgRGFzaGJvYXJkIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlSW52ZXN0b3JzRGFzaGJvYXJkKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICB0cnkgewogICAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogICAgY29uc3QgW2ludmVzdG9yc1JlcywgZGVhbHNSZXNdID0gYXdhaXQgUHJvbWlzZS5hbGwoWwogICAgICBzYi5mcm9tKCdpbnZlc3RvcnMnKS5zZWxlY3QoJyonLCB7IGNvdW50OiAnZXhhY3QnLCBoZWFkOiBmYWxzZSB9KS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KS5saW1pdCg1MCksCiAgICAgIHNiLmZyb20oJ2p2X2RlYWxzJykuc2VsZWN0KCcqJywgeyBjb3VudDogJ2V4YWN0JywgaGVhZDogdHJ1ZSB9KS5lcSgncHVibGlzaGVkJywgdHJ1ZSksCiAgICBdKTsKICAgIHJldHVybiBqc29uKHsKICAgICAgaW52ZXN0b3JzOiBpbnZlc3RvcnNSZXMuZGF0YSB8fCBbXSwKICAgICAgdG90YWxJbnZlc3RvcnM6IGludmVzdG9yc1Jlcy5jb3VudCB8fCAwLAogICAgICB0b3RhbERlYWxzOiBkZWFsc1Jlcy5jb3VudCB8fCAwLAogICAgICBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiwKICAgIH0pOwogIH0gY2F0Y2ggKGVycikgeyByZXR1cm4ganNvbih7IGVycm9yOiBlcnIubWVzc2FnZSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNTAwKTsgfQp9CgovLyDilIDilIAgQ1JNIE1haW4g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACmV4cG9ydCBhc3luYyBmdW5jdGlvbiBoYW5kbGVDUk1NYWluKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICB0cnkgewogICAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogICAgY29uc3QgW2ludmVzdG9yc1JlcywgbGVhZHNSZXNdID0gYXdhaXQgUHJvbWlzZS5hbGwoWwogICAgICBzYi5mcm9tKCdpbnZlc3RvcnMnKS5zZWxlY3QoJyonLCB7IGNvdW50OiAnZXhhY3QnLCBoZWFkOiBmYWxzZSB9KS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KS5saW1pdCgyMCksCiAgICAgIHNiLmZyb20oJ2xlYWRzJykuc2VsZWN0KCcqJywgeyBjb3VudDogJ2V4YWN0JywgaGVhZDogZmFsc2UgfSkub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFzY2VuZGluZzogZmFsc2UgfSkubGltaXQoMjApLAogICAgXSk7CiAgICByZXR1cm4ganNvbih7CiAgICAgIGludmVzdG9yczogaW52ZXN0b3JzUmVzLmRhdGEgfHwgW10sCiAgICAgIHRvdGFsSW52ZXN0b3JzOiBpbnZlc3RvcnNSZXMuY291bnQgfHwgMCwKICAgICAgbGVhZHM6IGxlYWRzUmVzLmRhdGEgfHwgW10sCiAgICAgIHRvdGFsTGVhZHM6IGxlYWRzUmVzLmNvdW50IHx8IDAsCiAgICAgIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSLAogICAgfSk7CiAgfSBjYXRjaCAoZXJyKSB7IHJldHVybiBqc29uKHsgZXJyb3I6IGVyci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA1MDApOyB9Cn0KCi8vIOKUgOKUgCBKViBEZWFscyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZUpWRGVhbHNMaXN0KHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICB0cnkgewogICAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogICAgY29uc3QgeyBkYXRhLCBlcnJvciwgY291bnQgfSA9IGF3YWl0IHNiLmZyb20oJ2p2X2RlYWxzJykuc2VsZWN0KCcqJywgeyBjb3VudDogJ2V4YWN0JywgaGVhZDogZmFsc2UgfSkuZXEoJ3B1Ymxpc2hlZCcsIHRydWUpLm9yZGVyKCdkaXNwbGF5X29yZGVyJywgeyBhc2NlbmRpbmc6IHRydWUsIG51bGxzRmlyc3Q6IGZhbHNlIH0pLm9yZGVyKCd1cGRhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDUwKTsKICAgIGlmIChlcnJvcikgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyb3IubWVzc2FnZSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNTAwKTsKICAgIHJldHVybiBqc29uKHsgZGVhbHM6IGRhdGEgfHwgW10sIGNvdW50OiBjb3VudCB8fCAwLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9KTsKICB9IGNhdGNoIChlcnIpIHsgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7IH0KfQoKLy8g4pSA4pSAIFByb3BlcnR5IEFkbWluIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlUHJvcGVydHlBZG1pbkxpc3QocmVxOiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBjb25zdCBzYiA9IGF3YWl0IGdldFNCKCk7CiAgICBjb25zdCB7IGRhdGEsIGVycm9yLCBjb3VudCB9ID0gYXdhaXQgc2IuZnJvbSgncHJvcGVydGllcycpLnNlbGVjdCgnKicsIHsgY291bnQ6ICdleGFjdCcsIGhlYWQ6IGZhbHNlIH0pLm9yZGVyKCdjcmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDEwMCk7CiAgICBpZiAoZXJyb3IpIHJldHVybiBqc29uKHsgZXJyb3I6IGVycm9yLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7CiAgICByZXR1cm4ganNvbih7IHByb3BlcnRpZXM6IGRhdGEgfHwgW10sIGNvdW50OiBjb3VudCB8fCAwLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9KTsKICB9IGNhdGNoIChlcnIpIHsgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7IH0KfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZVByb3BlcnR5QWRtaW5DcmVhdGUocmVxOiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBjb25zdCBzYiA9IGF3YWl0IGdldFNCKCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVhZEJvZHkocmVxKTsKICAgIGNvbnN0IHsgZGF0YSwgZXJyb3IgfSA9IGF3YWl0IHNiLmZyb20oJ3Byb3BlcnRpZXMnKS5pbnNlcnQoYm9keSkuc2VsZWN0KCkuc2luZ2xlKCk7CiAgICBpZiAoZXJyb3IpIHJldHVybiBqc29uKHsgZXJyb3I6IGVycm9yLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7CiAgICByZXR1cm4ganNvbih7IHByb3BlcnR5OiBkYXRhLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCAyMDEpOwogIH0gY2F0Y2ggKGVycikgeyByZXR1cm4ganNvbih7IGVycm9yOiBlcnIubWVzc2FnZSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNTAwKTsgfQp9CgovLyDilIDilIAgTWVkaWEgVXBsb2FkIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlTWVkaWFVcGxvYWQocmVxOiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIHRyeSB7CiAgICBjb25zdCBzYiA9IGF3YWl0IGdldFNCKCk7CiAgICBjb25zdCBib2R5ID0gYXdhaXQgcmVhZEJvZHkocmVxKTsKICAgIGNvbnN0IHByb2plY3RJZCA9IHNhZmVTdHIoYm9keS5wcm9qZWN0SWQgfHwgYm9keS5wcm9qZWN0X2lkKTsKICAgIGNvbnN0IG1lZGlhVXJsID0gc2FmZVN0cihib2R5LnVybCB8fCBib2R5Lm1lZGlhVXJsIHx8IGJvZHkubWVkaWFfdXJsKTsKICAgIGNvbnN0IG1lZGlhVHlwZSA9IHNhZmVTdHIoYm9keS50eXBlIHx8IGJvZHkubWVkaWFUeXBlIHx8IGJvZHkubWVkaWFfdHlwZSwgJ2ltYWdlJyk7CiAgICBpZiAoIXByb2plY3RJZCB8fCAhbWVkaWFVcmwpIHJldHVybiBqc29uKHsgZXJyb3I6ICdwcm9qZWN0SWQgYW5kIHVybCByZXF1aXJlZCcsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDQwMCk7CiAgICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2FpdCBzYi5mcm9tKCdwcm9qZWN0X21lZGlhJykuaW5zZXJ0KHsgcHJvamVjdF9pZDogcHJvamVjdElkLCBtZWRpYV91cmw6IG1lZGlhVXJsLCBtZWRpYV90eXBlOiBtZWRpYVR5cGUsIGlzX2FwcHJvdmVkOiB0cnVlIH0pLnNlbGVjdCgpLnNpbmdsZSgpOwogICAgaWYgKGVycm9yKSByZXR1cm4ganNvbih7IGVycm9yOiBlcnJvci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA1MDApOwogICAgcmV0dXJuIGpzb24oeyBtZWRpYTogZGF0YSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgMjAxKTsKICB9IGNhdGNoIChlcnIpIHsgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7IH0KfQoKLy8g4pSA4pSAIEluc3RhZ3JhbSBDYXJkcyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGhhbmRsZUluc3RhZ3JhbUNhcmRzKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICB0cnkgewogICAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogICAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgc2IuZnJvbSgncHJvamVjdF9tZWRpYScpLnNlbGVjdCgnaWQscHJvamVjdF9pZCxtZWRpYV90eXBlLHVybCxtZWRpYV91cmwsdGh1bWJuYWlsX3VybCx0aXRsZSxkZXNjcmlwdGlvbixwb3NpdGlvbixpc19hcHByb3ZlZCxjcmVhdGVkX2F0JykuZXEoJ21lZGlhX3R5cGUnLCAnaW5zdGFncmFtX2NhcmQnKS5lcSgnaXNfYXBwcm92ZWQnLCB0cnVlKS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KS5saW1pdCg1MCk7CiAgICBpZiAoZXJyb3IpIHJldHVybiBqc29uKHsgZXJyb3I6IGVycm9yLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7CiAgICByZXR1cm4ganNvbih7IGNhcmRzOiBkYXRhIHx8IFtdLCBjb3VudDogZGF0YT8ubGVuZ3RoIHx8IDAsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0pOwogIH0gY2F0Y2ggKGVycikgeyByZXR1cm4ganNvbih7IGVycm9yOiBlcnIubWVzc2FnZSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNTAwKTsgfQp9CgovLyDilIDilIAgRW5nYWdlbWVudCBBbGlhc2VzIChkZWxlZ2F0ZSB0byBwcm9qZWN0IGVuZ2FnZW1lbnQgd2l0aCBxdWVyeSBwYXJhbXMpIOKUgOKUgApleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlRW5nYWdlbWVudExpa2VzKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICBjb25zdCB1cmwgPSBuZXcgVVJMKHJlcS51cmwpOwogIGNvbnN0IHByb2plY3RJZCA9IHVybC5zZWFyY2hQYXJhbXMuZ2V0KCdwcm9qZWN0SWQnKSB8fCB1cmwuc2VhcmNoUGFyYW1zLmdldCgncHJvamVjdF9pZCcpIHx8IG51bGw7CiAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogIGxldCBxdWVyeSA9IHNiLmZyb20oJ3Byb2plY3RfbGlrZXMnKS5zZWxlY3QoJ2lkLHByb2plY3RfaWQsdXNlcl9pZCxjcmVhdGVkX2F0Jyk7CiAgaWYgKHByb2plY3RJZCkgcXVlcnkgPSBxdWVyeS5lcSgncHJvamVjdF9pZCcsIHByb2plY3RJZCk7CiAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgcXVlcnkub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFzY2VuZGluZzogZmFsc2UgfSkubGltaXQoMTAwKTsKICBpZiAoZXJyb3IpIHJldHVybiBqc29uKHsgZXJyb3I6IGVycm9yLm1lc3NhZ2UsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDUwMCk7CiAgcmV0dXJuIGpzb24oeyBsaWtlczogZGF0YSB8fCBbXSwgY291bnQ6IGRhdGE/Lmxlbmd0aCB8fCAwLCBwcm9qZWN0SWQsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0pOwp9CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlRW5nYWdlbWVudENvbW1lbnRzKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICBjb25zdCB1cmwgPSBuZXcgVVJMKHJlcS51cmwpOwogIGNvbnN0IHByb2plY3RJZCA9IHVybC5zZWFyY2hQYXJhbXMuZ2V0KCdwcm9qZWN0SWQnKSB8fCB1cmwuc2VhcmNoUGFyYW1zLmdldCgncHJvamVjdF9pZCcpIHx8IG51bGw7CiAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogIGxldCBxdWVyeSA9IHNiLmZyb20oJ3Byb2plY3RfY29tbWVudHMnKS5zZWxlY3QoJ2lkLHByb2plY3RfaWQsdXNlcl9pZCx0ZXh0LGNyZWF0ZWRfYXQnKTsKICBpZiAocHJvamVjdElkKSBxdWVyeSA9IHF1ZXJ5LmVxKCdwcm9qZWN0X2lkJywgcHJvamVjdElkKTsKICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2FpdCBxdWVyeS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KS5saW1pdCgxMDApOwogIGlmIChlcnJvcikgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyb3IubWVzc2FnZSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNTAwKTsKICByZXR1cm4ganNvbih7IGNvbW1lbnRzOiBkYXRhIHx8IFtdLCBjb3VudDogZGF0YT8ubGVuZ3RoIHx8IDAsIHByb2plY3RJZCwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSk7Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBoYW5kbGVFbmdhZ2VtZW50U2hhcmVzKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICBjb25zdCB1cmwgPSBuZXcgVVJMKHJlcS51cmwpOwogIGNvbnN0IHByb2plY3RJZCA9IHVybC5zZWFyY2hQYXJhbXMuZ2V0KCdwcm9qZWN0SWQnKSB8fCB1cmwuc2VhcmNoUGFyYW1zLmdldCgncHJvamVjdF9pZCcpIHx8IG51bGw7CiAgY29uc3Qgc2IgPSBhd2FpdCBnZXRTQigpOwogIGxldCBxdWVyeSA9IHNiLmZyb20oJ3Byb2plY3Rfc2hhcmVzJykuc2VsZWN0KCdpZCxwcm9qZWN0X2lkLHVzZXJfaWQscGxhdGZvcm0sY3JlYXRlZF9hdCcpOwogIGlmIChwcm9qZWN0SWQpIHF1ZXJ5ID0gcXVlcnkuZXEoJ3Byb2plY3RfaWQnLCBwcm9qZWN0SWQpOwogIGNvbnN0IHsgZGF0YSwgZXJyb3IgfSA9IGF3YWl0IHF1ZXJ5Lm9yZGVyKCdjcmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDEwMCk7CiAgaWYgKGVycm9yKSByZXR1cm4ganNvbih7IGVycm9yOiBlcnJvci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA1MDApOwogIHJldHVybiBqc29uKHsgc2hhcmVzOiBkYXRhIHx8IFtdLCBjb3VudDogZGF0YT8ubGVuZ3RoIHx8IDAsIHByb2plY3RJZCwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSk7Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBoYW5kbGVFbmdhZ2VtZW50U2F2ZXMocmVxOiBSZXF1ZXN0KTogUHJvbWlzZTxSZXNwb25zZT4gewogIGNvbnN0IHVybCA9IG5ldyBVUkwocmVxLnVybCk7CiAgY29uc3QgcHJvamVjdElkID0gdXJsLnNlYXJjaFBhcmFtcy5nZXQoJ3Byb2plY3RJZCcpIHx8IHVybC5zZWFyY2hQYXJhbXMuZ2V0KCdwcm9qZWN0X2lkJykgfHwgbnVsbDsKICBjb25zdCBzYiA9IGF3YWl0IGdldFNCKCk7CiAgbGV0IHF1ZXJ5ID0gc2IuZnJvbSgncHJvamVjdF9zYXZlcycpLnNlbGVjdCgnaWQscHJvamVjdF9pZCx1c2VyX2lkLGNyZWF0ZWRfYXQnKTsKICBpZiAocHJvamVjdElkKSBxdWVyeSA9IHF1ZXJ5LmVxKCdwcm9qZWN0X2lkJywgcHJvamVjdElkKTsKICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2FpdCBxdWVyeS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KS5saW1pdCgxMDApOwogIGlmIChlcnJvcikgcmV0dXJuIGpzb24oeyBlcnJvcjogZXJyb3IubWVzc2FnZSwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSwgNTAwKTsKICByZXR1cm4ganNvbih7IHNhdmVzOiBkYXRhIHx8IFtdLCBjb3VudDogZGF0YT8ubGVuZ3RoIHx8IDAsIHByb2plY3RJZCwgZGVwbG95bWVudE1hcmtlcjogREVQTE9ZTUVOVF9NQVJLRVIgfSk7Cn0KCi8vIHByb2plY3RfYW5hbHl0aWNzLnByb2plY3RfaWQgaXMgYSB1dWlkIGNvbHVtbjsgcmVqZWN0IG5vbi11dWlkIGlucHV0IHdpdGggNDAwIGluc3RlYWQgb2YgbGV0dGluZyBQb3N0Z3JlcyB0aHJvdyBhIDUwMC4KY29uc3QgVVVJRF9SRSA9IC9eWzAtOWEtZl17OH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17MTJ9JC9pOwpleHBvcnQgYXN5bmMgZnVuY3Rpb24gaGFuZGxlQW5hbHl0aWNzKHJlcTogUmVxdWVzdCk6IFByb21pc2U8UmVzcG9uc2U+IHsKICBjb25zdCB1cmwgPSBuZXcgVVJMKHJlcS51cmwpOwogIGNvbnN0IHByb2plY3RJZCA9IHVybC5zZWFyY2hQYXJhbXMuZ2V0KCdwcm9qZWN0SWQnKSB8fCB1cmwuc2VhcmNoUGFyYW1zLmdldCgncHJvamVjdF9pZCcpIHx8IG51bGw7CiAgaWYgKHByb2plY3RJZCAmJiAhVVVJRF9SRS50ZXN0KHByb2plY3RJZCkpIHsKICAgIHJldHVybiBqc29uKHsgZXJyb3I6ICdwcm9qZWN0SWQgbXVzdCBiZSBhIHZhbGlkIFVVSUQnLCBwcm9qZWN0SWQsIGRlcGxveW1lbnRNYXJrZXI6IERFUExPWU1FTlRfTUFSS0VSIH0sIDQwMCk7CiAgfQogIGNvbnN0IGRheXMgPSBwYXJzZUludCh1cmwuc2VhcmNoUGFyYW1zLmdldCgnZGF5cycpIHx8ICczMCcsIDEwKTsKICBjb25zdCBzYiA9IGF3YWl0IGdldFNCKCk7CiAgY29uc3Qgc2luY2UgPSBuZXcgRGF0ZShEYXRlLm5vdygpIC0gZGF5cyAqIDg2NDAwMDAwKS50b0lTT1N0cmluZygpOwogIC8vIENvbHVtbnMgbWF0Y2ggdGhlIHVwc2VydCBwYXRoIGluIGl2eC1wcm9qZWN0LWVuZ2FnZW1lbnQudHMgKGludmVzdF9jbGlja3MvZGV0YWlsX3ZpZXdzKSwKICAvLyBOT1QgZXZlbnRfdHlwZS9jb3VudCB3aGljaCBkbyBub3QgZXhpc3Qgb24gdGhpcyB0YWJsZS4KICBsZXQgcXVlcnkgPSBzYi5mcm9tKCdwcm9qZWN0X2FuYWx5dGljcycpLnNlbGVjdCgnaWQscHJvamVjdF9pZCxkYXRlLGludmVzdF9jbGlja3MsZGV0YWlsX3ZpZXdzJywgeyBjb3VudDogJ2V4YWN0JywgaGVhZDogZmFsc2UgfSkuZ3RlKCdkYXRlJywgc2luY2Uuc3BsaXQoJ1QnKVswXSk7CiAgaWYgKHByb2plY3RJZCkgcXVlcnkgPSBxdWVyeS5lcSgncHJvamVjdF9pZCcsIHByb2plY3RJZCk7CiAgY29uc3QgeyBkYXRhLCBlcnJvciwgY291bnQgfSA9IGF3YWl0IHF1ZXJ5Lm9yZGVyKCdkYXRlJywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDEwMCk7CiAgaWYgKGVycm9yKSByZXR1cm4ganNvbih7IGVycm9yOiBlcnJvci5tZXNzYWdlLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9LCA1MDApOwogIHJldHVybiBqc29uKHsgZXZlbnRzOiBkYXRhIHx8IFtdLCBjb3VudDogY291bnQgfHwgMCwgcHJvamVjdElkLCBkYXlzLCBkZXBsb3ltZW50TWFya2VyOiBERVBMT1lNRU5UX01BUktFUiB9KTsKfQo=
+/**
+ * IVX Public Feature Handlers — registered under /api/ivx/*
+ *
+ * Covers: properties, members dashboard, investors dashboard,
+ * CRM, JV deals, property admin, media, instagram cards.
+ */
+const DEPLOYMENT_MARKER = 'ivx-public-features-api-v1-2026-07-01';
+
+// ── Supabase ───────────────────────────────────────────────────────────────
+let _sb: any = null;
+async function getSB() {
+  if (_sb) return _sb;
+  const { createClient } = await import('@supabase/supabase-js');
+  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  return _sb;
+}
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://ivxholding.com', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS' },
+  });
+}
+
+async function readBody(req: Request): Promise<Record<string, unknown>> {
+  try { return await req.json() as Record<string, unknown>; } catch { return {}; }
+}
+
+function safeStr(v: unknown, fallback = ''): string { return typeof v === 'string' ? v.trim() : fallback; }
+
+export const publicFeatureOptions = (): Response => {
+  return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS' } });
+};
+
+// ── Featured Properties ────────────────────────────────────────────────────
+export async function handleFeaturedProperties(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    // Query jv_deals with published=true as featured, fall back to properties
+    const { data, error } = await sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).eq('status', 'active').order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(20);
+    if (error) {
+      // Fallback: try property_controls for featured IDs
+      const { data: featuredIds } = await sb.from('property_controls').select('property_id').eq('is_featured', true);
+      if (featuredIds && featuredIds.length > 0) {
+        const ids = featuredIds.map((r: any) => r.property_id);
+        const { data: props } = await sb.from('properties').select('id,name,location,city,country,price_per_share,total_shares,available_shares,min_investment,target_raise,current_raise,yield,property_type,status,description,created_at').in('id', ids).order('created_at', { ascending: false }).limit(20);
+        return json({ properties: props || [], count: props?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
+      }
+      // Last fallback: all properties
+      const { data: allProps } = await sb.from('properties').select('id,name,location,city,country,price_per_share,total_shares,available_shares,min_investment,target_raise,current_raise,yield,property_type,status,description,created_at').order('created_at', { ascending: false }).limit(20);
+      return json({ properties: allProps || [], count: allProps?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
+    }
+    return json({ properties: data || [], count: data?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Property Details ──────────────────────────────────────────────────────
+export async function handlePropertyDetails(req: Request, propertyId: string): Promise<Response> {
+  try {
+    const sb = await getSB();
+    // The landing page featured properties come from jv_deals (not properties table).
+    // Try jv_deals first by string ID, then fall back to properties by numeric/string ID.
+    const { data: dealData, error: dealError } = await sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,created_at').eq('id', propertyId).maybeSingle();
+    if (dealData) return json({ property: dealData, deploymentMarker: DEPLOYMENT_MARKER, source: 'jv_deals' });
+
+    // Fallback: try properties table
+    const numericId = Number(propertyId);
+    const isNumeric = !isNaN(numericId) && String(numericId) === propertyId;
+    const query = sb.from('properties').select('id,name,location,city,country,price_per_share,total_shares,available_shares,min_investment,target_raise,current_raise,yield,property_type,status,description,created_at');
+    const { data, error } = isNumeric
+      ? await query.eq('id', numericId).maybeSingle()
+      : await query.eq('id', propertyId).maybeSingle();
+    if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 404);
+    if (!data) return json({ error: 'Property not found', propertyId, deploymentMarker: DEPLOYMENT_MARKER }, 404);
+    return json({ property: data, deploymentMarker: DEPLOYMENT_MARKER, source: 'properties' });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Members Dashboard ─────────────────────────────────────────────────────
+export async function handleMembersDashboard(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const [membersRes, walletsRes] = await Promise.all([
+      sb.from('members').select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(50),
+      sb.from('wallets').select('*', { count: 'exact', head: true }),
+    ]);
+    return json({
+      members: membersRes.data || [],
+      totalMembers: membersRes.count || 0,
+      totalWallets: walletsRes.count || 0,
+      deploymentMarker: DEPLOYMENT_MARKER,
+    });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Investors Dashboard ───────────────────────────────────────────────────
+export async function handleInvestorsDashboard(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const [investorsRes, dealsRes] = await Promise.all([
+      sb.from('investors').select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(50),
+      sb.from('jv_deals').select('*', { count: 'exact', head: true }).eq('published', true),
+    ]);
+    return json({
+      investors: investorsRes.data || [],
+      totalInvestors: investorsRes.count || 0,
+      totalDeals: dealsRes.count || 0,
+      deploymentMarker: DEPLOYMENT_MARKER,
+    });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── CRM Main ──────────────────────────────────────────────────────────────
+export async function handleCRMMain(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const [investorsRes, leadsRes] = await Promise.all([
+      sb.from('investors').select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(20),
+      sb.from('leads').select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(20),
+    ]);
+    return json({
+      investors: investorsRes.data || [],
+      totalInvestors: investorsRes.count || 0,
+      leads: leadsRes.data || [],
+      totalLeads: leadsRes.count || 0,
+      deploymentMarker: DEPLOYMENT_MARKER,
+    });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── JV Deals ──────────────────────────────────────────────────────────────
+export async function handleJVDealsList(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const { data, error, count } = await sb.from('jv_deals').select('*', { count: 'exact', head: false }).eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(50);
+    if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    return json({ deals: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Property Admin ────────────────────────────────────────────────────────
+export async function handlePropertyAdminList(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const { data, error, count } = await sb.from('properties').select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(100);
+    if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    return json({ properties: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+export async function handlePropertyAdminCreate(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const body = await readBody(req);
+    const { data, error } = await sb.from('properties').insert(body).select().single();
+    if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    return json({ property: data, deploymentMarker: DEPLOYMENT_MARKER }, 201);
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Media Upload ──────────────────────────────────────────────────────────
+export async function handleMediaUpload(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const body = await readBody(req);
+    const projectId = safeStr(body.projectId || body.project_id);
+    const mediaUrl = safeStr(body.url || body.mediaUrl || body.media_url);
+    const mediaType = safeStr(body.type || body.mediaType || body.media_type, 'image');
+    if (!projectId || !mediaUrl) return json({ error: 'projectId and url required', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+    const { data, error } = await sb.from('project_media').insert({ project_id: projectId, media_url: mediaUrl, media_type: mediaType, is_approved: true }).select().single();
+    if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    return json({ media: data, deploymentMarker: DEPLOYMENT_MARKER }, 201);
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Instagram Cards ───────────────────────────────────────────────────────
+export async function handleInstagramCards(req: Request): Promise<Response> {
+  try {
+    const sb = await getSB();
+    const { data, error } = await sb.from('project_media').select('id,project_id,media_type,url,media_url,thumbnail_url,title,description,position,is_approved,created_at').eq('media_type', 'instagram_card').eq('is_approved', true).order('created_at', { ascending: false }).limit(50);
+    if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    return json({ cards: data || [], count: data?.length || 0, deploymentMarker: DEPLOYMENT_MARKER });
+  } catch (err) { return json({ error: err.message, deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+}
+
+// ── Engagement Aliases (delegate to project engagement with query params) ──
+export async function handleEngagementLikes(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const projectId = url.searchParams.get('projectId') || url.searchParams.get('project_id') || null;
+  const sb = await getSB();
+  let query = sb.from('project_likes').select('id,project_id,user_id,created_at');
+  if (projectId) query = query.eq('project_id', projectId);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
+  if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  return json({ likes: data || [], count: data?.length || 0, projectId, deploymentMarker: DEPLOYMENT_MARKER });
+}
+
+export async function handleEngagementComments(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const projectId = url.searchParams.get('projectId') || url.searchParams.get('project_id') || null;
+  const sb = await getSB();
+  let query = sb.from('project_comments').select('id,project_id,user_id,text,created_at');
+  if (projectId) query = query.eq('project_id', projectId);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
+  if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  return json({ comments: data || [], count: data?.length || 0, projectId, deploymentMarker: DEPLOYMENT_MARKER });
+}
+
+export async function handleEngagementShares(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const projectId = url.searchParams.get('projectId') || url.searchParams.get('project_id') || null;
+  const sb = await getSB();
+  let query = sb.from('project_shares').select('id,project_id,user_id,platform,created_at');
+  if (projectId) query = query.eq('project_id', projectId);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
+  if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  return json({ shares: data || [], count: data?.length || 0, projectId, deploymentMarker: DEPLOYMENT_MARKER });
+}
+
+export async function handleEngagementSaves(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const projectId = url.searchParams.get('projectId') || url.searchParams.get('project_id') || null;
+  const sb = await getSB();
+  let query = sb.from('project_saves').select('id,project_id,user_id,created_at');
+  if (projectId) query = query.eq('project_id', projectId);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
+  if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  return json({ saves: data || [], count: data?.length || 0, projectId, deploymentMarker: DEPLOYMENT_MARKER });
+}
+
+// project_analytics.project_id is a uuid column; reject non-uuid input with 400 instead of letting Postgres throw a 500.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export async function handleAnalytics(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const projectId = url.searchParams.get('projectId') || url.searchParams.get('project_id') || null;
+  if (projectId && !UUID_RE.test(projectId)) {
+    return json({ error: 'projectId must be a valid UUID', projectId, deploymentMarker: DEPLOYMENT_MARKER }, 400);
+  }
+  const days = parseInt(url.searchParams.get('days') || '30', 10);
+  const sb = await getSB();
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  // Columns match the upsert path in ivx-project-engagement.ts (invest_clicks/detail_views),
+  // NOT event_type/count which do not exist on this table.
+  let query = sb.from('project_analytics').select('id,project_id,date,invest_clicks,detail_views', { count: 'exact', head: false }).gte('date', since.split('T')[0]);
+  if (projectId) query = query.eq('project_id', projectId);
+  const { data, error, count } = await query.order('date', { ascending: false }).limit(100);
+  if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  return json({ events: data || [], count: count || 0, projectId, days, deploymentMarker: DEPLOYMENT_MARKER });
+}
