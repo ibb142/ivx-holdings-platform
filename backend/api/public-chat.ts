@@ -514,11 +514,17 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
       source: result.source,
       model: result.model,
     }).catch(() => 'none' as const);
-    const userPersistence = await Promise.race([
-      userPersistencePromise,
-      Promise.resolve('none' as const),
+
+    // Wait for both persistence promises (non-blocking on failure) and report
+    // whichever one actually succeeded. Previously this used Promise.race with
+    // Promise.resolve('none'), which always resolved to 'none' instantly because
+    // a resolved promise wins the race before the real persistence promise even
+    // starts — making the persistence field in every chat response wrong.
+    const [userPersisted, assistantPersisted] = await Promise.all([
+      userPersistencePromise.catch(() => 'none' as const),
+      assistantPersistencePromise,
     ]);
-    const persistence = userPersistence;
+    const persistence = assistantPersisted !== 'none' ? assistantPersisted : userPersisted;
 
     const payload: PublicChatSuccessResponse = {
       ok: true,
