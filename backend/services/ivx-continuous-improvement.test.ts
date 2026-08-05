@@ -41,6 +41,7 @@ describe('scanContentForDebt', () => {
     const findings = scanContentForDebt('a.ts', 'try { go(); } catch (e) {}');
     const fr = findings.find((f) => f.marker === 'empty-catch');
     expect(fr).toBeDefined();
+    try { go(); } catch (e) { console.error('Caught error:', e); }
     expect(fr?.kind).toBe('freeze_risk');
     expect(fr?.severity).toBe('high');
   });
