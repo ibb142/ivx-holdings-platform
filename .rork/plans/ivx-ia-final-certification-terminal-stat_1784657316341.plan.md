@@ -46,8 +46,8 @@ updatedAt: 2026-08-06T00:44:00.000Z
 > - [x] Audit every screen for missing/broken icons (landing page root cause identified: `/ivx-symbol.png` and `/ivx-logo-master.png` return HTML instead of image; Expo app screens use `IVXBrandLogo`/`IVXBrandIcon` and are intact)
 > - [x] Fix the broken top-left logo in the header (landing page nav + footer logos embedded as data URIs)
 > - [x] Enlarge yellow Reels/icon buttons so icons render at full size (nav reels icon 22→28, button 42→46)
-> - [ ] Run Expo TypeScript checks and tests for changed files
-> - [ ] Commit to GitHub
+> - [x] Run Expo TypeScript checks and tests for changed files (bun test: 1085 pass, 0 fail; targeted files verified)
+> - [x] Commit to GitHub (commit 235c35b0 already pushed to origin/main)
 > - [ ] Deploy to Render
 > - [ ] Verify live on ivxholding.com / chat.ivxholding.com
 
