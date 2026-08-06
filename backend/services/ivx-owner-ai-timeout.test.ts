@@ -13,7 +13,7 @@ describe('withOwnerAIRequestTimeout', () => {
 
   it('returns the fallback when the promise exceeds the timeout', async () => {
     const result = await withOwnerAIRequestTimeout(
-      new Promise<string>((resolve) => setTimeout(() => resolve('slow_value'), 200)),
+      new Promise<string>((resolve) => setTimeout(() => resolve('slow_value'), 1000)),
       50,
       () => 'timeout_fallback',
     );
@@ -23,7 +23,7 @@ describe('withOwnerAIRequestTimeout', () => {
   it('returns the fallback when the promise never resolves within the budget', async () => {
     const result = await withOwnerAIRequestTimeout(
       new Promise<string>(() => { /* intentionally never resolves */ }),
-      25,
+      50,
       () => 'timeout_fallback',
     );
     expect(result).toBe('timeout_fallback');

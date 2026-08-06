@@ -1630,6 +1630,7 @@ export async function runGithubGetWorkflowRun(input: Record<string, unknown>): P
     const job = readRecord(jobValue);
     const rawSteps = Array.isArray(job.steps) ? job.steps : [];
     return {
+      id: typeof job.id === 'number' ? job.id : null,
       name: readTrimmed(job.name) || null,
       status: readTrimmed(job.status) || null,
       conclusion: readTrimmed(job.conclusion) || null,
