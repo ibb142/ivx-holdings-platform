@@ -3887,7 +3887,7 @@ async function fetchProductionHealth(): Promise<Record<string, unknown>> {
 
 async function runSeniorDevEndToEndProof(input: Record<string, unknown>): Promise<Record<string, unknown>> {
   const startedAt = nowIso();
-  const evidence: Record<string, unknown> = { startedAt, steps: [] };
+  const evidence: Record<string, unknown> & { steps: Array<Record<string, unknown>> } = { startedAt, steps: [] };
 
   // Step 1: diagnostic — read current state
   evidence.steps.push({ step: 'diagnostic', status: 'running' });
