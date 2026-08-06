@@ -10,11 +10,11 @@ try {
     Platform: {
       OS: 'ios',
       Version: '17.0',
-      select: (obj) => obj.ios ?? obj.default,
+      select: (obj: Record<string, unknown>) => (obj.ios ?? obj.default) as unknown,
     },
     StyleSheet: {
-      create: (styles) => styles,
-      flatten: (styles) => styles,
+      create: (styles: Record<string, unknown>) => styles,
+      flatten: (styles: Record<string, unknown>) => styles,
     },
   }));
 } catch (e) {
