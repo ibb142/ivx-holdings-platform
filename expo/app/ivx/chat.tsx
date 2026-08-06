@@ -5660,9 +5660,9 @@ export default function IVXOwnerChatRoute() {
                 <View style={styles.brandRow} testID="ivx-owner-chat-brand-row">
                   <View style={styles.brandLeftCompact}>
                     <View style={styles.brandMark}>
-                      <IVXBrandIcon size={15} />
+                      <IVXBrandIcon size={22} />
                     </View>
-                    <Text style={styles.brandTitleCompact} numberOfLines={1}>IVX</Text>
+                    <Text style={styles.brandTitleCompact} numberOfLines={1}>IVX IA</Text>
                   </View>
                   <Pressable
                     style={styles.brandInlineSearch}
@@ -7166,9 +7166,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500' as const},
   brandMark: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: Colors.primary,
     alignItems: 'center' as const,
     justifyContent: 'center' as const},

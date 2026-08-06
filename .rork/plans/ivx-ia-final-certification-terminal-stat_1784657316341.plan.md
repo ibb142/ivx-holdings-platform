@@ -30,6 +30,29 @@ updatedAt: 2026-08-06T00:44:00.000Z
 
 ---
 
+# NEW OWNER DIRECTIVE — UI ICON QA & FIX (in progress)
+
+> **STATUS:** New UI/UX task initiated by owner on 2026-08-06. This directive supersedes further certification close-out work until the icon issues are resolved, deployed, and verified live.
+>
+> **Reported issues:**
+> - Top-left brand icon in the app header is broken / not rendering (screenshot shows broken image placeholder + "IVX" text).
+> - Yellow icon buttons (e.g., Project Reels) show the icon too small; owner requires the icon to render at full size.
+>
+> **Scope:** Audit every screen for missing or broken icons, fix the header logo so it always renders, and ensure all yellow icon buttons use full-size icons.
+>
+> **Required proof:** code changes → local TS/test checks → commit to GitHub → deploy to Render → live screenshot/endpoint verification.
+>
+> **Task checklist:**
+> - [x] Audit every screen for missing/broken icons (landing page root cause identified: `/ivx-symbol.png` and `/ivx-logo-master.png` return HTML instead of image; Expo app screens use `IVXBrandLogo`/`IVXBrandIcon` and are intact)
+> - [x] Fix the broken top-left logo in the header (landing page nav + footer logos embedded as data URIs)
+> - [x] Enlarge yellow Reels/icon buttons so icons render at full size (nav reels icon 22→28, button 42→46)
+> - [ ] Run Expo TypeScript checks and tests for changed files
+> - [ ] Commit to GitHub
+> - [ ] Deploy to Render
+> - [ ] Verify live on ivxholding.com / chat.ivxholding.com
+
+---
+
 # IVX IA 16-phase final certification — live production QA + deploy + evidence
 
 > **STATUS: ALL 16 PHASES PASS. CERTIFICATION COMPLETE. ✅✅✅**
