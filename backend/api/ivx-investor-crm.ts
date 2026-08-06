@@ -20,6 +20,7 @@ import {
   getInvestor,
   importInvestors,
   listInvestors,
+  listInvestorsWithSummary,
   normalizePartyType,
   setInvestorStatus,
   summarizeInvestors,
@@ -122,8 +123,8 @@ export async function handleInvestorListRequest(request: Request): Promise<Respo
   const offsetParam = parseInt(url.searchParams.get('offset') ?? '0', 10);
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 500) : 200;
   const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? offsetParam : 0;
-  const [allInvestors, summary] = await Promise.all([listInvestors(), summarizeInvestors()]);
-  const total = allInvestors.length;
+  // Single durable read: avoid loading the large investor JSON twice in parallel.
+  const { investors: allInvestors, total, summary } = await listInvestorsWithSummary();
   const investors = allInvestors.slice(offset, offset + limit);
   return ownerOnlyJson({ ok: true, investors, summary, total, limit, offset, hasMore: offset + limit < total });
 }
