@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   canonicalizeRole,
   isAdminRole,
@@ -161,6 +161,19 @@ describe('IVX Enterprise Auth Recovery — Phase 15', () => {
   });
 
   describe('Password reset redirect (Phase 4 + 12)', () => {
+    // Save and clear EXPO_PUBLIC_IVX_AUTH_URL so the default redirect URL is used,
+    // regardless of what the runtime environment has set. This makes the tests
+    // deterministic in CI, local dev, and the Rork sandbox.
+    const _prevAuthUrl = process.env.EXPO_PUBLIC_IVX_AUTH_URL;
+    beforeEach(() => {
+      delete process.env.EXPO_PUBLIC_IVX_AUTH_URL;
+    });
+    afterEach(() => {
+      if (_prevAuthUrl !== undefined) {
+        process.env.EXPO_PUBLIC_IVX_AUTH_URL = _prevAuthUrl;
+      }
+    });
+
     it('resolves to the production reset route', () => {
       expect(getPasswordResetRedirectUrl()).toBe('https://ivxholding.com/reset-password.html');
     });
