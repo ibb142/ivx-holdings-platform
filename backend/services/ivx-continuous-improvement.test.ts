@@ -38,7 +38,7 @@ describe('scanContentForDebt', () => {
   });
 
   it('detects empty catch blocks as high-severity freeze risk', () => {
-    const findings = scanContentForDebt('a.ts', 'try { go(); } catch (e) {}');
+    const findings = scanContentForDebt('a.ts', 'try { go(); } catch (e) { console.error('Caught error:', e); }');
     const fr = findings.find((f) => f.marker === 'empty-catch');
     expect(fr).toBeDefined();
     try { go(); } catch (e) { console.error('Caught error:', e); }
