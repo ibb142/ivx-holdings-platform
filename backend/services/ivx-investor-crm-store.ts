@@ -310,6 +310,50 @@ export async function listInvestors(): Promise<InvestorRecord[]> {
   return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+export type InvestorListWithSummary = {
+  investors: InvestorRecord[];
+  total: number;
+  summary: InvestorCrmSummary;
+};
+
+export async function listInvestorsWithSummary(): Promise<InvestorListWithSummary> {
+  const items = await readJsonFile<InvestorRecord[]>(INVESTORS_STATE, []);
+  const sorted = [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const byStatus: Record<InvestorStatus, number> = {
+    prospect: 0, contacted: 0, meeting_scheduled: 0, active: 0, invested: 0,
+  };
+  const bySource: Record<InvestorSource, number> = {
+    owner_entered: 0, submitted_form: 0, crm_import: 0, public_source: 0, verified_deal: 0,
+  };
+  const byPartyType: Record<PartyType, number> = {
+    investor: 0, buyer: 0, broker: 0, developer: 0, lender: 0, partner: 0,
+  };
+  let accredited = 0;
+  let leadSum = 0;
+  let relSum = 0;
+  for (const item of items) {
+    byStatus[item.status] = (byStatus[item.status] ?? 0) + 1;
+    bySource[item.source] = (bySource[item.source] ?? 0) + 1;
+    byPartyType[item.partyType] = (byPartyType[item.partyType] ?? 0) + 1;
+    if (item.accreditedStatus === 'accredited') accredited += 1;
+    leadSum += item.leadScore;
+    relSum += item.relationshipScore;
+  }
+  const total = items.length;
+  const summary: InvestorCrmSummary = {
+    marker: IVX_INVESTOR_CRM_MARKER,
+    generatedAt: nowIso(),
+    total,
+    byStatus,
+    bySource,
+    byPartyType,
+    accredited,
+    avgLeadScore: total > 0 ? Math.round(leadSum / total) : 0,
+    avgRelationshipScore: total > 0 ? Math.round(relSum / total) : 0,
+  };
+  return { investors: sorted, total, summary };
+}
+
 export async function getInvestor(id: string): Promise<InvestorRecord | null> {
   const items = await readJsonFile<InvestorRecord[]>(INVESTORS_STATE, []);
   return items.find((item) => item.id === id) ?? null;
