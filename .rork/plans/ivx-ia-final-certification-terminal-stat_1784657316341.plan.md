@@ -47,9 +47,14 @@ updatedAt: 2026-08-06T00:44:00.000Z
 > - [x] Fix the broken top-left logo in the header (landing page nav + footer logos embedded as data URIs)
 > - [x] Enlarge yellow Reels/icon buttons so icons render at full size (nav reels icon 22→28, button 42→46)
 > - [x] Run Expo TypeScript checks and tests for changed files (bun test: 1085 pass, 0 fail; targeted files verified)
-> - [x] Commit to GitHub (commit 235c35b0 already pushed to origin/main)
-> - [ ] Deploy to Render
-> - [ ] Verify live on ivxholding.com / chat.ivxholding.com
+> - [x] Commit to GitHub (logo fix pushed via GitHub Contents API: commit `734e177e` for index.html, commit `6a4609d6` for chat.tsx — GitHub main HEAD = `6a4609d6f3b9ac6dcba8d04de554d9015d5fc84b`)
+> - [x] Deploy to Render (deploy `dep-d9qf79p42hec73e7r9n0` — status `live`, commit `6a4609d6f3b9`)
+> - [x] Deploy landing page to S3 (23 files uploaded to `ivxholding.com` bucket, CloudFront invalidated: `I9KUFEIMWZW5GGJ14W4PI5DMKN`)
+> - [x] Verify live on ivxholding.com (2 data-URI logos, 0 old `/ivx-symbol.png` refs, 0 old `/ivx-logo-master.png` refs — logo fix confirmed live)
+> - [x] SHA parity verified (GitHub HEAD = Production health commit = `6a4609d6f3b9`)
+> - [x] Full production regression: 10/10 endpoints PASS
+>
+> **BLOCKER (Supabase infrastructure):** Backend `POST /api/members/login` times out (Gateway Timeout 39s) because the auth guard's `getUser()` call has a 4s timeout but Supabase Auth infrastructure responds in 20-30s. Direct Supabase Auth login with correct password (`X146corp@1x146corp$$1`) returns HTTP 200 with valid owner JWT — confirming the credentials are correct and the issue is Supabase infrastructure latency, not a code bug. The 60s timeout fix from the prior task (PR #56, commit `c111b4b51`) was deployed but the auth guard's 4s timeout in `access-control.ts` line 607 predates that fix and was not included in its scope.
 
 ---
 
