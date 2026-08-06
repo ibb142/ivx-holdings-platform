@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// Mock react-native before any module that imports it
-mock.module('react-native', () => ({
-  Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
-}));
+// react-native is mocked comprehensively by test-preload.ts (Platform, Linking, AppState, Alert, StyleSheet, Animated)
 
 // Mock @supabase/supabase-js before any transitive import
 mock.module('@supabase/supabase-js', () => ({

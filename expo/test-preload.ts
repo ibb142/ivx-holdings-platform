@@ -12,9 +12,29 @@ try {
       Version: '17.0',
       select: (obj: Record<string, unknown>) => (obj.ios ?? obj.default) as unknown,
     },
+    Linking: {
+      canOpenURL: async () => true,
+      openURL: async () => {},
+      addEventListener: () => ({ remove: () => {} }),
+    },
+    AppState: {
+      addEventListener: () => ({ remove: () => {} }),
+      currentState: 'active',
+    },
+    Alert: {
+      alert: () => {},
+    },
     StyleSheet: {
       create: (styles: Record<string, unknown>) => styles,
       flatten: (styles: Record<string, unknown>) => styles,
+    },
+    Animated: {
+      Value: class AnimatedValue {},
+      timing: () => ({ start: () => {} }),
+      spring: () => ({ start: () => {} }),
+      loop: () => ({ start: () => {} }),
+      sequence: () => ({ start: () => {} }),
+      parallel: () => ({ start: () => {} }),
     },
   }));
 } catch (e) {

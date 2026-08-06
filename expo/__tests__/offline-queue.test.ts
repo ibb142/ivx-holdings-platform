@@ -15,13 +15,7 @@ mock.module('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-// Mock react-native AppState (no-op subscription).
-mock.module('react-native', () => ({
-  AppState: {
-    addEventListener: () => ({ remove: () => {} }),
-  },
-  Linking: { canOpenURL: async () => true, openURL: async () => {}, addEventListener: () => ({ remove: () => {} }) },
-}));
+// react-native is mocked comprehensively by test-preload.ts (Platform, Linking, AppState, Alert, StyleSheet, Animated)
 
 // Mock chatService so we control send behavior per test.
 let sendImpl: (input: any) => Promise<any> = async (input) => ({ id: 'sent-1', ...input });
