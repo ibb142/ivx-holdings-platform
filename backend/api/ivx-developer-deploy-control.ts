@@ -2593,13 +2593,37 @@ export async function runGithubGetFileTree(input: Record<string, unknown>): Prom
 /** Read-only: fetches GitHub Actions job logs (plain text, capped at 50KB). */
 export async function runGithubGetWorkflowLogs(input: Record<string, unknown>): Promise<Record<string, unknown>> {
   const repoInfo = await getGithubRepoInfo(input);
-  const jobIdRaw = Number(input.jobId);
-  const jobId = Number.isFinite(jobIdRaw) ? Math.trunc(jobIdRaw) : 0;
-  if (jobId <= 0) {
-    throw new Error('A valid jobId (numeric GitHub Actions job id) is required for github_get_workflow_logs.');
-  }
-  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/actions/jobs/${jobId}/logs`;
   const headers = await githubHeaders();
+  const jobIdRaw = Number(input.jobId);
+  let jobId = Number.isFinite(jobIdRaw) ? Math.trunc(jobIdRaw) : 0;
+
+  // If no jobId was supplied, a runId can be used to discover the first failing job.
+  if (jobId <= 0) {
+    const runIdRaw = Number(input.runId);
+    const runId = Number.isFinite(runIdRaw) ? Math.trunc(runIdRaw) : 0;
+    if (runId <= 0) {
+      throw new Error('A valid jobId or runId (numeric GitHub Actions id) is required for github_get_workflow_logs.');
+    }
+    const jobsUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/actions/runs/${runId}/jobs?per_page=20`;
+    const jobsResponse = await fetchJson(jobsUrl, { method: 'GET', headers });
+    if (!jobsResponse.ok) {
+      throw new Error(`GitHub workflow jobs lookup failed with HTTP ${jobsResponse.status}.`);
+    }
+    const jobsData = readRecord(jobsResponse.data);
+    const rawJobs = Array.isArray(jobsData.jobs) ? jobsData.jobs : [];
+    const failedJob = rawJobs.find((jobValue) => {
+      const job = readRecord(jobValue);
+      return readTrimmed(job.conclusion) === 'failure';
+    });
+    const targetJob = failedJob || rawJobs[0];
+    const targetJobId = typeof targetJob?.id === 'number' ? targetJob.id : 0;
+    if (!targetJobId) {
+      throw new Error(`No job found for workflow run ${runId}.`);
+    }
+    jobId = targetJobId;
+  }
+
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/actions/jobs/${jobId}/logs`;
   const response = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
   if (!response.ok) {
     throw new Error(`GitHub workflow logs failed with HTTP ${response.status}.`);
