@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { supabase } from '@/lib/supabase';
+import { resolveSupabaseUrl, resolveSupabaseAnonKey } from '@/lib/supabase-env';
 
 const STORAGE_BUCKET = 'deal-photos';
 const MAX_PHOTO_SIZE_MB = 50;
@@ -628,12 +629,12 @@ async function checkNetworkConnectivity(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://kvclcdjmjghndxsngfzb.supabase.co';
+    const supabaseUrl = resolveSupabaseUrl();
     if (!supabaseUrl) return true;
     const resp = await fetch(`${supabaseUrl}/rest/v1/`, {
       method: 'HEAD',
       signal: controller.signal,
-      headers: { 'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk' },
+      headers: { 'apikey': resolveSupabaseAnonKey() },
     });
     clearTimeout(timeout);
     return resp.ok || resp.status === 400 || resp.status === 401;

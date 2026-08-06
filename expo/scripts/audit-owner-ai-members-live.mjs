@@ -4,9 +4,9 @@
  * "how many members" and "how many visitors from day one" to catch the hallucination.
  * Also query the members table with different selects to find the 400 cause.
  */
-const SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://kvclcdjmjghndxsngfzb.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
+const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND = 'https://api.ivxholding.com';
 const OWNER_TOKEN = process.env.IVX_OWNER_TOKEN || '';
 const OWNER_EMAIL = process.env.IVX_OWNER_EMAIL || '';
