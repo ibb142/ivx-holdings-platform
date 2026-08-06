@@ -955,14 +955,11 @@ export async function handleIVXOwnerRegistrationStatusRequest(request?: Request)
     }
   }
 
+  // SECURITY: Public payload exposes only email lookup result + timestamp.
+  // No route paths, no deployment markers, no internal config flags.
   const publicPayload: Record<string, unknown> = {
     ok: true,
-    routeRegistered: true,
-    route: 'POST /api/ivx/owner-registration',
-    statusRoute: 'GET /api/ivx/owner-registration/status',
-    deploymentMarker: DEPLOYMENT_MARKER,
     ...(ownerEmailLookup ? { ownerEmailLookup } : {}),
-    secretValuesReturned: false,
     timestamp: nowIso(),
   };
 
@@ -1155,22 +1152,29 @@ export async function handleIVXOwnerRegistrationRequest(request: Request): Promi
 
 export async function handleIVXOwnerAccessRepairStatusRequest(request: Request): Promise<Response> {
   if (request.method !== 'GET') {
-    return json({ success: false, ok: false, backendVersion: OWNER_ACCESS_REPAIR_BACKEND_VERSION, message: 'Method not allowed.', deploymentMarker: DEPLOYMENT_MARKER, secretValuesReturned: false }, 405);
+    return json({ success: false, ok: false, message: 'Method not allowed.' }, 405);
+  }
+
+  // SECURITY: Require owner auth — no internal config details to unauthenticated callers.
+  let ownerVerified = false;
+  try {
+    const { assertIVXOwnerOnly } = await import('./owner-only');
+    await assertIVXOwnerOnly(request);
+    ownerVerified = true;
+  } catch {
+    ownerVerified = false;
+  }
+
+  if (!ownerVerified) {
+    return json({ ok: false, error: 'Owner authentication required.', secretValuesReturned: false }, 401);
   }
 
   return json({
     success: true,
     ok: true,
-    route: 'GET /api/ivx/owner-access-repair/status',
-    backendVersion: OWNER_ACCESS_REPAIR_BACKEND_VERSION,
-    backendVersionProof: 'owner-access-repair-v7-render-direct-client-password-required',
-    phonePasswordSourceOfTruth: true,
     requiresClientPassword: true,
-    acceptsNewPasswordFromPhone: true,
     passwordUpdateSource: 'client_request',
     ownerNewPasswordRuntimeSecretUsed: false,
-    message: 'V7 owner repair is live on the real ivx-holdings-platform backend: phone must submit newPassword; OWNER_NEW_PASSWORD is not used for phone repair.',
-    deploymentMarker: DEPLOYMENT_MARKER,
     secretValuesReturned: false,
     timestamp: nowIso(),
   });
