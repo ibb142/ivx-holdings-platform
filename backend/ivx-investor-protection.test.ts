@@ -1,6 +1,24 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import { rm, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+
+// Mock the durable store so isDurableStoreConfigured() always returns false.
+// Without this, parallel test files that set SUPABASE_SERVICE_ROLE_KEY at module
+// level (e.g. ivx-canonical-identity-model.test.ts line 159) can leak that env
+// var into this test file during parallel execution, causing the durable store
+// to route writes to Supabase instead of the filesystem fallback. The
+// resetProtectionStore() helper only clears the local filesystem directory, so
+// Supabase-routed writes persist or fail silently, producing test failures.
+// All other IVX store tests (treasury, outreach, CRM, deal-tracking, crm-import)
+// already use this exact mock pattern.
+mock.module('./services/ivx-durable-store', () => ({
+  isDurableStoreConfigured: () => false,
+  readDurableJson: async (_file: string, fallback: unknown) => fallback,
+  writeDurableJson: async () => {},
+  appendDurableEvent: async () => {},
+  readDurableEvents: async () => [],
+}));
+
 import { auditDir } from './services/ivx-data-root';
 import {
   createWithdrawal,

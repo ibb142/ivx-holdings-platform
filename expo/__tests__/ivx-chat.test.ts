@@ -479,16 +479,7 @@ mock.module('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-mock.module('react-native', () => ({
-  Linking: {
-    canOpenURL: async () => true,
-    openURL: async () => {},
-  },
-  AppState: {
-    addEventListener: () => ({ remove: () => {} }),
-    currentState: 'active',
-  },
-}));
+// react-native is mocked comprehensively by test-preload.ts (Platform, Linking, AppState, Alert, StyleSheet, Animated)
 
 const ivxChat = await import('../src/modules/chat/services/ivxChat');
 

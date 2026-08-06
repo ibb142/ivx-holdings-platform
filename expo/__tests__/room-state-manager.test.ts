@@ -26,13 +26,7 @@ mock.module('../src/modules/chat/services/ivxChat', () => ({
   invalidateRoomStatusCache: () => {},
 }));
 
-mock.module('react-native', () => ({
-  AppState: {
-    addEventListener: (_event: string, _handler: Function) => ({ remove: () => {} }),
-    currentState: 'active',
-  },
-  Linking: { canOpenURL: async () => true, openURL: async () => {}, addEventListener: () => ({ remove: () => {} }) },
-}));
+// react-native is mocked comprehensively by test-preload.ts (Platform, Linking, AppState, Alert, StyleSheet, Animated)
 
 const roomState = await import('../src/modules/chat/services/roomStateManager');
 

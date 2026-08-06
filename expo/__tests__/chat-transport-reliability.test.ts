@@ -13,15 +13,7 @@
 import { describe, it, expect, mock } from 'bun:test';
 import type { SendOperationMode } from '@/src/modules/chat/services/chatTransportQueue';
 
-// Mock react-native before importing the queue module.
-mock.module('react-native', () => ({
-  AppState: {
-    addEventListener: () => ({ remove: () => {} }),
-    currentState: 'active',
-  },
-  Platform: { OS: 'ios' },
-  Linking: { canOpenURL: async () => true, openURL: async () => {}, addEventListener: () => ({ remove: () => {} }) },
-}));
+// react-native is mocked comprehensively by test-preload.ts (Platform, Linking, AppState, Alert, StyleSheet, Animated)
 
 mock.module('@react-native-async-storage/async-storage', () => ({
   default: {
