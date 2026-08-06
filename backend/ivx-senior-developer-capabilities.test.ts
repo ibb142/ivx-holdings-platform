@@ -163,6 +163,30 @@ describe('github_get_workflow_logs input validation', () => {
   test('rejects zero jobId', async () => {
     await expect(runGithubGetWorkflowLogs({ repoUrl: TEST_REPO_URL, jobId: 0 })).rejects.toThrow('jobId');
   });
+
+  // Regression: input validation must run BEFORE any token-dependent call.
+  // Previously, getGithubRepoInfo() and githubHeaders() were called before
+  // validating jobId/runId, causing 'GITHUB_TOKEN is required' instead of
+  // the expected 'jobId' validation error when no token is set.
+  test('validation error is thrown even when GITHUB_TOKEN is absent', async () => {
+    const savedToken = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    try {
+      await expect(runGithubGetWorkflowLogs({ repoUrl: TEST_REPO_URL })).rejects.toThrow('jobId');
+    } finally {
+      if (savedToken !== undefined) process.env.GITHUB_TOKEN = savedToken;
+    }
+  });
+
+  test('rejects missing jobId and missing runId without requiring GITHUB_TOKEN', async () => {
+    const savedToken = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    try {
+      await expect(runGithubGetWorkflowLogs({ repoUrl: TEST_REPO_URL, jobId: -1, runId: 0 })).rejects.toThrow('jobId');
+    } finally {
+      if (savedToken !== undefined) process.env.GITHUB_TOKEN = savedToken;
+    }
+  });
 });
 
 // ─── ai_diagnose_failure ───────────────────────────────────────────────────
