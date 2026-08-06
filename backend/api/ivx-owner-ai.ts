@@ -170,6 +170,7 @@ import {
   type IVXQAOnlyProof,
 } from '../services/ivx-senior-developer-qa-runtime';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
+import { withOwnerAIRequestTimeout } from '../services/ivx-owner-ai-timeout';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
 import { buildSeniorEngineerSystemPrompt, buildCompactContextPrefix } from '../services/ivx-senior-engineer-persona';
@@ -5822,7 +5823,27 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
     return handleIVXOwnerAIRequestSSE(request, auditAuthRequest, startedAt);
   }
 
-  const response = await handleIVXOwnerAIRequestInternal(request);
+  // JSON path: hard ceiling so a stuck planner/AI gateway can never hold the
+  // connection longer than the frontend watchdog budget. The SSE path above is
+  // exempt — it emits heartbeats every 3s and is intended for long-running work.
+  const OWNER_AI_JSON_TIMEOUT_MS = 60_000;
+  const response = await withOwnerAIRequestTimeout(
+    handleIVXOwnerAIRequestInternal(request),
+    OWNER_AI_JSON_TIMEOUT_MS,
+    () => {
+      console.log('[IVXOwnerAIBackend] JSON path timed out; returning 504 to client', {
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs: OWNER_AI_JSON_TIMEOUT_MS,
+      });
+      return ownerOnlyJson({
+        ok: false,
+        error: 'owner_ai_request_timeout',
+        detail: `IVX Owner AI request exceeded the ${OWNER_AI_JSON_TIMEOUT_MS / 1000}s server timeout. Retry or use a more specific command.`,
+        requestId: createRequestId(),
+        deploymentMarker: DEPLOYMENT_MARKER,
+      }, 504);
+    },
+  );
 
   // Phase 4c — fire-and-forget audit log to public.ai_usage_logs. Never blocks.
   // Do not clone/read the request body here; the owner chat handler consumes it once.
