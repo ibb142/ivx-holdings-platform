@@ -2938,293 +2938,43 @@ app.get('/health', async (context) => {
 
   // Senior Developer Runtime diagnostic: validates that all execution
   // credentials (GitHub, Render) are present and reachable at runtime.
-  let seniorDeveloperRuntime: Record<string, unknown> = {
-    enabled: false,
-    variablesValidated: false,
-    toolRegistryReady: false,
-    commitSha: LIVE_COMMIT_SHA,
-    checkedAt: nowIso(),
-  };
+  // SECURITY: Public health only exposes enabled + blockers count.
+  // Credential presence, markers, route lists, and internal paths are
+  // never exposed publicly — they require owner auth via /api/ivx/owner-ai/status.
+  let sdEnabled = false;
+  let sdBlockers: string[] = [];
   let sdGithubReady = false;
   let sdRenderReady = false;
+  let sdVariablesValidated = false;
   try {
     const credAudit = await auditIVXProductionCredentialRuntime();
     sdGithubReady = credAudit.github.canReadRepo === true;
     sdRenderReady = credAudit.render.canDeploy === true;
-    seniorDeveloperRuntime = {
-      enabled: true,
-      variablesValidated: credAudit.ok,
-      toolRegistryReady: credAudit.ok,
-      commitSha: LIVE_COMMIT_SHA,
-      checkedAt: nowIso(),
-      markers: {
-        runtime: IVX_SENIOR_DEVELOPER_RUNTIME_MARKER,
-        deployment: DEPLOYMENT_MARKER,
-      },
-      credentials: {
-        GITHUB_REPO_URL: credAudit.credentials.GITHUB_REPO_URL.present,
-        GITHUB_TOKEN: credAudit.credentials.GITHUB_TOKEN.present,
-        RENDER_API_KEY: credAudit.credentials.RENDER_API_KEY.present,
-        RENDER_SERVICE_ID: credAudit.credentials.RENDER_SERVICE_ID.present,
-      },
-      github: {
-        canReadRepo: credAudit.github.canReadRepo,
-        canPush: credAudit.github.canPush,
-      },
-      render: {
-        canDeploy: credAudit.render.canDeploy,
-      },
-      blockers: credAudit.blockers,
-    };
-  } catch (error) {
-    seniorDeveloperRuntime = {
-      enabled: false,
-      variablesValidated: false,
-      toolRegistryReady: false,
-      commitSha: LIVE_COMMIT_SHA,
-      checkedAt: nowIso(),
-      error: error instanceof Error ? error.message : 'audit failed',
-    };
+    sdEnabled = credAudit.ok;
+    sdVariablesValidated = credAudit.ok;
+    sdBlockers = credAudit.blockers;
+  } catch {
+    // audit failed — defaults remain false/empty
   }
 
+  // SECURITY: Public /health returns only minimal uptime info.
+  // No route enumeration, no credential presence, no internal markers,
+  // no key prefixes, no deployment history, no service IDs.
+  // Owner-authenticated status is at /api/ivx/owner-ai/status.
   return context.json({
     ok: true,
     status: 'healthy',
-    aiStartupValidation: {
+    ai: {
       ok: aiStartup.ok,
-      provider: aiStartup.provider,
-      providerType: aiStartup.providerType,
       model: aiStartup.model,
-      adapterVersion: aiStartup.adapterVersion,
-      keyLoaded: aiStartup.keyLoaded,
-      keyPrefix: aiStartup.keyPrefix,
-      baseUrl: aiStartup.baseUrl,
-      errors: aiStartup.errors,
     },
-    seniorDeveloperRuntime,
-    ivxSeniorDeveloperFinalVerification: {
-      verified: seniorDeveloperRuntime.enabled === true && seniorDeveloperRuntime.variablesValidated === true && (seniorDeveloperRuntime.blockers as string[]).length === 0,
-      executionPath: IVX_GITHUB_CANONICAL_PATH,
-      executionPathDescription: IVX_GITHUB_CANONICAL_PATH_DESCRIPTION,
-      renderEnvSafeMerge: true,
-      deploymentDeduplication: true,
-      liveWorkPersistence: true,
-      commitSha: LIVE_COMMIT_SHA,
-      checkedAt: nowIso(),
+    seniorDeveloper: {
+      enabled: sdEnabled,
+      blockers: sdBlockers.length,
     },
-    ivxSeniorDeveloperProviderVerification: {
-      providerConfigured: aiStartup.ok,
-      providerReady: primaryProviderReady,
-      aiServiceAvailable,
-      provider: aiStartup.provider,
-      providerType: aiStartup.providerType,
-      model: aiStartup.model,
-      adapterVersion: aiStartup.adapterVersion,
-      credentialLoaded: aiStartup.keyLoaded,
-      credentialValid: providerHealth.credentialValid,
-      keyPrefix: aiStartup.keyPrefix,
-      baseUrl: aiStartup.baseUrl,
-      lastValidationTime: providerHealth.lastValidationTime,
-      lastHttpStatus: providerHealth.lastHttpStatus,
-      fallbackEnabled: providerHealth.fallbackEnabled,
-      fallbackUsed: providerHealth.fallbackUsed,
-      providerState: providerHealth.state,
-      traceId: providerHealth.traceId,
-      toolRegistryReady: (seniorDeveloperRuntime.blockers as string[]).length === 0,
-      variablesValidated: seniorDeveloperRuntime.variablesValidated === true,
-      externalDependency: false,
-      commitSha: LIVE_COMMIT_SHA,
-      checkedAt: nowIso(),
-    },
-    ivxSeniorDeveloperFinalQA: {
-      verifiedAtRuntime: true,
-      ownerAuthorized: true,
-      intentRouterReady: true,
-      toolRegistryReady: (seniorDeveloperRuntime.blockers as string[]).length === 0,
-      variablesValidated: seniorDeveloperRuntime.variablesValidated === true,
-      aiProviderConfigured: aiStartup.ok,
-      aiProviderReady: primaryProviderReady,
-      aiServiceAvailable,
-      liveWorkReady: true,
-      githubReady: sdGithubReady,
-      renderReady: sdRenderReady,
-      deployedSha: LIVE_COMMIT_SHA,
-      qaRunId: 'qa-b400e2f1',
-      checkedAt: nowIso(),
-    },
-    service: 'ivx-owner-ai-backend',
-    serviceName: 'ivx-holdings-platform',
-    environment: RUNTIME_ENVIRONMENT,
-    version: BACKEND_VERSION,
-    buildTimestamp: BUILD_TIMESTAMP,
-    renderServiceId: 'srv-d7t9ivreo5us73ftose0',
-    deploymentMarker: DEPLOYMENT_MARKER,
-    autonomousDeployIteration: 3,
-    ivxIaLastVerified: '2026-07-29T19:45:00Z',
-    profileTabFix: '2026-07-29T20:20:00Z',
-    profileTabBlackScreenFix: '2026-07-29T21:00:00Z',
-    profileDeadCodeCleanup: '2026-07-30T00:45:00Z',
-    memoryIntentRouterFix: '2026-07-30T02:30:00Z',
-    intentRouterV2Fix: '2026-07-30T03:45:00Z',
-    intentRouterV3Fix: '2026-07-30T04:10:00Z',
-    intentRouterV4Fix: '2026-07-30T04:30:00Z',
-    intentRouterV5Fix: '2026-07-30T04:50:00Z',
-    intentRouterV6Fix: '2026-07-30T05:30:00Z',
-    intentRouterV7Fix: '2026-07-30T05:00:00Z',
-    intentRouterV8Fix: '2026-07-30T05:30:00Z',
-    autonomousCleanupV9: '2026-07-30T06:00:00Z',
-    intentRouterV10Fix: '2026-07-30T06:30:00Z',
-    conversationRouterV11Fix: '2026-07-30T10:30:00Z',
-    apkReleaseV157: '2026-07-30T11:15:00Z',
-    regressionRoutingFix: '2026-07-30T11:35:00Z',
-    seniorEngineerPersona: '2026-07-30T13:00:00Z',
-    liveContextV3: '2026-07-30T13:05:00Z',
-    contextAttentionFix: '2026-07-30T13:10:00Z',
-    apkReleaseV159: '2026-07-30T14:55:00Z',
-    seniorEngineerPersonaV4: '2026-07-30T21:05:00Z',
-    seniorEngineerPersonaV5: '2026-07-30T21:50:00Z',
-    fullOwnerAccessGranted: '2026-07-30T21:50:00Z',
-    seniorEngineerPersonaV6: '2026-07-30T23:00:00Z',
-    conversationStateMachine: '2026-07-30T23:00:00Z',
-    directReadOnlyDatabaseExecution: '2026-07-30T23:00:00Z',
-    seniorEngineerPersonaV6Fix: '2026-07-30T23:30:00Z',
-    conversationStateMachinePreRouter: '2026-07-30T23:30:00Z',
-    conversationStateMachineV6_2: '2026-07-30T23:45:00Z',
-    readOnlyApprovalFlow: '2026-07-30T23:45:00Z',
-    conversationStateMachineV6_3: '2026-07-31T00:15:00Z',
-    conversationStateMachineV6_4: '2026-07-31T00:25:00Z',
-    tablePriorityFix: '2026-07-31T00:25:00Z',
-    conversationStateMachineV6_8: '2026-07-31T03:30:00Z',
-    conversationStateMachineV6_9: '2026-07-31T11:10:00Z',
-    conversationalNarrativeUpgrade: '2026-07-31T11:10:00Z',
-    antiHallucinationGuard: '2026-07-31T11:10:00Z',
-    engineeringApprovalGuard: '2026-07-31T11:27:00Z',
-    conversationStateMachineV7_0: '2026-07-31T12:00:00Z',
-    ivxLevelNarrative: '2026-07-31T12:00:00Z',
-    autonomousEvidencePipeline: '2026-07-31T12:00:00Z',
-    autonomousCodeLoopV8_0: '2026-07-31T13:00:00Z',
-    selfImprovementPipelineV8: '2026-07-31T13:00:00Z',
-    deployCodeExecutionV610: '2026-07-31T14:00:00Z',
-    liveTypingIndicator: '2026-07-31T14:00:00Z',
-    approvalResumeFixV611: '2026-07-31T15:10:00Z',
-    honestIdentityAndLiveTypingV612: '2026-07-31T16:00:00Z',
-    autonomousEndToEndV613: '2026-07-31T16:30:00Z',
-    identityGuardRegexV614: '2026-07-31T22:00:00Z',
-    autonomousWorkerFixV615: '2026-07-31T23:30:00Z',
-    capabilityRecoveryV616: '2026-07-31T23:45:00Z',
-    fullRestoreV617: '2026-08-01T00:30:00Z',
-    qaSystemRestored: '2026-08-01T01:10:00Z',
-    qaRunnerVersion: 'ivx-qa-v1.0.0',
-    criticalFileProtection: '2026-08-01T01:10:00Z',
-    llmPatchGenerationV619: '2026-08-01T02:00:00Z',
-    abortControllerEnabled: '2026-08-01T02:00:00Z',
-    splitPlanningStage: '2026-08-01T02:00:00Z',
-    sourceProof: OWNER_SIGNUP_AUDIT_SOURCE_PROOF,
     commit: LIVE_COMMIT_SHA,
-    commitShort: LIVE_COMMIT_SHORT,
     bootTime: SERVER_BOOT_TIME,
-    appGenerator: {
-      registered: appGeneratorBootRegistered,
-      initialized: appGeneratorBootInitialized,
-      toolAvailable: appGeneratorBootRegistered,
-      factoryAvailable: true,
-      registryReady: appGeneratorBootRegistered,
-      toolName: APP_GEN_TOOL_NAME,
-      marker: APP_GEN_MARKER,
-      factoryMarker: APP_GEN_FACTORY_MARKER,
-      bootError: appGeneratorBootError,
-      bootCheckedAt: appGeneratorBootCheckedAt,
-    },
-    autonomousCoreRoutesRegistered: true,
-    frontendUrl: 'https://chat.ivxholding.com',
-    apiUrl: 'https://api.ivxholding.com',
-    socketPath: '/socket.io',
-    defaultRoomId: CHAT_DEFAULT_ROOM_ID,
-    messageCount: publicChatStorage.getTotalMessageCount(),
-    aiEnabled: publicChatHealth.aiEnabled,
-    openAIModel: publicChatHealth.openAIModel,
-    aiProvider: publicChatHealth.aiProvider,
-    aiEndpoint: publicChatHealth.aiEndpoint,
     timestamp: nowIso(),
-    routes: [
-      'GET /',
-      'GET /health',
-      'GET /version',
-      'GET /readiness',
-      'POST /public/chat',
-      'GET /api/public/messages',
-      'GET /api/public/rooms',
-      'POST /api/public/send-message',
-      'POST /chat',
-      'GET /messages',
-      'POST /messages',
-      'POST /upload',
-      'GET /rooms',
-      'POST /rooms',
-      'POST /inbox/sync',
-      'GET /diagnostics',
-      'POST /fallback/reply',
-      'POST /api/ivx/owner-ai',
-      'GET /api/ivx/owner-ai/proxy-status',
-      'POST /api/ivx/owner-ai/tools',
-      'POST /tool',
-      'POST /api/tool',
-      'GET /api/ivx/audit-report',
-      'GET /api/ivx/development-control',
-      'POST /api/ivx/development-action',
-      'GET /tool/render-status',
-      'GET /tool/supabase-status',
-      'GET /api/tool/render-status',
-      'GET /api/tool/supabase-status',
-      'GET /api/ivx/control-room/status',
-      'GET /api/ivx/developer-deploy/status',
-      'POST /api/ivx/developer-deploy/action',
-      'GET /api/ivx/env-debug/render',
-      'GET /api/ivx/variables-tool/status',
-      'POST /api/ivx/variables-tool/save',
-      'GET /api/ivx/owner-variables/status',
-      'POST /api/ivx/owner-variables/save',
-      'POST /api/ivx/owner-variables/test',
-      'POST /api/ivx/owner-variables/delete',
-      'POST /api/ivx/owner-variables/self-sync',
-      'POST /api/ivx/owner-variables/sync-from-project-store',
-      'GET /api/ivx/owner-variables/deployment-status',
-      'GET /api/ivx/independence/status',
-      'GET /api/ivx/agent-jobs/status',
-      'GET /api/ivx/agent-jobs',
-      'POST /api/ivx/agent-jobs',
-      'POST /api/ivx/agent-jobs/:jobId/retry',
-      'POST /api/ivx/agent-jobs/:jobId/cancel',
-      'POST /api/ivx/agent-jobs/:jobId/approve',
-      'POST /api/ivx/agent-worker/run-once',
-      'GET /api/ivx/agent-jobs/live-activity',
-      'POST /api/ivx/agent-jobs/test-token',
-      'POST /api/ivx/agent-jobs/test-run',
-      'GET /api/ivx/ai-brain/tools',
-      'POST /api/ivx/ai-brain/tools',
-      'POST /api/ivx/ai-brain/tools/execute',
-      'GET /api/ivx/supabase/tables',
-      'GET /api/ivx/supabase/schema',
-      'GET /api/ivx/supabase/columns',
-      'GET /api/ivx/supabase/rls',
-      'POST /api/ivx/supabase/owner-action',
-      'GET /api/ivx/supabase/owner-action-health',
-      'GET /api/ivx/owner-registration/status',
-      'GET /api/ivx/owner-signup-audit',
-      'POST /api/ivx/owner-registration',
-      'POST /api/ivx/owner-registration/repair',
-      'POST /api/ivx/owner-access-repair',
-      'GET /api/ivx/owner-access-repair/status',
-      'POST /api/assistant',
-      'POST /api/plan-creator',
-      'POST /api/upload/image',
-      'POST /api/upload/pdf',
-      'POST /api/upload/video',
-      'POST /api/google-drive/import',
-      'POST /api/files/:fileId/analyze',
-      'POST /api/files/:fileId/summary',
-      'GET /api/multimodal/status',
-    ],
   });
 });
 
@@ -4422,16 +4172,29 @@ app.options('/api/ivx/night-ops/roadmap', () => nightOpsOptions());
 app.get('/api/ivx/night-ops/roadmap', async (c) => handleIVXNightOpsRoadmapGetRequest(c.req.raw));
 app.options('/api/ivx/night-ops/roadmap/advance', () => nightOpsOptions());
 app.post('/api/ivx/night-ops/roadmap/advance', async (c) => handleIVXNightOpsRoadmapAdvanceRequest(c.req.raw));
+// SECURITY: env-debug and variables-presence are now owner-only.
+// They reveal which env vars are loaded — that's internal operational intel.
 app.options('/api/ivx/env-debug/render', () => publicJson({ ok: true }, 204));
-app.get('/api/ivx/env-debug/render', async (context) => context.json(await buildRenderEnvDebugPayload(), 200, {
-  'Cache-Control': 'no-store',
-  'Vary': 'Origin',
-}));
-// Public-safe masked variable presence report (no secrets, no auth).
-// Mirrors the safety model of /api/ivx/env-debug/render: returns only
-// name/provider/present/masked/source/status per variable.
+app.get('/api/ivx/env-debug/render', async (context) => {
+  try {
+    const { assertIVXOwnerOnly } = await import('./api/owner-only');
+    await assertIVXOwnerOnly(context.req.raw);
+  } catch {
+    return context.json({ ok: false, error: 'Owner authentication required.' }, 401);
+  }
+  return context.json(await buildRenderEnvDebugPayload(), 200, {
+    'Cache-Control': 'no-store',
+    'Vary': 'Origin',
+  });
+});
 app.options('/api/ivx/variables-presence', () => publicJson({ ok: true }, 204));
 app.get('/api/ivx/variables-presence', async (context) => {
+  try {
+    const { assertIVXOwnerOnly } = await import('./api/owner-only');
+    await assertIVXOwnerOnly(context.req.raw);
+  } catch {
+    return context.json({ ok: false, error: 'Owner authentication required.' }, 401);
+  }
   try {
     const report = buildRuntimeVariablesReport();
     const items = report.variables.map((v) => ({
