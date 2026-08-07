@@ -1,9 +1,35 @@
 name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
 overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-07T12:40:00.000Z
+updatedAt: 2026-08-07T19:05:00.000Z
 ---
-# NEW OWNER DIRECTIVE — OWNER AUTHENTICATION HARDENING (in progress)
+# NEW OWNER DIRECTIVE — OWNER SIGN-IN ABORTED FIX (in progress)
+
+> **STATUS:** Owner reported (screenshot 871817.jpg) that owner sign-in on v1.10.3 still shows "Sign In Failed / Aborted". This directive supersedes the "Owner Authentication Hardening" directive.
+>
+> **Root causes found:**
+> 1. Render env var `EXPO_PUBLIC_SUPABASE_ANON_KEY` was set to `sb_publishable_...` (not a valid Supabase anon key). Fixed to the production JWT via Render API on 2026-08-07T19:04Z.
+> 2. The direct mobile → Supabase Auth path times out for the owner account (`upstream request timeout` HTTP 504 after ~40s from the sandbox).
+>
+> **Scope:** Fix the Render backend env var, re-enable the verified Instagram technique (mobile → backend `/api/members/login`) in the mobile app, build v1.10.4, deploy to Render, push to GitHub, and verify end-to-end.
+>
+> **Required proof:** env fix → code change → tests → commit → Render deploy → live SHA parity → APK build → download link → final verdict.
+>
+> **Task checklist:**
+> - [x] Fix Render `EXPO_PUBLIC_SUPABASE_ANON_KEY` env var
+> - [ ] Trigger and verify Render deploy
+> - [ ] Re-enable Instagram backend-mediated login in `expo/lib/auth-context.tsx`
+> - [ ] Update tests for Instagram backend-login flow
+> - [ ] Bump APK version to v1.10.4
+> - [ ] Commit and push to GitHub
+> - [ ] Build and upload Android APK
+> - [ ] Verify backend `/api/members/login` responds correctly
+> - [ ] Return final evidence and verdict
+>
+> **Verdict:** NOT END-TO-END COMPLETE — root cause identified and env fix applied; mobile app code change and verification in progress.
+>
+> ---
+# NEW OWNER DIRECTIVE — OWNER AUTHENTICATION HARDENING (superseded)
 
 > **STATUS:** Owner ordered a stop to the Instagram technique workaround and a full architecture-level repair of owner authentication. The goal is deterministic, fast, secure, observable owner login that completes in under 5 seconds and follows the architecture: Mobile → Supabase Auth → valid JWT → IVX backend → owner authorization → application session. The Instagram technique (mobile → backend `/api/members/login`) is deprecated by this directive.
 >
@@ -34,7 +60,7 @@ updatedAt: 2026-08-07T12:40:00.000Z
 > - [x] Deploy to Render and verify production SHA parity (Render deploy dep-d9r20r942hec73c06ttg — status: live, commit: 08bcd1ba899df0ca9b15b51bc9cc2e0c69de8fa2, finishedAt: 2026-08-07T18:17:37Z; /health commit = 08bcd1ba899df0ca9b15b51bc9cc2e0c69de8fa2, bootTime: 2026-08-07T18:15:13.567Z)
 > - [x] Return full evidence matrix and final verdict
 >
-> **Verdict:** END-TO-END COMPLETE — code, tests, APK, GitHub push, Render deploy, and SHA parity all verified.
+> **Verdict:** NOT END-TO-END COMPLETE — superseded by the Owner Sign-In Aborted Fix directive. The v1.10.3 direct-Supabase login still aborts on the owner device.
 >
 > **Previous Instagram technique APK:** v1.10.1, versionCode 99, 84.1 MB, QA variant — https://gofile.io/d/gyeWqi, md5: `ab1966903d4f0ee2fa79bcebd065503f`. This build is deprecated by the new directive and should be replaced once v1.10.2 is ready.
 >

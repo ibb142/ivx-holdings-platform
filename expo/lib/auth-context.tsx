@@ -5,7 +5,6 @@ import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CO
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
-import { signInWithEmailPassword } from './auth-password-sign-in';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1785,41 +1784,98 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         setIsOwnerIPAccess(false);
       }
 
-      trace.checkpoint('SUPABASE_REQUEST_STARTED');
+      trace.checkpoint('BACKEND_REQUEST_STARTED');
       manualOwnerLoginRef.current = true;
-      const signInResult = await signInWithEmailPassword(freshClient, normalizedEmail, password);
-      trace.checkpoint('SUPABASE_RESPONSE_RECEIVED', { success: signInResult.ok, errorCode: signInResult.ok ? undefined : signInResult.error?.code, errorMessage: signInResult.ok ? undefined : signInResult.error?.message });
-      if (!signInResult.ok) {
-        manualOwnerLoginRef.current = false;
-        const error = signInResult.error as AuthError & { code?: string; status?: number };
-        const code = error?.code?.toLowerCase() ?? '';
-        const message = error?.message ?? 'Sign-in failed.';
-        if (code.includes('invalid_credentials') || message.toLowerCase().includes('invalid login credentials')) {
-          return { success: false, message: 'Invalid email or password.', failureReason: 'invalid_credentials' };
+      const apiBaseUrls = getOwnerRegistrationApiBaseUrls();
+      let lastError: string | null = null;
+      let serverResult: {
+        success: boolean;
+        message?: string;
+        userId?: string;
+        email?: string;
+        accessToken?: string;
+        refreshToken?: string;
+        expiresAt?: number;
+        requiresVerification?: boolean;
+      } | null = null;
+
+      for (const baseUrl of apiBaseUrls) {
+        const endpoint = `${baseUrl}/api/members/login`;
+        try {
+          const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail, password }),
+          });
+          const text = await response.text();
+          let parsed: Record<string, unknown> = {};
+          try { parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {}; } catch {}
+          if (response.ok && parsed.success === true) {
+            serverResult = {
+              success: true,
+              userId: typeof parsed.userId === 'string' ? parsed.userId : '',
+              email: typeof parsed.email === 'string' ? parsed.email : normalizedEmail,
+              accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : '',
+              refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '',
+              expiresAt: typeof parsed.expiresAt === 'number' ? parsed.expiresAt : 0,
+            };
+            lastError = null;
+            break;
+          }
+          lastError = typeof parsed.message === 'string' ? parsed.message : `Server login failed (HTTP ${response.status}).`;
+          if (parsed.requiresVerification === true) {
+            return { success: false, message: lastError, requiresVerification: true, failureReason: 'verification_required' };
+          }
+        } catch (endpointError) {
+          lastError = endpointError instanceof Error ? endpointError.message : 'Login endpoint failed.';
         }
-        if (code.includes('email_not_confirmed') || message.toLowerCase().includes('email not confirmed')) {
-          return { success: false, message: 'Please verify your email before signing in.', failureReason: 'email_not_confirmed' };
-        }
-        if (code.includes('over_email_send_rate_limit') || code.includes('rate_limit') || message.toLowerCase().includes('rate limit')) {
-          return { success: false, message: 'Too many attempts. Please wait a minute and try again.', failureReason: 'rate_limited' };
-        }
-        trace.checkpoint('FAILED', { stage: 'auth', errorCode: code, errorMessage: message });
+      }
+
+      if (!serverResult?.success || !serverResult.accessToken || !serverResult.refreshToken) {
+        const displayMessage = lastError || 'Server login did not return a valid session. Please try again.';
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'server_login_failed', errorMessage: displayMessage });
         return {
           success: false,
-          message,
+          message: displayMessage,
           failureReason: 'service_unavailable',
-          supabaseErrorMessage: message,
-          supabaseErrorCode: error?.code,
-          supabaseErrorStatus: error?.status,
-          supabaseErrorName: error?.name,
+          supabaseErrorMessage: displayMessage,
+          supabaseErrorCode: 'server_login_failed',
+          supabaseErrorName: 'AuthError',
+          supabaseErrorStatus: 504,
         };
       }
 
+      trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true });
       trace.checkpoint('SESSION_CREATED');
       trace.checkpoint('SESSION_PERSIST_STARTED');
-      trace.checkpoint('SESSION_PERSIST_COMPLETE');
 
-      const resolvedSession = signInResult.session;
+      const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
+        access_token: serverResult.accessToken,
+        refresh_token: serverResult.refreshToken,
+      });
+      if (sessionError) {
+        manualOwnerLoginRef.current = false;
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: sessionError.code, errorMessage: sessionError.message });
+        return {
+          success: false,
+          message: sessionError.message || 'Session could not be installed on the device.',
+          failureReason: 'service_unavailable',
+          supabaseErrorMessage: sessionError.message,
+          supabaseErrorCode: sessionError.code,
+          supabaseErrorName: 'AuthError',
+        };
+      }
+      const resolvedSession = sessionData.session;
+      if (!resolvedSession) {
+        manualOwnerLoginRef.current = false;
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'session_missing', errorMessage: 'No session returned from setSession' });
+        return {
+          success: false,
+          message: 'Login succeeded but no session was returned.',
+          failureReason: 'service_unavailable',
+        };
+      }
+      trace.checkpoint('SESSION_PERSIST_COMPLETE');
       const challengeRequired = await requireTwoFactorIfNeeded(resolvedSession, 'password sign-in');
       if (challengeRequired) {
         return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };

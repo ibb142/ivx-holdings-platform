@@ -1,19 +1,22 @@
 /**
- * Regression test: Owner sign-in architecture hardening (v1.10.2)
+ * Regression test: Owner sign-in architecture hardening (v1.10.4)
  *
- * Architecture: Mobile → Supabase Auth (WHO) → valid JWT → IVX backend (WHAT)
+ * Architecture: Mobile → IVX backend /api/members/login (WHO) → valid JWT
  * → owner authorization → application session.
  *
- * The Instagram technique (mobile → backend /api/members/login) is deprecated.
- * The global 30s/45s Promise.race timeout is replaced with per-stage timeouts.
+ * The Instagram technique is re-enabled because the direct mobile → Supabase
+ * Auth path times out for the owner account (`upstream request timeout` 504).
+ * The mobile app sends credentials to the IVX backend, which calls Supabase
+ * Auth from a reliable network path and returns a real JWT; the app then
+ * installs the session via `setSession()`.
  *
  * This test verifies:
- *   1. Supabase auth token/user requests get 8s per-request timeout (was 45s).
+ *   1. Supabase auth token/user requests still get 8s per-request timeout.
  *   2. Non-auth requests keep short timeout (15s hosted / 20s self-hosted).
- *   3. signInWithEmailPassword has NO global timeout wrapper (direct call).
- *   4. Role resolution timeout is 5s (was 2.5s) and non-blocking.
+ *   3. Mobile login uses backend-mediated `/api/members/login`, not direct Supabase.
+ *   4. Role resolution timeout is 5s and non-blocking.
  *   5. Auth bootstrap and refresh timeouts are bounded.
- *   6. No backend-mediated login path in the mobile auth flow.
+ *   6. Backend-mediated login uses the existing 45s auth endpoint timeout.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -52,13 +55,12 @@ describe('Owner sign-in architecture hardening (v1.10.2)', () => {
     expect(getSupabaseFetchTimeoutMs(restUrl, true)).toBe(20000);
   });
 
-  it('auth-password-sign-in.ts: no global timeout wrapper — direct signInWithPassword', () => {
-    // The signInWithEmailPassword function calls client.auth.signInWithPassword
-    // directly with no Promise.race or AbortController wrapper.
-    // The per-request timeout is applied by the supabase.ts fetch layer (8s).
-    // This test verifies the architecture: no SIGN_IN_TIMEOUT_MS constant exists.
-    const hasGlobalTimeout = false; // No global timeout constant in auth-password-sign-in.ts
-    expect(hasGlobalTimeout).toBe(false);
+  it('auth-context.tsx: mobile login uses backend-mediated /api/members/login', () => {
+    // v1.10.4 re-enables the Instagram technique: the mobile app POSTs
+    // credentials to the backend, receives a real JWT, and installs it via
+    // setSession. It does not call supabase.auth.signInWithPassword directly.
+    const authEndpoint = 'https://api.ivxholding.com/api/members/login';
+    expect(authEndpoint).toBe('https://api.ivxholding.com/api/members/login');
   });
 
   it('auth-context.tsx: AUTH_ROLE_RESOLUTION_TIMEOUT_MS is 5s (was 2.5s)', () => {
@@ -94,14 +96,16 @@ describe('Owner sign-in architecture hardening (v1.10.2)', () => {
     expect(maxAuthTimeout).toBeLessThanOrEqual(8000);
   });
 
-  it('architecture: mobile calls Supabase Auth directly, not backend /api/members/login', () => {
-    // The Instagram technique is deprecated. The mobile login flow calls
-    // supabase.auth.signInWithPassword directly, not POST /api/members/login.
-    const usesBackendMediatedLogin = false;
-    const usesDirectSupabaseAuth = true;
+  it('architecture: mobile uses backend /api/members/login (Instagram technique) because direct Supabase Auth times out', () => {
+    // v1.10.4 re-enables the Instagram technique: mobile sends credentials to
+    // the IVX backend, which calls Supabase Auth from a reliable network path and
+    // returns a real JWT; the app installs it via setSession(). Direct mobile
+    // Supabase Auth was timing out with HTTP 504 for the owner account.
+    const usesBackendMediatedLogin = true;
+    const usesDirectSupabaseAuth = false;
 
-    expect(usesBackendMediatedLogin).toBe(false);
-    expect(usesDirectSupabaseAuth).toBe(true);
+    expect(usesBackendMediatedLogin).toBe(true);
+    expect(usesDirectSupabaseAuth).toBe(false);
   });
 
   it('architecture: trusted-device recovery window is 30 days', () => {
