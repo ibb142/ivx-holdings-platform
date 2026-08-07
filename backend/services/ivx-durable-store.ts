@@ -23,7 +23,8 @@
  */
 import path from 'node:path';
 
-const SCHEMA_MARKER = 'ivx-durable-store-2026-06-07';
+const SCHEMA_MARKER = 'ivx-durable-store-2026-08-07';
+export const REST_TIMEOUT_MS = 30000;
 const SERVICE_ROLE_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'] as const;
 const SUPABASE_URL_NAMES = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
 
@@ -126,7 +127,7 @@ class DurableStore {
       method: 'POST',
       headers: buildHeaders(),
       body: JSON.stringify({ sql_text: statement }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(REST_TIMEOUT_MS),
     });
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
@@ -182,7 +183,7 @@ class DurableStore {
     const response = await fetch(`${this.restBaseUrl()}${pathName}`, {
       ...init,
       headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(REST_TIMEOUT_MS),
     });
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
