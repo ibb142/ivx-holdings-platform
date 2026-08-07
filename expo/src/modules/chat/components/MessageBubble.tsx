@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AlertCircle, Check, CheckCheck, Copy, Download, Eye, FileText, MessageCircle, Pin, PinOff, PlayCircle, RefreshCw, Reply, Smile, X } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -7,6 +7,8 @@ import Colors from '@/constants/colors';
 import { openAttachment, shouldRenderInlineImage, shouldRenderTapToOpenAttachment } from '../services/ivxChat';
 import { containsBlockedUserFacingChatText, redactUserFacingChatSecrets, sanitizeUserFacingChatText } from '../services/visibleTextSanitizer';
 import { ReactionPicker, REACTION_EMOJIS } from './ReactionPicker';
+import { ControlledImage } from '@/src/modules/media-lifecycle/components/ControlledImage';
+import { ControlledVideo } from '@/src/modules/media-lifecycle/components/ControlledVideo';
 import type { ChatMessage } from '../types/chat';
 import type { MessageReactionSummary } from '../services/messageReactions';
 
@@ -280,12 +282,38 @@ export const MessageBubble = memo(function MessageBubble({
         ) : null}
 
         {shouldRenderInlineImage(message) && message.fileUrl ? (
-          <Image
-            source={{ uri: message.fileUrl }}
-            style={styles.imageAttachment}
-            resizeMode="cover"
-            testID={`chat-message-image-${message.id}`}
-          />
+          <View style={styles.imageAttachment} testID={`chat-message-image-wrap-${message.id}`}>
+            <ControlledImage
+              mediaId={`chat:image:${message.id}`}
+              scope="chat"
+              module="ivx-chat"
+              sourceUrl={message.fileUrl}
+              thumbnailUrl={message.thumbnailUrl ?? message.fileUrl}
+              fullResolutionUrl={message.fileUrl}
+              messageId={message.id}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              testID={`chat-message-image-${message.id}`}
+            />
+          </View>
+        ) : null}
+
+        {message.fileType === 'video' && message.fileUrl ? (
+          <View style={styles.videoAttachment} testID={`chat-message-video-wrap-${message.id}`}>
+            <ControlledVideo
+              mediaId={`chat:video:${message.id}`}
+              scope="chat"
+              module="ivx-chat"
+              uri={message.fileUrl}
+              posterUri={message.thumbnailUrl ?? message.fileUrl}
+              messageId={message.id}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              isLooping={false}
+              isMuted={true}
+              testID={`chat-message-video-${message.id}`}
+            />
+          </View>
         ) : null}
 
         {shouldRenderTapToOpenAttachment(message) ? (
@@ -698,6 +726,13 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.10)',
+  },
+  videoAttachment: {
+    width: 220,
+    height: 150,
+    borderRadius: 16,
+    backgroundColor: '#000',
+    overflow: 'hidden',
   },
   fileCard: {
     flexDirection: 'row',

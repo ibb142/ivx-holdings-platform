@@ -47,6 +47,7 @@ import CanonicalInvestmentReelCard, {
   type CanonicalReelData} from '@/components/CanonicalInvestmentReelCard';
 import { useReelPlayback } from '@/hooks/useReelPlayback';
 import { useReelEngagement, type EngagementState } from '@/hooks/useReelEngagement';
+import { useMediaLifecycleList } from '@/src/modules/media-lifecycle/hooks';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import {
   fetchProjectComments,
@@ -192,6 +193,14 @@ export default function VideosScreen() {
 
   // Playback lifecycle hooks
   const playback = useReelPlayback();
+  const mediaLifecycle = useMediaLifecycleList('reels', filteredVideos, {
+    module: 'reels',
+    keyExtractor: (_item, index) => `reels:media:${index}`,
+    getMediaType: (item) => ((item as FeedVideo).video_url ? 'video' : 'image'),
+    getSourceUrl: (item) => (item as FeedVideo).video_url ?? (item as FeedVideo).thumbnail_url ?? null,
+    getThumbnailUrl: (item) => (item as FeedVideo).thumbnail_url ?? null,
+    getContainerId: (item) => (item as FeedVideo).id,
+  });
   const engagement = useReelEngagement();
   // Destructure stable callbacks to avoid effect dependency loops
   const { initEngagements, handleView } = engagement;
@@ -431,7 +440,11 @@ export default function VideosScreen() {
           snapToInterval={itemHeight}
           snapToAlignment="start"
           showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={playback.handleViewableItemsChanged}
+          onViewableItemsChanged={(info) => {
+            playback.handleViewableItemsChanged(info);
+            mediaLifecycle.handleViewableItemsChanged(info as never);
+          }}
+          onScroll={(event) => mediaLifecycle.handleScroll(event)}
           viewabilityConfig={playback.viewabilityConfig}
           initialNumToRender={2}
           maxToRenderPerBatch={3}
