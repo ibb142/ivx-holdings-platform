@@ -115,6 +115,7 @@ import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/iv
 import { executeReliably, type ReliabilityTrace } from '@/src/modules/chat/services/aiReliability';
 import { useChatSendQueue } from '@/src/modules/chat/services/useChatSendQueue';
 import { shouldStartAssistantBeforePersistence } from '@/src/modules/chat/services/ivxSendTriggerPolicy';
+import { shouldRenderInlineImage } from '@/src/modules/chat/services/ivxChat';
 import {
   isExplicitSensitiveActionConfirmation,
   resolveOwnerTrustContext,
