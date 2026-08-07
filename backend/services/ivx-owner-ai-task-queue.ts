@@ -685,10 +685,29 @@ ALTER TABLE ivx_owner_ai_tasks ENABLE ROW LEVEL SECURITY;
 
 let tableEnsured = false;
 
+/** Test-only hook: resets the bootstrap memo so each test starts with a clean module state. */
+export function __resetBootstrapStateForTests(): void {
+  tableEnsured = false;
+}
+
+const DDL_RETRY_ATTEMPTS = 3;
+const DDL_RETRY_BASE_MS = 1_000;
+
+export function isTransientBootstrapStatus(status: number): boolean {
+  // 544 is a non-standard Supabase Management API / edge gateway status that
+  // has been observed during cold-boot DDL. Retry it like any other 5xx or 429.
+  return status >= 500 || status === 429 || status === 408 || status === 544;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Self-bootstrapping DDL: creates the durable task table through the Supabase
  * Management API (the only SQL path in the Render runtime — same pattern as
  * the migration runner). Idempotent; non-fatal when the token is absent.
+ * Retries transient gateway errors (including 544) with bounded backoff.
  */
 export async function ensureTaskTable(): Promise<boolean> {
   if (tableEnsured) return true;
@@ -702,20 +721,30 @@ export async function ensureTaskTable(): Promise<boolean> {
     console.log('[IVXOwnerAITaskQueue] table missing and SUPABASE_ACCESS_TOKEN absent — cannot self-bootstrap DDL');
     return false;
   }
-  try {
-    const res = await fetch(`${MANAGEMENT_API_BASE}/projects/${managementProjectRef()}/database/query`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: TASK_TABLE_DDL }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    console.log('[IVXOwnerAITaskQueue] self-bootstrap DDL result', { httpStatus: res.status });
-    tableEnsured = res.ok || res.status === 201;
-    return tableEnsured;
-  } catch (error) {
-    console.log('[IVXOwnerAITaskQueue] self-bootstrap DDL failed:', error instanceof Error ? error.message : 'unknown');
-    return false;
+  for (let attempt = 1; attempt <= DDL_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(`${MANAGEMENT_API_BASE}/projects/${managementProjectRef()}/database/query`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: TASK_TABLE_DDL }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      console.log('[IVXOwnerAITaskQueue] self-bootstrap DDL result', { attempt, httpStatus: res.status });
+      if (res.ok || res.status === 201) {
+        tableEnsured = true;
+        return true;
+      }
+      if (!isTransientBootstrapStatus(res.status) || attempt === DDL_RETRY_ATTEMPTS) {
+        return false;
+      }
+      await sleep(DDL_RETRY_BASE_MS * attempt);
+    } catch (error) {
+      console.log('[IVXOwnerAITaskQueue] self-bootstrap DDL failed:', error instanceof Error ? error.message : 'unknown', { attempt });
+      if (attempt === DDL_RETRY_ATTEMPTS) return false;
+      await sleep(DDL_RETRY_BASE_MS * attempt);
+    }
   }
+  return false;
 }
 
 /** Start the durable worker: DDL bootstrap + restart recovery first, then a polling loop. */
