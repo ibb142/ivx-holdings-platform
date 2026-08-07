@@ -8,9 +8,46 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { normalizeRole } from '../services/ivx-role-helpers';
 
 const DEPLOYMENT_MARKER = 'ivx-owner-auth-v1';
+const ADMIN_ROLES = ['owner', 'admin', 'ceo', 'staff', 'manager', 'analyst', 'support'] as const;
+const ROLE_ALIASES: Record<string, string> = {
+  super_admin: 'admin',
+  superadmin: 'admin',
+  administrator: 'admin',
+  admin_user: 'admin',
+  adminuser: 'admin',
+  owner_admin: 'owner',
+  owneradmin: 'owner',
+  chief_executive_officer: 'ceo',
+  chiefexecutiveofficer: 'ceo',
+  staff_member: 'staff',
+  staffmember: 'staff',
+  team_manager: 'manager',
+  teammanager: 'manager',
+  support_staff: 'support',
+  supportstaff: 'support',
+  support_agent: 'support',
+  supportagent: 'support',
+  customer_support: 'support',
+  customersupport: 'support',
+};
+
+function canonicalizeRole(role: string | null | undefined): string {
+  return role?.trim().toLowerCase().replace(/[\s-]+/g, '_') ?? '';
+}
+
+function normalizeRole(role: string | null | undefined): string {
+  const normalized = canonicalizeRole(role);
+  if (!normalized) return 'investor';
+  const aliased = ROLE_ALIASES[normalized] ?? normalized;
+  if (ADMIN_ROLES.includes(aliased as typeof ADMIN_ROLES[number])) return aliased;
+  return 'investor';
+}
+
+function isAdminRole(role: string | null | undefined): boolean {
+  return normalizeRole(role) !== 'investor';
+}
 
 type OwnerAuthorizationResult = {
   success: true;
@@ -45,10 +82,6 @@ function getSupabaseConfig(): { url: string; anonKey: string } | null {
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
   if (!url || !anonKey) return null;
   return { url, anonKey };
-}
-
-function isAdminRole(role: string | null | undefined): boolean {
-  return normalizeRole(role) !== 'investor';
 }
 
 export async function handleOwnerAuthorize(request: Request): Promise<Response> {
@@ -102,7 +135,6 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
     const userId = user.id;
     const email = user.email ?? '';
 
-    // Owner authorization: look up the role in profiles first, then verify_admin_access RPC.
     let role: string | null = null;
     let roleSource: OwnerAuthorizationResult['roleSource'] = 'profiles';
 

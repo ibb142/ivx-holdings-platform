@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CONFIGURED_MESSAGE, forceProductionSupabaseClient } from './supabase';
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
 import { clearOwnerResilientSession } from './owner-session-resilience';
+import { LoginTrace } from './login-trace';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -39,7 +40,7 @@ const OWNER_VERIFIED_EMAIL_KEY = 'ivx_owner_verified_email';
 const OWNER_TRUSTED_DEVICE_WINDOW_MS = 1000 * 60 * 60 * 24 * 30;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 3500;
 const AUTH_REFRESH_TIMEOUT_MS = 4000;
-const AUTH_ROLE_RESOLUTION_TIMEOUT_MS = 2500;
+const AUTH_ROLE_RESOLUTION_TIMEOUT_MS = 5000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function getIPSubnet(ip: string | null | undefined, prefixOctets: number = 2): string | null {
@@ -1303,35 +1304,36 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       }
     }
 
-    const roleBootstrap = await withTimeout<SessionRoleBootstrap | null>(
-      async () => {
-        const resolvedRole = await resolveServerRole(supaUser.id, supaUser.email);
-        return {
-          role: normalizeRole(resolvedRole.role),
-          source: resolvedRole.source,
-          requiresBackgroundHydration: false,
-        };
-      },
-      AUTH_ROLE_RESOLUTION_TIMEOUT_MS,
-      'resolveServerRole',
-      null,
-    );
+    // Role resolution must never block navigation. We resolve optimistically
+    // from the server with a short deadline, and if it misses the deadline we use
+    // a safe fallback and rehydrate in the background. This prevents the login
+    // UI from appearing to hang for 30 seconds when the network is slow.
+    let roleBootstrap: SessionRoleBootstrap | null = null;
+    try {
+      roleBootstrap = await withTimeout<SessionRoleBootstrap | null>(
+        async () => {
+          const resolvedRole = await resolveServerRole(supaUser.id, supaUser.email);
+          return {
+            role: normalizeRole(resolvedRole.role),
+            source: resolvedRole.source,
+            requiresBackgroundHydration: false,
+          };
+        },
+        AUTH_ROLE_RESOLUTION_TIMEOUT_MS,
+        'resolveServerRole',
+        null,
+      );
+    } catch (roleError) {
+      console.log('[Auth] Role resolution threw (non-blocking):', (roleError as Error)?.message ?? 'unknown');
+    }
     const resolvedSessionRole = roleBootstrap ?? await resolveLocalSessionRoleFallback(supaUser.id, supaUser.email);
     let role = normalizeRole(resolvedSessionRole.role);
 
-    // Owner email allow-list: if the authenticated email matches the configured
-    // EXPO_PUBLIC_OWNER_EMAIL, force the role to 'owner'. This guarantees the
-    // owner account has full end-to-end admin access across every module
-    // (Home, Invest, Market, Portfolio, Chat, Profile, Owner Controls, Admin
-    // Hub, Revenue, Properties, Fees, Settings, Landing Control, Landing
-    // Analytics, Landing Submissions, Deploy Waitlist, Waitlist Admin,
-    // Banners, JV Deals, Land Partners, Users & Investors, Team, KYC,
-    // Broker/Agent Applications, Diagnostic modules, etc.) even when the
-    // Supabase profiles row is missing or drifted to investor.
-    if (isOwnerAdminEmail(supaUser.email) && role !== 'owner') {
-      console.log('[Auth] Owner email allow-list upgrade — promoting role from', role, 'to owner for:', sanitizeEmail(supaUser.email ?? 'unknown'));
-      role = 'owner';
-    }
+    // Owner authorization is determined by the IVX backend via the
+    // /api/ivx/owner/authorize endpoint. The client no longer promotes roles
+    // based on email allow-list. The fallback here is used only when the server
+    // is unreachable and the stored trusted-device role is valid; it will be
+    // revalidated in the background.
 
     if (resolvedSessionRole.source === 'timeout_fallback') {
       console.log('[Auth] Session role bootstrap used timeout fallback for:', supaUser.id, 'role:', role);
@@ -1733,14 +1735,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     setLoginLoading(true);
+    const trace = new LoginTrace();
     try {
-      // Runtime safety: if the Expo Go bundle loaded the stale module-level
-      // noop client, force re-initialization before any auth call. This catches
-      // the "Supabase URL is required" AuthError that comes from a stale bundle
-      // even though the current code has production fallbacks.
-      // We capture the fresh client and pass it to signInWithEmailPassword so
-      // we never accidentally use the noop client even if the export snapshot
-      // was bound before the fallback constants loaded.
+      trace.checkpoint('LOGIN_TAP');
+      trace.checkpoint('CREDENTIAL_VALIDATION');
+      const normalizedEmail = sanitizeEmail(email);
+
       let freshClient: SupabaseClient;
       try {
         freshClient = ensureSupabaseClient();
@@ -1752,6 +1752,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       } catch (configError) {
         const configAudit = getSupabaseConfigAudit();
         console.log('[Auth] Supabase client not configured at login time:', configAudit);
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'not_configured', errorMessage: 'Supabase not configured' });
         return {
           success: false,
           message: SUPABASE_NOT_CONFIGURED_MESSAGE,
@@ -1764,106 +1765,53 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       }
 
       if (ownerIPActiveRef.current || isOwnerIPAccess) {
-        console.log('[Auth] Clearing transient trusted-owner access before password sign-in');
         ownerIPActiveRef.current = false;
         setIsOwnerIPAccess(false);
       }
 
-      const normalizedEmail = sanitizeEmail(email);
-
-      // INSTAGRAM TECHNIQUE: Never call Supabase Auth directly from the mobile app.
-      // The mobile network path to Supabase intermittently returns HTTP 504 Gateway Timeout
-      // (see owner screenshot 2026-08-07). Instead, send credentials to the IVX backend,
-      // which sits next to Supabase and returns a real session. The app then installs the
-      // session with setSession — the same pattern used by passwordless owner login.
-      const apiBaseUrls = getOwnerRegistrationApiBaseUrls();
-      let lastError: string | null = null;
-      let serverResult: {
-        success: boolean;
-        message?: string;
-        userId?: string;
-        email?: string;
-        accessToken?: string;
-        refreshToken?: string;
-        expiresAt?: number;
-        requiresVerification?: boolean;
-      } | null = null;
-
-      for (const baseUrl of apiBaseUrls) {
-        const endpoint = `${baseUrl}/api/members/login`;
-        try {
-          const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ email: normalizedEmail, password }),
-          });
-          const text = await response.text();
-          let parsed: Record<string, unknown> = {};
-          try { parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {}; } catch {}
-          if (response.ok && parsed.success === true) {
-            serverResult = {
-              success: true,
-              userId: typeof parsed.userId === 'string' ? parsed.userId : '',
-              email: typeof parsed.email === 'string' ? parsed.email : normalizedEmail,
-              accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : '',
-              refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '',
-              expiresAt: typeof parsed.expiresAt === 'number' ? parsed.expiresAt : 0,
-            };
-            lastError = null;
-            break;
-          }
-          lastError = typeof parsed.message === 'string' ? parsed.message : `Server login failed (HTTP ${response.status}).`;
-          if (parsed.requiresVerification === true) {
-            return { success: false, message: lastError, requiresVerification: true, failureReason: 'verification_required' };
-          }
-        } catch (endpointError) {
-          lastError = endpointError instanceof Error ? endpointError.message : 'Login endpoint failed.';
-        }
-      }
-
-      if (!serverResult?.success || !serverResult.accessToken || !serverResult.refreshToken) {
-        const displayMessage = lastError || 'Server login did not return a valid session. Please try again.';
-        return {
-          success: false,
-          message: displayMessage,
-          failureReason: 'service_unavailable',
-          supabaseErrorMessage: displayMessage,
-          supabaseErrorName: 'AuthError',
-          supabaseErrorStatus: 504,
-        };
-      }
-
-      // Mark manual login BEFORE setSession so the synchronous onAuthStateChange event
-      // does not trigger the owner auto-login block and wipe the session immediately.
+      trace.checkpoint('SUPABASE_REQUEST_STARTED');
       manualOwnerLoginRef.current = true;
-      const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
-        access_token: serverResult.accessToken,
-        refresh_token: serverResult.refreshToken,
-      });
-      if (sessionError) {
+      const signInResult = await signInWithEmailPassword(freshClient, normalizedEmail, password);
+      trace.checkpoint('SUPABASE_RESPONSE_RECEIVED', { success: signInResult.ok, errorCode: signInResult.ok ? undefined : signInResult.error?.code, errorMessage: signInResult.ok ? undefined : signInResult.error?.message });
+      if (!signInResult.ok) {
         manualOwnerLoginRef.current = false;
+        const error = signInResult.error as AuthError & { code?: string; status?: number };
+        const code = error?.code?.toLowerCase() ?? '';
+        const message = error?.message ?? 'Sign-in failed.';
+        if (code.includes('invalid_credentials') || message.toLowerCase().includes('invalid login credentials')) {
+          return { success: false, message: 'Invalid email or password.', failureReason: 'invalid_credentials' };
+        }
+        if (code.includes('email_not_confirmed') || message.toLowerCase().includes('email not confirmed')) {
+          return { success: false, message: 'Please verify your email before signing in.', failureReason: 'email_not_confirmed' };
+        }
+        if (code.includes('over_email_send_rate_limit') || code.includes('rate_limit') || message.toLowerCase().includes('rate limit')) {
+          return { success: false, message: 'Too many attempts. Please wait a minute and try again.', failureReason: 'rate_limited' };
+        }
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: code, errorMessage: message });
         return {
           success: false,
-          message: sessionError.message || 'Session could not be installed on the device.',
+          message,
           failureReason: 'service_unavailable',
+          supabaseErrorMessage: message,
+          supabaseErrorCode: error?.code,
+          supabaseErrorStatus: error?.status,
+          supabaseErrorName: error?.name,
         };
       }
-      const resolvedSession = sessionData.session;
-      if (!resolvedSession) {
-        manualOwnerLoginRef.current = false;
-        return { success: false, message: 'Login succeeded but no session was installed.', failureReason: 'service_unavailable' };
-      }
 
-      console.log('[Auth] Server-side password sign-in produced a real session for:', serverResult.email, 'user:', resolvedSession.user.id);
+      trace.checkpoint('SESSION_CREATED');
+      trace.checkpoint('SESSION_PERSIST_STARTED');
+      trace.checkpoint('SESSION_PERSIST_COMPLETE');
+
+      const resolvedSession = signInResult.session;
       const challengeRequired = await requireTwoFactorIfNeeded(resolvedSession, 'password sign-in');
       if (challengeRequired) {
-        return {
-          success: false,
-          requiresTwoFactor: true,
-          message: 'Enter the 6-digit code from your authenticator app to finish signing in.',
-        };
+        return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };
       }
+
+      trace.checkpoint('OWNER_LOOKUP_STARTED');
       const handledSession = await handleSession(resolvedSession);
+      trace.checkpoint('OWNER_LOOKUP_COMPLETE', { success: handledSession.accepted, errorMessage: handledSession.blockedReason ?? undefined });
       if (!handledSession.accepted) {
         return {
           success: false,
@@ -1871,15 +1819,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           failureReason: 'admin_access_locked',
         };
       }
-      // Auto-detect and save timezone on login
-      try {
-        const tzProfile = await autoDetectAndSaveTimezone();
-        console.log('[Auth] Timezone auto-detected on login:', tzProfile.timezone, 'offset:', tzProfile.utc_offset);
-      } catch (tzError) {
-        console.log('[Auth] Timezone auto-detect failed (non-blocking):', (tzError as Error)?.message);
-      }
-      return { success: true, message: 'Login successful' };
+      trace.checkpoint('APP_SESSION_READY');
+      return { success: true, message: 'Login successful', traceId: trace.traceId };
     } catch (error: unknown) {
+      manualOwnerLoginRef.current = false;
       const authErrorMessage = extractAuthErrorMessage(error);
       const errorCode = typeof error === 'object' && error && 'code' in error
         ? String((error as { code?: string }).code ?? '')
@@ -1890,14 +1833,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const errorName = typeof error === 'object' && error && 'name' in error
         ? String((error as { name?: string }).name ?? '')
         : '';
-      console.log('[Auth] Login exception (full):', serializeSupabaseAuthErrorForLog(error));
       const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
       const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
-      if (normalizedFailure.isExpectedFailure) {
-        console.log('[Auth] Login exception treated as auth rejection:', normalizedFailure.failureReason, 'email:', sanitizeEmail(email));
-      } else {
-        console.log('[Auth] Login exception handled:', authErrorMessage ?? 'unknown login exception', 'email:', sanitizeEmail(email));
-      }
+      trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage, errorStatus: Number.isFinite(errorStatus) ? errorStatus : undefined });
       return {
         success: false,
         message: displayMessage,

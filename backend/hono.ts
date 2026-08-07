@@ -272,6 +272,7 @@ import {
   handleRegistrationHealthRequest,
   handleRegistrationMetricsRequest,
 } from './api/ivx-members';
+import { handleOwnerAuthorize } from './api/ivx-owner-auth';
 import {
   OPTIONS as ownerRecoverySmsOptions,
   handleOwnerRecoveryStatusRequest,
@@ -4861,6 +4862,7 @@ app.get('/api/members/me', async (c) => handleGetMemberProfile(c.req.raw));
 app.post('/api/members/start-kyc', async (c) => handleStartKYC(c.req.raw));
 app.get('/api/members/verification-status', async (c) => handleVerificationStatus(c.req.raw));
 app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => handleMemberLogin(c.req.raw)) as Promise<Response>);
+app.post('/api/ivx/owner/authorize', async (c) => handleOwnerAuthorize(c.req.raw));
 app.post('/api/members/forgot-password', async (c) => withRateLimit(c.req.raw, 'member-forgot', 3, 0.1, () => handleMemberForgotPassword(c.req.raw)) as Promise<Response>);
 app.post('/api/members/reset-password', async (c) => handleMemberResetPassword(c.req.raw));
 app.post('/api/members/profile', async (c) => handleUpdateMemberProfile(c.req.raw));

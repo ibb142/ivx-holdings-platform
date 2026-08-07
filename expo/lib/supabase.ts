@@ -225,7 +225,7 @@ function buildSupabaseClient(url: string, key: string): SupabaseClient {
         logAuthTokenRequestIfDev(urlStr, nextOptions);
         const controller = new AbortController();
         const isAuthRequest = typeof url === 'string' && (url.includes('/auth/v1/token') || url.includes('/auth/v1/user'));
-        const timeoutMs = isAuthRequest ? 45000 : (selfHosted ? 20000 : 15000);
+        const timeoutMs = isAuthRequest ? 8000 : (selfHosted ? 20000 : 15000);
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         return fetch(url, {
           ...nextOptions,
