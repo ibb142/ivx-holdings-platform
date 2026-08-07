@@ -1,7 +1,26 @@
 name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
 overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-06T00:44:00.000Z
+updatedAt: 2026-08-07T02:36:00.000Z
+---
+# NEW OWNER DIRECTIVE — DURABLE-STORE AI CHAT TIMEOUT FIX (in progress)
+
+> **STATUS:** New QA-reported failure. The IVX Autonomous QA report (2026-08-07 02:26 UTC) shows `API health: FAIL` and the owner chat message `Error: TimeoutError` at `backend/services/ivx-durable-store.ts:182:22`.
+>
+> **Selected production issue:** `DurableStore.restRequest` uses `AbortSignal.timeout(8000)` which aborts during slow Supabase durable-document reads, causing the owner AI chat to surface a timeout error before the LLM call can even start.
+>
+> **Fix in progress:** Replace the hardcoded 8s durable-store timeout with a 30s constant `REST_TIMEOUT_MS` and add a regression test.
+>
+> **Required proof:** code → test → commit → push → Render deploy → live `/health` and owner AI chat verification.
+>
+> **Task checklist:**
+> - [x] Identify root cause (8s `AbortSignal.timeout` in `DurableStore.restRequest` and `executeSql`)
+> - [x] Implement fix (replace with `REST_TIMEOUT_MS = 30000`)
+> - [x] Add regression test (`backend/services/ivx-durable-store.test.ts`)
+> - [x] Commit to GitHub and push to main (commit 9d5c0d2daedbbcb9cbf37ced9d98cc86f4ee56bf via Git Data API; direct git push blocked by missing LFS object)
+> - [x] Deploy to Render (deploy `dep-d9qk9q449kds73cpsnn0` live, commit `9d5c0d2daedb`)
+> - [x] Verify production SHA parity and owner AI chat live (health commit `9d5c0d2daedb` matches GitHub; owner AI chat `POST /api/ivx/owner-ai` responded 200 in 10.9s via GPT-4o with no TimeoutError)
+
 ---
 # FINAL OWNER DIRECTIVE — TRUE END-TO-END CERTIFICATION TASK (in progress)
 
