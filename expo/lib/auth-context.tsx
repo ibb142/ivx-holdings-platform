@@ -5,6 +5,7 @@ import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CO
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
+import { signInWithEmailPassword } from './auth-password-sign-in';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';

@@ -18,13 +18,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.10.2",
+  version: "1.10.3",
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_08_07_V1102_AUTH_HARDENING',
-    buildTimestamp: "2026-07-31T15:10:00.000000+00:00",
+    buildMarker: 'IVX_BUNDLE_2026_08_07_V1103_AUTH_HARDENING_SIGNIN_IMPORT_FIX',
+    buildTimestamp: "2026-08-07T18:20:00.000000+00:00",
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',
