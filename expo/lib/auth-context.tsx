@@ -5,7 +5,7 @@ import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CO
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
-import { signInWithEmailPassword } from './auth-password-sign-in';
+
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
 import { startSessionMonitor } from './session-timeout';
 import { initializeSync, syncOwnerData, syncUserData } from './supabase-sync';
@@ -1770,90 +1770,115 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       }
 
       const normalizedEmail = sanitizeEmail(email);
-      const signInResult = await signInWithEmailPassword(freshClient, email, password);
-      const { credentials } = signInResult;
-      console.log(
-        '[Auth] Password sign-in attempt: email=',
-        credentials.email,
-        'passwordLength=',
-        credentials.passwordLength,
-      );
 
-      // SECURITY: The former "owner self-healing fallback" that submitted the
-      // typed password to the backend repair endpoint has been removed. It let
-      // ANY typed password become the owner password, which broke wrong-password
-      // rejection and was a critical account-takeover vector. Password sign-in
-      // now calls supabase.auth.signInWithPassword only. Recovery goes through
-      // the official password reset email flow.
-      if (!signInResult.ok && isOwnerAdminEmail(normalizedEmail)) {
-        console.log('[Auth] Owner password rejected by Supabase. Self-heal is disabled; use the official password reset flow.');
+      // INSTAGRAM TECHNIQUE: Never call Supabase Auth directly from the mobile app.
+      // The mobile network path to Supabase intermittently returns HTTP 504 Gateway Timeout
+      // (see owner screenshot 2026-08-07). Instead, send credentials to the IVX backend,
+      // which sits next to Supabase and returns a real session. The app then installs the
+      // session with setSession — the same pattern used by passwordless owner login.
+      const apiBaseUrls = getOwnerRegistrationApiBaseUrls();
+      let lastError: string | null = null;
+      let serverResult: {
+        success: boolean;
+        message?: string;
+        userId?: string;
+        email?: string;
+        accessToken?: string;
+        refreshToken?: string;
+        expiresAt?: number;
+        requiresVerification?: boolean;
+      } | null = null;
+
+      for (const baseUrl of apiBaseUrls) {
+        const endpoint = `${baseUrl}/api/members/login`;
+        try {
+          const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail, password }),
+          });
+          const text = await response.text();
+          let parsed: Record<string, unknown> = {};
+          try { parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {}; } catch {}
+          if (response.ok && parsed.success === true) {
+            serverResult = {
+              success: true,
+              userId: typeof parsed.userId === 'string' ? parsed.userId : '',
+              email: typeof parsed.email === 'string' ? parsed.email : normalizedEmail,
+              accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : '',
+              refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '',
+              expiresAt: typeof parsed.expiresAt === 'number' ? parsed.expiresAt : 0,
+            };
+            lastError = null;
+            break;
+          }
+          lastError = typeof parsed.message === 'string' ? parsed.message : `Server login failed (HTTP ${response.status}).`;
+          if (parsed.requiresVerification === true) {
+            return { success: false, message: lastError, requiresVerification: true, failureReason: 'verification_required' };
+          }
+        } catch (endpointError) {
+          lastError = endpointError instanceof Error ? endpointError.message : 'Login endpoint failed.';
+        }
       }
 
-      if (!signInResult.ok) {
-        const { error } = signInResult;
-        const authErrorMessage = extractAuthErrorMessage(error);
-        const errorCode = typeof error === 'object' && error && 'code' in error
-          ? String((error as { code?: string }).code ?? '')
-          : '';
-        const errorStatus = typeof error === 'object' && error && 'status' in error
-          ? Number((error as { status?: number }).status)
-          : NaN;
-        const errorName = typeof error === 'object' && error && 'name' in error
-          ? String((error as { name?: string }).name ?? '')
-          : '';
-        console.log('[Auth] Supabase signInWithPassword error (full):', serializeSupabaseAuthErrorForLog(error));
-        const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
-        const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
-        if (normalizedFailure.isExpectedFailure) {
-          console.log('[Auth] Login rejected:', normalizedFailure.failureReason, 'email:', credentials.email, 'displayMessage:', displayMessage);
-        } else {
-          console.log('[Auth] Login rejection handled:', authErrorMessage ?? 'unknown login rejection', 'email:', credentials.email);
-        }
+      if (!serverResult?.success || !serverResult.accessToken || !serverResult.refreshToken) {
+        const displayMessage = lastError || 'Server login did not return a valid session. Please try again.';
         return {
           success: false,
           message: displayMessage,
-          failureReason: normalizedFailure.failureReason,
+          failureReason: 'service_unavailable',
           supabaseErrorMessage: displayMessage,
-          ...(errorCode ? { supabaseErrorCode: errorCode } : {}),
-          ...(Number.isFinite(errorStatus) ? { supabaseErrorStatus: errorStatus } : {}),
-          ...(errorName ? { supabaseErrorName: errorName } : {}),
+          supabaseErrorName: 'AuthError',
+          supabaseErrorStatus: 504,
         };
       }
 
-      const { session: dataSession } = signInResult;
-      const resolvedSession = dataSession ?? (await supabase.auth.getSession()).data.session;
-      if (resolvedSession) {
-        // Mark manual login so onAuthStateChange accepts this session.
-        manualOwnerLoginRef.current = true;
-        console.log('[Auth] Direct password sign-in produced a real session for:', credentials.email, 'user:', resolvedSession.user.id);
-        const challengeRequired = await requireTwoFactorIfNeeded(resolvedSession, 'password sign-in');
-        if (challengeRequired) {
-          return {
-            success: false,
-            requiresTwoFactor: true,
-            message: 'Enter the 6-digit code from your authenticator app to finish signing in.',
-          };
-        }
-        const handledSession = await handleSession(resolvedSession);
-        if (!handledSession.accepted) {
-          return {
-            success: false,
-            message: handledSession.blockedReason ?? getAdminAccessLockMessage(),
-            failureReason: 'admin_access_locked',
-          };
-        }
-        // Auto-detect and save timezone on login
-        try {
-          const tzProfile = await autoDetectAndSaveTimezone();
-          console.log('[Auth] Timezone auto-detected on login:', tzProfile.timezone, 'offset:', tzProfile.utc_offset);
-        } catch (tzError) {
-          console.log('[Auth] Timezone auto-detect failed (non-blocking):', (tzError as Error)?.message);
-        }
-        return { success: true, message: 'Login successful' };
+      // Mark manual login BEFORE setSession so the synchronous onAuthStateChange event
+      // does not trigger the owner auto-login block and wipe the session immediately.
+      manualOwnerLoginRef.current = true;
+      const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
+        access_token: serverResult.accessToken,
+        refresh_token: serverResult.refreshToken,
+      });
+      if (sessionError) {
+        manualOwnerLoginRef.current = false;
+        return {
+          success: false,
+          message: sessionError.message || 'Session could not be installed on the device.',
+          failureReason: 'service_unavailable',
+        };
+      }
+      const resolvedSession = sessionData.session;
+      if (!resolvedSession) {
+        manualOwnerLoginRef.current = false;
+        return { success: false, message: 'Login succeeded but no session was installed.', failureReason: 'service_unavailable' };
       }
 
-      console.log('[Auth] Login finished without a recoverable session for:', credentials.email);
-      return { success: false, message: 'Login failed because no active session was returned.', failureReason: 'unknown' };
+      console.log('[Auth] Server-side password sign-in produced a real session for:', serverResult.email, 'user:', resolvedSession.user.id);
+      const challengeRequired = await requireTwoFactorIfNeeded(resolvedSession, 'password sign-in');
+      if (challengeRequired) {
+        return {
+          success: false,
+          requiresTwoFactor: true,
+          message: 'Enter the 6-digit code from your authenticator app to finish signing in.',
+        };
+      }
+      const handledSession = await handleSession(resolvedSession);
+      if (!handledSession.accepted) {
+        return {
+          success: false,
+          message: handledSession.blockedReason ?? getAdminAccessLockMessage(),
+          failureReason: 'admin_access_locked',
+        };
+      }
+      // Auto-detect and save timezone on login
+      try {
+        const tzProfile = await autoDetectAndSaveTimezone();
+        console.log('[Auth] Timezone auto-detected on login:', tzProfile.timezone, 'offset:', tzProfile.utc_offset);
+      } catch (tzError) {
+        console.log('[Auth] Timezone auto-detect failed (non-blocking):', (tzError as Error)?.message);
+      }
+      return { success: true, message: 'Login successful' };
     } catch (error: unknown) {
       const authErrorMessage = extractAuthErrorMessage(error);
       const errorCode = typeof error === 'object' && error && 'code' in error

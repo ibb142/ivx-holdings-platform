@@ -1,7 +1,32 @@
 name: "IVX IA 16-phase final certification — live production QA + deploy + evidence"
 overview: "Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence."
 createdAt: 2026-07-21T18:08:36.341Z
-updatedAt: 2026-08-07T11:00:00.000Z
+updatedAt: 2026-08-07T12:40:00.000Z
+---
+# NEW OWNER DIRECTIVE — INSTAGRAM TECHNIQUE LOGIN FIX (in progress)
+
+> **STATUS:** Owner reported (screenshot 2026-08-07) that mobile owner sign-in still returns HTTP 504 from Supabase Auth. Prior QA certification had verified the *backend* `/api/members/login` endpoint, but the mobile app was still calling Supabase Auth directly from the mobile network path. Owner ordered the Instagram technique: mobile → backend → Supabase → tokens → `setSession`.
+>
+> **Scope:** Replace the direct `signInWithEmailPassword` call in `expo/lib/auth-context.tsx` with a backend-mediated `POST /api/members/login` flow, then install the returned JWT via `setSession()`.
+>
+> **Required proof:** code change → regression test → version bump → commit → Render deploy → live SHA parity → APK build → bundle verification → download link.
+>
+> **Task checklist:**
+> - [x] Replace mobile direct Supabase Auth login with Instagram backend-mediated login in `expo/lib/auth-context.tsx`
+> - [x] Remove `signInWithEmailPassword` import from `expo/lib/auth-context.tsx`
+> - [x] Update `expo/__tests__/auth-timeout-fix.test.ts` for Instagram backend-login flow
+> - [x] Bump APK version to v1.10.1 / versionCode 99
+> - [x] Commit and push to GitHub via Git Data API (commit `c228dd254daccfbadf07997cf4cb21a66f8f9d31`)
+> - [x] Deploy to Render and verify production SHA (live `/health` commit = `c228dd254daccfbadf07997cf4cb21a66f8f9d31`)
+> - [x] Build Android APK and upload (APK v1.10.1, versionCode 99, 84.1 MB, QA variant — https://gofile.io/d/gyeWqi, md5: `ab1966903d4f0ee2fa79bcebd065503f`)
+> - [x] Verify APK bundle contains backend login path (`api/members/login`) and `setSession`, with no direct `signInWithEmailPassword`
+> - [x] Run regression tests (9/9 pass)
+> - [ ] Owner device login verification pending with new APK v1.10.1
+>
+> **Verdict:** NOT END-TO-END COMPLETE — developer-controlled fix, deploy, and APK are done; physical device login is the only remaining verification.
+>
+> **NOTE:** Supersedes the prior `OWNER LOGIN: FIXED AND VERIFIED LIVE` claim for the *mobile* path; the backend `/api/members/login` endpoint remains live, but the mobile app was still on the direct Supabase Auth path.
+
 ---
 # NEW OWNER DIRECTIVE — IVX IA CHAT CRASH: `shouldRenderInlineImage` (completed)
 
