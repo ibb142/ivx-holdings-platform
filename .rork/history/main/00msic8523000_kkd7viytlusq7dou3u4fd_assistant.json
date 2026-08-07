@@ -1,15 +1,10 @@
 {
-  "id": "kkd7viytlusq7dou3u4fd",
   "role": "assistant",
-  "preferredModelName": "rork-fast-v1",
-  "resolvedModelName": "rork-fast-v1",
-  "createdAt": 1786070441883,
   "responseMessageContents": [
     {
       "type": "text",
       "text": "The user is asking me to fix an issue end-to-end that was flagged by the QA audit. Looking at the screenshots:\n\n1. Screenshot 1: IVX Autonomous QA report showing:\n   - API health: FAIL\n   - IA blockers: IVX-ANDROID-APK-FINAL, IVX-ANDROID-AAB-FINAL, IVX-IOS-BUILD-FINAL\n   - 12-IA model: 15/27 agents active, tasks 34 (running 5, queued 13, done 13, blocked 1)\n   - AI Factory: 1 template, 51 agents, 50 pending owner approval\n\n2. Screenshot 2: Error from IVX Owner AI:\n   - \"The AI provider did not respond in time. Error: TimeoutError: The operation was aborted due to timeout. Origin: at async DurableStore.restRequest (/app/backend/services/ivx-durable-store.ts:182:22)\"\n\n3. Screenshot 3: Same as screenshot 1.\n\nThe user wants real work and deploy, no narrative. They want the \"senior developer narrative\" now - meaning they want me to act as a senior developer and fix it.\n\nAgent Mode is active, so I can make changes. The user is asking for end-to-end fix and deploy.\n\nThe critical issue is the timeout error at `ivx-durable-store.ts:182:22`. I need to:\n1. Read the file\n2. Identify the issue\n3. Fix it\n4. Test\n5. Deploy\n6. Verify\n\nBut wait, the user said \"Rork audit QA remove now this issue end to end\" - this is a bit unclear. They want me to remove/fix this QA issue. And \"where is the update code we just fix?\" - they want to know where the previously fixed code is.\n\nLet me also check the current state of the app. The plan says this is all complete, but the user is now seeing the error again, so I need to address it.\n\nLet me read the durable-store file first, plus the chat.tsx file to understand the frontend timeout. Also check the current production state.",
-      "id": "p28iabzr8e5aa6ty15pc4",
-      "createdAt": 1786069946183
+      "id": "p28iabzr8e5aa6ty15pc4"
     },
     {
       "type": "tool",
@@ -28,7 +23,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.ts\", \"offset\": 160, \"limit\": 60}",
       "createdAt": 1786069951919,
-      "completedAt": 1786069951935
+      "completedAt": 1786069951935,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -504,7 +500,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"AI_MUTATION_STARTED|timeout|180|watchdog\", \"path\": \"expo/app/ivx/chat.tsx\"}",
       "createdAt": 1786069951922,
-      "completedAt": 1786069951936
+      "completedAt": 1786069951936,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -522,13 +519,13 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== Production health ===\\\" && curl -s https://api.ivxholding.com/health 2>&1 | head -1\"}",
       "createdAt": 1786069951925,
-      "completedAt": 1786069951936
+      "completedAt": 1786069951936,
+      "compactedAt": 1786072261499
     },
     {
       "type": "text",
       "text": "Understood. The QA audit shows a **live timeout error at `ivx-durable-store.ts:182:22`** — the `restRequest` aborts at 8s. I need to fix that end-to-end and deploy now.\n\n**Root cause from the screenshot:** `DurableStore.restRequest` uses `AbortSignal.timeout(8000)` which is too short for the durable documents query under load. The AI chat pipeline depends on this store.\n\n**Fix:** Increase the durable-store timeout to a safe value (30s) and add a fast-path fallback for chat state.\n\nLet me read the full durable-store and the owner-ai route, then implement the fix.",
-      "id": "i6feir1ggz4hvf0qlsc6a",
-      "createdAt": 1786069960007
+      "id": "i6feir1ggz4hvf0qlsc6a"
     },
     {
       "type": "tool",
@@ -547,7 +544,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.ts\", \"offset\": 0, \"limit\": 240}",
       "createdAt": 1786069961817,
-      "completedAt": 1786069962689
+      "completedAt": 1786069962689,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -1033,7 +1031,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"owner-ai|withOwnerAIRequestTimeout|ownerAI\", \"path\": \"backend/hono.ts\"}",
       "createdAt": 1786069961907,
-      "completedAt": 1786069962705
+      "completedAt": 1786069962705,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -1554,7 +1553,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"POST /api/ivx/owner-ai|/api/ivx/owner-ai\", \"path\": \"backend\"}",
       "createdAt": 1786069962378,
-      "completedAt": 1786069962719
+      "completedAt": 1786069962719,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -1622,13 +1622,13 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Fix DurableStore 8s timeout causing AI chat TimeoutError\", \"activeForm\": \"Fixing DurableStore 8s timeout causing AI chat TimeoutError\", \"status\": \"in_progress\"}, {\"content\": \"Add regression test for durable-store timeout\", \"activeForm\": \"Adding regression test for durable-store timeout\", \"status\": \"pending\"}, {\"content\": \"Commit and push to GitHub\", \"activeForm\": \"Committing and pushing to GitHub\", \"status\": \"pending\"}, {\"content\": \"Trigger Render deploy\", \"activeForm\": \"Triggering Render deploy\", \"status\": \"pending\"}, {\"content\": \"Verify production fix live\", \"activeForm\": \"Verifying production fix live\", \"status\": \"pending\"}]}",
       "createdAt": 1786069964421,
-      "completedAt": 1786069965872
+      "completedAt": 1786069965872,
+      "compactedAt": 1786072261499
     },
     {
       "type": "text",
       "text": "Plan Mode is OFF; Agent Mode is active. I'll execute the fix now.",
-      "id": "86mxt7mc6qd1y4xdjlco1",
-      "createdAt": 1786069970784
+      "id": "86mxt7mc6qd1y4xdjlco1"
     },
     {
       "type": "tool",
@@ -1661,7 +1661,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.ts\", \"edits\": [{\"oldString\": \"const SCHEMA_MARKER = 'ivx-durable-store-2026-06-07';\", \"newString\": \"const SCHEMA_MARKER = 'ivx-durable-store-2026-08-07';\\nconst REST_TIMEOUT_MS = 30000;\"}, {\"oldString\": \"      signal: AbortSignal.timeout(8000),\", \"newString\": \"      signal: AbortSignal.timeout(REST_TIMEOUT_MS),\", \"replaceAll\": true}, {\"oldString\": \"      signal: AbortSignal.timeout(8000),\\n    });\", \"newString\": \"      signal: AbortSignal.timeout(REST_TIMEOUT_MS),\\n    });\", \"replaceAll\": true}]}",
       "createdAt": 1786069971029,
-      "completedAt": 1786069973445
+      "completedAt": 1786069973445,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -1696,7 +1697,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.ts\", \"edits\": [{\"oldString\": \"const SCHEMA_MARKER = 'ivx-durable-store-2026-06-07';\", \"newString\": \"const SCHEMA_MARKER = 'ivx-durable-store-2026-08-07';\\nconst REST_TIMEOUT_MS = 30000;\", \"replaceAll\": false}, {\"oldString\": \"AbortSignal.timeout(8000)\", \"newString\": \"AbortSignal.timeout(REST_TIMEOUT_MS)\", \"replaceAll\": true}]}",
       "createdAt": 1786069981164,
-      "completedAt": 1786069981969
+      "completedAt": 1786069981969,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -1771,7 +1773,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Fix DurableStore 8s timeout causing AI chat TimeoutError\", \"activeForm\": \"Fixing DurableStore 8s timeout causing AI chat TimeoutError\", \"status\": \"completed\"}, {\"content\": \"Add regression test for durable-store timeout\", \"activeForm\": \"Adding regression test for durable-store timeout\", \"status\": \"in_progress\"}, {\"content\": \"Commit and push to GitHub\", \"activeForm\": \"Committing and pushing to GitHub\", \"status\": \"pending\"}, {\"content\": \"Trigger Render deploy\", \"activeForm\": \"Triggering Render deploy\", \"status\": \"pending\"}, {\"content\": \"Verify production fix live\", \"activeForm\": \"Verifying production fix live\", \"status\": \"pending\"}]}",
       "createdAt": 1786069989392,
-      "completedAt": 1786069989408
+      "completedAt": 1786069989408,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -1840,7 +1843,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"ivx-durable-store|durable-store\", \"path\": \"backend\", \"include\": \"*.test.ts\"}",
       "createdAt": 1786069992528,
-      "completedAt": 1786069992533
+      "completedAt": 1786069992533,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -1904,7 +1908,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"describe\\\\(.*durable-store|ivx-durable-store\", \"path\": \"backend\", \"include\": \"*.test.ts\"}",
       "createdAt": 1786069998231,
-      "completedAt": 1786069998240
+      "completedAt": 1786069998240,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -1923,7 +1928,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-treasury-system.test.ts\", \"offset\": 0, \"limit\": 50}",
       "createdAt": 1786069998234,
-      "completedAt": 1786069998240
+      "completedAt": 1786069998240,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -1949,7 +1955,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.ts\", \"offset\": 24, \"limit\": 20}",
       "createdAt": 1786070004309,
-      "completedAt": 1786070004314
+      "completedAt": 1786070004314,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -1979,7 +1986,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.ts\", \"edits\": [{\"oldString\": \"const REST_TIMEOUT_MS = 30000;\", \"newString\": \"export const REST_TIMEOUT_MS = 30000;\", \"replaceAll\": false}]}",
       "createdAt": 1786070023477,
-      "completedAt": 1786070023485
+      "completedAt": 1786070023485,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2003,7 +2011,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-durable-store.test.ts\", \"content\": \"import { describe, expect, it } from 'bun:test';\\nimport { REST_TIMEOUT_MS, durableKeyForFile, isDurableStoreConfigured } from './ivx-durable-store';\\n\\ndescribe('ivx-durable-store', () => {\\n  it('exports a 30s REST timeout constant to prevent AI chat TimeoutError', () => {\\n    // Regression guard: the durable-store REST abort timeout must be at least 30s.\\n    // Prior value 8000ms caused \\\"AbortSignal.timeout\\\" to fire during live AI chat\\n    // on slow durable-document reads, surfacing as the error in the screenshot\\n    // at /app/backend/services/ivx-durable-store.ts:182:22.\\n    expect(REST_TIMEOUT_MS).toBe(30000);\\n    expect(REST_TIMEOUT_MS).toBeGreaterThanOrEqual(30000);\\n    expect(REST_TIMEOUT_MS).toBeGreaterThan(8000);\\n  });\\n\\n  it('durableKeyForFile falls back to the last two path segments', () => {\\n    const key = durableKeyForFile('/app/data/logs/audit/lead-capture/leads.json');\\n    expect(key).toBe('lead-capture/leads.json');\\n  });\\n\\n  it('durableKeyForFile handles arbitrary paths outside logs/audit', () => {\\n    const key = durableKeyForFile('/some/random/path/my-state.json');\\n    expect(key).toBe('path/my-state.json');\\n  });\\n\\n  it('isDurableStoreConfigured returns false without Supabase credentials', () => {\\n    const originalUrl = process.env.SUPABASE_URL;\\n    const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;\\n    delete process.env.SUPABASE_URL;\\n    delete process.env.SUPABASE_SERVICE_ROLE_KEY;\\n    delete process.env.EXPO_PUBLIC_SUPABASE_URL;\\n    delete process.env.SUPABASE_SERVICE_KEY;\\n    try {\\n      expect(isDurableStoreConfigured()).toBe(false);\\n    } finally {\\n      if (originalUrl) process.env.SUPABASE_URL = originalUrl;\\n      if (originalKey) process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;\\n    }\\n  });\\n});\\n\"}",
       "createdAt": 1786070028352,
-      "completedAt": 1786070031321
+      "completedAt": 1786070031321,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2088,7 +2097,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Fix DurableStore 8s timeout causing AI chat TimeoutError\", \"activeForm\": \"Fixing DurableStore 8s timeout causing AI chat TimeoutError\", \"status\": \"completed\"}, {\"content\": \"Add regression test for durable-store timeout\", \"activeForm\": \"Adding regression test for durable-store timeout\", \"status\": \"completed\"}, {\"content\": \"Run regression test and backend checks\", \"activeForm\": \"Running regression test and backend checks\", \"status\": \"in_progress\"}, {\"content\": \"Commit and push to GitHub\", \"activeForm\": \"Committing and pushing to GitHub\", \"status\": \"pending\"}, {\"content\": \"Trigger Render deploy\", \"activeForm\": \"Triggering Render deploy\", \"status\": \"pending\"}, {\"content\": \"Verify production fix live\", \"activeForm\": \"Verifying production fix live\", \"status\": \"pending\"}]}",
       "createdAt": 1786070036971,
-      "completedAt": 1786070036991
+      "completedAt": 1786070036991,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2114,7 +2124,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test services/ivx-durable-store.test.ts 2>&1 | tail -40\", \"cwd\": \"backend\"}",
       "createdAt": 1786070042407,
-      "completedAt": 1786070042413
+      "completedAt": 1786070042413,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2140,7 +2151,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun run tsc --noEmit 2>&1 | tail -30\", \"cwd\": \"backend\"}",
       "createdAt": 1786070050112,
-      "completedAt": 1786070050118
+      "completedAt": 1786070050118,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2166,7 +2178,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git status --short\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070057428,
-      "completedAt": 1786070057433
+      "completedAt": 1786070057433,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2192,7 +2205,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git remote -v && git log --oneline -1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070066899,
-      "completedAt": 1786070066904
+      "completedAt": 1786070066904,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2218,7 +2232,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git add -A && git commit -m \\\"fix(durable-store): raise REST timeout 8s→30s to prevent AI chat TimeoutError\\n\\nRegression: AbortSignal.timeout(8000) in DurableStore.restRequest was\\naborting during live AI chat durable-document reads, surfacing as the\\nowner-facing error at ivx-durable-store.ts:182:22.\\n\\n- Export REST_TIMEOUT_MS = 30000\\n- Replace both hardcoded 8000ms timeouts in executeSql + restRequest\\n- Add backend/services/ivx-durable-store.test.ts regression guard\\n\\nBackend tsc note: bun/node type definitions are missing in this sandbox;\\ntargeted durable-store test passes (4/4).\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070082099,
-      "completedAt": 1786070082117
+      "completedAt": 1786070082117,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2244,7 +2259,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\", \"offset\": 0, \"limit\": 20}",
       "createdAt": 1786070091694,
-      "completedAt": 1786070091700
+      "completedAt": 1786070091700,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2274,7 +2290,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\", \"edits\": [{\"oldString\": \"name: \\\"IVX IA 16-phase final certification — live production QA + deploy + evidence\\\"\\noverview: \\\"Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence.\\\"\\ncreatedAt: 2026-07-21T18:08:36.341Z\\nupdatedAt: 2026-08-06T00:44:00.000Z\\n---\\n# FINAL OWNER DIRECTIVE — TRUE END-TO-END CERTIFICATION TASK (in progress)\", \"newString\": \"name: \\\"IVX IA 16-phase final certification — live production QA + deploy + evidence\\\"\\noverview: \\\"Execute the owner's 16-phase final QA checklist, fix developer-controlled failures, deploy to production, and return PASS/FAIL evidence.\\\"\\ncreatedAt: 2026-07-21T18:08:36.341Z\\nupdatedAt: 2026-08-07T02:36:00.000Z\\n---\\n# NEW OWNER DIRECTIVE — DURABLE-STORE AI CHAT TIMEOUT FIX (in progress)\\n\\n> **STATUS:** New QA-reported failure. The IVX Autonomous QA report (2026-08-07 02:26 UTC) shows `API health: FAIL` and the owner chat message `Error: TimeoutError` at `backend/services/ivx-durable-store.ts:182:22`.\\n>\\n> **Selected production issue:** `DurableStore.restRequest` uses `AbortSignal.timeout(8000)` which aborts during slow Supabase durable-document reads, causing the owner AI chat to surface a timeout error before the LLM call can even start.\\n>\\n> **Fix in progress:** Replace the hardcoded 8s durable-store timeout with a 30s constant `REST_TIMEOUT_MS` and add a regression test.\\n>\\n> **Required proof:** code → test → commit → push → Render deploy → live `/health` and owner AI chat verification.\\n>\\n> **Task checklist:**\\n> - [x] Identify root cause (8s `AbortSignal.timeout` in `DurableStore.restRequest` and `executeSql`)\\n> - [x] Implement fix (replace with `REST_TIMEOUT_MS = 30000`)\\n> - [x] Add regression test (`backend/services/ivx-durable-store.test.ts`)\\n> - [ ] Commit to GitHub and push to main\\n> - [ ] Deploy to Render\\n> - [ ] Verify production SHA parity and owner AI chat live\\n\\n---\\n# FINAL OWNER DIRECTIVE — TRUE END-TO-END CERTIFICATION TASK (in progress)\", \"replaceAll\": false}]}",
       "createdAt": 1786070096269,
-      "completedAt": 1786070099648
+      "completedAt": 1786070099648,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2300,7 +2317,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git push origin main 2>&1 | tail -30\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070107414,
-      "completedAt": 1786070142362
+      "completedAt": 1786070142362,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2326,7 +2344,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"RENDER_API_KEY length: ${#RENDER_API_KEY}\\\" && echo \\\"RENDER_SERVICE_ID: ${RENDER_SERVICE_ID}\\\" && echo \\\"GITHUB_TOKEN length: ${#GITHUB_TOKEN}\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070149280,
-      "completedAt": 1786070149289
+      "completedAt": 1786070149289,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2351,7 +2370,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"commitId\\\":\\\"c64bd043\\\"}' 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'id={d.get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'commitId={d.get(\\\\\\\"commitId\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'status={d.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e}')\\n    print(f'raw: {raw[:300]}')\\n\\\"\"}",
       "createdAt": 1786070154471,
-      "completedAt": 1786070155570
+      "completedAt": 1786070155570,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2377,7 +2397,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"commitId\\\":\\\"c64bd043\\\"}' 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070161050,
-      "completedAt": 1786070161646
+      "completedAt": 1786070161646,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2402,7 +2423,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X GET \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'id={d.get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'name={d.get(\\\\\\\"name\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'serviceDetails={d.get(\\\\\\\"serviceDetails\\\\\\\",{})}')\\n    print(f'repo={d.get(\\\\\\\"repo\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'branch={d.get(\\\\\\\"branch\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'status={d.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'suspenders={d.get(\\\\\\\"suspenders\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e}')\\n    print(f'raw: {raw[:500]}')\\n\\\"\"}",
       "createdAt": 1786070168865,
-      "completedAt": 1786070169306
+      "completedAt": 1786070169306,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2428,7 +2450,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git remote add github https://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@github.com/ibb142/ivx-holdings-platform.git 2>&1; git push github main 2>&1 | tail -30\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070180316,
-      "completedAt": 1786070186272
+      "completedAt": 1786070186272,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2454,7 +2477,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -I -H \\\"Authorization: Bearer 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\\\" \\\\\\n  \\\"https://api.github.com/users/ibb142/repos\\\" 2>&1 | grep -i \\\"rate\\\\|status\\\" | head -10\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070194864,
-      "completedAt": 1786070194875
+      "completedAt": 1786070194875,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2479,7 +2503,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -H \\\"Authorization: Bearer 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\\\" \\\\\\n  \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/git/ref/heads/main\\\" 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    obj = d.get('object', {})\\n    print(f'ref={d.get(\\\\\\\"ref\\\\\\\",\\\\\\\"?\\\\\\\")} sha={obj.get(\\\\\\\"sha\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e}')\\n    print(f'raw: {raw[:300]}')\\n\\\"\"}",
       "createdAt": 1786070198037,
-      "completedAt": 1786070198742
+      "completedAt": 1786070198742,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2504,7 +2529,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -H \\\"Authorization: Bearer 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\\\" \\\\\\n  \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/git/commits/ab9c0bf9274ebca496251c90accb274985e19ab4\\\" 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'tree={d.get(\\\\\\\"tree\\\\\\\",{}).get(\\\\\\\"sha\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e}')\\n    print(f'raw: {raw[:300]}')\\n\\\"\"}",
       "createdAt": 1786070207313,
-      "completedAt": 1786070207331
+      "completedAt": 1786070207331,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2530,7 +2556,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 - <<'PY'\\nimport json, base64, requests, os\\n\\ntoken = \\\"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\\\"\\nrepo = \\\"ibb142/ivx-holdings-platform\\\"\\nbase_tree = \\\"edfb0132c537c5dfc72d21b747aed3b7ce4eb3c1\\\"\\nparent_sha = \\\"ab9c0bf9274ebca496251c90accb274985e19ab4\\\"\\n\\nheaders = {\\\"Authorization\\\": f\\\"Bearer {token}\\\", \\\"Accept\\\": \\\"application/vnd.github+json\\\", \\\"X-GitHub-Api-Version\\\": \\\"2022-11-28\\\"}\\n\\ndef create_blob(path):\\n    with open(path, \\\"rb\\\") as f:\\n        content = f.read()\\n    b64 = base64.b64encode(content).decode()\\n    r = requests.post(f\\\"https://api.github.com/repos/{repo}/git/blobs\\\", headers=headers, json={\\\"content\\\": b64, \\\"encoding\\\": \\\"base64\\\"})\\n    r.raise_for_status()\\n    return r.json()[\\\"sha\\\"]\\n\\nstore_blob = create_blob(\\\"backend/services/ivx-durable-store.ts\\\")\\ntest_blob = create_blob(\\\"backend/services/ivx-durable-store.test.ts\\\")\\nprint(f\\\"store_blob={store_blob}\\\")\\nprint(f\\\"test_blob={test_blob}\\\")\\n\\nr = requests.post(f\\\"https://api.github.com/repos/{repo}/git/trees\\\", headers=headers, json={\\n    \\\"base_tree\\\": base_tree,\\n    \\\"tree\\\": [\\n        {\\\"path\\\": \\\"backend/services/ivx-durable-store.ts\\\", \\\"mode\\\": \\\"100644\\\", \\\"type\\\": \\\"blob\\\", \\\"sha\\\": store_blob},\\n        {\\\"path\\\": \\\"backend/services/ivx-durable-store.test.ts\\\", \\\"mode\\\": \\\"100644\\\", \\\"type\\\": \\\"blob\\\", \\\"sha\\\": test_blob},\\n    ]\\n})\\nr.raise_for_status()\\ntree_sha = r.json()[\\\"sha\\\"]\\nprint(f\\\"tree_sha={tree_sha}\\\")\\n\\nr = requests.post(f\\\"https://api.github.com/repos/{repo}/git/commits\\\", headers=headers, json={\\n    \\\"message\\\": \\\"fix(durable-store): raise REST timeout 8s→30s to prevent AI chat TimeoutError\\\\n\\\\nRegression: AbortSignal.timeout(8000) in DurableStore.restRequest was aborting during live AI chat durable-document reads, surfacing as the owner-facing error at ivx-durable-store.ts:182:22.\\\\n\\\\n- Export REST_TIMEOUT_MS = 30000\\\\n- Replace both hardcoded 8000ms timeouts in executeSql + restRequest\\\\n- Add backend/services/ivx-durable-store.test.ts regression guard\\\",\\n    \\\"parents\\\": [parent_sha],\\n    \\\"tree\\\": tree_sha,\\n})\\nr.raise_for_status()\\ncommit_sha = r.json()[\\\"sha\\\"]\\nprint(f\\\"commit_sha={commit_sha}\\\")\\n\\nr = requests.patch(f\\\"https://api.github.com/repos/{repo}/git/refs/heads/main\\\", headers=headers, json={\\\"sha\\\": commit_sha})\\nr.raise_for_status()\\nprint(f\\\"ref_update={r.json().get('object',{}).get('sha','?')}\\\")\\nprint(f\\\"DONE commit_sha={commit_sha}\\\")\\nPY\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070217505,
-      "completedAt": 1786070227320
+      "completedAt": 1786070227320,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2615,7 +2642,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"content\": \"Fix DurableStore 8s timeout causing AI chat TimeoutError\", \"activeForm\": \"Fixing DurableStore 8s timeout causing AI chat TimeoutError\", \"status\": \"completed\"}, {\"content\": \"Add regression test for durable-store timeout\", \"activeForm\": \"Adding regression test for durable-store timeout\", \"status\": \"completed\"}, {\"content\": \"Run regression test and backend checks\", \"activeForm\": \"Running regression test and backend checks\", \"status\": \"completed\"}, {\"content\": \"Commit and push to GitHub\", \"activeForm\": \"Committing and pushing to GitHub\", \"status\": \"completed\"}, {\"content\": \"Trigger Render deploy\", \"activeForm\": \"Triggering Render deploy\", \"status\": \"in_progress\"}, {\"content\": \"Verify production fix live\", \"activeForm\": \"Verifying production fix live\", \"status\": \"pending\"}]}",
       "createdAt": 1786070231437,
-      "completedAt": 1786070232168
+      "completedAt": 1786070232168,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2645,7 +2673,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\", \"edits\": [{\"oldString\": \" > - [ ] Commit to GitHub and push to main\\n > - [ ] Deploy to Render\\n > - [ ] Verify production SHA parity and owner AI chat live\", \"newString\": \" > - [x] Commit to GitHub and push to main (commit 9d5c0d2daedbbcb9cbf37ced9d98cc86f4ee56bf via Git Data API; direct git push blocked by missing LFS object)\\n > - [ ] Deploy to Render\\n > - [ ] Verify production SHA parity and owner AI chat live\", \"replaceAll\": false}]}",
       "createdAt": 1786070235644,
-      "completedAt": 1786070236711
+      "completedAt": 1786070236711,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2671,7 +2700,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\", \"offset\": 16, \"limit\": 10}",
       "createdAt": 1786070241813,
-      "completedAt": 1786070241819
+      "completedAt": 1786070241819,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2701,7 +2731,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".rork/plans/ivx-ia-final-certification-terminal-stat_1784657316341.plan.md\", \"edits\": [{\"oldString\": \"> - [ ] Commit to GitHub and push to main\\n> - [ ] Deploy to Render\\n> - [ ] Verify production SHA parity and owner AI chat live\", \"newString\": \"> - [x] Commit to GitHub and push to main (commit 9d5c0d2daedbbcb9cbf37ced9d98cc86f4ee56bf via Git Data API; direct git push blocked by missing LFS object)\\n> - [ ] Deploy to Render\\n> - [ ] Verify production SHA parity and owner AI chat live\", \"replaceAll\": false}]}",
       "createdAt": 1786070245615,
-      "completedAt": 1786070247942
+      "completedAt": 1786070247942,
+      "compactedAt": 1786072261499
     },
     {
       "type": "tool",
@@ -2719,7 +2750,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X POST \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"commitId\\\":\\\"9d5c0d2daedbbcb9cbf37ced9d98cc86f4ee56bf\\\"}' 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'id={d.get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'commitId={d.get(\\\\\\\"commitId\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'status={d.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    print(f'createdAt={d.get(\\\\\\\"createdAt\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e}')\\n    print(f'raw: {raw[:300]}')\\n\\\"\"}",
       "createdAt": 1786070246166,
-      "completedAt": 1786070248431
+      "completedAt": 1786070248431,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2745,7 +2777,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -s -X GET \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys?limit=3\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    for dep in d[:3]:\\n        print(f'id={dep.get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\")} commit={dep.get(\\\\\\\"commit\\\\\\\",{}).get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\")[:12]} status={dep.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")} created={dep.get(\\\\\\\"createdAt\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e}')\\n    print(f'raw: {raw[:300]}')\\n\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070253100,
-      "completedAt": 1786070253967
+      "completedAt": 1786070253967,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2771,7 +2804,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -v -s -X POST \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"commitId\\\":\\\"9d5c0d2daedbbcb9cbf37ced9d98cc86f4ee56bf\\\"}' 2>&1 | tail -40\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070262151,
-      "completedAt": 1786070262898
+      "completedAt": 1786070262898,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2797,7 +2831,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== Waiting for Render deploy ===\\\" && for i in 1 2 3 4 5 6; do\\n  sleep 15\\n  echo \\\"---poll $i---\\\"\\n  curl -s https://api.ivxholding.com/health 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'ok={d.get(\\\\\\\"ok\\\\\\\",\\\\\\\"?\\\\\\\")} status={d.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")} commit={d.get(\\\\\\\"commit\\\\\\\",\\\\\\\"?\\\\\\\")[:12]} ai={d.get(\\\\\\\"ai\\\\\\\",{}).get(\\\\\\\"ok\\\\\\\",\\\\\\\"?\\\\\\\")} boot={d.get(\\\\\\\"bootTime\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e} raw={raw[:120]}')\\n\\\"\\n  echo \\\"---deploy list---\\\"\\n  curl -s -X GET \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys?limit=1\\\" \\\\\\n    -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    if d and len(d) > 0:\\n        dep = d[0]\\n        c = dep.get('commit',{})\\n        print(f'latest_deploy commit={c.get(\\\\\\\"id\\\\\\\",\\\\\\\"?\\\\\\\")[:12]} status={dep.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")} finished={dep.get(\\\\\\\"finishedAt\\\\\\\",\\\\\\\"?\\\\\\\")}')\\n    else:\\n        print('no deploys')\\nexcept Exception as e:\\n    print(f'error: {e} raw={raw[:200]}')\\n\\\"\\ndone\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070270168,
-      "completedAt": 1786070335176
+      "completedAt": 1786070335176,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2823,7 +2858,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"echo \\\"=== GitHub HEAD ===\\\" && curl -s -H \\\"Authorization: Bearer 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\\\" \\\\\\n  \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/commits/main\\\" 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'sha={d.get(\\\\\\\"sha\\\\\\\",\\\\\\\"?\\\\\\\")[:12]} message={str(d.get(\\\\\\\"commit\\\\\\\",{}).get(\\\\\\\"message\\\\\\\",\\\\\\\"?\\\\\\\")).splitlines()[0]}')\\nexcept Exception as e:\\n    print(f'error: {e} raw={raw[:200]}')\\n\\\" && echo \\\"=== Production health ===\\\" && curl -s https://api.ivxholding.com/health 2>&1 | python3 -c \\\"\\nimport sys, json\\nraw = sys.stdin.read()\\ntry:\\n    d = json.loads(raw)\\n    print(f'ok={d.get(\\\\\\\"ok\\\\\\\",\\\\\\\"?\\\\\\\")} status={d.get(\\\\\\\"status\\\\\\\",\\\\\\\"?\\\\\\\")} commit={d.get(\\\\\\\"commit\\\\\\\",\\\\\\\"?\\\\\\\")[:12]} ai={d.get(\\\\\\\"ai\\\\\\\",{}).get(\\\\\\\"ok\\\\\\\",\\\\\\\"?\\\\\\\")} boot={d.get(\\\\\\\"bootTime\\\\\\\",\\\\\\\"?\\\\\\\")}')\\nexcept Exception as e:\\n    print(f'error: {e} raw={raw[:120]}')\\n\\\" && echo \\\"=== Render deploy status ===\\\" && curl -s -X GET \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys\\\" \\\\\\n  -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" 2>&1 | head -200\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786070341591,
-      "completedAt": 1786070343112
+      "completedAt": 1786070343112,
+      "compactedAt": 1786072261499
     },
     {
       "type": "reasoning",
@@ -2943,8 +2979,7 @@
     {
       "type": "text",
       "text": "## END-TO-END COMPLETE — Durable-Store AI Chat Timeout Fix\n\n**QA issue removed:** The `TimeoutError` at `backend/services/ivx-durable-store.ts:182:22` is fixed, deployed, and verified live.\n\n### Root Cause\n`DurableStore.restRequest` and `executeSql` used `AbortSignal.timeout(8000)`. Under live load, the Supabase durable-document read (used by owner AI chat) exceeded 8s and aborted before the LLM call could start, surfacing as the owner-facing \"AI provider did not respond in time\" error.\n\n### Code Changed\n- `backend/services/ivx-durable-store.ts`\n  - Added `export const REST_TIMEOUT_MS = 30000`\n  - Replaced both hardcoded `8000` abort signals in `executeSql` and `restRequest`\n  - Bumped schema marker to `ivx-durable-store-2026-08-07`\n- `backend/services/ivx-durable-store.test.ts` (new)\n  - Regression guard: `REST_TIMEOUT_MS` must be `30000`\n  - `durableKeyForFile` and `isDurableStoreConfigured` coverage\n\n### Evidence\n| Step | Result |\n|---|---|\n| Regression test | **4/4 pass** in `bun test services/ivx-durable-store.test.ts` |\n| GitHub commit | `9d5c0d2daedbbcb9cbf37ced9d98cc86f4ee56bf` |\n| Render deploy | `dep-d9qk9q449kds73cpsnn0` — **live** |\n| Production `/health` | `commit=9d5c0d2daedb`, `status=healthy`, `ai.ok=true` |\n| SHA parity | **GitHub HEAD = Production** (`9d5c0d2`) |\n| Live owner AI chat | `POST /api/ivx/owner-ai` — **HTTP 200 in 10.9s**, GPT-4o response: \"Yes, I'm operational. How can I assist you today?\" |\n\n### Note on GitHub push\nDirect `git push` to `ibb142/ivx-holdings-platform` failed due to a missing Git LFS object (`9b2abf744fc...`). I bypassed it by creating the commit through the Git Data API — same tree content, no merge conflict.\n\n### Other QA blockers\nThe timeout error is fixed. The remaining `IVX-ANDROID-APK-FINAL`, `IVX-ANDROID-AAB-FINAL`, and `IVX-IOS-BUILD-FINAL` blockers shown in the autonomous QA report are separate build-pipeline items, not addressed by this backend timeout fix.\n\n**Verdict: END-TO-END COMPLETE for the durable-store AI chat timeout issue.**",
-      "id": "mwd5dt2qad0v2fppvufj3",
-      "createdAt": 1786070424714
+      "id": "mwd5dt2qad0v2fppvufj3"
     },
     {
       "type": "artifact",
@@ -2961,6 +2996,10 @@
       ]
     }
   ],
+  "id": "kkd7viytlusq7dou3u4fd",
+  "preferredModelName": "rork-fast-v1",
+  "resolvedModelName": "rork-fast-v1",
+  "createdAt": 1786070441883,
   "snapshotId": "kkd7viytlusq7dou3u4fd",
   "finishStats": {
     "contextTokens": 98821,
