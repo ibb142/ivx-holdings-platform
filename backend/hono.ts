@@ -5265,6 +5265,11 @@ app.get('/api/ivx/jv-deals', async (c) => handleJVDealsList(c.req.raw));
 // Canonical aliases — /api/deals and /api/properties map to the ivx-prefixed routes
 app.options('/api/deals', () => publicFeatureOptions());
 app.get('/api/deals', async (c) => handleJVDealsList(c.req.raw));
+// Public published-JV-deals and landing-deals aliases — app fetches these for content display
+app.options('/api/published-jv-deals', () => publicFeatureOptions());
+app.get('/api/published-jv-deals', async (c) => handleJVDealsList(c.req.raw));
+app.options('/api/landing-deals', () => publicFeatureOptions());
+app.get('/api/landing-deals', async (c) => handleJVDealsList(c.req.raw));
 app.options('/api/properties', () => publicFeatureOptions());
 app.get('/api/properties', async (c) => handleFeaturedProperties(c.req.raw));
 app.options('/api/properties/:propertyId', () => publicFeatureOptions());
