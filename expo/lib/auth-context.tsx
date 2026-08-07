@@ -602,7 +602,8 @@ function getOwnerRegistrationApiBaseUrls(): string[] {
 
 async function fetchWithOwnerRegistrationTimeout(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const isAuthEndpoint = typeof url === 'string' && (url.includes('/owner-passwordless-login') || url.includes('/members/login') || url.includes('/owner/login'));
+  const timeout = setTimeout(() => controller.abort(), isAuthEndpoint ? 45_000 : 15_000);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {

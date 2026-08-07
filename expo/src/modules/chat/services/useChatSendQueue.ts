@@ -146,7 +146,7 @@ export function useChatSendQueue(options?: ChatSendQueueOptions): ChatSendQueueM
           pendingRef.current.delete(requestId);
           handledRef.current.add(requestId);
           const error = new Error(
-            'Send queue timeout: the request was not processed within 10 minutes. Senior-developer and factory tasks can take several minutes to run live — please retry if this was a long-running task.'
+            'Send queue timeout: the request was not processed within 90 seconds. The backend may be unreachable or your session may have expired. Please check your connection and try again.'
           );
           stillPending.reject(error);
           setIsPending(false);
@@ -155,7 +155,7 @@ export function useChatSendQueue(options?: ChatSendQueueOptions): ChatSendQueueM
           optionsRef.current?.onError?.(error, stillPending.variables);
           optionsRef.current?.onSettled?.(stillPending.variables);
         }
-      }, 600_000);
+      }, 90_000);
 
       // Clear safety timer when resolved
       const checkTimer = setInterval(() => {

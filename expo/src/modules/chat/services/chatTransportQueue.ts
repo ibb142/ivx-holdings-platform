@@ -87,7 +87,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 const PERSISTENCE_KEY = 'ivx_chat_transport_queue_v1';
-const QUEUE_TIMEOUT_MS = 30_000;
+const QUEUE_TIMEOUT_MS = 20_000;
 const MAX_RETRY_ATTEMPTS = 3;
 const BASE_RETRY_DELAY_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 8_000;

@@ -224,7 +224,8 @@ function buildSupabaseClient(url: string, key: string): SupabaseClient {
         const nextOptions = stripConnectionPoolHeaderForAuth(urlStr, options);
         logAuthTokenRequestIfDev(urlStr, nextOptions);
         const controller = new AbortController();
-        const timeoutMs = selfHosted ? 20000 : 15000;
+        const isAuthRequest = typeof url === 'string' && (url.includes('/auth/v1/token') || url.includes('/auth/v1/user'));
+        const timeoutMs = isAuthRequest ? 45000 : (selfHosted ? 20000 : 15000);
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         return fetch(url, {
           ...nextOptions,
