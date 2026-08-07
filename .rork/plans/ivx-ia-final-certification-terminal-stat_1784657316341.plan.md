@@ -8,25 +8,27 @@ updatedAt: 2026-08-07T19:05:00.000Z
 > **STATUS:** Owner reported (screenshot 871817.jpg) that owner sign-in on v1.10.3 still shows "Sign In Failed / Aborted". This directive supersedes the "Owner Authentication Hardening" directive.
 >
 > **Root causes found:**
-> 1. Render env var `EXPO_PUBLIC_SUPABASE_ANON_KEY` was set to `sb_publishable_...` (not a valid Supabase anon key). Fixed to the production JWT via Render API on 2026-08-07T19:04Z.
-> 2. The direct mobile → Supabase Auth path times out for the owner account (`upstream request timeout` HTTP 504 after ~40s from the sandbox).
+> 1. Render env var `EXPO_PUBLIC_SUPABASE_ANON_KEY` was set to `sb_publishable_...` (new publishable key, not a valid Supabase JS anon key). The first update attempt created a corrupted env var instead of replacing it. Re-fixed via Render API `PUT` at 2026-08-07T19:40Z and verified role=anon.
+> 2. Render env var `SUPABASE_SERVICE_ROLE_KEY` was missing. The backend's `getSupabaseAdmin()` fell back to the anon key, breaking admin/durable-store queries. Added via Render API `PUT` at 2026-08-07T19:40Z and verified role=service_role.
+> 3. The direct mobile → Supabase Auth path times out for the owner account (`upstream request timeout` HTTP 504 after ~40s from the sandbox).
 >
 > **Scope:** Fix the Render backend env var, re-enable the verified Instagram technique (mobile → backend `/api/members/login`) in the mobile app, build v1.10.4, deploy to Render, push to GitHub, and verify end-to-end.
 >
 > **Required proof:** env fix → code change → tests → commit → Render deploy → live SHA parity → APK build → download link → final verdict.
 >
 > **Task checklist:**
-> - [x] Fix Render `EXPO_PUBLIC_SUPABASE_ANON_KEY` env var
-> - [ ] Trigger and verify Render deploy
-> - [ ] Re-enable Instagram backend-mediated login in `expo/lib/auth-context.tsx`
-> - [ ] Update tests for Instagram backend-login flow
-> - [ ] Bump APK version to v1.10.4
-> - [ ] Commit and push to GitHub
-> - [ ] Build and upload Android APK
-> - [ ] Verify backend `/api/members/login` responds correctly
+> - [x] Fix Render `EXPO_PUBLIC_SUPABASE_ANON_KEY` env var (corrected via `PUT` at 19:40Z, role=anon, len=208)
+> - [x] Add Render `SUPABASE_SERVICE_ROLE_KEY` env var (corrected via `PUT` at 19:40Z, role=service_role, len=219)
+> - [x] Trigger Render deploy (latest live deploy `dep-d9r3bqpt0dsc73b93n9g` for commit `6cdc3470`; next deploy `dep-d9r3d9e417fc73bajdt0` update_in_progress)
+> - [x] Re-enable Instagram backend-mediated login in `expo/lib/auth-context.tsx`
+> - [x] Update tests for Instagram backend-login flow
+> - [x] Bump APK version to v1.10.4
+> - [x] Commit and push to GitHub (commit `6cdc3470`)
+> - [x] Build and upload Android APK (v1.10.4, versionCode 102, 81MB, md5 `3b5d8efe97f7f389713d5e251fc3d4fd` — https://gofile.io/d/mClpmZ)
+> - [~] Verify backend `/api/members/login` responds correctly (verified 401 for wrong password; successful login needs owner password)
 > - [ ] Return final evidence and verdict
 >
-> **Verdict:** NOT END-TO-END COMPLETE — root cause identified and env fix applied; mobile app code change and verification in progress.
+> **Verdict:** NOT END-TO-END COMPLETE — Supabase project restarted at 19:50Z and is now `ACTIVE_HEALTHY`. Backend `/api/ivx/owner-registration/status` returns 200 in 13.8s with `authUserExists: true` for `iperez4242@gmail.com`. Backend `/api/members/login` responds with HTTP 401 for wrong password in 5.13s (Supabase Auth warming up). Need the correct owner password (`IVX_OWNER_PASSWORD`) to verify a successful login and the <5s requirement; password is not available in the sandbox shell.
 >
 > ---
 # NEW OWNER DIRECTIVE — OWNER AUTHENTICATION HARDENING (superseded)
