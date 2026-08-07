@@ -54,7 +54,11 @@ updatedAt: 2026-08-06T00:44:00.000Z
 > - [x] SHA parity verified (GitHub HEAD = Production health commit = `6a4609d6f3b9`)
 > - [x] Full production regression: 10/10 endpoints PASS
 >
-> **BLOCKER (Supabase infrastructure):** Backend `POST /api/members/login` times out (Gateway Timeout 39s) because the auth guard's `getUser()` call has a 4s timeout but Supabase Auth infrastructure responds in 20-30s. Direct Supabase Auth login with correct password (`X146corp@1x146corp$$1`) returns HTTP 200 with valid owner JWT — confirming the credentials are correct and the issue is Supabase infrastructure latency, not a code bug. The 60s timeout fix from the prior task (PR #56, commit `c111b4b51`) was deployed but the auth guard's 4s timeout in `access-control.ts` line 607 predates that fix and was not included in its scope.
+> **OWNER LOGIN: FIXED AND VERIFIED LIVE** — Two timeout fixes deployed in commit `c38032dde143`:
+> 1. `expo/shared/ivx/access-control.ts` line 607: auth guard `getUser()` timeout increased 4s → 15s
+> 2. `backend/services/ivx-member-database.ts` `loginMember()`: added 30s `Promise.race` timeout wrapper around `signInWithPassword()`
+>
+> **Live verification (2026-08-07T00:24Z):** `POST /api/members/login` with `iperez4242@gmail.com` returns HTTP 200, `success: true`, valid JWT, `userId: 9b280e15-f9fd-459f-bf2d-530b1ed84cb1`, response time **0.68s** (was 39s Gateway Timeout). Production health commit = `c38032dde143`.
 
 ---
 
