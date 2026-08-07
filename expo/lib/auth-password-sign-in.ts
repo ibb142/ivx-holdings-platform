@@ -46,7 +46,7 @@ export async function signInWithEmailPassword(
   };
   const traceId = generateAuthTraceId();
 
-  const SIGN_IN_TIMEOUT_MS = 20000;
+  const SIGN_IN_TIMEOUT_MS = 45000;
 
   const signInPromise = client.auth.signInWithPassword({ email, password });
   const timeoutPromise = new Promise<never>((_, reject) => {
