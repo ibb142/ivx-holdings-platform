@@ -3,7 +3,42 @@ overview: "Execute the owner's 16-phase final QA checklist, fix developer-contro
 createdAt: 2026-07-21T18:08:36.341Z
 updatedAt: 2026-08-07T12:40:00.000Z
 ---
-# NEW OWNER DIRECTIVE — INSTAGRAM TECHNIQUE LOGIN FIX (in progress)
+# NEW OWNER DIRECTIVE — OWNER AUTHENTICATION HARDENING (in progress)
+
+> **STATUS:** Owner ordered a stop to the Instagram technique workaround and a full architecture-level repair of owner authentication. The goal is deterministic, fast, secure, observable owner login that completes in under 5 seconds and follows the architecture: Mobile → Supabase Auth → valid JWT → IVX backend → owner authorization → application session. The Instagram technique (mobile → backend `/api/members/login`) is deprecated by this directive.
+>
+> **Scope:**
+> - Revert mobile `login()` from backend-mediated `/api/members/login` to direct Supabase `signInWithPassword`.
+> - Add a dedicated IVX backend owner authorization endpoint (`/api/ivx/owner/authorize`) that validates the Supabase JWT and returns the owner profile.
+> - Replace the global 30s/45s Promise.race timeout with per-stage timeouts and accurate error messages.
+> - Add trace IDs for every login checkpoint (T1–T7) without logging secrets.
+> - Implement a canonical login state machine in the login screen.
+> - Prevent duplicate tap / concurrent login attempts.
+> - Harden owner recovery so it cannot bypass valid authentication.
+> - Add automated tests for the 18 required auth scenarios.
+> - Build and deploy APK v1.10.2, verify SHA parity, and return a full evidence matrix.
+>
+> **Required proof:** evidence gate → timing trace → code changes → tests → commit → deploy → live SHA parity → APK download link → full audit report.
+>
+> **Task checklist:**
+> - [x] Evidence Gate: inspect all auth files and map exact login path
+> - [ ] Trace one login end-to-end and identify real 30s delay segment
+> - [ ] Implement canonical login state machine with per-stage timeouts
+> - [ ] Audit and fix auth-state listeners, storage, singleton client
+> - [ ] Harden owner lookup and backend authorization
+> - [ ] Secure owner recovery and Remember Me behavior
+> - [ ] Add login traceId checkpoint logging (no secrets)
+> - [ ] Add automated tests for all 18 required auth scenarios
+> - [ ] Build and verify Android APK v1.10.2
+> - [ ] Commit, deploy, and verify production SHA parity
+> - [ ] Return full evidence matrix and final verdict
+>
+> **Verdict:** NOT END-TO-END COMPLETE — architecture repair in progress.
+>
+> **Previous Instagram technique APK:** v1.10.1, versionCode 99, 84.1 MB, QA variant — https://gofile.io/d/gyeWqi, md5: `ab1966903d4f0ee2fa79bcebd065503f`. This build is deprecated by the new directive and should be replaced once v1.10.2 is ready.
+>
+> ---
+> # NEW OWNER DIRECTIVE — INSTAGRAM TECHNIQUE LOGIN FIX (deprecated)
 
 > **STATUS:** Owner reported (screenshot 2026-08-07) that mobile owner sign-in still returns HTTP 504 from Supabase Auth. Prior QA certification had verified the *backend* `/api/members/login` endpoint, but the mobile app was still calling Supabase Auth directly from the mobile network path. Owner ordered the Instagram technique: mobile → backend → Supabase → tokens → `setSession`.
 >
