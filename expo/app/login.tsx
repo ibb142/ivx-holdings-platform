@@ -38,6 +38,7 @@ import { getOpenAccessModeMessage, isOpenAccessModeEnabled } from '@/lib/open-ac
 import { supabase, isSupabaseConfigured, getSupabaseConfigAudit, forceProductionSupabaseClient, SUPABASE_USING_PRODUCTION_FALLBACK, SUPABASE_NOT_CONFIGURED_MESSAGE, SUPABASE_HOST_HINT } from '@/lib/supabase';
 import { resolveSupabaseUrl, resolveSupabaseAnonKey } from '@/lib/supabase-env';
 import { logStartup } from '@/lib/startup-trace';
+import { useLoginStateMachine } from '@/lib/use-login-state-machine';
 
 /** Pre-sign-in guard: verifies the resolved Supabase config is safe before
  * sending credentials. Blocks sign-in and shows a clear error if the bundle
@@ -438,6 +439,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
   const postLoginNavigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loginSubmitInFlightRef = useRef(false);
   const ownerTrustedRestoreNavigationDoneRef = useRef(false);
+  const loginMachine = useLoginStateMachine();
   const [telemetrySteps, setTelemetrySteps] = useState<{ step: string; ts: string; detail?: string }[]>([]);
   const pushTelemetry = useCallback((step: string, detail?: string) => {
     const ts = new Date().toISOString().slice(11, 23);
@@ -1184,7 +1186,13 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
   }, [effectiveRecoveryEmail, normalizedEmail, password, login, navigateAfterSuccessfulLogin, shake]);
 
   const handleLogin = async () => {
-    if (loginSubmitInFlightRef.current || isLoading) {
+    // Canonical state machine: reject duplicate taps and concurrent login attempts.
+    if (!loginMachine.tryStart()) {
+      console.log('[Login] Duplicate tap blocked by state machine: state=' + loginMachine.state);
+      return;
+    }
+    if (isLoading) {
+      loginMachine.reset();
       return;
     }
 
@@ -1201,6 +1209,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
       return;
     }
     if (!validateEmail(email.trim())) {
+      loginMachine.transition('FAILED', 'invalid email format');
       setAttemptState({
         status: 'failed',
         title: 'Email format invalid',
@@ -1209,12 +1218,14 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         tone: 'warning'});
       Alert.alert('Invalid Email', 'Please enter a valid email address.');
       shake();
+      loginMachine.reset();
       return;
     }
     const identifier = sanitizeEmail(email);
 
     const passwordForSignIn = password.trim();
     if (!passwordForSignIn) {
+      loginMachine.transition('FAILED', 'empty password');
       setAttemptState({
         status: 'failed',
         title: 'Password required',
@@ -1223,11 +1234,13 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         tone: 'warning'});
       Alert.alert('Missing Password', 'Please enter your password.');
       shake();
+      loginMachine.reset();
       return;
     }
     const rateCheck = checkAuthRateLimit(identifier);
     if (!rateCheck.allowed) {
       const lockedMessage = getRateLimitMessage(rateCheck.lockedUntilMs);
+      loginMachine.transition('FAILED', 'rate limited');
       setAttemptState({
         status: 'failed',
         title: 'Device cooldown active',
@@ -1236,10 +1249,12 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
         tone: 'warning'});
       shake();
       Alert.alert('Account Locked', lockedMessage);
+      loginMachine.reset();
       return;
     }
 
     loginSubmitInFlightRef.current = true;
+    loginMachine.transition('AUTHENTICATING', 'submitting to Supabase');
     try {
       setAttemptState({
       status: 'submitting',
@@ -1319,6 +1334,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     }
 
     if (result.success) {
+      loginMachine.transition('SUCCESS', 'session created');
       setLastFailureReason(null);
       setAttemptState({
         status: 'success',
@@ -1421,6 +1437,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     );
     } finally {
       loginSubmitInFlightRef.current = false;
+      loginMachine.reset();
     }
   };
 

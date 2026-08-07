@@ -22,13 +22,13 @@ updatedAt: 2026-08-07T12:40:00.000Z
 >
 > **Task checklist:**
 > - [x] Evidence Gate: inspect all auth files and map exact login path
-> - [ ] Trace one login end-to-end and identify real 30s delay segment
-> - [ ] Implement canonical login state machine with per-stage timeouts
-> - [ ] Audit and fix auth-state listeners, storage, singleton client
-> - [ ] Harden owner lookup and backend authorization
-> - [ ] Secure owner recovery and Remember Me behavior
-> - [ ] Add login traceId checkpoint logging (no secrets)
-> - [ ] Add automated tests for all 18 required auth scenarios
+> - [x] Trace one login end-to-end and identify real 30s delay segment
+> - [x] Implement canonical login state machine with per-stage timeouts
+> - [x] Audit and fix auth-state listeners, storage, singleton client
+> - [x] Harden owner lookup and backend authorization
+> - [x] Secure owner recovery and Remember Me behavior
+> - [x] Add login traceId checkpoint logging (no secrets)
+> - [x] Add automated tests for all 18 required auth scenarios
 > - [ ] Build and verify Android APK v1.10.2
 > - [ ] Commit, deploy, and verify production SHA parity
 > - [ ] Return full evidence matrix and final verdict

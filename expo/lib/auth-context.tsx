@@ -1426,9 +1426,24 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return sessionPromise;
   }, [clearTwoFactorState, hydrateResolvedRoleInBackground, resolveLocalSessionRoleFallback, resolveServerRole, startMonitor, warmSessionInBackground]);
 
-  const activateOwnerIPSession = useCallback((ip: string, verifiedRole: string = 'owner', verifiedUserId?: string | null, verifiedEmail?: string | null) => {
+  const activateOwnerIPSession = useCallback(async (ip: string, verifiedRole: string = 'owner', verifiedUserId?: string | null, verifiedEmail?: string | null) => {
     if (shouldBlockRoleForAdminAccess(verifiedRole, verifiedEmail)) {
       console.log('[Auth] Trusted owner IP activation blocked because owner-only admin access is enabled for another email:', sanitizeEmail(verifiedEmail ?? 'unknown'));
+      return;
+    }
+
+    // SECURITY HARDENING: Require a valid Supabase session before activating
+    // any owner IP / trusted-device bypass. This prevents authentication-less
+    // access — the owner must have signed in with valid credentials at least
+    // once in this app session for the trusted-device restore to work.
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        console.log('[Auth] Trusted owner IP activation BLOCKED: no valid Supabase session. Authentication-less access denied.');
+        return;
+      }
+    } catch (sessionCheckError) {
+      console.log('[Auth] Trusted owner IP activation BLOCKED: session check failed:', (sessionCheckError as Error)?.message);
       return;
     }
 
@@ -1502,7 +1517,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           await setOwnerIP(currentIP);
           console.log('[Auth] Updated stored owner IP to current:', currentIP);
         }
-        activateOwnerIPSession(currentIP, trustedRole, ownerDeviceMeta.userId, ownerDeviceMeta.email);
+        await activateOwnerIPSession(currentIP, trustedRole, ownerDeviceMeta.userId, ownerDeviceMeta.email);
         return true;
       }
 
@@ -1513,7 +1528,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           console.log('[Auth] Updated stored owner IP during trusted-window restore:', currentIP, 'previous:', storedIP ?? 'none');
         }
         console.log('[Auth] Trusted owner device is still inside the verification window — restoring owner access without blocking on exact IP match. Current:', currentIP ?? 'unavailable', 'Stored:', storedIP ?? 'none', 'Role:', trustedRole, 'User:', ownerDeviceMeta.userId);
-        activateOwnerIPSession(restoreIdentity, trustedRole, ownerDeviceMeta.userId, ownerDeviceMeta.email);
+        await activateOwnerIPSession(restoreIdentity, trustedRole, ownerDeviceMeta.userId, ownerDeviceMeta.email);
         return true;
       }
 
@@ -2740,7 +2755,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         console.log('[Auth] ownerDirectAccess: Updated stored IP to current:', audit.currentIP);
       }
       console.log('[Auth] ownerDirectAccess: restoring via path:', audit.accessPath, 'identity:', accessIdentity, 'role:', trustedRole, 'verifiedUserId:', audit.verifiedUserId);
-      activateOwnerIPSession(accessIdentity, trustedRole, audit.verifiedUserId, audit.verifiedEmail);
+      await activateOwnerIPSession(accessIdentity, trustedRole, audit.verifiedUserId, audit.verifiedEmail);
       return {
         success: true,
         message: `Trusted owner access restored for ${accessIdentity}`,
