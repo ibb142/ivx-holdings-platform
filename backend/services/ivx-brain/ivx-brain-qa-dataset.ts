@@ -223,7 +223,7 @@ function generateInvestmentTests(): IVXQATestCase[] {
     { p: 'What is the ROI on this deal?', facts: ['requires actual numbers', 'time horizon', 'cash flow data'], prohibited: ['inventing ROI', 'guaranteeing return'], reasoning: ['identify inputs', 'calculate ROI', 'state assumptions', 'disclose uncertainty'] },
     { p: 'Should I invest in this property?', facts: ['property data', 'market conditions', 'personal risk tolerance'], prohibited: ['guaranteeing appreciation', 'inventing market data'], reasoning: ['analyze deal', 'assess risks', 'compare alternatives', 'disclose uncertainty'] },
     { p: 'What are the risks of this investment?', facts: ['specific investment', 'market risks', 'liquidity risks'], prohibited: ['downplaying risks', 'claiming risk-free'], reasoning: ['identify all risk categories', 'rate severity', 'suggest mitigations'] },
-    { p: 'Compare two investment strategies', facts: ['both strategies need real data', 'risk-return profile'], prohibited: ['inventing historical returns', 'guaranteeing future performance'], reasoning: ['compare risk-adjusted returns', 'assess time horizons', 'evaluate liquidity'], source: 'required' as const },
+    { p: 'Compare two investment strategies', facts: ['both strategies need real data', 'risk-return profile'], prohibited: ['inventing historical returns', 'guaranteeing future performance'], reasoning: ['compare risk-adjusted returns', 'assess time horizons', 'evaluate liquidity'] },
   ];
   for (let i = 0; i < 100; i++) {
     const base = prompts[i % prompts.length];

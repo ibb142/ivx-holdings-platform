@@ -136,7 +136,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
     const email = user.email ?? '';
 
     let role: string | null = null;
-    let roleSource: OwnerAuthorizationResult['roleSource'] = 'profiles';
+    let roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_not_owner' = 'profiles';
 
     try {
       const { data: profile, error: profileError } = await client
@@ -175,7 +175,8 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
       }, 403);
     }
 
-    const expiresAt = typeof user.expires_at === 'number' ? user.expires_at : Math.floor(Date.now() / 1000) + 3600;
+    const userWithExpiry = user as { expires_at?: number };
+    const expiresAt = typeof userWithExpiry.expires_at === 'number' ? userWithExpiry.expires_at : Math.floor(Date.now() / 1000) + 3600;
     console.log(`[OwnerAuth] ${traceId} authorized owner: userId=${userId} role=${normalizedRole} source=${roleSource} elapsed=${Date.now() - startedAt}ms`);
     return jsonResponse({
       success: true,
