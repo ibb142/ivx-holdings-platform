@@ -176,6 +176,7 @@ import {
   pollSeniorDeveloperWorkerJob,
   submitSeniorDeveloperWorkerJob,
   type WorkerJobView} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
+import { useMediaLifecycleList } from '@/src/modules/media-lifecycle/hooks';
 
 type PickerAsset = {
   uri: string;
@@ -1557,6 +1558,22 @@ export default function IVXOwnerChatRoute() {
   // bubble layout measurement completed.
   const invertedData = useMemo<IVXMessage[]>(() => [...displayedMessages].reverse(), [displayedMessages]);
 
+  // IVX Media Lifecycle: register all chat messages and wire viewport/scroll
+  // tracking so image/video attachments obey centralized lifecycle rules.
+  const mediaLifecycle = useMediaLifecycleList('chat', invertedData, {
+    module: 'ivx-chat',
+    keyExtractor: (_item, index) => `chat:message:${index}`,
+    getMediaType: (item) => {
+      const message = item as IVXMessage;
+      if (message.fileType === 'video') return 'video';
+      if (message.fileType === 'image' || shouldRenderInlineImage(message)) return 'image';
+      return 'unknown';
+    },
+    getSourceUrl: (item) => (item as IVXMessage).fileUrl ?? null,
+    getThumbnailUrl: (item) => (item as IVXMessage).thumbnailUrl ?? (item as IVXMessage).fileUrl ?? null,
+    getContainerId: (item) => (item as IVXMessage).id,
+  });
+
   // Watchdog: report MESSAGE_ARRAY_MERGED / FILTER_VISIBLE_PASSED / DEDUP_PASSED
   // / SEARCH_PIN_FILTER_PASSED for every active trace as soon as its bound
   // assistant transient id surfaces in the relevant pipeline stage.
@@ -1622,18 +1639,22 @@ export default function IVXOwnerChatRoute() {
     }
   }, [allMessages, displayedMessages, searchActive]);
 
-  const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: IVXMessage }[] }) => {
-    if (activeWatchdogTracesRef.current.size === 0) return;
-    const visibleIds = new Set(viewableItems.map((v) => v.item.id));
-    for (const trace of activeWatchdogTracesRef.current.values()) {
-      const report = trace.getReport();
-      if (report.finalStatus !== 'PENDING') continue;
-      const anyVisible = report.assistantTransientIds.some((id) => visibleIds.has(id));
-      if (anyVisible) {
-        trace.pass('ASSISTANT_BUBBLE_VISIBLE', 'viewable on screen');
-        trace.complete('SUCCESS');
+  const handleViewableItemsChanged = useRef((info: { viewableItems: Array<{ item: IVXMessage; index: number | null; isViewable: boolean; percent?: number }> }) => {
+    const { viewableItems } = info;
+    if (activeWatchdogTracesRef.current.size > 0) {
+      const visibleIds = new Set(viewableItems.map((v) => v.item.id));
+      for (const trace of activeWatchdogTracesRef.current.values()) {
+        const report = trace.getReport();
+        if (report.finalStatus !== 'PENDING') continue;
+        const anyVisible = report.assistantTransientIds.some((id) => visibleIds.has(id));
+        if (anyVisible) {
+          trace.pass('ASSISTANT_BUBBLE_VISIBLE', 'viewable on screen');
+          trace.complete('SUCCESS');
+        }
       }
     }
+    // Forward viewport info to the centralized media lifecycle controller.
+    mediaLifecycle.handleViewableItemsChanged({ viewableItems: viewableItems as never });
   }).current;
   const pinnedMessageIdSet = useMemo<Set<string>>(() => new Set(pinnedMessageIds), [pinnedMessageIds]);
   const pinnedMessages = useMemo<IVXMessage[]>(() => {
@@ -5466,6 +5487,7 @@ export default function IVXOwnerChatRoute() {
 
   const handleMessageListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     ivxDiagnostics.recordScroll('message-list');
+    mediaLifecycle.handleScroll(event);
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     // INVERTED FLATLIST: offset 0 = newest message (visually at bottom). The
     // user is "at bottom" (latest) when contentOffset.y is near 0. The user is
@@ -5527,7 +5549,7 @@ export default function IVXOwnerChatRoute() {
           });
       }
     }
-  }, [initialScrollPending, searchActive, displayedMessages, messagesQuery.data, queryClient]);
+  }, [initialScrollPending, searchActive, displayedMessages, messagesQuery.data, queryClient, mediaLifecycle]);
 
   const handleScrollToLatest = useCallback(() => {
     ivxDiagnostics.recordAutoScroll('jump-to-latest');
