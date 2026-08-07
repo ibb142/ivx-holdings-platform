@@ -622,12 +622,19 @@ export async function loginMember(email: string, password: string): Promise<Memb
   }
 
   // 2. Supabase Auth path — use the ANON key client so signInWithPassword returns a real session.
+  //    Wrap in a 30s timeout to prevent Render's 60s gateway from killing the request before
+  //    we can return a structured error. Supabase Auth can take 20-25s under load.
   try {
     const anonClient = getSupabaseAnonClient();
-    const { data, error } = await anonClient.auth.signInWithPassword({
+    const authPromise = anonClient.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('Supabase Auth sign-in timed out after 30s.')), 30_000);
+      if (typeof t === 'object' && t && 'unref' in t) (t as { unref?: () => void }).unref?.();
+    });
+    const { data, error } = await Promise.race([authPromise, timeoutPromise]);
     if (error) {
       const msg = error.message.toLowerCase();
       if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
