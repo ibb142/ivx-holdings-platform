@@ -48,9 +48,9 @@ export interface IVXStagedTimeoutBannerProps {
   onQueryBackendStatus: (traceId: string) => Promise<TimeoutEvidence | null>;
 }
 
-const STAGE_WORKING_MS = 15_000;
-const STAGE_RETRY_MS = 45_000;
-const STAGE_STATUS_CHECK_MS = 90_000;
+const STAGE_WORKING_MS = 30_000;
+const STAGE_RETRY_MS = 60_000;
+const STAGE_STATUS_CHECK_MS = 120_000;
 const STAGE_FAIL_MS = 180_000;
 
 export function IVXStagedTimeoutBanner({

@@ -3285,12 +3285,14 @@ export default function IVXOwnerChatRoute() {
           // Mark the handoff before invoking the mutation so a blocked persistence
           // queue can never strand this trace at USER_ROW_INSERTED.
           wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
-          try {
-            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId });
-          } catch (aiErr) {
+          // FIX: Fire AI reply as background — do NOT block the send mutation.
+          void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
             console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_RETRY_1', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
-            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId });
-          }
+            void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((retryErr: unknown) => {
+              console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_BOTH_FAILED', { clientId, err: retryErr instanceof Error ? retryErr.message : String(retryErr) });
+              wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation rejected twice: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`);
+            });
+          });
         } else {
           console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_NO_AI_BRANCH', { clientId, mode });
           wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first_send_only mode=${mode}`);
@@ -3445,7 +3447,13 @@ export default function IVXOwnerChatRoute() {
             }
           }
         };
-        await triggerAIWithRetry();
+        // FIX: Fire the AI reply as a background side effect — do NOT await it.
+        // The send mutation must complete as soon as the user message is persisted
+        // so onSuccess fires promptly (composer already cleared in handleSend,
+        // pending message removed, user can send again). The assistantReplyMutation
+        // manages its own loading state (aiReplyPending) and inserts the assistant
+        // message when the reply arrives via realtime/polling.
+        void triggerAIWithRetry();
       } else if (mode === 'send_only') {
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_only_no_ai');
         watchdogTrace?.complete('SUCCESS');
@@ -3459,7 +3467,8 @@ export default function IVXOwnerChatRoute() {
       // "message disappears after send" gap). The owner content-dedup in
       // `allMessages` suppresses the optimistic copy the moment the remote row
       // arrives, so the brief overlap never renders a duplicate.
-      commitComposerClear(variables.capturedText);
+      // Composer is now cleared immediately in handleSend (before mutate).
+      // This refetch ensures the persisted remote row replaces the optimistic copy.
       try {
         await queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
       } catch (refetchError) {
@@ -4194,8 +4203,13 @@ export default function IVXOwnerChatRoute() {
     // unrelated message.
     const detectedTask = detectChatLiveWorkTask(text);
     setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
+    // FIX: Clear the composer IMMEDIATELY before firing the mutation so the user
+    // can start typing their next message right away. The previous code only
+    // cleared the composer in sendMessageMutation.onSuccess, which fires AFTER
+    // the entire send+AI round trip — potentially 90s later.
+    commitComposerClear(normalizedText);
     sendMessageMutation.mutate({ text, mode: mode as 'send_only' | 'send_and_ai', clientId, capturedText: normalizedText, replyTo, watchdogTraceId: watchdogTrace.traceId });
-  }, [attachmentMutation.isPending, composerHasText, draftAttachments.length, isPickingFile, localFirstChatMode, sendMessageMutation.isPending, selectedReplyContext, sendDraftAttachment, sendMessageMutation]);
+  }, [attachmentMutation.isPending, commitComposerClear, composerHasText, draftAttachments.length, isPickingFile, localFirstChatMode, sendMessageMutation.isPending, selectedReplyContext, sendDraftAttachment, sendMessageMutation]);
 
   const handleStartReplyToMessage = useCallback((message: ChatMessage) => {
     const previewText = safeTrim(message.text) || safeTrim(message.fileName) || 'Attachment';
