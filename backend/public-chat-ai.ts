@@ -620,7 +620,11 @@ export async function generatePublicChatAnswer(input: {
       return await gateAnswer(result);
     }
   } catch (error) {
-    console.log('[PublicChatAI] IVX AI request failed, falling back:', error instanceof Error ? error.message : 'unknown');
+    const errMsg = error instanceof Error ? error.message : 'unknown';
+    const errName = error instanceof Error ? error.name : 'unknown';
+    console.log('[PublicChatAI] IVX AI request failed, falling back:', errMsg);
+    // Temporary debug: surface sanitized error info for diagnosis
+    (globalThis as Record<string, unknown>).__ivxLastChatError = { message: errMsg.slice(0, 200), name: errName };
   }
 
   // Verification / confirmation requests must never leak an empty fallback.
