@@ -3228,6 +3228,41 @@ app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context
 // Public-safe AI status — minimal info, no credentials, no internal details.
 app.get('/api/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
 app.get('/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
+// Temporary diagnostic: surface the last AI error and provider health for debugging
+app.get('/api/ivx/chat-debug', () => {
+  const lastErr = (globalThis as Record<string, unknown>).__ivxLastChatError as { message: string; name: string } | undefined;
+  const health = getProviderHealth();
+  const startup = validateIVXAIStartup();
+  return Response.json({
+    ok: true,
+    lastError: lastErr ?? null,
+    providerHealth: {
+      state: health.state,
+      provider: health.provider,
+      model: health.model,
+      adapterVersion: health.adapterVersion,
+      credentialLoaded: health.credentialLoaded,
+      credentialValid: health.credentialValid,
+      lastHttpStatus: health.lastHttpStatus,
+      fallbackEnabled: health.fallbackEnabled,
+      fallbackUsed: health.fallbackUsed,
+      error: health.error ? health.error.slice(0, 200) : null,
+      traceId: health.traceId,
+    },
+    startup: {
+      ok: startup.ok,
+      providerType: startup.providerType,
+      model: startup.model,
+      adapterVersion: startup.adapterVersion,
+      keyLoaded: startup.keyLoaded,
+      keyPrefix: startup.keyPrefix,
+      baseUrl: startup.baseUrl,
+      endpoint: startup.endpoint,
+      errors: startup.errors,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Owner-only AI proxy status — requires valid owner JWT, returns internal runtime details.
 app.options('/api/ivx/owner-ai/proxy-status', () => ownerAIOptions());
