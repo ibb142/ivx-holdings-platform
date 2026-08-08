@@ -16,6 +16,14 @@ try {
       create: (styles: Record<string, unknown>) => styles,
       flatten: (styles: Record<string, unknown>) => styles,
     },
+    Linking: {
+      canOpenURL: async () => true,
+      openURL: async () => {},
+    },
+    AppState: {
+      addEventListener: () => ({ remove: () => {} }),
+      currentState: 'active',
+    },
   }));
 } catch (e) {
   // Already mocked or bun:test not available
