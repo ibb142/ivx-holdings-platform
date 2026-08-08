@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 // Mock react-native before any module that imports it
 mock.module('react-native', () => ({
   Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
+  StyleSheet: { create: (styles: Record<string, unknown>) => styles, flatten: (styles: Record<string, unknown>) => styles },
+  Linking: { canOpenURL: async () => true, openURL: async () => {}, getInitialURL: async () => null },
+  AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+  TurboModuleRegistry: { get: () => ({}) },
+  NativeModules: {},
+  NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
 }));
 
 // Mock @supabase/supabase-js before any transitive import
@@ -30,6 +36,13 @@ mock.module('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+// Mock expo-secure-store so @/lib/supabase can load without a native module.
+mock.module('expo-secure-store', () => ({
+  getItem: async () => null,
+  setItem: async () => {},
+  deleteItem: async () => {},
+}));
+
 const mockSessionToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
 
 const mockSupabase = {
@@ -47,6 +60,21 @@ const mockSupabase = {
 
 // Delegate to the preload Proxy mock for @/lib/supabase
 (globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__ = mockSupabase;
+
+// Mock @/lib/supabase so seniorDeveloperApprovalService gets a real-looking
+// owner session without needing the global preload.
+mock.module('@/lib/supabase', () => ({
+  supabase: mockSupabase,
+  getSupabaseClient: () => mockSupabase,
+  isSupabaseConfigured: () => true,
+  ensureSupabaseClient: () => mockSupabase,
+  getSupabaseConfigAudit: () => ({ urlConfigured: true, keyConfigured: true, usingFallback: false, host: 'test', initError: null }),
+  isSelfHostedSupabase: () => false,
+  SUPABASE_HOST_HINT: 'test.supabase.co',
+  forceProductionSupabaseClient: () => mockSupabase,
+  PRODUCTION_SUPABASE_HOST_HINT: 'test.supabase.co',
+  PRODUCTION_SUPABASE_PROJECT_REF: 'test',
+}));
 
 mock.module('@/lib/ivx-supabase-client', () => ({
   getIVXAccessToken: async () => mockSessionToken,

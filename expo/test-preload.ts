@@ -19,11 +19,15 @@ try {
     Linking: {
       canOpenURL: async () => true,
       openURL: async () => {},
+      getInitialURL: async () => null,
     },
     AppState: {
       addEventListener: () => ({ remove: () => {} }),
       currentState: 'active',
     },
+    TurboModuleRegistry: { get: () => ({}) },
+    NativeModules: {},
+    NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
   }));
 } catch (e) {
   // Already mocked or bun:test not available
