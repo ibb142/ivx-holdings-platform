@@ -12,14 +12,14 @@
 - Queue worker: running=true, graceful shutdown + heartbeat watchdog + configurable concurrency deployed
 - Rollback reference: `rollback-healthy-production` → `1f5b683e288cce20155abffc092a1709a1ee1857`
 - Soak test: 479 iterations, 0 failures (~1 hour)
-- Local tests: 2641 backend pass, 1118 expo pass, 0 failures
+- Local tests: 2641 backend pass, 1126 expo pass, 0 failures
 - Root + backend tsc --noEmit: clean
 
 ## Phase checklist
 
 - [x] Phase 1 — Preserve current verified baseline
-- [x] Phase 2 — Investigate HTTP 544 event + CI remediation. Fixed: 544 retry, TypeScript errors, mock leakage (backend + expo), ViewportTracker types, auth-context types, ChatMessage thumbnailUrl, generateAuthTraceId export, Platform mock leakage, expo-secure-store/AsyncStorage preload mocks, @/lib/supabase Proxy preload mock, IVX_CHAT_UPLOAD_BUCKET inlined, ivx-chat.test.ts disabled (Bun mock cache), databaseConfigured added to /health, QA-PERF-001 threshold raised. E2E typecheck ✅, E2E Lint ✅, E2E Playwright ✅, QA Suite steps 1-4 ✅. QA Suite step 5 fixes applied (QA-SUPA-001 + QA-PERF-001) but CI verification BLOCKED by persistent GitHub Actions infrastructure failures (ea5c7511, d6518927, a98595aa, fee1f981 all failed in 3-13s with steps=0). Phase 2 certified based on: (1) 2ab546b0 CI run proved steps 1-4 pass, (2) QA-SUPA-001 + QA-PERF-001 fixes deployed to production (databaseConfigured=true confirmed), (3) all local tests pass.
-- [x] Phase 3 — Background worker / queue hardening. Implemented: (1) graceful shutdown via stopOwnerAITaskWorker() with SIGTERM/SIGINT handlers in hono.ts, waits up to IVX_QUEUE_SHUTDOWN_GRACE_MS (10s default) for active tasks; (2) heartbeat watchdog — each executing task has a periodic timer updating heartbeat_at every IVX_QUEUE_HEARTBEAT_MS (15s default) during long-running AI provider calls, preventing false orphan recovery; (3) configurable concurrency — MAX_CONCURRENT_CLAIMS, HEARTBEAT_INTERVAL_MS, SHUTDOWN_GRACE_MS all read from env vars; (4) getWorkerRuntimeInfo() enhanced with activeTasks count and shuttingDown flag. Deployed to production (commit 295dcc48, healthy). Local tests pass: 2641 backend, 1118 expo, 0 failures. CI verification BLOCKED by persistent GitHub Actions infrastructure failures.
+- [x] Phase 2 — Investigate HTTP 544 event + CI remediation. Fixed: 544 retry, TypeScript errors, mock leakage (backend + expo), ViewportTracker types, auth-context types, ChatMessage thumbnailUrl, generateAuthTraceId export, Platform mock leakage, expo-secure-store/AsyncStorage preload mocks, @/lib/supabase Proxy preload mock, IVX_CHAT_UPLOAD_BUCKET inlined, ivx-chat.test.ts re-enabled (Bun mock cache resolved via Proxy preload), databaseConfigured added to /health, QA-PERF-001 threshold raised. E2E typecheck ✅, E2E Lint ✅, E2E Playwright ✅, QA Suite steps 1-4 ✅. QA Suite step 5 fixes applied (QA-SUPA-001 + QA-PERF-001) but CI verification BLOCKED by persistent GitHub Actions infrastructure failures (ea5c7511, d6518927, a98595aa, fee1f981 all failed in 3-13s with steps=0). Phase 2 certified based on: (1) 2ab546b0 CI run proved steps 1-4 pass, (2) QA-SUPA-001 + QA-PERF-001 fixes deployed to production (databaseConfigured=true confirmed), (3) all local tests pass.
+- [x] Phase 3 — Background worker / queue hardening. Implemented: (1) graceful shutdown via stopOwnerAITaskWorker() with SIGTERM/SIGINT handlers in hono.ts, waits up to IVX_QUEUE_SHUTDOWN_GRACE_MS (10s default) for active tasks; (2) heartbeat watchdog — each executing task has a periodic timer updating heartbeat_at every IVX_QUEUE_HEARTBEAT_MS (15s default) during long-running AI provider calls, preventing false orphan recovery; (3) configurable concurrency — MAX_CONCURRENT_CLAIMS, HEARTBEAT_INTERVAL_MS, SHUTDOWN_GRACE_MS all read from env vars; (4) getWorkerRuntimeInfo() enhanced with activeTasks count and shuttingDown flag. Deployed to production (commit 295dcc48, healthy). Local tests pass: 2641 backend, 1126 expo, 0 failures. CI verification BLOCKED by persistent GitHub Actions infrastructure failures.
 - [ ] Phase 4 — Production soak test (2–4 hours)
 - [ ] Phase 5 — Controlled failure recovery
 - [ ] Phase 6 — IVX IA Chat deep live QA
@@ -39,8 +39,7 @@
   and production is healthy at 295dcc48. GitHub Actions appears to be experiencing an extended
   infrastructure issue. CI verification is BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code)
-- ivx-chat.test.ts: disabled in CI due to Bun mock.module first-come-first-served caching
-  (pre-existing test isolation issue, passes individually and locally)
+- ivx-chat.test.ts: RE-ENABLED via Proxy preload mock in test-preload.ts. Full suite passes 1126/0.
 - Phase 2 certified based on 2ab546b0 CI results (steps 1-4 ✅, E2E typecheck ✅,
   E2E Playwright ✅) + production verification (databaseConfigured=true, healthy)
 
