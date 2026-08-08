@@ -2958,6 +2958,17 @@ app.get('/health', async (context) => {
     // audit failed — defaults remain false/empty
   }
 
+  // Supabase configuration check for QA-SUPA-001.
+  // Only exposes a boolean — no URLs, keys, or project refs.
+  const databaseConfigured = Boolean(
+    readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) ||
+    readTrimmed(process.env.SUPABASE_URL)
+  ) && Boolean(
+    readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) ||
+    readTrimmed(process.env.SUPABASE_SERVICE_KEY) ||
+    readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)
+  );
+
   // SECURITY: Public /health returns only minimal uptime info.
   // No route enumeration, no credential presence, no internal markers,
   // no key prefixes, no deployment history, no service IDs.
@@ -2965,6 +2976,7 @@ app.get('/health', async (context) => {
   return context.json({
     ok: true,
     status: 'healthy',
+    databaseConfigured,
     ai: {
       ok: aiStartup.ok,
       model: aiStartup.model,
