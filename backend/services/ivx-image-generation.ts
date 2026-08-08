@@ -77,7 +77,7 @@ export const defaultGatewayImageGenerator: GatewayImageGenerator = async (input)
   const isMultimodalLLM = input.modelId.includes('gemini') || input.modelId.includes('gpt-5');
   if (isMultimodalLLM) {
     const result = await aiModule.generateText({
-      model: provider(input.modelId),
+      model: provider.chat(input.modelId),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       providerOptions: { google: { responseModalities: ['TEXT', 'IMAGE'] } } as any,
       messages: [
