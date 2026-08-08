@@ -323,9 +323,11 @@ function buildRecord(input: CreateDealInput, prior?: DealTrackingRecord): DealTr
   };
 }
 
-export async function listDeals(): Promise<DealTrackingRecord[]> {
+/** Optional limit for listDeals — caps the response payload when the deal portfolio grows large. */
+export async function listDeals(limit?: number): Promise<DealTrackingRecord[]> {
   const items = await readJsonFile<DealTrackingRecord[]>(STATE, []);
-  return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const sorted = [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return typeof limit === 'number' && limit > 0 ? sorted.slice(0, limit) : sorted;
 }
 
 export async function getDeal(id: string): Promise<DealTrackingRecord | null> {
