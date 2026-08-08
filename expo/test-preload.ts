@@ -42,3 +42,32 @@ try {
 } catch (e) {
   // Already mocked or bun:test not available
 }
+
+// Mock expo-secure-store so @/lib/supabase can load without a native module.
+// Without this, the real @/lib/supabase module throws on import in CI,
+// causing any test that transitively imports it (e.g. ivxChat.ts) to get
+// an empty module object with undefined exports.
+try {
+  mock.module('expo-secure-store', () => ({
+    getItem: async () => null,
+    setItem: async () => {},
+    deleteItem: async () => {},
+  }));
+} catch (e) {
+  // Already mocked or bun:test not available
+}
+
+// Mock @react-native-async-storage/async-storage globally so modules that
+// import it at the top level can load without a native module.
+try {
+  mock.module('@react-native-async-storage/async-storage', () => ({
+    default: {
+      getItem: async () => null,
+      setItem: async () => {},
+      removeItem: async () => {},
+      clear: async () => {},
+    },
+  }));
+} catch (e) {
+  // Already mocked or bun:test not available
+}
