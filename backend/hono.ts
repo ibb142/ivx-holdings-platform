@@ -45,6 +45,7 @@ import {
 } from './api/ivx-owner-ai-durable';
 import {
   startOwnerAITaskWorker,
+  stopOwnerAITaskWorker,
   recordOwnerAIIncident,
   classify503Source,
   checkAIHealth as checkOwnerAIHealth,
@@ -5919,6 +5920,12 @@ try { startScaleLoopScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono]
 try { startRoleAgentScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] role-agent run loop failed to start:', err instanceof Error ? err.message : err); }
 try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI-Hono] engineering OS 2h report ticker failed to start:', err instanceof Error ? err.message : err); }
 try { startOwnerAITaskWorker(); } catch (err) { console.warn('[IVXOwnerAI-Hono] owner AI durable task worker failed to start:', err instanceof Error ? err.message : err); }
+
+// Graceful shutdown: stop the queue worker on SIGTERM/SIGINT so Render
+// doesn't kill tasks mid-execution. The worker waits up to
+// IVX_QUEUE_SHUTDOWN_GRACE_MS for active tasks to complete.
+process.on('SIGTERM', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
+process.on('SIGINT', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
 try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
 try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
 try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }

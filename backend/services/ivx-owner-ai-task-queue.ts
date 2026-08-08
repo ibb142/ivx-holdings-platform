@@ -453,11 +453,16 @@ export async function replayDeadLetterTasks(): Promise<number> {
 // ---------------------------------------------------------------------------
 
 const WORKER_ID = `ivx-ownerai-worker-${Math.random().toString(36).slice(2, 10)}`;
-const MAX_CONCURRENT_CLAIMS = 2;
+const MAX_CONCURRENT_CLAIMS = Number.parseInt(process.env.IVX_QUEUE_MAX_CONCURRENT ?? '2', 10) || 2;
+const HEARTBEAT_INTERVAL_MS = Number.parseInt(process.env.IVX_QUEUE_HEARTBEAT_MS ?? '15000', 10) || 15_000;
+const SHUTDOWN_GRACE_MS = Number.parseInt(process.env.IVX_QUEUE_SHUTDOWN_GRACE_MS ?? '10000', 10) || 10_000;
 
 let workerTimer: ReturnType<typeof setInterval> | null = null;
 let workerLastTickAt: string | null = null;
 let workerTickRunning = false;
+let workerShuttingDown = false;
+let activeTaskCount = 0;
+let activeHeartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 async function claimTask(candidate: IVXOwnerAITaskRow): Promise<IVXOwnerAITaskRow | null> {
   // Optimistic claim: only wins if the row is still claimable.
@@ -501,6 +506,11 @@ async function persistAssistantReply(task: IVXOwnerAITaskRow, answer: string): P
 }
 
 async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
+  activeTaskCount++;
+  const heartbeatTimer = setInterval(() => {
+    void patchTask(task.id, { heartbeat_at: nowIso() }).catch(() => {});
+  }, HEARTBEAT_INTERVAL_MS);
+  activeHeartbeatTimers.set(task.id, heartbeatTimer);
   const startedMs = Date.now();
   const queueMs = Math.max(0, startedMs - new Date(task.created_at).getTime());
   try {
@@ -560,6 +570,7 @@ async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'owner AI task execution failed';
+    // heartbeat timer is cleared in finally
     const httpStatus = (error as { httpStatus?: number }).httpStatus ?? null;
     const classification = classifyFailureForRetry({ httpStatus, message });
     const attempt = task.retry_count + 1;
@@ -592,11 +603,15 @@ async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
       failure_source: source,
       durations: { queueMs, totalMs: Date.now() - startedMs },
     });
+  } finally {
+    clearInterval(heartbeatTimer);
+    activeHeartbeatTimers.delete(task.id);
+    activeTaskCount--;
   }
 }
 
 async function workerTick(): Promise<void> {
-  if (workerTickRunning || !isTaskQueueConfigured()) return;
+  if (workerTickRunning || !isTaskQueueConfigured() || workerShuttingDown) return;
   workerTickRunning = true;
   workerLastTickAt = nowIso();
   try {
@@ -750,14 +765,39 @@ export async function ensureTaskTable(): Promise<boolean> {
 /** Start the durable worker: DDL bootstrap + restart recovery first, then a polling loop. */
 export function startOwnerAITaskWorker(intervalMs: number = 5_000): void {
   if (workerTimer) return;
-  console.log('[IVXOwnerAITaskQueue] starting durable worker', { workerId: WORKER_ID, intervalMs });
+  workerShuttingDown = false;
+  console.log('[IVXOwnerAITaskQueue] starting durable worker', { workerId: WORKER_ID, intervalMs, maxConcurrent: MAX_CONCURRENT_CLAIMS, heartbeatMs: HEARTBEAT_INTERVAL_MS });
   void ensureTaskTable().then(() => recoverOrphanTasks()).catch(() => 0);
   workerTimer = setInterval(() => { void workerTick(); }, intervalMs);
   (workerTimer as { unref?: () => void }).unref?.();
 }
 
-export function getWorkerRuntimeInfo(): { workerId: string; running: boolean; lastTickAt: string | null } {
-  return { workerId: WORKER_ID, running: workerTimer !== null, lastTickAt: workerLastTickAt };
+/** Graceful shutdown: stop polling, wait for active tasks, clear heartbeat timers.
+ * Called on SIGTERM/SIGINT to ensure Render doesn't kill tasks mid-execution. */
+export async function stopOwnerAITaskWorker(graceMs: number = SHUTDOWN_GRACE_MS): Promise<void> {
+  workerShuttingDown = true;
+  if (workerTimer) {
+    clearInterval(workerTimer);
+    workerTimer = null;
+  }
+  console.log('[IVXOwnerAITaskQueue] graceful shutdown initiated', { workerId: WORKER_ID, activeTasks: activeTaskCount, graceMs });
+  const deadline = Date.now() + graceMs;
+  while (activeTaskCount > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  for (const timer of activeHeartbeatTimers.values()) {
+    clearInterval(timer);
+  }
+  activeHeartbeatTimers.clear();
+  if (activeTaskCount > 0) {
+    console.warn('[IVXOwnerAITaskQueue] graceful shutdown exceeded grace period', { workerId: WORKER_ID, activeTasks: activeTaskCount });
+  } else {
+    console.log('[IVXOwnerAITaskQueue] graceful shutdown complete', { workerId: WORKER_ID });
+  }
+}
+
+export function getWorkerRuntimeInfo(): { workerId: string; running: boolean; lastTickAt: string | null; activeTasks: number; shuttingDown: boolean } {
+  return { workerId: WORKER_ID, running: workerTimer !== null, lastTickAt: workerLastTickAt, activeTasks: activeTaskCount, shuttingDown: workerShuttingDown };
 }
 
 // ---------------------------------------------------------------------------
