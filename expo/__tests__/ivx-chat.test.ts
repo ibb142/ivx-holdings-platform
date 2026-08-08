@@ -463,9 +463,12 @@ const mockSupabase = {
   },
 };
 
-mock.module('@/lib/supabase', () => ({
-  supabase: mockSupabase,
-}));
+// Override the global supabase mock from test-preload.ts. The preload
+// registers a Proxy-based mock.module('@/lib/supabase') that delegates to
+// globalThis.__IVX_TEST_SUPABASE__. Setting it here ensures ivxChat.ts uses
+// our mockSupabase object without needing to win Bun's first-come-first-served
+// mock.module race.
+(globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__ = mockSupabase;
 
 mock.module('@react-native-async-storage/async-storage', () => ({
   default: {
