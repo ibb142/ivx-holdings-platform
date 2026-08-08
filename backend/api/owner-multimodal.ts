@@ -230,7 +230,7 @@ async function runVisionAnalysis(input: {
   const model = getVisionModel();
 
   const result = await generateText({
-    model: provider(model),
+    model: provider.chat(model),
     messages: [
       {
         role: 'user',
@@ -259,7 +259,7 @@ async function runTextAnalysis(input: { system?: string; prompt: string }): Prom
   const model = getTextModel();
 
   const result = await generateText({
-    model: provider(model),
+    model: provider.chat(model),
     system: input.system,
     prompt: input.prompt.slice(0, MAX_PROMPT_CHARS * 4),
   });

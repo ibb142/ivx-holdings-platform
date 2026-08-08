@@ -680,7 +680,7 @@ async function requestIVXAITextInternal(input: {
             ? [...baseMessages, multimodalUser]
             : [...messages, multimodalUser];
           result = await runWithHardTimeout('IVX AI direct (multimodal)', generateText({
-            model: gatewayProvider(model),
+            model: gatewayProvider.chat(model),
             system: system.length > 0 ? system : undefined,
             maxOutputTokens: input.maxOutputTokens,
             abortSignal: input.abortSignal ?? undefined,
@@ -690,14 +690,14 @@ async function requestIVXAITextInternal(input: {
         } else {
           result = messages.length > 0
             ? await runWithHardTimeout('IVX AI direct (messages)', generateText({
-                model: gatewayProvider(model),
+                model: gatewayProvider.chat(model),
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
                 abortSignal: input.abortSignal ?? undefined,
                 messages,
               }), callTimeoutMs)
             : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
-                model: gatewayProvider(model),
+                model: gatewayProvider.chat(model),
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
                 abortSignal: input.abortSignal ?? undefined,
@@ -983,7 +983,7 @@ export async function* streamIVXAIText(input: {
     // Direct OpenAI-compatible client for both key types (no gateway SDK).
     const gatewayProvider = createOpenAI({ apiKey, baseURL });
     const streamResult = streamText({
-      model: gatewayProvider(model),
+      model: gatewayProvider.chat(model),
       system: system.length > 0 ? system : undefined,
       maxOutputTokens: input.maxOutputTokens,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
