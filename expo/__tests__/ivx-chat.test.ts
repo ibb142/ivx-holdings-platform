@@ -463,6 +463,13 @@ const mockSupabase = {
   },
 };
 
+// Mock @supabase/supabase-js to prevent leakage from other test files that
+// mock it globally (Bun mock.module is process-global). @/shared/ivx/access-control
+// imports createClient from this package transitively.
+mock.module('@supabase/supabase-js', () => ({
+  createClient: () => mockSupabase,
+}));
+
 mock.module('@/lib/supabase', () => ({
   supabase: mockSupabase,
 }));
@@ -496,6 +503,9 @@ const ivxChat = await import('../src/modules/chat/services/ivxChat');
 beforeEach(() => {
   currentState = createState();
   asyncStorageState.clear();
+  // Invalidate room status cache between tests — cachedRoomStatus is a
+  // module-level variable that persists across tests in the same file.
+  ivxChat.invalidateRoomStatusCache();
 });
 
 describe('ivx chat bootstrap and fallback flow', () => {
