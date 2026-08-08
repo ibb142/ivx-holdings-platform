@@ -1566,12 +1566,12 @@ export default function IVXOwnerChatRoute() {
     keyExtractor: (_item, index) => `chat:message:${index}`,
     getMediaType: (item) => {
       const message = item as IVXMessage;
-      if (message.fileType === 'video') return 'video';
-      if (message.fileType === 'image' || shouldRenderInlineImage(message)) return 'image';
-      return 'unknown';
+      if (message.attachmentKind === 'video') return 'video' as const;
+      if (message.attachmentKind === 'image' && message.attachmentUrl) return 'image' as const;
+      return 'unknown' as const;
     },
-    getSourceUrl: (item) => (item as IVXMessage).fileUrl ?? null,
-    getThumbnailUrl: (item) => (item as IVXMessage).thumbnailUrl ?? (item as IVXMessage).fileUrl ?? null,
+    getSourceUrl: (item) => (item as IVXMessage).attachmentUrl ?? null,
+    getThumbnailUrl: (item) => (item as IVXMessage).attachmentUrl ?? null,
     getContainerId: (item) => (item as IVXMessage).id,
   });
 

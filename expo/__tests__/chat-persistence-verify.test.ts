@@ -32,22 +32,16 @@ mock.module('@react-native-async-storage/async-storage', () => ({
 }));
 
 mock.module('react-native', () => ({
+  Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
   Linking: { canOpenURL: async () => true, openURL: async () => {} },
   AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
 }));
 
-mock.module('@/lib/supabase', () => ({
-  supabase: {
-    from: () => ({
-      select: () => ({ eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }) }),
-      insert: () => ({ select: () => Promise.resolve({ data: null, error: { message: 'schema missing', code: '42P01' } }) }),
-      upsert: () => Promise.resolve({ data: null, error: null }),
-    }),
-    storage: { from: () => ({ upload: async () => ({ error: null }), getPublicUrl: () => ({ data: { publicUrl: 'https://x' } }) }) },
-    channel: () => ({ on: () => ({ subscribe: () => ({}) }) }),
-    removeChannel: () => Promise.resolve('ok'),
-  },
-}));
+// NOTE: Do NOT mock @/lib/supabase here. This test only imports from
+// ivxChatMessageMerge which has ZERO runtime imports. Mocking @/lib/supabase
+// here wins Bun's first-come-first-served mock.module race over ivx-chat.test.ts,
+// causing ivxChat.ts to get the wrong supabase object and all its exports to be
+// undefined in CI.
 
 beforeEach(() => {
   asyncStorageState.clear();

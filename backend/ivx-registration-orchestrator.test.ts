@@ -34,7 +34,13 @@ mock.module('./services/ivx-durable-store', () => ({
   isDurableStoreConfigured: () => true,
   readDurableJson: async <T>(file: string, fallback: T): Promise<T> => ((_store[file] as T) ?? fallback),
   writeDurableJson: async (file: string, value: unknown): Promise<void> => { _store[file] = value; },
-  durableKeyForFile: (f: string) => f,
+  durableKeyForFile: (f: string) => {
+    const marker = "logs/audit/";
+    const i = f.indexOf(marker);
+    if (i >= 0) return f.slice(i + marker.length);
+    const p = f.split("/").filter(Boolean);
+    return p.slice(-2).join("/") || f;
+  },
   appendDurableEvent: async () => {},
   readDurableEvents: async () => [],
 }));

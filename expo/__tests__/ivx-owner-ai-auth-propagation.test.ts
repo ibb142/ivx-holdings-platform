@@ -45,10 +45,8 @@ const mockSupabase = {
   },
 };
 
-mock.module('@/lib/supabase', () => ({
-  supabase: mockSupabase,
-  getSupabaseClient: () => mockSupabase,
-}));
+// Override the global supabase mock from test-preload.ts Proxy.
+(globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__ = mockSupabase;
 
 mock.module('@/lib/ivx-supabase-client', () => ({
   getIVXAccessToken: async () => mockSessionToken,

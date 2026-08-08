@@ -45,6 +45,7 @@ import {
 } from './api/ivx-owner-ai-durable';
 import {
   startOwnerAITaskWorker,
+  stopOwnerAITaskWorker,
   recordOwnerAIIncident,
   classify503Source,
   checkAIHealth as checkOwnerAIHealth,
@@ -2958,6 +2959,17 @@ app.get('/health', async (context) => {
     // audit failed — defaults remain false/empty
   }
 
+  // Supabase configuration check for QA-SUPA-001.
+  // Only exposes a boolean — no URLs, keys, or project refs.
+  const databaseConfigured = Boolean(
+    readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) ||
+    readTrimmed(process.env.SUPABASE_URL)
+  ) && Boolean(
+    readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) ||
+    readTrimmed(process.env.SUPABASE_SERVICE_KEY) ||
+    readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)
+  );
+
   // SECURITY: Public /health returns only minimal uptime info.
   // No route enumeration, no credential presence, no internal markers,
   // no key prefixes, no deployment history, no service IDs.
@@ -2965,6 +2977,7 @@ app.get('/health', async (context) => {
   return context.json({
     ok: true,
     status: 'healthy',
+    databaseConfigured,
     ai: {
       ok: aiStartup.ok,
       model: aiStartup.model,
@@ -5907,6 +5920,12 @@ try { startScaleLoopScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono]
 try { startRoleAgentScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] role-agent run loop failed to start:', err instanceof Error ? err.message : err); }
 try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI-Hono] engineering OS 2h report ticker failed to start:', err instanceof Error ? err.message : err); }
 try { startOwnerAITaskWorker(); } catch (err) { console.warn('[IVXOwnerAI-Hono] owner AI durable task worker failed to start:', err instanceof Error ? err.message : err); }
+
+// Graceful shutdown: stop the queue worker on SIGTERM/SIGINT so Render
+// doesn't kill tasks mid-execution. The worker waits up to
+// IVX_QUEUE_SHUTDOWN_GRACE_MS for active tasks to complete.
+process.on('SIGTERM', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
+process.on('SIGINT', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
 try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
 try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
 try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
@@ -6345,4 +6364,4 @@ app.get('/api/ivx/autonomous/monitor/schedule', async (c) => {
   return c.json({ ok: true, schedule: CHECK_SCHEDULE });
 });
 
-export default app;
+export default app;// CI trigger comment

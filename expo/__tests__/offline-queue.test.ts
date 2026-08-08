@@ -17,6 +17,7 @@ mock.module('@react-native-async-storage/async-storage', () => ({
 
 // Mock react-native AppState (no-op subscription).
 mock.module('react-native', () => ({
+  Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
   AppState: {
     addEventListener: () => ({ remove: () => {} }),
   },

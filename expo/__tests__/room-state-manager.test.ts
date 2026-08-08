@@ -27,6 +27,7 @@ mock.module('../src/modules/chat/services/ivxChat', () => ({
 }));
 
 mock.module('react-native', () => ({
+  Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
   AppState: {
     addEventListener: (_event: string, _handler: Function) => ({ remove: () => {} }),
     currentState: 'active',

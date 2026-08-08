@@ -89,7 +89,7 @@ export function useMediaLifecycleViewport(options: UseMediaLifecycleViewportOpti
         index: vt.index ?? 0,
         item: vt.item,
         isViewable: vt.isViewable,
-        percentVisible: vt.percent ?? 0,
+        percentVisible: (vt as ViewToken & { percent?: number }).percent ?? (vt.isViewable ? 100 : 0),
       }));
       mediaLifecycleController.processViewport(scope, viewportItems);
     },
@@ -195,7 +195,7 @@ export function useMediaLifecycleList(
         index: vt.index ?? 0,
         item: vt.item,
         isViewable: vt.isViewable,
-        percentVisible: vt.percent ?? 0,
+        percentVisible: (vt as ViewToken & { percent?: number }).percent ?? (vt.isViewable ? 100 : 0),
       }));
       mediaLifecycleController.processViewport(scope, viewportItems);
     },

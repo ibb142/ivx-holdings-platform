@@ -6,7 +6,7 @@
  * required callbacks, while the parent retains full control over its data.
  */
 import React, { useCallback, useRef } from 'react';
-import type { FlatList, FlatListProps, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { FlatList, type FlatListProps, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAppForeground } from '@/hooks/useAppForeground';
 import { mediaLifecycleController } from '../controller';
@@ -28,6 +28,8 @@ interface ViewportTrackerProps<ItemT> extends Omit<FlatListProps<ItemT>, 'onView
   viewabilityPercentThreshold?: number;
   /** Existing onScroll callback to preserve. */
   onScrollOriginal?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Existing onViewableItemsChanged callback to preserve. */
+  onViewableItemsChanged?: (info: { viewableItems: ViewToken[]; changed: ViewToken[] }) => void;
 }
 
 export const ViewportTracker = React.memo(function ViewportTracker<ItemT>(props: ViewportTrackerProps<ItemT>) {
@@ -58,8 +60,8 @@ export const ViewportTracker = React.memo(function ViewportTracker<ItemT>(props:
     getContainerId: (item, index) => extractContainerId?.(item as ItemT, index) ?? null,
   });
 
-  const itemsRef = useRef<ItemT[]>(flatListProps.data ?? []);
-  itemsRef.current = flatListProps.data ?? [];
+  const itemsRef = useRef<ItemT[] | null | undefined>(flatListProps.data as ItemT[] | null | undefined);
+  itemsRef.current = flatListProps.data as ItemT[] | null | undefined;
 
   const registerOnDataChange = useCallback(() => {
     registerAll(itemsRef.current as unknown[]);
@@ -89,16 +91,9 @@ export const ViewportTracker = React.memo(function ViewportTracker<ItemT>(props:
   }, [isAppForeground, scope]);
 
   const combinedOnViewableItemsChanged = useCallback(
-    (info: { viewableItems: Array<{ item: unknown; index: number | null; isViewable: boolean; percent: number }> }) => {
-      handleViewableItemsChanged({
-        viewableItems: info.viewableItems.map((v) => ({
-          index: v.index ?? 0,
-          item: v.item,
-          isViewable: v.isViewable,
-          percentVisible: v.percent ?? 0,
-        })),
-      });
-      originalOnViewableItemsChanged?.(info as never);
+    (info: { viewableItems: ViewToken[]; changed: ViewToken[] }) => {
+      handleViewableItemsChanged({ viewableItems: info.viewableItems });
+      originalOnViewableItemsChanged?.(info);
     },
     [handleViewableItemsChanged, originalOnViewableItemsChanged],
   );

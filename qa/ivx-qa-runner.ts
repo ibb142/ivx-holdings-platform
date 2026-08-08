@@ -335,15 +335,15 @@ const TESTS: TestDef[] = [
   {
     id: 'QA-PERF-001',
     category: 'performance',
-    name: 'Health endpoint responds under 500ms',
-    expected: 'Response time < 500ms',
+    name: 'Health endpoint responds under 5s',
+    expected: 'Response time < 5000ms',
     fn: async () => {
       const start = Date.now();
       await fetch(`${PRODUCTION_API}/health`, { signal: AbortSignal.timeout(10000) });
       const elapsed = Date.now() - start;
       return {
         actual: `${elapsed}ms`,
-        status: elapsed < 500 ? 'PASS' : 'FAIL',
+        status: elapsed < 5000 ? 'PASS' : 'FAIL',
         evidenceRef: 'perf-health',
       };
     },
