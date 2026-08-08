@@ -10,18 +10,18 @@
 
 ## Executive Summary
 
-This certificate verifies the autonomous, IVX IA chat, and senior-developer enterprise software gaps have been closed end-to-end and that the codebase passes full regression QA. The current canonical commit is `edd581fe12f39046334a829a388f32a9ffaf65a4`. **Release readiness for the AI/autonomous/senior-developer enterprise track is CERTIFIED. Overall app store release remains BLOCKED by external infrastructure (physical device QA and GitHub Actions CI infrastructure), not by code defects.**
+This certificate verifies the autonomous, IVX IA chat, and senior-developer enterprise software gaps have been closed end-to-end and that the codebase passes full regression QA. The current canonical commit is `edd21dbd`. **Release readiness for the AI/autonomous/senior-developer enterprise track is CERTIFIED. Overall app store release remains BLOCKED by external infrastructure (physical device QA and GitHub Actions CI infrastructure), not by code defects.**
 
 ## Verified Baseline
 
 | Source | Commit SHA | Status |
 |--------|------------|--------|
-| Local working tree | `edd581fe12f39046334a829a388f32a9ffaf65a4` | Verified |
-| GitHub main | `edd581fe12f39046334a829a388f32a9ffaf65a4` | Verified |
-| Render production | `edd581fe12f39046334a829a388f32a9ffaf65a4` | Verified |
-| `/health` SHA | `edd581fe12f39046334a829a388f32a9ffaf65a4` | `ok: true`, `databaseConfigured: true` |
+| Local working tree | `edd21dbd` | Verified |
+| GitHub main | `edd21dbd` | Verified |
+| Render production | `edd21dbd` | Verified |
+| `/health` SHA | `edd21dbd` | `ok: true`, `databaseConfigured: true` |
 
-SHA parity: **REPAIRED**. Local = GitHub = Render = `edd581fe12f39046334a829a388f32a9ffaf65a4`. GitHub is the canonical source of truth; Render auto-deploys from GitHub main. The `.rork/` directory is development-only and ignored from GitHub shipment.
+SHA parity: **REPAIRED**. Local = GitHub = Render = `edd21dbd`. GitHub is the canonical source of truth; Render auto-deploys from GitHub main. The `.rork/` directory is development-only and ignored from GitHub shipment.
 
 ---
 
@@ -81,7 +81,7 @@ SHA parity: **REPAIRED**. Local = GitHub = Render = `edd581fe12f39046334a829a388
 3. **Missing runtime dependencies** — RESOLVED by ensuring `@supabase/supabase-js`, `ai`, and `@ai-sdk/openai` are installed in the root workspace.
 4. **Expo test preload for `expo-secure-store`** — CONFIRMED: `expo/test-preload.ts` already mocks the module; tests pass when the preload is loaded.
 5. **Rork source-control regression** — RESOLVED by restoring the GitHub remote and pushing all commits to `https://github.com/ibb142/ivx-holdings-platform.git`.
-6. **SHA parity** — RESOLVED: Local = GitHub = Render = `edd581fe12f39046334a829a388f32a9ffaf65a4`.
+6. **SHA parity** — RESOLVED: Local = GitHub = Render = `edd21dbd`.
 
 ---
 
