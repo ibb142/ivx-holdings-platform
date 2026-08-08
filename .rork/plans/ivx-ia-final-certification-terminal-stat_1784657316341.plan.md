@@ -4,14 +4,13 @@
 
 ## Current verified baseline
 
-- **REALITY CHECK (2026-08-08T21:03+00:00):** SHA parity is REPAIRED.
+- **REALITY CHECK (2026-08-08T21:45+00:00):** SHA parity is BROKEN again.
   - GitHub main: `eb4050d7ce093bffe96df4d917f623062754ebe7`
   - Render deployed: `eb4050d7ce093bffe96df4d917f623062754ebe7`
-  - Local checkout: `eb4050d7ce093bffe96df4d917f623062754ebe7`
+  - Local checkout: `821995e3` (fixes for P0 regression guard + test parity)
   - `/health` SHA: `eb4050d7ce093bffe96df4d917f623062754ebe7`
   - `/health` databaseConfigured: `true`
-  - Git remote is now `https://github.com/ibb142/ivx-holdings-platform.git` (x-access-token)
-  - Rork router remote (`rork-git-router.rork-direct.workers.dev`) replaced with GitHub
+  - Git remote is `https://rork-git-router.rork-direct.workers.dev/git/j2l8t44588ix9ns7b57mu` (Rork router) because the GitHub token is not available in the sandbox shell (`RORK_PUBLIC_GITHUB_TOKEN` length 0, direct GitHub push fails with "Invalid username or token"). The Rork router accepts the push but does not propagate to GitHub.
 - Production status: `healthy`, queue depth 0, 0 5xx alerts, not stale, not saturated
 - Queue worker: running=true, graceful shutdown + heartbeat watchdog + configurable concurrency deployed
 - Rollback reference: `rollback-healthy-production` → `1f5b683e288cce20155abffc092a1709a1ee1857`
@@ -34,17 +33,17 @@
 - [ ] Phase 10 — Android real-device QA. BLOCKED — no physical device, no KVM, no stable emulator. See Blocker #2 evidence.
 - [ ] Phase 11 — iOS / TestFlight QA. BLOCKED — owner-deferred per conversation constraints; no device or TestFlight access.
 - [ ] Phase 12 — Store release readiness. BLOCKED — requires Phase 10 + 11 completion.
-- [x] Phase 13 — Rork independence check. ✅ FULL PASS: (1) Git remote changed from `rork-git-router.rork-direct.workers.dev` to `https://github.com/ibb142/ivx-holdings-platform.git`; (2) merge commit `eb4050d7` pushed to GitHub and deployed to Render (SHA parity verified); (3) clean checkout from GitHub (`/home/user/rork-app/.tmp-independent-checkout`) builds and starts the backend without the Rork workspace; (4) independent Metro config (`expo/metro.config.independent.js`) is identical to live config; (5) no `@rork` or Rork toolkit dependencies in backend/expo package trees; (6) owner-controlled CI workflow exists under `deploy/ci/ivx-independent-build.yml`; (7) `ivx-independence-audit.mjs` reports 7 pass, 0 failure — IVX is Rork-free in production runtime code.
-- [x] Phase 14 — Final full regression + release verdict. ✅ Partial PASS: full backend suite 2641/2641 pass; full expo suite 1126/1126 pass. Typecheck: 2 pre-existing backend TypeScript errors (owner-passwordless-login.ts) not introduced by this work. SHA parity now FIXED. Final release verdict remains BLOCKED only by Phase 10/11 (device QA) and GitHub Actions infrastructure failures (CI verification still blocked).
+- [x] Phase 13 — Rork independence check. ✅ PARTIAL PASS: (1) Runtime/build/deploy independence is PASS — no `@rork` or Rork toolkit dependencies in backend/expo package trees; (2) independent Metro config (`expo/metro.config.independent.js`) matches live config; (3) owner-controlled CI workflow exists under `deploy/ci/ivx-independent-build.yml`; (4) `ivx-independence-audit.mjs` reports 5/5 PASS; (5) `ivx-rork-independence.test.ts` 8/8 PASS. **REGRESSION:** Git remote is back to `rork-git-router.rork-direct.workers.dev` because the GitHub token is not available in the sandbox shell; source-control independence is temporarily regressed until the token is restored.
+- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: full backend suite 2641/2641 pass; full expo suite 1126/1126 pass; root + backend `tsc --noEmit` clean. The 2 pre-existing TypeScript errors in `owner-passwordless-login.ts` are resolved in the current working tree. Final release verdict remains BLOCKED by Phase 10/11 (device QA) and the current GitHub token outage (SHA parity broken).
 
 ## Active blocker
 
-- **SHA parity:** RESOLVED. Merge commit `eb4050d7` is now on GitHub main and deployed to Render.
-- GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is
-  a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
+- **SHA parity:** BROKEN. New commit `821995e3` is on the Rork router but NOT on GitHub. GitHub main / Render remain at `eb4050d7`. Direct GitHub push fails because the GitHub token is not available in the sandbox shell (`RORK_PUBLIC_GITHUB_TOKEN` length 0). Rork router accepts the push but does not propagate to GitHub. This is a source-control blocker, not a code defect.
+- GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
 - ivx-chat.test.ts: RE-ENABLED via Proxy preload mock in test-preload.ts. Full suite passes 1126/0.
 - Phase 10/11 remain BLOCKED by lack of physical device / emulator / TestFlight infrastructure.
+- Phase 14 regression: 2641/2641 backend pass, 1126/1126 expo pass, tsc clean. Autonomous, IVX IA chat, and senior-developer enterprise gaps are closed.
 
 ## CI progress (Phase 2 remediation)
 
