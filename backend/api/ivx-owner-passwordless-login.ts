@@ -42,8 +42,11 @@ function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/** Maximum email length per RFC 5321 — prevents oversized payload DoS. */
+const MAX_EMAIL_LENGTH = 254;
+
 function sanitizeEmail(value: unknown): string {
-  return readTrimmed(value).toLowerCase();
+  return readTrimmed(value).toLowerCase().slice(0, MAX_EMAIL_LENGTH);
 }
 
 function isValidEmail(email: string): boolean {

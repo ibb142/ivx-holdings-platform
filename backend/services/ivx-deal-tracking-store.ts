@@ -260,23 +260,25 @@ export type AddDealDocumentInput = {
   uploadedBy?: string;
 };
 
-export type DealValidation = { ok: true } | { ok: false; error: string };
+export type DealValidation = { ok: true } | { ok: false; error: string; code: string };
 
 /** Validate a create input. Enforces the honesty rule: name + real source required. */
 export function validateCreateDeal(input: CreateDealInput): DealValidation {
   if (!asTrimmedString(input.dealName)) {
-    return { ok: false, error: 'Deal name is required — IVX never fabricates a deal record.' };
+    return { ok: false, error: 'Deal name is required — IVX never fabricates a deal record.', code: 'DEAL_NAME_REQUIRED' };
   }
   if (!VALID_SOURCES.has(input.source)) {
     return {
       ok: false,
       error: 'A real source is required (owner_entered | submitted_form | crm_import | public_source | verified_deal).',
+      code: 'DEAL_SOURCE_INVALID',
     };
   }
   if ((input.source === 'public_source' || input.source === 'crm_import') && !asTrimmedString(input.sourceDetail)) {
     return {
       ok: false,
       error: 'Source attribution (sourceDetail) is required for public_source and crm_import records.',
+      code: 'DEAL_SOURCE_DETAIL_REQUIRED',
     };
   }
   return { ok: true };

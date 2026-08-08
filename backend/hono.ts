@@ -3025,6 +3025,9 @@ app.get('/health', async (context) => {
     commit: LIVE_COMMIT_SHA,
     bootTime: SERVER_BOOT_TIME,
     timestamp: nowIso(),
+  }, 200, {
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
   });
 });
 

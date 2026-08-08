@@ -80,6 +80,8 @@ const MAX_SESSION_HISTORY_LIMIT = 100;
 const DEFAULT_SESSION_HISTORY_LIMIT = 40;
 const MAX_SESSIONS_PER_CLIENT = 25;
 const RATE_LIMIT_MAX_ENTRIES = 10_000;
+/** Maximum inline history items accepted per request — prevents oversized payloads from clients. */
+const MAX_INLINE_HISTORY_ITEMS = 50;
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 let publicChatHistoryStorage: ChatStorage | null = null;
@@ -332,6 +334,7 @@ function sanitizeHistory(history: unknown): PublicChatHistoryItem[] {
   }
 
   const normalizedHistory = history
+    .slice(0, MAX_INLINE_HISTORY_ITEMS)
     .map((item) => {
       const record = item as Record<string, unknown>;
       const role = record?.role === 'assistant' ? 'assistant' : record?.role === 'user' ? 'user' : null;
