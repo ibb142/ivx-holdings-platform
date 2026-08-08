@@ -46,6 +46,7 @@ import {
 import {
   startOwnerAITaskWorker,
   stopOwnerAITaskWorker,
+  getWorkerRuntimeInfo,
   recordOwnerAIIncident,
   classify503Source,
   checkAIHealth as checkOwnerAIHealth,
@@ -2970,6 +2971,31 @@ app.get('/health', async (context) => {
     readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)
   );
 
+  // Queue worker summary — lets monitoring tools check everything in one call
+  // instead of requiring a separate /health/queue request.
+  // SECURITY: Only exposes public-safe fields (running, depth, counts). No worker IDs,
+  // no task IDs, no internal state beyond aggregate counts.
+  const workerInfo = getWorkerRuntimeInfo();
+  let queueDepth = 0;
+  let deadLetterCount = 0;
+  let staleQueue = false;
+  let saturated = false;
+  let total5xx = 0;
+  try {
+    const queueResult = await checkOwnerAIQueueHealth();
+    if (queueResult.ok && queueResult.detail) {
+      const d = queueResult.detail as Record<string, unknown>;
+      queueDepth = typeof d.depth === 'number' ? d.depth : 0;
+      deadLetterCount = typeof d.deadLetterCount === 'number' ? d.deadLetterCount : 0;
+      staleQueue = typeof d.staleQueue === 'boolean' ? d.staleQueue : false;
+      saturated = typeof d.saturated === 'boolean' ? d.saturated : false;
+      const alerts = d.alerts as Record<string, unknown> | undefined;
+      total5xx = typeof alerts?.total5xx === 'number' ? alerts.total5xx : 0;
+    }
+  } catch {
+    // queue check failed — defaults remain zeros
+  }
+
   // SECURITY: Public /health returns only minimal uptime info.
   // No route enumeration, no credential presence, no internal markers,
   // no key prefixes, no deployment history, no service IDs.
@@ -2985,6 +3011,16 @@ app.get('/health', async (context) => {
     seniorDeveloper: {
       enabled: sdEnabled,
       blockers: sdBlockers.length,
+    },
+    queue: {
+      workerRunning: workerInfo.running,
+      activeTasks: workerInfo.activeTasks,
+      shuttingDown: workerInfo.shuttingDown,
+      depth: queueDepth,
+      deadLetterCount,
+      staleQueue,
+      saturated,
+      alerts5xx: total5xx,
     },
     commit: LIVE_COMMIT_SHA,
     bootTime: SERVER_BOOT_TIME,
