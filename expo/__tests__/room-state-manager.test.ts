@@ -15,7 +15,7 @@ let detectResult: MockRoomStatus = {
 };
 let detectShouldFail = false;
 
-mock.module('../src/modules/chat/services/ivxChat', () => ({
+mock.module('../src/modules/chat/services/roomDetection', () => ({
   detectRoomStatus: async () => {
     detectCallCount++;
     if (detectShouldFail) {

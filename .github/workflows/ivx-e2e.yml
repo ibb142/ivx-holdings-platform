@@ -77,10 +77,12 @@ jobs:
       - run: cd expo && bun install
       - name: Start the Expo development server
         working-directory: expo
+        env:
+          CI: '1'
         run: |
-          nohup bunx expo start --dev-client --non-interactive --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
+          nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
           for attempt in {1..30}; do
-            if curl --silent --fail http://127.0.0.1:8081/status | rg -q 'packager-status:running'; then
+            if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
               exit 0
             fi
             sleep 2

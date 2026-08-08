@@ -1,6 +1,6 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import type { ChatRoomStatus, DeliveryMode, StorageMode } from '../types/chat';
-import { detectRoomStatus, invalidateRoomStatusCache } from './ivxChat';
+import { detectRoomStatus, invalidateRoomStatusCache } from './roomDetection';
 
 export type RoomSyncPhase =
   | 'initializing'
