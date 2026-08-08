@@ -59,10 +59,72 @@ async function runTest(def: TestDef): Promise<QATestResult> {
   }
 }
 
+/**
+ * Fetch JSON with retry on transient errors (502/503/504/connection reset).
+ * Render instances cycle during deploys, causing brief 502 windows.
+ * Retries up to 3 times with exponential backoff.
+ */
 async function fetchJson(url: string, opts?: RequestInit): Promise<Record<string, unknown>> {
-  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-  return (await res.json()) as Record<string, unknown>;
+  const maxRetries = 3;
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
+      if (res.status >= 502 && res.status <= 504 && attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      return (await res.json()) as Record<string, unknown>;
+    } catch (err) {
+      lastErr = err as Error;
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+    }
+  }
+  throw lastErr ?? new Error('fetchJson exhausted retries');
+}
+
+/**
+ * Get owner token from env var or local file.
+ * Returns null if unavailable (e.g. in CI without secrets).
+ * Tests using this should SKIP gracefully when null.
+ */
+function getOwnerToken(): string | null {
+  if (process.env.IVX_OWNER_TOKEN) return process.env.IVX_OWNER_TOKEN;
+  const tokenPath = join(process.cwd(), 'tmp', 'owner_token.txt');
+  if (existsSync(tokenPath)) {
+    return readFileSync(tokenPath, 'utf8').trim();
+  }
+  return null;
+}
+
+/**
+ * Fetch with retry on transient errors (502/503/504).
+ * Returns the Response object so callers can check status codes.
+ */
+async function fetchWithRetry(url: string, opts?: RequestInit): Promise<Response> {
+  const maxRetries = 3;
+  let lastRes: Response | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
+      if (res.status >= 502 && res.status <= 504 && attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return lastRes ?? new Response('', { status: 503 });
 }
 
 function hashString(s: string): string {
@@ -102,7 +164,8 @@ const TESTS: TestDef[] = [
     name: 'Multi-turn context preservation',
     expected: 'Follow-up question references prior context',
     fn: async () => {
-      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
+      const token = getOwnerToken();
+      if (!token) return { actual: 'No owner token available in CI', status: 'SKIP' as TestStatus, evidenceRef: 'no-token-ci' };
       const r1 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -127,7 +190,8 @@ const TESTS: TestDef[] = [
     name: 'Context preserved across approval flow',
     expected: 'Approval executes pending action, not losing thread',
     fn: async () => {
-      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
+      const token = getOwnerToken();
+      if (!token) return { actual: 'No owner token available in CI', status: 'SKIP' as TestStatus, evidenceRef: 'no-token-ci' };
       const r1 = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -150,7 +214,8 @@ const TESTS: TestDef[] = [
     name: 'Intent router classifies property question',
     expected: 'Provider is ivx_readonly_inspection_runtime or ivx_conversation_state_machine',
     fn: async () => {
-      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
+      const token = getOwnerToken();
+      if (!token) return { actual: 'No owner token available in CI', status: 'SKIP' as TestStatus, evidenceRef: 'no-token-ci' };
       const d = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -172,7 +237,8 @@ const TESTS: TestDef[] = [
     name: 'Owner memory recall — where did we leave off',
     expected: 'Returns most recent conversation action',
     fn: async () => {
-      const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
+      const token = getOwnerToken();
+      if (!token) return { actual: 'No owner token available in CI', status: 'SKIP' as TestStatus, evidenceRef: 'no-token-ci' };
       const d = await fetchJson(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -317,7 +383,7 @@ const TESTS: TestDef[] = [
     name: 'Owner endpoints require authentication',
     expected: '401/403 without bearer token',
     fn: async () => {
-      const res = await fetch(`${PRODUCTION_API}/api/ivx/owner-ai`, {
+      const res = await fetchWithRetry(`${PRODUCTION_API}/api/ivx/owner-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'test' }),
@@ -339,7 +405,7 @@ const TESTS: TestDef[] = [
     expected: 'Response time < 5000ms',
     fn: async () => {
       const start = Date.now();
-      await fetch(`${PRODUCTION_API}/health`, { signal: AbortSignal.timeout(10000) });
+      await fetchWithRetry(`${PRODUCTION_API}/health`, { signal: AbortSignal.timeout(10000) });
       const elapsed = Date.now() - start;
       return {
         actual: `${elapsed}ms`,
@@ -399,7 +465,7 @@ const TESTS: TestDef[] = [
     name: 'Senior developer worker endpoint is accessible',
     expected: 'Worker API responds with 200 or 401',
     fn: async () => {
-      const res = await fetch(`${PRODUCTION_API}/api/ivx/senior-developer/worker/jobs`, {
+      const res = await fetchWithRetry(`${PRODUCTION_API}/api/ivx/senior-developer/worker/jobs`, {
         signal: AbortSignal.timeout(10000),
       });
       return {
@@ -438,7 +504,7 @@ const TESTS: TestDef[] = [
     name: 'Reels/media jobs endpoint is accessible',
     expected: 'Media jobs API responds',
     fn: async () => {
-      const res = await fetch(`${PRODUCTION_API}/api/video/capabilities`, {
+      const res = await fetchWithRetry(`${PRODUCTION_API}/api/video/capabilities`, {
         signal: AbortSignal.timeout(10000),
       });
       return {
@@ -456,7 +522,7 @@ const TESTS: TestDef[] = [
     name: 'Member registration endpoint is accessible',
     expected: 'Registration API responds with 200 or 400',
     fn: async () => {
-      const res = await fetch(`${PRODUCTION_API}/api/members/register`, {
+      const res = await fetchWithRetry(`${PRODUCTION_API}/api/members/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -499,7 +565,8 @@ const TESTS: TestDef[] = [
     expected: 'No worker jobs stuck in running/patching for > 20 min',
     fn: async () => {
       try {
-        const token = process.env.IVX_OWNER_TOKEN || readFileSync(join(process.cwd(), 'tmp/owner_token.txt'), 'utf8').trim();
+        const token = getOwnerToken();
+        if (!token) return { actual: 'No owner token available', status: 'SKIP' as TestStatus, evidenceRef: 'zombie-skip' };
         const d = await fetchJson(`${PRODUCTION_API}/api/ivx/senior-developer/worker/jobs`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: AbortSignal.timeout(10000),
