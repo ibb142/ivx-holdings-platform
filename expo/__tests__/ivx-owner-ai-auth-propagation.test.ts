@@ -45,7 +45,7 @@ const mockSupabase = {
   },
 };
 
-// Override the global supabase mock from test-preload.ts Proxy.
+// Delegate to the preload Proxy mock for @/lib/supabase
 (globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__ = mockSupabase;
 
 mock.module('@/lib/ivx-supabase-client', () => ({
@@ -93,6 +93,9 @@ describe('IVX Owner AI auth header propagation', () => {
   const originalConsoleLog = console.log;
 
   beforeEach(() => {
+    // Re-arm the preload Proxy mock before every test in case another file
+    // changed the global override during the same Bun test process.
+    (globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__ = mockSupabase;
     fetchCalls = [];
     logCalls = [];
     asyncStorageMemory.clear();
