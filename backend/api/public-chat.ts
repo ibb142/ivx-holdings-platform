@@ -79,6 +79,7 @@ const PUBLIC_CHAT_SESSION_ROOM_PREFIX = 'pcs-';
 const MAX_SESSION_HISTORY_LIMIT = 100;
 const DEFAULT_SESSION_HISTORY_LIMIT = 40;
 const MAX_SESSIONS_PER_CLIENT = 25;
+const RATE_LIMIT_MAX_ENTRIES = 10_000;
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 let publicChatHistoryStorage: ChatStorage | null = null;
@@ -233,6 +234,20 @@ function cleanupRateLimitStore(): void {
       rateLimitStore.delete(key);
     }
   });
+
+  // Hard cap: if the Map grew beyond RATE_LIMIT_MAX_ENTRIES (e.g. a flood of
+  // unique client IDs from a botnet or CDN), evict the oldest entries by
+  // lastSeenAt to bound memory. Without this, a sustained attack with unique
+  // IPs/headers grows the Map indefinitely until the process OOMs.
+  if (rateLimitStore.size > RATE_LIMIT_MAX_ENTRIES) {
+    const sorted = [...rateLimitStore.entries()].sort(
+      (a, b) => a[1].lastSeenAt - b[1].lastSeenAt,
+    );
+    const toEvict = sorted.length - RATE_LIMIT_MAX_ENTRIES;
+    for (let i = 0; i < toEvict; i++) {
+      rateLimitStore.delete(sorted[i][0]);
+    }
+  }
 }
 
 function consumeRateLimit(clientId: string): { allowed: boolean; remaining: number; resetAt: string } {

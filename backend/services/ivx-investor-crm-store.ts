@@ -305,9 +305,11 @@ function buildRecord(input: CreateInvestorInput, prior?: InvestorRecord): Invest
   };
 }
 
-export async function listInvestors(): Promise<InvestorRecord[]> {
+/** Optional limit for listInvestors — caps the response payload when the CRM grows large. */
+export async function listInvestors(limit?: number): Promise<InvestorRecord[]> {
   const items = await readJsonFile<InvestorRecord[]>(INVESTORS_STATE, []);
-  return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const sorted = [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return typeof limit === 'number' && limit > 0 ? sorted.slice(0, limit) : sorted;
 }
 
 export type InvestorListWithSummary = {
