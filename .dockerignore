@@ -1,0 +1,47 @@
+# Reduce Docker build context from 93MB to ~15MB.
+# The Dockerfile only copies specific paths — everything else
+# is dead weight that slows context upload and build startup.
+# Without this file, Render uploaded 42MB of .rork/history JSON
+# and 671MB of expo/node_modules on every build, causing builds
+# to hang for 2+ hours.
+
+# Exclude everything by default, then re-include what the Dockerfile copies
+*
+
+# Re-include files the Dockerfile actually COPYs
+!package.json
+!server.ts
+!tsconfig.json
+!Dockerfile
+!render.yaml
+!backend/
+!expo/constants/
+!expo/shared/
+!expo/deploy/scripts/
+!expo/sync-github.mjs
+!expo/sync-paths.mjs
+!expo/supabase/
+!expo/scripts/
+!expo/ivxholding-landing/
+!expo/assets/images/
+
+# Still exclude node_modules and .git from re-included dirs
+node_modules/
+.git/
+.rork/
+expo/node_modules/
+expo/android/
+expo/__tests__/
+expo/.expo/
+qa/
+docs/
+deploy/
+data/
+recovery/
+qa-archive/
+qa-frames/
+home/
+ios-ivx-*/
+android-ivx-*/
+assets/
+.github/
