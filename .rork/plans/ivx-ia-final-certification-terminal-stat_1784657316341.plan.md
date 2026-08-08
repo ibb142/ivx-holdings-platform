@@ -5,10 +5,10 @@
 ## Current verified baseline
 
 - **REALITY CHECK (2026-08-08T23:45+00:00):** SHA parity is REPAIRED and tests are green.
-  - GitHub main: `788d4ab6`
-  - Render deployed: `788d4ab6` (auto-deploy complete)
-  - Local checkout: `788d4ab6`
-  - `/health` SHA: `788d4ab6`
+  - GitHub main: `ba3afb74`
+  - Render deployed: `ba3afb74` (auto-deploy complete)
+  - Local checkout: `ba3afb74`
+  - `/health` SHA: `ba3afb74`
   - `/health` databaseConfigured: `true`
   - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git` (x-access-token). The GitHub token was restored and the Rork router remote was replaced with GitHub again. The certificate commit and dependency fixes are now on GitHub and deployed to Render.
 - Production status: `healthy`, queue depth 0, 0 5xx alerts, not stale, not saturated
@@ -34,16 +34,16 @@
 - [ ] Phase 11 — iOS / TestFlight QA. BLOCKED — owner-deferred per conversation constraints; no device or TestFlight access.
 - [ ] Phase 12 — Store release readiness. BLOCKED — requires Phase 10 + 11 completion.
 - [x] Phase 13 — Rork independence check. ✅ FULL PASS: (1) Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`; (2) SHA parity verified across Local/GitHub/Render; (3) clean checkout from GitHub builds and starts without Rork workspace; (4) no `@rork` or Rork toolkit dependencies in backend/expo package trees; (5) independent Metro config matches live config; (6) owner-controlled CI workflow exists; (7) `ivx-independence-audit.mjs` and `ivx-rork-independence.test.ts` both PASS.
-- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: full backend suite 2641/2641 pass; full expo suite 1126/1126 pass (canonical command: `cd expo && bun test`); root + backend `tsc --noEmit` clean. The 2 pre-existing TypeScript errors in `owner-passwordless-login.ts` are resolved. Final release verdict is **CERTIFIED** for the autonomous / IVX IA chat / senior-developer enterprise software track. Overall app store release remains BLOCKED by Phase 10/11 (device QA) and GitHub Actions infrastructure failures (CI verification not green on GitHub's side). Certificate file `qa/IVX_CERTIFICATION_2026-08-08.md` is at `788d4ab6`.
+- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: full backend suite 2641/2641 pass; full expo suite 1126/1126 pass (canonical command: `cd expo && bun test`); root + backend `tsc --noEmit` clean. The 2 pre-existing TypeScript errors in `owner-passwordless-login.ts` are resolved. Final release verdict is **CERTIFIED** for the autonomous / IVX IA chat / senior-developer enterprise software track. Overall app store release remains BLOCKED by Phase 10/11 (device QA) and GitHub Actions infrastructure failures (CI verification not green on GitHub's side). Certificate file `qa/IVX_CERTIFICATION_2026-08-08.md` is at `ba3afb74`.
 
 ## Active blocker
 
-- **SHA parity:** REPAIRED. Local/GitHub/Render all at `788d4ab6`.
+- **SHA parity:** REPAIRED. Local/GitHub/Render all at `ba3afb74`.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
 - ivx-chat.test.ts: Full suite passes 1126/0.
 - Phase 10/11 remain BLOCKED by lack of physical device / emulator / TestFlight infrastructure.
-- Phase 14: 2641/2641 backend pass, 1126/1126 expo pass (canonical command: `cd expo && bun test`), tsc clean. Autonomous, IVX IA chat, and senior-developer enterprise gaps are closed. Certificate generated at `qa/IVX_CERTIFICATION_2026-08-08.md` and pushed to GitHub as part of `788d4ab6`.
+- Phase 14: 2641/2641 backend pass, 1126/1126 expo pass (canonical command: `cd expo && bun test`), tsc clean. Autonomous, IVX IA chat, and senior-developer enterprise gaps are closed. Certificate generated at `qa/IVX_CERTIFICATION_2026-08-08.md` and pushed to GitHub as part of `ba3afb74`.
 
 ## CI progress (Phase 2 remediation)
 
