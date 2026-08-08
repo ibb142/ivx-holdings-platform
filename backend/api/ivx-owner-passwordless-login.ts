@@ -92,13 +92,13 @@ function createAdminClient() {
     auth: { autoRefreshToken: false, persistSession: false, debug: false },
     global: {
       headers: { 'X-Client-Info': 'ivx-owner-passwordless-login' },
-      fetch: (url: RequestInfo | URL, init: RequestInit = {}) => {
+      fetch: ((url: RequestInfo | URL, init: RequestInit = {}) => {
         const signal = AbortSignal.timeout(SUPABASE_ADMIN_TIMEOUT_MS);
         const mergedInit = init.signal
           ? init
           : { ...init, signal };
         return fetch(url, mergedInit);
-      },
+      }) as typeof fetch,
     },
   });
 }
@@ -166,7 +166,6 @@ async function mintSessionViaMagicLink(
       type: 'magiclink',
       email,
       options: {
-        createUser: true,
         data: {
           accountType: 'owner',
           requestedRole: 'owner',
