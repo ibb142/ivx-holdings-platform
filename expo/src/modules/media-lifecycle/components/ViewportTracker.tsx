@@ -60,7 +60,7 @@ export const ViewportTracker = React.memo(function ViewportTracker<ItemT>(props:
     getContainerId: (item, index) => extractContainerId?.(item as ItemT, index) ?? null,
   });
 
-  const itemsRef = useRef<ItemT[]>(flatListProps.data ?? []);
+  const itemsRef = useRef<readonly ItemT[]>(flatListProps.data ?? []);
   itemsRef.current = flatListProps.data ?? [];
 
   const registerOnDataChange = useCallback(() => {
@@ -92,14 +92,7 @@ export const ViewportTracker = React.memo(function ViewportTracker<ItemT>(props:
 
   const combinedOnViewableItemsChanged = useCallback(
     (info: { viewableItems: ViewToken[]; changed: ViewToken[] }) => {
-      handleViewableItemsChanged({
-        viewableItems: info.viewableItems.map((vt) => ({
-          index: vt.index ?? 0,
-          item: vt.item,
-          isViewable: vt.isViewable,
-          percentVisible: (vt as ViewToken & { percent?: number }).percent ?? (vt.isViewable ? 100 : 0),
-        })),
-      });
+      handleViewableItemsChanged({ viewableItems: info.viewableItems });
       originalOnViewableItemsChanged?.(info);
     },
     [handleViewableItemsChanged, originalOnViewableItemsChanged],

@@ -344,7 +344,7 @@ export class MediaLifecycleController {
     if (current.mediaType === 'video' && current.playerState !== player) {
       this.store.setPlayer(item.mediaId, player as MediaPlayerState);
       recordLifecycleEvent(item.mediaId, item.scope, item.mediaType, 'player_changed', {
-        playerState: player,
+        playerState: player as MediaPlayerState,
       });
     }
     if (lifecycle === 'active' && !current.isActive) {

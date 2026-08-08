@@ -480,6 +480,7 @@ mock.module('@react-native-async-storage/async-storage', () => ({
 }));
 
 mock.module('react-native', () => ({
+  Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
   Linking: {
     canOpenURL: async () => true,
     openURL: async () => {},

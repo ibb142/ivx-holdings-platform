@@ -1,6 +1,14 @@
 import type { AuthError, Session, SupabaseClient, User } from '@supabase/supabase-js';
 import { sanitizeEmail, sanitizePasswordForSignIn } from '@/lib/auth-helpers';
 
+/**
+ * Generate a unique auth trace ID for correlating client-side login traces.
+ * Format: `auth-{timestamp}-{random}` — never contains password data.
+ */
+export function generateAuthTraceId(): string {
+  return `auth-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export type EmailPasswordSignInCredentials = {
   email: string;
   passwordLength: number;
