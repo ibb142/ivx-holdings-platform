@@ -12,7 +12,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, type ImageContentFit, type ImageSource } from 'expo-image';
 import { View, StyleSheet } from 'react-native';
-import { useMediaLifecycleItem, useMediaLifecycleRegister, useMediaLifecycleStore } from '../hooks';
+import { useMediaLifecycleItem, useMediaLifecycleRegister } from '../hooks';
+import { useMediaLifecycleStore } from '../store';
 import { mediaLifecycleController } from '../controller';
 import type { MediaScope } from '../types';
 
@@ -64,7 +65,7 @@ export const ControlledImage: React.FC<ControlledImageProps> = React.memo(functi
   );
 
   const lifecycle = useMediaLifecycleItem(mediaId);
-  const generation = useMediaLifecycleStore((state) => state.items[mediaId]?.mountGeneration ?? 0);
+  const generation = useMediaLifecycleStore((state: { items: Record<string, { mountGeneration?: number }> }) => state.items[mediaId]?.mountGeneration ?? 0);
 
   useEffect(() => {
     generationRef.current = generation;

@@ -46,6 +46,8 @@ export type ChatMessage = {
   text?: string | null;
   replyTo?: ChatReplyContext | null;
   fileUrl?: string | null;
+  /** Optional thumbnail URL for image/video preview before full load. */
+  thumbnailUrl?: string | null;
   fileStorageBucket?: string | null;
   fileStoragePath?: string | null;
   fileType?: ChatFileType | null;

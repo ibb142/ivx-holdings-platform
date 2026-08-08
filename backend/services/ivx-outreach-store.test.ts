@@ -9,7 +9,13 @@ mock.module('./ivx-durable-store', () => ({
   writeDurableJson: async () => {},
   appendDurableEvent: async () => {},
   readDurableEvents: async () => [],
-  durableKeyForFile: (f: string) => f,
+  durableKeyForFile: (f: string) => {
+    const marker = "logs/audit/";
+    const i = f.indexOf(marker);
+    if (i >= 0) return f.slice(i + marker.length);
+    const p = f.split("/").filter(Boolean);
+    return p.slice(-2).join("/") || f;
+  },
 }));
 
 import {

@@ -7,9 +7,12 @@
  */
 import { useMediaLifecycleStore, type MediaLifecycleStore } from './store';
 import type {
+  MediaCacheState,
+  MediaDownloadState,
   MediaLifecycleConfig,
   MediaLifecycleItem,
   MediaLifecycleState,
+  MediaPlayerState,
   MediaScope,
   MediaType,
   ViewportItem,
@@ -217,7 +220,7 @@ export class MediaLifecycleController {
       const isVideo = item.mediaType === 'video';
 
       if (isVideo) {
-        this.applyVideoRules(item, percent, isViewable, isPrimaryVideo, focused, distance, activeVideoId);
+        this.applyVideoRules(item, percent, isViewable, isPrimaryVideo, focused, distance);
       } else {
         this.applyImageRules(item, percent, isViewable, focused, distance);
       }
@@ -329,7 +332,7 @@ export class MediaLifecycleController {
     this.transition(item, 'released', 'none');
   }
 
-  private transition(item: MediaLifecycleItem, lifecycle: MediaLifecycleState, player: MediaLifecycleItem['playerState']): void {
+  private transition(item: MediaLifecycleItem, lifecycle: MediaLifecycleState, player: MediaPlayerState | MediaDownloadState | MediaCacheState): void {
     const current = this.store.items[item.mediaId];
     if (!current) return;
     if (current.lifecycleState !== lifecycle) {
@@ -339,7 +342,7 @@ export class MediaLifecycleController {
       });
     }
     if (current.mediaType === 'video' && current.playerState !== player) {
-      this.store.setPlayer(item.mediaId, player);
+      this.store.setPlayer(item.mediaId, player as MediaPlayerState);
       recordLifecycleEvent(item.mediaId, item.scope, item.mediaType, 'player_changed', {
         playerState: player,
       });

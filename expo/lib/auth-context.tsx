@@ -484,7 +484,7 @@ export interface AuthUser {
   accountStatus?: string;
 }
 
-export type LoginFailureReason = 'invalid_credentials' | 'email_not_confirmed' | 'rate_limited' | 'service_unavailable' | 'admin_access_locked' | 'unknown';
+export type LoginFailureReason = 'invalid_credentials' | 'email_not_confirmed' | 'rate_limited' | 'service_unavailable' | 'admin_access_locked' | 'verification_required' | 'unknown';
 
 export interface LoginResult {
   success: boolean;
@@ -499,6 +499,10 @@ export interface LoginResult {
   supabaseErrorStatus?: number;
   /** Supabase Auth error class/name when present. */
   supabaseErrorName?: string;
+  /** Login trace ID for correlating client-side logs with backend traces. */
+  traceId?: string;
+  /** Whether email verification is required before login can complete. */
+  requiresVerification?: boolean;
 }
 
 type RegisterAccountType = 'investor' | 'owner';
@@ -1907,7 +1911,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         : '';
       const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
       const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
-      trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage, errorStatus: Number.isFinite(errorStatus) ? errorStatus : undefined });
+      trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage, httpStatus: Number.isFinite(errorStatus) ? errorStatus : undefined });
       return {
         success: false,
         message: displayMessage,
