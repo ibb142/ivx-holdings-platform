@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { IVX_CHAT_UPLOAD_BUCKET } from '@/shared/ivx';
+import { IVX_CHAT_UPLOAD_BUCKET } from '@/shared/ivx/types';
 import type {
   ChatConversation,
   ChatFileType,

@@ -463,13 +463,6 @@ const mockSupabase = {
   },
 };
 
-// Mock @supabase/supabase-js to prevent leakage from other test files that
-// mock it globally (Bun mock.module is process-global). @/shared/ivx/access-control
-// imports createClient from this package transitively.
-mock.module('@supabase/supabase-js', () => ({
-  createClient: () => mockSupabase,
-}));
-
 mock.module('@/lib/supabase', () => ({
   supabase: mockSupabase,
 }));
