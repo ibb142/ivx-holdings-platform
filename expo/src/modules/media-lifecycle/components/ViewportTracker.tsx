@@ -60,8 +60,8 @@ export const ViewportTracker = React.memo(function ViewportTracker<ItemT>(props:
     getContainerId: (item, index) => extractContainerId?.(item as ItemT, index) ?? null,
   });
 
-  const itemsRef = useRef<readonly ItemT[]>(flatListProps.data ?? []);
-  itemsRef.current = flatListProps.data ?? [];
+  const itemsRef = useRef<ItemT[] | null | undefined>(flatListProps.data as ItemT[] | null | undefined);
+  itemsRef.current = flatListProps.data as ItemT[] | null | undefined;
 
   const registerOnDataChange = useCallback(() => {
     registerAll(itemsRef.current as unknown[]);
