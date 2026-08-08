@@ -5,6 +5,7 @@ import {
   resolveIVXAuthenticatedRequest,
   type IVXAuthenticatedRequestContext,
 } from '../../expo/shared/ivx';
+import { timingSafeEqual } from 'node:crypto';
 
 export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;
 
@@ -265,9 +266,19 @@ function makeSystemOwnerRequestContext(): IVXOwnerRequestContext {
 
 const IVX_AI_SYSTEM_SECRET = process.env.IVX_AI_SYSTEM_SECRET?.trim() ?? '';
 
+/** Constant-time string comparison to prevent timing attacks on system key auth. */
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
+  } catch {
+    return false;
+  }
+}
+
 function checkIVXAISystemKey(request: Request): boolean {
   const systemKey = request.headers.get('X-IVX-System-Key')?.trim() ?? '';
-  return IVX_AI_SYSTEM_SECRET.length > 0 && systemKey === IVX_AI_SYSTEM_SECRET;
+  return IVX_AI_SYSTEM_SECRET.length > 0 && constantTimeEquals(systemKey, IVX_AI_SYSTEM_SECRET);
 }
 
 function makeSystemMutationApprovalProof(action: string): IVXOwnerMutationApprovalProof {
