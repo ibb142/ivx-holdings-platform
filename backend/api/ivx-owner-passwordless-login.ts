@@ -84,8 +84,19 @@ function createAdminClient() {
   if (!serviceRoleKey) {
     throw new Error('Supabase service role key is not configured on the backend (SUPABASE_SERVICE_ROLE_KEY).');
   }
+  const SUPABASE_ADMIN_TIMEOUT_MS = 12_000;
   return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    auth: { autoRefreshToken: false, persistSession: false, debug: false },
+    global: {
+      headers: { 'X-Client-Info': 'ivx-owner-passwordless-login' },
+      fetch: (url: RequestInfo | URL, init: RequestInit = {}) => {
+        const signal = AbortSignal.timeout(SUPABASE_ADMIN_TIMEOUT_MS);
+        const mergedInit = init.signal
+          ? init
+          : { ...init, signal };
+        return fetch(url, mergedInit);
+      },
+    },
   });
 }
 
