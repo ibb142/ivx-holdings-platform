@@ -2465,8 +2465,12 @@ startQueueDrainTimer();
 // STATUS SURFACE
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Process start time for uptime reporting in the worker status snapshot. */
+const WORKER_PROCESS_START_TIME = Date.now();
+
 /** Worker capability snapshot — what this self-hosted executor can do without external platform. */
 export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
+  const uptimeMs = Date.now() - WORKER_PROCESS_START_TIME;
   return {
     ok: true,
     marker: IVX_SENIOR_DEV_WORKER_MARKER,
@@ -2474,6 +2478,7 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
     externalRequiredAsExecutor: false,
     durableQueue: isDurableStoreConfigured(),
     perOwnerSingleFlight: true,
+    uptimeSeconds: Math.floor(uptimeMs / 1000),
     concurrency: {
       globalExecutionSlots: 1,
       independentRuntimeCount: 0,
