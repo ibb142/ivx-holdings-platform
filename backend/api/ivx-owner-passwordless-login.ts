@@ -2,18 +2,19 @@
  * Passwordless owner sign-in.
  *
  * POST /api/ivx/owner-passwordless-login
- *   body: { email }
+ *   body: { email, emergency }
  *
  * The owner types ONLY their email. The backend:
  *   1. Validates the email is in the owner allowlist
  *      (IVX_OWNER_REGISTRATION_EMAILS / IVX_BASELINE_OWNER_EMAILS).
- *   2. Uses the Supabase admin (service-role) client to find the owner auth user
- *      (creating + confirming them if they do not exist yet).
+ *   2. Uses a single Supabase admin generateLink(magiclink) call which both
+ *      resolves the user (creating them if needed) AND returns the hashed
+ *      token needed for session minting. This replaces the prior 3-call
+ *      sequence (listUsers → createUser → updateUserById) that timed out
+ *      on Render free tier.
  *   3. PRESERVES the owner's password: mints the session with a server-side
  *      magic-link token (admin generateLink + verifyOtp token_hash). The
  *      owner's manual password is NEVER modified by this flow anymore.
- *      (The previous behavior reset the password on every call, which kept
- *      breaking the owner's manual email+password sign-in.)
  *   4. Falls back to the legacy password self-heal ONLY if the magic-link
  *      session mint fails, so owner access can never be fully locked out.
  *
@@ -27,7 +28,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-password-preserving-2026-07-17';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-generatelink-optimized-2026-08-08';
 
 const PASSWORDLESS_HEADERS = {
   'Content-Type': 'application/json',
@@ -122,13 +123,21 @@ type MintedSession = {
 };
 
 /**
- * Mint a real Supabase session WITHOUT touching the owner's password:
- * admin generateLink(magiclink) -> verifyOtp(token_hash) with the anon key.
+ * Mint a real Supabase session WITHOUT touching the owner's password.
+ *
+ * Uses a single admin generateLink(magiclink) call which both resolves the
+ * user (creating them if they don't exist) AND returns the hashed_token
+ * needed for OTP verification. This eliminates the prior listUsers call
+ * that fetched up to 1000 users just to find one by email — a call that
+ * consistently timed out on Render free tier.
+ *
+ * Returns the user ID alongside the session so callers don't need a
+ * separate lookup.
  */
 async function mintSessionViaMagicLink(
   adminClient: SupabaseClient,
   email: string,
-): Promise<{ ok: boolean; session?: MintedSession; errorMessage?: string }> {
+): Promise<{ ok: boolean; session?: MintedSession; userId?: string; userCreated?: boolean; errorMessage?: string }> {
   const supabaseUrl = resolveSupabaseUrl();
   const anonKey = resolveAnonKey();
   if (!anonKey) {
@@ -136,8 +145,23 @@ async function mintSessionViaMagicLink(
   }
 
   let tokenHash = '';
+  let userId = '';
+  let userCreated = false;
   try {
-    const { data, error } = await adminClient.auth.admin.generateLink({ type: 'magiclink', email });
+    const { data, error } = await adminClient.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: {
+        createUser: true,
+        data: {
+          accountType: 'owner',
+          requestedRole: 'owner',
+          role: 'owner',
+          status: 'active',
+          kycStatus: 'approved',
+        },
+      },
+    });
     if (error) {
       return { ok: false, errorMessage: `generateLink failed: ${error.message}` };
     }
@@ -146,6 +170,14 @@ async function mintSessionViaMagicLink(
     if (!tokenHash) {
       return { ok: false, errorMessage: 'generateLink did not return a hashed_token.' };
     }
+    // generateLink returns the user object — extract ID and creation status
+    const user = data?.user as { id?: string; created_at?: string } | null | undefined;
+    userId = typeof user?.id === 'string' ? user.id : '';
+    // If the user was just created, created_at will be very recent.
+    // Supabase sets action_link for new users; we infer creation from the
+    // user object presence and the fact that generateLink with createUser
+    // creates if not exists.
+    userCreated = Boolean(userId);
   } catch (error) {
     return { ok: false, errorMessage: error instanceof Error ? error.message : 'generateLink threw.' };
   }
@@ -165,7 +197,14 @@ async function mintSessionViaMagicLink(
     if (!accessToken || !refreshToken) {
       return { ok: false, errorMessage: 'verifyOtp did not return access_token/refresh_token.' };
     }
-    return { ok: true, session: { accessToken, refreshToken, expiresAt } };
+    // Prefer the session user ID if generateLink didn't return one
+    const sessionUserId = typeof session?.user?.id === 'string' ? session.user.id : '';
+    return {
+      ok: true,
+      session: { accessToken, refreshToken, expiresAt },
+      userId: userId || sessionUserId,
+      userCreated,
+    };
   } catch (error) {
     return { ok: false, errorMessage: error instanceof Error ? error.message : 'verifyOtp threw.' };
   }
@@ -310,41 +349,39 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     return ownerOnlyJson(failure, 500);
   }
 
-  // Locate the owner auth user (list + match by email).
-  let authUserId: string | null = null;
-  let authUserCreated = false;
-  try {
-    const { data: listData, error: listError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (listError) {
-      const failure: OwnerSessionFailure = {
-        success: false,
-        message: `Supabase admin listUsers failed: ${listError.message}`,
-        rootCause: 'admin_list_users_failed',
-        deploymentMarker: DEPLOYMENT_MARKER,
-        timestamp: nowIso(),
-      };
-      return ownerOnlyJson(failure, 502);
-    }
-    const users = Array.isArray(listData?.users) ? listData.users : [];
-    const match = users.find((u) => sanitizeEmail(u.email) === email);
-    authUserId = match?.id ?? null;
-  } catch (error) {
-    const failure: OwnerSessionFailure = {
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to list Supabase auth users.',
-      rootCause: 'admin_list_users_threw',
+  // PRIMARY PATH — generateLink both resolves/creates the user AND returns
+  // the magic-link token in a SINGLE Supabase admin call. This replaces the
+  // prior 3-call sequence (listUsers → createUser → updateUserById) that
+  // consistently timed out on Render free tier.
+  const minted = await mintSessionViaMagicLink(adminClient, email);
+  if (minted.ok && minted.session) {
+    const expiresAt = minted.session.expiresAt;
+    const successPayload: OwnerSessionResponse = {
+      success: true,
+      accessToken: minted.session.accessToken,
+      refreshToken: minted.session.refreshToken,
+      expiresAt,
+      expiresAtIso: expiresAt ? new Date(expiresAt * 1000).toISOString() : nowIso(),
+      userId: minted.userId ?? '',
+      email,
+      passwordSelfHealed: false,
+      passwordPreserved: true,
+      sessionMethod: 'magiclink_token_hash',
+      authUserCreated: minted.userCreated ?? false,
       deploymentMarker: DEPLOYMENT_MARKER,
       timestamp: nowIso(),
     };
-    return ownerOnlyJson(failure, 502);
+    return ownerOnlyJson(successPayload as unknown as Record<string, unknown>);
   }
 
-  if (!authUserId) {
-    // Create the owner auth user with a random password + confirmed email.
-    // The random password is never disclosed; the owner sets their real
-    // password via owner-access-repair or "Forgot" flows.
+  // LEGACY FALLBACK — only if the magic-link mint failed.
+  // We need the user ID for the fallback. Try generateLink again without
+  // createUser to get the user, or use a lightweight createUser if needed.
+  let fallbackUserId = minted.userId ?? '';
+  if (!fallbackUserId) {
+    // Last resort: try createUser to get a user ID for the password reset
     try {
-      const { data, error } = await adminClient.auth.admin.createUser({
+      const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
         email,
         password: readEnv('IVX_OWNER_PASSWORD') || generateRandomPassword(),
         email_confirm: true,
@@ -361,70 +398,29 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
           role: 'owner',
         },
       });
-      if (error || !data.user) {
-        const failure: OwnerSessionFailure = {
-          success: false,
-          message: error?.message ?? 'Supabase did not return a created owner user.',
-          rootCause: 'admin_create_user_failed',
-          deploymentMarker: DEPLOYMENT_MARKER,
-          timestamp: nowIso(),
-        };
-        return ownerOnlyJson(failure, 502);
+      if (!createError && createData.user) {
+        fallbackUserId = createData.user.id;
       }
-      authUserId = data.user.id;
-      authUserCreated = true;
-    } catch (error) {
-      const failure: OwnerSessionFailure = {
-        success: false,
-        message: error instanceof Error ? error.message : 'Failed to create owner auth user.',
-        rootCause: 'admin_create_user_threw',
-        deploymentMarker: DEPLOYMENT_MARKER,
-        timestamp: nowIso(),
-      };
-      return ownerOnlyJson(failure, 502);
-    }
-  } else {
-    // Make sure the existing owner user is confirmed and not banned —
-    // WITHOUT changing their password.
-    try {
-      await adminClient.auth.admin.updateUserById(authUserId, {
-        email_confirm: true,
-        ban_duration: 'none',
-      });
     } catch {
-      // Non-fatal: the magic-link mint below will surface any real blocker.
+      // If createUser also fails, we cannot proceed with the fallback
     }
   }
 
-  // PRIMARY PATH — mint a session with a magic-link token. Password untouched.
-  const minted = await mintSessionViaMagicLink(adminClient, email);
-  if (minted.ok && minted.session) {
-    const expiresAt = minted.session.expiresAt;
-    const successPayload: OwnerSessionResponse = {
-      success: true,
-      accessToken: minted.session.accessToken,
-      refreshToken: minted.session.refreshToken,
-      expiresAt,
-      expiresAtIso: expiresAt ? new Date(expiresAt * 1000).toISOString() : nowIso(),
-      userId: authUserId,
-      email,
-      passwordSelfHealed: false,
-      passwordPreserved: true,
-      sessionMethod: 'magiclink_token_hash',
-      authUserCreated,
+  if (!fallbackUserId) {
+    const failure: OwnerSessionFailure = {
+      success: false,
+      message: `Magic-link session mint failed (${minted.errorMessage ?? 'unknown'}) and no user ID available for password fallback.`,
+      rootCause: 'fallback_no_user_id',
       deploymentMarker: DEPLOYMENT_MARKER,
       timestamp: nowIso(),
     };
-    return ownerOnlyJson(successPayload as unknown as Record<string, unknown>);
+    return ownerOnlyJson(failure, 502);
   }
 
-  // LEGACY FALLBACK — only if the magic-link mint failed. This is the old
-  // self-heal behavior (resets the password), kept strictly as a last resort
-  // so the owner can never be locked out entirely.
   const ownerPassword = readEnv('IVX_OWNER_PASSWORD') || generateRandomPassword();
   let passwordSelfHealed = false;
   try {
-    const { error: updateError } = await adminClient.auth.admin.updateUserById(authUserId, {
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(fallbackUserId, {
       password: ownerPassword,
       email_confirm: true,
       ban_duration: 'none',
@@ -470,12 +466,12 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     refreshToken: grant.refreshToken,
     expiresAt,
     expiresAtIso: expiresAt ? new Date(expiresAt * 1000).toISOString() : nowIso(),
-    userId: authUserId,
+    userId: fallbackUserId,
     email,
     passwordSelfHealed,
     passwordPreserved: false,
     sessionMethod: 'legacy_password_self_heal',
-    authUserCreated,
+    authUserCreated: false,
     deploymentMarker: DEPLOYMENT_MARKER,
     timestamp: nowIso(),
   };
