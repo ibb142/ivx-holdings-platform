@@ -36,6 +36,8 @@ describe('Block 1 — owner-ai/status auth guard', () => {
 
   it('returns 403 for an authenticated non-owner token', async () => {
     // A random non-owner JWT — the guard should reject it.
+    // In CI (no Supabase URL), the auth guard hits a 15s internal timeout before
+    // returning 401/403. Bun's default test timeout is 5s, so we extend it here.
     const fakeJwt = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' })) + '.' +
       btoa(JSON.stringify({ sub: 'non-owner-user', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })) +
       '.';
@@ -44,7 +46,7 @@ describe('Block 1 — owner-ai/status auth guard', () => {
     });
     const res = await handleIVXOwnerAIProxyStatus(req);
     expect([401, 403]).toContain(res.status);
-  });
+  }, 20000);
 
   it('does not leak secrets, credentials, or env values on rejection', async () => {
     const req = new Request('https://api.ivxholding.com/api/ivx/owner-ai/status');
