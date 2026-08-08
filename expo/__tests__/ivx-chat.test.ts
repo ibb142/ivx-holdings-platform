@@ -494,17 +494,7 @@ mock.module('react-native', () => ({
   },
 }));
 
-let ivxChat: Record<string, unknown>;
-try {
-  ivxChat = await import('../src/modules/chat/services/ivxChat');
-} catch (importError) {
-  console.error('[IVX-CHAT-TEST] Module import failed:', importError);
-  ivxChat = {} as Record<string, unknown>;
-}
-if (!ivxChat.bootstrapRoomByFriendlySlug) {
-  console.error('[IVX-CHAT-TEST] ivxChat exports:', Object.keys(ivxChat).join(', ') || '(empty)');
-  console.error('[IVX-CHAT-TEST] Has supabase mock:', !!(globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__);
-}
+const ivxChat = await import('../src/modules/chat/services/ivxChat');
 
 beforeEach(() => {
   currentState = createState();

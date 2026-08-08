@@ -1,7 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { IVX_CHAT_UPLOAD_BUCKET } from '@/shared/ivx';
+// Inlined from @/shared/ivx/types to avoid transitive @supabase/supabase-js
+// import via @/shared/ivx/index → access-control.ts → createClient.
+// The transitive import causes partial module evaluation in CI when
+// @supabase/supabase-js is mocked by test-preload.ts.
+const IVX_CHAT_UPLOAD_BUCKET = 'ivx-chat-uploads';
 import type {
   ChatConversation,
   ChatFileType,

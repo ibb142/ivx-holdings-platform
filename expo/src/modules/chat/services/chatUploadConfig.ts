@@ -1,4 +1,6 @@
-import { IVX_CHAT_UPLOAD_BUCKET } from '@/shared/ivx';
+// Inlined from @/shared/ivx/types to avoid transitive @supabase/supabase-js
+// import via @/shared/ivx/index → access-control.ts → createClient.
+const IVX_CHAT_UPLOAD_BUCKET = 'ivx-chat-uploads';
 
 const DEFAULT_CHAT_UPLOAD_BUCKET = IVX_CHAT_UPLOAD_BUCKET;
 
