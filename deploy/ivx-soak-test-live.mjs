@@ -1,6 +1,8 @@
 // IVX Phase 4 Production Soak Test — 2 hour continuous probe
-// Probes /health and /version every 10 seconds, plus 5 random API endpoints
+// Probes /health every 10 seconds, plus 5 random API endpoints every 60 seconds.
 // Logs results to /tmp/ivx-soak-live.log
+
+import { appendFileSync } from 'node:fs';
 
 const BASE = 'https://api.ivxholding.com';
 const ENDPOINTS = [
@@ -15,21 +17,23 @@ const log = (msg) => {
   const line = `${new Date().toISOString()} ${msg}`;
   console.log(line);
   try {
-    fs.appendFileSync('/tmp/ivx-soak-live.log', line + '\n');
-  } catch {}
+    appendFileSync('/tmp/ivx-soak-live.log', line + '\n');
+  } catch (e) {
+    console.error('log append failed:', e.message);
+  }
 };
-
-import { appendFileSync } from 'node:fs';
 
 let pass = 0;
 let fail = 0;
 let mismatchedSha = 0;
+let iteration = 0;
 const expectedSha = 'e4eb93231ac441f97df0b18b3b3331d2f52e3b29';
 const start = Date.now();
 const durationMs = 2 * 60 * 60 * 1000; // 2 hours
 const intervalMs = 10_000;
 
 async function probe() {
+  iteration++;
   const elapsedMin = ((Date.now() - start) / 60000).toFixed(1);
   try {
     const res = await fetch(`${BASE}/health`, { method: 'GET' });
@@ -38,7 +42,9 @@ async function probe() {
       pass++;
       const sha = body.match(/"commit":"([^"]+)"/)?.[1] ?? 'unknown';
       if (sha !== expectedSha) mismatchedSha++;
-      if (pass % 60 === 0) log(`SOAK ${elapsedMin}m: pass=${pass} fail=${fail} shaMismatch=${mismatchedSha} sha=${sha}`);
+      if (iteration % 60 === 0) {
+        log(`SOAK ${elapsedMin}m: iter=${iteration} pass=${pass} fail=${fail} shaMismatch=${mismatchedSha} sha=${sha}`);
+      }
     } else {
       fail++;
       log(`SOAK ${elapsedMin}m: FAIL status=${res.status} body=${body.slice(0,200)}`);
@@ -50,10 +56,10 @@ async function probe() {
 }
 
 log(`SOAK START: duration=2h interval=10s expectedSha=${expectedSha}`);
-const interval = setInterval(probe, intervalMs);
 probe();
+const interval = setInterval(probe, intervalMs);
 setTimeout(() => {
   clearInterval(interval);
-  log(`SOAK END: pass=${pass} fail=${fail} shaMismatch=${mismatchedSha}`);
+  log(`SOAK END: iter=${iteration} pass=${pass} fail=${fail} shaMismatch=${mismatchedSha}`);
   process.exit(0);
 }, durationMs);
