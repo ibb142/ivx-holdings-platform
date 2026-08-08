@@ -570,8 +570,12 @@ describe('test_api_endpoint input validation', () => {
 
 describe('test_api_endpoint (live)', () => {
   test('probes a real endpoint', async () => {
+    // Use Render direct URL — api.ivxholding.com can 502 during deploy cycling
+    const url = process.env.CI
+      ? 'https://ivx-holdings-platform.onrender.com/health'
+      : 'https://api.ivxholding.com/health';
     const result = await runTestApiEndpoint({
-      url: 'https://api.ivxholding.com/health',
+      url,
       method: 'GET',
     });
     expect(result.provider).toBe('ivx');
@@ -662,7 +666,10 @@ describe('all new AI actions share safety invariants', () => {
   }, 30_000);
 
   test('test_api_endpoint returns readOnly=true', async () => {
-    const result = await runTestApiEndpoint({ url: 'https://api.ivxholding.com/health' });
+    const url = process.env.CI
+      ? 'https://ivx-holdings-platform.onrender.com/health'
+      : 'https://api.ivxholding.com/health';
+    const result = await runTestApiEndpoint({ url });
     expect(result.readOnly).toBe(true);
     expect(result.secretValuesReturned).toBe(false);
   }, 20_000);

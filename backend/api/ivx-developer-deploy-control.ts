@@ -3268,6 +3268,7 @@ export async function runTestApiEndpoint(input: Record<string, unknown>): Promis
       url,
       method,
       ok: false,
+      status: 0,
       error: err instanceof Error ? err.message : 'fetch failed',
       elapsedMs: elapsed,
       timedOut: err instanceof Error && err.name === 'AbortError',
