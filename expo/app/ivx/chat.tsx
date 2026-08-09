@@ -540,15 +540,18 @@ const WORKER_TRIGGER_HINTS: readonly string[] = [
   '“Deploy …” / “Ship to production”',
 ];
 
-/** Detect whether a sent message kicks off real IVX work so we can surface the Live Work button. */
-function detectChatLiveWorkTask(text: string): { label: string; isSupabase: boolean } | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  for (const pattern of LIVE_WORK_TASK_PATTERNS) {
-    if (pattern.re.test(trimmed)) {
-      return { label: pattern.label, isSupabase: Boolean(pattern.supabase) };
-    }
-  }
+/**
+ * Detect whether a sent message kicks off a REAL autonomous job.
+ *
+ * Per owner directive: normal chat messages containing words like "fix",
+ * "build", "deploy", "task", "work", "complete", or "developer" must NOT
+ * create fake progress UI. A live-work banner is only shown when a real
+ * autonomous job exists with a job ID — the backend task queue must create
+ * the job first. This function now returns null for normal text messages;
+ * real job status is set via setActiveLiveWorkTask when a job ID is received
+ * from the backend task queue.
+ */
+function detectChatLiveWorkTask(_text: string): { label: string; isSupabase: boolean } | null {
   return null;
 }
 const DEFAULT_OWNER_AI_CONFIG_AUDIT: IVXOwnerAIConfigAudit = getIVXOwnerAIConfigAudit();
