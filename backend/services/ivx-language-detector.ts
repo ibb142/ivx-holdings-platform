@@ -29,19 +29,27 @@ export function detectMessageLanguage(message: string): DetectedLanguage {
   const hasSpanishAccents = /[áéíóúñ¿¡ü]/i.test(message);
   if (hasSpanishAccents) return 'es';
 
-  // Common Spanish question / conversational words
+  // Common Spanish question / conversational words.
+  // IMPORTANT: short words like 'es', 'mi', 'tu', 'su', 'son' must use word
+  // boundary matching — otherwise 'es' matches inside 'estate', 'houses',
+  // 'is'; 'su' matches inside 'surface', 'measure'; etc.
   const spanishKeywords = [
-    'cual', 'cuál', 'quien', 'quién', 'que', 'qué', 'como', 'cómo',
-    'donde', 'dónde', 'cuando', 'cuándo', 'por que', 'por qué',
+    'cual', 'cuál', 'quien', 'quién', 'qué', 'como', 'cómo',
+    'donde', 'dónde', 'cuando', 'cuándo', 'por qué',
     'hola', 'buenos dias', 'buenas tardes', 'buenas noches',
     'gracias', 'por favor', 'de nada', 'nombre', 'dueno', 'dueño',
-    'propietario', 'empresa', 'inversion', 'inversión', 'proyecto',
-    'dime', 'quiero', 'necesito', 'puedes', 'puede', 'esta', 'está',
-    'son', 'es', 'mi', 'tu', 'su', 'nuestra', 'nuestro',
+    'propietario', 'empresa', 'inversión', 'proyecto',
+    'dime', 'quiero', 'necesito', 'puedes', 'está',
+    'nuestra', 'nuestro',
     'dinero', 'casa', 'propiedad', 'invertir', 'ganancia',
     'respuesta', 'ayuda', 'entiendo', 'hablas', 'español',
   ];
-  const spanishMatches = spanishKeywords.filter((kw) => text.includes(kw)).length;
+  // Short Spanish words that need word-boundary matching
+  const spanishWordBoundary = ['es', 'mi', 'tu', 'su', 'son', 'que', 'esta'];
+
+  const spanishSubstringMatches = spanishKeywords.filter((kw) => text.includes(kw)).length;
+  const spanishBoundaryMatches = spanishWordBoundary.filter((kw) => new RegExp(`\b${kw}\b`).test(text)).length;
+  const spanishMatches = spanishSubstringMatches + spanishBoundaryMatches;
   if (spanishMatches >= 2) return 'es';
 
   // Common English question / conversational words
@@ -50,11 +58,15 @@ export function detectMessageLanguage(message: string): DetectedLanguage {
     'hello', 'hi', 'hey', 'good morning', 'good afternoon',
     'thank', 'please', 'name', 'owner', 'company',
     'invest', 'project', 'property', 'tell me', 'can you',
-    'is', 'are', 'the', 'my', 'your', 'our',
     'money', 'house', 'return', 'help', 'understand',
     'english', 'language',
   ];
-  const englishMatches = englishKeywords.filter((kw) => text.includes(kw)).length;
+  // Short English words that need word-boundary matching
+  const englishWordBoundary = ['is', 'are', 'the', 'my', 'your', 'our'];
+
+  const englishSubstringMatches = englishKeywords.filter((kw) => text.includes(kw)).length;
+  const englishBoundaryMatches = englishWordBoundary.filter((kw) => new RegExp(`\b${kw}\b`).test(text)).length;
+  const englishMatches = englishSubstringMatches + englishBoundaryMatches;
   if (englishMatches >= 2) return 'en';
 
   // Single keyword match — lean toward that language
