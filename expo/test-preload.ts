@@ -2,6 +2,11 @@
 // This ensures react-native and @supabase/supabase-js are mocked globally
 // for test files that transitively import them without their own mocks.
 
+// Define __DEV__ global for expo-modules-core compatibility
+if (typeof (globalThis as Record<string, unknown>).__DEV__ === 'undefined') {
+  (globalThis as Record<string, unknown>).__DEV__ = false;
+}
+
 // Only mock if not already mocked by the test file itself
 const { mock } = require('bun:test');
 

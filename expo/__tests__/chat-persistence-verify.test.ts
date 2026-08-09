@@ -35,6 +35,10 @@ mock.module('react-native', () => ({
   Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
   Linking: { canOpenURL: async () => true, openURL: async () => {} },
   AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+  TurboModuleRegistry: { get: () => ({}) },
+  NativeModules: {},
+  NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
+  StyleSheet: { create: (s: Record<string, unknown>) => s, flatten: (s: Record<string, unknown>) => s },
 }));
 
 // NOTE: Do NOT mock @/lib/supabase here. This test only imports from

@@ -28,6 +28,10 @@ mock.module('../src/modules/chat/services/roomDetection', () => ({
 
 mock.module('react-native', () => ({
   Platform: { OS: 'ios', Version: '17.0', select: (obj: Record<string, unknown>) => obj.ios ?? obj.default },
+  TurboModuleRegistry: { get: () => ({}) },
+  NativeModules: {},
+  NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
+  StyleSheet: { create: (s: Record<string, unknown>) => s, flatten: (s: Record<string, unknown>) => s },
   AppState: {
     addEventListener: (_event: string, _handler: Function) => ({ remove: () => {} }),
     currentState: 'active',

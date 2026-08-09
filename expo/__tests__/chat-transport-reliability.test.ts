@@ -21,6 +21,10 @@ mock.module('react-native', () => ({
   },
   Platform: { OS: 'ios' },
   Linking: { canOpenURL: async () => true, openURL: async () => {}, addEventListener: () => ({ remove: () => {} }) },
+  TurboModuleRegistry: { get: () => ({}) },
+  NativeModules: {},
+  NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
+  StyleSheet: { create: (s: Record<string, unknown>) => s, flatten: (s: Record<string, unknown>) => s },
 }));
 
 mock.module('@react-native-async-storage/async-storage', () => ({
