@@ -486,6 +486,8 @@ import {
   handleSchedulerEnableRequest,
 } from './api/ivx-scheduler';
 import { startAutonomousScheduler } from './services/ivx-autonomous-scheduler';
+import { startSmsNotificationScheduler, getSmsNotifierStatus, sendOwnerStatusSms, sendOwnerAlertSms } from './services/ivx-autonomous-sms-notifier';
+import { runFactoryActivation, getFactoryActivationStatus, IVX_FACTORY_ACTIVATION_MARKER } from './services/ivx-factory-activation';
 import { startLandingSeoAutodeploy } from './services/ivx-landing-seo-autodeploy';
 import { buildVersionResponse } from './services/ivx-version-endpoint';
 import {
@@ -5990,6 +5992,7 @@ try {
 } catch (err) { console.warn('[IVXOwnerAI-Hono] daily report scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startContinuousExecutionScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] continuous execution scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startAutonomousScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous scheduler failed to start:', err instanceof Error ? err.message : err); }
+try { startSmsNotificationScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] SMS notification scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startScaleLoopScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] scale loop scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startRoleAgentScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] role-agent run loop failed to start:', err instanceof Error ? err.message : err); }
 try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI-Hono] engineering OS 2h report ticker failed to start:', err instanceof Error ? err.message : err); }
@@ -6436,6 +6439,41 @@ app.options('/api/ivx/autonomous/monitor/schedule', () => new Response(null, { s
 app.get('/api/ivx/autonomous/monitor/schedule', async (c) => {
   const { CHECK_SCHEDULE } = await import('./services/ivx-production-monitor');
   return c.json({ ok: true, schedule: CHECK_SCHEDULE });
+});
+
+// ============================================================================
+// IVX Autonomous SMS Notifier — owner status notifications via AWS SNS
+// ============================================================================
+app.options('/api/ivx/autonomous/sms/status', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/sms/status', (c) => c.json({ ok: true, sms: getSmsNotifierStatus() }));
+
+app.options('/api/ivx/autonomous/sms/send', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/autonomous/sms/send', async (c) => {
+  const result = await sendOwnerStatusSms();
+  return c.json({ ok: result.ok, result });
+});
+
+app.options('/api/ivx/autonomous/sms/alert', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/autonomous/sms/alert', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const message = typeof body.message === 'string' ? body.message : 'No message provided';
+  const result = await sendOwnerAlertSms(message);
+  return c.json({ ok: result.ok, result });
+});
+
+// ============================================================================
+// IVX App Factory Activation — verify + activate factory agents
+// ============================================================================
+app.options('/api/ivx/autonomous/factory/activate', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.post('/api/ivx/autonomous/factory/activate', async (c) => {
+  const result = await runFactoryActivation();
+  return c.json({ ok: true, result });
+});
+
+app.options('/api/ivx/autonomous/factory/status', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
+app.get('/api/ivx/autonomous/factory/status', async (c) => {
+  const status = await getFactoryActivationStatus();
+  return c.json({ ok: true, status });
 });
 
 export default app;// CI trigger comment
