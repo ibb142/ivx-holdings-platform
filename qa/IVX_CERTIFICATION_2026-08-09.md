@@ -215,9 +215,9 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `5e8f19c7`. GitHub is the ca
 
 ### Owner Action Required
 
-1. **Apply new Vercel AI Gateway key to Render:** Run `RENDER_API_KEY=rnd_xxx NEW_AI_GATEWAY_KEY=vck_3Ggvu9pDufv7OLoTbPV0GmNMLWkIMlTV7P5aipOBj4V5gFZlGD2SE33H node deploy/update-ai-gateway-key.mjs` — this updates `AI_GATEWAY_API_KEY` + `IVX_AI_GATEWAY_KEY` on Render and triggers a deploy. After deploy, `/api/public/chat` will serve real LLM responses in production.
+1. **Apply new Vercel AI Gateway key to Render:** Run `RENDER_API_KEY=rnd_xxx NEW_AI_GATEWAY_KEY=<your-vck-key> node deploy/update-ai-gateway-key.mjs` — this updates `AI_GATEWAY_API_KEY` + `IVX_AI_GATEWAY_KEY` on Render and triggers a deploy. After deploy, `/api/public/chat` will serve real LLM responses in production. (Key provided to owner separately — not committed to repo for security.)
 
-2. **Push updated certificate to GitHub:** The GitHub PAT `ghp_kpobTJ***` returned 401 (expired/revoked). Provide a fresh PAT to push the final commit.
+2. **Push updated certificate to GitHub:** ✅ COMPLETE — pushed to GitHub main as commit `077c9c39`.
 
 ### External / Infrastructure Blockers
 
