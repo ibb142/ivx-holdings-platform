@@ -190,7 +190,7 @@ async function verifyAndActivateAgent(agent: FactoryAgent): Promise<Verification
         method: 'PATCH',
         body: JSON.stringify({
           activation_status: 'ACTIVE',
-          qa_status: 'PASS',
+          qa_status: 'PASSED',
           updated_at: now,
         }),
       },
