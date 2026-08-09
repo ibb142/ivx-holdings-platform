@@ -140,7 +140,7 @@ export function mapRoomMessagesToPublicChatHistory(messages: ChatRoomMessage[]):
  * Instead of returning a canned auth wall, these should route to the LLM for
  * a helpful diagnostic response ("What problem are you seeing?").
  */
-function isVagueExecutionRequest(message: string): boolean {
+export function isVagueExecutionRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase().trim();
   if (!text || text.length > 500) return false;
 
