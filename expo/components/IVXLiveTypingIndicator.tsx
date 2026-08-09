@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 type IVXLiveTypingIndicatorProps = {
@@ -6,27 +6,19 @@ type IVXLiveTypingIndicatorProps = {
   speedMs?: number;
 };
 
-export function IVXLiveTypingIndicator({ baseText, speedMs = 30 }: IVXLiveTypingIndicatorProps) {
-  const [revealed, setRevealed] = useState(0);
-
-  useEffect(() => {
-    setRevealed(0);
-    const interval = setInterval(() => {
-      setRevealed((prev) => {
-        if (prev >= baseText.length) {
-          clearInterval(interval);
-          return baseText.length;
-        }
-        return prev + 1;
-      });
-    }, speedMs);
-    return () => clearInterval(interval);
-  }, [baseText, speedMs]);
-
+/**
+ * Minimal static typing indicator for normal chat.
+ *
+ * Shows "IVX is typing..." as a single static line — NO character reveal,
+ * NO fake typing animation. This is the ONLY loading state
+ * visible during normal chat. It disappears when the first real response
+ * delta arrives.
+ */
+export function IVXLiveTypingIndicator({ baseText }: IVXLiveTypingIndicatorProps) {
   return (
     <View style={styles.container} testID="ivx-owner-chat-live-typing">
       <Text style={styles.text}>
-        {baseText.slice(0, revealed)}
+        {baseText}
         <Text style={styles.caret}>▋</Text>
       </Text>
     </View>

@@ -23,6 +23,7 @@ import {
   type PublicChatHistoryItem,
   type PublicChatSource,
 } from '../public-chat-ai';
+import { detectMessageLanguage, buildLanguageInstruction } from '../services/ivx-language-detector';
 import { getIVXAIEndpoint, resolveIVXAIModel, streamIVXAIText } from '../ivx-ai-runtime';
 import { resolveIVXIdentityAnswer } from '../services/ivx-ia-identity-brain';
 import { resolveIVXConversationAnswer } from '../services/ivx-ia-conversation-brain';
@@ -445,7 +446,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
             '',
             'Reply directly to the user message. If the user asks for an exact token or proof string, include it exactly.',
           );
-          const system = buildSystemPrompt(sessionId, true, documents, null, null);
+          const system = buildSystemPrompt(sessionId, true, documents, null, null, message);
           try {
             const result = await requestIVXAIText({
               module: 'public-chat',
@@ -507,6 +508,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           documents,
           null,
           null,
+          message,
         );
 
         let accumulated = '';

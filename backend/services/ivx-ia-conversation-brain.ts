@@ -235,16 +235,20 @@ function evaluateMathQuestion(message: string): number | null {
 /**
  * Build the direct answer for a general conversation question.
  */
+import { detectMessageLanguage, type DetectedLanguage } from './ivx-language-detector';
+
 export function buildIVXConversationAnswer(message: string): string | null {
   const type = detectIVXConversationQuestion(message);
   if (type === 'none') return null;
+  const lang = detectMessageLanguage(message);
+  const isSpanish = lang === 'es';
 
   switch (type) {
     case 'math': {
       const result = evaluateMathQuestion(message);
       if (result === null || !isFinite(result)) return null;
       const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(6)));
-      return `The answer is ${formatted}.`;
+      return isSpanish ? `El resultado es ${formatted}.` : `The answer is ${formatted}.`;
     }
 
     case 'percentage': {
@@ -255,9 +259,9 @@ export function buildIVXConversationAnswer(message: string): string | null {
       // the result with a dollar sign and thousands separators.
       const hasDollar = /\$/.test(message);
       if (hasDollar && Number.isInteger(result)) {
-        return `The answer is $${result.toLocaleString('en-US')}.`;
+        return isSpanish ? `El resultado es $${result.toLocaleString('en-US')}.` : `The answer is $${result.toLocaleString('en-US')}.`;
       }
-      return `The answer is ${formatted}.`;
+      return isSpanish ? `El resultado es ${formatted}.` : `The answer is ${formatted}.`;
     }
 
     case 'yes_no': {
@@ -271,17 +275,33 @@ export function buildIVXConversationAnswer(message: string): string | null {
     }
 
     case 'greeting':
-      return [
+      return isSpanish ? [
+        '¡Hola! Soy IVX IA, el cerebro de IA de IVXHOLDINGS.',
+        '',
+        'Puedo responder cualquier pregunta que tengas — sobre IVXHOLDINGS, nuestros proyectos, inversiones, rendimientos, la plataforma o cualquier otra cosa. ¿Qué te gustaría saber?',
+      ].join('\n') : [
         'Hello! I am IVX IA, the AI brain for IVXHOLDINGS.',
         '',
         'I can answer any question you have — about IVXHOLDINGS, our projects, investments, returns, the platform, or anything else. What would you like to know?',
       ].join('\n');
 
     case 'thanks':
-      return "You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.";
+      return isSpanish
+        ? "¡De nada! Soy IVX IA — feliz de ayudar. Pregúntame lo que quieras cuando lo necesites."
+        : "You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.";
 
     case 'capabilities':
-      return [
+      return isSpanish ? [
+        'Esto es lo que puedo hacer como IVX IA:',
+        '',
+        '- Responder cualquier pregunta sobre IVXHOLDINGS — la empresa, proyectos, inversiones, ROI, riesgos, ofertas JV, prestamistas privados, tokenización, billeteras, retiros y transferencias.',
+        '- Tener una conversación normal y responder preguntas generales (matemáticas, definiciones, consejos).',
+        '- Explicar el proceso de inversión, mínimos, plazos y rendimientos esperados para cualquier proyecto.',
+        '- Operar como Desarrollador Senior (con autorización del dueño) — auditar código, arquitectura, Supabase, GitHub, Render y proponer parches exactos.',
+        '- Ejecutar tareas de desarrollo aprobadas por el dueño que confirman, despliegan y devuelven prueba en vivo.',
+        '',
+        'Nada está prohibido. Solo pregunta.',
+      ].join('\n') : [
         'Here is what I can do as IVX IA:',
         '',
         '- Answer any question about IVXHOLDINGS — the company, projects, investments, ROI, risks, JV deals, private lenders, tokenization, wallets, withdrawals, and wires.',
@@ -294,7 +314,18 @@ export function buildIVXConversationAnswer(message: string): string | null {
       ].join('\n');
 
     case 'help':
-      return [
+      return isSpanish ? [
+        'Soy IVX IA — aquí para ayudar.',
+        '',
+        'Puedes preguntarme:',
+        '- "¿Cuál es tu nombre?" o "¿Quién te creó?"',
+        '- "Cuéntame sobre las inversiones y proyectos de IVXHOLDINGS"',
+        '- "¿Cómo invierto?" o "¿Cuál es el ROI?"',
+        '- Cualquier pregunta general — matemáticas, definiciones, consejos, conversación.',
+        '- "¿Estás en modo desarrollador senior?" para verificar capacidades de desarrollo.',
+        '',
+        '¿Qué te gustaría saber?',
+      ].join('\n') : [
         'I am IVX IA — here to help.',
         '',
         'You can ask me:',
