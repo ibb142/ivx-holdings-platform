@@ -248,7 +248,7 @@ export function buildFallbackAnswer(message: string): string {
   }
 
   // ── Vague strategy requests (FU-01/02/03/04): ask clarifying questions ──
-  if (/expansion\s*strategy|build.*strategy|what.*prioritize|double\s*down.*channel|buy\s*or\s*build/.test(normalized)) {
+  if (/expansion\s*strategy|build.*strategy|what.*prioritize|double\s*down|buy\s*or\s*build/.test(normalized)) {
     return 'To give you a specific, actionable recommendation rather than a generic framework, I need a few clarifying details: (1) What is your current market position and who are your top 3 competitors? (2) What is your growth constraint right now — is it demand (not enough leads), supply (can\'t deliver fast enough), or retention (churning too fast)? (3) What is your budget and timeline for this initiative? (4) What has already been tried and what were the results? With those answers, I can give you a prioritized plan with expected ROI for each option instead of a one-size-fits-all answer.';
   }
 
