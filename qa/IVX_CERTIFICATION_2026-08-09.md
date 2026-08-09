@@ -2,7 +2,7 @@
 
 **Project:** ivx-holdings-platform  
 **Repository:** https://github.com/ibb142/ivx-holdings-platform  
-**Certificate date:** 2026-08-09T12:40+00:00  
+**Certificate date:** 2026-08-09T14:21+00:00  
 **Certified by:** IVX autonomous QA pipeline (owner-controlled)  
 **Rules applied:** No fabricated logs, commits, SHAs, deploy IDs, or test results. Every result classified as PASS / FAIL / BLOCKED / NOT EXECUTED.
 
@@ -10,7 +10,11 @@
 
 ## Executive Summary
 
-This certificate verifies the autonomous, IVX IA chat, and senior-developer enterprise software gaps are closed end-to-end and that the codebase passes full regression QA. The current canonical commit is `b5947947`. All test suites pass with zero failures: backend 2641/2641, expo 1126/1126. SHA parity is verified across Local = GitHub = Render. Phase 15 narrative QA gaps (TJ-01, TJ-03, CA-02, FU, CM-04) were remediated in commits `2ec070f9` through `992ff149`. **Overall app store release remains BLOCKED by external infrastructure (physical device QA, TestFlight, GitHub Actions CI), not by code defects.**
+This certificate verifies the autonomous, IVX IA chat, and senior-developer enterprise software regression suites pass end-to-end. The current canonical commit is `5e8f19c7`. All automated test suites pass with zero failures: backend 2641/2641, expo 1126/1126. SHA parity is verified across Local = GitHub = Render.
+
+**Critical new blocker:** the production Vercel AI Gateway key is now returning `401 authentication_error`. `/api/ivx/chat-debug` reports `credentialValid: false`, `lastHttpStatus: 401`, `state: AI_UNAVAILABLE`. Because the LLM path is down, `/api/public/chat` falls back to deterministic `buildFallbackAnswer` for every request. Phase 15 senior-intelligence narrative QA cannot be fully certified until the key is restored and the 80-question battery is re-run with real LLM responses.
+
+Deterministic Phase 15 remediation (FU-03 regex, TJ-01/TJ-03/CA-02/FU/CM-04 fallback answers) is deployed at `5e8f19c7` and spot-checked against production, but the full 11-dimension rubric evaluation requires a working AI gateway.
 
 ---
 
@@ -18,12 +22,12 @@ This certificate verifies the autonomous, IVX IA chat, and senior-developer ente
 
 | Source | Commit SHA | Status |
 |--------|------------|--------|
-| Local working tree | `b5947947c2353e3885ff992708e2a1c338f4bdce` | Verified |
-| GitHub main | `b5947947c2353e3885ff992708e2a1c338f4bdce` | Verified |
-| Render production | `b5947947c2353e3885ff992708e2a1c338f4bdce` | Verified |
-| `/health` SHA | `b5947947...` | `ok: true`, `databaseConfigured: true`, `status: healthy` |
+| Local working tree | `5e8f19c7f0b6f399507d955bf6dbc51cddcbb0b7` | Verified |
+| GitHub main | `5e8f19c7f0b6f399507d955bf6dbc51cddcbb0b7` | Verified |
+| Render production | `5e8f19c7f0b6f399507d955bf6dbc51cddcbb0b7` | Verified |
+| `/health` SHA | `5e8f19c7...` | `ok: true`, `databaseConfigured: true`, `status: healthy` |
 
-SHA parity: **VERIFIED**. Local = GitHub = Render = `b5947947`. GitHub is the canonical source of truth; Render auto-deploys from GitHub main. Git remote is `https://github.com/ibb142/ivx-holdings-platform.git` (owner-controlled, not Rork router).
+SHA parity: **VERIFIED**. Local = GitHub = Render = `5e8f19c7`. GitHub is the canonical source of truth; Render auto-deploys from GitHub main. Git remote is `https://github.com/ibb142/ivx-holdings-platform.git` (owner-controlled, not Rork router).
 
 ---
 
@@ -107,14 +111,14 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `b5947947`. GitHub is the ca
 
 | Metric | Result |
 |--------|--------|
-| TJ-01 arithmetic fix | PASS — fallback returns `$36,000` (commit `2ec070f9`) |
-| TJ-03 vague execution fix | PASS — routes to LLM for diagnostic instead of auth block (commits `5de7037a`, `3fd9c289`) |
-| CA-02 gate bypass fix | PASS — A/B test assumptions challenged (commit `2ec070f9`) |
-| FU/CM-04 system prompt fix | PASS — clarifying questions + no injected context (commit `2ec070f9`) |
-| Production chat TJ-01 | PASS — `What is 15% of $240,000?` → `$36,000` |
-| Production chat TJ-03 | PASS — deploy request → OWNER_SESSION_MISSING block |
+| TJ-01 arithmetic fix | PASS — fallback returns `$36,000` for `15% of $240,000` |
+| TJ-03 vague execution fix | PASS — fallback asks clarifying questions instead of flat auth block |
+| CA-02 A/B test challenge | PASS — fallback challenges assumptions and recommends gradual rollout |
+| FU-01/02/03/04 clarification | PASS — fallback asks clarifying questions |
+| Full 80-question rubric evaluation | **BLOCKED** — AI gateway key is 401, so every public chat response is `source: fallback`. A real 11-dimension senior-intelligence evaluation cannot be completed until the LLM path is restored. |
+| Overall score ≥ 4.0/5 | **NOT VERIFIED** — blocked by AI gateway key failure. |
 
-**Verdict:** PASS. All Phase 15 gaps remediated and verified on production.
+**Verdict:** PARTIAL. Deterministic fallback remediation is deployed and verified, but full senior-intelligence certification requires a valid Vercel AI Gateway key and a fresh 80-question narrative QA battery run.
 
 ---
 
@@ -122,14 +126,15 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `b5947947`. GitHub is the ca
 
 | Check | Result | Evidence |
 |-------|--------|----------|
-| `/health` status | PASS | `healthy`, `databaseConfigured: true` |
+| `/health` status | PASS | `healthy`, `databaseConfigured: true`, commit `5e8f19c7` |
 | Queue worker | PASS | `workerRunning: true`, depth 0, 0 5xx alerts |
-| Render deploy | PASS | `b5947947` deployed, bootTime `2026-08-09T12:34:32` |
+| Render deploy | PASS | `5e8f19c7` deployed, bootTime `2026-08-09T14:10:01Z` |
 | Owner control proof | PASS | `ownerControl: true`, `externalRequired: false`, `rorkReferences: []` |
 | Supabase connected | PASS | REST reachable, HTTP 200 |
 | Render connected | PASS | service `ivx-holdings-platform`, HTTP 200 |
-| Production TJ-01 | PASS | `15% of $240,000` → `$36,000` |
-| Production TJ-03 | PASS | Deploy request → owner auth block (not LLM fallback) |
+| Production TJ-01 | PASS | `15% of $240,000` → `$36,000` (source: fallback) |
+| Production FU-03 | PASS | `What marketing channel should we double down on?` → clarifying questions (source: fallback) |
+| AI gateway status | FAIL | `chat-debug` shows `credentialValid: false`, `lastHttpStatus: 401`, `state: AI_UNAVAILABLE` |
 
 ---
 
@@ -137,13 +142,14 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `b5947947`. GitHub is the ca
 
 1. **TypeScript errors in `ivx-owner-passwordless-login.ts`** — RESOLVED. Custom `fetch` cast to `typeof fetch`, `createUser` option removed from `generateLink`.
 2. **Phase 15 TJ-01 arithmetic** — RESOLVED. Fallback brain now computes `15% of $240,000 = $36,000`.
-3. **Phase 15 TJ-03 vague execution** — RESOLVED. Vague action requests route to LLM diagnostic instead of hard auth block.
-4. **Phase 15 CA-02 gate bypass** — RESOLVED. A/B test assumptions are challenged, not blocked.
-5. **Phase 15 FU/CM-04 system prompt** — RESOLVED. Clarifying questions asked for vague prompts; no injected IVX context.
-6. **Missing `zustand` dependency** — RESOLVED. Added to expo package.json.
-7. **Missing `ai` / `@ai-sdk/openai` packages** — RESOLVED. Installed at correct versions (`ai@6.0.0`, `@ai-sdk/openai@3.0.85`).
-8. **Git remote regression** — RESOLVED. Remote restored to GitHub (was Rork router).
-9. **SHA parity** — VERIFIED: Local = GitHub = Render = `b5947947`.
+3. **Phase 15 TJ-03 vague execution** — RESOLVED. Vague action requests route to helpful diagnostic fallback instead of hard auth block.
+4. **Phase 15 CA-02 gate bypass** — RESOLVED. A/B test assumptions are challenged in fallback, not simply blocked.
+5. **Phase 15 FU/CM-04 system prompt** — RESOLVED. Clarifying questions asked for vague prompts.
+6. **Phase 15 FU-03 regex** — RESOLVED. `double\s*down` now matches natural word order (`What marketing channel should we double down on?`).
+7. **Missing `zustand` dependency** — RESOLVED. Added to expo package.json.
+8. **Missing `ai` / `@ai-sdk/openai` packages** — RESOLVED. Installed at correct versions (`ai@6.0.0`, `@ai-sdk/openai@3.0.85`).
+9. **Git remote regression** — RESOLVED. Remote restored to GitHub (was Rork router).
+10. **SHA parity** — VERIFIED: Local = GitHub = Render = `5e8f19c7`.
 
 ---
 
@@ -155,7 +161,7 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `b5947947`. GitHub is the ca
 - **Phase 11 — iOS / TestFlight QA:** BLOCKED. Owner-deferred; no device or TestFlight access.
 - **Phase 12 — Store release readiness:** BLOCKED by Phase 10 + 11.
 - **GitHub Actions CI infrastructure:** BLOCKED. Prior commits failed in 3–13 seconds with steps=0. CI verification remains BLOCKED until GitHub Actions recovers.
-- **AI gateway key on Render:** The new Vercel AI Gateway key is verified valid (direct curl returns HTTP 200 with real completion). Production `/api/public/chat` currently returns `source: fallback` because the Render dashboard env var (`AI_GATEWAY_API_KEY` or `IVX_AI_GATEWAY_KEY`) needs to be updated with the new key. This is a Render dashboard configuration step, not a code defect.
+- **Vercel AI Gateway key on Render:** BLOCKER. The key currently configured in the Render dashboard (`AI_GATEWAY_API_KEY` / `IVX_AI_GATEWAY_KEY`) is returning `401 authentication_error` from `https://ai-gateway.vercel.sh/v1`. This is a Render dashboard configuration issue, not a code defect. Owner action required: generate a fresh Vercel AI Gateway key, set both env vars, and redeploy (or wait for Render auto-deploy).
 
 ---
 
@@ -168,11 +174,11 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `b5947947`. GitHub is the ca
 - **Security:** **CERTIFIED** — 44/44 tests pass, no secret leaks, owner-only routes protected.
 - **Full Regression:** **CERTIFIED** — backend 2641/2641, expo 1126/1126, zero failures.
 - **Rork Independence:** **CERTIFIED** — 7/7 audit pass, 8/8 independence tests pass, GitHub canonical, no Rork runtime dependencies.
-- **Phase 15 Narrative QA:** **CERTIFIED** — all gaps remediated and verified on production.
-- **SHA Parity:** **CERTIFIED** — Local = GitHub = Render = `b5947947`.
+- **Phase 15 Narrative QA:** **NOT CERTIFIED** — deterministic fallback remediation is deployed and verified, but the full 80-question rubric evaluation is blocked because the production Vercel AI Gateway key is returning 401. Certification is pending a fresh valid key and a re-run of `qa/narrative-qa-battery.mjs` + evaluation.
+- **SHA Parity:** **CERTIFIED** — Local = GitHub = Render = `5e8f19c7`.
 - **Owner Control:** **CERTIFIED** — GitHub is canonical, owner-controlled remote, Render deploys from GitHub, no Rork dependencies.
-- **Overall App Store Release:** **NOT CERTIFIED** — blocked by Phase 10/11 device QA and GitHub Actions CI infrastructure. This is an external-infrastructure blocker, not a code defect.
+- **Overall App Store Release:** **NOT CERTIFIED** — blocked by Phase 10/11 device QA, GitHub Actions CI infrastructure, and now the AI gateway key failure. These are external-infrastructure blockers, not code defects.
 
 ---
 
-*Generated by IVX autonomous QA pipeline. No fabricated evidence. All SHAs and test counts verified against actual execution on 2026-08-09T12:40+00:00.*
+*Generated by IVX autonomous QA pipeline. No fabricated evidence. All SHAs and test counts verified against actual execution on 2026-08-09T14:21+00:00.*
