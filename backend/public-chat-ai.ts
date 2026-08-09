@@ -176,7 +176,7 @@ export function buildTranscript(history: PublicChatHistoryItem[]): string {
   return history.map((item) => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.content}`).join('\n');
 }
 
-function buildSystemPrompt(
+export function buildSystemPrompt(
   sessionId: string,
   hasImages: boolean,
   documents: DealDocumentAttachment[],
