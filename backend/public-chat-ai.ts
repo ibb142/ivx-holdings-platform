@@ -134,6 +134,40 @@ export function mapRoomMessagesToPublicChatHistory(messages: ChatRoomMessage[]):
   );
 }
 
+/**
+ * Detect a vague execution request on public chat — one that has an execution
+ * verb (fix, deploy, etc.) but no concrete target, error, file, or context.
+ * Instead of returning a canned auth wall, these should route to the LLM for
+ * a helpful diagnostic response ("What problem are you seeing?").
+ */
+function isVagueExecutionRequest(message: string): boolean {
+  const text = (message ?? '').toLowerCase().trim();
+  if (!text || text.length > 500) return false;
+
+  // Must contain an execution verb
+  const hasExecVerb = /\b(?:fix|deploy|patch|commit|push|build|ship|rollback|release|implement|create|update|remove|delete|run)\b/.test(text);
+  if (!hasExecVerb) return false;
+
+  // If there's a concrete target (file name, endpoint, specific bug description,
+  // error message, stack trace, SHA), it's NOT vague — block normally.
+  const hasConcreteTarget = /\b(?:file|endpoint|route|module|service|component|function|handler|test|bug\s+(?:in|on|at|with)|error[:\s]|stack\s+trace|exception|crash|fail(?:ed|ure)|sha|commit\s+[a-f0-9]|render|supabase|github|database|table|column|500|502|503|timeout|cors|ssl|dns|auth(?:entication|orized)|401|403|404|env\s+var|config)\b/.test(text);
+  if (hasConcreteTarget) return false;
+
+  // Vague patterns: "fix the production problem", "deploy this", "fix it",
+  // "build the feature", with no specifics.
+  const vaguePatterns = [
+    /\bfix\s+(?:the\s+)?(?:production\s+)?(?:problem|issue|bug|error|thing|it|this|that)\b/i,
+    /\bdeploy\s+(?:this|that|it|now|live)\b/i,
+    /\bpatch\s+(?:this|that|it|the\s+issue)\b/i,
+    /\bbuild\s+(?:the\s+)?(?:feature|app|service|module|thing)\b/i,
+    /\bimplement\s+(?:this|that|the\s+feature|it)\b/i,
+    /\bcreate\s+(?:this|that|it|the\s+module)\b/i,
+    /\brollback\s+(?:production|the\s+deploy|it)\b/i,
+    /\brun\s+(?:the\s+)?(?:tests|qa|checks|validation)\b/i,
+  ];
+  return vaguePatterns.some((p) => p.test(text));
+}
+
 function buildTranscript(history: PublicChatHistoryItem[]): string {
   if (history.length === 0) {
     return 'No previous messages.';
@@ -154,6 +188,9 @@ function buildSystemPrompt(
     'IDENTITY (always true): Your name is IVX IA. You were created by Ivan Perez, the owner and founder of IVXHOLDINGS. When anyone asks "what is your name", answer "IVX IA". When anyone asks "who created you", "who made you", "who is your owner", or "who are you", answer that you were created by Ivan Perez, the owner of IVXHOLDINGS. Never say you are a generic AI, never say you do not know who created you, and never say you lack context about IVX.',
     'IVXHOLDINGS QUESTIONS — NO LIMITS: when someone asks about IVXHOLDINGS, the projects, the investment process, returns, ROI, minimum buy-in, deal timelines, risks, Casa Rosario, or any other project, answer fully and directly. Do NOT limit, refuse, or deflect. Do NOT ask for owner approval to answer a project or investment question. These are informational questions and you answer them completely.',
     'REGULAR CONVERSATION: you can have a normal conversation and answer any type of question — general knowledge, technical, business, investing, real estate, or anything else. Be helpful, direct, and grounded.',
+    'CLARIFICATION INTELLIGENCE: when a request is vague or lacks critical context (e.g. "best expansion strategy" without goals/constraints/market, "what should we prioritize" without specifying the problem area, "what marketing channel" without performance data), ALWAYS start your response with 1-3 targeted clarifying questions before offering preliminary guidance. Frame it as: "To give you the most useful answer, I need to understand: (1) ... (2) ... (3) ..." Then provide a preliminary framework based on reasonable assumptions. Never skip the clarifying questions — they show strategic thinking and prevent generic answers.',
+    `CONVERSATION MEMORY: you have access to the recent chat transcript provided in context. Use it. When a user refers to "our earlier decision", "what we discussed", "the launch date", "the budget", or any prior context, check the transcript and reference specific details from it. If the transcript is empty or does not contain the referenced information, say so honestly and ask the user to restate the key details. Never say "I don't have access to prior conversations" when a transcript is provided — use it.`,
+    'CHALLENGE ASSUMPTIONS: when a user presents a conclusion and asks you to confirm it (e.g. "variant B won, we should roll it out to everyone, confirm that"), do NOT simply agree. Critically evaluate the assumption: Is the sample size sufficient? Is the result statistically significant? Could the result be specific to a segment? What are the risks of immediate full rollout? Offer a graduated rollout plan. Always challenge before confirming.',
     'Be concise, practical, and trustworthy.',
     'Help with IVX onboarding, investing basics, product navigation, API status checks, and deployment troubleshooting.',
     'You also act as an acquisition analyst / investment-committee member: when asked, rank deals, compare projects, give a buy/hold/avoid recommendation with rationale, assess risk, and answer capital-allocation questions — always from the IVX deal-intelligence scores provided in context.',
@@ -373,13 +410,25 @@ export async function generatePublicChatAnswer(input: {
 
   // Public chat: block execution, deployment, destructive actions, owner controls
   if (authoritativeDecision.selectedRoute === 'CLARIFICATION' && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked') {
-    return {
-      answer: `This request requires owner authentication. Safe technical questions, code reviews, architecture designs, and product information are available without login. Try rephrasing your question if you want an explanation rather than an execution.`,
-      model: 'ivx-authoritative-router',
-      source: 'fallback' as PublicChatSource,
-      endpoint: null,
-      imageCount: images.length,
-    };
+    // Vague execution requests ("fix the production problem", "deploy this") on
+    // public chat get a helpful LLM response instead of a canned auth block.
+    // The LLM will ask what the problem is and explain that execution requires
+    // owner login — far more useful than a generic auth wall.
+    if (isVagueExecutionRequest(input.message)) {
+      console.log('[PublicChatAI] Vague execution request on public chat — routing to LLM for helpful diagnostic:', {
+        sessionId: input.sessionId,
+        intent: authoritativeDecision.intent,
+      });
+      // Fall through to the LLM call below
+    } else {
+      return {
+        answer: `This request requires owner authentication. Safe technical questions, code reviews, architecture designs, and product information are available without login. Try rephrasing your question if you want an explanation rather than an execution.`,
+        model: 'ivx-authoritative-router',
+        source: 'fallback' as PublicChatSource,
+        endpoint: null,
+        imageCount: images.length,
+      };
+    }
   }
 
   // Public chat: safe knowledge questions go straight to LLM (no owner auth needed)
@@ -393,6 +442,14 @@ export async function generatePublicChatAnswer(input: {
       confidence: authoritativeDecision.confidence,
     });
   }
+
+  // If the authoritative router allowed this through (PUBLIC_LLM_RESPONSE or
+  // vague execution routed to LLM), skip the legacy router's owner-session gate.
+  // The authoritative router is the single source of truth — the legacy router
+  // is audit-only. This prevents the legacy router from re-blocking questions
+  // that the authoritative router already approved.
+  const authoritativeApproved = authoritativeDecision.selectedRoute === 'PUBLIC_LLM_RESPONSE'
+    || (authoritativeDecision.selectedRoute === 'CLARIFICATION' && isVagueExecutionRequest(input.message));
 
   // Keep the old router for backward compatibility logging only
   const routeDecision = routeIVXChatIntent(input.message, images.length > 0);
@@ -408,7 +465,9 @@ export async function generatePublicChatAnswer(input: {
   // Public chat is unauthenticated. Branches that require an owner session
   // cannot execute here — BUT only if the authoritative router agrees.
   // The authoritative router allows safe knowledge questions through.
-  if (routeDecision.requiresOwnerSession && !ownerSessionPresent && authoritativeDecision.selectedRoute !== 'PUBLIC_LLM_RESPONSE') {
+  // Vague execution requests routed to LLM by the authoritative router also
+  // skip this gate.
+  if (routeDecision.requiresOwnerSession && !ownerSessionPresent && !authoritativeApproved) {
     const blockedPipeline = runIVXUnifiedGatePipeline({
       message: input.message,
       answer: '',
@@ -512,8 +571,19 @@ export async function generatePublicChatAnswer(input: {
     // actually involve execution/developer/owner claims. The general_ai
     // branch (normal investor questions) is still protected by the
     // query-narrative gate and report-evidence gate above.
+    // The unified gate pipeline (fake-execution, reliability gates) is designed
+    // for DEVELOPER and OWNER-EXECUTION requests. Running it on general AI /
+    // business analysis / conversation answers causes false-positive BLOCKED
+    // rewrites. Skip the gate pipeline when:
+    //   1. The legacy router classifies this as general_ai, OR
+    //   2. The authoritative router approved this as PUBLIC_LLM_RESPONSE, OR
+    //   3. This is a vague execution request routed to the LLM for diagnostics
+    // This prevents business judgment questions (A/B test rollouts, strategy
+    // confirmations) from being rewritten to "STATE: BLOCKED" by the
+    // fake-execution gate.
     const isGeneralAiBranch = routeDecision.branch === 'general_ai';
-    if (!isGeneralAiBranch) {
+    const skipGatePipeline = isGeneralAiBranch || authoritativeApproved;
+    if (!skipGatePipeline) {
       const pipeline = runIVXUnifiedGatePipeline({
         message: input.message,
         answer: result.answer,
