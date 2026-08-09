@@ -16,7 +16,7 @@ import {
   View,
   useWindowDimensions} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Archive, MessageCirclePlus, RefreshCw, Send, ShieldCheck, Sparkles, Wifi, WifiOff } from 'lucide-react-native';
+import { Archive, MessageCirclePlus, RefreshCw, Send, ShieldCheck, Sparkles, Square, Wifi, WifiOff } from 'lucide-react-native';
 import ChatBubble from '@/components/ChatBubble';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
@@ -24,13 +24,16 @@ import {
   fetchPublicChatHealth,
   fetchPublicChatHistory,
   fetchPublicChatSessions,
-  sendPublicChatMessage,
   type PublicChatApiResponse,
   type PublicChatHistoryItem,
   type PublicChatHistoryResponse,
   type PublicChatSessionMessage,
   type PublicChatSessionSummary,
   type PublicHealthResponse} from '@/lib/public-chat';
+import {
+  streamPublicChatMessage,
+  type ChatStreamEvent,
+} from '@/lib/public-chat-stream';
 import { usePublicChatSession } from '@/lib/public-chat-session-context';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
 import type { ChatMessage } from '@/types';
@@ -160,6 +163,10 @@ export default function ChatHubScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [createWelcomeMessage()]);
   const [latestResponse, setLatestResponse] = useState<PublicChatApiResponse | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [streamingText, setStreamingText] = useState<string>('');
+  const [hasFirstToken, setHasFirstToken] = useState<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const healthQuery = useQuery<PublicHealthResponse, Error>({
     queryKey: ['public-chat', 'health'],
@@ -203,31 +210,103 @@ export default function ChatHubScreen() {
   // "disappearing chat" bug). We only let history fully replace the local list
   // when no send is pending; otherwise we merge so the optimistic bubbles win.
   const sendInFlightRef = useRef(false);
+  const hasFirstTokenRef = useRef(false);
 
   const sendMutation = useMutation<PublicChatApiResponse, Error, SendMutationInput>({
     mutationKey: ['public-chat', 'send', sessionId],
-    mutationFn: async ({ text, requestId, history }) => sendPublicChatMessage({
-      message: text,
-      history,
-      sessionId,
-      requestId,
-      clientId}),
-    onMutate: async ({ text, requestId }) => {
-      const pendingMessage: ChatMessage = {
-        id: `${requestId}-user-pending`,
+    mutationFn: async ({ text, requestId, history }) => {
+      // ── Real SSE streaming from /api/public/chat/stream ──────────────
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      setIsStreaming(true);
+      setStreamingText('');
+      setHasFirstToken(false);
+
+      // Optimistic user message
+      const userMessage: ChatMessage = {
+        id: `${requestId}-user`,
         senderId: 'public-chat-user',
         senderName: 'You',
         senderAvatar: '',
         message: text,
         timestamp: new Date().toISOString(),
         isSupport: false,
-        status: 'sent'};
-      setMessages((current) => mergeMessages(current.filter((message) => message.id !== 'public-chat-welcome'), [pendingMessage]));
+        status: 'sent',
+      };
+      setMessages((current) => mergeMessages(current.filter((m) => m.id !== 'public-chat-welcome'), [userMessage]));
       setComposerValue('');
+
+      return new Promise<PublicChatApiResponse>((resolve, reject) => {
+        let finalText = '';
+        let finalModel = 'unknown';
+        let finalSource = 'chatgpt';
+        let finalSessionId = sessionId;
+        let resolved = false;
+
+        streamPublicChatMessage(
+          { message: text, history, sessionId, requestId, clientId, signal: controller.signal },
+          {
+            onEvent: (event: ChatStreamEvent) => {
+              if (event.type === 'response.delta' && event.delta) {
+                if (!hasFirstTokenRef.current) {
+                  hasFirstTokenRef.current = true;
+                  setHasFirstToken(true);
+                }
+                setStreamingText((prev) => prev + event.delta);
+              } else if (event.type === 'response.completed') {
+                finalText = event.text;
+                finalModel = event.model;
+                finalSource = event.source;
+                finalSessionId = event.sessionId;
+                if (event.error) {
+                  // Partial completion with error — keep text but flag error
+                  setLocalError(event.error);
+                } else {
+                  setLocalError(null);
+                }
+              } else if (event.type === 'response.error') {
+                setLocalError(event.error);
+              }
+            },
+            onError: (error: string) => {
+              if (resolved) return;
+              resolved = true;
+              setIsStreaming(false);
+              setStreamingText('');
+              setHasFirstToken(false);
+              abortControllerRef.current = null;
+              reject(new Error(error));
+            },
+            onComplete: (text: string, model: string, source: string) => {
+              if (resolved) return;
+              resolved = true;
+              setIsStreaming(false);
+              setStreamingText('');
+              setHasFirstToken(false);
+              abortControllerRef.current = null;
+
+              const finalResponse: PublicChatApiResponse = {
+                ok: true,
+                requestId,
+                sessionId: finalSessionId,
+                answer: text || finalText,
+                model,
+                source: source as 'chatgpt' | 'fallback',
+                deploymentMarker: 'ivx-public-chat-stream',
+                rateLimitRemaining: 19,
+                rateLimitResetAt: new Date(Date.now() + 300000).toISOString(),
+                timestamp: new Date().toISOString(),
+                endpoint: null,
+                persistence: 'supabase',
+              };
+              resolve(finalResponse);
+            },
+          },
+        );
+      });
     },
     onSuccess: async (response, variables) => {
       setLatestResponse(response);
-      setLocalError(null);
       const assistantMessage: ChatMessage = {
         id: `${response.requestId}-assistant`,
         senderId: 'public-chat-assistant',
@@ -237,18 +316,7 @@ export default function ChatHubScreen() {
         timestamp: response.timestamp,
         isSupport: true,
         status: 'read'};
-      setMessages((current) => mergeMessages(current.filter((message) => message.id !== `${variables.requestId}-user-pending`), [
-        {
-          id: `${response.requestId}-user`,
-          senderId: 'public-chat-user',
-          senderName: 'You',
-          senderAvatar: '',
-          message: variables.text,
-          timestamp: response.timestamp,
-          isSupport: false,
-          status: 'read'},
-        assistantMessage,
-      ]));
+      setMessages((current) => mergeMessages(current, [assistantMessage]));
       void historyQuery.refetch();
       void sessionsQuery.refetch();
       await Haptics.selectionAsync();
@@ -259,13 +327,13 @@ export default function ChatHubScreen() {
     }});
 
   const canSend = useMemo<boolean>(() => {
-    return readTrimmed(composerValue).length > 0 && !sendMutation.isPending && isHydrated;
-  }, [composerValue, isHydrated, sendMutation.isPending]);
+    return readTrimmed(composerValue).length > 0 && !isStreaming && isHydrated;
+  }, [composerValue, isHydrated, isStreaming]);
 
   // Sync the in-flight ref now that sendMutation exists.
   useEffect(() => {
-    sendInFlightRef.current = sendMutation.isPending;
-  }, [sendMutation.isPending]);
+    sendInFlightRef.current = sendMutation.isPending || isStreaming;
+  }, [sendMutation.isPending, isStreaming]);
 
   // History restoration — preserve optimistic bubbles while a send is pending.
   useEffect(() => {
@@ -339,13 +407,37 @@ export default function ChatHubScreen() {
 
   const handleSend = useCallback(async () => {
     const text = readTrimmed(composerValue);
-    if (!text || sendMutation.isPending) return;
+    if (!text || isStreaming) return;
     const requestId = createId('public-chat-request');
     await sendMutation.mutateAsync({
       text,
       requestId,
       history: buildHistoryPayload(messages)});
-  }, [composerValue, messages, sendMutation]);
+  }, [composerValue, messages, sendMutation, isStreaming]);
+
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    setHasFirstToken(false);
+    // Preserve whatever text was streamed so far as the assistant message
+    if (streamingText.trim().length > 0) {
+      const partialMessage: ChatMessage = {
+        id: `${createId('partial')}-assistant`,
+        senderId: 'public-chat-assistant',
+        senderName: 'IVX AI',
+        senderAvatar: '',
+        message: streamingText,
+        timestamp: new Date().toISOString(),
+        isSupport: true,
+        status: 'read',
+      };
+      setMessages((current) => mergeMessages(current, [partialMessage]));
+    }
+    setStreamingText('');
+  }, [streamingText]);
 
   const renderMessage = useCallback(({ item }: { item: ChatMessage }) => {
     return <ChatBubble message={item} />;
@@ -462,6 +554,9 @@ export default function ChatHubScreen() {
                 <View style={styles.errorBanner} testID="public-chat-error-banner">
                   <WifiOff size={14} color={Colors.warning} />
                   <Text style={styles.errorBannerText}>{statusError}</Text>
+                  <Pressable onPress={() => setLocalError(null)} testID="public-chat-error-dismiss" hitSlop={8}>
+                    <Text style={styles.errorDismissText}>Dismiss</Text>
+                  </Pressable>
                 </View>
               ) : null}
 
@@ -473,12 +568,33 @@ export default function ChatHubScreen() {
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
-                ListFooterComponent={sendMutation.isPending || historyQuery.isLoading ? (
-                  <View style={styles.typingRow} testID="public-chat-loading-state">
-                    <ShimmerIndicator size="small" color={Colors.primary} />
-                    <Text style={styles.typingText}>{sendMutation.isPending ? 'ChatGPT is replying…' : 'Restoring history…'}</Text>
-                  </View>
-                ) : <View style={styles.listFooterSpacing} />}
+                ListFooterComponent={(() => {
+                  // Streaming assistant bubble — progressive rendering
+                  if (isStreaming) {
+                    return (
+                      <View style={styles.streamingBubble} testID="public-chat-streaming-bubble">
+                        {hasFirstToken ? (
+                          <Text style={styles.streamingText}>{streamingText}</Text>
+                        ) : (
+                          <View style={styles.typingDotsRow} testID="public-chat-typing-indicator">
+                            <ShimmerIndicator size={8} color={Colors.primary} />
+                            <Text style={styles.typingDotsText}>IVX</Text>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  }
+                  // No routine loading banners — only a subtle restoring indicator
+                  // for initial history load (not for sending messages)
+                  if (historyQuery.isLoading && messages.length <= 1) {
+                    return (
+                      <View style={styles.typingDotsRow} testID="public-chat-history-loading">
+                        <ShimmerIndicator size={8} color={Colors.textTertiary} />
+                      </View>
+                    );
+                  }
+                  return <View style={styles.listFooterSpacing} />;
+                })()}
                 testID="public-chat-message-list"
               />
             </View>
@@ -506,16 +622,26 @@ export default function ChatHubScreen() {
                     }}
                   />
                 </View>
-                <Pressable
-                  onPress={() => {
-                    void handleSend();
-                  }}
-                  disabled={!canSend}
-                  style={({ pressed }) => [styles.sendButton, !canSend && styles.sendButtonDisabled, pressed && canSend && styles.sendButtonPressed]}
-                  testID="public-chat-send-button"
-                >
-                  <Send size={18} color={canSend ? Colors.black : Colors.textTertiary} />
-                </Pressable>
+                {isStreaming ? (
+                  <Pressable
+                    onPress={handleStopGeneration}
+                    style={({ pressed }) => [styles.sendButton, styles.stopButton, pressed && styles.sendButtonPressed]}
+                    testID="public-chat-stop-button"
+                  >
+                    <Square size={16} color={Colors.white} />
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      void handleSend();
+                    }}
+                    disabled={!canSend}
+                    style={({ pressed }) => [styles.sendButton, !canSend && styles.sendButtonDisabled, pressed && canSend && styles.sendButtonPressed]}
+                    testID="public-chat-send-button"
+                  >
+                    <Send size={18} color={canSend ? Colors.black : Colors.textTertiary} />
+                  </Pressable>
+                )}
               </View>
               <View style={styles.bottomMetaRow}>
                 <Text style={styles.bottomMetaText}>{deploymentMarker ? `Deploy ${deploymentMarker}` : 'Deployment marker pending'}</Text>
@@ -727,9 +853,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '600' as const},
+  errorDismissText: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontWeight: '700' as const,
+    paddingHorizontal: 6,
+    paddingVertical: 4},
   listContent: {
     paddingTop: 6,
     paddingBottom: 14},
+  streamingBubble: {
+    marginHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 6,
+    borderRadius: 18,
+    backgroundColor: 'rgba(14, 14, 14, 0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.12)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignSelf: 'flex-start',
+    maxWidth: '92%'},
+  streamingText: {
+    color: Colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '400' as const},
+  typingDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 8},
+  typingDotsText: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    letterSpacing: 2},
   typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -800,6 +963,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }]},
   sendButtonDisabled: {
     backgroundColor: Colors.backgroundSecondary},
+  stopButton: {
+    backgroundColor: '#EF4444'},
   bottomMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
