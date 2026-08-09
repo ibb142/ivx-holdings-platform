@@ -420,23 +420,28 @@ export async function generatePublicChatAnswer(input: {
   const isExecutionRoute = authoritativeDecision.selectedRoute === 'CLARIFICATION'
     || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER'
     || authoritativeDecision.selectedRoute === 'DEPLOYMENT_ACTION';
-  if (isExecutionRoute && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked') {
-    if (isVagueExec) {
-      console.log('[PublicChatAI] Vague execution request on public chat — routing to LLM for helpful diagnostic:', {
-        sessionId: input.sessionId,
-        intent: authoritativeDecision.intent,
-        route: authoritativeDecision.selectedRoute,
-      });
-      // Fall through to the LLM call below
-    } else {
-      return {
-        answer: `This request requires owner authentication. Safe technical questions, code reviews, architecture designs, and product information are available without login. Try rephrasing your question if you want an explanation rather than an execution.`,
-        model: 'ivx-authoritative-router',
-        source: 'fallback' as PublicChatSource,
-        endpoint: null,
-        imageCount: images.length,
-      };
-    }
+  // On public chat (no owner session), vague execution requests get a helpful
+  // LLM diagnostic instead of a canned auth block. This applies regardless of
+  // publicBoundary — the authoritative router may classify "fix the production
+  // problem" as DEVELOPER_WORKER with public_safe boundary (no explicit blocked
+  // pattern matches), but we still want the LLM to ask what the problem is
+  // rather than returning a useless auth wall.
+  if (isExecutionRoute && !ownerSessionPresent && isVagueExec) {
+    console.log('[PublicChatAI] Vague execution request on public chat — routing to LLM for helpful diagnostic:', {
+      sessionId: input.sessionId,
+      intent: authoritativeDecision.intent,
+      route: authoritativeDecision.selectedRoute,
+      publicBoundary: authoritativeDecision.safetyStage.publicBoundary,
+    });
+    // Fall through to the LLM call below
+  } else if (isExecutionRoute && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked') {
+    return {
+      answer: `This request requires owner authentication. Safe technical questions, code reviews, architecture designs, and product information are available without login. Try rephrasing your question if you want an explanation rather than an execution.`,
+      model: 'ivx-authoritative-router',
+      source: 'fallback' as PublicChatSource,
+      endpoint: null,
+      imageCount: images.length,
+    };
   }
 
   // Public chat: safe knowledge questions go straight to LLM (no owner auth needed)
@@ -457,7 +462,7 @@ export async function generatePublicChatAnswer(input: {
   // is audit-only. This prevents the legacy router from re-blocking questions
   // that the authoritative router already approved.
   const authoritativeApproved = authoritativeDecision.selectedRoute === 'PUBLIC_LLM_RESPONSE'
-    || (isExecutionRoute && isVagueExec && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked');
+    || (isExecutionRoute && isVagueExec && !ownerSessionPresent);
 
   // Keep the old router for backward compatibility logging only
   const routeDecision = routeIVXChatIntent(input.message, images.length > 0);
