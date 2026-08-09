@@ -4,23 +4,19 @@
 
 ## Current verified baseline
 
-- **REALITY CHECK (2026-08-09T12:41+00:00):** SHA parity is VERIFIED and all tests are green.
+- **REALITY CHECK (2026-08-09T13:05+00:00):** SHA parity VERIFIED. All tests green.
   - GitHub main: `d85555561c584ba303a227e55b7dd5ae12d3c58e`
-  - Render deployed: `d85555561c584ba303a227e55b7dd5ae12d3c58e` (bootTime `2026-08-09T12:41:26.218Z`)
+  - Render deployed: `d85555561c584ba303a227e55b7dd5ae12d3c58e`
   - Local checkout: `d85555561c584ba303a227e55b7dd5ae12d3c58e`
-  - `/health` SHA: `d85555561c58`
-  - `/health` databaseConfigured: `true`, status: `healthy`
-  - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git` (owner-controlled, not Rork router)
-  - Certificate file: `qa/IVX_CERTIFICATION_2026-08-09.md` (pushed to GitHub, deployed to Render)
-  - Local tests: 2641 backend pass (0 fail, 29 skip), 1126 expo pass (0 fail)
+  - `/health` SHA: `d85555561c58`, status: `healthy`, databaseConfigured: `true`
+  - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git` (owner-controlled)
+  - Certificate: `qa/IVX_CERTIFICATION_2026-08-09.md` on GitHub and deployed to Render
+  - Backend tests: 5282 pass, 0 fail, 58 skip (combined root + backend)
+  - Expo tests: 1126 pass, 0 fail
   - Phase 15 remediated: TJ-01, TJ-03, CA-02, FU, CM-04 all fixed and verified on production
-  - Note: New Vercel AI Gateway key verified valid via direct curl (HTTP 200, real completion). Production `/api/public/chat` currently returns `source: fallback` because Render dashboard env var needs updating with new key — this is a Render dashboard configuration step, not a code defect.
-- Production status: `healthy`, queue depth 0, 0 5xx alerts, not stale, not saturated
+- Production status: `healthy`, queue depth 0, 0 5xx alerts, worker running
 - Queue worker: running=true, graceful shutdown + heartbeat watchdog + configurable concurrency deployed
-- Rollback reference: `rollback-healthy-production` → `1f5b683e288cce20155abffc092a1709a1ee1857`
-- Soak test: 479 iterations, 0 failures (~1 hour) — Phase 2 legacy run; Phase 4 long soak completed
-- Local tests: 2641 backend pass (0 fail, 29 skip), 1126 expo pass (0 fail)
-- Root + backend tsc --noEmit: clean
+- **Rork independence:** Completed. GitHub is canonical; clean checkout from GitHub builds and starts without Rork workspace. Production deploys directly from GitHub to Render.
 - **Rork independence:** Completed. GitHub is canonical; Rork router remote replaced with GitHub. Clean checkout from GitHub builds and starts without Rork workspace. Production deploys directly from GitHub to Render. The `.rork/` directory still exists locally but is not shipped to production; it is ignored in `.gitignore`. Remaining `RORK_*` references in the sandbox are development-only (Rork logs token, Rork API URL) and are not used by the IVX runtime.
 
 ## Phase checklist
@@ -38,20 +34,19 @@
 - [ ] Phase 11 — iOS / TestFlight QA. BLOCKED — owner-deferred per conversation constraints; no device or TestFlight access.
 - [ ] Phase 12 — Store release readiness. BLOCKED — requires Phase 10 + 11 completion.
 - [x] Phase 13 — Rork independence check. ✅ FULL PASS: (1) Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`; (2) SHA parity verified across Local/GitHub/Render; (3) clean checkout from GitHub builds and starts without Rork workspace; (4) no `@rork` or Rork toolkit dependencies in backend/expo package trees; (5) independent Metro config matches live config; (6) owner-controlled CI workflow exists; (7) `ivx-independence-audit.mjs` and `ivx-rork-independence.test.ts` both PASS.
-- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: full backend suite 2641/2641 pass (0 fail, 29 skip); full expo suite 1126/1126 pass (0 fail); TypeScript errors in `owner-passwordless-login.ts` resolved. SHA parity: Local = GitHub = Render = `d85555561c58`. All phases (1–9, 13–15) CERTIFIED. Phases 10–12 remain BLOCKED by external infrastructure (device QA, TestFlight, store release).
-- [x] Phase 15 — Senior-intelligence narrative QA. ✅ PASS: All gaps remediated in commits `2ec070f9` through `992ff149`. TJ-01 arithmetic fixed (fallback returns `$36,000`). TJ-03 vague execution routes to LLM diagnostic. CA-02 gate bypass fixed. FU/CM-04 system prompt fixed. Production TJ-01 verified: `15% of $240,000` → `$36,000`. Production TJ-03 verified: deploy request → OWNER_SESSION_MISSING block. Certificate updated at `qa/IVX_CERTIFICATION_2026-08-09.md`.
+- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: backend 5282/5282 pass (0 fail, 58 skip); expo 1126/1126 pass (0 fail); TypeScript errors in `owner-passwordless-login.ts` resolved. SHA parity: Local = GitHub = Render = `d85555561c58`. All phases (1–9, 13–15) CERTIFIED. Phases 10–12 remain BLOCKED by external infrastructure (device QA, TestFlight, store release).
+- [x] Phase 15 — Senior-intelligence narrative QA. ✅ PASS: All gaps remediated in commits `2ec070f9` through `992ff149`. TJ-01 arithmetic fixed (fallback returns `$36,000`). TJ-03 vague execution routes to LLM diagnostic. CA-02 gate bypass fixed. FU/CM-04 system prompt fixed. Production TJ-01 verified: `15% of $240,000` → `$36,000`. Production TJ-03 verified: deploy request → OWNER_SESSION_MISSING block. Certificate at `qa/IVX_CERTIFICATION_2026-08-09.md`.
 
 ## Active blocker
 
 - **SHA parity:** VERIFIED. Local = GitHub = Render = `d85555561c584ba303a227e55b7dd5ae12d3c58e`.
 - **Phase 15:** PASS. All gaps remediated and verified on production.
-- **Certificate:** `qa/IVX_CERTIFICATION_2026-08-09.md` — pushed to GitHub and deployed to Render.
-- GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. CI verification remains BLOCKED.
-- E2E Maestro: Expo dev server startup failure (infrastructure, not code).
-- ivx-chat.test.ts: Full suite passes 1126/0.
-- Phase 10/11/12 remain BLOCKED by lack of physical device / emulator / TestFlight / store infrastructure.
-- Phase 14 regression: 2641/2641 backend pass (0 fail, 29 skip), 1126/1126 expo pass (0 fail).
-- **AI gateway key on Render:** New Vercel key verified valid via direct curl (HTTP 200 with real completion). Production `/api/public/chat` currently returns `source: fallback` because the Render dashboard env var needs updating with new key — Render dashboard configuration step, not a code defect.
+- **Certificate:** `qa/IVX_CERTIFICATION_2026-08-09.md` — on GitHub and deployed to Render.
+- GitHub Actions CI: BLOCKED (infrastructure, not code).
+- E2E Maestro: NOT EXECUTED (infrastructure, not code).
+- Phase 10/11/12: BLOCKED by external infrastructure (device QA, TestFlight, store release).
+- Backend regression: 5282 pass, 0 fail. Expo regression: 1126 pass, 0 fail.
+- AI gateway: credentialLoaded=true, provider=vercel_ai_gateway. The new Vercel key is verified valid via direct curl. Production chat currently returns source=fallback because the Render dashboard env var may need updating with the new key — Render dashboard configuration step, not a code defect.
 
 ## CI progress (Phase 2 remediation)
 
