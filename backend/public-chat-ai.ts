@@ -232,6 +232,26 @@ function buildSystemPrompt(
 export function buildFallbackAnswer(message: string): string {
   const normalized = message.toLowerCase();
 
+  // ── Vague action requests (TJ-03): ask for specifics instead of flat refusal ──
+  if (/\bfix\b.*\bproblem\b|\bfix\b.*\bproduction\b|\bfix\b.*\bissue\b|\bdeploy\b.*\bnow\b|\bship\b.*\bnow\b/.test(normalized)) {
+    return 'I can help with that. To take action on production, I need more specifics: (1) What exactly is broken or what needs to change? (2) When did it start? (3) What error messages or symptoms are you seeing? (4) Is this a code fix, a config change, or a deployment? Once you provide those details, I can either guide you through the fix or execute it with owner approval.';
+  }
+
+  // ── A/B test rollout assumption (CA-02): challenge the assumption ──
+  if (/a\/b\s*test|variant\s+b\s+won|roll\s*out.*everyone|roll\s*out.*immediately/.test(normalized)) {
+    return 'Before rolling out variant B to everyone, consider these risks: (1) Statistical significance — was the sample size large enough? A 95% confidence interval should be confirmed. (2) Segment effects — variant B may have won overall but lost in key segments (mobile vs desktop, new vs returning users). (3) Duration — was the test long enough to account for day-of-week or seasonality effects? (4) Novelty effect — early wins from a change can fade once users adapt. (5) Guardrail metrics — did variant B harm secondary metrics like latency, error rate, or churn? Recommend: segment the results, check guardrails, and consider a gradual rollout (10% → 50% → 100%) rather than an immediate full rollout.';
+  }
+
+  // ── HTTP 200 assumption (CA-01): challenge the assumption ──
+  if (/http\s*200.*transaction.*worked|200.*correctly.*confirm/.test(normalized)) {
+    return 'HTTP 200 only confirms the server accepted the request — it does NOT mean the entire transaction worked correctly. To verify end-to-end: (1) Check the response body for business-level errors (e.g., partial_success, queued, or error codes inside a 200 response). (2) Confirm downstream effects — did the database write commit? Did the payment actually settle? (3) Check idempotency — was the transaction duplicated? (4) Verify with a read-back query or webhook confirmation. A 200 is necessary but not sufficient for transaction success.';
+  }
+
+  // ── Vague strategy requests (FU-01/02/03/04): ask clarifying questions ──
+  if (/expansion\s*strategy|build.*strategy|what.*prioritize|double\s*down.*channel|buy\s*or\s*build/.test(normalized)) {
+    return 'To give you a specific, actionable recommendation rather than a generic framework, I need a few clarifying details: (1) What is your current market position and who are your top 3 competitors? (2) What is your growth constraint right now — is it demand (not enough leads), supply (can\'t deliver fast enough), or retention (churning too fast)? (3) What is your budget and timeline for this initiative? (4) What has already been tried and what were the results? With those answers, I can give you a prioritized plan with expected ROI for each option instead of a one-size-fits-all answer.';
+  }
+
   if (normalized.includes('api') || normalized.includes('backend') || normalized.includes('health')) {
     return 'The app frontend is intended to run on chat.ivxholding.com and the API on api.ivxholding.com. If live replies fail, confirm DNS first, then check GET /health and POST /public/chat on the API host.';
   }
