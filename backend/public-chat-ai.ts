@@ -409,15 +409,23 @@ export async function generatePublicChatAnswer(input: {
   });
 
   // Public chat: block execution, deployment, destructive actions, owner controls
-  if (authoritativeDecision.selectedRoute === 'CLARIFICATION' && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked') {
-    // Vague execution requests ("fix the production problem", "deploy this") on
-    // public chat get a helpful LLM response instead of a canned auth block.
-    // The LLM will ask what the problem is and explain that execution requires
-    // owner login — far more useful than a generic auth wall.
-    if (isVagueExecutionRequest(input.message)) {
+  // Vague execution requests ("fix the production problem", "deploy this") on
+  // public chat get a helpful LLM response instead of a canned auth block.
+  // The LLM will ask what the problem is and explain that execution requires
+  // owner login — far more useful than a generic auth wall.
+  // This applies to BOTH CLARIFICATION and DEVELOPER_WORKER routes — the
+  // authoritative router classifies vague execution as DEVELOPER_WORKER, but
+  // on public chat we still want a helpful LLM diagnostic, not a block.
+  const isVagueExec = isVagueExecutionRequest(input.message);
+  const isExecutionRoute = authoritativeDecision.selectedRoute === 'CLARIFICATION'
+    || authoritativeDecision.selectedRoute === 'DEVELOPER_WORKER'
+    || authoritativeDecision.selectedRoute === 'DEPLOYMENT_ACTION';
+  if (isExecutionRoute && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked') {
+    if (isVagueExec) {
       console.log('[PublicChatAI] Vague execution request on public chat — routing to LLM for helpful diagnostic:', {
         sessionId: input.sessionId,
         intent: authoritativeDecision.intent,
+        route: authoritativeDecision.selectedRoute,
       });
       // Fall through to the LLM call below
     } else {
@@ -449,7 +457,7 @@ export async function generatePublicChatAnswer(input: {
   // is audit-only. This prevents the legacy router from re-blocking questions
   // that the authoritative router already approved.
   const authoritativeApproved = authoritativeDecision.selectedRoute === 'PUBLIC_LLM_RESPONSE'
-    || (authoritativeDecision.selectedRoute === 'CLARIFICATION' && isVagueExecutionRequest(input.message));
+    || (isExecutionRoute && isVagueExec && authoritativeDecision.safetyStage.publicBoundary === 'public_blocked');
 
   // Keep the old router for backward compatibility logging only
   const routeDecision = routeIVXChatIntent(input.message, images.length > 0);
