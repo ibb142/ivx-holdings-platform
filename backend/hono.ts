@@ -3005,7 +3005,7 @@ app.get('/health', async (context) => {
     status: 'healthy',
     databaseConfigured,
     ai: {
-      ok: aiStartup.ok,
+      ok: aiServiceAvailable,
       model: aiStartup.model,
     },
     seniorDeveloper: {
