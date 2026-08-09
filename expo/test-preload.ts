@@ -10,6 +10,35 @@ if (typeof (globalThis as Record<string, unknown>).__DEV__ === 'undefined') {
 // Only mock if not already mocked by the test file itself
 const { mock } = require('bun:test');
 
+// Mock expo-modules-core and its internal subpaths so __DEV__ is never
+// referenced as a bare global (it doesn't exist in bun test context).
+// mock.module('expo-modules-core') only intercepts the top-level entry;
+// internal files like ./environment/browser and ./Platform reference __DEV__
+// directly and must be mocked separately to prevent ReferenceError.
+const _emcMock = {
+  CodedError: class CodedError extends Error {},
+  NativeModule: class NativeModule {},
+  requireNativeModule: () => ({}),
+  requireOptionalNativeModule: () => null,
+  Platform: { OS: 'ios', Version: '17.0', select: (o: Record<string, unknown>) => (o.ios ?? o.default) as unknown },
+  EventEmitter: class { addListener() { return { remove: () => {} }; } },
+  SharedObject: class {},
+  SharedRef: class {},
+};
+for (const p of [
+  'expo-modules-core',
+  'expo-modules-core/src/environment/browser',
+  'expo-modules-core/src/Platform',
+  'expo-modules-core/src/sweet/setUpJsLogger.fx',
+  'expo-modules-core/src/index',
+]) {
+  try {
+    mock.module(p, () => _emcMock);
+  } catch (_) {
+    // Already mocked
+  }
+}
+
 try {
   mock.module('react-native', () => ({
     Platform: {
