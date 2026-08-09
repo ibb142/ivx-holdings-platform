@@ -4,11 +4,11 @@
 
 ## Current verified baseline
 
-- **REALITY CHECK (2026-08-09T02:45+00:00):** SHA parity is REPAIRED and tests are green.
-  - GitHub main: `fad7e8da`
-  - Render deployed: `fad7e8da` (auto-deploy complete for commits `1fcd2520`, `f273189d`, and `fad7e8da`)
-  - Local checkout: `fad7e8da`
-  - `/health` SHA: `fad7e8da`
+- **REALITY CHECK (2026-08-09T02:15+00:00):** SHA parity is REPAIRED and tests are green.
+  - GitHub main: `1fcd2520`
+  - Render deployed: `1fcd2520` (auto-deploy complete for commits `1fcd2520` and `f273189d`)
+  - Local checkout: `1fcd2520`
+  - `/health` SHA: `1fcd2520`
   - `/health` databaseConfigured: `true`
   - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`. The Rork router remote was replaced with GitHub again.
   - Old Vercel AI Gateway key `vck_2rmvXXl10hKhRFiS3mYPQqZPCdFzvcSEaLZNbc7McuejLnMtPN4AJ6Ac` REJECTED (401 authentication_error); replaced with new key `vck_8G1XA8SrP7j8KP3VBZlAIg1RLYoUvCn6H4xQOGhbgDNqK5n9nt2NF3Vl` which is verified valid against Vercel AI Gateway.
@@ -41,13 +41,14 @@
 
 ## Active blocker
 
-- **SHA parity:** REPAIRED. Local/GitHub/Render all at `fad7e8da`.
+- **SHA parity:** REPAIRED. Local/GitHub/Render all at `1fcd2520`.
 - **AI gateway:** LIVE. Direct curl to Vercel AI Gateway returns HTTP 200 with real `openai/gpt-4o` completion. Production `/api/public/chat` returns `source: chatgpt`, `model: openai/gpt-4o` with real AI responses. `chat-debug` shows `baseUrl: https://ai-gateway.vercel.sh/v1` and `credentialLoaded: true`. Note: `/health` reports `ai.ok: false` immediately after restart because the provider state machine starts in `PROVIDER_VALIDATING` and only transitions to `PROVIDER_READY` after the first successful AI request; once QA requests have run, the state is `PROVIDER_READY`.
 - **Senior-intelligence QA:** FAIL. Overall 3.70/5. Remediation required: fix fallback arithmetic (TJ-01), improve challenge_assumptions handling for A/B test prompts, improve followup_intelligence clarification behavior, and re-run/evaluate.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
 - ivx-chat.test.ts: Full suite passes 1126/0.
-- Phase 14 regression: 2589/2589 backend pass, 1126/1126 expo pass, tsc clean. Certificate file `qa/IVX_CERTIFICATION_2026-08-08.md` updated at `fad7e8da` with SHA `1fcd2520` code baseline and Phase 15 evidence.
+- Phase 10/11 remain BLOCKED by lack of physical device / emulator / TestFlight infrastructure.
+- Phase 14 regression: 2589/2589 backend pass, 1126/1126 expo pass, tsc clean. Certificate file `qa/IVX_CERTIFICATION_2026-08-08.md` needs update to SHA `1fcd2520` and Phase 15 evidence.
 
 ## CI progress (Phase 2 remediation)
 
@@ -62,7 +63,6 @@
 | fee1f981 | infra | infra | infra | infra |
 | 295dcc48 | infra | infra | infra | infra |
 | 1fcd2520 | infra | infra | infra | infra |
-| fad7e8da | infra | infra | infra | infra |
 
 ## Rules
 

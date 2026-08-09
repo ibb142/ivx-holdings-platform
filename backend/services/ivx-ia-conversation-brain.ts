@@ -103,7 +103,14 @@ function detectPercentageQuestion(compact: string): boolean {
  * Evaluate a percentage expression from natural language.
  */
 function evaluatePercentageQuestion(message: string): number | null {
-  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s%.]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Strip currency symbols and commas BEFORE sanitizing so numbers like
+  // "$240,000" are preserved as "240000" not broken into "240 000".
+  const text = (message ?? '')
+    .toLowerCase()
+    .replace(/[$,€£¥]/g, '')
+    .replace(/[^a-z0-9\s%.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   const match = text.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)\s+of\s+(\d+(?:\.\d+)?)/);
   if (!match) return null;
   const pct = parseFloat(match[1]);
@@ -187,7 +194,9 @@ function answerDefinitionQuestion(message: string): string | null {
  * Evaluate a math expression from natural language.
  */
 function evaluateMathQuestion(message: string): number | null {
-  const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s+\-*/=.]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Strip currency symbols and commas before sanitizing so numbers like
+  // "$240,000 + $120,000" are preserved as "240000 + 120000".
+  const text = (message ?? '').toLowerCase().replace(/[$,€£¥]/g, '').replace(/[^a-z0-9\s+\-*/=.]/g, ' ').replace(/\s+/g, ' ').trim();
   // square root
   const sqrtMatch = text.match(/(?:square root|sqrt)\s+of\s+(\d+(?:\.\d+)?)/);
   if (sqrtMatch) {
@@ -242,6 +251,12 @@ export function buildIVXConversationAnswer(message: string): string | null {
       const result = evaluatePercentageQuestion(message);
       if (result === null || !isFinite(result)) return null;
       const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(2)));
+      // Preserve dollar context: if the original message contained $, format
+      // the result with a dollar sign and thousands separators.
+      const hasDollar = /\$/.test(message);
+      if (hasDollar && Number.isInteger(result)) {
+        return `The answer is $${result.toLocaleString('en-US')}.`;
+      }
       return `The answer is ${formatted}.`;
     }
 
