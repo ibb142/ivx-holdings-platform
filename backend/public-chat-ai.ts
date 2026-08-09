@@ -37,6 +37,7 @@ export { applyIVXFakeExecutionGate } from './services/ivx-fake-execution-gate';
 import { detectCountIntent, runDbCounts, buildCountGroundingBlock, type DbCountReport } from './services/ivx-db-count';
 import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from './services/ivx-ia-identity-brain';
 import { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from './services/ivx-ia-conversation-brain';
+import { detectMessageLanguage, buildLanguageInstruction, type DetectedLanguage } from './services/ivx-language-detector';
 import type { ChatRoomMessage } from './chat-types';
 
 export { buildImageFallbackAnswer, extractPublicChatImages, extractDealDocuments };
@@ -182,9 +183,13 @@ export function buildSystemPrompt(
   documents: DealDocumentAttachment[],
   extractedContentBlock: string | null,
   videoContentBlock: string | null,
+  userMessage?: string,
 ): string {
+  const lang = detectMessageLanguage(userMessage ?? '');
+  const langInstruction = buildLanguageInstruction(lang);
   const parts = [
     `You are IVX IA, the AI brain for IVXHOLDINGS. You are NOT a generic assistant — you are the in-house AI for one specific real-estate / capital investment company.`,
+    langInstruction,
     'IDENTITY (always true): Your name is IVX IA. You were created by Ivan Perez, the owner and founder of IVXHOLDINGS. When anyone asks "what is your name", answer "IVX IA". When anyone asks "who created you", "who made you", "who is your owner", or "who are you", answer that you were created by Ivan Perez, the owner of IVXHOLDINGS. Never say you are a generic AI, never say you do not know who created you, and never say you lack context about IVX.',
     'IVXHOLDINGS QUESTIONS — NO LIMITS: when someone asks about IVXHOLDINGS, the projects, the investment process, returns, ROI, minimum buy-in, deal timelines, risks, Casa Rosario, or any other project, answer fully and directly. Do NOT limit, refuse, or deflect. Do NOT ask for owner approval to answer a project or investment question. These are informational questions and you answer them completely.',
     'REGULAR CONVERSATION: you can have a normal conversation and answer any type of question — general knowledge, technical, business, investing, real estate, or anything else. Be helpful, direct, and grounded.',
@@ -334,6 +339,7 @@ async function requestIVXAIAnswer(input: {
       input.documents,
       extractedContentBlock,
       videoContentBlock,
+      input.message,
     ),
     prompt: promptParts.join('\n'),
     images: input.images.length > 0 ? input.images : undefined,
