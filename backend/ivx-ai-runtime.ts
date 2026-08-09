@@ -951,6 +951,8 @@ export async function* streamIVXAIText(input: {
   prompt?: string | null;
   messages?: IVXAITextMessage[];
   maxOutputTokens?: number;
+  /** When aborted, the underlying streamText call is cancelled via the Vercel AI SDK's abortSignal param. */
+  abortSignal?: AbortSignal | null;
 }): AsyncGenerator<IVXAIStreamChunk, void, void> {
   const model = resolveIVXAIModel(input.model);
   const messages = normalizeMessages(input.messages);
@@ -991,13 +993,18 @@ export async function* streamIVXAIText(input: {
       model: gatewayProvider.chat(model),
       system: system.length > 0 ? system : undefined,
       maxOutputTokens: input.maxOutputTokens,
+      abortSignal: input.abortSignal ?? undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(messages.length > 0 ? { messages } as any : { prompt }),
     });
 
     for await (const delta of streamResult.textStream) {
-      if (timedOut) {
-        lastError = `IVX AI stream timed out after ${adaptiveTimeoutMs}ms`;
+      if (timedOut || input.abortSignal?.aborted) {
+        if (input.abortSignal?.aborted) {
+          lastError = 'Generation stopped by user.';
+        } else {
+          lastError = `IVX AI stream timed out after ${adaptiveTimeoutMs}ms`;
+        }
         break;
       }
       accumulated += delta;

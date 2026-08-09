@@ -1169,6 +1169,10 @@ import {
   handlePublicChatSessionsGet,
   setPublicChatHistoryStorage,
 } from './api/public-chat';
+import {
+  handlePublicChatStreamPost,
+  setPublicChatStreamStorage,
+} from './api/public-chat-stream';
 import { ChatStorage } from './chat-storage';
 import type { ChatRoomMessage } from './chat-types';
 import {
@@ -1509,6 +1513,7 @@ const CHAT_DATABASE_PATH = (process.env.CHAT_DATABASE_PATH?.trim() || path.join(
 const CHAT_DEFAULT_ROOM_ID = (process.env.CHAT_ROOM_ID?.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 40) || 'main-room');
 const publicChatStorage = new ChatStorage(CHAT_DATABASE_PATH);
 setPublicChatHistoryStorage(publicChatStorage);
+setPublicChatStreamStorage(publicChatStorage);
 const publicRoomMembers = new Map<string, number>();
 type RenderProofToolName = 'time-now' | 'room-status' | 'supabase-tables' | 'storage-diagnostics' | 'github-status' | 'aws-status' | 'supabase-status' | 'render-status';
 
@@ -4698,6 +4703,10 @@ app.options('/public/send-message', (context) => context.body(null, 204));
 app.options('/api/public/send-message', (context) => context.body(null, 204));
 app.post('/public/chat', async (context) => handlePublicChatPost(context.req.raw));
 app.post('/api/public/chat', async (context) => handlePublicChatPost(context.req.raw));
+app.post('/public/chat/stream', async (context) => handlePublicChatStreamPost(context.req.raw));
+app.post('/api/public/chat/stream', async (context) => handlePublicChatStreamPost(context.req.raw));
+app.options('/public/chat/stream', (context) => context.body(null, 204));
+app.options('/api/public/chat/stream', (context) => context.body(null, 204));
 app.get('/public/chat/history', async (context) => handlePublicChatHistoryGet(context.req.raw));
 app.get('/api/public/chat/history', async (context) => handlePublicChatHistoryGet(context.req.raw));
 app.get('/public/chat/sessions', async (context) => handlePublicChatSessionsGet(context.req.raw));
