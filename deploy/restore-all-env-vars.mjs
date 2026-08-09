@@ -68,7 +68,7 @@ const ALL_ENV_VARS = [
   { key: 'GITHUB_REPO_URL', value: 'https://github.com/ibb142/ivx-holdings-platform.git' },
   { key: 'GITHUB_REPO', value: 'ibb142/ivx-holdings-platform' },
   { key: 'GITHUB_DEFAULT_BRANCH', value: 'main' },
-  { key: 'GITHUB_TOKEN', value: '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' },
+  { key: 'GITHUB_TOKEN', value: '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' },
 
   // Owner credentials
   { key: 'IVX_OWNER_RECOVERY_PHONE', value: '+15616443503' },
@@ -77,8 +77,8 @@ const ALL_ENV_VARS = [
   { key: 'IVX_OWNER_TOKEN', value: 'fdolDghfy4SNhHNH+LZenny1+fjLsIKBv9puQi3sPII=' },
   { key: 'IVX_INTERNAL_DEPLOY_SECRET', value: 'ff06bfbffa61af1bb1060b792479df4dd06674aca32249f92ff2e161adeed5b5' },
 
-  // Supabase Management API token (expired but keep for reference)
-  { key: 'SUPABASE_ACCESS_TOKEN', value: 'sbp_9736d07516c9f41a319e8f64687111424b406fbc' },
+  // Supabase Management API token (fresh, verified working)
+  { key: 'SUPABASE_ACCESS_TOKEN', value: 'sbp_4271aff0b7bf775acced47fde0bd694140bf16b9' },
 
   // Security — JWT_SECRET newly generated (256-bit hex)
   { key: 'JWT_SECRET', value: '06125c620b9baf67f6e917a64f3d70220a84184dd69bce81ed737797eb77c9e4' },
