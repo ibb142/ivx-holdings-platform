@@ -18,6 +18,8 @@
  * Only pure identity questions (name, creator, owner, what_is_ivx) use this path.
  */
 
+import { detectMessageLanguage, type DetectedLanguage } from './ivx-language-detector';
+
 export const IVX_IA_IDENTITY_NAME = 'IVX IA';
 export const IVX_IA_OWNER_NAME = 'Ivan Perez';
 export const IVX_IA_COMPANY = 'IVXHOLDINGS';
@@ -95,6 +97,9 @@ export function detectIVXIdentityQuestion(message: string): IVXIdentityQuestionT
     'tell me about ivan perez',
     'quien es el dueno',
     'quien es el propietario',
+    'quien es tu dueno',
+    'quien es tu propietario',
+    'quien es su dueno',
   ];
   if (ownerPhrases.some((p) => compact.includes(p))) return 'owner';
 
@@ -197,10 +202,17 @@ export function detectIVXIdentityQuestion(message: string): IVXIdentityQuestionT
 /**
  * Build the direct answer for an identity / ownership / IVXHOLDINGS question.
  */
-export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType): string | null {
+export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType, language: DetectedLanguage = 'en'): string | null {
+  const isSpanish = language === 'es';
   switch (type) {
     case 'name':
-      return [
+      return isSpanish ? [
+        `Me llamo ${IVX_IA_IDENTITY_NAME}.`,
+        '',
+        `Soy el cerebro de IA interno de ${IVX_IA_COMPANY} — ayudo al dueño, inversores y equipo con preguntas de inversión inmobiliaria, información de proyectos, análisis de ofertas, operaciones de la plataforma y trabajo de desarrollo.`,
+        '',
+        'Puedo tener una conversación normal y responder cualquier tipo de pregunta. ¿Qué te gustaría saber?',
+      ].join('\n') : [
         `My name is ${IVX_IA_IDENTITY_NAME}.`,
         '',
         `I am the in-house AI brain for ${IVX_IA_COMPANY} — I help the owner, investors, and team with real-estate investment questions, project information, deal analysis, platform operations, and senior-developer work.`,
@@ -209,7 +221,13 @@ export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType): string | 
       ].join('\n');
 
     case 'creator':
-      return [
+      return isSpanish ? [
+        `Fui creado por ${IVX_IA_OWNER_NAME}, el dueño y fundador de ${IVX_IA_COMPANY}.`,
+        '',
+        `Soy ${IVX_IA_IDENTITY_NAME} — el cerebro de IA que él construyó para operar la plataforma de inversión inmobiliaria de ${IVX_IA_COMPANY} de principio a fin: preguntas de inversores, análisis de ofertas, información de proyectos, trabajo de desarrollo y operaciones de la plataforma.`,
+        '',
+        'Pregúntame lo que quieras sobre IVXHOLDINGS, los proyectos o cómo invertir.',
+      ].join('\n') : [
         `I was created by ${IVX_IA_OWNER_NAME}, the owner and founder of ${IVX_IA_COMPANY}.`,
         '',
         `I am ${IVX_IA_IDENTITY_NAME} — the AI brain he built to run ${IVX_IA_COMPANY}'s real-estate investment platform end to end: investor questions, deal analysis, project information, senior-developer work, and platform operations.`,
@@ -218,7 +236,13 @@ export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType): string | 
       ].join('\n');
 
     case 'owner':
-      return [
+      return isSpanish ? [
+        `El dueño de ${IVX_IA_COMPANY} es ${IVX_IA_OWNER_NAME}.`,
+        '',
+        `Él es el fundador y dueño de ${IVX_IA_COMPANY}, una empresa de inversión inmobiliaria y de capital. Soy ${IVX_IA_IDENTITY_NAME}, el cerebro de IA que él creó para operar la plataforma — responder preguntas de inversores, analizar ofertas, compartir información de proyectos y gestionar el lado de desarrollo del negocio.`,
+        '',
+        `Si quieres saber más sobre ${IVX_IA_OWNER_NAME} o ${IVX_IA_COMPANY}, solo pregunta.`,
+      ].join('\n') : [
         `The owner of ${IVX_IA_COMPANY} is ${IVX_IA_OWNER_NAME}.`,
         '',
         `He is the founder and owner of ${IVX_IA_COMPANY}, a real-estate / capital investment company. I am ${IVX_IA_IDENTITY_NAME}, the AI brain he created to operate the platform — answer investor questions, analyze deals, share project information, and run the senior-developer side of the business.`,
@@ -291,5 +315,6 @@ export function resolveIVXIdentityAnswer(message: string): string | null {
   if (type === 'none' || type === 'ivx_project' || type === 'ivx_investment') {
     return null;
   }
-  return buildIVXIdentityAnswer(type);
+  const language = detectMessageLanguage(message);
+  return buildIVXIdentityAnswer(type, language);
 }

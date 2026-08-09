@@ -5787,69 +5787,16 @@ export default function IVXOwnerChatRoute() {
             </Pressable>
           ) : null}
 
-          {/* Red "IVX AI BLOCKED" watchdog banner. Self-hidden during normal
-              successful chat and while a request is in flight; appears ONLY when
-              /api/ivx/owner-ai fails, times out, or returns an auth/tooling/
-              backend error. Tap opens the full watchdog drawer. */}
-          <IVXWatchdogBanner onPress={() => setWatchdogDrawerVisible(true)} />
+          {/* ROUTINE BANNERS REMOVED — owner mandate 2026-08-09.
+              IVXWatchdogBanner and IVXStagedTimeoutBanner are NO LONGER rendered
+              in normal chat. They were showing "IVX AI WORKING", "Still working...",
+              watchdog telemetry, elapsed-time banners, and Cancel panels during
+              normal conversation — all of which the owner explicitly prohibited.
 
-          {/* Staged timeout banner: 15s "Still working", 45s retry, 90s backend
-              status check, 180s fail with exact evidence. No infinite spinner. */}
-          {stagedTimeoutTraceId ? (
-            <IVXStagedTimeoutBanner
-              traceId={stagedTimeoutTraceId}
-              messageId={stagedTimeoutMessageId}
-              conversationId={conversationQuery.data?.id ?? null}
-              requestStarted={stagedTimeoutRequestStarted}
-              lastSuccessfulCheckpoint={stagedTimeoutLastCheckpoint}
-              onRetry={() => {
-                console.log('[IVXStagedTimeout] Retry triggered for trace:', stagedTimeoutTraceId);
-                // Re-invoke the last message via handleAskAI or handleSend
-                const lastPending = pendingOwnerMessages[pendingOwnerMessages.length - 1];
-                if (lastPending) {
-                  sendMessageMutation.mutate({
-                    text: lastPending.text,
-                    mode: lastPending.mode === 'ai_only' ? 'ai_only' : 'send_and_ai',
-                    clientId: createTransientMessageId('ivx-owner-staged-retry'),
-                    capturedText: lastPending.text,
-                    replyTo: lastPending.replyTo ?? null});
-                }
-              }}
-              onCancel={() => {
-                console.log('[IVXStagedTimeout] Cancel triggered for trace:', stagedTimeoutTraceId);
-                setStagedTimeoutTraceId(null);
-                setAiReplyPending(false);
-              }}
-              onQueryBackendStatus={async (traceId: string): Promise<TimeoutEvidence | null> => {
-                try {
-                  const baseUrl = 'https://api.ivxholding.com';
-                  const token = await getIVXAccessToken();
-                  const res = await fetch(`${baseUrl}/api/ivx/owner-ai/request/${traceId}/status`, {
-                    headers: { Authorization: `Bearer ${token}` }});
-                  if (!res.ok) return null;
-                  const data = await res.json() as Record<string, unknown>;
-                  return {
-                    traceId,
-                    requestId: (data.requestId as string) ?? null,
-                    conversationId: (data.conversationId as string) ?? null,
-                    messageId: stagedTimeoutMessageId,
-                    lastSuccessfulCheckpoint: stagedTimeoutLastCheckpoint,
-                    failedCheckpoint: (data.structuredError as { checkpoint?: string } | null)?.checkpoint ?? null,
-                    requestStarted: stagedTimeoutRequestStarted,
-                    httpStatus: (data.terminalResult as { httpStatus?: number } | null)?.httpStatus ?? null,
-                    retryCount: (data.retryCount as number) ?? 0,
-                    networkStatus: 'online',
-                    appVersion: getIVXBuildInfo().appVersion,
-                    buildNumber: String(Constants.expoConfig?.android?.versionCode ?? 'unknown'),
-                    commitSha: getIVXBuildInfo().commitShort,
-                    elapsedMs: Date.now() - (stagedTimeoutStartRef.current ?? Date.now())};
-                } catch (err) {
-                  console.log('[IVXStagedTimeout] Backend status query failed:', err instanceof Error ? err.message : 'unknown');
-                  return null;
-                }
-              }}
-            />
-          ) : null}
+              These components remain imported for the diagnostics drawer (opened
+              manually via the developer tools panel), but they do NOT render in
+              the normal chat flow. Only genuine error states (owner auth failure
+              banner above) surface in normal chat. */}
 
           {showDiagnostics && developerToolsAllowed ? (
             <ScrollView
