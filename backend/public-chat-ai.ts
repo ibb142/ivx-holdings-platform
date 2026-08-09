@@ -168,7 +168,7 @@ export function isVagueExecutionRequest(message: string): boolean {
   return vaguePatterns.some((p) => p.test(text));
 }
 
-function buildTranscript(history: PublicChatHistoryItem[]): string {
+export function buildTranscript(history: PublicChatHistoryItem[]): string {
   if (history.length === 0) {
     return 'No previous messages.';
   }
