@@ -192,8 +192,13 @@ function getIVXAIGatewayApiKey(): string {
   const ivxGatewayKey = readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   if (ivxGatewayKey) return ivxGatewayKey;
 
-  // Legacy fallback: owner-provided Vercel AI Gateway key
-  return readTrimmed(process.env.IVX_AI_GATEWAY_KEY) || readTrimmed(process.env.OPENAI_API_KEY);
+  // Render dashboard env var name (AI_GATEWAY_API_KEY) — used when the key
+  // is configured directly on Render rather than via IVX_AI_GATEWAY_KEY.
+  const renderGatewayKey = readTrimmed(process.env.AI_GATEWAY_API_KEY);
+  if (renderGatewayKey) return renderGatewayKey;
+
+  // Legacy fallback
+  return readTrimmed(process.env.OPENAI_API_KEY);
 }
 
 /**
@@ -506,7 +511,7 @@ export function getIVXAIKeySource(): string {
   if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';
   if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';
   if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';
-  if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';
+  if (readTrimmed(process.env.AI_GATEWAY_API_KEY)) return 'AI_GATEWAY_API_KEY';
   if (readTrimmed(process.env.OPENAI_API_KEY)) return 'OPENAI_API_KEY';
   return 'none';
 }
