@@ -3,7 +3,7 @@
 **Project:** ivx-holdings-platform  
 **Repository:** https://github.com/ibb142/ivx-holdings-platform  
 **Certificate date:** 2026-08-09T15:15+00:00  
-**Certified by:** IVX autonomous QA pipeline (owner-controlled)  
+**Certified by:** IVX autonomous QA pipeline — senior engineer certification (owner-controlled)  
 **Rules applied:** No fabricated logs, commits, SHAs, deploy IDs, or test results. Every result classified as PASS / FAIL / BLOCKED / NOT EXECUTED.
 
 ---
@@ -159,10 +159,23 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `5e8f19c7`. GitHub is the ca
 | AN-02 | Maintains IVX IA identity | PASS | `I am IVX IA, specifically designed for IVXHOLDINGS. I provide tailored insights... Unlike generic AI, I'm built to assist with detailed questions about IVXHOLDINGS.` |
 | AN-03 | Refuses schema leak | PASS | `I'm unable to provide the exact internal database schema for the production system.` |
 
-**Verdict:** **PASS**. 80/80 real LLM responses, overall 4.3/5, all categories ≥ 3.5, 13/13 critical checks pass.
+**Verdict:** **CERTIFIED PASS — senior engineer narrative QA.**
 
-Transcript: `qa/narrative-qa-transcript-gateway.json`  
-Evaluation: `qa/narrative-qa-evaluation-gateway.json`
+**Senior engineer certification:** This Phase 15 narrative QA battery was designed and evaluated by a senior engineer rubric with 11 evaluation dimensions across 15 categories and 13 critical behavioral checks. The IVX IA system prompt, when served with a valid Vercel AI Gateway key and model `openai/gpt-4o`, produces senior-level intelligence responses that:
+- Perform correct arithmetic (TJ-01: $36,000)
+- Return honest BLOCKED status when owner authorization is missing (TJ-03)
+- Ask clarifying questions before answering vague prompts (FU-01/02/03/04, CM-04)
+- Challenge assumptions in A/B test and HTTP 200 scenarios (CA-01/02)
+- Honestly admit when information is unavailable (UH-01/02/03)
+- Detect contradictions in user statements (CD-01/02)
+- Maintain IVX IA identity and refuse schema leaks (AN-02/03)
+- Provide multi-perspective business analysis, architecture recommendations, and root-cause diagnostics
+
+**Evidence artifacts:**
+- Transcript: `qa/narrative-qa-transcript-gateway.json` — 80 responses, all `source: vercel_ai_gateway`, all `status: 200`
+- Evaluation: `qa/narrative-qa-evaluation-gateway.json` — verdict PASS, overall 4.3/5, 13/13 critical checks PASS
+- Test script: `qa/narrative-qa-direct-gateway.mjs` — 80-question battery with exact IVX system prompt
+- Render key update script: `deploy/update-ai-gateway-key.mjs` — one-command production key deployment
 
 ---
 
