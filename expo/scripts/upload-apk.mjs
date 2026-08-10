@@ -49,7 +49,7 @@ function deriveS3Key() {
   try {
     const configPath = resolve(__dirname, '../app.config.ts');
     const configContent = readFileSync(configPath, 'utf8');
-    const versionMatch = configContent.match(/version['"]s*:\s*['"]([^'"]+)['"]/);
+    const versionMatch = configContent.match(/version['"]?\s*:\s*['"]([^'"]+)['"]/);
     const version = versionMatch ? versionMatch[1] : 'latest';
     return `apk/ivx-holdings-${version}-owner.apk`;
   } catch {
