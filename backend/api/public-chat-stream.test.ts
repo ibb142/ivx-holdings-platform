@@ -9,7 +9,7 @@
  * - partial response preservation
  * - deterministic brains emit single delta + completed
  */
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach } from 'bun/test';
 
 // ── Mock setup ──────────────────────────────────────────────────────────────
 
@@ -62,15 +62,6 @@ mock.module('../ivx-ai-runtime', () => ({
   resolveIVXAIModel: (m: string) => m || 'gpt-4o',
   streamIVXAIText: mockStreamIVXAIText,
   isIVXAIConfigured: () => true,
-  requestIVXAIText: mock(async () => ({ text: 'Mocked response', model: 'gpt-4o' })),
-  getIVXAIConfigurationSnapshot: () => ({ model: 'gpt-4o', endpoint: 'https://ai-gateway.vercel.sh/v1' }),
-  getIVXAIKeySource: () => 'AI_GATEWAY_API_KEY',
-  getIVXAIActiveEndpoint: () => 'https://ai-gateway.vercel.sh/v1',
-  getIVXAIActiveProviderLabel: () => 'Vercel AI Gateway',
-  validateIVXAIStartup: () => ({ ok: true }),
-  getProviderHealth: () => ({ ok: true, label: 'healthy' }),
-  runWithOwnerAIStreamCallback: async (_input: unknown, cb: (delta: string) => void) => { cb('Mocked'); return { text: 'Mocked response', model: 'gpt-4o' }; },
-  computeAdaptiveTimeoutMs: () => 30000,
 }));
 
 mock.module('../public-chat-ai', () => ({
@@ -131,22 +122,6 @@ mock.module('../public-chat-supabase-store', () => ({
 
 mock.module('../chat-storage', () => ({
   ChatStorage: class MockChatStorage {},
-}));
-
-mock.module('../services/ivx-language-detector', () => ({
-  detectMessageLanguage: () => 'en',
-  buildLanguageInstruction: () => '',
-}));
-
-mock.module('../services/ivx-chat-autonomous-handoff', () => ({
-  detectAutonomousExecutionIntent: () => null,
-  createAutonomousJobFromChat: async () => null,
-  formatAutonomousTaskSsePayload: () => null,
-  formatAutonomousTaskMessage: () => '',
-}));
-
-mock.module('./owner-only', () => ({
-  assertIVXOwnerOnly: async () => ({ ownerSessionDetected: false, bearerAccepted: false, ownerVerified: false, ownerEmailMatched: false, ownerEmailMasked: null, userId: null, role: null, guardMode: null }),
 }));
 
 // ── Test helpers ────────────────────────────────────────────────────────────

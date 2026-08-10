@@ -225,7 +225,7 @@ export async function discoverAllCredentials(): Promise<CredentialSyncResult> {
         validationDetail = test.detail;
       }
     } else if (reg.category === 'supabase' && reg.name === 'SUPABASE_SERVICE_ROLE_KEY') {
-      const url = (process.env.SUPABASE_URL ?? '').trim();
+      const url = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim() || (process.env.SUPABASE_URL ?? '').trim();
       const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
       if (url && key) {
         const test = await testSupabaseConnection(url, key);

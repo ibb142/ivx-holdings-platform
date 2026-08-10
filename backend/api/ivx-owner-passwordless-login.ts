@@ -87,7 +87,7 @@ function createAdminClient() {
   if (!serviceRoleKey) {
     throw new Error('Supabase service role key is not configured on the backend (SUPABASE_SERVICE_ROLE_KEY).');
   }
-  const SUPABASE_ADMIN_TIMEOUT_MS = 12_000;
+  const SUPABASE_ADMIN_TIMEOUT_MS = 30_000;
   return createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false, debug: false },
     global: {
