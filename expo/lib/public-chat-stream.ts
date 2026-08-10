@@ -17,37 +17,16 @@ import type { PublicChatHistoryItem } from './public-chat';
 
 // ── Stream event types ─────────────────────────────────────────────────────
 
-export type AutonomousTaskEvent = {
-  type: 'response.autonomous_task';
-  ok: boolean;
-  jobId: string | null;
-  status: string;
-  stage: string;
-  progressPercent: number;
-  attached: boolean;
-  error: string | null;
-  intent: {
-    isExecutionCommand: boolean;
-    requiresApproval: boolean;
-    approvalCategories: string[];
-    autoExecute: boolean;
-    executionMode: string;
-    templateMode: string;
-  };
-};
-
 export type ChatStreamEvent =
   | { type: 'response.started'; requestId: string; sessionId: string; timestamp: string }
   | { type: 'response.delta'; delta: string; requestId: string }
-  | { type: 'response.completed'; text: string; model: string; source: string; endpoint?: string | null; requestId: string; sessionId: string; error?: string; jobId?: string | null; jobStatus?: string; jobStage?: string }
-  | { type: 'response.autonomous_task'; ok: boolean; jobId: string | null; status: string; stage: string; progressPercent: number; attached: boolean; error: string | null; intent: { isExecutionCommand: boolean; requiresApproval: boolean; approvalCategories: string[]; autoExecute: boolean; executionMode: string; templateMode: string } }
+  | { type: 'response.completed'; text: string; model: string; source: string; endpoint?: string | null; requestId: string; sessionId: string; error?: string }
   | { type: 'response.error'; error: string; requestId: string; sessionId: string };
 
 export type StreamCallbacks = {
   onEvent: (event: ChatStreamEvent) => void;
   onError: (error: string) => void;
   onComplete: (finalText: string, model: string, source: string) => void;
-  onAutonomousTask?: (event: AutonomousTaskEvent) => void;
 };
 
 export type StreamPublicChatInput = {
