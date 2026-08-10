@@ -14,7 +14,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, type AppStateStatus, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useQuery } from '@tanstack/react-query';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
-import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 // Module-level singleton guard — prevents duplicate mounts across fast-refresh,
 // nested routes, or accidental double mounts. Only the first mount renders;
@@ -161,7 +160,6 @@ export function IVXAdvancedExecutionMode(): React.ReactElement | null {
   if (query.isLoading && !data) {
     return (
       <View style={styles.loading} testID="ivx-advanced-exec-loading">
-        <ShimmerIndicator color="#1f6feb" />
         <Text style={styles.muted}>Connecting to execution stream…</Text>
       </View>
     );

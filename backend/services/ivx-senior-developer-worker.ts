@@ -2382,12 +2382,62 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : 'Worker run failed.';
+
+    // P0 FIX (owner mandate 2026-08-10): Automatic recovery for transient failures.
+    // Detect recoverable errors (transient GitHub API error, rate limit, stale
+    // branch, provider timeout, network failure, credential refresh) and retry
+    // the job WITHOUT asking the owner again. Bounded to MAX_AUTO_RETRIES.
+    const TRANSIENT_ERROR_PATTERNS = [
+      /HTTP 403/i,
+      /HTTP 429/i,
+      /rate.?limit/i,
+      /secondary.?rate.?limit/i,
+      /stale.?branch/i,
+      /ETIMEDOUT/i,
+      /ECONNRESET/i,
+      /ENOTFOUND/i,
+      /EAI_AGAIN/i,
+      /fetch.?failed/i,
+      /network.?error/i,
+      /timeout/i,
+      /abort/i,
+      /5\d\d/i,
+      /credential/i,
+      /token.*(expired|invalid|revoked)/i,
+    ];
+    const isTransient = TRANSIENT_ERROR_PATTERNS.some((re) => re.test(message));
+    const MAX_AUTO_RETRIES = 3;
+    const currentAttempts = job.attempts;
+
+    if (isTransient && currentAttempts < MAX_AUTO_RETRIES) {
+      console.log(`[IVXWorker] transient_failure_retry: job=${job.jobId} attempt=${currentAttempts}/${MAX_AUTO_RETRIES} error=${message.slice(0, 200)}`);
+      // Re-queue the job with exponential backoff. Owner approval PERSISTS —
+      // the same task scope does NOT require re-authorization.
+      const backoffMs = Math.min(2_000 * Math.pow(2, currentAttempts), 30_000);
+      await updateJob(job.jobId, {
+        status: 'queued',
+        stage: 'QUEUED',
+        progressPercent: 0,
+        stageDetail: `Auto-retry ${currentAttempts + 1}/${MAX_AUTO_RETRIES} after transient failure: ${message.slice(0, 150)}. Backoff ${backoffMs}ms. Owner authorization preserved.`,
+        finishedAt: null,
+        error: `transient_failure (auto-retry ${currentAttempts + 1}/${MAX_AUTO_RETRIES}): ${message.slice(0, 200)}`,
+      });
+      activeJobControllers.delete(job.jobId);
+      // Schedule re-drain after backoff.
+      setTimeout(() => { void drainSeniorDeveloperQueue(); }, backoffMs).unref?.();
+      return null;
+    }
+
+    // Retries exhausted or non-transient failure — report BLOCKED with exact evidence.
+    const blockedReason = isTransient
+      ? `Task failed after ${MAX_AUTO_RETRIES} auto-retries: ${message}`
+      : `Task failed at execution: ${message}`;
     await updateJob(job.jobId, {
       status: 'failed',
       stage: 'FAILED',
-      stageDetail: message,
+      stageDetail: blockedReason,
       finishedAt: nowIso(),
-      error: message,
+      error: blockedReason,
     });
     activeJobControllers.delete(job.jobId);
     return null;

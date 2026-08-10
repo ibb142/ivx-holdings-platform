@@ -30,6 +30,7 @@ import {
   type IVXWorkerJobStage,
   type IVXWorkerJobStatus,
 } from './ivx-senior-developer-worker';
+import { recordOwnerAuthorization, isOwnerAuthorized, getOwnerAuthorization } from './ivx-owner-authorization-store';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Intent detection
@@ -235,8 +236,14 @@ export async function createAutonomousJobFromChat(
     };
   }
 
-  // Risky commands require explicit owner approval — don't auto-create.
-  if (intent.requiresApproval) {
+  // P0 FIX (owner mandate 2026-08-10): Authorization persistence.
+  // If the owner already authorized this task scope, reuse the authorization.
+  // Do NOT re-ask for the same task unless scope materially changes.
+  const alreadyAuthorized = isOwnerAuthorized(ownerId, message);
+
+  // Risky commands require explicit owner approval — but if the owner already
+  // authorized the same scope, skip the approval gate and proceed.
+  if (intent.requiresApproval && !alreadyAuthorized) {
     return {
       ok: false,
       jobId: null,
@@ -247,6 +254,19 @@ export async function createAutonomousJobFromChat(
       error: `Owner approval required for: ${intent.approvalCategories.join(', ')}. Reply with /confirm to approve.`,
       intent,
     };
+  }
+
+  // Record the authorization so retries/recovery don't re-ask.
+  if (!alreadyAuthorized) {
+    recordOwnerAuthorization({
+      taskId: `chat-${Date.now()}`,
+      ownerId,
+      goal: message.trim(),
+      approvalPhrase: 'auto_execute',
+    });
+  } else {
+    const existingAuth = getOwnerAuthorization(ownerId, message);
+    console.log(`[IVXChatHandoff] authorization_reused: taskId=${existingAuth?.taskId} owner=${ownerId} — no re-ask for same scope`);
   }
 
   // Create the real worker job
