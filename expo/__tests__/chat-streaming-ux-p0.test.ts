@@ -48,13 +48,9 @@ mock.module('@/lib/ivx-supabase-client', () => ({
   },
 }));
 
-mock.module('@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService', () => ({
-  buildIVXOwnerMemoryPromptBlock: () => '',
-  ivxOwnerMemoryService: {
-    recordConversationTurn: async () => {},
-  },
-}));
-
+// ivxOwnerMemoryService is NOT mocked — AsyncStorage is already mocked above,
+// so the real service works fine without leaking a process-global mock that
+// breaks ivx-multimodal-upload.test.ts in the full suite.
 const { ivxAIRequestService } = await import('@/src/modules/ivx-owner-ai/services/ivxAIRequestService');
 
 function buildSSEResponse(events: string[]): Response {
