@@ -5268,6 +5268,21 @@ export default function IVXOwnerChatRoute() {
   // V1.10.8 real-time streaming: when deltas arrive, the streaming text
   // renders live in the bubble. The pill is only shown before the first
   // delta (no text yet). Once text is streaming, the bubble takes over.
+  // P0 FIX: The pill auto-dismisses after 12s — if no delta arrived by then,
+  // the backend is still processing (tool grounding, context loading, etc).
+  // Show a static text line instead of a persistent pill. No circular spinner.
+  const [pillShowTime, setPillShowTime] = useState<number>(0);
+  const [pillExpired, setPillExpired] = useState<boolean>(false);
+  useEffect(() => {
+    if (aiReplyPending && streamingText.trim().length === 0) {
+      setPillShowTime(Date.now());
+      setPillExpired(false);
+      const timer = setTimeout(() => setPillExpired(true), 12_000);
+      return () => clearTimeout(timer);
+    }
+    setPillExpired(false);
+  }, [aiReplyPending, streamingText]);
+
   const renderTypingHeader = useMemo(() => {
     if (!aiReplyPending) return null;
     if (streamingText.trim().length > 0) {
@@ -5280,15 +5295,21 @@ export default function IVXOwnerChatRoute() {
         </View>
       );
     }
+    // After 12s with no delta, show static text — no pill, no spinner.
+    if (pillExpired) {
+      return (
+        <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
+          <Text style={styles.typingHeaderTextStatic}>Still processing…</Text>
+        </View>
+      );
+    }
+    // Single lightweight pre-token indicator — static text, no animation.
     return (
       <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
-        <View style={styles.typingHeaderPill}>
-          <View style={styles.typingHeaderDot} />
-          <Text style={styles.typingHeaderText}>IVX is responding…</Text>
-        </View>
+        <Text style={styles.typingHeaderTextStatic}>IVX is responding…</Text>
       </View>
     );
-  }, [aiReplyPending, streamingText]);
+  }, [aiReplyPending, streamingText, pillExpired]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
   // Owner-only live debug proof. Every value here is read live from the running
@@ -6590,7 +6611,7 @@ export default function IVXOwnerChatRoute() {
                   removeClippedSubviews={false}
                   automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
                   inverted={true}
-              refreshControl={<RefreshControl tintColor={Colors.primary} refreshing={refreshing || controlRoomQuery.isFetching} onRefresh={() => {
+              refreshControl={<RefreshControl tintColor={Colors.primary} refreshing={refreshing} onRefresh={() => {
                 void messagesQuery.refetch();
                 void conversationQuery.refetch();
                 void roomStatusQuery.refetch();
@@ -8450,6 +8471,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700' as const,
     letterSpacing: 0.3},
+  typingHeaderTextStatic: {
+    color: 'rgba(246,200,95,0.70)',
+    fontSize: 12,
+    fontWeight: '500' as const,
+    letterSpacing: 0.2},
   streamingBubble: {
     alignSelf: 'flex-start' as const,
     marginLeft: 12,

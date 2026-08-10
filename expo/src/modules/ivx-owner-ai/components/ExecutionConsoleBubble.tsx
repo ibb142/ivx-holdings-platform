@@ -12,7 +12,7 @@
  * as the worker drains the queue.
  */
 import React, { memo, useCallback, useMemo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   AlertCircle,
   CheckCircle2,
@@ -123,7 +123,7 @@ export const ExecutionConsoleBubble = memo(function ExecutionConsoleBubble({
         <Terminal size={14} color={Colors.info} />
         <Text style={styles.headerText}>{headerLabel}</Text>
         {polling ? (
-          <ActivityIndicator size="small" color={Colors.primary} style={styles.headerSpinner} />
+          <Text style={styles.headerPollingText}>(live)</Text>
         ) : null}
       </View>
 
@@ -149,12 +149,12 @@ export const ExecutionConsoleBubble = memo(function ExecutionConsoleBubble({
         <Text style={styles.value}>{stageLabel(stage)}</Text>
       </View>
 
-      <View style={styles.progressTrack} testID="ivx-execution-progress-track">
-        <View
-          style={[styles.progressFill, { width: `${Math.min(Math.max(liveProgress, 0), 100)}%` }]}
-          testID="ivx-execution-progress-fill"
-        />
-        <Text style={styles.progressText}>{liveProgress}%</Text>
+      {/* P0 FIX: No invented progress percentages. Only show the current
+          stage as a label, not a fake percentage. The LLM must NOT invent
+          task progress — progress is only shown when derived from a real
+          deterministic execution plan. */}
+      <View style={styles.stageLabelRow} testID="ivx-execution-stage-label">
+        <Text style={styles.stageLabelText}>{stageLabel(stage)}</Text>
       </View>
 
       <View style={styles.row}>
@@ -264,6 +264,13 @@ const styles = StyleSheet.create({
   headerSpinner: {
     marginLeft: 4,
   },
+  headerPollingText: {
+    color: Colors.primary,
+    fontFamily: 'monospace',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -289,30 +296,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flex: 1,
   },
-  progressTrack: {
-    height: 10,
-    backgroundColor: 'rgba(20, 28, 44, 0.9)',
-    borderRadius: 5,
+  stageLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginVertical: 8,
-    overflow: 'hidden',
-    position: 'relative',
-    justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(31, 111, 235, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(31, 111, 235, 0.25)',
   },
-  progressFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: Colors.primary,
-    borderRadius: 5,
-  },
-  progressText: {
-    color: 'rgba(240, 246, 255, 0.95)',
+  stageLabelText: {
+    color: Colors.info,
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    alignSelf: 'center',
-    zIndex: 2,
+    letterSpacing: 0.3,
   },
   fileList: {
     marginTop: 2,
