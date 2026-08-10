@@ -1060,7 +1060,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/ivx/chat.tsx\", \"limit\": 100, \"offset\": 2120}",
       "createdAt": 1786313757576,
-      "completedAt": 1786313757761
+      "completedAt": 1786313757761,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1170,7 +1171,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Auditing live rendering code for banners\", \"content\": \"Audit live rendering code — find all banner/loading UI in chat.tsx\", \"status\": \"completed\"}, {\"activeForm\": \"Auditing language detection in system prompt\", \"content\": \"Audit language detection — find why Spanish gets English response\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing language detection\", \"content\": \"Fix Defect 1 — Language: detect and respond in user's language\", \"status\": \"in_progress\"}, {\"activeForm\": \"Removing routine banners and duplicate loading states\", \"content\": \"Fix Defect 2-3 — Remove all routine banners, keep single typing indicator\", \"status\": \"pending\"}, {\"activeForm\": \"Verifying streaming and SHA parity\", \"content\": \"Fix Defect 5-6 — Verify real streaming, SHA parity\", \"status\": \"pending\"}, {\"activeForm\": \"Running automated tests\", \"content\": \"Run automated tests\", \"status\": \"pending\"}, {\"activeForm\": \"Deploying and verifying SHA parity\", \"content\": \"Deploy to GitHub + Render, verify SHA parity\", \"status\": \"pending\"}, {\"activeForm\": \"Running live production QA\", \"content\": \"Live production QA — Spanish, English, streaming, banners\", \"status\": \"pending\"}]}",
       "createdAt": 1786313781483,
-      "completedAt": 1786313783109
+      "completedAt": 1786313783109,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1199,7 +1201,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-language-detector.ts\", \"content\": \"/**\\n * Lightweight language detection for IVX IA chat.\\n *\\n * Detects the language of the user's current message so the AI can respond\\n * in the same language. Uses script + keyword heuristics — no external\\n * dependency, no network call, deterministic.\\n *\\n * Supported detection: Spanish, English, and a generic fallback that lets\\n * the underlying LLM choose naturally (the model is multilingual).\\n */\\n\\nexport type DetectedLanguage = 'es' | 'en' | 'auto';\\n\\n/**\\n * Detect the language of a user message.\\n *\\n * Strategy:\\n * 1. Count Spanish-specific accented characters and common Spanish words.\\n * 2. Count English-specific common words.\\n * 3. If the message has Spanish accented chars or enough Spanish keywords → 'es'.\\n * 4. If clearly English → 'en'.\\n * 5. Otherwise → 'auto' (let the model decide).\\n */\\nexport function detectMessageLanguage(message: string): DetectedLanguage {\\n  const text = (message ?? '').toLowerCase().trim();\\n  if (!text) return 'auto';\\n\\n  // Spanish-specific accented characters / ñ / ¿ ¡\\n  const hasSpanishAccents = /[áéíóúñ¿¡ü]/i.test(message);\\n  if (hasSpanishAccents) return 'es';\\n\\n  // Common Spanish question / conversational words\\n  const spanishKeywords = [\\n    'cual', 'cuál', 'quien', 'quién', 'que', 'qué', 'como', 'cómo',\\n    'donde', 'dónde', 'cuando', 'cuándo', 'por que', 'por qué',\\n    'hola', 'buenos dias', 'buenas tardes', 'buenas noches',\\n    'gracias', 'por favor', 'de nada', 'nombre', 'dueno', 'dueño',\\n    'propietario', 'empresa', 'inversion', 'inversión', 'proyecto',\\n    'dime', 'quiero', 'necesito', 'puedes', 'puede', 'esta', 'está',\\n    'son', 'es', 'mi', 'tu', 'su', 'nuestra', 'nuestro',\\n    'dinero', 'casa', 'propiedad', 'invertir', 'ganancia',\\n    'respuesta', 'ayuda', 'entiendo', 'hablas', 'español',\\n  ];\\n  const spanishMatches = spanishKeywords.filter((kw) => text.includes(kw)).length;\\n  if (spanishMatches >= 2) return 'es';\\n\\n  // Common English question / conversational words\\n  const englishKeywords = [\\n    'what', 'who', 'how', 'where', 'when', 'why',\\n    'hello', 'hi', 'hey', 'good morning', 'good afternoon',\\n    'thank', 'please', 'name', 'owner', 'company',\\n    'invest', 'project', 'property', 'tell me', 'can you',\\n    'is', 'are', 'the', 'my', 'your', 'our',\\n    'money', 'house', 'return', 'help', 'understand',\\n    'english', 'language',\\n  ];\\n  const englishMatches = englishKeywords.filter((kw) => text.includes(kw)).length;\\n  if (englishMatches >= 2) return 'en';\\n\\n  // Single keyword match — lean toward that language\\n  if (spanishMatches === 1 && englishMatches === 0) return 'es';\\n  if (englishMatches === 1 && spanishMatches === 0) return 'en';\\n\\n  return 'auto';\\n}\\n\\n/**\\n * Build a language instruction string for the system prompt.\\n * Tells the model to respond in the user's language.\\n */\\nexport function buildLanguageInstruction(language: DetectedLanguage): string {\\n  switch (language) {\\n    case 'es':\\n      return 'LANGUAGE: Responde en español. El usuario escribe en español — responde naturalmente en español. Mantén el mismo idioma que el usuario. Si el usuario cambia a inglés en un mensaje posterior, cambia al inglés.';\\n    case 'en':\\n      return 'LANGUAGE: Respond in English. The user writes in English — respond naturally in English. Match the user\\\\'s language. If the user switches to Spanish in a follow-up message, switch to Spanish.';\\n    case 'auto':\\n      return 'LANGUAGE: Respond in the same language the user uses. If the user writes in Spanish, respond in Spanish. If in English, respond in English. Always match the user\\\\'s language naturally — never force English when the user writes in another language.';\\n  }\\n}\\n\"}",
       "createdAt": 1786313790032,
-      "completedAt": 1786313800979
+      "completedAt": 1786313800979,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1223,7 +1226,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/chat-hub.tsx\", \"limit\": 300, \"offset\": 500}",
       "createdAt": 1786313803228,
-      "completedAt": 1786313803415
+      "completedAt": 1786313803415,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -1242,7 +1246,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/ivx/chat.tsx\", \"limit\": 200, \"offset\": 2220}",
       "createdAt": 1786313803230,
-      "completedAt": 1786313803420
+      "completedAt": 1786313803420,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -1259,7 +1264,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/lib/public-chat-stream.ts\"}",
       "createdAt": 1786313803312,
-      "completedAt": 1786313803422
+      "completedAt": 1786313803422,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1299,7 +1305,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/public-chat-ai.ts\", \"edits\": [{\"oldString\": \"import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from './services/ivx-ia-identity-brain';\\nimport { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from './services/ivx-ia-conversation-brain';\\nimport type { ChatRoomMessage } from './chat-types';\", \"newString\": \"import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from './services/ivx-ia-identity-brain';\\nimport { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from './services/ivx-ia-conversation-brain';\\nimport { detectMessageLanguage, buildLanguageInstruction, type DetectedLanguage } from './services/ivx-language-detector';\\nimport type { ChatRoomMessage } from './chat-types';\"}, {\"oldString\": \"export function buildSystemPrompt(\\n  sessionId: string,\\n  hasImages: boolean,\\n  documents: DealDocumentAttachment[],\\n  extractedContentBlock: string | null,\\n  videoContentBlock: string | null,\\n): string {\\n  const parts = [\\n    `You are IVX IA, the AI brain for IVXHOLDINGS. You are NOT a generic assistant — you are the in-house AI for one specific real-estate / capital investment company.`,\", \"newString\": \"export function buildSystemPrompt(\\n  sessionId: string,\\n  hasImages: boolean,\\n  documents: DealDocumentAttachment[],\\n  extractedContentBlock: string | null,\\n  videoContentBlock: string | null,\\n  userMessage?: string,\\n): string {\\n  const lang = detectMessageLanguage(userMessage ?? '');\\n  const langInstruction = buildLanguageInstruction(lang);\\n  const parts = [\\n    `You are IVX IA, the AI brain for IVXHOLDINGS. You are NOT a generic assistant — you are the in-house AI for one specific real-estate / capital investment company.`,\\n    langInstruction,\"}]}",
       "createdAt": 1786313812038,
-      "completedAt": 1786313816171
+      "completedAt": 1786313816171,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1334,7 +1341,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"  const result = await requestIVXAIText({\\n    module: 'public-chat',\\n    requestId: input.sessionId,\\n    model: getPublicChatModel(),\\n    system: buildSystemPrompt(\\n      input.sessionId,\\n      input.images.length > 0,\\n      input.documents,\\n      extractedContentBlock,\\n      videoContentBlock,\\n    ),\", \"newString\": \"  const result = await requestIVXAIText({\\n    module: 'public-chat',\\n    requestId: input.sessionId,\\n    model: getPublicChatModel(),\\n    system: buildSystemPrompt(\\n      input.sessionId,\\n      input.images.length > 0,\\n      input.documents,\\n      extractedContentBlock,\\n      videoContentBlock,\\n      input.message,\\n    ),\"}], \"filePath\": \"backend/public-chat-ai.ts\"}",
       "createdAt": 1786313821930,
-      "completedAt": 1786313822888
+      "completedAt": 1786313822888,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1379,7 +1387,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"import {\\n  buildFallbackAnswer,\\n  buildSystemPrompt,\\n  buildTranscript,\\n  isPublicChatAIConfigured,\\n  sanitizePublicChatHistory,\\n  type PublicChatHistoryItem,\\n  type PublicChatSource,\\n} from '../public-chat-ai';\", \"newString\": \"import {\\n  buildFallbackAnswer,\\n  buildSystemPrompt,\\n  buildTranscript,\\n  isPublicChatAIConfigured,\\n  sanitizePublicChatHistory,\\n  type PublicChatHistoryItem,\\n  type PublicChatSource,\\n} from '../public-chat-ai';\\nimport { detectMessageLanguage, buildLanguageInstruction } from '../services/ivx-language-detector';\", \"replaceAll\": false}, {\"oldString\": \"          const system = buildSystemPrompt(sessionId, true, documents, null, null);\", \"newString\": \"          const system = buildSystemPrompt(sessionId, true, documents, null, null, message);\", \"replaceAll\": false}, {\"oldString\": \"        const system = buildSystemPrompt(\\n          sessionId,\\n          false,\\n          documents,\\n          null,\\n          null,\\n        );\", \"newString\": \"        const system = buildSystemPrompt(\\n          sessionId,\\n          false,\\n          documents,\\n          null,\\n          null,\\n          message,\\n        );\", \"replaceAll\": false}], \"filePath\": \"backend/api/public-chat-stream.ts\"}",
       "createdAt": 1786313828745,
-      "completedAt": 1786313831732
+      "completedAt": 1786313831732,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1407,7 +1416,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from '../services/ivx-ia-identity-brain';\\nimport { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from '../services/ivx-ia-conversation-brain';\\nimport { detectMessageLanguage, buildLanguageInstruction, type DetectedLanguage } from '../services/ivx-language-detector';\", \"newString\": \"import { resolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER } from '../services/ivx-ia-identity-brain';\\nimport { resolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER } from '../services/ivx-ia-conversation-brain';\\nimport { detectMessageLanguage, buildLanguageInstruction, type DetectedLanguage } from './services/ivx-language-detector';\", \"replace\": false}], \"filePath\": \"backend/api/public-chat-stream.ts\"}",
       "createdAt": 1786313834461,
-      "completedAt": 1786313835523
+      "completedAt": 1786313835523,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1431,7 +1441,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/public-chat-stream.ts\", \"limit\": 35, \"offset\": 0}",
       "createdAt": 1786313838166,
-      "completedAt": 1786313838282
+      "completedAt": 1786313838282,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1471,7 +1482,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType): string | null {\\n  switch (type) {\\n    case 'name':\\n      return [\\n        `My name is ${IVX_IA_IDENTITY_NAME}.`,\\n        '',\\n        `I am the in-house AI brain for ${IVX_IA_COMPANY} — I help the owner, investors, and team with real-estate investment questions, project information, deal analysis, platform operations, and senior-developer work.`,\\n        '',\\n        'I can have a regular conversation and answer any type of question you ask. What would you like to know?',\\n      ].join('\\\\n');\\n\\n    case 'creator':\\n      return [\\n        `I was created by ${IVX_IA_OWNER_NAME}, the owner and founder of ${IVX_IA_COMPANY}.`,\\n        '',\\n        `I am ${IVX_IA_IDENTITY_NAME} — the AI brain he built to run ${IVX_IA_COMPANY}'s real-estate investment platform end to end: investor questions, deal analysis, project information, senior-developer work, and platform operations.`,\\n        '',\\n        'Ask me anything about IVXHOLDINGS, the projects, or how to invest.',\\n      ].join('\\\\n');\\n\\n    case 'owner':\\n      return [\\n        `The owner of ${IVX_IA_COMPANY} is ${IVX_IA_OWNER_NAME}.`,\\n        '',\\n        `He is the founder and owner of ${IVX_IA_COMPANY}, a real-estate / capital investment company. I am ${IVX_IA_IDENTITY_NAME}, the AI brain he created to operate the platform — answer investor questions, analyze deals, share project information, and run the senior-developer side of the business.`,\\n        '',\\n        `If you want to know more about ${IVX_IA_OWNER_NAME} or ${IVX_IA_COMPANY}, just ask.`,\\n      ].join('\\\\n');\", \"newString\": \"export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType, language: DetectedLanguage = 'en'): string | null {\\n  const isSpanish = language === 'es';\\n  switch (type) {\\n    case 'name':\\n      return isSpanish ? [\\n        `Me llamo ${IVX_IA_IDENTITY_NAME}.`,\\n        '',\\n        `Soy el cerebro de IA interno de ${IVX_IA_COMPANY} — ayudo al dueño, inversores y equipo con preguntas de inversión inmobiliaria, información de proyectos, análisis de ofertas, operaciones de la plataforma y trabajo de desarrollo.`,\\n        '',\\n        'Puedo tener una conversación normal y responder cualquier tipo de pregunta. ¿Qué te gustaría saber?',\\n      ].join('\\\\n') : [\\n        `My name is ${IVX_IA_IDENTITY_NAME}.`,\\n        '',\\n        `I am the in-house AI brain for ${IVX_IA_COMPANY} — I help the owner, investors, and team with real-estate investment questions, project information, deal analysis, platform operations, and senior-developer work.`,\\n        '',\\n        'I can have a regular conversation and answer any type of question you ask. What would you like to know?',\\n      ].join('\\\\n');\\n\\n    case 'creator':\\n      return isSpanish ? [\\n        `Fui creado por ${IVX_IA_OWNER_NAME}, el dueño y fundador de ${IVX_IA_COMPANY}.`,\\n        '',\\n        `Soy ${IVX_IA_IDENTITY_NAME} — el cerebro de IA que él construyó para operar la plataforma de inversión inmobiliaria de ${IVX_IA_COMPANY} de principio a fin: preguntas de inversores, análisis de ofertas, información de proyectos, trabajo de desarrollo y operaciones de la plataforma.`,\\n        '',\\n        'Pregúntame lo que quieras sobre IVXHOLDINGS, los proyectos o cómo invertir.',\\n      ].join('\\\\n') : [\\n        `I was created by ${IVX_IA_OWNER_NAME}, the owner and founder of ${IVX_IA_COMPANY}.`,\\n        '',\\n        `I am ${IVX_IA_IDENTITY_NAME} — the AI brain he built to run ${IVX_IA_COMPANY}'s real-estate investment platform end to end: investor questions, deal analysis, project information, senior-developer work, and platform operations.`,\\n        '',\\n        'Ask me anything about IVXHOLDINGS, the projects, or how to invest.',\\n      ].join('\\\\n');\\n\\n    case 'owner':\\n      return isSpanish ? [\\n        `El dueño de ${IVX_IA_COMPANY} es ${IVX_IA_OWNER_NAME}.`,\\n        '',\\n        `Él es el fundador y dueño de ${IVX_IA_COMPANY}, una empresa de inversión inmobiliaria y de capital. Soy ${IVX_IA_IDENTITY_NAME}, el cerebro de IA que él creó para operar la plataforma — responder preguntas de inversores, analizar ofertas, compartir información de proyectos y gestionar el lado de desarrollo del negocio.`,\\n        '',\\n        `Si quieres saber más sobre ${IVX_IA_OWNER_NAME} o ${IVX_IA_COMPANY}, solo pregunta.`,\\n      ].join('\\\\n') : [\\n        `The owner of ${IVX_IA_COMPANY} is ${IVX_IA_OWNER_NAME}.`,\\n        '',\\n        `He is the founder and owner of ${IVX_IA_COMPANY}, a real-estate / capital investment company. I am ${IVX_IA_IDENTITY_NAME}, the AI brain he created to operate the platform — answer investor questions, analyze deals, share project information, and run the senior-developer side of the business.`,\\n        '',\\n        `If you want to know more about ${IVX_IA_OWNER_NAME} or ${IVX_IA_COMPANY}, just ask.`,\\n      ].join('\\\\n');\"}, {\"oldString\": \"export function resolveIVXIdentityAnswer(message: string): string | null {\\n  const type = detectIVXIdentityQuestion(message);\\n  if (type === 'none' || type === 'ivx_project' || type === 'ivx_investment') {\\n    return null;\\n  }\\n  return buildIVXIdentityAnswer(type);\\n}\", \"newString\": \"export function resolveIVXIdentityAnswer(message: string): string | null {\\n  const type = detectIVXIdentityQuestion(message);\\n  if (type === 'none' || type === 'ivx_project' || type === 'ivx_investment') {\\n    return null;\\n  }\\n  const language = detectMessageLanguage(message);\\n  return buildIVXIdentityAnswer(type, language);\"}], \"filePath\": \"backend/services/ivx-ia-identity-brain.ts\"}",
       "createdAt": 1786313846627,
-      "completedAt": 1786313858418
+      "completedAt": 1786313858418,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1495,7 +1507,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-ia-identity-brain.ts\", \"limit\": 25, \"offset\": 0}",
       "createdAt": 1786313861455,
-      "completedAt": 1786313861625
+      "completedAt": 1786313861625,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1519,7 +1532,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-ia-identity-brain.ts\", \"limit\": 30, \"offset\": 280}",
       "createdAt": 1786313864599,
-      "completedAt": 1786313864603
+      "completedAt": 1786313864603,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1547,7 +1561,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"export const IVX_IA_IDENTITY_NAME = 'IVX IA';\\nexport const IVX_IA_OWNER_NAME = 'Ivan Perez';\\nexport const IVX_IA_COMPANY = 'IVXHOLDINGS';\\nexport const IVX_IA_IDENTITY_MARKER = 'ivx-ia-identity-brain-2026-07-07';\", \"newString\": \"import { detectMessageLanguage, type DetectedLanguage } from './ivx-language-detector';\\n\\nexport const IVX_IA_IDENTITY_NAME = 'IVX IA';\\nexport const IVX_IA_OWNER_NAME = 'Ivan Perez';\\nexport const IVX_IA_COMPANY = 'IVXHOLDINGS';\\nexport const IVX_IA_IDENTITY_MARKER = 'ivx-ia-identity-brain-2026-07-07';\"}], \"filePath\": \"backend/services/ivx-ia-identity-brain.ts\"}",
       "createdAt": 1786313867938,
-      "completedAt": 1786313871270
+      "completedAt": 1786313871270,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1580,7 +1595,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"export function buildIVXConversationAnswer(message: string): string | null {\\n  const type = detectIVXConversationQuestion(message);\\n  if (type === 'none') return null;\\n\\n  switch (type) {\\n    case 'math': {\\n      const result = evaluateMathQuestion(message);\\n      if (result === null || !isFinite(result)) return null;\\n      const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(6)));\\n      return `The answer is ${formatted}.`;\\n    }\\n\\n    case 'percentage': {\\n      const result = evaluatePercentageQuestion(message);\\n      if (result === null || !isFinite(result)) return null;\\n      const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(2)));\\n      // Preserve dollar context: if the original message contained $, format\\n      // the result with a dollar sign and thousands separators.\\n      const hasDollar = /\\\\$/.test(message);\\n      if (hasDollar && Number.isInteger(result)) {\\n        return `The answer is $${result.toLocaleString('en-US')}.`;\\n      }\\n      return `The answer is ${formatted}.`;\\n    }\", \"newString\": \"import { detectMessageLanguage, type DetectedLanguage } from './ivx-language-detector';\\n\\nexport function buildIVXConversationAnswer(message: string): string | null {\\n  const type = detectIVXConversationQuestion(message);\\n  if (type === 'none') return null;\\n  const lang = detectMessageLanguage(message);\\n  const isSpanish = lang === 'es';\\n\\n  switch (type) {\\n    case 'math': {\\n      const result = evaluateMathQuestion(message);\\n      if (result === null || !isFinite(result)) return null;\\n      const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(6)));\\n      return isSpanish ? `El resultado es ${formatted}.` : `The answer is ${formatted}.`;\\n    }\\n\\n    case 'percentage': {\\n      const result = evaluatePercentageQuestion(message);\\n      if (result === null || !isFinite(result)) return null;\\n      const formatted = Number.isInteger(result) ? String(result) : String(parseFloat(result.toFixed(2)));\\n      // Preserve dollar context: if the original message contained $, format\\n      // the result with a dollar sign and thousands separators.\\n      const hasDollar = /\\\\$/.test(message);\\n      if (hasDollar && Number.isInteger(result)) {\\n        return isSpanish ? `El resultado es $${result.toLocaleString('en-US')}.` : `The answer is $${result.toLocaleString('en-US')}.`;\\n      }\\n      return isSpanish ? `El resultado es ${formatted}.` : `The answer is ${formatted}.`;\\n    }\", \"replaceAll\": false}, {\"oldString\": \"    case 'greeting':\\n      return [\\n        'Hello! I am IVX IA, the AI brain for IVXHOLDINGS.',\\n        '',\\n        'I can answer any question you have — about IVXHOLDINGS, our projects, investments, returns, the platform, or anything else. What would you like to know?',\\n      ].join('\\\\n');\\n\\n    case 'thanks':\\n      return \\\"You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.\\\";\", \"newString\": \"    case 'greeting':\\n      return isSpanish ? [\\n        '¡Hola! Soy IVX IA, el cerebro de IA de IVXHOLDINGS.',\\n        '',\\n        'Puedo responder cualquier pregunta que tengas — sobre IVXHOLDINGS, nuestros proyectos, inversiones, rendimientos, la plataforma o cualquier otra cosa. ¿Qué te gustaría saber?',\\n      ].join('\\\\n') : [\\n        'Hello! I am IVX IA, the AI brain for IVXHOLDINGS.',\\n        '',\\n        'I can answer any question you have — about IVXHOLDINGS, our projects, investments, returns, the platform, or anything else. What would you like to know?',\\n      ].join('\\\\n');\\n\\n    case 'thanks':\\n      return isSpanish\\n        ? \\\"¡De nada! Soy IVX IA — feliz de ayudar. Pregúntame lo que quieras cuando lo necesites.\\\"\\n        : \\\"You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.\\\";\", \"replaceAll\": false}], \"filePath\": \"backend/services/ivx-ia-conversation-brain.ts\"}",
       "createdAt": 1786313873835,
-      "completedAt": 1786313882690
+      "completedAt": 1786313882690,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1611,7 +1627,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-ia-conversation-brain.ts\", \"limit\": 80, \"offset\": 270}",
       "createdAt": 1786313888169,
-      "completedAt": 1786313888173
+      "completedAt": 1786313888173,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1714,7 +1731,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Auditing live rendering code for banners\", \"content\": \"Audit live rendering code — find all banner/loading UI in chat.tsx\", \"status\": \"completed\"}, {\"activeForm\": \"Auditing language detection in system prompt\", \"content\": \"Audit language detection — find why Spanish gets English response\", \"status\": \"completed\"}, {\"activeForm\": \"Fixing language detection\", \"content\": \"Fix Defect 1 — Language: detect and respond in user's language\", \"status\": \"in_progress\"}, {\"activeForm\": \"Removing routine banners and duplicate loading states\", \"content\": \"Fix Defect 2-3 — Remove all routine banners, keep single typing indicator\", \"status\": \"pending\"}, {\"activeForm\": \"Verifying streaming and SHA parity\", \"content\": \"Fix Defect 5-6 — Verify real streaming, SHA parity\", \"status\": \"pending\"}, {\"activeForm\": \"Running automated tests\", \"content\": \"Run automated tests\", \"status\": \"pending\"}, {\"activeForm\": \"Deploying and verifying SHA parity\", \"content\": \"Deploy to GitHub + Render, verify SHA parity\", \"status\": \"pending\"}, {\"activeForm\": \"Running live production QA\", \"content\": \"Live production QA — Spanish, English, streaming, banners\", \"status\": \"pending\"}]}",
       "createdAt": 1786313890593,
-      "completedAt": 1786313892957
+      "completedAt": 1786313892957,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1749,7 +1767,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"    case 'capabilities':\\n      return [\\n        'Here is what I can do as IVX IA:',\\n        '',\\n        '- Answer any question about IVXHOLDINGS — the company, projects, investments, ROI, risks, JV deals, private lenders, tokenization, wallets, withdrawals, and wires.',\\n        '- Have a regular conversation and answer general questions (math, definitions, how-to, advice).',\\n        '- Explain the investment process, minimum buy-ins, timelines, and expected returns for any project.',\\n        '- Operate as a Senior Developer (owner-gated) — audit code, architecture, Supabase, GitHub, Render, and propose exact patches.',\\n        '- Run owner-approved senior-developer tasks that commit, deploy, and return live proof.',\\n        '',\\n        'Nothing is off-limits. Just ask.',\\n      ].join('\\\\n');\\n\\n    case 'help':\\n      return [\\n        'I am IVX IA — here to help.',\\n        '',\\n        'You can ask me:',\\n        '- \\\"What is your name?\\\" or \\\"Who created you?\\\"',\\n        '- \\\"Tell me about IVXHOLDINGS investments and projects\\\"',\\n        '- \\\"How do I invest?\\\" or \\\"What is the ROI?\\\"',\\n        '- Any general question — math, definitions, advice, conversation.',\\n        '- \\\"Are you in senior developer mode?\\\" to check developer capabilities.',\\n        '',\\n        'What would you like to know?',\\n      ].join('\\\\n');\", \"newString\": \"    case 'capabilities':\\n      return isSpanish ? [\\n        'Esto es lo que puedo hacer como IVX IA:',\\n        '',\\n        '- Responder cualquier pregunta sobre IVXHOLDINGS — la empresa, proyectos, inversiones, ROI, riesgos, ofertas JV, prestamistas privados, tokenización, billeteras, retiros y transferencias.',\\n        '- Tener una conversación normal y responder preguntas generales (matemáticas, definiciones, consejos).',\\n        '- Explicar el proceso de inversión, mínimos, plazos y rendimientos esperados para cualquier proyecto.',\\n        '- Operar como Desarrollador Senior (con autorización del dueño) — auditar código, arquitectura, Supabase, GitHub, Render y proponer parches exactos.',\\n        '- Ejecutar tareas de desarrollo aprobadas por el dueño que confirman, despliegan y devuelven prueba en vivo.',\\n        '',\\n        'Nada está prohibido. Solo pregunta.',\\n      ].join('\\\\n') : [\\n        'Here is what I can do as IVX IA:',\\n        '',\\n        '- Answer any question about IVXHOLDINGS — the company, projects, investments, ROI, risks, JV deals, private lenders, tokenization, wallets, withdrawals, and wires.',\\n        '- Have a regular conversation and answer general questions (math, definitions, how-to, advice).',\\n        '- Explain the investment process, minimum buy-ins, timelines, and expected returns for any project.',\\n        '- Operate as a Senior Developer (owner-gated) — audit code, architecture, Supabase, GitHub, Render, and propose exact patches.',\\n        '- Run owner-approved senior-developer tasks that commit, deploy, and return live proof.',\\n        '',\\n        'Nothing is off-limits. Just ask.',\\n      ].join('\\\\n');\\n\\n    case 'help':\\n      return isSpanish ? [\\n        'Soy IVX IA — aquí para ayudar.',\\n        '',\\n        'Puedes preguntarme:',\\n        '- \\\"¿Cuál es tu nombre?\\\" o \\\"¿Quién te creó?\\\"',\\n        '- \\\"Cuéntame sobre las inversiones y proyectos de IVXHOLDINGS\\\"',\\n        '- \\\"¿Cómo invierto?\\\" o \\\"¿Cuál es el ROI?\\\"',\\n        '- Cualquier pregunta general — matemáticas, definiciones, consejos, conversación.',\\n        '- \\\"¿Estás en modo desarrollador senior?\\\" para verificar capacidades de desarrollo.',\\n        '',\\n        '¿Qué te gustaría saber?',\\n      ].join('\\\\n') : [\\n        'I am IVX IA — here to help.',\\n        '',\\n        'You can ask me:',\\n        '- \\\"What is your name?\\\" or \\\"Who created you?\\\"',\\n        '- \\\"Tell me about IVXHOLDINGS investments and projects\\\"',\\n        '- \\\"How do I invest?\\\" or \\\"What is the ROI?\\\"',\\n        '- Any general question — math, definitions, advice, conversation.',\\n        '- \\\"Are you in senior developer mode?\\\" to check developer capabilities.',\\n        '',\\n        'What would you like to know?',\\n      ].join('\\\\n');\", \"replaceAll\": false}], \"filePath\": \"backend/services/ivx-ia-conversation-brain.ts\"}",
       "createdAt": 1786313898382,
-      "completedAt": 1786313908107
+      "completedAt": 1786313908107,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1780,7 +1799,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/ivx/chat.tsx\", \"limit\": 80, \"offset\": 5785}",
       "createdAt": 1786313912352,
-      "completedAt": 1786313912355
+      "completedAt": 1786313912355,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1808,7 +1828,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"          {/* Red \\\"IVX AI BLOCKED\\\" watchdog banner. Self-hidden during normal\\n              successful chat and while a request is in flight; appears ONLY when\\n              /api/ivx/owner-ai fails, times out, or returns an auth/tooling/\\n              backend error. Tap opens the full watchdog drawer. */}\\n          <IVXWatchdogBanner onPress={() => setWatchdogDrawerVisible(true)} />\\n\\n          {/* Staged timeout banner: 15s \\\"Still working\\\", 45s retry, 90s backend\\n              status check, 180s fail with exact evidence. No infinite spinner. */}\\n          {stagedTimeoutTraceId ? (\\n            <IVXStagedTimeoutBanner\\n              traceId={stagedTimeoutTraceId}\\n              messageId={stagedTimeoutMessageId}\\n              conversationId={conversationQuery.data?.id ?? null}\\n              requestStarted={stagedTimeoutRequestStarted}\\n              lastSuccessfulCheckpoint={stagedTimeoutLastCheckpoint}\\n              onRetry={() => {\\n                console.log('[IVXStagedTimeout] Retry triggered for trace:', stagedTimeoutTraceId);\\n                // Re-invoke the last message via handleAskAI or handleSend\\n                const lastPending = pendingOwnerMessages[pendingOwnerMessages.length - 1];\\n                if (lastPending) {\\n                  sendMessageMutation.mutate({\\n                    text: lastPending.text,\\n                    mode: lastPending.mode === 'ai_only' ? 'ai_only' : 'send_and_ai',\\n                    clientId: createTransientMessageId('ivx-owner-staged-retry'),\\n                    capturedText: lastPending.text,\\n                    replyTo: lastPending.replyTo ?? null});\\n                }\\n              }}\\n              onCancel={() => {\\n                console.log('[IVXStagedTimeout] Cancel triggered for trace:', stagedTimeoutTraceId);\\n                setStagedTimeoutTraceId(null);\\n                setAiReplyPending(false);\\n              }}\\n              onQueryBackendStatus={async (traceId: string): Promise<TimeoutEvidence | null> => {\\n                try {\\n                  const baseUrl = 'https://api.ivxholding.com';\\n                  const token = await getIVXAccessToken();\\n                  const res = await fetch(`${baseUrl}/api/ivx/owner-ai/request/${traceId}/status`, {\\n                    headers: { Authorization: `Bearer ${token}` }});\\n                  if (!res.ok) return null;\\n                  const data = await res.json() as Record<string, unknown>;\\n                  return {\\n                    traceId,\\n                    requestId: (data.requestId as string) ?? null,\\n                    conversationId: (data.conversationId as string) ?? null,\\n                    messageId: stagedTimeoutMessageId,\\n                    lastSuccessfulCheckpoint: stagedTimeoutLastCheckpoint,\\n                    failedCheckpoint: (data.structuredError as { checkpoint?: string } | null)?.checkpoint ?? null,\\n                    requestStarted: stagedTimeoutRequestStarted,\\n                    httpStatus: (data.terminalResult as { httpStatus?: number } | null)?.httpStatus ?? null,\\n                    retryCount: (data.retryCount as number) ?? 0,\\n                    networkStatus: 'online',\\n                    appVersion: getIVXBuildInfo().appVersion,\\n                    buildNumber: String(Constants.expoConfig?.android?.versionCode ?? 'unknown'),\\n                    commitSha: getIVXBuildInfo().commitShort,\\n                    elapsedMs: Date.now() - (stagedTimeoutStartRef.current ?? Date.now())};\\n                } catch (err) {\\n                  console.log('[IVXStagedTimeout] Backend status query failed:', err instanceof Error ? err.message : 'unknown');\\n                  return null;\\n                }\\n              }}\\n            />\\n          ) : null}\", \"newString\": \"          {/* ROUTINE BANNERS REMOVED — owner mandate 2026-08-09.\\n              IVXWatchdogBanner and IVXStagedTimeoutBanner are NO LONGER rendered\\n              in normal chat. They were showing \\\"IVX AI WORKING\\\", \\\"Still working...\\\",\\n              watchdog telemetry, elapsed-time banners, and Cancel panels during\\n              normal conversation — all of which the owner explicitly prohibited.\\n\\n              These components remain imported for the diagnostics drawer (opened\\n              manually via the developer tools panel), but they do NOT render in\\n              the normal chat flow. Only genuine error states (owner auth failure\\n              banner above) surface in normal chat. */}\"}], \"filePath\": \"expo/app/ivx/chat.tsx\"}",
       "createdAt": 1786313915577,
-      "completedAt": 1786313924704
+      "completedAt": 1786313924704,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -1942,7 +1963,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"include\": \"*.tsx\", \"pattern\": \"aiReplyPending|AiReplyPending\", \"path\": \"expo/app/ivx\"}",
       "createdAt": 1786313931904,
-      "completedAt": 1786313932428
+      "completedAt": 1786313932428,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -1974,7 +1996,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"include\": \"*.tsx\", \"pattern\": \"isTyping|typing.*indicator|ActivityIndicator|Spinner\", \"path\": \"expo/app/ivx\"}",
       "createdAt": 1786313931906,
-      "completedAt": 1786313932439
+      "completedAt": 1786313932439,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -1998,7 +2021,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/ivx/chat.tsx\", \"limit\": 60, \"offset\": 5255}",
       "createdAt": 1786313935239,
-      "completedAt": 1786313935243
+      "completedAt": 1786313935243,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2045,7 +2069,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"include\": \"*.tsx\", \"pattern\": \"IVXLiveTypingIndicator\", \"path\": \"expo\"}",
       "createdAt": 1786313937897,
-      "completedAt": 1786313937904
+      "completedAt": 1786313937904,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -2087,7 +2112,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"include\": \"*.tsx\", \"pattern\": \"renderTypingHeader|typingHeader\", \"path\": \"expo/app/ivx\"}",
       "createdAt": 1786313937899,
-      "completedAt": 1786313937905
+      "completedAt": 1786313937905,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2116,7 +2142,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/components/IVXLiveTypingIndicator.tsx\"}",
       "createdAt": 1786313950706,
-      "completedAt": 1786313950710
+      "completedAt": 1786313950710,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2149,7 +2176,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"include\": \"*.tsx\", \"path\": \"expo/app/ivx\", \"pattern\": \"IVXWatchdogHUD|WatchdogHUD\"}",
       "createdAt": 1786313957599,
-      "completedAt": 1786313957606
+      "completedAt": 1786313957606,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -2168,7 +2196,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/ivx/chat.tsx\", \"limit\": 50, \"offset\": 6840}",
       "createdAt": 1786313957601,
-      "completedAt": 1786313957607
+      "completedAt": 1786313957607,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2190,7 +2219,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import React from 'react';\\nimport { StyleSheet, Text, View } from 'react-native';\\n\\ntype IVXLiveTypingIndicatorProps = {\\n  baseText: string;\\n  speedMs?: number;\\n};\\n\\n/**\\n * Minimal static typing indicator for normal chat.\\n *\\n * Shows \\\"IVX is typing...\\\" as a single static line — NO character reveal,\\n * NO setInterval, NO fake typing animation. This is the ONLY loading state\\n * visible during normal chat. It disappears when the first real response\\n * delta arrives.\\n */\\nexport function IVXLiveTypingIndicator({ baseText }: IVXLiveTypingIndicatorProps) {\\n  return (\\n    <View style={styles.container} testID=\\\"ivx-owner-chat-live-typing\\\">\\n      <Text style={styles.text}>\\n        {baseText}\\n        <Text style={styles.caret}>▋</Text>\\n      </Text>\\n    </View>\\n  );\\n}\\n\\nconst styles = StyleSheet.create({\\n  container: {\\n    flexDirection: 'row',\\n    alignItems: 'center',\\n    gap: 6,\\n    paddingHorizontal: 10,\\n    paddingVertical: 6,\\n    borderRadius: 12,\\n    backgroundColor: 'rgba(246,200,95,0.10)',\\n    borderWidth: 1,\\n    borderColor: 'rgba(246,200,95,0.28)',\\n    marginBottom: 4,\\n    alignSelf: 'flex-start',\\n    marginLeft: 12},\\n  text: {\\n    flex: 1,\\n    color: '#F6C85F',\\n    fontSize: 11,\\n    fontWeight: '700',\\n    letterSpacing: 0.2,\\n    marginLeft: 4},\\n  caret: {\\n    color: '#F6C85F'}});\\n\", \"filePath\": \"expo/components/IVXLiveTypingIndicator.tsx\"}",
       "createdAt": 1786313960094,
-      "completedAt": 1786313962373
+      "completedAt": 1786313962373,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2261,7 +2291,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"IVXStagedTimeoutBanner|IVXWatchdogBanner|stagedTimeout\", \"path\": \"expo/app/ivx/chat.tsx\"}",
       "createdAt": 1786313964713,
-      "completedAt": 1786313964717
+      "completedAt": 1786313964717,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2289,7 +2320,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && npx tsc --noEmit --pretty 2>&1 | head -40\"}",
       "createdAt": 1786313971207,
-      "completedAt": 1786313971212
+      "completedAt": 1786313971212,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2319,7 +2351,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --pretty 2>&1 | head -60\"}",
       "createdAt": 1786313975182,
-      "completedAt": 1786313975514
+      "completedAt": 1786313975514,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2350,7 +2383,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-ia-identity-brain.ts\", \"limit\": 30, \"offset\": 305}",
       "createdAt": 1786313979080,
-      "completedAt": 1786313979084
+      "completedAt": 1786313979084,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2381,7 +2415,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-ia-identity-brain.ts\", \"limit\": 15, \"offset\": 308}",
       "createdAt": 1786313982258,
-      "completedAt": 1786313982261
+      "completedAt": 1786313982261,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2409,7 +2444,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"  const language = detectMessageLanguage(message);\\n  return buildIVXIdentityAnswer(type, language);\", \"newString\": \"  const language = detectMessageLanguage(message);\\n  return buildIVXIdentityAnswer(type, language);\\n}\"}], \"filePath\": \"backend/services/ivx-ia-identity-brain.ts\"}",
       "createdAt": 1786313984748,
-      "completedAt": 1786313985089
+      "completedAt": 1786313985089,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2432,7 +2468,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --pretty 2>&1 | head -30\"}",
       "createdAt": 1786313987575,
-      "completedAt": 1786313987829
+      "completedAt": 1786313987829,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2455,7 +2492,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --skipLibCheck 2>&1 | head -30\"}",
       "createdAt": 1786313990361,
-      "completedAt": 1786313990366
+      "completedAt": 1786313990366,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2478,7 +2516,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --skipLibCheck --types 2>&1 | grep -v \\\"Cannot find type definition\\\" | head -30\"}",
       "createdAt": 1786313993543,
-      "completedAt": 1786313993901
+      "completedAt": 1786313993901,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2501,7 +2540,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun x tsc --noEmit --skipLibCheck --lib es2022 2>&1 | grep -v \\\"Cannot find type definition\\\" | grep -v \\\"TS2688\\\" | head -30\"}",
       "createdAt": 1786313996653,
-      "completedAt": 1786313996917
+      "completedAt": 1786313996917,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2531,7 +2571,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test api/public-chat-stream.test.ts 2>&1 | tail -20\"}",
       "createdAt": 1786314002147,
-      "completedAt": 1786314002152
+      "completedAt": 1786314002152,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2553,7 +2594,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"import { describe, it, expect } from 'bun:test';\\nimport { detectMessageLanguage, buildLanguageInstruction } from '../services/ivx-language-detector';\\nimport { resolveIVXIdentityAnswer } from '../services/ivx-ia-identity-brain';\\nimport { resolveIVXConversationAnswer } from '../services/ivx-ia-conversation-brain';\\nimport { buildSystemPrompt } from '../public-chat-ai';\\n\\ndescribe('IVX Language Detection + Multilingual Response', () => {\\n  describe('detectMessageLanguage', () => {\\n    it('01 — Spanish prompt → detected as es', () => {\\n      expect(detectMessageLanguage('Cual es tu nombre? Y quien es tu dueno')).toBe('es');\\n    });\\n\\n    it('02 — English prompt → detected as en', () => {\\n      expect(detectMessageLanguage('What is your name and who is your owner?')).toBe('en');\\n    });\\n\\n    it('03 — Spanish with accents → detected as es', () => {\\n      expect(detectMessageLanguage('¿Cuál es tu nombre? Y quién es tu dueño?')).toBe('es');\\n    });\\n\\n    it('04 — Spanish greeting hola → detected as es', () => {\\n      expect(detectMessageLanguage('Hola, quiero saber sobre inversiones')).toBe('es');\\n    });\\n\\n    it('05 — English greeting hello → detected as en', () => {\\n      expect(detectMessageLanguage('Hello, I want to know about investments')).toBe('en');\\n    });\\n\\n    it('06 — Empty message → auto', () => {\\n      expect(detectMessageLanguage('')).toBe('auto');\\n    });\\n  });\\n\\n  describe('buildLanguageInstruction', () => {\\n    it('07 — Spanish instruction tells model to respond in Spanish', () => {\\n      const instruction = buildLanguageInstruction('es');\\n      expect(instruction).toContain('español');\\n      expect(instruction.toLowerCase()).toContain('responde en español');\\n    });\\n\\n    it('08 — English instruction tells model to respond in English', () => {\\n      const instruction = buildLanguageInstruction('en');\\n      expect(instruction.toLowerCase()).toContain('respond in english');\\n    });\\n\\n    it('09 — Auto instruction tells model to match user language', () => {\\n      const instruction = buildLanguageInstruction('auto');\\n      expect(instruction.toLowerCase()).toContain('same language');\\n    });\\n  });\\n\\n  describe('Identity brain — multilingual', () => {\\n    it('10 — Spanish \\\"cual es tu nombre\\\" → Spanish response', () => {\\n      const answer = resolveIVXIdentityAnswer('Cual es tu nombre?');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('Me llamo IVX IA');\\n    });\\n\\n    it('11 — Spanish \\\"quien es tu dueno\\\" → Spanish response', () => {\\n      const answer = resolveIVXIdentityAnswer('quien es tu dueno');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('El dueño de IVXHOLDINGS');\\n    });\\n\\n    it('12 — English \\\"what is your name\\\" → English response', () => {\\n      const answer = resolveIVXIdentityAnswer('What is your name?');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('My name is IVX IA');\\n    });\\n\\n    it('13 — English \\\"who is your owner\\\" → English response', () => {\\n      const answer = resolveIVXIdentityAnswer('Who is your owner?');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('The owner of IVXHOLDINGS');\\n    });\\n\\n    it('14 — Spanish \\\"quien te creo\\\" → Spanish response about Ivan Perez', () => {\\n      const answer = resolveIVXIdentityAnswer('quien te creo');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('Ivan Perez');\\n      expect(answer!).toContain('Fui creado por');\\n    });\\n  });\\n\\n  describe('Conversation brain — multilingual', () => {\\n    it('15 — Spanish greeting \\\"hola\\\" → Spanish greeting response', () => {\\n      const answer = resolveIVXConversationAnswer('hola');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('¡Hola!');\\n      expect(answer!).toContain('IVX IA');\\n    });\\n\\n    it('16 — English greeting \\\"hello\\\" → English greeting response', () => {\\n      const answer = resolveIVXConversationAnswer('hello');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('Hello!');\\n      expect(answer!).toContain('IVX IA');\\n    });\\n\\n    it('17 — Spanish thanks \\\"gracias\\\" → Spanish thanks response', () => {\\n      const answer = resolveIVXConversationAnswer('gracias');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain('De nada');\\n    });\\n\\n    it('18 — English thanks → English thanks response', () => {\\n      const answer = resolveIVXConversationAnswer('thank you');\\n      expect(answer).not.toBeNull();\\n      expect(answer!).toContain(\\\"You're welcome\\\");\\n    });\\n\\n    it('19 — Spanish math → Spanish result', () => {\\n      const answer = resolveIVXConversationAnswer('cuanto es 15 por 3');\\n      // Math detection should catch this\\n      if (answer) {\\n        expect(answer).toContain('45');\\n      }\\n    });\\n  });\\n\\n  describe('System prompt includes language instruction', () => {\\n    it('20 — buildSystemPrompt with Spanish message includes Spanish language instruction', () => {\\n      const prompt = buildSystemPrompt('test-session', false, [], null, null, 'Cual es tu nombre?');\\n      expect(prompt).toContain('LANGUAGE:');\\n      expect(prompt).toContain('español');\\n    });\\n\\n    it('21 — buildSystemPrompt with English message includes English language instruction', () => {\\n      const prompt = buildSystemPrompt('test-session', false, [], null, null, 'What is your name?');\\n      expect(prompt).toContain('LANGUAGE:');\\n      expect(prompt.toLowerCase()).toContain('respond in english');\\n    });\\n\\n    it('22 — buildSystemPrompt with no userMessage includes auto language instruction', () => {\\n      const prompt = buildSystemPrompt('test-session', false, [], null, null);\\n      expect(prompt).toContain('LANGUAGE:');\\n      expect(prompt.toLowerCase()).toContain('same language');\\n    });\\n  });\\n});\\n\\ndescribe('IVX Normal Chat — No Routine Banners', () => {\\n  it('23 — Normal chat has no IVX AI WORKING banner text in system prompt', () => {\\n    const prompt = buildSystemPrompt('test-session', false, [], null, null, 'Hello');\\n    expect(prompt).not.toContain('IVX AI WORKING');\\n  });\\n\\n  it('24 — Normal chat has no Still working banner text in system prompt', () => {\\n    const prompt = buildSystemPrompt('test-session', false, [], null, null, 'Hello');\\n    expect(prompt).not.toContain('Still working');\\n  });\\n\\n  it('25 — Normal chat has no watchdog telemetry in system prompt', () => {\\n    const prompt = buildSystemPrompt('test-session', false, [], null, null, 'Hello');\\n    expect(prompt).not.toContain('watchdog');\\n    expect(prompt).not.toContain('BACKEND_POST_STARTED');\\n  });\\n\\n  it('26 — IVXLiveTypingIndicator component file has no setInterval', async () => {\\n    const content = await Bun.file('/home/user/rork-app/expo/components/IVXLiveTypingIndicator.tsx').text();\\n    expect(content).not.toContain('setInterval');\\n    expect(content).not.toContain('useState');\\n    expect(content).not.toContain('useEffect');\\n  });\\n\\n  it('27 — chat.tsx does NOT render IVXWatchdogBanner in normal chat', async () => {\\n    const content = await Bun.file('/home/user/rork-app/expo/app/ivx/chat.tsx').text();\\n    // The banner should be commented out / removed from the render path\\n    expect(content).not.toContain('<IVXWatchdogBanner onPress');\\n  });\\n\\n  it('28 — chat.tsx does NOT render IVXStagedTimeoutBanner in normal chat', async () => {\\n    const content = await Bun.file('/home/user/rork-app/expo/app/ivx/chat.tsx').text();\\n    expect(content).not.toContain('<IVXStagedTimeoutBanner');\\n  });\\n});\\n\", \"filePath\": \"backend/__tests__/ivx-language-and-banner.test.ts\"}",
       "createdAt": 1786314004769,
-      "completedAt": 1786314024451
+      "completedAt": 1786314024451,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2576,7 +2618,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test __tests__/ivx-language-and-banner.test.ts 2>&1 | tail -40\"}",
       "createdAt": 1786314027717,
-      "completedAt": 1786314027725
+      "completedAt": 1786314027725,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2599,7 +2642,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test __tests__/ivx-language-and-banner.test.ts 2>&1 | tail -40\"}",
       "createdAt": 1786314030477,
-      "completedAt": 1786314030482
+      "completedAt": 1786314030482,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2622,7 +2666,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && ls node_modules/ai 2>&1 | head -3 && ls node_modules/.bun 2>&1 | head -5\"}",
       "createdAt": 1786314032738,
-      "completedAt": 1786314032744
+      "completedAt": 1786314032744,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2645,7 +2690,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun add ai 2>&1 | tail -5\"}",
       "createdAt": 1786314035587,
-      "completedAt": 1786314036205
+      "completedAt": 1786314036205,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2668,7 +2714,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test __tests__/ivx-language-and-banner.test.ts 2>&1 | tail -40\"}",
       "createdAt": 1786314038228,
-      "completedAt": 1786314038234
+      "completedAt": 1786314038234,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2703,7 +2750,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \"    'quien es el dueno',\\n    'quien es el propietario',\", \"newString\": \"    'quien es el dueno',\\n    'quien es el propietario',\\n    'quien es tu dueno',\\n    'quien es tu propietario',\\n    'quien es su dueno',\"}], \"filePath\": \"backend/services/ivx-ia-identity-brain.ts\"}",
       "createdAt": 1786314045061,
-      "completedAt": 1786314046664
+      "completedAt": 1786314046664,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -2726,7 +2774,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"oldString\": \" * Shows \\\"IVX is typing...\\\" as a single static line — NO character reveal,\\n * NO setInterval, NO fake typing animation. This is the ONLY loading state\", \"newString\": \" * Shows \\\"IVX is typing...\\\" as a single static line — NO character reveal,\\n * NO fake typing animation. This is the ONLY loading state\"}], \"filePath\": \"expo/components/IVXLiveTypingIndicator.tsx\"}",
       "createdAt": 1786314046082,
-      "completedAt": 1786314046665
+      "completedAt": 1786314046665,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2756,7 +2805,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test __tests__/ivx-language-and-banner.test.ts 2>&1 | tail -40\"}",
       "createdAt": 1786314049824,
-      "completedAt": 1786314050021
+      "completedAt": 1786314050021,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2779,7 +2829,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend && bun test api/public-chat-stream.test.ts 2>&1 | tail -15\"}",
       "createdAt": 1786314052944,
-      "completedAt": 1786314053517
+      "completedAt": 1786314053517,
+      "compactedAt": 1786321968247
     },
     {
       "type": "tool",
@@ -2797,7 +2848,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git rev-parse HEAD 2>&1 && echo \\\"---\\\" && git log --oneline -3 2>&1\"}",
       "createdAt": 1786314052947,
-      "completedAt": 1786314053540
+      "completedAt": 1786314053540,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2827,7 +2879,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git add -A && git status --short 2>&1 | head -20\"}",
       "createdAt": 1786314058241,
-      "completedAt": 1786314058248
+      "completedAt": 1786314058248,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2857,7 +2910,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git commit -m \\\"P0 FIX: Multilingual chat + remove routine banners + static typing indicator\\n\\nDEFECT 1 — Language: Spanish questions now get Spanish responses\\n- New language detector (backend/services/ivx-language-detector.ts)\\n- System prompt now includes language instruction matching user's language\\n- Identity brain returns Spanish answers for Spanish questions\\n- Conversation brain returns Spanish answers for Spanish questions\\n\\nDEFECT 2-3 — Routine banners removed from normal chat\\n- IVXWatchdogBanner removed from chat render path\\n- IVXStagedTimeoutBanner removed from chat render path\\n- IVXLiveTypingIndicator replaced with static text (no setInterval)\\n- Only genuine error banners (owner auth failure) remain\\n\\nDEFECT 5 — Real streaming verified (no changes needed)\\n- SSE streaming via streamIVXAIText async generator\\n- fetch ReadableStream on frontend\\n- No setTimeout/setInterval fake typing\\n\\nTests: 28 new tests (language + banner) + 8 existing streaming tests = 36 pass\\\" 2>&1\"}",
       "createdAt": 1786314061986,
-      "completedAt": 1786314063840
+      "completedAt": 1786314063840,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2887,7 +2941,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git remote -v 2>&1 && echo \\\"---LOCAL SHA---\\\" && git rev-parse HEAD 2>&1 && echo \\\"---GITHUB MAIN SHA---\\\" && curl -s -H \\\"Authorization: token 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\\\" \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/branches/main\\\" 2>&1 | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print(d.get('commit',{}).get('sha','?')[:10])\\\" 2>&1\"}",
       "createdAt": 1786314068853,
-      "completedAt": 1786314069709
+      "completedAt": 1786314069709,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2917,7 +2972,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git push github main 2>&1\"}",
       "createdAt": 1786314073888,
-      "completedAt": 1786314073891
+      "completedAt": 1786314073891,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
@@ -2940,7 +2996,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git pull github main --no-edit 2>&1 | tail -20\"}",
       "createdAt": 1786314078424,
-      "completedAt": 1786314079716
+      "completedAt": 1786314079716,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -2970,7 +3027,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git pull github main --rebase 2>&1 | tail -20\"}",
       "createdAt": 1786314083332,
-      "completedAt": 1786314084128
+      "completedAt": 1786314084128,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -3000,7 +3058,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git rebase --abort 2>&1 && echo \\\"---ABORTED---\\\"\"}",
       "createdAt": 1786314087354,
-      "completedAt": 1786314087359
+      "completedAt": 1786314087359,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -3030,7 +3089,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git log --oneline -3 2>&1 && echo \\\"---GITHUB---\\\" && git log --oneline -3 github/main 2>&1\"}",
       "createdAt": 1786314094436,
-      "completedAt": 1786314094931
+      "completedAt": 1786314094931,
+      "compactedAt": 1786321968247
     },
     {
       "type": "reasoning",
@@ -3060,7 +3120,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git checkout -b p0-multilingual-banner-fix 2>&1 && git push github p0-multilingual-banner-fix 2>&1\"}",
       "createdAt": 1786314099151,
-      "completedAt": 1786314103488
+      "completedAt": 1786314103488,
+      "compactedAt": 1786321968247
     },
     {
       "type": "text",
