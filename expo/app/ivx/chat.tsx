@@ -62,7 +62,7 @@ import { getIVXRuntimeInfo } from '@/lib/runtime-environment';
 import { ivxDiagnostics } from '@/src/modules/ivx-developer/diagnosticsStore';
 import { refreshOwnerSession } from '@/src/modules/ivx-developer/authDiagnosticsService';
 import IVXAdvancedExecutionMode from '@/components/IVXAdvancedExecutionMode';
-import { IVXLiveTypingIndicator } from '@/components/IVXLiveTypingIndicator';
+
 // Legacy panel kept for fallback access (not currently mounted).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import _IVXLiveWorkVisibility from '@/components/IVXLiveWorkVisibility';
@@ -5258,12 +5258,20 @@ export default function IVXOwnerChatRoute() {
   }, [pinnedMessages, renderPinnedMessagePreview]);
 
   const listFooter = useMemo(() => <View style={styles.listFooterSpacer} />, []);
-  // V6.12 LIVE TYPING INDICATOR: shows above the composer whenever the AI is
-  // generating a response. Text reveals character-by-character so the owner
-  // sees it being typed live.
+  // V6.12+ real-time status indicator: no fake typing animation. We show a
+  // minimal "IVX is responding…" label only when the assistant is actually
+  // generating a response, and the streamed text renders in the message
+  // bubble as soon as real deltas arrive.
   const renderTypingHeader = useMemo(() => {
     if (!aiReplyPending) return null;
-    return <IVXLiveTypingIndicator baseText="IVX is typing..." speedMs={30} />;
+    return (
+      <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
+        <View style={styles.typingHeaderPill}>
+          <View style={styles.typingHeaderDot} />
+          <Text style={styles.typingHeaderText}>IVX is responding…</Text>
+        </View>
+      </View>
+    );
   }, [aiReplyPending]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
@@ -8401,6 +8409,31 @@ const styles = StyleSheet.create({
   typingHeaderContainer: {
     paddingHorizontal: 12,
     paddingBottom: 8},
+  typingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 8},
+  typingHeaderPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(246, 200, 95, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(246, 200, 95, 0.28)'},
+  typingHeaderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#F6C85F'},
+  typingHeaderText: {
+    color: '#F6C85F',
+    fontSize: 12,
+    fontWeight: '700' as const,
+    letterSpacing: 0.3},
   typingDot: {
     width: 5,
     height: 5,
