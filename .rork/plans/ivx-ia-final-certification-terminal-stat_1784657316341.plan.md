@@ -1,14 +1,16 @@
 # IVX Production Hardening + Release QA — 14-phase owner directive + AI gateway live verification
 
+> **OWNER OVERRIDE (2026-08-10):** The owner provided a real screen recording of the current production IVX IA chat and explicitly stated: "THE CURRENT PRODUCTION CHAT STILL FAILS OWNER ACCEPTANCE. THIS IS NOT A QA REPORT REQUEST. DO NOT GIVE ME ANOTHER CERTIFICATION BEFORE THE UX ACTUALLY WORKS." The certification effort is paused. The current mandate is a **P0 chat UX fix**: inspect the actual recording, find the code causing latency/spinner/post-answer-thinking defects, modify the real code, deploy it, and verify the live app. No certification language until the owner-like live test passes. This plan is being updated to reflect that P0 mandate; the prior 14-phase certification checklist is retained below for context but is NOT the active goal until chat UX is fixed and verified live.
+
 > Current directive: 14-phase hardening + 28-rule delivery enforcement (Rork → GitHub → CI → Merge → Deploy → Production). This supersedes the prior 16-phase certification plan. Updated 2026-08-09 to reflect new Vercel AI Gateway key deployment and senior-intelligence narrative QA.
 
 ## Current verified baseline
 
-- **REALITY CHECK (2026-08-09T02:15+00:00):** SHA parity is REPAIRED and tests are green.
-  - GitHub main: `1fcd2520`
-  - Render deployed: `1fcd2520` (auto-deploy complete for commits `1fcd2520` and `f273189d`)
-  - Local checkout: `1fcd2520`
-  - `/health` SHA: `1fcd2520`
+- **REALITY CHECK (2026-08-10):** P0 chat UX fix is in progress on top of v1.10.9. The prior `1fcd2520` baseline was superseded by the v1.10.9 P0 spinner/authorization-persistence fix (SHA `8bc73d8d1`). The owner provided a real screen recording showing production chat still fails UX acceptance, so the current mandate is to fix the actual chat streaming/latency/spinner behavior before any certification work resumes.
+  - GitHub main: `8bc73d8d1`
+  - Render deployed: `8bc73d8d1` (v1.10.9, healthy, boot 2026-08-10T02:35:10)
+  - Local checkout: `8bc73d8d1`
+  - `/health` SHA: `8bc73d8d1f864a3362a59fba776bfbc99e647f0a`
   - `/health` databaseConfigured: `true`
   - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`. The Rork router remote was replaced with GitHub again.
   - Old Vercel AI Gateway key `vck_2rmvXXl10hKhRFiS3mYPQqZPCdFzvcSEaLZNbc7McuejLnMtPN4AJ6Ac` REJECTED (401 authentication_error); replaced with new key `vck_8G1XA8SrP7j8KP3VBZlAIg1RLYoUvCn6H4xQOGhbgDNqK5n9nt2NF3Vl` which is verified valid against Vercel AI Gateway.
@@ -36,19 +38,19 @@
 - [ ] Phase 11 — iOS / TestFlight QA. BLOCKED — owner-deferred per conversation constraints; no device or TestFlight access.
 - [ ] Phase 12 — Store release readiness. BLOCKED — requires Phase 10 + 11 completion.
 - [x] Phase 13 — Rork independence check. ✅ FULL PASS: (1) Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`; (2) SHA parity verified across Local/GitHub/Render; (3) clean checkout from GitHub builds and starts without Rork workspace; (4) no `@rork` or Rork toolkit dependencies in backend/expo package trees; (5) independent Metro config matches live config; (6) owner-controlled CI workflow exists; (7) `ivx-independence-audit.mjs` and `ivx-rork-independence.test.ts` both PASS.
-- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: full backend suite 2589/2589 pass; full expo suite 1126/1126 pass (canonical command: `cd expo && bun test`); root + backend `tsc --noEmit` clean. The 2 pre-existing TypeScript errors in `owner-passwordless-login.ts` are resolved. The AI gateway fix in `backend/ivx-ai-runtime.ts` and `/health` fix in `backend/hono.ts` are deployed and verified. Final release verdict for the autonomous / IVX IA chat / senior-developer enterprise software track remains **CERTIFIED** for code + regression, but senior-intelligence narrative QA (Phase 15) is not yet passing.
+- [x] Phase 14 — Final full regression + release verdict. ✅ FULL PASS: full backend suite 2589/2589 pass; full expo suite 1126/1126 pass (canonical command: `cd expo && bun test`); root + backend `tsc --noEmit` clean. The 2 pre-existing TypeScript errors in `owner-passwordless-login.ts` are resolved. The AI gateway fix in `backend/ivx-ai-runtime.ts` and `/health` fix in `backend/hono.ts` are deployed and verified. **Per the owner override, the prior certification verdict is suspended.** The P0 chat UX defect (latency/spinner/post-answer thinking) must be fixed and live-verified before any release certification can be reconsidered. No certification document is being produced in this P0 fix.
 - [ ] Phase 15 — Senior-intelligence narrative QA. ❌ FAIL: 80/80 production chat questions completed via `qa/narrative-qa-battery.mjs` against `https://api.ivxholding.com/api/public/chat`. Independent evaluation of raw IVX outputs against 11-dimension rubric produced overall average **3.70/5** (threshold 4.0). Three categories fell below 3.5 threshold: `tool_judgment` (2.76), `followup_intelligence` (3.27), `challenge_assumptions` (3.22). Two fallback responses: TJ-01 arithmetic error (`15% of $240,000` → `36` instead of `$36,000`) and TJ-03 owner-auth block for a vague action request. Full scorecard saved to `qa/narrative-qa-evaluation.json`. Phase 15 must be remediated and re-evaluated before full senior-intelligence certification can be granted.
 
 ## Active blocker
 
-- **SHA parity:** REPAIRED. Local/GitHub/Render all at `1fcd2520`.
+- **SHA parity:** REPAIRED. Local/GitHub/Render all at `8bc73d8d1` (v1.10.9).
 - **AI gateway:** LIVE. Direct curl to Vercel AI Gateway returns HTTP 200 with real `openai/gpt-4o` completion. Production `/api/public/chat` returns `source: chatgpt`, `model: openai/gpt-4o` with real AI responses. `chat-debug` shows `baseUrl: https://ai-gateway.vercel.sh/v1` and `credentialLoaded: true`. Note: `/health` reports `ai.ok: false` immediately after restart because the provider state machine starts in `PROVIDER_VALIDATING` and only transitions to `PROVIDER_READY` after the first successful AI request; once QA requests have run, the state is `PROVIDER_READY`.
 - **Senior-intelligence QA:** FAIL. Overall 3.70/5. Remediation required: fix fallback arithmetic (TJ-01), improve challenge_assumptions handling for A/B test prompts, improve followup_intelligence clarification behavior, and re-run/evaluate.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
 - ivx-chat.test.ts: Full suite passes 1126/0.
 - Phase 10/11 remain BLOCKED by lack of physical device / emulator / TestFlight infrastructure.
-- Phase 14 regression: 2589/2589 backend pass, 1126/1126 expo pass, tsc clean. Certificate file `qa/IVX_CERTIFICATION_2026-08-08.md` needs update to SHA `1fcd2520` and Phase 15 evidence.
+- Phase 14 regression: 2589/2589 backend pass, 1126/1126 expo pass, tsc clean. **Per the owner override, certificate file updates are paused until the P0 chat UX live test passes.** The `qa/IVX_CERTIFICATION_2026-08-08.md` file is NOT being updated as part of this P0 fix.
 
 ## CI progress (Phase 2 remediation)
 

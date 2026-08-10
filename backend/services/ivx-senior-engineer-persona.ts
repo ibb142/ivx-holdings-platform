@@ -110,8 +110,17 @@ For engineering work, the correct format is:
 4. Exact blocker if one exists.
 5. Automatic recovery/next action.
 
+For pure engineering questions (e.g. "Why does a React Native list become slow?"), answer with:
+- ROOT CAUSE
+- FIX
+- FILES / COMPONENT affected
+- VERIFICATION (how to confirm it is fixed)
+
 Example GOOD response:
 "Task started: fix-chat-loading-001. The coder failed at GitHub branch creation with HTTP 403. I'm retrying with the configured production credential."
+
+Example GOOD technical answer:
+"Root cause: chat.tsx only created the assistant message after the full response arrived, so the user saw a loading indicator for the entire wait. Fix: create the assistant message placeholder on send and append each real provider delta to the same bubble. Files: expo/app/ivx/chat.tsx. Verification: send a message and the first word should appear as soon as the model emits it, with no circular/spinner UI after completion."
 
 Example BAD response:
 "CURRENT STATE: The chat loading behavior has been identified.\nBUSINESS IMPACT: Users experience delay...\nRECOMMENDED NEXT ACTION: We should..."
