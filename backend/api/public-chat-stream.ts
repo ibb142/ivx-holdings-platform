@@ -39,6 +39,39 @@ import {
 } from '../public-chat-supabase-store';
 import type { ChatStorage } from '../chat-storage';
 import { isDeploymentCommand, routeDeploymentCommand } from '../services/ivx-deployment-chat-brain';
+import {
+  detectAutonomousExecutionIntent,
+  createAutonomousJobFromChat,
+  formatAutonomousTaskSsePayload,
+  formatAutonomousTaskMessage,
+} from '../services/ivx-chat-autonomous-handoff';
+import { assertIVXOwnerOnly } from './owner-only';
+
+// ── Owner authentication detection ──────────────────────────────────────────
+
+/**
+ * Detect whether the incoming request carries a valid owner bearer token.
+ * If so, execution commands are routed to the real autonomous worker instead
+ * of the LLM. Non-owner (public) requests always go through the normal chat.
+ */
+async function detectOwnerSession(request: Request): Promise<{
+  isOwner: boolean;
+  ownerId: string | null;
+}> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isOwner: false, ownerId: null };
+  }
+  try {
+    const context = await assertIVXOwnerOnly(request);
+    if (context.userId) {
+      return { isOwner: true, ownerId: context.userId };
+    }
+  } catch {
+    // Not a valid owner token — treat as public.
+  }
+  return { isOwner: false, ownerId: null };
+}
 
 // ── Persistence (mirrors handlePublicChatPost) ──────────────────────────────
 
@@ -249,6 +282,54 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           source: 'user',
           model: null,
         }).catch(() => undefined);
+
+        // ── Autonomous handoff: if the request is from an authenticated owner
+        //    AND the message is an execution command, route to the real worker
+        //    instead of the LLM. This is the critical chat→autonomous bridge.
+        //    Non-owner (public) requests always go through normal chat. ─────
+        if (message && images.length === 0 && documents.length === 0) {
+          const ownerSession = await detectOwnerSession(request);
+          if (ownerSession.isOwner && ownerSession.ownerId) {
+            const intent = detectAutonomousExecutionIntent(message);
+            if (intent.isExecutionCommand) {
+              // Create a real autonomous worker job
+              const handoffResult = await createAutonomousJobFromChat(
+                message,
+                ownerSession.ownerId,
+                sessionId,
+              );
+
+              // Send the autonomous task event so the frontend can track real progress
+              send(formatAutonomousTaskSsePayload(handoffResult));
+
+              // Send a human-readable summary as a delta
+              const summary = formatAutonomousTaskMessage(handoffResult);
+              send({ type: 'response.delta', delta: summary, requestId });
+
+              // Mark the response as completed with the autonomous source
+              send({
+                type: 'response.completed',
+                text: summary,
+                model: 'ivx-autonomous-worker',
+                source: 'autonomous',
+                requestId,
+                sessionId,
+                jobId: handoffResult.jobId,
+                jobStatus: handoffResult.status,
+                jobStage: handoffResult.stage,
+              });
+
+              // Persist the autonomous task message
+              void persistPublicTurn({
+                sessionId, clientId, role: 'assistant',
+                content: summary, source: 'autonomous', model: 'ivx-autonomous-worker',
+              }).catch(() => undefined);
+
+              controller.close();
+              return;
+            }
+          }
+        }
 
         // ── Pre-execution gate ────────────────────────────────────────────
         try {
