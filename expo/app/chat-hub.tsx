@@ -37,9 +37,54 @@ import {
 import { usePublicChatSession } from '@/lib/public-chat-session-context';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
 import type { ChatMessage } from '@/types';
-import { ActivityIndicator } from 'react-native';
-
 type ConnectionTone = 'live' | 'warn' | 'error';
+
+function useTypingDots(): Animated.Value {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 360, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.2, duration: 360, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [opacity]);
+  return opacity;
+}
+
+function TypingDots({ color }: { color: string }) {
+  const dot1 = useTypingDots();
+  const dot2 = useTypingDots();
+  const dot3 = useTypingDots();
+  return (
+    <View style={styles.typingDotsContainer}>
+      <Animated.Text style={[styles.typingDot, { color, opacity: dot1 }]}>·</Animated.Text>
+      <Animated.Text style={[styles.typingDot, { color, opacity: dot2, marginLeft: 2 }]}>·</Animated.Text>
+      <Animated.Text style={[styles.typingDot, { color, opacity: dot3, marginLeft: 2 }]}>·</Animated.Text>
+    </View>
+  );
+}
+
+function useBlinkingCursor(): Animated.Value {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.2, duration: 420, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 420, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [opacity]);
+  return opacity;
+}
 
 type StatusChipProps = {
   label: string;
@@ -166,6 +211,7 @@ export default function ChatHubScreen() {
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamingText, setStreamingText] = useState<string>('');
   const [hasFirstToken, setHasFirstToken] = useState<boolean>(false);
+  const cursorOpacity = useBlinkingCursor();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const healthQuery = useQuery<PublicHealthResponse, Error>({
@@ -626,11 +672,14 @@ export default function ChatHubScreen() {
                     return (
                       <View style={styles.streamingBubble} testID="public-chat-streaming-bubble">
                         {hasFirstToken ? (
-                          <Text style={styles.streamingText}>{streamingText}</Text>
+                          <Text style={styles.streamingText}>
+                            {streamingText}
+                            <Animated.Text style={[styles.cursor, { opacity: cursorOpacity }]}>▋</Animated.Text>
+                          </Text>
                         ) : (
                           <View style={styles.typingDotsRow} testID="public-chat-typing-indicator">
-                            <ActivityIndicator size="small" color={Colors.primary} />
-                            <Text style={styles.typingDotsText}>Analyzing…</Text>
+                            <TypingDots color={Colors.primary} />
+                            <Text style={styles.typingDotsText}>IVX is typing…</Text>
                           </View>
                         )}
                       </View>
@@ -640,7 +689,7 @@ export default function ChatHubScreen() {
                   if (historyQuery.isLoading && messages.length <= 1) {
                     return (
                       <View style={styles.typingDotsRow} testID="public-chat-history-loading">
-                        <ActivityIndicator size="small" color={Colors.textTertiary} />
+                        <TypingDots color={Colors.textTertiary} />
                         <Text style={styles.typingDotsText}>Restoring session…</Text>
                       </View>
                     );
@@ -931,6 +980,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '400' as const},
+  cursor: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '400' as const,
+    color: Colors.primary},
+  typingDotsContainer: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    width: 28,
+    height: 18},
+  typingDot: {
+    fontSize: 22,
+    lineHeight: 18,
+    fontWeight: '700' as const},
   typingDotsRow: {
     flexDirection: 'row',
     alignItems: 'center',

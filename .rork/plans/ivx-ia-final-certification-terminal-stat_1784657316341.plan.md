@@ -6,11 +6,11 @@
 
 ## Current verified baseline
 
-- **REALITY CHECK (2026-08-10):** P0 chat UX fix is in progress on top of v1.10.9. The prior `1fcd2520` baseline was superseded by the v1.10.9 P0 spinner/authorization-persistence fix (SHA `8bc73d8d1`). The owner provided a real screen recording showing production chat still fails UX acceptance, so the current mandate is to fix the actual chat streaming/latency/spinner behavior before any certification work resumes.
-  - GitHub main: `8bc73d8d1`
-  - Render deployed: `8bc73d8d1` (v1.10.9, healthy, boot 2026-08-10T02:35:10)
-  - Local checkout: `8bc73d8d1`
-  - `/health` SHA: `8bc73d8d1f864a3362a59fba776bfbc99e647f0a`
+- **REALITY CHECK (2026-08-10):** P0 chat UX fix is in progress. The autonomous canary completed end-to-end after the prior `8bc73d8d1` baseline, pushing commit `f4b72fea4b37` to GitHub and deploying it to Render. The owner provided a real screen recording showing production chat still fails UX acceptance (latency/spinner/no visible end-to-end typing). The current mandate is to fix the actual chat streaming/latency/spinner behavior before any certification work resumes. SHA parity was repaired during this session after the local remote reverted to the Rork router.
+  - GitHub main: `e83f2f8b` (P0 chat UX fix, 2026-08-10)
+  - Render deployed: `e83f2f8b` (P0 chat UX fix, auto-deployed)
+  - Local checkout: `e83f2f8b` (P0 chat UX fix committed and pushed)
+  - `/health` SHA: `e83f2f8b5726f58dcd5bf5a7b101ad60f3c83cd6`
   - `/health` databaseConfigured: `true`
   - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`. The Rork router remote was replaced with GitHub again.
   - Old Vercel AI Gateway key `vck_2rmvXXl10hKhRFiS3mYPQqZPCdFzvcSEaLZNbc7McuejLnMtPN4AJ6Ac` REJECTED (401 authentication_error); replaced with new key `vck_8G1XA8SrP7j8KP3VBZlAIg1RLYoUvCn6H4xQOGhbgDNqK5n9nt2NF3Vl` which is verified valid against Vercel AI Gateway.
@@ -43,7 +43,7 @@
 
 ## Active blocker
 
-- **SHA parity:** REPAIRED. Local/GitHub/Render all at `8bc73d8d1` (v1.10.9).
+- **SHA parity:** REPAIRED. Local/GitHub/Render all at `e83f2f8b` (P0 chat UX fix, 2026-08-10). Parity was re-repaired during this session after the local remote reverted to the Rork router.
 - **AI gateway:** LIVE. Direct curl to Vercel AI Gateway returns HTTP 200 with real `openai/gpt-4o` completion. Production `/api/public/chat` returns `source: chatgpt`, `model: openai/gpt-4o` with real AI responses. `chat-debug` shows `baseUrl: https://ai-gateway.vercel.sh/v1` and `credentialLoaded: true`. Note: `/health` reports `ai.ok: false` immediately after restart because the provider state machine starts in `PROVIDER_VALIDATING` and only transitions to `PROVIDER_READY` after the first successful AI request; once QA requests have run, the state is `PROVIDER_READY`.
 - **Senior-intelligence QA:** FAIL. Overall 3.70/5. Remediation required: fix fallback arithmetic (TJ-01), improve challenge_assumptions handling for A/B test prompts, improve followup_intelligence clarification behavior, and re-run/evaluate.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.

@@ -24,7 +24,25 @@ type MessageBubbleProps = {
   isPinned?: boolean;
   reactions?: MessageReactionSummary[];
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  isStreaming?: boolean;
 };
+
+function useBlinkingCursor(): Animated.Value {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.2, duration: 420, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 420, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [opacity]);
+  return opacity;
+}
 
 type HighlightSegment = {
   text: string;
@@ -102,8 +120,10 @@ export const MessageBubble = memo(function MessageBubble({
   isPinned = false,
   reactions,
   onToggleReaction,
+  isStreaming = false,
 }: MessageBubbleProps) {
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const cursorOpacity = useBlinkingCursor();
   const [pickerVisible, setPickerVisible] = useState<boolean>(false);
 
   useEffect(() => {
@@ -264,7 +284,7 @@ export const MessageBubble = memo(function MessageBubble({
           </View>
         ) : null}
 
-        {displayText ? (
+        {displayText || isStreaming ? (
           <Text style={[styles.messageText, textColorStyle]}>
             {highlightedSegments.length > 0
               ? highlightedSegments
@@ -278,6 +298,9 @@ export const MessageBubble = memo(function MessageBubble({
                     </Text>
                   ))
               : <Text>{String(displayText)}</Text>}
+            {isStreaming && !isMine ? (
+              <Animated.Text style={[styles.cursor, { opacity: cursorOpacity }]}>▋</Animated.Text>
+            ) : null}
           </Text>
         ) : null}
 
@@ -548,6 +571,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     fontWeight: '500' as const,
+  },
+  cursor: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '500' as const,
+    color: Colors.primary,
   },
   toolUsedBadge: {
     alignSelf: 'flex-start',
