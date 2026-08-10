@@ -615,56 +615,6 @@ export default function ChatHubScreen() {
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
                 ListFooterComponent={(() => {
-                  // Autonomous job progress card — real worker status
-                  if (activeJobId && jobProgress) {
-                    const isRunning = jobProgress.status === 'running' || jobProgress.status === 'queued';
-                    const isDone = jobProgress.status === 'completed';
-                    const isFailed = jobProgress.status === 'failed' || jobProgress.status === 'blocked';
-                    return (
-                      <View style={styles.autonomousJobCard} testID="autonomous-job-progress">
-                        <View style={styles.autonomousJobHeader}>
-                          <ShieldCheck size={16} color={isDone ? '#22c55e' : isFailed ? '#ef4444' : Colors.primary} />
-                          <Text style={styles.autonomousJobTitle}>
-                            {isDone ? 'Task Complete' : isFailed ? 'Task Failed' : 'Autonomous Worker'}
-                          </Text>
-                        </View>
-                        <Text style={styles.autonomousJobId} numberOfLines={1}>
-                          {activeJobId}
-                        </Text>
-                        <View style={styles.autonomousJobProgressRow}>
-                          <View style={styles.autonomousJobProgressBar}>
-                            <Animated.View
-                              style={[
-                                styles.autonomousJobProgressFill,
-                                {
-                                  width: `${Math.min(100, Math.max(5, jobProgress.percent))}%`,
-                                  backgroundColor: isDone ? '#22c55e' : isFailed ? '#ef4444' : Colors.primary,
-                                },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.autonomousJobPercent}>{jobProgress.percent}%</Text>
-                        </View>
-                        <View style={styles.autonomousJobStatusRow}>
-                          <View style={[styles.autonomousJobBadge, {
-                            backgroundColor: isDone ? 'rgba(34,197,94,0.15)' : isFailed ? 'rgba(239,68,68,0.15)' : 'rgba(255,215,0,0.12)',
-                          }]}>
-                            <Text style={[styles.autonomousJobBadgeText, {
-                              color: isDone ? '#22c55e' : isFailed ? '#ef4444' : Colors.primary,
-                            }]}>
-                              {jobProgress.status.toUpperCase()}
-                            </Text>
-                          </View>
-                          <Text style={styles.autonomousJobStage}>{jobProgress.stage}</Text>
-                        </View>
-                        {isRunning && (
-                          <Text style={styles.autonomousJobHint}>
-                            Real execution in progress — file edit → test → commit → deploy → verify
-                          </Text>
-                        )}
-                      </View>
-                    );
-                  }
                   // Real-time streaming assistant bubble — text appears as deltas arrive.
                   // No fake typing/loading shimmer; the actual response is visible from
                   // the first token.

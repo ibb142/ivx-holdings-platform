@@ -216,7 +216,10 @@ export const MessageBubble = memo(function MessageBubble({
   }, [message.id, onToggleReaction]);
 
   const hasVisibleAttachment = Boolean(message.fileUrl);
-  if ((!isMine && containsBlockedUserFacingChatText(message.text)) || (!displayText && !hasVisibleAttachment)) {
+  // P0 FIX: always render the streaming assistant bubble even when text is empty,
+  // so the user sees a live blinking cursor while the response is generated.
+  const isStreamingEmptyBubble = Boolean(isStreaming) && !isMine && !displayText && !hasVisibleAttachment;
+  if ((!isMine && containsBlockedUserFacingChatText(message.text)) || (!displayText && !hasVisibleAttachment && !isStreamingEmptyBubble)) {
     return null;
   }
 

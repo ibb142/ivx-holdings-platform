@@ -64,36 +64,6 @@ import { ivxDiagnostics } from '@/src/modules/ivx-developer/diagnosticsStore';
 import { refreshOwnerSession } from '@/src/modules/ivx-developer/authDiagnosticsService';
 import IVXAdvancedExecutionMode from '@/components/IVXAdvancedExecutionMode';
 
-function useTypingDotPulse(): Animated.Value {
-  const opacity = useRef(new Animated.Value(0.2)).current;
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 380, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.2, duration: 380, useNativeDriver: true }),
-      ]),
-    );
-    animation.start();
-    return () => {
-      animation.stop();
-    };
-  }, [opacity]);
-  return opacity;
-}
-
-function TypingDots({ color }: { color: string }) {
-  const dot1 = useTypingDotPulse();
-  const dot2 = useTypingDotPulse();
-  const dot3 = useTypingDotPulse();
-  return (
-    <View style={styles.typingDotsRow}>
-      <Animated.Text style={[styles.typingDotText, { color, opacity: dot1 }]}>·</Animated.Text>
-      <Animated.Text style={[styles.typingDotText, { color, opacity: dot2, marginLeft: 2 }]}>·</Animated.Text>
-      <Animated.Text style={[styles.typingDotText, { color, opacity: dot3, marginLeft: 2 }]}>·</Animated.Text>
-    </View>
-  );
-}
-
 // Legacy panel kept for fallback access (not currently mounted).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import _IVXLiveWorkVisibility from '@/components/IVXLiveWorkVisibility';
@@ -1334,6 +1304,13 @@ export default function IVXOwnerChatRoute() {
         return true;
       }
 
+      // P0 FIX: keep the currently streaming assistant message in the list even
+      // while its body is empty, so the message bubble renders immediately with
+      // a blinking cursor and the user sees real end-to-end typing.
+      if (message.id === currentStreamingMessageId) {
+        return true;
+      }
+
       return safeTrim(message.body).length > 0;
     });
     const transientIds = new Set(visibleTransientAssistantMessages.map((message) => message.id));
@@ -1455,7 +1432,7 @@ export default function IVXOwnerChatRoute() {
     const dedupCount = Math.max(0, rawCount - deduped.size);
     duplicateMessageCountRef.current = dedupCount;
     return sortMessagesByCanonicalOrder(Array.from(deduped.values()));
-  }, [conversationQuery.data?.id, messages, ownerId, ownerLabel, pendingOwnerMessages, transientAssistantMessages]);
+  }, [conversationQuery.data?.id, currentStreamingMessageId, messages, ownerId, ownerLabel, pendingOwnerMessages, transientAssistantMessages]);
 
   // DURABLE ANTI-DISAPPEAR MIRROR:
   // Every committed/rendered owner + assistant turn is written into the durable
@@ -5356,15 +5333,6 @@ export default function IVXOwnerChatRoute() {
   // streaming bubble renders the live text with a blinking cursor. This removes
   // all spinner-like static loading states and makes the response feel like
   // real end-to-end typing.
-  const renderTypingHeader = useMemo(() => {
-    if (!aiReplyPending || streamingText.trim().length > 0) return null;
-    return (
-      <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
-        <TypingDots color="#F6C85F" />
-        <Text style={styles.typingHeaderTextStatic}>IVX is typing…</Text>
-      </View>
-    );
-  }, [aiReplyPending, streamingText]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
   // Owner-only live debug proof. Every value here is read live from the running
@@ -6690,8 +6658,6 @@ export default function IVXOwnerChatRoute() {
               }
               ListFooterComponent={listFooter}
               ListFooterComponentStyle={styles.listFooterContainer}
-              ListHeaderComponent={renderTypingHeader}
-              ListHeaderComponentStyle={styles.typingHeaderContainer}
               onContentSizeChange={(width, height) => {
                 ivxDiagnostics.recordContentHeight(`h=${Math.round(height)} count=${displayedMessages.length} atBottom=${isAtBottomRef.current}`);
                 // INVERTED FLATLIST: The list naturally anchors at offset 0
@@ -8498,39 +8464,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     alignSelf: 'flex-start',
     marginLeft: 12},
-  typingHeaderContainer: {
-    paddingHorizontal: 12,
-    paddingBottom: 8},
-  typingHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 8},
-  typingHeaderPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: 'rgba(246, 200, 95, 0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(246, 200, 95, 0.28)'},
-  typingHeaderDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: '#F6C85F'},
-  typingHeaderText: {
-    color: '#F6C85F',
-    fontSize: 12,
-    fontWeight: '700' as const,
-    letterSpacing: 0.3},
-  typingHeaderTextStatic: {
-    color: 'rgba(246,200,95,0.70)',
-    fontSize: 12,
-    fontWeight: '500' as const,
-    letterSpacing: 0.2},
   streamingBubble: {
     alignSelf: 'flex-start' as const,
     marginLeft: 12,
@@ -8557,24 +8490,6 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 999,
     backgroundColor: '#F6C85F'},
-  typingDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: '#F6C85F',
-    opacity: 0.55},
-  typingDotMid: {
-    opacity: 0.85},
-  typingDotsRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    width: 28,
-    height: 18},
-  typingDotText: {
-    fontSize: 20,
-    lineHeight: 18,
-    fontWeight: '700' as const},
   typingText: {
     flex: 1,
     color: '#F6C85F',
