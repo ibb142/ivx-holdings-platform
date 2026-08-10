@@ -1,5 +1,6 @@
 import { generateText, streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { acquireAIQueueSlot, classifyRequestLane, type IVXAIQueueLane } from './services/ivx-ai-queue';
 import { estimatePromptTokens, recordProviderTelemetry } from './services/ivx-provider-telemetry';
 import { attemptProviderFallback, classifyProviderFailure, isFailureRetryable } from './services/ivx-ai-provider-fallback';
@@ -65,6 +66,25 @@ export type IVXAITextResult = {
   usage: unknown;
   providerMetadata: IVXAIProviderMetadata;
 };
+
+/**
+ * AsyncLocalStorage context for live delta streaming. When set, requestIVXAIText
+ * routes through streamIVXAIText and invokes this callback for each token chunk,
+ * so callers (e.g. the owner AI SSE handler) can emit `delta` SSE events without
+ * threading a callback through every intermediate function in the call chain.
+ */
+const ownerAIStreamCallbackStore = new AsyncLocalStorage<(delta: string) => void>();
+
+export function runWithOwnerAIStreamCallback<T>(
+  callback: (delta: string) => void,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return ownerAIStreamCallbackStore.run(callback, fn);
+}
+
+function getOwnerAIStreamCallback(): ((delta: string) => void) | undefined {
+  return ownerAIStreamCallbackStore.getStore();
+}
 
 type IVXAIGatewayFailureContext = {
   module: string;
@@ -628,6 +648,55 @@ async function requestIVXAITextInternal(input: {
     phase: 'agent_runtime_v2',
     layer: 'ivx_ai_runtime_wrapper',
   });
+
+  // When a live stream callback is set in AsyncLocalStorage context (e.g. from
+  // the owner AI SSE handler), route through streamIVXAIText which yields token
+  // deltas in real time. streamIVXAIText manages its own queue slot, timeout,
+  // and telemetry, so we return early before the non-streaming generateText path.
+  const streamCallback = getOwnerAIStreamCallback();
+  if (streamCallback) {
+    let accumulated = '';
+    let streamUsage: unknown = null;
+    let streamProviderMetadata: IVXAIProviderMetadata | null = null;
+    let streamError: string | null = null;
+    for await (const chunk of streamIVXAIText(input)) {
+      if (chunk.type === 'delta' && chunk.delta) {
+        accumulated += chunk.delta;
+        streamCallback(chunk.delta);
+      } else if (chunk.type === 'done') {
+        accumulated = chunk.text ?? accumulated;
+        streamUsage = chunk.usage ?? null;
+        streamProviderMetadata = chunk.providerMetadata ?? null;
+        if ('error' in chunk && chunk.error) streamError = chunk.error as string;
+      } else if (chunk.type === 'error') {
+        streamError = chunk.error ?? 'IVX AI stream failed';
+      }
+    }
+    if (streamError) {
+      throw new Error(streamError);
+    }
+    const text = readTrimmed(accumulated);
+    if (!text) {
+      throw new Error('IVX AI stream returned an empty response.');
+    }
+    const providerMetadata: IVXAIProviderMetadata = streamProviderMetadata ?? {
+      provider: 'chatgpt',
+      source: 'remote_api',
+      model,
+      endpoint: baseUrlCandidates[0] ?? null,
+      runtime: 'ivx_ai_gateway',
+      ivxAI: {
+        architecture: 'ivx-ai',
+        phase: 'agent_runtime_v2',
+        layer: 'ivx_ai_runtime_wrapper',
+        module: input.module,
+        providerDependency: 'chatgpt_current_baseline',
+        requestId: input.requestId ?? null,
+        generatedAt: nowIso(),
+      },
+    };
+    return { text, usage: streamUsage, providerMetadata };
+  }
 
   // Adaptive timeout + queue gating: long prompts/reports get more time and a
   // dedicated lane so they cannot block normal chat under contention.

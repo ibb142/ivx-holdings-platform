@@ -1820,6 +1820,7 @@ export default function IVXOwnerChatRoute() {
   const [aiHealthDetail, setAiHealthDetail] = useState<ServiceRuntimeHealth>('inactive');
   const sendQueue = useChatSendQueue();
   const [aiReplyPending, setAiReplyPending] = useState<boolean>(false);
+  const [streamingText, setStreamingText] = useState<string>('');
   const [ownerCommandsActive, setOwnerCommandsActive] = useState<boolean>(false);
   const [knowledgeActive, setKnowledgeActive] = useState<boolean>(false);
   const [codeAwareActive, setCodeAwareActive] = useState<boolean>(false);
@@ -2162,10 +2163,12 @@ export default function IVXOwnerChatRoute() {
         lastAttemptAt: startedAtIso,
         hasVisibleResponseText: false}));
       setAiReplyPending(true);
+      setStreamingText('');
       // Watchdog: force-clear typing indicator after a hard ceiling so it can never get stuck.
       const watchdogTimer = setTimeout(() => {
         console.log('[IVXOwnerChatRoute] assistant_reply_watchdog_fired — force-clearing typing indicator after 190s.');
         setAiReplyPending(false);
+        setStreamingText('');
       }, 190_000);
       try {
         // Send keys off the single canonical id (adopted from the prior backend
@@ -2205,6 +2208,8 @@ export default function IVXOwnerChatRoute() {
                   trace.heartbeat(`stage:${event.stage}`);
                 } else if (event.type === 'start') {
                   trace.heartbeat('sse_start');
+                } else if (event.type === 'delta') {
+                  setStreamingText((prev) => prev + event.delta);
                 } else if (event.type === 'final') {
                   trace.heartbeat(`sse_final:${event.status}`);
                 }
@@ -2764,6 +2769,7 @@ export default function IVXOwnerChatRoute() {
       } finally {
         clearTimeout(watchdogTimer);
         setAiReplyPending(false);
+        setStreamingText('');
         // INVARIANT GUARANTEE (state-authoritative):
         // Use functional setState to inspect the LIVE committed transient list.
         // If none of this mutation's emitted bubble ids are present (race,
@@ -2855,6 +2861,7 @@ export default function IVXOwnerChatRoute() {
     },
     onSettled: () => {
       setAiReplyPending(false);
+      setStreamingText('');
     }});
 
   // Pending owner-approval build-job draft (set when a build request is detected,
@@ -5258,12 +5265,21 @@ export default function IVXOwnerChatRoute() {
   }, [pinnedMessages, renderPinnedMessagePreview]);
 
   const listFooter = useMemo(() => <View style={styles.listFooterSpacer} />, []);
-  // V6.12+ real-time status indicator: no fake typing animation. We show a
-  // minimal "IVX is responding…" label only when the assistant is actually
-  // generating a response, and the streamed text renders in the message
-  // bubble as soon as real deltas arrive.
+  // V1.10.8 real-time streaming: when deltas arrive, the streaming text
+  // renders live in the bubble. The pill is only shown before the first
+  // delta (no text yet). Once text is streaming, the bubble takes over.
   const renderTypingHeader = useMemo(() => {
     if (!aiReplyPending) return null;
+    if (streamingText.trim().length > 0) {
+      return (
+        <View style={styles.streamingBubble} testID="ivx-owner-streaming-bubble">
+          <Text style={styles.streamingBubbleText}>{streamingText}</Text>
+          <View style={styles.streamingCursorRow}>
+            <View style={styles.streamingCursorDot} testID="ivx-owner-streaming-cursor" />
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
         <View style={styles.typingHeaderPill}>
@@ -5272,7 +5288,7 @@ export default function IVXOwnerChatRoute() {
         </View>
       </View>
     );
-  }, [aiReplyPending]);
+  }, [aiReplyPending, streamingText]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
   // Owner-only live debug proof. Every value here is read live from the running
@@ -8434,6 +8450,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700' as const,
     letterSpacing: 0.3},
+  streamingBubble: {
+    alignSelf: 'flex-start' as const,
+    marginLeft: 12,
+    marginRight: 40,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
+    backgroundColor: 'rgba(28, 28, 32, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(246, 200, 95, 0.22)'},
+  streamingBubbleText: {
+    color: '#E8E6E3',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '400' as const},
+  streamingCursorRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: 4},
+  streamingCursorDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: '#F6C85F'},
   typingDot: {
     width: 5,
     height: 5,

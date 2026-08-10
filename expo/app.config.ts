@@ -18,12 +18,12 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.10.7",
+  version: "1.10.8",
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_08_10_V1107_NO_FAKE_TYPING',
+    buildMarker: 'IVX_BUNDLE_2026_08_10_V1108_LIVE_STREAMING',
     buildTimestamp: "2026-08-10T02:00:00.000000+00:00",
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',

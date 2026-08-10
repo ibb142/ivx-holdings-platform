@@ -2964,6 +2964,7 @@ export type IVXOwnerAIProgressEvent =
   | { type: 'start'; startedAt?: string }
   | { type: 'stage'; stage: string }
   | { type: 'heartbeat'; elapsedMs: number }
+  | { type: 'delta'; delta: string }
   | { type: 'final'; status: number; ok: boolean }
   | { type: 'error'; error: string };
 
@@ -3213,6 +3214,13 @@ async function fetchOwnerAIWithHeartbeat(
       if (type === 'start') {
         const startedAt = typeof payloadEvent.startedAt === 'string' ? payloadEvent.startedAt : undefined;
         try { onProgress({ type: 'start', startedAt }); } catch { /* listener safe */ }
+        return;
+      }
+      if (type === 'delta') {
+        const delta = typeof payloadEvent.delta === 'string' ? payloadEvent.delta : '';
+        if (delta) {
+          try { onProgress({ type: 'delta', delta }); } catch { /* listener safe */ }
+        }
         return;
       }
     };
