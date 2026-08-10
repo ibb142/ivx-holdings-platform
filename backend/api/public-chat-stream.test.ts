@@ -9,7 +9,7 @@
  * - partial response preservation
  * - deterministic brains emit single delta + completed
  */
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach } from 'bun/test';
 
 // ── Mock setup ──────────────────────────────────────────────────────────────
 
