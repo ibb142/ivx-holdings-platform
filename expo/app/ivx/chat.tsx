@@ -2164,6 +2164,22 @@ export default function IVXOwnerChatRoute() {
         hasVisibleResponseText: false}));
       setAiReplyPending(true);
       setStreamingText('');
+      // P0 FIX: create the assistant message placeholder immediately so the user
+      // watches the real answer grow inside the actual message bubble, not a
+      // separate spinner-like streaming widget. Each delta will append to this
+      // same transient message.
+      setTransientAssistantMessages((current) => {
+        if (current.some((message) => message.id === transientReplyId)) return current;
+        emittedBubbleIds.add(transientReplyId);
+        bubbleEmitted = true;
+        return [
+          ...current,
+          buildVisibleAssistantTransient({
+            id: transientReplyId,
+            conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
+            body: ''}),
+        ];
+      });
       // Watchdog: force-clear typing indicator after a hard ceiling so it can never get stuck.
       const watchdogTimer = setTimeout(() => {
         console.log('[IVXOwnerChatRoute] assistant_reply_watchdog_fired — force-clearing typing indicator after 190s.');
@@ -2209,7 +2225,24 @@ export default function IVXOwnerChatRoute() {
                 } else if (event.type === 'start') {
                   trace.heartbeat('sse_start');
                 } else if (event.type === 'delta') {
-                  setStreamingText((prev) => prev + event.delta);
+                  const delta = event.delta;
+                  setStreamingText((prev) => prev + delta);
+                  // P0 FIX: append the provider delta to the same assistant transient
+                  // message so the user sees the real text growing in the actual
+                  // bubble, not a separate spinner-like streaming widget.
+                  setTransientAssistantMessages((current) => {
+                    const existing = current.find((message) => message.id === transientReplyId);
+                    if (!existing) return current;
+                    const updatedBody = (existing.body ?? '') + delta;
+                    return [
+                      ...current.filter((message) => message.id !== transientReplyId),
+                      buildVisibleAssistantTransient({
+                        id: existing.id,
+                        conversationId: existing.conversationId,
+                        body: updatedBody,
+                        taskId: existing.taskId ?? null}),
+                    ];
+                  });
                 } else if (event.type === 'final') {
                   trace.heartbeat(`sse_final:${event.status}`);
                 }
@@ -2403,6 +2436,22 @@ export default function IVXOwnerChatRoute() {
         try { trace?.bindTransient(transientReplyId); } catch (bindErr) { console.log('[IVXOwnerChatRoute] success_bindTransient_threw_safely_continuing:', bindErr instanceof Error ? bindErr.message : 'unknown'); }
         try {
           setTransientAssistantMessages((current) => {
+            const existing = current.find((message) => message.id === transientReplyId);
+            if (existing) {
+              // P0 FIX: update the existing streaming bubble in-place so the
+              // final answer does not flash or jump. The bubble has already been
+              // streaming deltas; this just finalizes it with the canonical text.
+              return current.map((message) =>
+                message.id === transientReplyId
+                  ? buildVisibleAssistantTransient({
+                      id: existing.id,
+                      conversationId: existing.conversationId,
+                      body: visibleAnswerWithBadge,
+                      taskId: executionStatusPayload?.taskId ?? existing.taskId ?? null})
+                  : message);
+            }
+            // Fallback: create the bubble if the request somehow ran without a
+            // streaming placeholder (e.g. non-SSE fast path).
             const replyMessage = buildVisibleAssistantTransient({
               id: transientReplyId,
               conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
@@ -5284,17 +5333,12 @@ export default function IVXOwnerChatRoute() {
   }, [aiReplyPending, streamingText]);
 
   const renderTypingHeader = useMemo(() => {
-    if (!aiReplyPending) return null;
-    if (streamingText.trim().length > 0) {
-      return (
-        <View style={styles.streamingBubble} testID="ivx-owner-streaming-bubble">
-          <Text style={styles.streamingBubbleText}>{streamingText}</Text>
-          <View style={styles.streamingCursorRow}>
-            <View style={styles.streamingCursorDot} testID="ivx-owner-streaming-cursor" />
-          </View>
-        </View>
-      );
-    }
+    // P0 FIX: only the single static pre-token indicator is allowed. Once the
+    // first real delta arrives, the streaming text renders in the actual
+    // assistant message bubble, so this indicator is removed immediately.
+    // The separate streaming bubble and blinking cursor dot have been removed
+    // because they were perceived as a spinner/loading UI.
+    if (!aiReplyPending || streamingText.trim().length > 0) return null;
     // After 12s with no delta, show static text — no pill, no spinner.
     if (pillExpired) {
       return (

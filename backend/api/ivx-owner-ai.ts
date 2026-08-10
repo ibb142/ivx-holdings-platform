@@ -6426,9 +6426,18 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     // to the LLM where context is lost.
     // V6.5: NEVER use a stale snapshot — always read fresh state before writing.
     const detectedLang = /\b(cuántas?|cuántos?|propiedades|propiedad|activas?|activos?|muestrame|muéstrame|dónde|donde|qué|que|estás?|estas?|últimas?|últimos?|hace|haces)\b/i.test(prompt) || /\b(español|spanish)\b/i.test(prompt) ? 'es' : 'en';
-    // V6.5 FIX: Read fresh state for language update — never use a stale snapshot.
-    const langFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
-    await setOwnerConversationState({ ...langFreshState, languagePreference: detectedLang });
+    // P0 FIX: do not block the LLM stream on a language-preference DB write.
+    // The detected language is used synchronously below for this response; the
+    // persistent preference is only for future turns. Fire-and-forget the
+    // read/write so it cannot delay the first SSE delta.
+    void (async () => {
+      try {
+        const langFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
+        await setOwnerConversationState({ ...langFreshState, languagePreference: detectedLang });
+      } catch (langErr) {
+        console.log('[IVXOwnerAIBackend] language-preference update failed (non-blocking):', langErr instanceof Error ? langErr.message : 'unknown');
+      }
+    })();
 
     const approvalSignal = detectOwnerApproval(prompt);
     const activeAction = await getActiveAction(conversation.id, ownerContext.userId);
