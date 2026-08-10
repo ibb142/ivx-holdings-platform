@@ -7,16 +7,15 @@
 ## Current verified baseline
 
 - **REALITY CHECK (2026-08-10):** P0 chat UX fix is in progress on top of v1.10.9. The prior `1fcd2520` baseline was superseded by the v1.10.9 P0 spinner/authorization-persistence fix (SHA `8bc73d8d1`). The owner provided a real screen recording showing production chat still fails UX acceptance, so the current mandate is to fix the actual chat streaming/latency/spinner behavior before any certification work resumes.
-  - GitHub main: `aa1a7da7` (v1.10.10, P0 chat UX fix + Android version sync pushed)
-  - Render deployed: redeploying `aa1a7da7` (in progress after push) — prior instance was `11fe9766` (boot 2026-08-10T12:42:58.321Z)
-  - Local checkout: `aa1a7da7` (v1.10.10)
-  - `/health` SHA: `11fe97668ec287e49c8c70049fc779f72d48fb90` (prior live instance) — currently flapping 502 during redeploy
-  - `/health` databaseConfigured: `true` (when healthy)
-  - Android v1.10.10 APK built successfully: `expo/android/app/build/outputs/apk/qa/app-qa.apk` (81 MB, versionCode 108, versionName 1.10.10)
+  - GitHub main: `8bc73d8d1`
+  - Render deployed: `8bc73d8d1` (v1.10.9, healthy, boot 2026-08-10T02:35:10)
+  - Local checkout: `8bc73d8d1`
+  - `/health` SHA: `8bc73d8d1f864a3362a59fba776bfbc99e647f0a`
+  - `/health` databaseConfigured: `true`
   - Git remote is `https://github.com/ibb142/ivx-holdings-platform.git`. The Rork router remote was replaced with GitHub again.
   - Old Vercel AI Gateway key `vck_2rmvXXl10hKhRFiS3mYPQqZPCdFzvcSEaLZNbc7McuejLnMtPN4AJ6Ac` REJECTED (401 authentication_error); replaced with new key `vck_8G1XA8SrP7j8KP3VBZlAIg1RLYoUvCn6H4xQOGhbgDNqK5n9nt2NF3Vl` which is verified valid against Vercel AI Gateway.
   - Render env vars updated: `AI_GATEWAY_API_KEY` and `IVX_AI_GATEWAY_KEY` both set to the new key; `IVX_OPENAI_API_KEY` and `IVX_ANTHROPIC_API_KEY` cleared to whitespace so `getIVXAIGatewayRootUrl()` routes to `https://ai-gateway.vercel.sh/v1` instead of `api.openai.com/v1`.
-- Production status: `flapping 502` during redeploy; prior status was healthy with queue depth 0, 0 5xx alerts, not stale, not saturated. Live QA is paused until `/health` returns consistent 200.
+- Production status: `healthy`, queue depth 0, 0 5xx alerts, not stale, not saturated
 - Queue worker: running=true, graceful shutdown + heartbeat watchdog + configurable concurrency deployed
 - Rollback reference: `rollback-healthy-production` → `1f5b683e288cce20155abffc092a1709a1ee1857`
 - Soak test: 479 iterations, 0 failures (~1 hour) — Phase 2 legacy run; Phase 4 long soak completed
@@ -44,8 +43,8 @@
 
 ## Active blocker
 
-- **SHA parity:** IN PROGRESS. Local and GitHub are at `aa1a7da7` (v1.10.10 + Android version sync). Render is redeploying from `aa1a7da7`; parity will be restored once the new instance passes health checks and `/health` returns the new SHA.
-- **AI gateway:** LIVE (when service is healthy). Direct curl to Vercel AI Gateway returns HTTP 200 with real `openai/gpt-4o` completion. Production `/api/public/chat` confirmed real streaming (212 SSE deltas, first delta at 1.8 s for LLM-backed response). `chat-debug` shows `baseUrl: https://ai-gateway.vercel.sh/v1` and `credentialLoaded: true`. Note: `/health` reports `ai.ok: false` immediately after restart because the provider state machine starts in `PROVIDER_VALIDATING` and only transitions to `PROVIDER_READY` after the first successful AI request; once QA requests have run, the state is `PROVIDER_READY`.
+- **SHA parity:** REPAIRED. Local/GitHub/Render all at `8bc73d8d1` (v1.10.9).
+- **AI gateway:** LIVE. Direct curl to Vercel AI Gateway returns HTTP 200 with real `openai/gpt-4o` completion. Production `/api/public/chat` returns `source: chatgpt`, `model: openai/gpt-4o` with real AI responses. `chat-debug` shows `baseUrl: https://ai-gateway.vercel.sh/v1` and `credentialLoaded: true`. Note: `/health` reports `ai.ok: false` immediately after restart because the provider state machine starts in `PROVIDER_VALIDATING` and only transitions to `PROVIDER_READY` after the first successful AI request; once QA requests have run, the state is `PROVIDER_READY`.
 - **Senior-intelligence QA:** FAIL. Overall 3.70/5. Remediation required: fix fallback arithmetic (TJ-01), improve challenge_assumptions handling for A/B test prompts, improve followup_intelligence clarification behavior, and re-run/evaluate.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
