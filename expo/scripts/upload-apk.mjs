@@ -60,7 +60,7 @@ async function uploadToS3() {
 
   const canonicalRequest = [
     'PUT',
-    `/${S3_KEY}`,
+    `/${BUCKET}/${S3_KEY}`,
     '',
     canonicalHeaders,
     signedHeaders,
