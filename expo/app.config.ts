@@ -18,13 +18,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.10.4",
+  version: "1.10.6",
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_08_07_V1104_INSTAGRAM_BACKEND_LOGIN_RECOVERY',
-    buildTimestamp: "2026-08-07T18:20:00.000000+00:00",
+    buildMarker: 'IVX_BUNDLE_2026_08_10_V1106_AUTONOMOUS_HANDOFF',
+    buildTimestamp: "2026-08-10T00:30:00.000000+00:00",
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',

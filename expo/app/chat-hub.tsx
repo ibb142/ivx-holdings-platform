@@ -33,7 +33,12 @@ import {
 import {
   streamPublicChatMessage,
   type ChatStreamEvent,
+  type AutonomousTaskEvent,
 } from '@/lib/public-chat-stream';
+import {
+  pollSeniorDeveloperWorkerJob,
+  type WorkerJobView,
+} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
 import { usePublicChatSession } from '@/lib/public-chat-session-context';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
 import type { ChatMessage } from '@/types';
@@ -166,7 +171,10 @@ export default function ChatHubScreen() {
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamingText, setStreamingText] = useState<string>('');
   const [hasFirstToken, setHasFirstToken] = useState<boolean>(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{ status: string; stage: string; percent: number } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
 
   const healthQuery = useQuery<PublicHealthResponse, Error>({
     queryKey: ['public-chat', 'health'],
@@ -247,7 +255,18 @@ export default function ChatHubScreen() {
           { message: text, history, sessionId, requestId, clientId, signal: controller.signal },
           {
             onEvent: (event: ChatStreamEvent) => {
-              if (event.type === 'response.delta' && event.delta) {
+              if (event.type === 'response.autonomous_task') {
+                // Real autonomous job created by the backend worker
+                if (event.ok && event.jobId) {
+                  setActiveJobId(event.jobId);
+                  activeJobIdRef.current = event.jobId;
+                  setJobProgress({
+                    status: event.status,
+                    stage: event.stage,
+                    percent: event.progressPercent,
+                  });
+                }
+              } else if (event.type === 'response.delta' && event.delta) {
                 if (!hasFirstTokenRef.current) {
                   hasFirstTokenRef.current = true;
                   setHasFirstToken(true);
@@ -258,14 +277,29 @@ export default function ChatHubScreen() {
                 finalModel = event.model;
                 finalSource = event.source;
                 finalSessionId = event.sessionId;
+                // Capture job info from completed event if present
+                if (event.jobId) {
+                  setActiveJobId(event.jobId);
+                  activeJobIdRef.current = event.jobId;
+                }
                 if (event.error) {
-                  // Partial completion with error — keep text but flag error
                   setLocalError(event.error);
                 } else {
                   setLocalError(null);
                 }
               } else if (event.type === 'response.error') {
                 setLocalError(event.error);
+              }
+            },
+            onAutonomousTask: (event: AutonomousTaskEvent) => {
+              if (event.ok && event.jobId) {
+                setActiveJobId(event.jobId);
+                activeJobIdRef.current = event.jobId;
+                setJobProgress({
+                  status: event.status,
+                  stage: event.stage,
+                  percent: event.progressPercent,
+                });
               }
             },
             onError: (error: string) => {
@@ -300,6 +334,32 @@ export default function ChatHubScreen() {
                 persistence: 'supabase',
               };
               resolve(finalResponse);
+
+              // If an autonomous job was created, start polling for real status
+              const capturedJobId = activeJobIdRef.current;
+              if (capturedJobId && source === 'autonomous') {
+                void pollSeniorDeveloperWorkerJob(capturedJobId, {
+                  intervalMs: 5000,
+                  timeoutMs: 300000,
+                  onTick: (job: WorkerJobView) => {
+                    setJobProgress({
+                      status: job.status,
+                      stage: job.result?.finalStatus ?? 'running',
+                      percent: job.status === 'completed' ? 100 : job.status === 'running' ? 50 : 0,
+                    });
+                  },
+                }).then((finalJob) => {
+                  if (finalJob) {
+                    setJobProgress({
+                      status: finalJob.status,
+                      stage: finalJob.result?.finalStatus ?? 'unknown',
+                      percent: finalJob.status === 'completed' ? 100 : 0,
+                    });
+                  }
+                }).catch(() => {
+                  // Polling errors are non-fatal — job continues server-side
+                });
+              }
             },
           },
         );
@@ -569,6 +629,56 @@ export default function ChatHubScreen() {
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
                 ListFooterComponent={(() => {
+                  // Autonomous job progress card — real worker status
+                  if (activeJobId && jobProgress) {
+                    const isRunning = jobProgress.status === 'running' || jobProgress.status === 'queued';
+                    const isDone = jobProgress.status === 'completed';
+                    const isFailed = jobProgress.status === 'failed' || jobProgress.status === 'blocked';
+                    return (
+                      <View style={styles.autonomousJobCard} testID="autonomous-job-progress">
+                        <View style={styles.autonomousJobHeader}>
+                          <ShieldCheck size={16} color={isDone ? '#22c55e' : isFailed ? '#ef4444' : Colors.primary} />
+                          <Text style={styles.autonomousJobTitle}>
+                            {isDone ? 'Task Complete' : isFailed ? 'Task Failed' : 'Autonomous Worker'}
+                          </Text>
+                        </View>
+                        <Text style={styles.autonomousJobId} numberOfLines={1}>
+                          {activeJobId}
+                        </Text>
+                        <View style={styles.autonomousJobProgressRow}>
+                          <View style={styles.autonomousJobProgressBar}>
+                            <Animated.View
+                              style={[
+                                styles.autonomousJobProgressFill,
+                                {
+                                  width: `${Math.min(100, Math.max(5, jobProgress.percent))}%`,
+                                  backgroundColor: isDone ? '#22c55e' : isFailed ? '#ef4444' : Colors.primary,
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.autonomousJobPercent}>{jobProgress.percent}%</Text>
+                        </View>
+                        <View style={styles.autonomousJobStatusRow}>
+                          <View style={[styles.autonomousJobBadge, {
+                            backgroundColor: isDone ? 'rgba(34,197,94,0.15)' : isFailed ? 'rgba(239,68,68,0.15)' : 'rgba(255,215,0,0.12)',
+                          }]}>
+                            <Text style={[styles.autonomousJobBadgeText, {
+                              color: isDone ? '#22c55e' : isFailed ? '#ef4444' : Colors.primary,
+                            }]}>
+                              {jobProgress.status.toUpperCase()}
+                            </Text>
+                          </View>
+                          <Text style={styles.autonomousJobStage}>{jobProgress.stage}</Text>
+                        </View>
+                        {isRunning && (
+                          <Text style={styles.autonomousJobHint}>
+                            Real execution in progress — file edit → test → commit → deploy → verify
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  }
                   // Streaming assistant bubble — progressive rendering
                   if (isStreaming) {
                     return (
@@ -862,6 +972,75 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 6,
     paddingBottom: 14},
+  autonomousJobCard: {
+    marginHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(10, 10, 12, 0.98)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.18)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignSelf: 'flex-start',
+    maxWidth: '92%'},
+  autonomousJobHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6},
+  autonomousJobTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700' as const,
+    letterSpacing: 0.3},
+  autonomousJobId: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginBottom: 10},
+  autonomousJobProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8},
+  autonomousJobProgressBar: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden' as const},
+  autonomousJobProgressFill: {
+    height: 6,
+    borderRadius: 3},
+  autonomousJobPercent: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '700' as const,
+    minWidth: 36,
+    textAlign: 'right' as const},
+  autonomousJobStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6},
+  autonomousJobBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3},
+  autonomousJobBadgeText: {
+    fontSize: 10,
+    fontWeight: '800' as const,
+    letterSpacing: 1},
+  autonomousJobStage: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '500' as const},
+  autonomousJobHint: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2},
   streamingBubble: {
     marginHorizontal: 18,
     marginTop: 4,
