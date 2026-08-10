@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
-import { getIVXAIConfigurationSnapshot, getIVXAIEndpoint, getIVXAIKeySource, getIVXAIActiveEndpoint, getIVXAIActiveProviderLabel, requestIVXAIText, resolveIVXAIModel } from '../ivx-ai-runtime';
+import { getIVXAIConfigurationSnapshot, getIVXAIEndpoint, getIVXAIKeySource, getIVXAIActiveEndpoint, getIVXAIActiveProviderLabel, requestIVXAIText, resolveIVXAIModel, runWithOwnerAIStreamCallback } from '../ivx-ai-runtime';
 import { executeIVXAIBrainTool, type IVXAIBrainToolName, type IVXAIBrainToolResult } from '../services/ivx-ai-brain-tool-executor';
 import {
   buildIVXAgentRuntimeV2Envelope,
@@ -5956,7 +5956,12 @@ async function handleIVXOwnerAIRequestSSE(
       let auditFinalStatus: number = 0;
       void (async () => {
         try {
-          await handleIVXOwnerAIRequestInternal(replayRequest)
+          await runWithOwnerAIStreamCallback(
+            (delta: string) => {
+              safeEnqueue(sse({ type: 'delta', delta }));
+            },
+            async () => handleIVXOwnerAIRequestInternal(replayRequest),
+          )
             .then(async (response) => {
               auditFinalStatus = response.status;
               let bodyJson: unknown = null;
