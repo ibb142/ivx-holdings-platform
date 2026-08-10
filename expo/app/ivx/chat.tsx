@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
   Alert,
+  Animated,
   AppState,
   type AppStateStatus,
   FlatList,
@@ -62,6 +63,36 @@ import { getIVXRuntimeInfo } from '@/lib/runtime-environment';
 import { ivxDiagnostics } from '@/src/modules/ivx-developer/diagnosticsStore';
 import { refreshOwnerSession } from '@/src/modules/ivx-developer/authDiagnosticsService';
 import IVXAdvancedExecutionMode from '@/components/IVXAdvancedExecutionMode';
+
+function useTypingDotPulse(): Animated.Value {
+  const opacity = useRef(new Animated.Value(0.2)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 380, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.2, duration: 380, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [opacity]);
+  return opacity;
+}
+
+function TypingDots({ color }: { color: string }) {
+  const dot1 = useTypingDotPulse();
+  const dot2 = useTypingDotPulse();
+  const dot3 = useTypingDotPulse();
+  return (
+    <View style={styles.typingDotsRow}>
+      <Animated.Text style={[styles.typingDotText, { color, opacity: dot1 }]}>·</Animated.Text>
+      <Animated.Text style={[styles.typingDotText, { color, opacity: dot2, marginLeft: 2 }]}>·</Animated.Text>
+      <Animated.Text style={[styles.typingDotText, { color, opacity: dot3, marginLeft: 2 }]}>·</Animated.Text>
+    </View>
+  );
+}
 
 // Legacy panel kept for fallback access (not currently mounted).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1264,6 +1295,7 @@ export default function IVXOwnerChatRoute() {
     refetchInterval: 120_000});
 
   const [transientAssistantMessages, setTransientAssistantMessages] = useState<IVXMessage[]>([]);
+  const [currentStreamingMessageId, setCurrentStreamingMessageId] = useState<string | null>(null);
   // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): side-channel
   // map from transient assistant message id → the 9-field executionStatus payload
   // the backend attached to its 202 response. Kept outside IVXMessage (which is
@@ -2164,6 +2196,7 @@ export default function IVXOwnerChatRoute() {
         hasVisibleResponseText: false}));
       setAiReplyPending(true);
       setStreamingText('');
+      setCurrentStreamingMessageId(transientReplyId);
       // P0 FIX: create the assistant message placeholder immediately so the user
       // watches the real answer grow inside the actual message bubble, not a
       // separate spinner-like streaming widget. Each delta will append to this
@@ -2819,6 +2852,7 @@ export default function IVXOwnerChatRoute() {
         clearTimeout(watchdogTimer);
         setAiReplyPending(false);
         setStreamingText('');
+        setCurrentStreamingMessageId(null);
         // INVARIANT GUARANTEE (state-authoritative):
         // Use functional setState to inspect the LIVE committed transient list.
         // If none of this mutation's emitted bubble ids are present (race,
@@ -2911,6 +2945,7 @@ export default function IVXOwnerChatRoute() {
     onSettled: () => {
       setAiReplyPending(false);
       setStreamingText('');
+      setCurrentStreamingMessageId(null);
     }});
 
   // Pending owner-approval build-job draft (set when a build request is detected,
@@ -4548,11 +4583,12 @@ export default function IVXOwnerChatRoute() {
             onReply={handleStartReplyToMessage}
             onOpenReplyContext={handleJumpToMessage}
             isPinned={pinnedMessageIdSet.has(item.id)}
+            isStreaming={currentStreamingMessageId === item.id}
           />
         </View>
       </>
     );
-  }, [displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
+  }, [currentStreamingMessageId, displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
 
   useEffect(() => {
     const pendingMessageId = pendingJumpMessageIdRef.current;
@@ -5314,46 +5350,21 @@ export default function IVXOwnerChatRoute() {
   }, [pinnedMessages, renderPinnedMessagePreview]);
 
   const listFooter = useMemo(() => <View style={styles.listFooterSpacer} />, []);
-  // V1.10.8 real-time streaming: when deltas arrive, the streaming text
-  // renders live in the bubble. The pill is only shown before the first
-  // delta (no text yet). Once text is streaming, the bubble takes over.
-  // P0 FIX: The pill auto-dismisses after 12s — if no delta arrived by then,
-  // the backend is still processing (tool grounding, context loading, etc).
-  // Show a static text line instead of a persistent pill. No circular spinner.
-  const [pillShowTime, setPillShowTime] = useState<number>(0);
-  const [pillExpired, setPillExpired] = useState<boolean>(false);
-  useEffect(() => {
-    if (aiReplyPending && streamingText.trim().length === 0) {
-      setPillShowTime(Date.now());
-      setPillExpired(false);
-      const timer = setTimeout(() => setPillExpired(true), 12_000);
-      return () => clearTimeout(timer);
-    }
-    setPillExpired(false);
-  }, [aiReplyPending, streamingText]);
-
+  // P0 chat UX fix: when the assistant is responding but no text has arrived
+  // yet, show a minimal animated typing indicator (pulsing dots) instead of
+  // static “responding” / “processing” text. Once the first delta arrives, the
+  // streaming bubble renders the live text with a blinking cursor. This removes
+  // all spinner-like static loading states and makes the response feel like
+  // real end-to-end typing.
   const renderTypingHeader = useMemo(() => {
-    // P0 FIX: only the single static pre-token indicator is allowed. Once the
-    // first real delta arrives, the streaming text renders in the actual
-    // assistant message bubble, so this indicator is removed immediately.
-    // The separate streaming bubble and blinking cursor dot have been removed
-    // because they were perceived as a spinner/loading UI.
     if (!aiReplyPending || streamingText.trim().length > 0) return null;
-    // After 12s with no delta, show static text — no pill, no spinner.
-    if (pillExpired) {
-      return (
-        <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
-          <Text style={styles.typingHeaderTextStatic}>Still processing…</Text>
-        </View>
-      );
-    }
-    // Single lightweight pre-token indicator — static text, no animation.
     return (
       <View style={styles.typingHeaderRow} testID="ivx-owner-responding-indicator">
-        <Text style={styles.typingHeaderTextStatic}>IVX is responding…</Text>
+        <TypingDots color="#F6C85F" />
+        <Text style={styles.typingHeaderTextStatic}>IVX is typing…</Text>
       </View>
     );
-  }, [aiReplyPending, streamingText, pillExpired]);
+  }, [aiReplyPending, streamingText]);
   const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
   const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
   // Owner-only live debug proof. Every value here is read live from the running
@@ -8554,6 +8565,16 @@ const styles = StyleSheet.create({
     opacity: 0.55},
   typingDotMid: {
     opacity: 0.85},
+  typingDotsRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    width: 28,
+    height: 18},
+  typingDotText: {
+    fontSize: 20,
+    lineHeight: 18,
+    fontWeight: '700' as const},
   typingText: {
     flex: 1,
     color: '#F6C85F',
