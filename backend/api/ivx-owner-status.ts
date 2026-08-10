@@ -103,6 +103,7 @@ export async function handleEnvStatusRequest(request: Request): Promise<Response
   const present = variables.filter((v) => v.status === 'PRESENT').length;
   const readiness = buildCredentialReadiness();
 
+  // CANARY-AUTONOMOUS-VERIFY-2026-08-10
   return ownerOnlyJson({
     ok: true,
     generatedAt: new Date().toISOString(),
