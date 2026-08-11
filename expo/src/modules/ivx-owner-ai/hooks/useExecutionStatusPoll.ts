@@ -1,28 +1,21 @@
 /**
  * IVX IA Chat Execution Mode — Live-polling hook
  *
- * FINAL IVX IA CHAT EXECUTION MODE mandate (owner 2026-07-19):
- *   "Stream live execution status."
- *
- * When the backend returns HTTP 202 + `executionStatus` payload for an
- * execution-mode prompt (fix/build/deploy/audit/QA/refactor/migration/
- * create module/create app/senior developer), the Expo chat renders a
- * live-polling execution console bubble. This hook polls the worker job
- * statusUrl on an interval and updates the bubble with the real stage,
- * progress %, files changed, tests, commitSha, deployId, and verified
- * evidence — never fabricated.
+ * Streams real worker state into the chat execution console. The status
+ * endpoint returns the durable worker job shape, while the initial owner-chat
+ * response may return the normalized execution-status shape. This hook accepts
+ * BOTH shapes so the UI keeps advancing instead of getting stuck on the first
+ * state.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// IVX canonical API base. Reads EXPO_PUBLIC_IVX_API_BASE_URL (owner-AI routing
-// env) with a fallback to the production host, matching the rest of the app
-// (see expo/lib/ivx-supabase-client.ts, expo/lib/video-feed.ts, etc.).
 const BASE_URL = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 
 export type IVXChatExecutionStatus = {
   taskId: string;
   status: string;
   stage: string;
+  stageDetail: string;
   liveProgress: number;
   filesChanged: string[];
   tests: { run: boolean; passed: boolean; command: string | null };
@@ -51,50 +44,118 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function readResultEvidence(result: Record<string, unknown> | null): IVXChatExecutionStatus['evidence'] {
+  if (!result) return null;
+  const terminalEvidence = isRecord(result.evidence) ? result.evidence : null;
+  if (terminalEvidence) {
+    const typecheck = isRecord(terminalEvidence.typecheck) ? terminalEvidence.typecheck : {};
+    return {
+      deployedToProduction: terminalEvidence.deployedToProduction === true,
+      liveCommit: typeof terminalEvidence.liveCommit === 'string' ? terminalEvidence.liveCommit : null,
+      commitMatch: terminalEvidence.commitMatch === true,
+      healthOk: terminalEvidence.healthOk === true,
+      typecheck: {
+        run: typecheck.run === true,
+        passed: typecheck.passed === true,
+      },
+      buildRun: terminalEvidence.buildRun === true,
+      finalStatus: typeof terminalEvidence.finalStatus === 'string' ? terminalEvidence.finalStatus : 'UNKNOWN',
+      error: typeof terminalEvidence.error === 'string' ? terminalEvidence.error : null,
+      answerBlock: typeof terminalEvidence.answerBlock === 'string' ? terminalEvidence.answerBlock : '',
+    };
+  }
+
+  const finalStatus = typeof result.finalStatus === 'string' ? result.finalStatus : null;
+  if (!finalStatus) return null;
+  return {
+    deployedToProduction: result.endToEndProductionComplete === true && result.commitMatch === true && result.healthOk === true,
+    liveCommit: typeof result.liveCommit === 'string' ? result.liveCommit : null,
+    commitMatch: result.commitMatch === true,
+    healthOk: result.healthOk === true,
+    typecheck: {
+      run: result.typecheckRun === true,
+      passed: result.testsPassed === true,
+    },
+    buildRun: result.buildRun === true,
+    finalStatus,
+    error: typeof result.error === 'string' ? result.error : null,
+    answerBlock: typeof result.answerBlock === 'string' ? result.answerBlock : '',
+  };
+}
+
 function coerceStatus(payload: unknown): IVXChatExecutionStatus | null {
   if (!isRecord(payload)) return null;
-  const taskId = typeof payload.taskId === 'string' ? payload.taskId : null;
-  const statusUrl = typeof payload.statusUrl === 'string' ? payload.statusUrl : null;
-  if (!taskId || !statusUrl) return null;
+
+  // Accept either the normalized execution-status payload or the raw durable
+  // worker job returned by GET /worker/jobs/:id.
+  const taskId = typeof payload.taskId === 'string'
+    ? payload.taskId
+    : typeof payload.jobId === 'string'
+      ? payload.jobId
+      : null;
+  if (!taskId) return null;
+
+  const result = isRecord(payload.result) ? payload.result : null;
   const testsRaw = isRecord(payload.tests) ? payload.tests : {};
-  const evidenceRaw = isRecord(payload.evidence) ? payload.evidence : null;
-  const typecheckField = evidenceRaw?.typecheck;
-  const typecheckRaw = isRecord(typecheckField) ? typecheckField : {};
+  const filesChanged = Array.isArray(payload.filesChanged)
+    ? payload.filesChanged.filter((f): f is string => typeof f === 'string')
+    : Array.isArray(result?.changedFiles)
+      ? result.changedFiles.filter((f): f is string => typeof f === 'string')
+      : [];
+
+  const status = typeof payload.status === 'string' ? payload.status : 'unknown';
+  const stage = typeof payload.stage === 'string' ? payload.stage : 'UNKNOWN';
+  const stageDetail = typeof payload.stageDetail === 'string' && payload.stageDetail.trim()
+    ? payload.stageDetail.trim()
+    : stage;
+  const isTerminal = TERMINAL_STATUSES.has(status);
+
+  const testsRun = typeof testsRaw.run === 'boolean' ? testsRaw.run : result?.testsRun === true;
+  const testsPassed = typeof testsRaw.passed === 'boolean' ? testsRaw.passed : result?.testsPassed === true;
+
   return {
     taskId,
-    status: typeof payload.status === 'string' ? payload.status : 'unknown',
-    stage: typeof payload.stage === 'string' ? payload.stage : 'UNKNOWN',
-    liveProgress: typeof payload.liveProgress === 'number' ? payload.liveProgress : 0,
-    filesChanged: Array.isArray(payload.filesChanged)
-      ? payload.filesChanged.filter((f): f is string => typeof f === 'string')
-      : [],
+    status,
+    stage,
+    stageDetail,
+    liveProgress: typeof payload.liveProgress === 'number'
+      ? payload.liveProgress
+      : typeof payload.progressPercent === 'number'
+        ? payload.progressPercent
+        : 0,
+    filesChanged,
     tests: {
-      run: typeof testsRaw.run === 'boolean' ? testsRaw.run : false,
-      passed: typeof testsRaw.passed === 'boolean' ? testsRaw.passed : false,
-      command: typeof testsRaw.command === 'string' ? testsRaw.command : null,
+      run: testsRun,
+      passed: testsPassed,
+      command: typeof testsRaw.command === 'string'
+        ? testsRaw.command
+        : testsRun
+          ? 'worker validation suite'
+          : null,
     },
-    commitSha: typeof payload.commitSha === 'string' ? payload.commitSha : null,
-    deploymentId: typeof payload.deploymentId === 'string' ? payload.deploymentId : null,
-    evidence: evidenceRaw
-      ? {
-          deployedToProduction: typeof evidenceRaw.deployedToProduction === 'boolean' ? evidenceRaw.deployedToProduction : false,
-          liveCommit: typeof evidenceRaw.liveCommit === 'string' ? evidenceRaw.liveCommit : null,
-          commitMatch: typeof evidenceRaw.commitMatch === 'boolean' ? evidenceRaw.commitMatch : false,
-          healthOk: typeof evidenceRaw.healthOk === 'boolean' ? evidenceRaw.healthOk : false,
-          typecheck: {
-            run: typeof typecheckRaw.run === 'boolean' ? typecheckRaw.run : false,
-            passed: typeof typecheckRaw.passed === 'boolean' ? typecheckRaw.passed : false,
-          },
-          buildRun: typeof evidenceRaw.buildRun === 'boolean' ? evidenceRaw.buildRun : false,
-          finalStatus: typeof evidenceRaw.finalStatus === 'string' ? evidenceRaw.finalStatus : 'UNKNOWN',
-          error: typeof evidenceRaw.error === 'string' ? evidenceRaw.error : null,
-          answerBlock: typeof evidenceRaw.answerBlock === 'string' ? evidenceRaw.answerBlock : '',
-        }
-      : null,
-    httpStatus: payload.httpStatus === 200 ? 200 : 202,
+    commitSha: typeof payload.commitSha === 'string'
+      ? payload.commitSha
+      : typeof result?.commitSha === 'string'
+        ? result.commitSha
+        : null,
+    deploymentId: typeof payload.deploymentId === 'string'
+      ? payload.deploymentId
+      : typeof result?.deployId === 'string'
+        ? result.deployId
+        : null,
+    evidence: readResultEvidence(payload.evidence && isRecord(payload.evidence) ? { evidence: payload.evidence } : result),
+    httpStatus: payload.httpStatus === 200 || isTerminal ? 200 : 202,
     category: typeof payload.category === 'string' ? payload.category : null,
-    statusUrl,
-    generatedAt: typeof payload.generatedAt === 'string' ? payload.generatedAt : new Date().toISOString(),
+    statusUrl: typeof payload.statusUrl === 'string' && payload.statusUrl.trim()
+      ? payload.statusUrl
+      : `/api/ivx/senior-developer/worker/jobs/${taskId}`,
+    generatedAt: typeof payload.generatedAt === 'string'
+      ? payload.generatedAt
+      : typeof payload.lastHeartbeatAt === 'string'
+        ? payload.lastHeartbeatAt
+        : typeof payload.finishedAt === 'string'
+          ? payload.finishedAt
+          : new Date().toISOString(),
   };
 }
 
@@ -105,15 +166,9 @@ type PollState = {
   attempts: number;
 };
 
-const DEFAULT_POLL_INTERVAL_MS = 2500;
-const MAX_POLL_ATTEMPTS = 80; // ~3.3min at 2.5s — ample for senior-dev tasks
+const DEFAULT_POLL_INTERVAL_MS = 900;
+const MAX_POLL_ATTEMPTS = 260;
 
-/**
- * Poll the worker statusUrl for live execution updates until the job reaches
- * a terminal state (completed/failed/blocked/cancelled) or the attempt cap
- * fires. Returns the latest status plus the terminal answerBlock so the chat
- * can swap the live-progress bubble for the final verified-evidence block.
- */
 export function useExecutionStatusPoll(
   initialStatus: IVXChatExecutionStatus | null,
   authToken: string | null,
@@ -138,6 +193,9 @@ export function useExecutionStatusPoll(
     return s !== null && TERMINAL_STATUSES.has(s.status);
   }, []);
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const pollOnce = useCallback(async (): Promise<void> => {
     const current = stateRef.current.status;
     if (!current || stoppedRef.current || isTerminal(current)) {
@@ -156,7 +214,6 @@ export function useExecutionStatusPoll(
         },
       });
       if (!response.ok) {
-        // 404/401 → keep the last status but stop polling to avoid a loop.
         setState((prev) => ({
           ...prev,
           polling: false,
@@ -191,19 +248,12 @@ export function useExecutionStatusPoll(
     }
   }, [isTerminal]);
 
-  // Keep a ref of the latest state so the interval callback reads fresh data.
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
   useEffect(() => {
-    if (!initialStatus || isTerminal(initialStatus)) {
-      return;
-    }
+    if (!initialStatus || isTerminal(initialStatus)) return;
     stoppedRef.current = false;
     const intervalId = setInterval(() => {
       void pollOnce();
     }, pollIntervalMs);
-    // Fire one immediate poll so the bubble advances past "queued" quickly.
     void pollOnce();
     return () => {
       clearInterval(intervalId);
@@ -212,7 +262,6 @@ export function useExecutionStatusPoll(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStatus?.taskId, pollIntervalMs]);
 
-  // Hard stop after maxAttempts to prevent unbounded polling.
   useEffect(() => {
     if (state.attempts >= maxAttempts && state.polling) {
       setState((prev) => ({ ...prev, polling: false, error: prev.error ?? 'poll timeout' }));
