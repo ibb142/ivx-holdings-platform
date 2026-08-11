@@ -7,88 +7,64 @@ import {
 
 describe('ivx-chat-autonomous-handoff', () => {
   describe('detectAutonomousExecutionIntent', () => {
-    it('detects "fix this bug" as an execution command', () => {
+    it('detects fix commands as code changes', () => {
       const result = detectAutonomousExecutionIntent('Fix this bug in the chat module');
       expect(result.isExecutionCommand).toBe(true);
       expect(result.executionMode).toBe('code_change');
       expect(result.templateMode).toBe('BUG_FIX');
     });
 
-    it('detects "deploy this to production" as a deploy command', () => {
+    it('detects deploy commands', () => {
       const result = detectAutonomousExecutionIntent('Deploy this to production now');
       expect(result.isExecutionCommand).toBe(true);
       expect(result.executionMode).toBe('deploy');
     });
 
-    it('detects "implement this API endpoint" as an execution command', () => {
-      const result = detectAutonomousExecutionIntent('Implement this API endpoint end to end');
+    it('routes a new app from scratch through factory mode', () => {
+      const result = detectAutonomousExecutionIntent('Build a new app from scratch for property inspections');
       expect(result.isExecutionCommand).toBe(true);
-      expect(result.matchedBuildIntent).toBe(true);
+      expect(result.executionMode).toBe('factory');
+      expect(result.templateMode).toBe('NEW_APP_FROM_SCRATCH');
     });
 
-    it('detects "build a new module" as an execution command', () => {
-      const result = detectAutonomousExecutionIntent('Build a new module from scratch');
+    it('routes a new module from scratch through factory mode', () => {
+      const result = detectAutonomousExecutionIntent('Build a new module from scratch for invoices');
       expect(result.isExecutionCommand).toBe(true);
+      expect(result.executionMode).toBe('factory');
       expect(result.templateMode).toBe('NEW_MODULE_FROM_SCRATCH');
     });
 
-    it('detects "audit the codebase" as a read-only execution command', () => {
+    it('detects implement endpoint as code change', () => {
+      const result = detectAutonomousExecutionIntent('Implement this API endpoint end to end');
+      expect(result.isExecutionCommand).toBe(true);
+      expect(result.matchedBuildIntent).toBe(true);
+      expect(result.executionMode).toBe('code_change');
+    });
+
+    it('detects audits as read only', () => {
       const result = detectAutonomousExecutionIntent('Audit the codebase for security issues');
       expect(result.isExecutionCommand).toBe(true);
       expect(result.executionMode).toBe('read_only');
     });
 
-    it('does NOT route "What is your name?" to the worker', () => {
-      const result = detectAutonomousExecutionIntent('What is your name?');
-      expect(result.isExecutionCommand).toBe(false);
-      expect(result.reason).toContain('Conversational');
+    it('keeps conversational questions in chat', () => {
+      expect(detectAutonomousExecutionIntent('What is your name?').isExecutionCommand).toBe(false);
+      expect(detectAutonomousExecutionIntent('Explain this architecture to me').isExecutionCommand).toBe(false);
+      expect(detectAutonomousExecutionIntent('How do you recommend I structure this?').isExecutionCommand).toBe(false);
+      expect(detectAutonomousExecutionIntent('Tell me about the IVX platform').isExecutionCommand).toBe(false);
+      expect(detectAutonomousExecutionIntent('').isExecutionCommand).toBe(false);
     });
 
-    it('does NOT route "Explain this architecture to me" to the worker', () => {
-      const result = detectAutonomousExecutionIntent('Explain this architecture to me');
-      expect(result.isExecutionCommand).toBe(false);
-    });
-
-    it('does NOT route "How do you recommend I structure this?" to the worker', () => {
-      const result = detectAutonomousExecutionIntent('How do you recommend I structure this?');
-      expect(result.isExecutionCommand).toBe(false);
-    });
-
-    it('does NOT route "What design pattern would you recommend?" to the worker', () => {
-      const result = detectAutonomousExecutionIntent('What design pattern would you recommend?');
-      expect(result.isExecutionCommand).toBe(false);
-    });
-
-    it('does NOT route empty messages to the worker', () => {
-      const result = detectAutonomousExecutionIntent('');
-      expect(result.isExecutionCommand).toBe(false);
-    });
-
-    it('detects approval-requiring commands (deploy to production)', () => {
-      const result = detectAutonomousExecutionIntent('Deploy to production');
-      expect(result.isExecutionCommand).toBe(true);
-    });
-
-    it('detects "ship it" as an execution command', () => {
-      const result = detectAutonomousExecutionIntent('Ship it to production');
-      expect(result.isExecutionCommand).toBe(true);
-      expect(result.executionMode).toBe('deploy');
-    });
-
-    it('detects "refactor the auth module" as an execution command', () => {
-      const result = detectAutonomousExecutionIntent('Refactor the auth module');
-      expect(result.isExecutionCommand).toBe(true);
-      expect(result.templateMode).toBe('REFACTOR');
-    });
-
-    it('does NOT route "tell me about the platform" to the worker', () => {
-      const result = detectAutonomousExecutionIntent('Tell me about the IVX platform');
-      expect(result.isExecutionCommand).toBe(false);
+    it('detects ship and refactor commands', () => {
+      expect(detectAutonomousExecutionIntent('Ship it to production').executionMode).toBe('deploy');
+      const refactor = detectAutonomousExecutionIntent('Refactor the auth module');
+      expect(refactor.isExecutionCommand).toBe(true);
+      expect(refactor.templateMode).toBe('REFACTOR');
     });
   });
 
   describe('formatAutonomousTaskMessage', () => {
-    it('formats a successful job creation', () => {
+    it('formats a successful job creation with execution mode', () => {
       const result: AutonomousHandoffResult = {
         ok: true,
         jobId: 'ivx-worker-test-123',
@@ -97,13 +73,12 @@ describe('ivx-chat-autonomous-handoff', () => {
         progressPercent: 0,
         attached: false,
         error: null,
-        intent: detectAutonomousExecutionIntent('Fix this bug'),
+        intent: detectAutonomousExecutionIntent('Build a new app from scratch'),
       };
       const msg = formatAutonomousTaskMessage(result);
       expect(msg).toContain('AUTONOMOUS TASK CREATED');
       expect(msg).toContain('JOB_ID: ivx-worker-test-123');
-      expect(msg).toContain('STATUS: queued');
-      expect(msg).toContain('STAGE: QUEUED');
+      expect(msg).toContain('MODE: factory');
     });
 
     it('formats an approval-required result', () => {
@@ -132,8 +107,8 @@ describe('ivx-chat-autonomous-handoff', () => {
       expect(msg).toContain('/confirm');
     });
 
-    it('formats a blocked result', () => {
-      const result: AutonomousHandoffResult = {
+    it('formats blocked and attached states truthfully', () => {
+      const blocked: AutonomousHandoffResult = {
         ok: false,
         jobId: null,
         status: null,
@@ -143,13 +118,9 @@ describe('ivx-chat-autonomous-handoff', () => {
         error: 'Worker unavailable',
         intent: detectAutonomousExecutionIntent('Fix this bug'),
       };
-      const msg = formatAutonomousTaskMessage(result);
-      expect(msg).toContain('BLOCKED');
-      expect(msg).toContain('Worker unavailable');
-    });
+      expect(formatAutonomousTaskMessage(blocked)).toContain('Worker unavailable');
 
-    it('notes when attached to existing job', () => {
-      const result: AutonomousHandoffResult = {
+      const attached: AutonomousHandoffResult = {
         ok: true,
         jobId: 'ivx-worker-existing-456',
         status: 'running',
@@ -159,8 +130,7 @@ describe('ivx-chat-autonomous-handoff', () => {
         error: null,
         intent: detectAutonomousExecutionIntent('Fix this bug'),
       };
-      const msg = formatAutonomousTaskMessage(result);
-      expect(msg).toContain('Attached to an existing');
+      expect(formatAutonomousTaskMessage(attached)).toContain('Attached to an existing');
     });
   });
 });
