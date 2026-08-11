@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'bun:test';
+import { resolve } from 'node:path';
 import { detectMessageLanguage, buildLanguageInstruction } from '../services/ivx-language-detector';
 import { resolveIVXIdentityAnswer } from '../services/ivx-ia-identity-brain';
 import { resolveIVXConversationAnswer } from '../services/ivx-ia-conversation-brain';
 import { buildSystemPrompt } from '../public-chat-ai';
+
+const repoFile = (...parts: string[]) => resolve(process.cwd(), ...parts);
 
 describe('IVX Language Detection + Multilingual Response', () => {
   describe('detectMessageLanguage', () => {
@@ -111,10 +114,7 @@ describe('IVX Language Detection + Multilingual Response', () => {
 
     it('19 — Spanish math → Spanish result', () => {
       const answer = resolveIVXConversationAnswer('cuanto es 15 por 3');
-      // Math detection should catch this
-      if (answer) {
-        expect(answer).toContain('45');
-      }
+      if (answer) expect(answer).toContain('45');
     });
   });
 
@@ -157,20 +157,19 @@ describe('IVX Normal Chat — No Routine Banners', () => {
   });
 
   it('26 — IVXLiveTypingIndicator component file has no setInterval', async () => {
-    const content = await Bun.file('/home/user/rork-app/expo/components/IVXLiveTypingIndicator.tsx').text();
+    const content = await Bun.file(repoFile('expo', 'components', 'IVXLiveTypingIndicator.tsx')).text();
     expect(content).not.toContain('setInterval');
     expect(content).not.toContain('useState');
     expect(content).not.toContain('useEffect');
   });
 
   it('27 — chat.tsx does NOT render IVXWatchdogBanner in normal chat', async () => {
-    const content = await Bun.file('/home/user/rork-app/expo/app/ivx/chat.tsx').text();
-    // The banner should be commented out / removed from the render path
+    const content = await Bun.file(repoFile('expo', 'app', 'ivx', 'chat.tsx')).text();
     expect(content).not.toContain('<IVXWatchdogBanner onPress');
   });
 
   it('28 — chat.tsx does NOT render IVXStagedTimeoutBanner in normal chat', async () => {
-    const content = await Bun.file('/home/user/rork-app/expo/app/ivx/chat.tsx').text();
+    const content = await Bun.file(repoFile('expo', 'app', 'ivx', 'chat.tsx')).text();
     expect(content).not.toContain('<IVXStagedTimeoutBanner');
   });
 });
