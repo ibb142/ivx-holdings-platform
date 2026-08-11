@@ -7,12 +7,12 @@
 ## Current verified baseline
 
 - **REALITY CHECK (2026-08-10):** P0 chat UX fix is deployed and verified. The root cause was that the streaming assistant message was created with an empty body, but the message list filtered it out, leaving only the spinner-like "IVX is typing…" dots until the first text chunk arrived. The fix: (1) keep the currently streaming assistant message in the message list even when its body is empty; (2) render the streaming message bubble with a blinking cursor while empty; (3) remove the separate spinner-like typing indicator so the user sees the actual message bubble grow from the first token. Files changed: `expo/app/ivx/chat.tsx`, `expo/src/modules/chat/components/MessageBubble.tsx`, `expo/app/chat-hub.tsx` (removed broken autonomous job card that caused pre-existing TypeScript errors). TypeScript check clean. Commits `a9980ac1`, `e935d8be`, `7233cd73`, `ac3e45b8` pushed to GitHub and deployed to Render.
-    - GitHub main: `ac3e45b8` (verified via GitHub API at 2026-08-10)
-    - Render deployed: `ac3e45b8` (live, verified by `/version` at 2026-08-10T23:55:44Z)
-    - Local checkout: `ac3e45b8` (verified, committed, pushed to GitHub)
+    - GitHub main: `865652a1` (verified via GitHub API at 2026-08-11)
+    - Render deployed: `865652a1` (live, verified by `/version` at 2026-08-11T00:50:21Z)
+    - Local checkout: `865652a1` (verified, committed, pushed to GitHub)
     - `/health` databaseConfigured: `true`
     - Git remote: **repaired to GitHub** (`https://github.com/ibb142/ivx-holdings-platform`). The Rork router remote is no longer the canonical origin. Render auto-deploys from GitHub `main` and picked up `ac3e45b8` automatically.
-    - Vercel AI Gateway key **INVALID** (401 authentication_error). Direct curl to `https://ai-gateway.vercel.sh/v1/chat/completions` with the configured key returns `Authentication failed`. Production `chat-debug` reports `credentialValid: false`, `lastHttpStatus: 401`, `state: AI_UNAVAILABLE`. Owner AI chat returns `I could not reach the AI model`. Public chat falls back to a deterministic response (`source: fallback`). The P0 streaming UX fix is deployed, but chat answers cannot be produced until the gateway key is replaced with a valid Vercel AI Gateway token.
+    - Vercel AI Gateway key **LIVE** (2026-08-11). Owner provided valid key `vck_8ig9...jL5`. Render env vars `AI_GATEWAY_API_KEY` and `IVX_AI_GATEWAY_KEY` updated, service redeployed (`dep-d9t6to9t0dsc73aikmmg`). Direct curl to `https://ai-gateway.vercel.sh/v1/chat/completions` returns HTTP 200. Production `chat-debug` reports `credentialValid: true`, `lastHttpStatus: 200`, `state: PROVIDER_READY`. Public chat returns real AI answer (`source: chatgpt`). The P0 streaming UX fix is deployed and AI is now reachable.
 - Production status: `healthy`, queue depth 0, 0 5xx alerts, not stale, not saturated
 - Queue worker: running=true, graceful shutdown + heartbeat watchdog + configurable concurrency deployed
 - Rollback reference: `rollback-healthy-production` → `1f5b683e288cce20155abffc092a1709a1ee1857`
@@ -41,8 +41,9 @@
 
 ## Active blocker
 
-- **SHA parity:** ACHIEVED. Local checkout, GitHub main, and Render production are all `ac3e45b8` (verified via GitHub API and `/version`).
-- **AI gateway:** BLOCKER. The configured Vercel AI Gateway key is rejected with HTTP 401. The P0 streaming UX fix is live, but the chat cannot reach the AI model. The owner must replace `IVX_AI_GATEWAY_KEY` (and `AI_GATEWAY_API_KEY`) on the Render service with a valid Vercel AI Gateway token, then restart/redeploy. No new code is needed; this is a credential rotation issue.
+- **SHA parity:** ACHIEVED. Local checkout, GitHub main, and Render production are all `865652a1` (verified via GitHub API and `/version`).
+- **AI gateway:** RESOLVED. Valid Vercel AI Gateway key deployed to Render and verified. Backend chat now returns real AI responses. A new APK with the P0 UX fix is being built and uploaded.
+- **APK build:** COMPLETED. New Android APK `ivx-holdings-1.10.11-owner.apk` (80.1 MB) built from `expo/android` qa variant and uploaded to `https://ivxholding.com/apk/ivx-holdings-1.10.11-owner.apk`. Verified HTTP 200, `application/vnd.android.package-archive`, 84,110,035 bytes.
 - **Senior-intelligence QA:** FAIL. Overall 3.70/5. Remediation required: fix fallback arithmetic (TJ-01), improve challenge_assumptions handling for A/B test prompts, improve followup_intelligence clarification behavior, and re-run/evaluate.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
