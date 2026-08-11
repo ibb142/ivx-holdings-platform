@@ -12,7 +12,7 @@
     - Local checkout: `865652a1` (verified, committed, pushed to GitHub)
     - `/health` databaseConfigured: `true`
     - Git remote: **repaired to GitHub** (`https://github.com/ibb142/ivx-holdings-platform`). The Rork router remote is no longer the canonical origin. Render auto-deploys from GitHub `main` and picked up `ac3e45b8` automatically.
-    - Vercel AI Gateway key **LIVE** (2026-08-11). Owner provided valid key `vck_8ig9...jL5`. Render env vars `AI_GATEWAY_API_KEY` and `IVX_AI_GATEWAY_KEY` updated, service redeployed (`dep-d9t6to9t0dsc73aikmmg`). Direct curl to `https://ai-gateway.vercel.sh/v1/chat/completions` returns HTTP 200. Production `chat-debug` reports `credentialValid: true`, `lastHttpStatus: 200`, `state: PROVIDER_READY`. Public chat returns real AI answer (`source: chatgpt`). The P0 streaming UX fix is deployed and AI is now reachable.
+    - Vercel AI Gateway key **REVOKED** (2026-08-11). The key `vck_8ig9...jL5` deployed to Render env vars `AI_GATEWAY_API_KEY` and `IVX_AI_GATEWAY_KEY` now returns HTTP 401 from `https://ai-gateway.vercel.sh/v1/chat/completions`. Production `chat-debug` reports `credentialValid: false`, `lastHttpStatus: 401`, `state: AI_UNAVAILABLE`. Owner chat returns `I could not reach the AI model`. Public chat falls back to deterministic responses (`source: fallback`). A new valid Vercel AI Gateway key is required before the P0 streaming UX fix can be verified live.
 - Production status: `healthy`, queue depth 0, 0 5xx alerts, not stale, not saturated
 - Queue worker: running=true, graceful shutdown + heartbeat watchdog + configurable concurrency deployed
 - Rollback reference: `rollback-healthy-production` → `1f5b683e288cce20155abffc092a1709a1ee1857`
@@ -42,8 +42,8 @@
 ## Active blocker
 
 - **SHA parity:** ACHIEVED. Local checkout, GitHub main, and Render production are all `865652a1` (verified via GitHub API and `/version`).
-- **AI gateway:** RESOLVED. Valid Vercel AI Gateway key deployed to Render and verified. Backend chat now returns real AI responses. A new APK with the P0 UX fix is being built and uploaded.
-- **APK build:** COMPLETED. New Android APK `ivx-holdings-1.10.11-owner.apk` (80.1 MB) built from `expo/android` qa variant and uploaded to `https://ivxholding.com/apk/ivx-holdings-1.10.11-owner.apk`. Verified HTTP 200, `application/vnd.android.package-archive`, 84,110,035 bytes.
+- **AI gateway:** BLOCKED. The deployed Vercel AI Gateway key is revoked (HTTP 401). Owner chat returns `I could not reach the AI model`. Public chat returns fallback responses. A new valid Vercel AI Gateway key is required.
+- **APK build:** COMPLETED (1.10.11). New Android APK `ivx-holdings-1.10.11-owner.apk` (80.1 MB) built from `expo/android` qa variant and uploaded to `https://ivxholding.com/apk/ivx-holdings-1.10.11-owner.apk`. Verified HTTP 200, `application/vnd.android.package-archive`, 84,110,035 bytes. Will be rebuilt and re-uploaded once the AI gateway key is restored.
 - **Senior-intelligence QA:** FAIL. Overall 3.70/5. Remediation required: fix fallback arithmetic (TJ-01), improve challenge_assumptions handling for A/B test prompts, improve followup_intelligence clarification behavior, and re-run/evaluate.
 - GitHub Actions infrastructure failure: prior commits failed in 3-13 seconds with steps=0. This is a separate infrastructure issue. CI verification remains BLOCKED until GitHub Actions recovers.
 - E2E Maestro: Expo dev server startup failure (infrastructure, not code).
