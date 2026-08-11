@@ -369,8 +369,9 @@ export const MessageBubble = memo(function MessageBubble({
         ) : null}
 
         <View style={styles.metaRow}>
-          {message.localOnly ? <Text style={[styles.localOnlyBadge, metaColorStyle]}>Local only</Text> : null}
-
+          {/* "Local only" badge removed per owner mandate — a successfully
+              sent message must not be permanently marked as local-only.
+              Only genuine failures show a status label. */}
           {isFailed ? (
             <View style={styles.failedIndicator}>
               <AlertCircle size={12} color="#FF4D4D" />
