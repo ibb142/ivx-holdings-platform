@@ -2957,14 +2957,17 @@ app.get('/health', async (context) => {
   let sdRenderReady = false;
   let sdVariablesValidated = false;
   try {
-    const credAudit = await auditIVXProductionCredentialRuntime();
+    const credAudit = await Promise.race([
+      auditIVXProductionCredentialRuntime(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('credential audit timeout')), 2500)),
+    ]);
     sdGithubReady = credAudit.github.canReadRepo === true;
     sdRenderReady = credAudit.render.canDeploy === true;
     sdEnabled = credAudit.ok;
     sdVariablesValidated = credAudit.ok;
     sdBlockers = credAudit.blockers;
   } catch {
-    // audit failed — defaults remain false/empty
+    // audit failed or timed out — defaults remain false/empty
   }
 
   // Supabase configuration check for QA-SUPA-001.
@@ -2989,7 +2992,10 @@ app.get('/health', async (context) => {
   let saturated = false;
   let total5xx = 0;
   try {
-    const queueResult = await checkOwnerAIQueueHealth();
+    const queueResult = await Promise.race([
+      checkOwnerAIQueueHealth(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('queue health timeout')), 2500)),
+    ]);
     if (queueResult.ok && queueResult.detail) {
       const d = queueResult.detail as Record<string, unknown>;
       queueDepth = typeof d.depth === 'number' ? d.depth : 0;
@@ -3000,7 +3006,7 @@ app.get('/health', async (context) => {
       total5xx = typeof alerts?.total5xx === 'number' ? alerts.total5xx : 0;
     }
   } catch {
-    // queue check failed — defaults remain zeros
+    // queue check failed or timed out — defaults remain zeros
   }
 
   // SECURITY: Public /health returns only minimal uptime info.
