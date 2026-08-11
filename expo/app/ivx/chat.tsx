@@ -6645,15 +6645,6 @@ export default function IVXOwnerChatRoute() {
                   <Sparkles size={28} color={Colors.primary} />
                   <Text style={styles.emptyTitle}>{searchActive ? 'No matching messages' : IVX_OWNER_AI_PROFILE.sharedRoom.emptyTitle}</Text>
                   <Text style={styles.emptyText}>{searchActive ? 'Try a different word or clear search to return to the full owner-room thread.' : resolution.emptyStateText}</Text>
-                  {!searchActive ? (
-                    <View style={styles.emptyTriggerHints} testID="ivx-owner-chat-worker-triggers">
-                      <Text style={styles.emptyTriggerTitle}>Senior Developer Worker triggers</Text>
-                      {WORKER_TRIGGER_HINTS.map((hint: string) => (
-                        <Text key={hint} style={styles.emptyTriggerPhrase}>{hint}</Text>
-                      ))}
-                      <Text style={styles.emptyTriggerNote}>These route straight to the worker (owner approval via /confirm) — no chat narrative, no database inspection.</Text>
-                    </View>
-                  ) : null}
                 </View>
               }
               ListFooterComponent={listFooter}
@@ -6838,8 +6829,11 @@ export default function IVXOwnerChatRoute() {
                   </Pressable>
                 </View>
               ) : null}
+              {/* Live Work bar — ONLY visible when a real autonomous task is active.
+                  Normal chat never shows this. */}
+              {activeLiveWorkTask ? (
               <View
-                style={[styles.chatLiveWorkBar, activeLiveWorkTask ? styles.chatLiveWorkBarActive : null]}
+                style={[styles.chatLiveWorkBar, styles.chatLiveWorkBarActive]}
                 testID="ivx-chat-live-work-bar"
               >
                 <Pressable
@@ -6850,7 +6844,7 @@ export default function IVXOwnerChatRoute() {
                   testID="ivx-chat-open-live-work"
                   hitSlop={6}
                 >
-                  <View style={[styles.chatLiveWorkDot, activeLiveWorkTask ? styles.chatLiveWorkDotActive : null]} />
+                  <View style={styles.chatLiveWorkDotActive} />
                   <View style={styles.chatLiveWorkCopy}>
                     <Text style={styles.chatLiveWorkTitle} numberOfLines={1}>
                       {'Live Work'}
@@ -6861,8 +6855,6 @@ export default function IVXOwnerChatRoute() {
                   </View>
                   <Terminal size={16} color={Colors.primary} />
                 </Pressable>
-                {/* Live-work actions hidden when idle to keep the composer clean. */}
-              {activeLiveWorkTask ? (
                 <View style={styles.chatLiveWorkActions}>
                   <Pressable style={styles.chatLiveWorkAction} onPress={() => handleOpenLiveWork()} testID="ivx-chat-live-work-view" hitSlop={6}>
                     <Activity size={13} color={Colors.text} />
@@ -6880,8 +6872,8 @@ export default function IVXOwnerChatRoute() {
                     <Text style={styles.chatLiveWorkActionText}>Dismiss</Text>
                   </Pressable>
                 </View>
-              ) : null}
               </View>
+              ) : null}
               {ownerAIAuthState !== 'SIGNED_IN_OWNER' && ownerAIAuthState !== 'AUTH_INITIALIZING' ? (
                 <Pressable
                   style={styles.ownerSignInBanner}
@@ -7029,6 +7021,9 @@ export default function IVXOwnerChatRoute() {
           </View>
         </View>
       ) : null}
+      {/* Live Work FAB — ONLY visible when a real autonomous task is active.
+          Normal chat never shows this floating button. */}
+      {activeLiveWorkTask ? (
       <Pressable
         onPress={() => setLiveWorkVisible((v) => !v)}
         accessibilityRole="button"
@@ -7039,6 +7034,7 @@ export default function IVXOwnerChatRoute() {
       >
         <Terminal size={16} color={Colors.text} />
       </Pressable>
+      ) : null}
       {showQaPanel && IVX_CHAT_QA_PANEL_ENABLED && developerToolsAllowed ? (
         <ChatQaPanel
           metrics={qaMetrics}
