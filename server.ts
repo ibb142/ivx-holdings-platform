@@ -11,6 +11,7 @@
 import { serve } from '@hono/node-server';
 import app from './backend/hono-extended';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
+import { startSmsNotificationScheduler } from './backend/services/ivx-autonomous-sms-notifier';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -32,6 +33,16 @@ if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
       error: error instanceof Error ? error.message : String(error),
     });
   });
+}
+
+// Wire the Autonomous owner-status SMS notifier into the real production entry
+// point. The notifier itself is idempotent, rate-limited to the configured
+// 2-hour cadence, secret-safe, and degrades cleanly when AWS/phone runtime
+// configuration is unavailable. It can be explicitly disabled without a code
+// change by setting IVX_AUTONOMOUS_SMS_ENABLED=false.
+if (process.env.NODE_ENV === 'production' && process.env.IVX_AUTONOMOUS_SMS_ENABLED !== 'false') {
+  startSmsNotificationScheduler();
+  console.log('[IVX Server] Autonomous SMS notifier enabled (2h cadence)');
 }
 
 serve(
