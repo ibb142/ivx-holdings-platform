@@ -5,16 +5,9 @@
  * - response.started → response.delta → response.completed event sequence
  * - response.error on failure
  * - no duplicate messages
- * - stop generation (abort)
- * - partial response preservation
  * - deterministic brains emit single delta + completed
  */
-import { describe, test, expect, mock, beforeEach } from 'bun/test';
-
-// ── Mock setup ──────────────────────────────────────────────────────────────
-
-// We test the SSE event protocol by mocking streamIVXAIText and the
-// deterministic brains, then parsing the ReadableStream output.
+import { describe, test, expect, mock, beforeEach } from 'bun:test';
 
 async function* defaultStreamGen(): AsyncGenerator<{
   type: 'delta' | 'done' | 'error';
@@ -26,44 +19,23 @@ async function* defaultStreamGen(): AsyncGenerator<{
 }> {
   yield { type: 'delta', delta: 'Hello' };
   yield { type: 'delta', delta: ' world' };
-  yield {
-    type: 'done',
-    text: 'Hello world',
-    providerMetadata: { model: 'gpt-4o', endpoint: 'https://ai-gateway.vercel.sh/v1' },
-  };
+  yield { type: 'done', text: 'Hello world', providerMetadata: { model: 'gpt-4o', endpoint: 'https://ai-gateway.vercel.sh/v1' } };
 }
 
 const mockStreamIVXAIText = mock(defaultStreamGen);
-
 const mockResolveIVXIdentityAnswer = mock((_msg: string): string | null => null);
 const mockResolveIVXConversationAnswer = mock((_msg: string): string | null => null);
-const mockClassifyIntent = mock(() => ({
-  selectedRoute: 'PUBLIC_LLM_RESPONSE',
-  safetyStage: { publicBoundary: 'public_safe' },
-  intent: 'general_ai',
-  confidence: 0.95,
-  traceId: 'test-trace',
-  reason: 'safe question',
-}));
-const mockRouteIVXChatIntent = mock(() => ({
-  branch: 'general_ai',
-  intent: 'general_ai',
-  requiresOwnerSession: false,
-}));
+const mockClassifyIntent = mock(() => ({ selectedRoute: 'PUBLIC_LLM_RESPONSE', safetyStage: { publicBoundary: 'public_safe' }, intent: 'general_ai', confidence: 0.95, traceId: 'test-trace', reason: 'safe question' }));
+const mockRouteIVXChatIntent = mock(() => ({ branch: 'general_ai', intent: 'general_ai', requiresOwnerSession: false }));
 const mockIsDeploymentCommand = mock(() => false);
-const mockCheckPreExecutionGate = mock(async () => ({
-  blocked: false,
-  result: { state: 'ALLOWED' },
-}));
+const mockCheckPreExecutionGate = mock(async () => ({ blocked: false, result: { state: 'ALLOWED' } }));
 
-// Mock module dependencies
 mock.module('../ivx-ai-runtime', () => ({
   getIVXAIEndpoint: () => 'https://ai-gateway.vercel.sh/v1',
   resolveIVXAIModel: (m: string) => m || 'gpt-4o',
   streamIVXAIText: mockStreamIVXAIText,
   isIVXAIConfigured: () => true,
 }));
-
 mock.module('../public-chat-ai', () => ({
   buildFallbackAnswer: (msg: string) => `Fallback: ${msg}`,
   buildSystemPrompt: () => 'System prompt',
@@ -72,66 +44,23 @@ mock.module('../public-chat-ai', () => ({
   sanitizePublicChatHistory: (h: any[]) => h,
   isVagueExecutionRequest: () => false,
 }));
-
-mock.module('../services/ivx-ia-identity-brain', () => ({
-  resolveIVXIdentityAnswer: mockResolveIVXIdentityAnswer,
-  IVX_IA_IDENTITY_MARKER: 'ivx-ia-identity-brain',
-}));
-
-mock.module('../services/ivx-ia-conversation-brain', () => ({
-  resolveIVXConversationAnswer: mockResolveIVXConversationAnswer,
-  IVX_IA_CONVERSATION_MARKER: 'ivx-ia-conversation-brain',
-}));
-
-mock.module('../services/ivx-authoritative-intent-router', () => ({
-  classifyIntent: mockClassifyIntent,
-}));
-
-mock.module('../services/ivx-chat-intent-router', () => ({
-  routeIVXChatIntent: mockRouteIVXChatIntent,
-  branchLabel: (b: string) => b,
-}));
-
-mock.module('../services/ivx-public-chat-gate-response', () => ({
-  formatPublicChatGateBlock: () => 'Gate block',
-}));
-
-mock.module('../services/ivx-pre-execution-gate-middleware', () => ({
-  checkPreExecutionGate: mockCheckPreExecutionGate,
-}));
-
-mock.module('../services/ivx-public-chat-vision', () => ({
-  extractPublicChatImages: () => [],
-}));
-
-mock.module('../services/ivx-deal-documents', () => ({
-  extractDealDocuments: () => [],
-}));
-
-mock.module('../services/ivx-deployment-chat-brain', () => ({
-  isDeploymentCommand: mockIsDeploymentCommand,
-  routeDeploymentCommand: async () => null,
-}));
-
-mock.module('../public-chat-supabase-store', () => ({
-  getPublicChatSupabaseStore: () => ({
-    isConfigured: () => false,
-    appendMessage: async () => undefined,
-  }),
-}));
-
-mock.module('../chat-storage', () => ({
-  ChatStorage: class MockChatStorage {},
-}));
-
-// ── Test helpers ────────────────────────────────────────────────────────────
+mock.module('../services/ivx-ia-identity-brain', () => ({ resolveIVXIdentityAnswer: mockResolveIVXIdentityAnswer, IVX_IA_IDENTITY_MARKER: 'ivx-ia-identity-brain' }));
+mock.module('../services/ivx-ia-conversation-brain', () => ({ resolveIVXConversationAnswer: mockResolveIVXConversationAnswer, IVX_IA_CONVERSATION_MARKER: 'ivx-ia-conversation-brain' }));
+mock.module('../services/ivx-authoritative-intent-router', () => ({ classifyIntent: mockClassifyIntent }));
+mock.module('../services/ivx-chat-intent-router', () => ({ routeIVXChatIntent: mockRouteIVXChatIntent, branchLabel: (b: string) => b }));
+mock.module('../services/ivx-public-chat-gate-response', () => ({ formatPublicChatGateBlock: () => 'Gate block' }));
+mock.module('../services/ivx-pre-execution-gate-middleware', () => ({ checkPreExecutionGate: mockCheckPreExecutionGate }));
+mock.module('../services/ivx-public-chat-vision', () => ({ extractPublicChatImages: () => [] }));
+mock.module('../services/ivx-deal-documents', () => ({ extractDealDocuments: () => [] }));
+mock.module('../services/ivx-deployment-chat-brain', () => ({ isDeploymentCommand: mockIsDeploymentCommand, routeDeploymentCommand: async () => null }));
+mock.module('../public-chat-supabase-store', () => ({ getPublicChatSupabaseStore: () => ({ isConfigured: () => false, appendMessage: async () => undefined }) }));
+mock.module('../chat-storage', () => ({ ChatStorage: class MockChatStorage {} }));
 
 async function parseSSEStream(response: Response): Promise<Record<string, unknown>[]> {
   const events: Record<string, unknown>[] = [];
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -139,88 +68,42 @@ async function parseSSEStream(response: Response): Promise<Record<string, unknow
     const chunks = buffer.split('\n\n');
     buffer = chunks.pop() ?? '';
     for (const chunk of chunks) {
-      const lines = chunk.split('\n').filter((l) => l.startsWith('data: '));
-      for (const line of lines) {
-        try {
-          events.push(JSON.parse(line.slice(6)));
-        } catch {
-          // skip malformed
-        }
+      for (const line of chunk.split('\n').filter((l) => l.startsWith('data: '))) {
+        try { events.push(JSON.parse(line.slice(6))); } catch { /* skip malformed */ }
       }
     }
   }
-  // Process remaining buffer
   if (buffer.length > 0) {
-    const lines = buffer.split('\n').filter((l) => l.startsWith('data: '));
-    for (const line of lines) {
-      try {
-        events.push(JSON.parse(line.slice(6)));
-      } catch {
-        // skip
-      }
+    for (const line of buffer.split('\n').filter((l) => l.startsWith('data: '))) {
+      try { events.push(JSON.parse(line.slice(6))); } catch { /* skip malformed */ }
     }
   }
   return events;
 }
-
-// ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('IVX Public Chat Streaming', () => {
   beforeEach(() => {
     mockStreamIVXAIText.mockImplementation(defaultStreamGen);
     mockResolveIVXIdentityAnswer.mockImplementation(() => null);
     mockResolveIVXConversationAnswer.mockImplementation(() => null);
-    mockClassifyIntent.mockImplementation(() => ({
-      selectedRoute: 'PUBLIC_LLM_RESPONSE',
-      safetyStage: { publicBoundary: 'public_safe' },
-      intent: 'general_ai',
-      confidence: 0.95,
-      traceId: 'test-trace',
-      reason: 'safe question',
-    }));
-    mockRouteIVXChatIntent.mockImplementation(() => ({
-      branch: 'general_ai',
-      intent: 'general_ai',
-      requiresOwnerSession: false,
-    }));
+    mockClassifyIntent.mockImplementation(() => ({ selectedRoute: 'PUBLIC_LLM_RESPONSE', safetyStage: { publicBoundary: 'public_safe' }, intent: 'general_ai', confidence: 0.95, traceId: 'test-trace', reason: 'safe question' }));
+    mockRouteIVXChatIntent.mockImplementation(() => ({ branch: 'general_ai', intent: 'general_ai', requiresOwnerSession: false }));
     mockIsDeploymentCommand.mockImplementation(() => false);
-    mockCheckPreExecutionGate.mockImplementation(async () => ({
-      blocked: false,
-      result: { state: 'ALLOWED' },
-    }));
+    mockCheckPreExecutionGate.mockImplementation(async () => ({ blocked: false, result: { state: 'ALLOWED' } }));
   });
 
   test('response.started → delta → delta → completed sequence', async () => {
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-ivx-client-id': 'test-client' },
-      body: JSON.stringify({
-        message: 'Explain why the sky is blue',
-        sessionId: 'test-session-1',
-        requestId: 'test-req-1',
-        history: [],
-      }),
-    });
-
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-ivx-client-id': 'test-client' }, body: JSON.stringify({ message: 'Explain why the sky is blue', sessionId: 'test-session-1', requestId: 'test-req-1', history: [] }) });
     const response = await handlePublicChatStreamPost(request);
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('text/event-stream');
-
     const events = await parseSSEStream(response);
-
-    // Verify event sequence
     expect(events.length).toBeGreaterThanOrEqual(4);
     expect(events[0].type).toBe('response.started');
     expect(events[0].requestId).toBe('test-req-1');
     expect(events[0].sessionId).toBe('test-session-1');
-
-    // Deltas
-    const deltas = events.filter((e) => e.type === 'response.delta');
-    expect(deltas.length).toBeGreaterThanOrEqual(1);
-
-    // Completed
+    expect(events.filter((e) => e.type === 'response.delta').length).toBeGreaterThanOrEqual(1);
     const completed = events.find((e) => e.type === 'response.completed');
     expect(completed).toBeDefined();
     expect(completed!.text).toBe('Hello world');
@@ -229,47 +112,18 @@ describe('IVX Public Chat Streaming', () => {
 
   test('typing indicator: response.started emitted before any delta', async () => {
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'What is 2+2?',
-        sessionId: 'test-session-2',
-        requestId: 'test-req-2',
-        history: [],
-      }),
-    });
-
-    const response = await handlePublicChatStreamPost(request);
-    const events = await parseSSEStream(response);
-
-    // First event must be response.started, NOT a delta
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'What is 2+2?', sessionId: 'test-session-2', requestId: 'test-req-2', history: [] }) });
+    const events = await parseSSEStream(await handlePublicChatStreamPost(request));
     expect(events[0].type).toBe('response.started');
     const firstDeltaIdx = events.findIndex((e) => e.type === 'response.delta');
-    const startedIdx = events.findIndex((e) => e.type === 'response.started');
-    expect(startedIdx).toBeLessThan(firstDeltaIdx);
+    expect(events.findIndex((e) => e.type === 'response.started')).toBeLessThan(firstDeltaIdx);
     expect(firstDeltaIdx).toBeGreaterThan(-1);
   });
 
   test('deltas append to one assistant message (no duplicate message IDs)', async () => {
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Tell me about IVX',
-        sessionId: 'test-session-3',
-        requestId: 'test-req-3',
-        history: [],
-      }),
-    });
-
-    const response = await handlePublicChatStreamPost(request);
-    const events = await parseSSEStream(response);
-
-    // All deltas should have the same requestId
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Tell me about IVX', sessionId: 'test-session-3', requestId: 'test-req-3', history: [] }) });
+    const events = await parseSSEStream(await handlePublicChatStreamPost(request));
     const deltas = events.filter((e) => e.type === 'response.delta');
     expect(deltas.length).toBeGreaterThan(0);
     const requestIds = new Set(deltas.map((d) => d.requestId));
@@ -279,24 +133,9 @@ describe('IVX Public Chat Streaming', () => {
 
   test('deterministic brain (identity) emits single delta + completed', async () => {
     mockResolveIVXIdentityAnswer.mockImplementation(() => 'My name is IVX IA. I was created by Ivan Perez.');
-
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'What is your name?',
-        sessionId: 'test-session-4',
-        requestId: 'test-req-4',
-        history: [],
-      }),
-    });
-
-    const response = await handlePublicChatStreamPost(request);
-    const events = await parseSSEStream(response);
-
-    // Should have: started, one delta, completed
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'What is your name?', sessionId: 'test-session-4', requestId: 'test-req-4', history: [] }) });
+    const events = await parseSSEStream(await handlePublicChatStreamPost(request));
     expect(events[0].type).toBe('response.started');
     const deltas = events.filter((e) => e.type === 'response.delta');
     expect(deltas.length).toBe(1);
@@ -308,75 +147,25 @@ describe('IVX Public Chat Streaming', () => {
   });
 
   test('provider error produces response.error event', async () => {
-    mockStreamIVXAIText.mockImplementation(async function* () {
-      yield { type: 'error', error: 'Gateway returned 401' };
-    });
-
+    mockStreamIVXAIText.mockImplementation(async function* () { yield { type: 'error', error: 'Gateway returned 401' }; });
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Test question',
-        sessionId: 'test-session-5',
-        requestId: 'test-req-5',
-        history: [],
-      }),
-    });
-
-    const response = await handlePublicChatStreamPost(request);
-    const events = await parseSSEStream(response);
-
-    // Should have started, then either error event or fallback delta+completed
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Test question', sessionId: 'test-session-5', requestId: 'test-req-5', history: [] }) });
+    const events = await parseSSEStream(await handlePublicChatStreamPost(request));
     expect(events[0].type).toBe('response.started');
-
-    // Since no tokens were streamed, we should get a fallback
-    const hasError = events.some((e) => e.type === 'response.error');
-    const hasCompleted = events.some((e) => e.type === 'response.completed');
-    expect(hasError || hasCompleted).toBe(true);
+    expect(events.some((e) => e.type === 'response.error') || events.some((e) => e.type === 'response.completed')).toBe(true);
   });
 
   test('normal question does NOT create fake autonomous job UI', async () => {
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Fix the bug in production',
-        sessionId: 'test-session-6',
-        requestId: 'test-req-6',
-        history: [],
-      }),
-    });
-
-    const response = await handlePublicChatStreamPost(request);
-    const events = await parseSSEStream(response);
-
-    // No job.* events should be emitted for normal chat
-    const jobEvents = events.filter((e) => typeof e.type === 'string' && e.type.startsWith('job.'));
-    expect(jobEvents.length).toBe(0);
-
-    // No tool.* events either
-    const toolEvents = events.filter((e) => typeof e.type === 'string' && e.type.startsWith('tool.'));
-    expect(toolEvents.length).toBe(0);
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Fix the bug in production', sessionId: 'test-session-6', requestId: 'test-req-6', history: [] }) });
+    const events = await parseSSEStream(await handlePublicChatStreamPost(request));
+    expect(events.filter((e) => typeof e.type === 'string' && e.type.startsWith('job.')).length).toBe(0);
+    expect(events.filter((e) => typeof e.type === 'string' && e.type.startsWith('tool.')).length).toBe(0);
   });
 
   test('SSE headers are correct', async () => {
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Test',
-        sessionId: 'test-session-7',
-        requestId: 'test-req-7',
-        history: [],
-      }),
-    });
-
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Test', sessionId: 'test-session-7', requestId: 'test-req-7', history: [] }) });
     const response = await handlePublicChatStreamPost(request);
     expect(response.headers.get('Content-Type')).toBe('text/event-stream; charset=utf-8');
     expect(response.headers.get('Cache-Control')).toBe('no-cache, no-transform');
@@ -386,19 +175,7 @@ describe('IVX Public Chat Streaming', () => {
 
   test('empty message returns 400', async () => {
     const { handlePublicChatStreamPost } = await import('./public-chat-stream');
-
-    const request = new Request('https://test.example/api/public/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: '',
-        sessionId: 'test-session-8',
-        requestId: 'test-req-8',
-        history: [],
-      }),
-    });
-
-    const response = await handlePublicChatStreamPost(request);
-    expect(response.status).toBe(400);
+    const request = new Request('https://test.example/api/public/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '', sessionId: 'test-session-8', requestId: 'test-req-8', history: [] }) });
+    expect((await handlePublicChatStreamPost(request)).status).toBe(400);
   });
 });
