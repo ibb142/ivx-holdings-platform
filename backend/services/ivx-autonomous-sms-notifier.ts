@@ -12,13 +12,15 @@
  *   - Never sends fabricated status. Counts come from live Supabase rows.
  *   - If Supabase is unreachable, the SMS says "DB unreachable" — not fake zeros.
  *   - Rate-limited to 1 SMS per 2 hours (12 per day max).
- *   - If AWS SNS is not configured, logs a warning and skips — never throws.
+ *   - If AWS SNS is not configured or fails, tries Twilio (IVX_TWILIO_* env vars).
+ *   - If both transports fail, logs a warning and skips — never throws.
  *
- * Marker: ivx-autonomous-sms-notifier-2026-08-09
+ * Marker: ivx-autonomous-sms-notifier-2026-08-11
  */
 import { sendSnsSms, resolveOwnerRecoveryPhone, type SnsSmsResult } from './ivx-sns-sms';
+import { sendTwilioSms, isTwilioSmsConfigured, type TwilioSmsResult } from './ivx-twilio-sms';
 
-export const IVX_SMS_NOTIFIER_MARKER = 'ivx-autonomous-sms-notifier-2026-08-09';
+export const IVX_SMS_NOTIFIER_MARKER = 'ivx-autonomous-sms-notifier-2026-08-11';
 const NOTIFICATION_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
 const MAX_SMS_PER_DAY = 12;
 
@@ -146,7 +148,12 @@ export async function sendOwnerStatusSms(): Promise<SnsSmsResult> {
 
   const counts = await fetchLiveCounts();
   const message = buildStatusSms(counts);
-  const result = await sendSnsSms({ to: phone, message, senderId: 'IVX' });
+  let result: SnsSmsResult | TwilioSmsResult = await sendSnsSms({ to: phone, message, senderId: 'IVX' });
+
+  if (!result.ok && isTwilioSmsConfigured()) {
+    console.log('[IVX-SMS-Notifier] SNS failed, attempting Twilio fallback...');
+    result = await sendTwilioSms({ to: phone, message });
+  }
 
   if (result.ok) {
     lastSmsSentAt = Date.now();
@@ -193,7 +200,12 @@ export async function sendOwnerAlertSms(alertMessage: string): Promise<SnsSmsRes
   }
 
   const truncated = alertMessage.slice(0, 140);
-  const result = await sendSnsSms({ to: phone, message: `IVX ALERT: ${truncated}`, senderId: 'IVX' });
+  let result: SnsSmsResult | TwilioSmsResult = await sendSnsSms({ to: phone, message: `IVX ALERT: ${truncated}`, senderId: 'IVX' });
+
+  if (!result.ok && isTwilioSmsConfigured()) {
+    console.log('[IVX-SMS-Notifier] SNS alert failed, attempting Twilio fallback...');
+    result = await sendTwilioSms({ to: phone, message: `IVX ALERT: ${truncated}` });
+  }
 
   if (result.ok) {
     smsSentToday += 1;
@@ -267,6 +279,7 @@ export function getSmsNotifierStatus(): {
   return {
     marker: IVX_SMS_NOTIFIER_MARKER,
     phoneConfigured: Boolean(phone),
+    twilioConfigured: isTwilioSmsConfigured(),
     phoneMasked: phone ? `${phone.slice(0, 2)}***${phone.slice(-4)}` : null,
     lastSmsSentAt: lastSmsSentAt > 0 ? new Date(lastSmsSentAt).toISOString() : null,
     smsSentToday,
