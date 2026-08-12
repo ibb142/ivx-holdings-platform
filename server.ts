@@ -14,6 +14,7 @@ import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
+import { startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -25,16 +26,8 @@ console.log('[IVX Server] Starting Hono API server...', {
   nodeEnv: process.env.NODE_ENV || 'development',
 });
 
-// Core Autonomous scheduler. This is server-side and therefore independent of
-// the owner's phone/app being open. The scheduler is internally idempotent and
-// gated by IVX_SCHEDULER=off when an operator needs to disable it deliberately.
 startAutonomousScheduler();
 
-// 12x100 completion campaign: 12 specialists -> 50 IVX agents -> 50 Factory
-// agents. Run immediately after boot, then every five minutes. State is durable
-// when the configured durable store is available, so a Render restart does not
-// erase verified progress. The campaign itself is proof-gated and cannot mark
-// an item VERIFIED without executed test + commit evidence.
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try {
     const state = await runCompletionCampaignCycle(4);
@@ -52,20 +45,11 @@ const runCompletionCycleSafely = async (reason: string): Promise<void> => {
     });
   }
 };
-const campaignBootKick = setTimeout(() => {
-  void runCompletionCycleSafely('boot');
-}, 20_000);
+const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000);
 campaignBootKick.unref?.();
-const campaignTimer = setInterval(() => {
-  void runCompletionCycleSafely('interval');
-}, COMPLETION_CAMPAIGN_INTERVAL_MS);
+const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS);
 campaignTimer.unref?.();
 
-// Owner SMS synchronization for Autonomous work. The notifier sends a boot
-// status and then a grounded status summary every two hours, plus immediate
-// alerts when callers invoke its alert surface. The destination is resolved
-// ONLY from IVX_OWNER_RECOVERY_PHONE at runtime; no phone number is committed
-// to source control or written unmasked to the startup log.
 startSmsNotificationScheduler();
 const smsStatus = getSmsNotifierStatus();
 console.log('[IVX Server] Autonomous SMS notifier initialized', {
@@ -75,11 +59,13 @@ console.log('[IVX Server] Autonomous SMS notifier initialized', {
   dailyCap: smsStatus.smsDailyCap,
 });
 
-// Start the autonomous senior developer worker in the background of the API
-// server process. It runs independently of HTTP requests and survives Rork
-// browser closure. It polls ivx_owner_ai_tasks for senior-dev-* trace_id tasks
-// and runs the real 8-phase engineering pipeline. Gated by env flag so it only
-// runs when explicitly enabled. Non-fatal if it fails to start.
+// Production member/auth certificate runner. It performs a real synthetic
+// registration + member sign-in, verifies owner password grant, executes the
+// authoritative REGULAR/VIP classification logic, removes the synthetic user,
+// and persists only non-secret proof. Boot run starts after the API is online;
+// subsequent audits run every six hours.
+startMemberAuthCertificationScheduler();
+
 if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
   startSeniorDevWorker().catch((error) => {
     console.error('[IVX Server] Senior dev worker failed to start', {
@@ -89,16 +75,8 @@ if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
 }
 
 serve(
-  {
-    fetch: app.fetch,
-    port: PORT,
-    hostname: HOST,
-  },
+  { fetch: app.fetch, port: PORT, hostname: HOST },
   (info) => {
-    console.log('[IVX Server] Hono API server online', {
-      host: HOST,
-      port: info.port,
-      family: info.family,
-    });
+    console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
   },
 );
