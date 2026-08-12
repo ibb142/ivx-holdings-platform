@@ -90,7 +90,7 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
   - Bank: U.S. Century Bank
   - Routing: 067015397
   - Account: 1052026057
-  - Account Name: ADVANTAGE BUSINESS CK
+  - Account Name: IVX Holdings
   - SWIFT/BIC: USCEUS3M
   - Beneficiary Address: 1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131
   - Bank Address: 2301 NW 87th Ave, Doral, FL 33172
