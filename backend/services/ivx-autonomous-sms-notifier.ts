@@ -269,6 +269,7 @@ export function stopSmsNotificationScheduler(): void {
 export function getSmsNotifierStatus(): {
   marker: string;
   phoneConfigured: boolean;
+  twilioConfigured: boolean;
   phoneMasked: string | null;
   lastSmsSentAt: string | null;
   smsSentToday: number;
