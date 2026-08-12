@@ -162,6 +162,14 @@ function IndependenceContent() {
         </View>
       ) : null}
 
+      {!query.isLoading && !query.isError && !data ? (
+        <View style={styles.emptyBox}>
+          <CircleDashed size={28} color={Colors.textSecondary} />
+          <Text style={styles.emptyText}>No independence report available yet.</Text>
+          <Text style={styles.emptySubtext}>Pull down to refresh and try again.</Text>
+        </View>
+      ) : null}
+
       {data ? (
         <>
           <View style={styles.summaryCard}>
@@ -290,4 +298,8 @@ const styles = StyleSheet.create({
   kvDetail: { color: Colors.textSecondary, fontSize: 12, marginTop: 1, lineHeight: 17 },
   nextActionRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   nextActionText: { color: Colors.textSecondary, fontSize: 12.5, flex: 1, lineHeight: 18 },
-  footerNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, textAlign: 'center' }});
+  footerNote: { color: Colors.textTertiary, fontSize: 11, marginTop: 8, textAlign: 'center' },
+  emptyBox: { padding: 32, alignItems: 'center', gap: 10, backgroundColor: Colors.surface, borderRadius: 14, borderWidth: 1, borderColor: Colors.surfaceBorder },
+  emptyText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600' as const },
+  emptySubtext: { color: Colors.textTertiary, fontSize: 12 },
+});

@@ -17,7 +17,12 @@
  *   - https://github.com/expo/expo/issues/44229
  */
 
-const { withDangerousMod } = require('expo/config-plugins');
+let withDangerousMod;
+try {
+  withDangerousMod = require('expo/config-plugins').withDangerousMod;
+} catch (_e) {
+  withDangerousMod = (_fn) => (config) => config;
+}
 const fs = require('fs');
 const path = require('path');
 

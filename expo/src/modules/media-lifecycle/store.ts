@@ -241,7 +241,7 @@ export const useMediaLifecycleStore = create<MediaLifecycleStore>()(
         });
       },
 
-      setLoadStarted: (mediaId) => {
+      setLoadStarted: (mediaId: string) => {
         const now = Date.now();
         set((state) => {
           const existing = state.items[mediaId];
