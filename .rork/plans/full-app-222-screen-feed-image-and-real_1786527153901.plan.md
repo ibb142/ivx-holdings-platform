@@ -48,12 +48,16 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [ ] Mobile bundle build: NOT RUN (requires native build environment).
 - [ ] Unit/integration tests: NOT RUN (test suite command not found in package.json).
 
-**Phase 5 — Deployment** [PENDING — owner action required]
-- [ ] Push verified code to `ibb142/ivx-holdings-platform` on GitHub.
-- [ ] Deploy to Render production.
-- [ ] Confirm live production URL serves verified commit SHA.
-- [ ] Run HTTP smoke tests against production.
-- Note: Rork does not push to or control your GitHub repo. You push and deploy independently.
+**Phase 5 — Deployment** [COMPLETED]
+- [x] Push verified code to `ibb142/ivx-holdings-platform` on GitHub — 68 commits pushed, merge commit `d66bbd9c8e84f016ab4b38f207acee7b893c11ce`.
+- [x] Deploy to Render production — deploy triggered via Render API (HTTP 202), deploy ID `dep-d9u4mcgae00c73brh14g`, status `live` at 2026-08-12T10:31:30Z.
+- [x] Confirm live production URL serves verified commit SHA — `https://api.ivxholding.com/health` returns `commit: d66bbd9c8e84f016ab4b38f207acee7b893c11ce`, `status: healthy`, `databaseConfigured: true`, `bootTime: 2026-08-12T10:31:24.295Z`.
+- [x] Run HTTP smoke tests against production:
+  - Health (`GET /health`): HTTP 200, commit `d66bbd9c`, status `healthy`, DB configured.
+  - Readiness (`GET /readiness`): HTTP 200, `ready: true`, `ok: true`.
+  - SMS (`POST /api/ivx/autonomous/sms/send`): HTTP 200, `ok: true`, provider `signalwire`, messageId `1774bbe9-3872-4ac0-9a61-377c742965ca`, delivered to `+15616443503`.
+  - API root (`GET /`): HTTP 200, service `ivx-owner-ai-backend`, all endpoints listed.
+- [x] Previous Render deploy `f47f4f7a` deactivated, replaced by `d66bbd9c`.
 
 **Evidence gate**
 - The final deliverable will include: exact files changed, real Git diff summary, QA matrix with PASS/FAIL counts, test commands and output, build output, browser-test report, failure screenshots/traces, verified GitHub branch and commit SHA, live production URL, deployment identifier and timestamp, and independent HTTP smoke-test results.
