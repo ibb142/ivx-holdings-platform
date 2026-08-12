@@ -1,17 +1,16 @@
 /**
- * IVX Twilio SMS sender — fallback/alternative to AWS SNS for owner notifications.
+ * IVX Twilio / SignalWire SMS sender — fallback/alternative to AWS SNS for owner notifications.
  *
- * Uses the Twilio Messaging API (https://messaging.twilio.com/v1) to send a
- * single SMS from the configured messaging service or from-number. Designed as
- * a drop-in alternative for sendSnsSms in ivx-autonomous-sms-notifier.ts.
+ * Supports Twilio native API and SignalWire-compatible (Twilio API-compatible) hosts.
  *
- * Credentials (two supported modes):
- *   - Auth Token mode: IVX_TWILIO_ACCOUNT_SID + IVX_TWILIO_AUTH_TOKEN
- *   - API Key mode (preferred, doesn't rotate): IVX_TWILIO_ACCOUNT_SID + IVX_TWILIO_API_KEY_SID + IVX_TWILIO_API_KEY_SECRET
+ * Credentials modes:
+ *   - Twilio Auth Token: IVX_TWILIO_ACCOUNT_SID + IVX_TWILIO_AUTH_TOKEN
+ *   - Twilio API Key: IVX_TWILIO_ACCOUNT_SID + IVX_TWILIO_API_KEY_SID + IVX_TWILIO_API_KEY_SECRET
+ *   - SignalWire: IVX_TWILIO_ACCOUNT_SID (Project ID) + IVX_TWILIO_AUTH_TOKEN (API token) + IVX_TWILIO_API_HOST=ivxholding.signalwire.com
  *   - IVX_TWILIO_MESSAGING_SERVICE_SID (preferred — uses the ivxholding.com service)
  *   - IVX_TWILIO_FROM_PHONE (fallback if no messaging service configured)
  *
- * Marker: ivx-twilio-sms-2026-08-11
+ * Marker: ivx-twilio-sms-2026-08-12
  */
 
 import { normalizePhoneToE164 } from './ivx-sns-sms';
@@ -26,6 +25,7 @@ export type TwilioSmsResult = {
   missingEnvNames: string[];
   error?: string;
   sentAt: string;
+  provider?: 'twilio' | 'signalwire';
 };
 
 function readEnv(name: string): string {
@@ -33,7 +33,7 @@ function readEnv(name: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** True when Twilio has enough config to attempt a send. */
+/** True when Twilio or SignalWire has enough config to attempt a send. */
 export function isTwilioSmsConfigured(): boolean {
   const accountSid = readEnv('IVX_TWILIO_ACCOUNT_SID');
   const authToken = readEnv('IVX_TWILIO_AUTH_TOKEN');
@@ -42,6 +42,18 @@ export function isTwilioSmsConfigured(): boolean {
   const authMode = Boolean(accountSid && authToken);
   const keyMode = Boolean(accountSid && apiKeySid && apiKeySecret);
   return authMode || keyMode;
+}
+
+function resolveApiHost(): { host: string; provider: 'twilio' | 'signalwire' } {
+  const customHost = readEnv('IVX_TWILIO_API_HOST');
+  if (customHost) {
+    const normalized = customHost.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return {
+      host: `https://${normalized}`,
+      provider: normalized.toLowerCase().endsWith('signalwire.com') ? 'signalwire' : 'twilio',
+    };
+  }
+  return { host: 'https://api.twilio.com', provider: 'twilio' };
 }
 
 function resolveFrom(): { messagingServiceSid?: string; fromPhone?: string } {
@@ -111,7 +123,8 @@ export async function sendTwilioSms(input: {
   const username = usingApiKey ? apiKeySid : accountSid;
   const password = usingApiKey ? apiKeySecret : authToken;
   const credentials = Buffer.from(`${username}:${password}`).toString('base64');
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const { host, provider } = resolveApiHost();
+  const url = `${host}/2010-04-01/Accounts/${accountSid}/Messages.json`;
 
   try {
     const response = await fetch(url, {
@@ -142,6 +155,7 @@ export async function sendTwilioSms(input: {
         missingEnvNames,
         error: errorMessage,
         sentAt,
+        provider,
       };
     }
 
@@ -154,8 +168,10 @@ export async function sendTwilioSms(input: {
       httpStatus: response.status,
       missingEnvNames,
       sentAt,
+      provider,
     };
   } catch (error) {
+    const { provider } = resolveApiHost();
     return {
       ok: false,
       status: 'failed',
@@ -164,6 +180,7 @@ export async function sendTwilioSms(input: {
       missingEnvNames,
       error: error instanceof Error ? error.message : 'Twilio SMS send request failed.',
       sentAt,
+      provider,
     };
   }
 }

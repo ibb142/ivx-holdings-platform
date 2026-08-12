@@ -1,11 +1,12 @@
-// IVX Twilio API Key verification + SMS send — reads credentials from Rork platform private env
-// Supports both Auth Token and API Key auth. No credentials are written to files or git.
+// IVX Twilio / SignalWire verification + SMS send — reads credentials from Rork platform private env
+// No credentials are written to files or git.
 
 interface Env {
   IVX_TWILIO_ACCOUNT_SID?: string;
   IVX_TWILIO_AUTH_TOKEN?: string;
   IVX_TWILIO_API_KEY_SID?: string;
   IVX_TWILIO_API_KEY_SECRET?: string;
+  IVX_TWILIO_API_HOST?: string;
   IVX_TWILIO_MESSAGING_SERVICE_SID?: string;
   IVX_TWILIO_FROM_PHONE?: string;
 }
@@ -16,6 +17,17 @@ function mask(val: string | undefined): string {
   if (!val) return "NOT_SET";
   if (val.length <= 8) return "***";
   return val.slice(0, 4) + "..." + val.slice(-4);
+}
+
+function resolveApiHost(customHost?: string): { host: string; provider: "twilio" | "signalwire" } {
+  if (customHost) {
+    const normalized = customHost.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return {
+      host: `https://${normalized}`,
+      provider: normalized.toLowerCase().endsWith("signalwire.com") ? "signalwire" : "twilio",
+    };
+  }
+  return { host: "https://api.twilio.com", provider: "twilio" };
 }
 
 export default {
@@ -31,9 +43,11 @@ export default {
       const authToken = env.IVX_TWILIO_AUTH_TOKEN?.trim();
       const apiKeySid = env.IVX_TWILIO_API_KEY_SID?.trim();
       const apiKeySecret = env.IVX_TWILIO_API_KEY_SECRET?.trim();
+      const apiHost = env.IVX_TWILIO_API_HOST?.trim();
       const messagingServiceSid = env.IVX_TWILIO_MESSAGING_SERVICE_SID?.trim();
       const fromPhone = env.IVX_TWILIO_FROM_PHONE?.trim();
 
+      const { host, provider } = resolveApiHost(apiHost);
       const usingApiKey = Boolean(accountSid && apiKeySid && apiKeySecret);
       const usingAuthToken = Boolean(accountSid && authToken && !usingApiKey);
 
@@ -41,11 +55,14 @@ export default {
         return Response.json({
           ok: false,
           step: "credential_check",
-          error: "Need Account SID + either Auth Token or API Key SID + Secret",
+          error: `Need Account/Project ID + either Auth Token or API Key SID + Secret for ${provider}`,
+          provider,
+          host,
           accountSid: mask(accountSid),
           authToken: mask(authToken),
           apiKeySid: mask(apiKeySid),
           apiKeySecret: mask(apiKeySecret),
+          apiHost: apiHost || "NOT_SET",
           mode: usingApiKey ? "api_key" : usingAuthToken ? "auth_token" : "none",
         }, { status: 400 });
       }
@@ -54,9 +71,9 @@ export default {
       const password = usingApiKey ? apiKeySecret! : authToken!;
       const authHeader = "Basic " + btoa(`${username}:${password}`);
 
-      // 1) Verify auth (fetch account info, but using API key auth style)
+      // 1) Verify auth (fetch account/project info)
       const acctRes = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`,
+        `${host}/2010-04-01/Accounts/${accountSid}.json`,
         { headers: { Authorization: authHeader } }
       );
 
@@ -70,22 +87,22 @@ export default {
         return Response.json({
           ok: false,
           step: "auth_verification",
+          provider,
+          host,
           httpStatus: acctRes.status,
           mode: usingApiKey ? "api_key" : "auth_token",
           accountSid: mask(accountSid),
           username: mask(username),
           passwordLength: password.length,
           error: acctText.slice(0, 300),
-          message: usingAuthToken
-            ? "Twilio rejected this auth token. It may be stale or rotated. Create an API Key instead."
-            : "Twilio rejected this API Key. Check that the SID and secret are correct and the key is not deleted.",
+          message: `Provider ${provider} rejected these credentials.`,
         }, { status: 401 });
       }
 
       // 2) Send SMS
       const toPhone = url.searchParams.get("to") || OWNER_PHONE;
       const messageBody = url.searchParams.get("body") ||
-        `IVX AI Verification: Autonomous work report SMS system is LIVE. Twilio integration confirmed end-to-end. ${new Date().toISOString()}`;
+        `IVX AI Verification: Autonomous work report SMS system is LIVE. ${provider.toUpperCase()} integration confirmed end-to-end. ${new Date().toISOString()}`;
 
       const params = new URLSearchParams();
       params.append("To", toPhone);
@@ -103,7 +120,7 @@ export default {
       params.append("Body", messageBody);
 
       const smsRes = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        `${host}/2010-04-01/Accounts/${accountSid}/Messages.json`,
         {
           method: "POST",
           headers: {
@@ -121,7 +138,8 @@ export default {
         return Response.json({
           ok: true,
           step: "sms_sent",
-          mode: usingApiKey ? "api_key" : "auth_token",
+          provider,
+          host,
           messageSid: data.sid,
           status: data.status,
           to: data.to,
@@ -134,12 +152,13 @@ export default {
       return Response.json({
         ok: false,
         step: "sms_send",
-        mode: usingApiKey ? "api_key" : "auth_token",
+        provider,
+        host,
         httpStatus: smsRes.status,
         error: smsText.slice(0, 500),
       }, { status: smsRes.status });
     }
 
-    return Response.json({ ok: true, message: "IVX Twilio Worker ready. Use /verify-and-send?to=+15616443503 to test." });
+    return Response.json({ ok: true, message: "IVX SMS Worker ready. Use /verify-and-send?to=+15616443503 to test." });
   },
 };
