@@ -13,9 +13,11 @@ import app from './backend/hono-extended';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
+import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
+const COMPLETION_CAMPAIGN_INTERVAL_MS = 5 * 60 * 1000;
 
 console.log('[IVX Server] Starting Hono API server...', {
   host: HOST,
@@ -27,6 +29,37 @@ console.log('[IVX Server] Starting Hono API server...', {
 // the owner's phone/app being open. The scheduler is internally idempotent and
 // gated by IVX_SCHEDULER=off when an operator needs to disable it deliberately.
 startAutonomousScheduler();
+
+// 12x100 completion campaign: 12 specialists -> 50 IVX agents -> 50 Factory
+// agents. Run immediately after boot, then every five minutes. State is durable
+// when the configured durable store is available, so a Render restart does not
+// erase verified progress. The campaign itself is proof-gated and cannot mark
+// an item VERIFIED without executed test + commit evidence.
+const runCompletionCycleSafely = async (reason: string): Promise<void> => {
+  try {
+    const state = await runCompletionCampaignCycle(4);
+    console.log('[IVX Completion Campaign]', {
+      reason,
+      phase: state.phase,
+      verifiedSpecialists: state.totals.verifiedSpecialists,
+      verifiedDivisionA: state.totals.verifiedDivisionA,
+      verifiedDivisionB: state.totals.verifiedDivisionB,
+    });
+  } catch (error) {
+    console.error('[IVX Completion Campaign] cycle failed', {
+      reason,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+const campaignBootKick = setTimeout(() => {
+  void runCompletionCycleSafely('boot');
+}, 20_000);
+campaignBootKick.unref?.();
+const campaignTimer = setInterval(() => {
+  void runCompletionCycleSafely('interval');
+}, COMPLETION_CAMPAIGN_INTERVAL_MS);
+campaignTimer.unref?.();
 
 // Owner SMS synchronization for Autonomous work. The notifier sends a boot
 // status and then a grounded status summary every two hours, plus immediate
