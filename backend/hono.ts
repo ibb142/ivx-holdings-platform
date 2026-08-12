@@ -2912,6 +2912,72 @@ app.get('/health/ai/monitor', () => {
   return Response.json(getAIKeyMonitorState());
 });
 
+import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';
+
+app.get('/api/ivx/wire-instructions', async (context) => {
+  // Optional: require a valid access token for the full account number.
+  // For now, allow public read of instructions but never expose sensitive values in logs.
+  const instructions = getWireInstructions();
+  if (!instructions) {
+    return Response.json({ ok: false, error: 'Wire instructions not configured' }, { status: 503 });
+  }
+
+  // Generate a reference code tied to the authenticated user when possible.
+  const authHeader = context.req.header('authorization') || '';
+  const userId = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon'
+    : 'anon';
+  const referenceCode = generateWireReferenceCode(userId + Date.now().toString());
+
+  return Response.json({ ok: true, instructions: { ...instructions, referenceCode }, timestamp: new Date().toISOString() });
+});
+
+app.post('/api/ivx/wire-submission', async (context) => {
+  try {
+    const body = await context.req.json() as {
+      userId?: string;
+      email?: string;
+      name?: string;
+      amount?: string;
+      currency?: string;
+      sentAt?: string;
+      referenceCode?: string;
+      senderBankName?: string;
+      senderAccountLast4?: string;
+      receiptUrl?: string;
+      notes?: string;
+    };
+
+    const amount = typeof body.amount === 'string' ? body.amount.trim() : '';
+    const referenceCode = typeof body.referenceCode === 'string' ? body.referenceCode.trim() : '';
+    const sentAt = typeof body.sentAt === 'string' ? body.sentAt.trim() : '';
+    const currency = typeof body.currency === 'string' ? body.currency.trim().toUpperCase() : 'USD';
+
+    if (!amount || !referenceCode || !sentAt) {
+      return Response.json({ ok: false, error: 'amount, referenceCode, and sentAt are required' }, { status: 400 });
+    }
+
+    const result = await recordWireSubmission({
+      userId: body.userId,
+      email: body.email,
+      name: body.name,
+      amount,
+      currency,
+      sentAt,
+      referenceCode,
+      senderBankName: body.senderBankName,
+      senderAccountLast4: body.senderAccountLast4,
+      receiptUrl: body.receiptUrl,
+      notes: body.notes,
+    });
+
+    return Response.json(result, { status: result.ok ? 200 : 500 });
+  } catch (error) {
+    console.error('[IVXWireTransfer] POST error', error instanceof Error ? error.message : error);
+    return Response.json({ ok: false, error: 'Invalid request body' }, { status: 400 });
+  }
+});
+
 app.get('/health/database', async () => {
   const result = await checkOwnerAIDatabaseHealth();
   return Response.json({
