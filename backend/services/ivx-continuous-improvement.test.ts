@@ -19,14 +19,13 @@ describe('scanContentForDebt', () => {
     const content = [
       '// TODO: wire this up',
       '/* FIXME: broken */',
-      'const label = "TODO not a real marker";', // string literal, not a comment → ignored
+      'const label = "TODO not a real marker";',
       'const fix = doWork();',
     ].join('\n');
     const findings = scanContentForDebt('a.ts', content);
     const markers = findings.filter((f) => f.kind === 'debt_marker').map((f) => f.marker);
     expect(markers).toContain('TODO');
     expect(markers).toContain('FIXME');
-    // the string-literal "TODO" on line 3 must NOT be flagged
     expect(findings.filter((f) => f.line === 3).length).toBe(0);
   });
 
@@ -37,8 +36,8 @@ describe('scanContentForDebt', () => {
     expect(f2.severity).toBe('medium');
   });
 
-  it('detects empty catch blocks as high-severity freeze risk', () => {
-    const findings = scanContentForDebt('a.ts', 'try { go(); } catch (e) { console.error('Error caught:', e); }');
+  it('detects catch blocks with only error logging as high-severity freeze risk', () => {
+    const findings = scanContentForDebt('a.ts', "try { go(); } catch (e) { console.error('Error caught:', e); }");
     const fr = findings.find((f) => f.marker === 'empty-catch');
     expect(fr).toBeDefined();
     expect(fr?.kind).toBe('freeze_risk');
@@ -100,7 +99,6 @@ describe('compareArchitectureSnapshots', () => {
   });
 });
 
-// ---------- improvement proposal builder (pure) ----------
 function emptyDebt(): TechDebtReport {
   return {
     marker: 'm', generatedAt: 'now', root: '/', durationMs: 1,
@@ -145,7 +143,7 @@ describe('buildImprovementProposals', () => {
     const cleanup = proposals.filter((p) => p.category === 'debt_cleanup');
     expect(cleanup.length).toBe(1);
     expect(cleanup[0].evidence.length).toBe(2);
-    expect(cleanup[0].severity).toBe('high'); // highest of the group
+    expect(cleanup[0].severity).toBe('high');
   });
 
   it('turns high/critical architecture drift into an owner-gated architecture proposal', () => {
