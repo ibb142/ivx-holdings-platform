@@ -11,6 +11,8 @@
 import { serve } from '@hono/node-server';
 import app from './backend/hono-extended';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
+import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
+import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -19,6 +21,25 @@ console.log('[IVX Server] Starting Hono API server...', {
   host: HOST,
   port: PORT,
   nodeEnv: process.env.NODE_ENV || 'development',
+});
+
+// Core Autonomous scheduler. This is server-side and therefore independent of
+// the owner's phone/app being open. The scheduler is internally idempotent and
+// gated by IVX_SCHEDULER=off when an operator needs to disable it deliberately.
+startAutonomousScheduler();
+
+// Owner SMS synchronization for Autonomous work. The notifier sends a boot
+// status and then a grounded status summary every two hours, plus immediate
+// alerts when callers invoke its alert surface. The destination is resolved
+// ONLY from IVX_OWNER_RECOVERY_PHONE at runtime; no phone number is committed
+// to source control or written unmasked to the startup log.
+startSmsNotificationScheduler();
+const smsStatus = getSmsNotifierStatus();
+console.log('[IVX Server] Autonomous SMS notifier initialized', {
+  configured: smsStatus.phoneConfigured,
+  destination: smsStatus.phoneMasked,
+  schedulerRunning: smsStatus.schedulerRunning,
+  dailyCap: smsStatus.smsDailyCap,
 });
 
 // Start the autonomous senior developer worker in the background of the API
