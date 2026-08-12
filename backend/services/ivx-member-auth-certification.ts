@@ -222,7 +222,14 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
 
     const certified = Object.values(checks).every((check) => check.ok);
     const result: MemberAuthCertification = { marker: IVX_MEMBER_AUTH_CERT_MARKER, startedAt, completedAt: new Date().toISOString(), commit, checks, certified, secretValuesReturned: false };
-    if (isDurableStoreConfigured()) await writeDurableJson(STATE_KEY, result);
+    // Persist to durable store — non-fatal if Supabase is unavailable.
+    // The certification result is still returned to the caller even if persistence fails.
+    if (isDurableStoreConfigured()) {
+      try { await writeDurableJson(STATE_KEY, result); }
+      catch (persistError) {
+        console.warn('[MemberAuthCert] Durable store write failed (non-fatal):', persistError instanceof Error ? persistError.message.slice(0, 120) : persistError);
+      }
+    }
     return result;
   })();
   try { return await inFlight; } finally { inFlight = null; }
@@ -230,7 +237,12 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
 
 export async function getLatestMemberAuthCertification(): Promise<MemberAuthCertification | null> {
   if (!isDurableStoreConfigured()) return null;
-  return readDurableJson<MemberAuthCertification | null>(STATE_KEY, null);
+  try {
+    return await readDurableJson<MemberAuthCertification | null>(STATE_KEY, null);
+  } catch (error) {
+    console.warn('[MemberAuthCert] Durable store read failed:', error instanceof Error ? error.message.slice(0, 120) : error);
+    return null;
+  }
 }
 
 export function startMemberAuthCertificationScheduler(): void {

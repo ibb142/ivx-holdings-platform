@@ -51,13 +51,23 @@ app.get('/api/ivx/autonomous/runs/summary', async (c) => handleAutonomousRunsSum
 app.options('/api/ivx/certification/member-auth', () => ownerOnlyOptions());
 app.get('/api/ivx/certification/member-auth', async (c) => {
   try { await assertIVXOwnerOnly(c.req.raw); } catch (error) { return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'owner authentication required' }, 401); }
-  const latest = await getLatestMemberAuthCertification();
-  return ownerOnlyJson({ ok: true, certificate: latest });
+  try {
+    const latest = await getLatestMemberAuthCertification();
+    return ownerOnlyJson({ ok: true, certificate: latest });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'failed to read certification';
+    return ownerOnlyJson({ ok: false, error: 'Certification store unavailable', detail: msg.slice(0, 200), certificate: null }, 200);
+  }
 });
 app.post('/api/ivx/certification/member-auth/run', async (c) => {
   try { await assertIVXOwnerOnly(c.req.raw); } catch (error) { return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'owner authentication required' }, 401); }
-  const certificate = await runMemberAuthCertification();
-  return ownerOnlyJson({ ok: certificate.certified, certificate }, certificate.certified ? 200 : 503);
+  try {
+    const certificate = await runMemberAuthCertification();
+    return ownerOnlyJson({ ok: certificate.certified, certificate }, certificate.certified ? 200 : 503);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'certification run failed';
+    return ownerOnlyJson({ ok: false, error: 'Certification run failed', detail: msg.slice(0, 300) }, 503);
+  }
 });
 
 app.options('/api/ivx/social/reels/status', () => reelsOptions());
