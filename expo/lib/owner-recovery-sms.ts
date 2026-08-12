@@ -7,8 +7,7 @@
  *                                            optionally repairs the owner password
  *   GET  /api/ivx/owner-recovery/status   → SNS readiness (no secrets)
  *
- * Secondary owner access path. Twilio integration is pending; AWS SNS is the
- * active transport and uses the AWS free SMS tier.
+ * Secondary owner access path. AWS SNS is the active transport.
  */
 import { envConfig } from './environment';
 
@@ -18,7 +17,6 @@ export type OwnerRecoveryStatus = {
   ok: boolean;
   ready: boolean;
   transport: 'aws_sns';
-  twilioPending: boolean;
   snsConfigured: boolean;
   awsCredentialsConfigured: boolean;
   awsRegion: string;
@@ -99,7 +97,6 @@ export async function fetchOwnerRecoverySmsStatus(): Promise<OwnerRecoveryStatus
     ok: Boolean(raw.ok),
     ready: Boolean(raw.ready),
     transport: 'aws_sns',
-    twilioPending: true,
     snsConfigured: Boolean(raw.snsConfigured),
     awsCredentialsConfigured: Boolean(raw.awsCredentialsConfigured),
     awsRegion: typeof raw.awsRegion === 'string' ? raw.awsRegion : 'us-east-1',

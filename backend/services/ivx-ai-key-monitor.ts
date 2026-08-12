@@ -13,7 +13,7 @@
  */
 
 import { probeAIGatewayLive } from './ivx-owner-ai-task-queue';
-import { sendTwilioSms } from './ivx-twilio-sms';
+import { sendSnsSms } from './ivx-sns-sms';
 import { getIVXAIProviderType } from '../ivx-ai-runtime';
 
 const PROBE_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -75,9 +75,10 @@ async function runProbe(): Promise<void> {
     if (!state.lastOk) {
       console.log('[IVXAIKeyMonitor] Provider RECOVERED', { provider, latencyMs: result.latencyMs });
       if (OWNER_PHONE) {
-        await sendTwilioSms({
+        await sendSnsSms({
           to: OWNER_PHONE,
           message: `IVX AI RESTORED: ${providerLabel(provider)} is authenticated and responding again.`,
+          senderId: 'IVX',
         }).catch(() => {});
       }
     }
@@ -97,9 +98,10 @@ async function runProbe(): Promise<void> {
   if (state.lastOk && OWNER_PHONE) {
     const shortReason = (result.reason || 'authentication/provider probe failed').slice(0, 70);
     const action = remediation(provider, result.status ?? null).slice(0, 120);
-    await sendTwilioSms({
+    await sendSnsSms({
       to: OWNER_PHONE,
       message: `IVX ALERT: ${providerLabel(provider)} failed (${result.status ?? 'n/a'}). ${shortReason}. ${action}`,
+      senderId: 'IVX',
     }).catch(() => {});
     state.lastAlertAt = now;
   }

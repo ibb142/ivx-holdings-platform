@@ -187,17 +187,18 @@ const INTEGRATIONS: IntegrationItem[] = [
     notes: 'SendGrid, AWS SES, or Mailgun. Email engine supports SMTP rotation.'},
   {
     id: 'sms',
-    service: 'Twilio (SMS / Phone Verification)',
-    description: 'Phone number verification, 2FA codes, SMS notifications',
+    service: 'AWS SNS (SMS / Owner Alerts)',
+    description: 'Owner SMS alerts, recovery codes, wire transfer notifications',
     keys: [
-      { name: 'Account SID', envVar: 'TWILIO_ACCOUNT_SID', example: 'AC...', isPublic: false },
-      { name: 'Auth Token', envVar: 'TWILIO_AUTH_TOKEN', example: 'auth_token_...', isPublic: false },
-      { name: 'Phone Number', envVar: 'TWILIO_PHONE_NUMBER', example: '+1234567890', isPublic: false },
-      { name: 'Verify Service SID', envVar: 'TWILIO_VERIFY_SID', example: 'VA...', isPublic: false },
+      { name: 'AWS Access Key ID', envVar: 'AWS_ACCESS_KEY_ID', example: 'AKIA...', isPublic: false },
+      { name: 'AWS Secret Access Key', envVar: 'AWS_SECRET_ACCESS_KEY', example: '...secret...', isPublic: false },
+      { name: 'AWS Region', envVar: 'AWS_REGION', example: 'us-east-1', isPublic: false },
+      { name: 'Owner Phone', envVar: 'IVX_OWNER_RECOVERY_PHONE', example: '+15616443503', isPublic: false },
     ],
     priority: 'high',
     status: 'mock',
-    notes: 'Sign up at twilio.com. Create Verify service for OTP.'},
+    notes: 'AWS SNS sends owner alerts and recovery codes. Free tier covers owner-only usage.'},
+    
   {
     id: 'analytics_ext',
     service: 'Analytics (Mixpanel / Amplitude)',

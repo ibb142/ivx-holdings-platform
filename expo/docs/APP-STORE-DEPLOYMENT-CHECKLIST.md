@@ -65,7 +65,7 @@ Once environment variables are set, code auto-connects to real services.
 | 2 | Create Google Play Developer Account ($25) | 0.5 hr | https://play.google.com/console |
 | 3 | Create Stripe Account (payments) | 1 hr | Get STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY |
 | 4 | Create Plaid Account (bank linking) | 0.5 hr | Get PLAID_CLIENT_ID, PLAID_SECRET (1-5 day approval) |
-| 5 | Create Twilio Account (SMS/WhatsApp) | 0.5 hr | Get TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE |
+| 5 | Configure AWS SNS (Owner SMS) | 0.5 hr | Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IVX_OWNER_RECOVERY_PHONE |
 | 6 | Create SendGrid Account (emails) | 0.5 hr | Get SENDGRID_API_KEY, verify sender domain |
 | 7 | Create KYC Provider Account (Onfido or Jumio) | 1 hr | Get ONFIDO_API_KEY or JUMIO_API_KEY (3-10 day contract) |
 
@@ -267,9 +267,9 @@ JUMIO_API_KEY=xxxxx
 JUMIO_API_SECRET=xxxxx
 
 # Communications
-TWILIO_ACCOUNT_SID=ACxxxxx
-TWILIO_AUTH_TOKEN=xxxxx
-TWILIO_PHONE=+1xxxxxxxxxx
+AWS_ACCESS_KEY_ID=AKIAxxxxx
+AWS_SECRET_ACCESS_KEY=xxxxx
+IVX_OWNER_RECOVERY_PHONE=+1xxxxxxxxxx
 SENDGRID_API_KEY=SG.xxxxx
 
 # Push Notifications

@@ -22,7 +22,7 @@
  *   - Owner email must match the allowlist (same gate as owner registration).
  *   - Recovery token is a random 256-bit secret, single-use, 10-minute TTL.
  *
- * Twilio integration remains pending; AWS SNS is the active transport.
+ * AWS SNS is the active transport.
  */
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { sendSnsSms, isSnsSmsConfigured, generateRecoveryCode, resolveOwnerRecoveryPhone, normalizePhoneToE164 } from '../services/ivx-sns-sms';
@@ -234,7 +234,6 @@ export async function handleOwnerRecoveryStatusRequest(request: Request): Promis
     route: 'GET /api/ivx/owner-recovery/status',
     backendVersion: RECOVERY_BACKEND_VERSION,
     transport: 'aws_sns',
-    twilioPending: true,
     snsConfigured,
     awsCredentialsConfigured: Boolean(readTrimmed(process.env.AWS_ACCESS_KEY_ID) && readTrimmed(process.env.AWS_SECRET_ACCESS_KEY)),
     awsRegion: readTrimmed(process.env.AWS_REGION) || 'us-east-1',

@@ -47,7 +47,7 @@ export default function OwnerSmsRecoveryScreen() {
   useEffect(() => {
     fetchOwnerRecoverySmsStatus()
       .then(setStatus)
-      .catch(() => setStatus({ ok: false, ready: false, transport: 'aws_sns', twilioPending: true, snsConfigured: false, awsCredentialsConfigured: false, awsRegion: 'us-east-1', recoveryPhoneConfigured: false, ownerEmailAllowlistConfigured: false }));
+      .catch(() => setStatus({ ok: false, ready: false, transport: 'aws_sns', snsConfigured: false, awsCredentialsConfigured: false, awsRegion: 'us-east-1', recoveryPhoneConfigured: false, ownerEmailAllowlistConfigured: false }));
   }, []);
 
   const handleRequestCode = useCallback(async () => {

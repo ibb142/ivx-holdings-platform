@@ -129,7 +129,7 @@ const CATEGORIES: APICategory[] = [
     color: '#25D366',
     icon: Phone,
     apis: [
-      { id: 14, name: 'Twilio', description: 'SMS verification, 2FA codes, programmable messaging', url: 'https://www.twilio.com/try-twilio', checkUrl: 'https://twilio.com', priority: 'must' },
+      { id: 14, name: 'AWS SNS', description: 'Owner SMS alerts, recovery codes, wire transfer notifications', url: 'https://aws.amazon.com/sns', checkUrl: 'https://aws.amazon.com', priority: 'must' },
     ]},
   {
     id: 'kyc',

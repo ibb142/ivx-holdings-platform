@@ -526,14 +526,6 @@ async function runFullAudit(mode: ReadinessAuditMode = 'full'): Promise<AuditCat
       details: '.env.example mentions "SMS uses the same AWS credentials" but no SNS publish call is implemented anywhere. sms-reports.tsx uses Supabase edge functions.',
       severity: 'high'},
     {
-      id: 'sms-twilio',
-      category: 'sms',
-      name: 'Twilio SMS/WhatsApp',
-      status: 'fail',
-      message: 'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN not configured',
-      details: 'Listed in .env.example but not in actual environment variables. No Twilio SDK code exists in the codebase.',
-      severity: 'high'},
-    {
       id: 'sms-reports-screen',
       category: 'sms',
       name: 'SMS Reports UI',

@@ -9,7 +9,7 @@
  * Marker: ivx-wire-transfer-2026-08-12
  */
 
-import { sendTwilioSms } from '../services/ivx-twilio-sms';
+import { sendSnsSms } from '../services/ivx-sns-sms';
 
 export type WireInstructions = {
   bankName: string;
@@ -104,7 +104,7 @@ export async function recordWireSubmission(input: WireSubmissionInput): Promise<
         `sent ${input.sentAt}`,
         `ref: ${input.referenceCode}`,
       ].filter(Boolean).join(' ').slice(0, 320);
-      await sendTwilioSms({ to: ownerPhone, message }).catch(() => {});
+      await sendSnsSms({ to: ownerPhone, message, senderId: 'IVX' }).catch(() => {});
     }
 
     return { ok: true, id };
