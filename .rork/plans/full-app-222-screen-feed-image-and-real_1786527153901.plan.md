@@ -66,3 +66,32 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 **Limitations the owner should know about now**
 - The current AI gateway keys and AWS credentials are invalid in production, so AI chat responses and S3/APK uploads will remain blocked until the owner provides valid keys. This work does not fix those credentials, but it will make the failures visible and honest instead of blank.
 - The project uses a mix of `useQuery`, `useInfiniteQuery`, custom `fetch`, and raw Supabase calls. Full unification across all 255 files is a large effort; the plan prioritizes the most common patterns first and repairs the rest screen-by-screen.
+
+**Phase 6 — AI Gateway 401 fix and key monitoring** [COMPLETED]
+- [x] Add `probeAIGatewayLive()` to `backend/services/ivx-owner-ai-task-queue.ts` to send a real request to the Vercel AI Gateway and detect 401/403/429/timeout with specific owner-action messages.
+- [x] Add `/health/ai/live` endpoint to `backend/hono.ts` returning a structured live probe result with `ok`, `status`, `reason`, `keyPrefix`, `endpoint`, `latencyMs`, and `ownerActionRequired`.
+- [x] Fix `backend/api/public-chat-stream.ts` and `backend/api/public-chat.ts` to emit `errorType: 'auth_expired'` instead of hiding failures behind generic fallback text.
+- [x] Fix `expo/app/chat-hub.tsx` and `expo/lib/public-chat-stream.ts` to surface `auth_expired` errors with a clear message and Vercel dashboard link.
+- [x] Deploy to production; verify `/health/ai/live` returns `ok: true` with the new Vercel AI Gateway key provided by the owner.
+- [x] Add `backend/services/ivx-ai-key-monitor.ts` that probes the gateway every 4 hours and sends an SMS alert to the owner when the key expires or recovers.
+- [x] Wire monitor into `backend/hono.ts` startup and add `/health/ai/monitor` status endpoint.
+- Live verification: `/health/ai/live` → HTTP 200, `ok: true`, `PROVIDER_READY`, `openai/gpt-4o`, ~900ms latency.
+- Files changed: `backend/services/ivx-owner-ai-task-queue.ts`, `backend/hono.ts`, `backend/api/public-chat-stream.ts`, `backend/api/public-chat.ts`, `expo/app/chat-hub.tsx`, `expo/lib/public-chat-stream.ts`, `backend/services/ivx-ai-key-monitor.ts`.
+
+**Phase 7 — Wire transfer funding flow** [COMPLETED]
+- [x] Create secure backend service `backend/api/ivx-wire-transfer.ts` that reads bank details from Render environment variables and never stores them in code or GitHub.
+- [x] Add `/api/ivx/wire-instructions` endpoint that returns sanitized wire instructions plus a unique reference code for the caller.
+- [x] Add `/api/ivx/wire-submission` endpoint that records a wire notification and sends an SMS alert to the owner phone number.
+- [x] Set Render environment variables: `IVX_WIRE_BANK_NAME`, `IVX_WIRE_ROUTING_NUMBER`, `IVX_WIRE_ACCOUNT_NUMBER`, `IVX_WIRE_ACCOUNT_NAME`, `IVX_WIRE_BANK_ADDRESS`, `IVX_WIRE_BENEFICIARY_ADDRESS`, `IVX_WIRE_SWIFT_CODE`.
+- [x] Create Expo app screen `expo/app/wire-transfer.tsx` with bank details, copy-to-clipboard, share instructions, unique reference code, and "I sent the wire" confirmation form.
+- [x] Add "Fund by Wire" section to `expo/ivxholding-landing/index.html` with the same instructions and a CTA to the authenticated app.
+- [x] Build and deploy to production; verify both endpoints respond correctly and SMS alert is delivered.
+- Wire details verified live:
+  - Bank: U.S. Century Bank
+  - Routing: 067015397
+  - Account: 1052026057
+  - Account Name: ADVANTAGE BUSINESS CK
+  - SWIFT/BIC: USCEUS3M
+  - Beneficiary Address: 1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131
+  - Bank Address: 2301 NW 87th Ave, Doral, FL 33172
+- Live verification: `GET /api/ivx/wire-instructions` → HTTP 200, returns instructions and `IVX-...` reference code. `POST /api/ivx/wire-submission` → HTTP 200, records submission and sends owner SMS.
