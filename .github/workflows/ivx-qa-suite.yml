@@ -33,21 +33,23 @@ jobs:
         run: |
           set -euo pipefail
           : > backend-test-results.txt
+          mkdir -p "$GITHUB_WORKSPACE/.tmp/test-logs"
           failed=0
           count=0
           while IFS= read -r test_file; do
             count=$((count + 1))
             safe_name=$(printf '%s' "$test_file" | tr '/ ' '__')
             test_root="${GITHUB_WORKSPACE}/.tmp/ivx-qa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${count}"
+            test_log="${GITHUB_WORKSPACE}/.tmp/test-logs/${safe_name}.log"
             rm -rf "$test_root"
             mkdir -p "$test_root"
             echo "=== $test_file ===" | tee -a backend-test-results.txt
-            if ! IVX_DATA_DIR="$test_root" NODE_ENV=test bun test "$test_file" --reporter=dots 2>&1 | tee ".tmp/${safe_name}.log"; then
-              cat ".tmp/${safe_name}.log" >> backend-test-results.txt
+            if ! (cd "$test_root" && IVX_DATA_DIR="$test_root" NODE_ENV=test bun test "$GITHUB_WORKSPACE/$test_file" --reporter=dots) 2>&1 | tee "$test_log"; then
+              cat "$test_log" >> backend-test-results.txt
               failed=$((failed + 1))
               echo "FAILED_FILE=$test_file" | tee -a backend-test-results.txt
             else
-              cat ".tmp/${safe_name}.log" >> backend-test-results.txt
+              cat "$test_log" >> backend-test-results.txt
             fi
             rm -rf "$test_root"
           done < <(find backend -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) -print | sort)
