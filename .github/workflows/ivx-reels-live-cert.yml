@@ -1,0 +1,133 @@
+name: IVX Reels Live Certificate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  reels-live-cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      API_BASE: https://api.ivxholding.com
+      LANDING_BASE: https://ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for production API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for i in $(seq 1 60); do
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 5 --max-time 15 "${API_BASE}/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "Production API responded on poll $i"
+              cat /tmp/health.json
+              ready=1
+              break
+            fi
+            echo "poll=$i health_http=$code"
+            sleep 10
+          done
+          if [ "$ready" != "1" ]; then
+            echo "Production API never became reachable"
+            exit 1
+          fi
+
+      - name: Verify production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(cat /tmp/health.json)
+          ok=$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || echo false)
+          if [ "$ok" != "true" ]; then
+            echo "health endpoint did not return ok=true"
+            exit 1
+          fi
+          echo "health=PASS"
+
+      - name: Verify canonical Reels feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --retry 2 --retry-delay 2 \
+            -D /tmp/reels-headers.txt \
+            -o /tmp/reels.json \
+            -w '%{http_code}' \
+            "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" || true)
+          echo "reels_http=$code"
+          cat /tmp/reels.json || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "Canonical Reels feed failed HTTP $code; response body printed above"
+            exit 1
+          fi
+          jq '.' /tmp/reels.json
+          feed_type=$(jq -r '.feed_type // empty' /tmp/reels.json)
+          marker=$(jq -r '.marker // empty' /tmp/reels.json)
+          count=$(jq -r '.count // (.videos | length) // 0' /tmp/reels.json)
+          if [ "$feed_type" != "reel" ]; then
+            echo "Expected feed_type=reel, got $feed_type"
+            exit 1
+          fi
+          if [ -z "$marker" ]; then
+            echo "Missing video platform marker"
+            exit 1
+          fi
+          if [ "$count" -lt 1 ]; then
+            echo "No live reels are published; advertising readiness requires at least one playable Reel"
+            exit 1
+          fi
+          echo "reels_feed=PASS count=$count marker=$marker"
+
+      - name: Verify feed determinism and cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 --retry-delay 2 -D /tmp/reels-headers-2.txt "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" -o /tmp/reels-2.json
+          ids1=$(jq -c '[.videos[]?.id]' /tmp/reels.json)
+          ids2=$(jq -c '[.videos[]?.id]' /tmp/reels-2.json)
+          test "$ids1" = "$ids2"
+          echo "feed_determinism=PASS"
+          grep -i '^x-ivx-cache:' /tmp/reels-headers-2.txt || true
+
+      - name: Verify at least one Reel media asset is playable
+        shell: bash
+        run: |
+          set -euo pipefail
+          media_url=$(jq -r '[.. | objects | to_entries[]? | select(.key | test("^(hls_url|video_url|playback_url|media_url)$")) | .value | select(type == "string" and startswith("http"))][0] // empty' /tmp/reels.json)
+          if [ -z "$media_url" ]; then echo "No absolute playable media URL found"; exit 1; fi
+          code=$(curl -sS -L --connect-timeout 10 --max-time 30 -H 'Range: bytes=0-1023' -D /tmp/media-headers.txt -o /tmp/media-sample.bin -w '%{http_code}' "$media_url" || true)
+          if [ "$code" != "200" ] && [ "$code" != "206" ]; then echo "Reel media HTTP $code"; exit 1; fi
+          bytes=$(wc -c < /tmp/media-sample.bin | tr -d ' ')
+          if [ "$bytes" -lt 1 ]; then echo "Reel media returned zero bytes"; exit 1; fi
+          echo "media_playback=PASS http=$code bytes=$bytes"
+
+      - name: Verify landing Reels surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -L --connect-timeout 10 --max-time 30 -o /tmp/landing.html -w '%{http_code}' "${LANDING_BASE}/" || true)
+          if [ "$code" != "200" ]; then echo "Landing HTTP $code"; exit 1; fi
+          grep -Eqi 'reels|ivx-reels' /tmp/landing.html
+          echo "landing_reels_surface=PASS"
+
+      - name: Emit Reels live certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          count=$(jq -r '.count // (.videos | length) // 0' /tmp/reels.json)
+          marker=$(jq -r '.marker // empty' /tmp/reels.json)
+          cat > qa/evidence/reels-live-cert.json <<EOF
+          {"certified":true,"scope":"IVX Reels live advertising readiness","githubSha":"${GITHUB_SHA}","health":"PASS","reelsFeed":"PASS","publishedReels":${count},"feedDeterminism":"PASS","mediaPlayback":"PASS","landingReelsSurface":"PASS","platformMarker":"${marker}","verifiedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+          EOF
+          cat qa/evidence/reels-live-cert.json
+
+      - name: Upload Reels certificate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-reels-live-certificate
+          path: qa/evidence/reels-live-cert.json

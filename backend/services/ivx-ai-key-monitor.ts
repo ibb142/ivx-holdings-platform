@@ -1,27 +1,32 @@
 /**
- * IVX AI Gateway Key Monitor
+ * IVX AI Provider Credential Monitor
  *
- * Probes the AI gateway every 4 hours. If the key is expired/revoked,
- * sends ONE SMS alert to the owner (not repeated every cycle).
- * When the key is restored, sends a recovery SMS.
+ * Probes the active AI provider every 4 hours. If authentication fails,
+ * sends ONE SMS alert to the owner (not repeated every cycle). When service
+ * recovers, sends a recovery SMS.
  *
- * This prevents the owner from discovering a dead key only when users
- * complain — they get alerted within 4 hours of expiry.
+ * Important: a 401 is an authentication/provider-binding failure, not a TLS
+ * certificate error. The alert intentionally avoids telling the owner to rotate
+ * a Vercel key unless the runtime actually selected the Vercel AI Gateway.
  *
- * Marker: ivx-ai-key-monitor-2026-08-12
+ * Marker: ivx-ai-key-monitor-provider-aware-2026-08-12
  */
 
 import { probeAIGatewayLive } from './ivx-owner-ai-task-queue';
 import { sendTwilioSms } from './ivx-twilio-sms';
+import { getIVXAIProviderType } from '../ivx-ai-runtime';
 
-const PROBE_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const PROBE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const OWNER_PHONE = process.env.IVX_OWNER_RECOVERY_PHONE || '';
 
-type MonitorState = {
+export type MonitorState = {
   lastOk: boolean;
   lastProbeAt: string | null;
   lastAlertAt: string | null;
   consecutiveFailures: number;
+  provider: 'vercel_gateway' | 'openai_direct' | 'unknown';
+  lastStatus: number | null;
+  lastReason: string | null;
 };
 
 let state: MonitorState = {
@@ -29,61 +34,88 @@ let state: MonitorState = {
   lastProbeAt: null,
   lastAlertAt: null,
   consecutiveFailures: 0,
+  provider: 'unknown',
+  lastStatus: null,
+  lastReason: null,
 };
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
+function providerLabel(provider: MonitorState['provider']): string {
+  if (provider === 'vercel_gateway') return 'Vercel AI Gateway';
+  if (provider === 'openai_direct') return 'OpenAI direct';
+  return 'AI provider';
+}
+
+function remediation(provider: MonitorState['provider'], status: number | null): string {
+  if (status === 401 || status === 403) {
+    if (provider === 'vercel_gateway') {
+      return 'Check the active Vercel AI Gateway key and its Render binding (IVX_AI_GATEWAY_KEY or AI_GATEWAY_API_KEY).';
+    }
+    if (provider === 'openai_direct') {
+      return 'Check the active OpenAI key and its Render binding (IVX_OPENAI_API_KEY or OPENAI_API_KEY).';
+    }
+    return 'Check the active provider key and Render environment binding; provider could not be identified.';
+  }
+  if (status === 429) return 'Provider rate limit reached; credential may still be valid.';
+  if (status !== null && status >= 500) return 'Provider returned a server error; do not rotate credentials unless authentication also fails.';
+  return 'Check provider connectivity and runtime binding.';
+}
+
 async function runProbe(): Promise<void> {
+  const provider = getIVXAIProviderType();
   const result = await probeAIGatewayLive();
   const now = new Date().toISOString();
   state.lastProbeAt = now;
+  state.provider = provider;
+  state.lastStatus = result.status ?? null;
+  state.lastReason = result.reason || null;
 
   if (result.ok) {
-    // Key is working
     if (!state.lastOk) {
-      // Recovery — key was down, now it's back
-      console.log('[IVXAIKeyMonitor] Gateway RECOVERED', { latencyMs: result.latencyMs });
+      console.log('[IVXAIKeyMonitor] Provider RECOVERED', { provider, latencyMs: result.latencyMs });
       if (OWNER_PHONE) {
         await sendTwilioSms({
           to: OWNER_PHONE,
-          message: 'IVX AI Gateway RESTORED: Key is working again. Provider PROVIDER_READY, chat back online.',
+          message: `IVX AI RESTORED: ${providerLabel(provider)} is authenticated and responding again.`,
         }).catch(() => {});
       }
     }
     state.lastOk = true;
     state.consecutiveFailures = 0;
-  } else {
-    state.consecutiveFailures += 1;
-    console.warn('[IVXAIKeyMonitor] Gateway FAILED', {
-      status: result.status,
-      reason: result.reason,
-      consecutiveFailures: state.consecutiveFailures,
-    });
-
-    // Only send SMS on the FIRST failure (not every 4h)
-    if (state.lastOk && OWNER_PHONE) {
-      const shortReason = result.reason.slice(0, 80);
-      await sendTwilioSms({
-        to: OWNER_PHONE,
-        message: `IVX ALERT: AI Gateway key expired or failing (${result.status}). ${shortReason}. Update Vercel key at vercel.com/~/ai-gateway/api-keys then set IVX_AI_GATEWAY_KEY on Render.`,
-      }).catch(() => {});
-      state.lastAlertAt = now;
-    }
-    state.lastOk = false;
+    return;
   }
+
+  state.consecutiveFailures += 1;
+  console.warn('[IVXAIKeyMonitor] Provider FAILED', {
+    provider,
+    status: result.status,
+    reason: result.reason,
+    consecutiveFailures: state.consecutiveFailures,
+  });
+
+  if (state.lastOk && OWNER_PHONE) {
+    const shortReason = (result.reason || 'authentication/provider probe failed').slice(0, 70);
+    const action = remediation(provider, result.status ?? null).slice(0, 120);
+    await sendTwilioSms({
+      to: OWNER_PHONE,
+      message: `IVX ALERT: ${providerLabel(provider)} failed (${result.status ?? 'n/a'}). ${shortReason}. ${action}`,
+    }).catch(() => {});
+    state.lastAlertAt = now;
+  }
+  state.lastOk = false;
 }
 
 export function startAIKeyMonitor(): void {
   if (intervalHandle) return;
-  console.log('[IVXAIKeyMonitor] Starting — probes every 4h, SMS alert on key failure');
+  console.log('[IVXAIKeyMonitor] Starting provider-aware monitor — probes every 4h');
 
-  // Initial probe after 30s (let boot settle)
-  setTimeout(() => { void runProbe().catch(() => {}); }, 30_000);
+  const bootProbe = setTimeout(() => { void runProbe().catch(() => {}); }, 30_000);
+  bootProbe.unref?.();
 
   intervalHandle = setInterval(() => {
     void runProbe().catch(() => {});
   }, PROBE_INTERVAL_MS);
-
   intervalHandle.unref?.();
 }
 

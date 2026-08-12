@@ -1,0 +1,157 @@
+name: IVX Render Live Certificate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  render-live-cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate existing Render binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            echo "RENDER_API_KEY is not bound in GitHub Actions secrets"
+            exit 1
+          fi
+          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
+          echo "Using Render service: ${SERVICE_ID}"
+          echo "SERVICE_ID=${SERVICE_ID}" >> "$GITHUB_ENV"
+
+      - name: Trigger Render deploy
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            --data '{"clearCache":"do_not_clear"}')
+          DEPLOY_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // .deploy.id // empty')
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "Render did not return a deploy id"
+            printf '%s\n' "$RESPONSE" | jq '.' || true
+            exit 1
+          fi
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
+          echo "Triggered Render deploy $DEPLOY_ID"
+
+      - name: Wait for Render live
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 72); do
+            RESPONSE=$(curl -fsS "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -H "Accept: application/json")
+            STATUS=$(printf '%s' "$RESPONSE" | jq -r '.status // empty')
+            COMMIT=$(printf '%s' "$RESPONSE" | jq -r '.commit.id // .commitId // empty')
+            echo "poll=$i status=$STATUS commit=${COMMIT:0:12}"
+            if [ "$STATUS" = "live" ]; then
+              echo "RENDER_COMMIT=$COMMIT" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            if [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "update_failed" ] || [ "$STATUS" = "canceled" ]; then
+              echo "Render deploy failed with status=$STATUS"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for Render live"
+          exit 1
+
+      - name: Verify production health and SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH=$(curl -fsS --retry 5 --retry-delay 3 "${API_BASE}/health")
+          printf '%s\n' "$HEALTH" | jq '.'
+          OK=$(printf '%s' "$HEALTH" | jq -r '.ok // false')
+          HEALTH_COMMIT=$(printf '%s' "$HEALTH" | jq -r '.commit // .sha // .gitCommit // empty')
+          if [ "$OK" != "true" ]; then
+            echo "Production /health did not return ok=true"
+            exit 1
+          fi
+          if [ -n "$HEALTH_COMMIT" ]; then
+            echo "Production commit: $HEALTH_COMMIT"
+            case "${GITHUB_SHA}" in
+              "$HEALTH_COMMIT"*) ;;
+              *)
+                case "$HEALTH_COMMIT" in
+                  "${GITHUB_SHA}"*) ;;
+                  *) echo "WARN: health commit does not yet match GitHub SHA ${GITHUB_SHA}" ;;
+                esac
+            esac
+          fi
+
+      - name: Verify AI provider authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEBUG=$(curl -sS --retry 4 --retry-delay 2 "${API_BASE}/api/ivx/chat-debug")
+          printf '%s\n' "$DEBUG" | jq '.' || true
+          HTTP_STATUS=$(printf '%s' "$DEBUG" | jq -r '.providerHealth.lastHttpStatus // .lastHttpStatus // empty')
+          CRED_VALID=$(printf '%s' "$DEBUG" | jq -r '.providerHealth.credentialValid // .credentialValid // empty')
+          STATE=$(printf '%s' "$DEBUG" | jq -r '.providerHealth.state // .state // empty')
+          echo "provider state=$STATE http=$HTTP_STATUS credentialValid=$CRED_VALID"
+          if [ "$HTTP_STATUS" = "401" ] || [ "$HTTP_STATUS" = "403" ]; then
+            echo "AI provider authentication is still rejected"
+            exit 1
+          fi
+
+      - name: Verify real public AI inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS --retry 3 --retry-delay 2 -X POST "${API_BASE}/api/public/chat" \
+            -H "Content-Type: application/json" \
+            --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"github-live-cert","requestId":"github-live-cert-'"${GITHUB_RUN_ID}"'","history":[]}')
+          printf '%s\n' "$RESPONSE" | jq '.'
+          SOURCE=$(printf '%s' "$RESPONSE" | jq -r '.source // empty')
+          ANSWER=$(printf '%s' "$RESPONSE" | jq -r '.answer // .text // empty')
+          if [ -z "$ANSWER" ]; then
+            echo "No AI answer returned"
+            exit 1
+          fi
+          if [ "$SOURCE" = "fallback" ]; then
+            echo "Public chat returned fallback instead of live provider inference"
+            exit 1
+          fi
+          echo "Live AI inference passed; source=${SOURCE:-unknown}"
+
+      - name: Emit certificate evidence
+        shell: bash
+        run: |
+          mkdir -p qa/evidence
+          cat > qa/evidence/render-live-cert.json <<EOF
+          {
+            "certified": true,
+            "githubSha": "${GITHUB_SHA}",
+            "renderDeployId": "${DEPLOY_ID}",
+            "renderCommit": "${RENDER_COMMIT:-}",
+            "health": "PASS",
+            "aiAuthentication": "PASS",
+            "liveInference": "PASS",
+            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat qa/evidence/render-live-cert.json
+
+      - name: Upload live certificate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-render-live-certificate
+          path: qa/evidence/render-live-cert.json
