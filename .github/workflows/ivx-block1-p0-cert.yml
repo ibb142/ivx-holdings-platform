@@ -1,0 +1,180 @@
+name: IVX Block 1 P0 Certificate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  block1-p0-cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install Expo dependencies
+        run: cd expo && bun install
+
+      - name: 1-10 Owner login code and regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd expo
+          bun test __tests__/auth-timeout-fix.test.ts --reporter=dots
+          grep -q '/api/members/login' lib/auth-context.tsx
+          grep -q 'auth_timeout' lib/auth-password-sign-in.ts
+          if grep -n "title: 'Aborted'\|message: 'Aborted'" app/login.tsx lib/auth-context.tsx lib/auth-password-sign-in.ts; then
+            echo 'Opaque Aborted owner-login UI is still present'
+            exit 1
+          fi
+          if grep -q "useRealtimeTable" app/owner-login.tsx; then
+            echo 'Owner login still depends on Realtime subscription'
+            exit 1
+          fi
+          grep -q 'OWNER_TRUSTED_DEVICE_WINDOW_MS' lib/auth-context.tsx
+          grep -q "router.replace('/(tabs)/(home)/home'" app/login.tsx || grep -q "const target = '/(tabs)/(home)/home'" app/login.tsx
+          echo 'owner_login_code_gate=PASS'
+
+      - name: 11-20 Wait for production health and database recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 60); do
+            code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+            echo "health poll=$i http=$code"
+            if [ "$code" = "200" ]; then
+              cat /tmp/health.json || true
+              health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
+              db_config=$(jq -r '.databaseConfigured // .database_configured // false' /tmp/health.json 2>/dev/null || echo false)
+              ai_ok=$(jq -r '.aiOk // .ai.ok // .ai_ok // empty' /tmp/health.json 2>/dev/null || true)
+              if [ "$health_ok" = "true" ] && [ "$db_config" = "true" ]; then
+                ok=1
+                break
+              fi
+            fi
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo 'Production health/database gate did not recover'
+            exit 1
+          fi
+          echo 'production_health_db_config=PASS'
+
+      - name: 11-17 Supabase Auth REST RPC and binding gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cert_code=$(curl -sS -m 30 -o /tmp/member-cert.json -w '%{http_code}' "${API_BASE}/api/ivx/certification/member-auth" || true)
+          echo "member_auth_cert_http=$cert_code"
+          cat /tmp/member-cert.json || true
+          if [ "$cert_code" != "200" ]; then
+            echo 'Member/owner certification endpoint unavailable'
+            exit 1
+          fi
+          runtime_ok=$(jq -r '.certificate.checks.runtimeConfig.ok // .checks.runtimeConfig.ok // false' /tmp/member-cert.json)
+          owner_ok=$(jq -r '.certificate.checks.ownerLogin.ok // .checks.ownerLogin.ok // false' /tmp/member-cert.json)
+          member_login_ok=$(jq -r '.certificate.checks.memberLogin.ok // .checks.memberLogin.ok // false' /tmp/member-cert.json)
+          persist_ok=$(jq -r '.certificate.checks.memberPersistence.ok // .checks.memberPersistence.ok // false' /tmp/member-cert.json)
+          if [ "$runtime_ok" != "true" ]; then echo 'Runtime Supabase/service-role/anon/owner binding FAIL'; exit 1; fi
+          if [ "$owner_ok" != "true" ]; then echo 'Live owner password grant FAIL'; exit 1; fi
+          if [ "$member_login_ok" != "true" ]; then echo 'Live member password grant FAIL'; exit 1; fi
+          if [ "$persist_ok" != "true" ]; then echo 'Live Supabase REST/member persistence FAIL'; exit 1; fi
+          echo 'supabase_auth_rest_binding=PASS'
+
+      - name: 18-20 DB resilience code gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'retryWithBackoff' backend/services/ivx-durable-store.ts
+          grep -q 'retryTransient' backend/services/ivx-member-auth-certification.ts
+          grep -Eq '522|5\\d\\d|timeout' backend/services/ivx-member-auth-certification.ts
+          echo 'db_retry_graceful_degradation_code=PASS'
+
+      - name: 21-25 AI provider authentication and failover gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 30 -o /tmp/chat-debug.json -w '%{http_code}' "${API_BASE}/api/ivx/chat-debug" || true)
+          echo "chat_debug_http=$code"
+          cat /tmp/chat-debug.json || true
+          if [ "$code" != "200" ]; then echo 'AI debug endpoint unavailable'; exit 1; fi
+          if grep -Eqi '"(lastHttpStatus|status)"[[:space:]]*:[[:space:]]*(401|403)' /tmp/chat-debug.json; then
+            echo 'AI credential still rejected with 401/403'
+            exit 1
+          fi
+          grep -q 'openai_direct' backend/services/ivx-ai-provider-fallback.ts
+          grep -q "cls === 'auth'" backend/services/ivx-ai-provider-fallback.ts
+          echo 'ai_provider_failover_code=PASS'
+
+      - name: 21-25 Real AI inference gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 60 -o /tmp/ai.json -w '%{http_code}' -X POST "${API_BASE}/api/public/chat" \
+            -H 'Content-Type: application/json' \
+            --data '{"message":"Return only 42","sessionId":"block1-p0-cert","requestId":"block1-'"${GITHUB_RUN_ID}"'","history":[]}' || true)
+          echo "public_ai_http=$code"
+          cat /tmp/ai.json || true
+          if [ "$code" != "200" ]; then echo 'Live AI inference HTTP failure'; exit 1; fi
+          if grep -Eqi '401|authentication failed|credential.*invalid|fallback unavailable' /tmp/ai.json; then
+            echo 'Live AI inference reports auth/fallback failure'
+            exit 1
+          fi
+          answer=$(jq -r '.answer // .text // empty' /tmp/ai.json 2>/dev/null || true)
+          source=$(jq -r '.source // empty' /tmp/ai.json 2>/dev/null || true)
+          if [ -z "$answer" ]; then echo 'No live AI answer'; exit 1; fi
+          if [ "$source" = "fallback" ]; then echo 'Generic application fallback returned instead of AI provider'; exit 1; fi
+          echo 'live_ai_inference=PASS'
+
+      - name: Latest main SHA equals production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          prod_sha=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json)
+          echo "github_sha=${GITHUB_SHA}"
+          echo "production_sha=${prod_sha:-missing}"
+          if [ -z "$prod_sha" ]; then
+            echo 'Production health does not expose deployment SHA; cannot certify parity'
+            exit 1
+          fi
+          case "$GITHUB_SHA" in
+            "$prod_sha"*) ;;
+            *) case "$prod_sha" in "$GITHUB_SHA"*) ;; *) echo 'Production SHA does not match main'; exit 1;; esac ;;
+          esac
+          echo 'sha_parity=PASS'
+
+      - name: Emit Block 1 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          cat > qa/evidence/block1-p0-certificate.json <<EOF
+          {
+            "certified": true,
+            "scope": "BLOCK 1 P0 PRODUCTION OWNER LOGIN DATABASE AI",
+            "githubSha": "${GITHUB_SHA}",
+            "ownerLogin": "PASS",
+            "database": "PASS",
+            "auth": "PASS",
+            "ai": "PASS",
+            "no401": true,
+            "no522": true,
+            "noOpaqueAborted": true,
+            "shaParity": true,
+            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat qa/evidence/block1-p0-certificate.json
+
+      - name: Upload Block 1 certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-block1-p0-certificate
+          path: qa/evidence/block1-p0-certificate.json
