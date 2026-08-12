@@ -5,6 +5,8 @@ import { Stack, useRouter } from 'expo-router';
 import { Activity, AlertTriangle, ArrowLeft, Bot, CheckCircle2, Factory, Lock, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { EmptyState } from '@/components/ivx';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const CONTROL_PLANE_URL = `${API_BASE}/api/ivx/autonomous/control-plane`;
@@ -154,6 +156,8 @@ function WorkforceCard({ title, section, icon }: { title: string; section?: Work
 
 export default function AutonomousDashboardScreen() {
   const router = useRouter();
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('autonomous_tasks', [['autonomous_tasks']]);
   const [control, setControl] = useState<ControlPlane | null>(null);
   const [qa, setQa] = useState<QAResponse | null>(null);
   const [runs, setRuns] = useState<RunsSummary | null>(null);
