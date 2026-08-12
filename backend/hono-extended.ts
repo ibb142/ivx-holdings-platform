@@ -10,7 +10,7 @@ import { autonomousRunsOptions, handleAutonomousRunsGet, handleAutonomousRunsSum
 import { OPTIONS as scopedMemoryOptions, handleStatus as handleScopedMemoryStatus, handleCreate as handleScopedMemoryCreate, handleRetrieve as handleScopedMemoryRetrieve, handleBuildContext as handleScopedMemoryBuildContext, handleRevoke as handleScopedMemoryRevoke, handleOwnerOverride as handleScopedMemoryOwnerOverride, handleValidate as handleScopedMemoryValidate } from './api/ivx-scoped-memory';
 import { OPTIONS as businessClassificationOptions, handleStatus as handleBusinessClassificationStatus, handleCreate as handleBusinessClassificationCreate, handleTransition as handleBusinessClassificationTransition, handleOwnerOverride as handleBusinessClassificationOwnerOverride, handleReconcile as handleBusinessClassificationReconcile, handleGetRecord as handleBusinessClassificationGetRecord, handleGetHistory as handleBusinessClassificationGetHistory, handleList as handleBusinessClassificationList, handleValidateTransition as handleBusinessClassificationValidateTransition, handleReconcileTotal as handleBusinessClassificationReconcileTotal } from './api/ivx-business-classification';
 import { OPTIONS as failureRecoveryOptions, handleRecoveryStatusRequest, handleRecoveryRegisterRequest, handleRecoveryCheckpointRequest, handleRecoveryCompleteRequest, handleRecoveryFailRequest, handleRecoveryResumeRequest, handleRecoveryGetJobRequest, handleRecoveryListCheckpointsRequest, handleRecoveryListDeadletterRequest, handleRecoveryInspectDeadletterRequest, handleRecoveryReplayDeadletterRequest, handleRecoveryDiscardDeadletterRequest, handleRecoveryRehydrateRequest, handleRecoveryInjectFailureRequest, handleRecoveryExecuteRequest } from './api/ivx-failure-recovery';
-import { reelsOptions, handleReelsStatus, handleReelsPublish } from './api/ivx-reels';
+import { reelsOptions, handleReelsStatus, handleReelsPublish, handleReelsFeed, handleReelsMedia, handleReelsView, handleReelsLike } from './api/ivx-reels';
 import { ivxDirectAuthOptions, handleIVXDirectAuthSignIn } from './api/ivx-direct-auth';
 import { ivxSupabaseRestartOptions, handleIVXSupabaseRestart } from './api/ivx-supabase-restart';
 
@@ -47,6 +47,10 @@ app.options('/api/ivx/social/reels/status', () => reelsOptions());
 app.get('/api/ivx/social/reels/status', async (c) => handleReelsStatus(c.req.raw));
 app.options('/api/ivx/social/reels/publish', () => reelsOptions());
 app.post('/api/ivx/social/reels/publish', async (c) => handleReelsPublish(c.req.raw));
+app.get('/api/ivx/social/reels/feed', async (c) => handleReelsFeed(c.req.raw));
+app.get('/api/ivx/social/reels/media/:id', async (c) => handleReelsMedia(c.req.raw, c.req.param('id')));
+app.post('/api/ivx/social/reels/:id/view', async (c) => handleReelsView(c.req.raw, c.req.param('id')));
+app.post('/api/ivx/social/reels/:id/like', async (c) => handleReelsLike(c.req.raw, c.req.param('id')));
 
 app.options('/api/ivx/scoped-memory/status', () => scopedMemoryOptions());
 app.get('/api/ivx/scoped-memory/status', async (c) => handleScopedMemoryStatus(c.req.raw));
