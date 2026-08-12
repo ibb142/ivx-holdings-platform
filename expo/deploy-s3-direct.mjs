@@ -51,9 +51,16 @@ async function deploy() {
     { path: LANDING_DIR + '/capture.html', key: 'capture', type: 'text/html; charset=utf-8', cache: 'no-cache, no-store, must-revalidate' },
     { path: LANDING_DIR + '/enterprise-register.html', key: 'enterprise-register.html', type: 'text/html; charset=utf-8', cache: 'no-cache, no-store, must-revalidate', injectBackend: true },
     { path: LANDING_DIR + '/enterprise-register.html', key: 'enterprise-register', type: 'text/html; charset=utf-8', cache: 'no-cache, no-store, must-revalidate', injectBackend: true },
+    { path: LANDING_DIR + '/reset-password.html', key: 'reset-password.html', type: 'text/html; charset=utf-8', cache: 'no-cache, no-store, must-revalidate', injectBackend: true },
+    { path: LANDING_DIR + '/reset-password.html', key: 'reset-password', type: 'text/html; charset=utf-8', cache: 'no-cache, no-store, must-revalidate', injectBackend: true },
     { path: LANDING_DIR + '/robots.txt', key: 'robots.txt', type: 'text/plain; charset=utf-8', cache: 'public, max-age=3600' },
     { path: LANDING_DIR + '/sitemap.xml', key: 'sitemap.xml', type: 'application/xml; charset=utf-8', cache: 'public, max-age=3600' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=300' },
+    { path: LANDING_DIR + '/ivx-home-feed.js', key: 'ivx-home-feed.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=300' },
+    { path: LANDING_DIR + '/ivx-invest.js', key: 'ivx-invest.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=300' },
+    { path: LANDING_DIR + '/ivx-portal.js', key: 'ivx-portal.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=300' },
+    { path: LANDING_DIR + '/landing-support-chat.js', key: 'landing-support-chat.js', type: 'application/javascript; charset=utf-8', cache: 'public, max-age=300' },
+    { path: LANDING_DIR + '/landing-support-chat.css', key: 'landing-support-chat.css', type: 'text/css; charset=utf-8', cache: 'public, max-age=300' },
   ];
 
   for (const f of files) {
