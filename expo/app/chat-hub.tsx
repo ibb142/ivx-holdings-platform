@@ -315,7 +315,8 @@ export default function ChatHubScreen() {
                   setLocalError(null);
                 }
               } else if (event.type === 'response.error') {
-                setLocalError(event.error);
+                const isAuthError = event.errorType === 'auth_expired' || /expired|invalid.*key|AI service key/i.test(event.error);
+                setLocalError(isAuthError ? `AI key expired: ${event.error}` : event.error);
               }
             },
             onError: (error: string) => {

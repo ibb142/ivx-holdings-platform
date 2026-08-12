@@ -567,8 +567,21 @@ export async function handlePublicChatPost(request: Request): Promise<Response> 
 
     return jsonResponse({ ...payload, block17Marker: BLOCK17_MARKER });
   } catch (error) {
+    const rawMsg = sanitizeErrorMessage(error, 'Unable to process public chat request.');
+    const isAuthError = /status=401|status=403|unauthor|forbidden|authentication/i.test(rawMsg);
+    if (isAuthError) {
+      return jsonResponse({
+        ok: false,
+        error: 'The AI service key is expired or invalid. The owner needs to update the Vercel AI Gateway key on Render. Visit https://vercel.com/~/ai-gateway/api-keys to generate a new key, then set IVX_AI_GATEWAY_KEY on Render.',
+        errorType: 'auth_expired',
+        deploymentMarker: DEPLOYMENT_MARKER,
+        rateLimitRemaining: rateLimit.remaining,
+        rateLimitResetAt: rateLimit.resetAt,
+      }, 503);
+    }
     return jsonResponse({
-      error: sanitizeErrorMessage(error, 'Unable to process public chat request.'),
+      ok: false,
+      error: rawMsg,
       deploymentMarker: DEPLOYMENT_MARKER,
       rateLimitRemaining: rateLimit.remaining,
       rateLimitResetAt: rateLimit.resetAt,

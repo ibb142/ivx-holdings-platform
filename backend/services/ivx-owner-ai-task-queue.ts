@@ -877,8 +877,111 @@ export function checkAIHealth(): HealthCheckResult {
       providerState: provider.state,
       provider: startup.provider,
       model: startup.model,
+      keyPrefix: startup.keyPrefix,
+      keyLoaded: startup.keyLoaded,
+      baseUrl: startup.baseUrl,
+      providerType: startup.providerType,
+      ownerActionRequired: !providerOk
+        ? 'AI provider is UNAVAILABLE. Check /health/ai for details. If the key is expired (vck_ prefix), generate a new one at https://vercel.com/~/ai-gateway/api-keys and update IVX_AI_GATEWAY_KEY on Render.'
+        : null,
     },
   };
+}
+
+/**
+ * Live AI gateway probe — actually sends a minimal request to the configured
+ * AI gateway endpoint to verify the key works RIGHT NOW (not just that it exists).
+ * Returns ok=true if the gateway responded with a valid completion,
+ * ok=false with a specific reason if it failed.
+ *
+ * This is the difference between "configured" and "working" — the regular
+ * checkAIHealth only verifies configuration, this verifies connectivity.
+ */
+export async function probeAIGatewayLive(): Promise<{
+  ok: boolean;
+  status: number | null;
+  reason: string;
+  keyPrefix: string;
+  endpoint: string | null;
+  latencyMs: number;
+  ownerActionRequired: string | null;
+}> {
+  const startup = validateIVXAIStartup();
+  const apiKey = process.env.IVX_AI_GATEWAY_KEY || process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || '';
+  const keyPrefix = apiKey ? `${apiKey.slice(0, 4)}***` : 'none';
+  const endpoint = startup.baseUrl;
+  const started = Date.now();
+
+  if (!apiKey) {
+    return {
+      ok: false, status: null, keyPrefix, endpoint, latencyMs: 0,
+      reason: 'No AI gateway key configured',
+      ownerActionRequired: 'Set IVX_AI_GATEWAY_KEY (or OPENAI_API_KEY) on the Render service to enable AI chat.',
+    };
+  }
+  if (!endpoint) {
+    return {
+      ok: false, status: null, keyPrefix, endpoint: null, latencyMs: 0,
+      reason: 'No AI gateway endpoint resolved',
+      ownerActionRequired: 'Check IVX_AI_GATEWAY_URL or ensure the key prefix (vck_ or sk_) resolves to a valid endpoint.',
+    };
+  }
+
+  const isVercelKey = apiKey.startsWith('vck_');
+  const model = isVercelKey ? 'openai/gpt-4o-mini' : 'gpt-4o-mini';
+  const url = `${endpoint}/chat/completions`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const latencyMs = Date.now() - started;
+
+    if (res.ok) {
+      return { ok: true, status: 200, reason: 'Gateway responded successfully', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
+    }
+
+    const bodyText = await res.text().catch(() => '');
+    if (res.status === 401 || res.status === 403) {
+      return {
+        ok: false, status: res.status, keyPrefix, endpoint, latencyMs,
+        reason: `Authentication failed (HTTP ${res.status}). The AI gateway key is expired or revoked.`,
+        ownerActionRequired: isVercelKey
+          ? 'Vercel AI Gateway key (vck_) is EXPIRED or REVOKED. Generate a new key at https://vercel.com/~/ai-gateway/api-keys and update IVX_AI_GATEWAY_KEY + AI_GATEWAY_API_KEY on Render.'
+          : 'OpenAI API key (sk_) was rejected. Verify the key is valid and has credits at https://platform.openai.com/api-keys. Update IVX_AI_GATEWAY_KEY on Render.',
+      };
+    }
+    if (res.status === 429) {
+      return {
+        ok: false, status: 429, keyPrefix, endpoint, latencyMs,
+        reason: 'Rate limited (HTTP 429). The gateway key has hit its rate limit.',
+        ownerActionRequired: 'Wait and retry. If persistent, check rate limits on the Vercel AI Gateway dashboard.',
+      };
+    }
+    return {
+      ok: false, status: res.status, keyPrefix, endpoint, latencyMs,
+      reason: `Gateway returned HTTP ${res.status}: ${bodyText.slice(0, 200)}`,
+      ownerActionRequired: res.status >= 500
+        ? 'Gateway server error — this is transient. Retry in a few minutes.'
+        : `Unexpected HTTP ${res.status} from gateway. Check the key and endpoint configuration on Render.`,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - started;
+    const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('abort'));
+    return {
+      ok: false, status: null, keyPrefix, endpoint, latencyMs,
+      reason: isTimeout ? 'Gateway probe timed out (10s)' : (error instanceof Error ? error.message : 'Network error'),
+      ownerActionRequired: isTimeout
+        ? 'Gateway did not respond within 10s — possible network issue or gateway is down. Retry.'
+        : 'Cannot reach the AI gateway endpoint. Check DNS and network connectivity.',
+    };
+  }
 }
 
 export async function checkQueueHealth(): Promise<HealthCheckResult> {

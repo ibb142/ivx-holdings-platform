@@ -632,21 +632,42 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
 
           // If stream produced an error but no done event, emit error
           if (streamError && accumulated.length === 0) {
-            // Try fallback
-            const fallbackAnswer = buildFallbackAnswer(message);
-            send({ type: 'response.delta', delta: fallbackAnswer, requestId });
-            send({
-              type: 'response.completed',
-              text: fallbackAnswer,
-              model: 'ivx-local-fallback',
-              source: 'fallback',
-              requestId,
-              sessionId,
-            });
-            void persistPublicTurn({
-              sessionId, clientId, role: 'assistant',
-              content: fallbackAnswer, source: 'fallback', model: 'ivx-local-fallback',
-            }).catch(() => undefined);
+            // Check if this is an auth failure — be honest about it
+            const isAuthError = /status=401|status=403|unauthor|forbidden|authentication/i.test(streamError);
+            if (isAuthError) {
+              // Auth failure: tell the user the AI key is expired, don't hide behind a fallback
+              const honestError = 'The AI service key is expired or invalid. The owner needs to update the Vercel AI Gateway key on Render. Visit https://vercel.com/~/ai-gateway/api-keys to generate a new key, then set IVX_AI_GATEWAY_KEY on Render.';
+              send({ type: 'response.error', error: honestError, requestId, sessionId, errorType: 'auth_expired' });
+              send({
+                type: 'response.completed',
+                text: honestError,
+                model: 'none',
+                source: 'error',
+                requestId,
+                sessionId,
+                errorType: 'auth_expired',
+              });
+              void persistPublicTurn({
+                sessionId, clientId, role: 'assistant',
+                content: honestError, source: 'error', model: 'none',
+              }).catch(() => undefined);
+            } else {
+              // Non-auth error: try fallback as before
+              const fallbackAnswer = buildFallbackAnswer(message);
+              send({ type: 'response.delta', delta: fallbackAnswer, requestId });
+              send({
+                type: 'response.completed',
+                text: fallbackAnswer,
+                model: 'ivx-local-fallback',
+                source: 'fallback',
+                requestId,
+                sessionId,
+              });
+              void persistPublicTurn({
+                sessionId, clientId, role: 'assistant',
+                content: fallbackAnswer, source: 'fallback', model: 'ivx-local-fallback',
+              }).catch(() => undefined);
+            }
           } else if (streamError && accumulated.length > 0) {
             // Partial response was streamed — emit completed with partial text
             send({
@@ -682,22 +703,41 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
             }).catch(() => undefined);
           } else {
             // No text was streamed — send error event
-            send({ type: 'response.error', error: errMsg, requestId, sessionId });
-            // Also try a fallback answer so the user sees something
-            const fallbackAnswer = buildFallbackAnswer(message);
-            send({ type: 'response.delta', delta: fallbackAnswer, requestId });
-            send({
-              type: 'response.completed',
-              text: fallbackAnswer,
-              model: 'ivx-local-fallback',
-              source: 'fallback',
-              requestId,
-              sessionId,
-            });
-            void persistPublicTurn({
-              sessionId, clientId, role: 'assistant',
-              content: fallbackAnswer, source: 'fallback', model: 'ivx-local-fallback',
-            }).catch(() => undefined);
+            const isAuthError = /status=401|status=403|unauthor|forbidden|authentication/i.test(errMsg);
+            if (isAuthError) {
+              const honestError = 'The AI service key is expired or invalid. The owner needs to update the Vercel AI Gateway key on Render. Visit https://vercel.com/~/ai-gateway/api-keys to generate a new key, then set IVX_AI_GATEWAY_KEY on Render.';
+              send({ type: 'response.error', error: honestError, requestId, sessionId, errorType: 'auth_expired' });
+              send({
+                type: 'response.completed',
+                text: honestError,
+                model: 'none',
+                source: 'error',
+                requestId,
+                sessionId,
+                errorType: 'auth_expired',
+              });
+              void persistPublicTurn({
+                sessionId, clientId, role: 'assistant',
+                content: honestError, source: 'error', model: 'none',
+              }).catch(() => undefined);
+            } else {
+              send({ type: 'response.error', error: errMsg, requestId, sessionId });
+              // Also try a fallback answer so the user sees something
+              const fallbackAnswer = buildFallbackAnswer(message);
+              send({ type: 'response.delta', delta: fallbackAnswer, requestId });
+              send({
+                type: 'response.completed',
+                text: fallbackAnswer,
+                model: 'ivx-local-fallback',
+                source: 'fallback',
+                requestId,
+                sessionId,
+              });
+              void persistPublicTurn({
+                sessionId, clientId, role: 'assistant',
+                content: fallbackAnswer, source: 'fallback', model: 'ivx-local-fallback',
+              }).catch(() => undefined);
+            }
           }
         }
 

@@ -20,8 +20,8 @@ import type { PublicChatHistoryItem } from './public-chat';
 export type ChatStreamEvent =
   | { type: 'response.started'; requestId: string; sessionId: string; timestamp: string }
   | { type: 'response.delta'; delta: string; requestId: string }
-  | { type: 'response.completed'; text: string; model: string; source: string; endpoint?: string | null; requestId: string; sessionId: string; error?: string }
-  | { type: 'response.error'; error: string; requestId: string; sessionId: string };
+  | { type: 'response.completed'; text: string; model: string; source: string; endpoint?: string | null; requestId: string; sessionId: string; error?: string; errorType?: string }
+  | { type: 'response.error'; error: string; requestId: string; sessionId: string; errorType?: string };
 
 export type StreamCallbacks = {
   onEvent: (event: ChatStreamEvent) => void;

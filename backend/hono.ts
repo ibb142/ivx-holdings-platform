@@ -50,6 +50,7 @@ import {
   recordOwnerAIIncident,
   classify503Source,
   checkAIHealth as checkOwnerAIHealth,
+  probeAIGatewayLive as probeOwnerAIGatewayLive,
   checkDatabaseHealth as checkOwnerAIDatabaseHealth,
   checkQueueHealth as checkOwnerAIQueueHealth,
   checkProviderHealthDetail as checkOwnerAIProviderDetail,
@@ -2899,6 +2900,11 @@ app.get('/health/live', () => Response.json({
 app.get('/health/ai', () => {
   const result = checkOwnerAIHealth();
   return Response.json({ ok: result.ok, ...result.detail, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
+});
+
+app.get('/health/ai/live', async () => {
+  const result = await probeOwnerAIGatewayLive();
+  return Response.json({ ...result, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
 });
 
 app.get('/health/database', async () => {
