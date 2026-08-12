@@ -5,9 +5,9 @@
  * single SMS from the configured messaging service or from-number. Designed as
  * a drop-in alternative for sendSnsSms in ivx-autonomous-sms-notifier.ts.
  *
- * Credentials:
- *   - IVX_TWILIO_ACCOUNT_SID
- *   - IVX_TWILIO_AUTH_TOKEN
+ * Credentials (two supported modes):
+ *   - Auth Token mode: IVX_TWILIO_ACCOUNT_SID + IVX_TWILIO_AUTH_TOKEN
+ *   - API Key mode (preferred, doesn't rotate): IVX_TWILIO_ACCOUNT_SID + IVX_TWILIO_API_KEY_SID + IVX_TWILIO_API_KEY_SECRET
  *   - IVX_TWILIO_MESSAGING_SERVICE_SID (preferred — uses the ivxholding.com service)
  *   - IVX_TWILIO_FROM_PHONE (fallback if no messaging service configured)
  *
@@ -35,7 +35,13 @@ function readEnv(name: string): string {
 
 /** True when Twilio has enough config to attempt a send. */
 export function isTwilioSmsConfigured(): boolean {
-  return Boolean(readEnv('IVX_TWILIO_ACCOUNT_SID') && readEnv('IVX_TWILIO_AUTH_TOKEN'));
+  const accountSid = readEnv('IVX_TWILIO_ACCOUNT_SID');
+  const authToken = readEnv('IVX_TWILIO_AUTH_TOKEN');
+  const apiKeySid = readEnv('IVX_TWILIO_API_KEY_SID');
+  const apiKeySecret = readEnv('IVX_TWILIO_API_KEY_SECRET');
+  const authMode = Boolean(accountSid && authToken);
+  const keyMode = Boolean(accountSid && apiKeySid && apiKeySecret);
+  return authMode || keyMode;
 }
 
 function resolveFrom(): { messagingServiceSid?: string; fromPhone?: string } {
@@ -55,12 +61,19 @@ export async function sendTwilioSms(input: {
   const sentAt = new Date().toISOString();
   const accountSid = readEnv('IVX_TWILIO_ACCOUNT_SID');
   const authToken = readEnv('IVX_TWILIO_AUTH_TOKEN');
+  const apiKeySid = readEnv('IVX_TWILIO_API_KEY_SID');
+  const apiKeySecret = readEnv('IVX_TWILIO_API_KEY_SECRET');
   const to = normalizePhoneToE164(input.to);
   const from = resolveFrom();
 
+  const usingApiKey = Boolean(accountSid && apiKeySid && apiKeySecret);
+  const usingAuthToken = Boolean(accountSid && authToken && !usingApiKey);
+
   const missingEnvNames: string[] = [];
   if (!accountSid) missingEnvNames.push('IVX_TWILIO_ACCOUNT_SID');
-  if (!authToken) missingEnvNames.push('IVX_TWILIO_AUTH_TOKEN');
+  if (!usingApiKey && !usingAuthToken) {
+    missingEnvNames.push('IVX_TWILIO_AUTH_TOKEN (or IVX_TWILIO_API_KEY_SID + IVX_TWILIO_API_KEY_SECRET)');
+  }
   if (!from.messagingServiceSid && !from.fromPhone) missingEnvNames.push('IVX_TWILIO_MESSAGING_SERVICE_SID or IVX_TWILIO_FROM_PHONE');
   if (!to) missingEnvNames.push('destination phone');
 
@@ -70,7 +83,7 @@ export async function sendTwilioSms(input: {
       status: 'missing_config',
       to: to || undefined,
       missingEnvNames,
-      error: 'Twilio SMS is not fully configured.',
+      error: 'Twilio SMS is not fully configured. Need Account SID + either Auth Token or API Key SID/Secret.',
       sentAt,
     };
   }
@@ -95,7 +108,9 @@ export async function sendTwilioSms(input: {
     body.set('From', from.fromPhone);
   }
 
-  const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const username = usingApiKey ? apiKeySid : accountSid;
+  const password = usingApiKey ? apiKeySecret : authToken;
+  const credentials = Buffer.from(`${username}:${password}`).toString('base64');
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
 
   try {
