@@ -937,7 +937,7 @@ export async function probeAIGatewayLive(): Promise<{
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 16 }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
