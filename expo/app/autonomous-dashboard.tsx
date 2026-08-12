@@ -1,256 +1,86 @@
-/**
- * IVX Autonomous Dashboard — live W1–W12 job ledger (owner-only).
- *
- * Reads REAL production data from:
- *   GET https://api.ivxholding.com/api/ivx/autonomous/ledger
- *
- * No seed data: every job shown carries a stable job ID, status history with
- * timestamps, evidence, and blockers straight from the durable backend ledger.
- * Auto-refreshes via controlled polling (30s) + pull-to-refresh.
- */
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
-import {View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl} from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import {
-  Activity,
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Cpu,
-  ListChecks,
-  Lock,
-  RefreshCw,
-  ShieldCheck} from 'lucide-react-native';
+import { Activity, AlertTriangle, ArrowLeft, Bot, CheckCircle2, Factory, Lock, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
-const LEDGER_URL = `${API_BASE}/api/ivx/autonomous/ledger`;
-const GUARDIAN_URL = `${API_BASE}/api/ivx/autonomous/auth-guardian`;
+const CONTROL_PLANE_URL = `${API_BASE}/api/ivx/autonomous/control-plane`;
 const QA_URL = `${API_BASE}/api/ivx/autonomous/qa`;
-const CREDENTIALS_URL = `${API_BASE}/api/ivx/autonomous/credentials`;
-const EXECUTIVE_URL = `${API_BASE}/api/ivx/executive-layer`;
-const RUNS_URL = `${API_BASE}/api/ivx/autonomous/runs`;
 const RUNS_SUMMARY_URL = `${API_BASE}/api/ivx/autonomous/runs/summary`;
 const POLL_INTERVAL_MS = 15_000;
 
-type LedgerWorker = { id: string; name: string; scope: string };
-
-type LedgerHistoryEntry = { at: string; from: string | null; to: string; note: string | null };
-
-type LedgerJob = {
-  jobId: string;
-  workerId: string;
-  title: string;
-  status: string;
-  priority: string;
-  evidence: string | null;
-  blocker: string | null;
-  createdAt: string;
-  updatedAt: string;
-  history: LedgerHistoryEntry[];
-};
-
-type LedgerApproval = {
-  approvalId: string;
-  workerId: string;
-  title: string;
-  risk: string;
-  rollback: string;
-  status: string;
-  createdAt: string;
-};
-
-type LedgerCounts = {
-  workers: number;
-  jobs: number;
-  verified: number;
-  running: number;
-  blocked: number;
-  ownerActionRequired: number;
-  queued: number;
-  pendingApprovals: number;
-};
-
-type GuardianProbe = {
+type CampaignItem = {
   id: string;
   name: string;
-  target: string;
-  ok: boolean;
-  httpStatus: number | null;
-  latencyMs: number;
-  detail: string;
-  checkedAt: string;
-};
-
-type GuardianIncident = {
-  incidentId: string;
-  probeId: string;
-  openedAt: string;
-  closedAt: string | null;
+  supervisor: string;
   status: string;
-  detail: string;
+  jobId: string | null;
+  evidence: string[];
+  lastError: string | null;
+  updatedAt: string;
 };
 
-type GuardianAlert = {
-  alertId: string;
-  severity: string;
-  area: string;
-  problem: string;
-  smsStatus: string;
-  messageId: string | null;
-  toMasked: string;
-  sentAt: string;
-  test: boolean;
+type WorkforceSection = {
+  label?: string;
+  total: number;
+  verified: number;
+  statuses: Record<string, number>;
+  items: CampaignItem[];
 };
 
-type GuardianSmsProvider = {
-  provider?: string;
-  awsCredentialsConfigured?: boolean;
-  awsRegion?: string;
-  ownerPhoneResolved?: boolean;
-  ownerPhoneMasked?: string | null;
-  phoneSource?: string;
-  ready?: boolean;
-};
-
-type GuardianResponse = {
+type ControlPlane = {
   ok: boolean;
-  error?: string;
   marker?: string;
   generatedAt?: string;
-  totalRuns?: number;
-  overall?: string;
-  probes?: GuardianProbe[];
-  openIncidents?: GuardianIncident[];
-  recentIncidents?: GuardianIncident[];
-  smsProvider?: GuardianSmsProvider;
-  recentAlerts?: GuardianAlert[];
-};
-
-type QARunEntry = {
-  runId: string;
-  kind: string;
-  at: string;
-  ok: boolean;
-  summary: string;
+  source?: string;
+  enterprise?: {
+    totalAgents: number;
+    expectedAgents: number;
+    registryShapeValid: boolean;
+    phase: string;
+    enabled: boolean;
+    completionPercent: number;
+    verifiedTotal: number;
+    running: number;
+    queued: number;
+    blocked: number;
+    failed: number;
+    durableState: boolean;
+    productionClaimsRequireProof: boolean;
+    paidSpendRequiresOwnerApproval: boolean;
+    destructiveActionsRequireOwnerApproval: boolean;
+  };
+  specialists?: WorkforceSection;
+  divisionA?: WorkforceSection;
+  divisionB?: WorkforceSection;
+  supervisors?: Record<string, number>;
+  sms?: {
+    phoneConfigured: boolean;
+    phoneMasked: string | null;
+    schedulerRunning: boolean;
+    lastSmsSentAt: string | null;
+    smsSentToday: number;
+    smsDailyCap: number;
+  };
+  certification?: {
+    liveReady: boolean;
+    campaignComplete: boolean;
+    proofPolicy: string;
+  };
+  error?: string;
 };
 
 type QAResponse = {
   ok: boolean;
-  error?: string;
-  marker?: string;
   schedulerRunning?: boolean;
-  cadence?: { healthMinutes?: number; authMinutes?: number; matrixHours?: number };
-  lastHealthAt?: string | null;
-  lastAuthAt?: string | null;
-  lastMatrixAt?: string | null;
   healthOk?: boolean | null;
   authOk?: boolean | null;
   totalRuns?: number;
-  recentRuns?: QARunEntry[];
-};
-
-type CredentialRow = {
-  service: string;
-  variable: string;
-  environment: string;
-  stored: boolean;
-  injected: boolean;
-  authenticated: boolean | null;
-  permissionTest: string;
-  runtimeTest: string;
-  httpStatus: number | null;
-  securityCheck: string;
-  blocker: string | null;
-  worker: string;
-  finalStatus: string;
-  testedAt: string;
-};
-
-type CredentialsResponse = {
-  ok: boolean;
-  error?: string;
-  marker?: string;
-  generatedAt?: string;
-  totalRuns?: number;
-  totals?: { total: number; verified: number; partial: number; blocked: number };
-  credentials?: CredentialRow[];
-};
-
-type LedgerResponse = {
-  ok: boolean;
-  error?: string;
-  marker?: string;
-  generatedAt?: string;
-  version?: number;
-  updatedAt?: string;
-  counts?: LedgerCounts;
-  workers?: LedgerWorker[];
-  jobs?: LedgerJob[];
-  approvals?: LedgerApproval[];
-};
-
-type EngineAction = {
-  kind: string;
-  label: string;
-  status: string;
-  lastRunAt: string;
-  runCount: number;
-  summary: string;
-};
-
-type AutonomousActionsView = {
-  schedulerEnabled: boolean;
-  totalRuns: number;
-  runsWithEvidence: number;
-  runsWithoutEvidence: number;
-  loopsRun: number;
-  outcomesRecorded: number;
-  actions: EngineAction[];
-};
-
-type ExecutiveResponse = {
-  ok: boolean;
-  error?: string;
-  executive?: {
-    autonomousActions?: AutonomousActionsView;
-  };
-};
-
-type RunRecord = {
-  runId: string;
-  kind: string;
-  engine: string | null;
-  workerId: string;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  status: string;
-  recordsDiscovered: number;
-  recordsInserted: number;
-  recordsUpdated: number;
-  duplicatesSkipped: number;
-  outreachQueued: number;
-  sendingEnabled: boolean;
-  error: string | null;
-  summary: string;
-  source: string;
-  evidence: string[];
-  hasEvidence: boolean;
-  commitSha: string | null;
-  deploymentSha: string | null;
-  marker: string;
+  lastHealthAt?: string | null;
+  lastMatrixAt?: string | null;
 };
 
 type RunsSummary = {
@@ -259,620 +89,266 @@ type RunsSummary = {
   runsWithEvidence: number;
   runsWithoutEvidence: number;
   failed: number;
-  byEngine?: Array<{ kind: string; engine: string | null; runCount: number; lastRunAt: string | null; lastStatus: string | null; lastSummary: string | null; withEvidence: number }>;
-  note?: string;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  VERIFIED: '#34D399',
-  DONE: '#34D399',
-  RUNNING: '#FBBF24',
-  QUEUED: '#94A3B8',
-  BLOCKED: '#F87171',
-  OWNER_ACTION_REQUIRED: '#F97316'};
-
-const STATUS_ORDER: string[] = ['RUNNING', 'BLOCKED', 'OWNER_ACTION_REQUIRED', 'QUEUED', 'VERIFIED', 'DONE'];
-
-function statusColor(status: string): string {
-  return STATUS_COLORS[status] ?? '#94A3B8';
+function formatTime(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 19)} UTC`;
 }
 
-function formatTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`;
-  } catch {
-    return iso;
-  }
+function statusColor(status: string): string {
+  const value = status.toLowerCase();
+  if (value === 'verified' || value === 'complete') return '#34D399';
+  if (value === 'running') return '#FBBF24';
+  if (value === 'blocked' || value === 'failed') return '#F87171';
+  if (value === 'queued' || value === 'pending') return '#94A3B8';
+  return '#60A5FA';
+}
+
+function SectionHeader({ title, value, icon }: { title: string; value?: string; icon: React.ReactNode }) {
+  return (
+    <View style={styles.sectionHeader}>
+      {icon}
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {value ? <Text style={styles.sectionValue}>{value}</Text> : null}
+    </View>
+  );
+}
+
+function Metric({ label, value, tone = '#E2E8F0' }: { label: string; value: string | number; tone?: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={[styles.metricValue, { color: tone }]}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function WorkforceCard({ title, section, icon }: { title: string; section?: WorkforceSection; icon: React.ReactNode }) {
+  if (!section) return null;
+  return (
+    <View style={styles.card}>
+      <SectionHeader title={title} value={`${section.verified}/${section.total} VERIFIED`} icon={icon} />
+      <View style={styles.metricGrid}>
+        <Metric label="Verified" value={section.verified} tone="#34D399" />
+        <Metric label="Running" value={section.statuses.running || 0} tone="#FBBF24" />
+        <Metric label="Queued" value={(section.statuses.queued || 0) + (section.statuses.pending || 0)} tone="#94A3B8" />
+        <Metric label="Blocked" value={(section.statuses.blocked || 0) + (section.statuses.failed || 0)} tone="#F87171" />
+      </View>
+      {section.items.slice(0, 8).map((item) => (
+        <View key={item.id} style={styles.agentRow}>
+          <View style={[styles.dot, { backgroundColor: statusColor(item.status) }]} />
+          <View style={styles.agentTextWrap}>
+            <Text style={styles.agentName}>{item.name}</Text>
+            <Text style={styles.agentMeta}>{item.supervisor} · {item.jobId || 'no job yet'}</Text>
+            {item.lastError ? <Text style={styles.agentError}>{item.lastError}</Text> : null}
+          </View>
+          <Text style={[styles.statusText, { color: statusColor(item.status) }]}>{item.status.toUpperCase()}</Text>
+        </View>
+      ))}
+      {section.items.length > 8 ? <Text style={styles.moreText}>+ {section.items.length - 8} more agents in this workforce</Text> : null}
+    </View>
+  );
 }
 
 export default function AutonomousDashboardScreen() {
-  // Realtime: auto-invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
-  const [data, setData] = useState<LedgerResponse | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isUnauthorized, setIsUnauthorized] = useState<boolean>(false);
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
-  const [guardian, setGuardian] = useState<GuardianResponse | null>(null);
+  const [control, setControl] = useState<ControlPlane | null>(null);
   const [qa, setQa] = useState<QAResponse | null>(null);
-  const [creds, setCreds] = useState<CredentialsResponse | null>(null);
-  const [executive, setExecutive] = useState<ExecutiveResponse | null>(null);
-  const [runs, setRuns] = useState<RunRecord[]>([]);
-  const [runsSummary, setRunsSummary] = useState<RunsSummary | null>(null);
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [runs, setRuns] = useState<RunsSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [unauthorized, setUnauthorized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchLedger = useCallback(async (silent: boolean) => {
-    if (!silent) setIsLoading(true);
-    setErrorMessage(null);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
     try {
       const token = await getIVXAccessToken();
       if (!token) {
-        setIsUnauthorized(true);
-        setErrorMessage('Owner session required. Sign in as the owner to view the autonomous ledger.');
+        setUnauthorized(true);
+        setError('Owner session required.');
         return;
       }
-      const response = await fetch(LEDGER_URL, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` }});
-      if (response.status === 401 || response.status === 403) {
-        setIsUnauthorized(true);
-        setErrorMessage('Access denied: this dashboard is restricted to the IVX owner.');
+      const headers = { Authorization: `Bearer ${token}` };
+      const [controlResponse, qaResponse, runsResponse] = await Promise.all([
+        fetch(CONTROL_PLANE_URL, { headers }),
+        fetch(QA_URL, { headers }),
+        fetch(RUNS_SUMMARY_URL, { headers }),
+      ]);
+      if ([controlResponse.status, qaResponse.status, runsResponse.status].some((s) => s === 401 || s === 403)) {
+        setUnauthorized(true);
+        setError('This control plane is restricted to the IVX owner.');
         return;
       }
-      const json = (await response.json()) as LedgerResponse;
-      if (!json.ok) {
-        setErrorMessage(json.error ?? `Ledger request failed (HTTP ${response.status}).`);
-        return;
-      }
-      setIsUnauthorized(false);
-      setData(json);
-      setLastFetchedAt(new Date().toISOString());
-      try {
-        const [guardianResponse, qaResponse, credsResponse, execResponse, runsResponse, runsSummaryResponse] = await Promise.all([
-          fetch(GUARDIAN_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(QA_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(CREDENTIALS_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(EXECUTIVE_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${RUNS_URL}?limit=50`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(RUNS_SUMMARY_URL, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        if (guardianResponse.ok) {
-          const guardianJson = (await guardianResponse.json()) as GuardianResponse;
-          if (guardianJson.ok) setGuardian(guardianJson);
-        }
-        if (qaResponse.ok) {
-          const qaJson = (await qaResponse.json()) as QAResponse;
-          if (qaJson.ok) setQa(qaJson);
-        }
-        if (credsResponse.ok) {
-          const credsJson = (await credsResponse.json()) as CredentialsResponse;
-          if (credsJson.ok) setCreds(credsJson);
-        }
-        if (execResponse.ok) {
-          const execJson = (await execResponse.json()) as ExecutiveResponse;
-          if (execJson.ok) setExecutive(execJson);
-        }
-        if (runsResponse.ok) {
-          const runsJson = (await runsResponse.json()) as { ok: boolean; runs?: RunRecord[] };
-          if (runsJson.ok && Array.isArray(runsJson.runs)) setRuns(runsJson.runs);
-        }
-        if (runsSummaryResponse.ok) {
-          const summaryJson = (await runsSummaryResponse.json()) as RunsSummary;
-          if (summaryJson.ok) setRunsSummary(summaryJson);
-        }
-      } catch (guardianError) {
-        console.log('[AutonomousDashboard] guardian/qa fetch skipped:', guardianError instanceof Error ? guardianError.message : guardianError);
-      }
+      const controlJson = (await controlResponse.json()) as ControlPlane;
+      const qaJson = (await qaResponse.json()) as QAResponse;
+      const runsJson = (await runsResponse.json()) as RunsSummary;
+      if (!controlResponse.ok || !controlJson.ok) throw new Error(controlJson.error || `Control plane HTTP ${controlResponse.status}`);
+      setUnauthorized(false);
+      setControl(controlJson);
+      if (qaResponse.ok && qaJson.ok) setQa(qaJson);
+      if (runsResponse.ok && runsJson.ok) setRuns(runsJson);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error loading ledger.';
-      console.log('[AutonomousDashboard] fetch failed:', message);
-      setErrorMessage(message);
+      setError(err instanceof Error ? err.message : 'Unable to load Autonomous control plane.');
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchLedger(false);
-    pollRef.current = setInterval(() => fetchLedger(true), POLL_INTERVAL_MS);
+    void load(false);
+    pollRef.current = setInterval(() => void load(true), POLL_INTERVAL_MS);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [fetchLedger]);
+  }, [load]);
 
-  const onRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    fetchLedger(true);
-  }, [fetchLedger]);
-
-  const counts = data?.counts;
-  const jobs = data?.jobs ?? [];
-  const workers = data?.workers ?? [];
-  const approvals = (data?.approvals ?? []).filter((a) => a.status === 'PENDING');
-  const sortedJobs = [...jobs].sort((a, b) => {
-    const sa = STATUS_ORDER.indexOf(a.status);
-    const sb = STATUS_ORDER.indexOf(b.status);
-    if (sa !== sb) return sa - sb;
-    return a.jobId.localeCompare(b.jobId);
-  });
-  const completionPercent = counts && counts.jobs > 0 ? Math.round((counts.verified / counts.jobs) * 100) : 0;
+  const enterprise = control?.enterprise;
+  const certificationReady = Boolean(
+    control?.certification?.liveReady &&
+    control?.certification?.campaignComplete &&
+    qa?.schedulerRunning &&
+    qa?.healthOk === true &&
+    qa?.authOk === true &&
+    runs && runs.runsWithoutEvidence === 0 && runs.failed === 0,
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} testID="autonomous-dashboard-back">
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconButton} testID="autonomous-dashboard-back">
           <ArrowLeft size={22} color="#E2E8F0" />
         </TouchableOpacity>
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle}>Autonomous Dashboard</Text>
-          <Text style={styles.headerSubtitle}>
-            Live ledger · v{data?.version ?? '—'} · {formatTime(lastFetchedAt)}
-          </Text>
+        <View style={styles.headerTextWrap}>
+          <Text style={styles.title}>Autonomous Control Plane</Text>
+          <Text style={styles.subtitle}>12 Specialists · 50 IVX · 50 Factory · proof-first</Text>
         </View>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} testID="autonomous-dashboard-refresh">
+        <TouchableOpacity onPress={() => { setRefreshing(true); void load(true); }} style={styles.iconButton} testID="autonomous-dashboard-refresh">
           <RefreshCw size={18} color="#FBBF24" />
         </TouchableOpacity>
       </View>
 
-      {isLoading ? (
-        <View style={styles.centerFill}>
+      {loading ? (
+        <View style={styles.center}>
           <ShimmerIndicator size="large" color="#FBBF24" />
-          <Text style={styles.loadingText}>Loading live job ledger…</Text>
+          <Text style={styles.muted}>Loading live control plane…</Text>
         </View>
-      ) : isUnauthorized ? (
-        <View style={styles.centerFill}>
-          <Lock size={40} color="#F87171" />
+      ) : unauthorized ? (
+        <View style={styles.center}>
+          <Lock size={42} color="#F87171" />
           <Text style={styles.errorTitle}>Owner access required</Text>
-          <Text style={styles.errorBody}>{errorMessage}</Text>
+          <Text style={styles.muted}>{error}</Text>
         </View>
-      ) : errorMessage && !data ? (
-        <View style={styles.centerFill}>
-          <AlertTriangle size={40} color="#F87171" />
-          <Text style={styles.errorTitle}>Could not load ledger</Text>
-          <Text style={styles.errorBody}>{errorMessage}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchLedger(false)}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
+      ) : error && !control ? (
+        <View style={styles.center}>
+          <AlertTriangle size={42} color="#F87171" />
+          <Text style={styles.errorTitle}>Control plane unavailable</Text>
+          <Text style={styles.muted}>{error}</Text>
         </View>
       ) : (
         <ScrollView
-          style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#FBBF24" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor="#FBBF24" />}
         >
-          {counts ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Activity size={16} color="#FBBF24" />
-                <Text style={styles.cardHeader}>Overview</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${completionPercent}%` }]} />
-              </View>
-              <Text style={styles.progressLabel}>{completionPercent}% verified ({counts.verified}/{counts.jobs} jobs)</Text>
-              <View style={styles.statGrid}>
-                <StatPill label="Running" value={counts.running} color="#FBBF24" />
-                <StatPill label="Blocked" value={counts.blocked} color="#F87171" />
-                <StatPill label="Owner action" value={counts.ownerActionRequired} color="#F97316" />
-                <StatPill label="Queued" value={counts.queued} color="#94A3B8" />
-                <StatPill label="Workers" value={counts.workers} color="#60A5FA" />
-                <StatPill label="Approvals" value={counts.pendingApprovals} color="#F97316" />
-              </View>
+          <View style={styles.heroCard}>
+            <SectionHeader title="Enterprise Autonomous" value={enterprise?.phase?.toUpperCase() || '—'} icon={<Activity size={18} color="#FBBF24" />} />
+            <Text style={styles.bigPercent}>{enterprise?.completionPercent ?? 0}%</Text>
+            <Text style={styles.heroCaption}>{enterprise?.verifiedTotal ?? 0}/{enterprise?.totalAgents ?? 0} agents verified</Text>
+            <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${enterprise?.completionPercent ?? 0}%` }]} /></View>
+            <View style={styles.metricGrid}>
+              <Metric label="Running" value={enterprise?.running ?? 0} tone="#FBBF24" />
+              <Metric label="Queued" value={enterprise?.queued ?? 0} tone="#94A3B8" />
+              <Metric label="Blocked" value={enterprise?.blocked ?? 0} tone="#F87171" />
+              <Metric label="Failed" value={enterprise?.failed ?? 0} tone="#F87171" />
             </View>
-          ) : null}
+            <View style={styles.checkRow}><CheckCircle2 size={15} color={enterprise?.registryShapeValid ? '#34D399' : '#F87171'} /><Text style={styles.checkText}>Registry 12/50/50 {enterprise?.registryShapeValid ? 'valid' : 'invalid'}</Text></View>
+            <View style={styles.checkRow}><ShieldCheck size={15} color={enterprise?.durableState ? '#34D399' : '#F87171'} /><Text style={styles.checkText}>Durable runtime state {enterprise?.durableState ? 'connected' : 'not confirmed'}</Text></View>
+          </View>
 
-          {executive?.executive?.autonomousActions ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Activity size={16} color="#34D399" />
-                <Text style={styles.cardHeader}>Live Engine Runs</Text>
-                <Text style={[styles.guardianBadge, { color: executive.executive.autonomousActions.schedulerEnabled ? '#34D399' : '#F87171' }]}>
-                  {executive.executive.autonomousActions.schedulerEnabled ? 'SCHEDULER ON' : 'SCHEDULER OFF'}
-                </Text>
-              </View>
-              <Text style={styles.guardianMeta}>
-                {executive.executive.autonomousActions.totalRuns} total runs · {executive.executive.autonomousActions.runsWithEvidence} with evidence · {executive.executive.autonomousActions.runsWithoutEvidence} without · {executive.executive.autonomousActions.loopsRun} loops
-              </Text>
-              {(executive.executive.autonomousActions.actions ?? []).map((action) => (
-                <View key={action.kind} style={styles.probeRow}>
-                  <View style={[styles.statusDot, { backgroundColor: action.status === 'ok' ? '#34D399' : action.status === 'blocked' ? '#F87171' : '#FBBF24' }]} />
-                  <View style={styles.probeTextWrap}>
-                    <Text style={styles.probeName}>{action.label}</Text>
-                    <Text style={styles.probeDetail}>
-                      {action.runCount} runs · {formatTime(action.lastRunAt)}
-                    </Text>
-                    <Text style={styles.probeDetail}>{action.summary}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {runsSummary ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <ListChecks size={16} color="#34D399" />
-                <Text style={styles.cardHeader}>Permanent Run Evidence</Text>
-                <Text style={[styles.guardianBadge, { color: runsSummary.runsWithoutEvidence === 0 ? '#34D399' : '#FBBF24' }]}>
-                  {runsSummary.runsWithEvidence}/{runsSummary.totalRuns} EVIDENCED
-                </Text>
-              </View>
-              <Text style={styles.guardianMeta}>
-                {runsSummary.totalRuns} permanent records · {runsSummary.runsWithEvidence} with evidence · {runsSummary.runsWithoutEvidence} without · {runsSummary.failed} failed · survives restarts/deploys
-              </Text>
-              {(runsSummary.byEngine ?? []).map((eng) => (
-                <View key={eng.kind} style={styles.probeRow}>
-                  <View style={[styles.statusDot, { backgroundColor: eng.lastStatus === 'ok' ? '#34D399' : '#F87171' }]} />
-                  <View style={styles.probeTextWrap}>
-                    <Text style={styles.probeName}>{eng.kind.replace('daily_', '').replace(/_/g, ' ')}</Text>
-                    <Text style={styles.probeDetail}>
-                      {eng.runCount} run(s) · {eng.withEvidence} evidenced · last {formatTime(eng.lastRunAt)}
-                    </Text>
-                    {eng.lastSummary ? <Text style={styles.probeDetail}>{eng.lastSummary}</Text> : null}
-                  </View>
-                </View>
-              ))}
-              {runsSummary.note ? <Text style={styles.jobEvidence}>{runsSummary.note}</Text> : null}
-            </View>
-          ) : null}
-
-          {runs.length > 0 ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Clock size={16} color="#60A5FA" />
-                <Text style={styles.cardHeader}>Historical Executions ({runs.length})</Text>
-                <Text style={[styles.guardianBadge, { color: '#60A5FA' }]}>NEWEST FIRST</Text>
-              </View>
-              <Text style={styles.guardianMeta}>
-                Tap any run to inspect full evidence (records, source URLs, commit/deploy SHA, errors).
-              </Text>
-              {runs.map((run) => {
-                const expanded = expandedRunId === run.runId;
-                return (
-                  <TouchableOpacity
-                    key={run.runId}
-                    style={styles.jobRow}
-                    onPress={() => setExpandedRunId(expanded ? null : run.runId)}
-                    testID={`run-${run.runId}`}
-                  >
-                    <View style={styles.jobTopRow}>
-                      <View style={[styles.statusDot, { backgroundColor: run.status === 'ok' ? '#34D399' : '#F87171' }]} />
-                      <Text style={styles.jobId}>{run.engine ?? run.kind.replace('daily_', '')}</Text>
-                      <Text style={[styles.jobStatus, { color: run.status === 'ok' ? '#34D399' : '#F87171' }]}>{run.status.toUpperCase()}</Text>
-                      {run.hasEvidence ? <Text style={[styles.jobStatus, { color: '#34D399', fontSize: 10 }]}>EVIDENCED</Text> : null}
-                      <Text style={styles.jobWorker}>{run.workerId}</Text>
-                      {expanded ? <ChevronDown size={14} color="#64748B" /> : <ChevronRight size={14} color="#64748B" />}
-                    </View>
-                    <Text style={styles.jobTitle}>{run.summary}</Text>
-                    <Text style={styles.jobMeta}>{formatTime(run.finishedAt)} · {(run.durationMs / 1000).toFixed(1)}s</Text>
-                    {expanded ? (
-                      <View style={styles.jobDetail}>
-                        <Text style={styles.jobMeta}>Run ID: {run.runId}</Text>
-                        <Text style={styles.jobMeta}>Kind: {run.kind}</Text>
-                        <Text style={styles.jobMeta}>Started: {formatTime(run.startedAt)}</Text>
-                        <Text style={styles.jobMeta}>Finished: {formatTime(run.finishedAt)}</Text>
-                        <Text style={styles.jobMeta}>Discovered: {run.recordsDiscovered} · Inserted: {run.recordsInserted} · Updated: {run.recordsUpdated} · Duplicates: {run.duplicatesSkipped}</Text>
-                        {run.outreachQueued > 0 ? <Text style={styles.jobMeta}>Outreach queued: {run.outreachQueued} · sending {run.sendingEnabled ? 'enabled' : 'disabled'}</Text> : null}
-                        <Text style={styles.jobMeta}>Source: {run.source || '—'}</Text>
-                        {run.error ? <Text style={styles.jobBlocker}>Error: {run.error}</Text> : null}
-                        {run.evidence.length > 0 ? (
-                          <View style={styles.incidentBox}>
-                            <Text style={styles.incidentHeader}>Evidence artifacts ({run.evidence.length})</Text>
-                            {run.evidence.slice(0, 8).map((ev, i) => (
-                              <Text key={`${run.runId}-ev${i}`} style={styles.jobEvidence}>· {ev}</Text>
-                            ))}
-                          </View>
-                        ) : (
-                          <Text style={styles.jobBlocker}>No evidence artifacts for this run.</Text>
-                        )}
-                        {run.commitSha ? <Text style={styles.jobMeta}>Commit SHA: {run.commitSha.slice(0, 12)}</Text> : null}
-                        {run.deploymentSha ? <Text style={styles.jobMeta}>Deploy SHA: {run.deploymentSha.slice(0, 12)}</Text> : null}
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : null}
-
-          {approvals.length > 0 ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <ShieldCheck size={16} color="#F97316" />
-                <Text style={styles.cardHeader}>Approvals waiting ({approvals.length})</Text>
-              </View>
-              {approvals.map((approval) => (
-                <View key={approval.approvalId} style={styles.approvalRow}>
-                  <Text style={styles.approvalTitle}>{approval.approvalId} · {approval.title}</Text>
-                  <Text style={styles.approvalMeta}>Risk: {approval.risk}</Text>
-                  <Text style={styles.approvalMeta}>Rollback: {approval.rollback}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {guardian ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <ShieldCheck size={16} color={guardian.overall === 'HEALTHY' ? '#34D399' : '#F87171'} />
-                <Text style={styles.cardHeader}>Owner Authentication</Text>
-                <Text style={[styles.guardianBadge, { color: guardian.overall === 'HEALTHY' ? '#34D399' : '#F87171' }]}>
-                  {guardian.overall ?? '—'}
-                </Text>
-              </View>
-              <Text style={styles.guardianMeta}>
-                Auth Guardian · run #{guardian.totalRuns ?? 0} · {formatTime(guardian.generatedAt)}
-              </Text>
-              {(guardian.probes ?? []).map((probe) => (
-                <View key={probe.id} style={styles.probeRow}>
-                  <View style={[styles.statusDot, { backgroundColor: probe.ok ? '#34D399' : '#F87171' }]} />
-                  <View style={styles.probeTextWrap}>
-                    <Text style={styles.probeName}>{probe.name}</Text>
-                    <Text style={styles.probeDetail}>
-                      HTTP {probe.httpStatus ?? '—'} · {probe.latencyMs}ms · {probe.detail}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              {(guardian.openIncidents ?? []).length > 0 ? (
-                <View style={styles.incidentBox}>
-                  <Text style={styles.incidentHeader}>Open incidents</Text>
-                  {(guardian.openIncidents ?? []).map((incident) => (
-                    <Text key={incident.incidentId} style={styles.jobBlocker}>
-                      {incident.incidentId} · {incident.detail} · opened {formatTime(incident.openedAt)}
-                    </Text>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.jobEvidence}>No open authentication incidents.</Text>
-              )}
-              <View style={styles.smsBox}>
-                <Text style={styles.smsHeader}>
-                  SMS alerts ({guardian.smsProvider?.provider ?? 'aws_sns'}) — {guardian.smsProvider?.ready ? 'READY' : 'NOT READY'}
-                </Text>
-                <Text style={styles.probeDetail}>
-                  AWS creds: {guardian.smsProvider?.awsCredentialsConfigured ? 'configured' : 'MISSING on backend'} · phone: {guardian.smsProvider?.ownerPhoneMasked ?? '—'} ({guardian.smsProvider?.phoneSource ?? '—'})
-                </Text>
-                {(guardian.recentAlerts ?? []).slice(0, 3).map((alert) => (
-                  <Text key={alert.alertId} style={styles.probeDetail}>
-                    {alert.alertId} · {alert.severity} · {alert.smsStatus}
-                    {alert.messageId ? ` · id ${alert.messageId.slice(0, 8)}…` : ''} · {formatTime(alert.sentAt)}
-                  </Text>
-                ))}
-              </View>
-            </View>
-          ) : null}
-
-          {qa ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Activity size={16} color={qa.schedulerRunning ? '#34D399' : '#F87171'} />
-                <Text style={styles.cardHeader}>Continuous QA</Text>
-                <Text style={[styles.guardianBadge, { color: qa.schedulerRunning ? '#34D399' : '#F87171' }]}>
-                  {qa.schedulerRunning ? 'RUNNING 24/7' : 'STOPPED'}
-                </Text>
-              </View>
-              <Text style={styles.guardianMeta}>
-                Health every {qa.cadence?.healthMinutes ?? 5}m · auth every {qa.cadence?.authMinutes ?? 15}m · full matrix every {qa.cadence?.matrixHours ?? 2}h · {qa.totalRuns ?? 0} runs
-              </Text>
-              <View style={styles.qaStatusRow}>
-                <View style={styles.qaStatusItem}>
-                  <View style={[styles.statusDot, { backgroundColor: qa.healthOk === false ? '#F87171' : qa.healthOk ? '#34D399' : '#64748B' }]} />
-                  <Text style={styles.probeDetail}>Health {formatTime(qa.lastHealthAt)}</Text>
-                </View>
-                <View style={styles.qaStatusItem}>
-                  <View style={[styles.statusDot, { backgroundColor: qa.authOk === false ? '#F87171' : qa.authOk ? '#34D399' : '#64748B' }]} />
-                  <Text style={styles.probeDetail}>Auth matrix {formatTime(qa.lastMatrixAt)}</Text>
-                </View>
-              </View>
-              {(qa.recentRuns ?? []).slice(0, 6).map((run) => (
-                <View key={run.runId} style={styles.probeRow}>
-                  <View style={[styles.statusDot, { backgroundColor: run.ok ? '#34D399' : '#F87171' }]} />
-                  <View style={styles.probeTextWrap}>
-                    <Text style={styles.probeName}>{run.runId} · {run.kind}</Text>
-                    <Text style={styles.probeDetail}>{formatTime(run.at)} · {run.summary}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {creds ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Lock size={16} color={creds.totals && creds.totals.blocked > 0 ? '#F97316' : '#34D399'} />
-                <Text style={styles.cardHeader}>Credentials &amp; Integrations</Text>
-                <Text style={[styles.guardianBadge, { color: creds.totals && creds.totals.blocked > 0 ? '#F97316' : '#34D399' }]}>
-                  {creds.totals ? `${creds.totals.verified}/${creds.totals.total} VERIFIED` : '—'}
-                </Text>
-              </View>
-              <Text style={styles.guardianMeta}>
-                Live binding tests · run #{creds.totalRuns ?? 0} · {formatTime(creds.generatedAt)} · no secret values shown
-              </Text>
-              {(creds.credentials ?? []).map((row) => (
-                <View key={`${row.service}-${row.variable}`} style={styles.probeRow}>
-                  <View
-                    style={[styles.statusDot, {
-                      backgroundColor:
-                        row.finalStatus === 'VERIFIED' ? '#34D399' : row.finalStatus === 'PARTIAL' ? '#FBBF24' : '#F87171'}]}
-                  />
-                  <View style={styles.probeTextWrap}>
-                    <Text style={styles.probeName}>{row.service} · {row.finalStatus} · {row.worker}</Text>
-                    <Text style={styles.probeDetail}>{row.variable} · {row.environment} · stored {row.stored ? 'yes' : 'NO'} · injected {row.injected ? 'yes' : 'NO'}</Text>
-                    <Text style={styles.probeDetail}>{row.runtimeTest}</Text>
-                    <Text style={styles.probeDetail}>{row.permissionTest}</Text>
-                    {row.blocker ? <Text style={styles.jobBlocker}>Blocker: {row.blocker}</Text> : null}
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : null}
+          <WorkforceCard title="12 Specialist IA" section={control?.specialists} icon={<Bot size={18} color="#60A5FA" />} />
+          <WorkforceCard title="50 IVX Operations Agents" section={control?.divisionA} icon={<ShieldCheck size={18} color="#34D399" />} />
+          <WorkforceCard title="50 Factory Agents" section={control?.divisionB} icon={<Factory size={18} color="#A78BFA" />} />
 
           <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <ListChecks size={16} color="#60A5FA" />
-              <Text style={styles.cardHeader}>Jobs ({sortedJobs.length})</Text>
+            <SectionHeader title="24/7 Runtime" icon={<Smartphone size={18} color="#60A5FA" />} />
+            <View style={styles.metricGrid}>
+              <Metric label="QA Scheduler" value={qa?.schedulerRunning ? 'ON' : 'OFF'} tone={qa?.schedulerRunning ? '#34D399' : '#F87171'} />
+              <Metric label="Health" value={qa?.healthOk === true ? 'PASS' : qa?.healthOk === false ? 'FAIL' : '—'} tone={qa?.healthOk ? '#34D399' : '#F87171'} />
+              <Metric label="Auth Matrix" value={qa?.authOk === true ? 'PASS' : qa?.authOk === false ? 'FAIL' : '—'} tone={qa?.authOk ? '#34D399' : '#F87171'} />
+              <Metric label="QA Runs" value={qa?.totalRuns ?? 0} />
             </View>
-            {sortedJobs.length === 0 ? (
-              <Text style={styles.emptyText}>No jobs in the ledger yet.</Text>
-            ) : (
-              sortedJobs.map((job) => {
-                const expanded = expandedJobId === job.jobId;
-                return (
-                  <TouchableOpacity
-                    key={job.jobId}
-                    style={styles.jobRow}
-                    onPress={() => setExpandedJobId(expanded ? null : job.jobId)}
-                    testID={`job-${job.jobId}`}
-                  >
-                    <View style={styles.jobTopRow}>
-                      <View style={[styles.statusDot, { backgroundColor: statusColor(job.status) }]} />
-                      <Text style={styles.jobId}>{job.jobId}</Text>
-                      <Text style={[styles.jobStatus, { color: statusColor(job.status) }]}>{job.status}</Text>
-                      <Text style={styles.jobPriority}>{job.priority}</Text>
-                      <Text style={styles.jobWorker}>{job.workerId}</Text>
-                      {expanded ? <ChevronDown size={14} color="#64748B" /> : <ChevronRight size={14} color="#64748B" />}
-                    </View>
-                    <Text style={styles.jobTitle}>{job.title}</Text>
-                    {expanded ? (
-                      <View style={styles.jobDetail}>
-                        {job.evidence ? <Text style={styles.jobEvidence}>Evidence: {job.evidence}</Text> : null}
-                        {job.blocker ? <Text style={styles.jobBlocker}>Blocker: {job.blocker}</Text> : null}
-                        <Text style={styles.jobMeta}>Updated: {formatTime(job.updatedAt)}</Text>
-                        {job.history.map((entry, index) => (
-                          <View key={`${job.jobId}-h${index}`} style={styles.historyRow}>
-                            <Clock size={11} color="#64748B" />
-                            <Text style={styles.historyText}>
-                              {formatTime(entry.at)} · {entry.from ?? 'START'} → {entry.to}
-                              {entry.note ? ` · ${entry.note}` : ''}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })
-            )}
+            <Text style={styles.muted}>Last health: {formatTime(qa?.lastHealthAt)}</Text>
+            <Text style={styles.muted}>Last auth matrix: {formatTime(qa?.lastMatrixAt)}</Text>
           </View>
 
           <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Cpu size={16} color="#34D399" />
-              <Text style={styles.cardHeader}>Workers ({workers.length})</Text>
+            <SectionHeader title="SMS & Evidence" icon={<ShieldCheck size={18} color="#34D399" />} />
+            <View style={styles.metricGrid}>
+              <Metric label="SMS Scheduler" value={control?.sms?.schedulerRunning ? 'ON' : 'OFF'} tone={control?.sms?.schedulerRunning ? '#34D399' : '#F87171'} />
+              <Metric label="Phone" value={control?.sms?.phoneConfigured ? control?.sms?.phoneMasked || 'SET' : 'MISSING'} tone={control?.sms?.phoneConfigured ? '#34D399' : '#F87171'} />
+              <Metric label="Evidence Runs" value={runs?.runsWithEvidence ?? 0} tone="#34D399" />
+              <Metric label="No Evidence" value={runs?.runsWithoutEvidence ?? 0} tone={(runs?.runsWithoutEvidence ?? 0) === 0 ? '#34D399' : '#F87171'} />
             </View>
-            {workers.map((worker) => {
-              const workerJobs = jobs.filter((j) => j.workerId === worker.id);
-              const active = workerJobs.find((j) => j.status === 'RUNNING');
-              return (
-                <View key={worker.id} style={styles.workerRow}>
-                  <View style={styles.workerTopRow}>
-                    <Text style={styles.workerId}>{worker.id}</Text>
-                    <Text style={styles.workerName}>{worker.name}</Text>
-                    {active ? <CheckCircle2 size={13} color="#FBBF24" /> : null}
-                  </View>
-                  <Text style={styles.workerScope}>{worker.scope}</Text>
-                  <Text style={styles.workerMeta}>
-                    {workerJobs.length} jobs · {workerJobs.filter((j) => j.status === 'VERIFIED' || j.status === 'DONE').length} verified
-                    {active ? ` · running: ${active.jobId}` : ''}
-                  </Text>
-                </View>
-              );
-            })}
+            <Text style={styles.muted}>Last SMS: {formatTime(control?.sms?.lastSmsSentAt)}</Text>
           </View>
 
-          <Text style={styles.footerNote}>
-            Source: {data?.marker ?? '—'} · durable backend ledger · run-log {runsSummary ? `v${runsSummary.totalRuns}` : 'pending'} · auto-refresh every 15s
-          </Text>
+          <View style={[styles.card, certificationReady ? styles.certPass : styles.certHold]}>
+            <SectionHeader title="Enterprise Certificate Gate" value={certificationReady ? 'VERIFIED' : 'HOLD'} icon={<ShieldCheck size={18} color={certificationReady ? '#34D399' : '#FBBF24'} />} />
+            <Text style={styles.certText}>{control?.certification?.proofPolicy || 'No PASS without runtime evidence.'}</Text>
+            <Text style={styles.certText}>Campaign complete: {control?.certification?.campaignComplete ? 'YES' : 'NO'}</Text>
+            <Text style={styles.certText}>Live runtime ready: {control?.certification?.liveReady ? 'YES' : 'NO'}</Text>
+            <Text style={styles.certText}>Permanent run failures: {runs?.failed ?? '—'}</Text>
+          </View>
+
+          <Text style={styles.footer}>Source: {control?.source || 'runtime_state'} · {formatTime(control?.generatedAt)}</Text>
         </ScrollView>
       )}
     </SafeAreaView>
   );
 }
 
-function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <View style={styles.statPill}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0B1220' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1E293B'},
-  backButton: { padding: 6, marginRight: 6 },
-  headerTitleWrap: { flex: 1 },
-  headerTitle: { color: '#F1F5F9', fontSize: 18, fontWeight: '700' as const },
-  headerSubtitle: { color: '#64748B', fontSize: 11, marginTop: 2 },
-  refreshButton: { padding: 8 },
-  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 10 },
-  loadingText: { color: '#94A3B8', fontSize: 14 },
-  errorTitle: { color: '#F1F5F9', fontSize: 17, fontWeight: '700' as const },
-  errorBody: { color: '#94A3B8', fontSize: 13, textAlign: 'center' as const },
-  retryButton: { marginTop: 8, backgroundColor: '#FBBF24', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 },
-  retryText: { color: '#0B1220', fontWeight: '700' as const },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 40, gap: 14 },
-  card: { backgroundColor: '#111A2C', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#1E293B' },
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  cardHeader: { color: '#E2E8F0', fontSize: 15, fontWeight: '700' as const },
-  progressTrack: { height: 8, backgroundColor: '#1E293B', borderRadius: 4, overflow: 'hidden' as const },
-  progressFill: { height: 8, backgroundColor: '#34D399', borderRadius: 4 },
-  progressLabel: { color: '#94A3B8', fontSize: 12, marginTop: 6, marginBottom: 10 },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 8 },
-  statPill: { backgroundColor: '#0B1220', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, minWidth: 92, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '800' as const },
-  statLabel: { color: '#64748B', fontSize: 11, marginTop: 2 },
-  approvalRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingVertical: 8, gap: 2 },
-  approvalTitle: { color: '#F1F5F9', fontSize: 13, fontWeight: '600' as const },
-  approvalMeta: { color: '#94A3B8', fontSize: 11 },
-  jobRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingVertical: 10 },
-  jobTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  jobId: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' as const },
-  jobStatus: { fontSize: 11, fontWeight: '700' as const },
-  jobPriority: { color: '#64748B', fontSize: 11, fontWeight: '600' as const },
-  jobWorker: { color: '#60A5FA', fontSize: 11, flex: 1, textAlign: 'right' as const },
-  jobTitle: { color: '#CBD5E1', fontSize: 13, marginTop: 4 },
-  jobDetail: { marginTop: 8, gap: 4 },
-  jobEvidence: { color: '#34D399', fontSize: 12 },
-  jobBlocker: { color: '#F87171', fontSize: 12 },
-  jobMeta: { color: '#64748B', fontSize: 11 },
-  historyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 2 },
-  historyText: { color: '#94A3B8', fontSize: 11, flex: 1 },
-  workerRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingVertical: 8 },
-  workerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  workerId: { color: '#FBBF24', fontSize: 12, fontWeight: '800' as const },
-  workerName: { color: '#E2E8F0', fontSize: 13, fontWeight: '600' as const, flex: 1 },
-  workerScope: { color: '#64748B', fontSize: 11, marginTop: 2 },
-  workerMeta: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
-  emptyText: { color: '#64748B', fontSize: 13 },
-  footerNote: { color: '#475569', fontSize: 11, textAlign: 'center' as const, marginTop: 4 },
-  guardianBadge: { fontSize: 12, fontWeight: '800' as const, marginLeft: 'auto' as const },
-  guardianMeta: { color: '#64748B', fontSize: 11, marginBottom: 8 },
-  probeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 5 },
-  probeTextWrap: { flex: 1 },
-  probeName: { color: '#E2E8F0', fontSize: 13, fontWeight: '600' as const },
-  probeDetail: { color: '#94A3B8', fontSize: 11, marginTop: 1 },
-  incidentBox: { marginTop: 8, gap: 3 },
-  incidentHeader: { color: '#F87171', fontSize: 12, fontWeight: '700' as const },
-  smsBox: { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1E293B', paddingTop: 8, gap: 3 },
-  smsHeader: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' as const },
-  qaStatusRow: { flexDirection: 'row', flexWrap: 'wrap' as const, gap: 14, marginBottom: 6 },
-  qaStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 }});
+  safeArea: { flex: 1, backgroundColor: '#07101D' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1E293B' },
+  iconButton: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111C2D' },
+  headerTextWrap: { flex: 1, paddingHorizontal: 12 },
+  title: { color: '#F8FAFC', fontSize: 19, fontWeight: '800' },
+  subtitle: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+  errorTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: '700' },
+  muted: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  scrollContent: { padding: 14, paddingBottom: 40, gap: 12 },
+  heroCard: { backgroundColor: '#0C1728', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#334155' },
+  card: { backgroundColor: '#0C1728', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#1E293B' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  sectionTitle: { flex: 1, color: '#E2E8F0', fontSize: 15, fontWeight: '800' },
+  sectionValue: { color: '#FBBF24', fontSize: 11, fontWeight: '800' },
+  bigPercent: { color: '#F8FAFC', fontSize: 44, lineHeight: 50, fontWeight: '900' },
+  heroCaption: { color: '#94A3B8', fontSize: 12, marginBottom: 10 },
+  progressTrack: { height: 8, borderRadius: 999, overflow: 'hidden', backgroundColor: '#1E293B', marginBottom: 12 },
+  progressFill: { height: '100%', backgroundColor: '#34D399' },
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 6 },
+  metric: { minWidth: '22%', flexGrow: 1, backgroundColor: '#101D30', borderRadius: 12, padding: 10 },
+  metricValue: { fontSize: 18, fontWeight: '900' },
+  metricLabel: { color: '#94A3B8', fontSize: 10, marginTop: 2 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 7 },
+  checkText: { color: '#CBD5E1', fontSize: 12 },
+  agentRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9, borderTopWidth: 1, borderTopColor: '#162235' },
+  dot: { width: 8, height: 8, borderRadius: 4, marginTop: 6, marginRight: 9 },
+  agentTextWrap: { flex: 1 },
+  agentName: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' },
+  agentMeta: { color: '#64748B', fontSize: 10, marginTop: 2 },
+  agentError: { color: '#F87171', fontSize: 10, marginTop: 3 },
+  statusText: { fontSize: 10, fontWeight: '900', marginLeft: 8 },
+  moreText: { color: '#64748B', fontSize: 11, marginTop: 8 },
+  certPass: { borderColor: '#166534', backgroundColor: '#082719' },
+  certHold: { borderColor: '#854D0E', backgroundColor: '#231A07' },
+  certText: { color: '#CBD5E1', fontSize: 12, marginTop: 5 },
+  footer: { color: '#64748B', textAlign: 'center', fontSize: 10, marginTop: 4 },
+});

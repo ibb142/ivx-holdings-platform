@@ -7,6 +7,7 @@ import { migrationRunnerOptions, handleMigrationStatusGet, handleMigrationRunPos
 import { iaOrchestratorOptions, handleIAStatusGet, handleIATaskPost, handleIALockPost } from './api/ivx-ia-orchestrator';
 import { ownerCredentialStatusOptions, handleOwnerCredentialStatusGet } from './api/ivx-owner-credential-status';
 import { autonomousRunsOptions, handleAutonomousRunsGet, handleAutonomousRunsSummaryGet } from './api/ivx-autonomous-runs';
+import { autonomousControlPlaneOptions, handleAutonomousControlPlaneGet } from './api/ivx-autonomous-control-plane';
 import { OPTIONS as scopedMemoryOptions, handleStatus as handleScopedMemoryStatus, handleCreate as handleScopedMemoryCreate, handleRetrieve as handleScopedMemoryRetrieve, handleBuildContext as handleScopedMemoryBuildContext, handleRevoke as handleScopedMemoryRevoke, handleOwnerOverride as handleScopedMemoryOwnerOverride, handleValidate as handleScopedMemoryValidate } from './api/ivx-scoped-memory';
 import { OPTIONS as businessClassificationOptions, handleStatus as handleBusinessClassificationStatus, handleCreate as handleBusinessClassificationCreate, handleTransition as handleBusinessClassificationTransition, handleOwnerOverride as handleBusinessClassificationOwnerOverride, handleReconcile as handleBusinessClassificationReconcile, handleGetRecord as handleBusinessClassificationGetRecord, handleGetHistory as handleBusinessClassificationGetHistory, handleList as handleBusinessClassificationList, handleValidateTransition as handleBusinessClassificationValidateTransition, handleReconcileTotal as handleBusinessClassificationReconcileTotal } from './api/ivx-business-classification';
 import { OPTIONS as failureRecoveryOptions, handleRecoveryStatusRequest, handleRecoveryRegisterRequest, handleRecoveryCheckpointRequest, handleRecoveryCompleteRequest, handleRecoveryFailRequest, handleRecoveryResumeRequest, handleRecoveryGetJobRequest, handleRecoveryListCheckpointsRequest, handleRecoveryListDeadletterRequest, handleRecoveryInspectDeadletterRequest, handleRecoveryReplayDeadletterRequest, handleRecoveryDiscardDeadletterRequest, handleRecoveryRehydrateRequest, handleRecoveryInjectFailureRequest, handleRecoveryExecuteRequest } from './api/ivx-failure-recovery';
@@ -14,6 +15,8 @@ import { reelsOptions, handleReelsStatus, handleReelsPublish, handleReelsFeed, h
 import { ivxDirectAuthOptions, handleIVXDirectAuthSignIn } from './api/ivx-direct-auth';
 import { ivxSupabaseRestartOptions, handleIVXSupabaseRestart } from './api/ivx-supabase-restart';
 
+app.options('/api/ivx/autonomous/control-plane', () => autonomousControlPlaneOptions());
+app.get('/api/ivx/autonomous/control-plane', async (c) => handleAutonomousControlPlaneGet(c.req.raw));
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (c) => handleAutonomousJobLedgerGet(c.req.raw));
 app.options('/api/ivx/autonomous/ledger/update', () => autonomousJobLedgerOptions());
