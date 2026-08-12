@@ -9,12 +9,20 @@ on:
 jobs:
   qa-suite:
     runs-on: ubuntu-latest
+    env:
+      IVX_DATA_DIR: ${{ runner.temp }}/ivx-qa-${{ github.run_id }}
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
+
+      - name: Prepare isolated QA data root
+        run: |
+          rm -rf "$IVX_DATA_DIR"
+          mkdir -p "$IVX_DATA_DIR"
 
       - name: Install root dependencies
         run: bun install
