@@ -57,6 +57,7 @@ import {
   auditDatabaseEnvConfig,
 } from './services/ivx-owner-ai-task-queue';
 import { OPTIONS as ownerAIJobsOptions, handleIVXAIJobStartRequest, handleIVXAIJobStatusRequest, handleIVXAIJobsListRequest, handleIVXAIRuntimeObservabilityRequest } from './api/ivx-owner-ai-jobs';
+import { startAIKeyMonitor, getAIKeyMonitorState } from './services/ivx-ai-key-monitor';
 import { OPTIONS as auditReportOptions, handleIVXAuditReportRequest } from './api/ivx-audit-report';
 import {
   OPTIONS as auditJobsOptions,
@@ -2905,6 +2906,10 @@ app.get('/health/ai', () => {
 app.get('/health/ai/live', async () => {
   const result = await probeOwnerAIGatewayLive();
   return Response.json({ ...result, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
+});
+
+app.get('/health/ai/monitor', () => {
+  return Response.json(getAIKeyMonitorState());
 });
 
 app.get('/health/database', async () => {
@@ -6027,6 +6032,7 @@ process.on('SIGINT', () => { void stopOwnerAITaskWorker().then(() => process.exi
 try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
 try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
 try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
+try { startAIKeyMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] AI key monitor failed to start:', err instanceof Error ? err.message : err); }
 
 // ============================================================================
 // IVX Enterprise Time Zone System — register all timezone routes
