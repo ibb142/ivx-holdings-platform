@@ -52,10 +52,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 4 --retry-delay 2 \
+          code=$(curl -sS --retry 2 --retry-delay 2 \
             -D /tmp/reels-headers.txt \
-            "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" \
-            -o /tmp/reels.json
+            -o /tmp/reels.json \
+            -w '%{http_code}' \
+            "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" || true)
+          echo "reels_http=$code"
+          cat /tmp/reels.json || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "Canonical Reels feed failed HTTP $code; response body printed above"
+            exit 1
+          fi
           jq '.' /tmp/reels.json
           feed_type=$(jq -r '.feed_type // empty' /tmp/reels.json)
           marker=$(jq -r '.marker // empty' /tmp/reels.json)
@@ -78,18 +86,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 \
-            -D /tmp/reels-headers-2.txt \
-            "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" \
-            -o /tmp/reels-2.json
+          curl -fsS --retry 3 --retry-delay 2 -D /tmp/reels-headers-2.txt "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" -o /tmp/reels-2.json
           ids1=$(jq -c '[.videos[]?.id]' /tmp/reels.json)
           ids2=$(jq -c '[.videos[]?.id]' /tmp/reels-2.json)
-          if [ "$ids1" != "$ids2" ]; then
-            echo "Canonical feed order changed between immediate requests"
-            echo "first=$ids1"
-            echo "second=$ids2"
-            exit 1
-          fi
+          test "$ids1" = "$ids2"
           echo "feed_determinism=PASS"
           grep -i '^x-ivx-cache:' /tmp/reels-headers-2.txt || true
 
@@ -97,49 +97,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          media_url=$(jq -r '
-            [
-              .. | objects | to_entries[]? |
-              select(.key | test("^(hls_url|video_url|playback_url|media_url)$")) |
-              .value |
-              select(type == "string" and startswith("http"))
-            ][0] // empty
-          ' /tmp/reels.json)
-          if [ -z "$media_url" ]; then
-            echo "No absolute playable media URL found in live Reel payload"
-            exit 1
-          fi
-          echo "Testing media host: $(printf '%s' "$media_url" | sed -E 's#(https?://[^/]+).*#\1#')"
-          code=$(curl -sS -L --connect-timeout 10 --max-time 30 \
-            -H 'Range: bytes=0-1023' \
-            -D /tmp/media-headers.txt \
-            -o /tmp/media-sample.bin \
-            -w '%{http_code}' "$media_url" || true)
-          if [ "$code" != "200" ] && [ "$code" != "206" ]; then
-            echo "Reel media is not playable: HTTP $code"
-            exit 1
-          fi
+          media_url=$(jq -r '[.. | objects | to_entries[]? | select(.key | test("^(hls_url|video_url|playback_url|media_url)$")) | .value | select(type == "string" and startswith("http"))][0] // empty' /tmp/reels.json)
+          if [ -z "$media_url" ]; then echo "No absolute playable media URL found"; exit 1; fi
+          code=$(curl -sS -L --connect-timeout 10 --max-time 30 -H 'Range: bytes=0-1023' -D /tmp/media-headers.txt -o /tmp/media-sample.bin -w '%{http_code}' "$media_url" || true)
+          if [ "$code" != "200" ] && [ "$code" != "206" ]; then echo "Reel media HTTP $code"; exit 1; fi
           bytes=$(wc -c < /tmp/media-sample.bin | tr -d ' ')
-          if [ "$bytes" -lt 1 ]; then
-            echo "Reel media returned zero bytes"
-            exit 1
-          fi
-          content_type=$(grep -i '^content-type:' /tmp/media-headers.txt | tail -1 | tr -d '\r' || true)
-          echo "media_playback=PASS http=$code bytes=$bytes $content_type"
+          if [ "$bytes" -lt 1 ]; then echo "Reel media returned zero bytes"; exit 1; fi
+          echo "media_playback=PASS http=$code bytes=$bytes"
 
       - name: Verify landing Reels surface
         shell: bash
         run: |
           set -euo pipefail
           code=$(curl -sS -L --connect-timeout 10 --max-time 30 -o /tmp/landing.html -w '%{http_code}' "${LANDING_BASE}/" || true)
-          if [ "$code" != "200" ]; then
-            echo "Landing page unavailable: HTTP $code"
-            exit 1
-          fi
-          if ! grep -Eqi 'reels|ivx-reels' /tmp/landing.html; then
-            echo "Landing page does not expose the Reels surface"
-            exit 1
-          fi
+          if [ "$code" != "200" ]; then echo "Landing HTTP $code"; exit 1; fi
+          grep -Eqi 'reels|ivx-reels' /tmp/landing.html
           echo "landing_reels_surface=PASS"
 
       - name: Emit Reels live certificate
@@ -150,19 +122,7 @@ jobs:
           count=$(jq -r '.count // (.videos | length) // 0' /tmp/reels.json)
           marker=$(jq -r '.marker // empty' /tmp/reels.json)
           cat > qa/evidence/reels-live-cert.json <<EOF
-          {
-            "certified": true,
-            "scope": "IVX Reels live advertising readiness",
-            "githubSha": "${GITHUB_SHA}",
-            "health": "PASS",
-            "reelsFeed": "PASS",
-            "publishedReels": ${count},
-            "feedDeterminism": "PASS",
-            "mediaPlayback": "PASS",
-            "landingReelsSurface": "PASS",
-            "platformMarker": "${marker}",
-            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
+          {"certified":true,"scope":"IVX Reels live advertising readiness","githubSha":"${GITHUB_SHA}","health":"PASS","reelsFeed":"PASS","publishedReels":${count},"feedDeterminism":"PASS","mediaPlayback":"PASS","landingReelsSurface":"PASS","platformMarker":"${marker}","verifiedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
           EOF
           cat qa/evidence/reels-live-cert.json
 
