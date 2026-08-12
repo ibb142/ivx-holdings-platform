@@ -45,20 +45,46 @@ function adminClient() {
   return createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+/** Retry transient Supabase 5xx/timeout errors with exponential backoff. */
+async function retryTransient<T>(fn: () => Promise<T>, maxAttempts = 4, baseMs = 3000): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      const isTransient = /5\d\d|522|timeout|timed out|ECONNREFUSED|fetch failed|HTTP 000/i.test(msg);
+      if (!isTransient || attempt === maxAttempts) throw error;
+      const delay = baseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 800);
+      console.warn(`[MemberAuthCert] Retry ${attempt}/${maxAttempts} after ${delay}ms: ${msg.slice(0, 140)}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('retry exhausted');
+}
+
 async function passwordGrant(email: string, password: string): Promise<{ ok: boolean; status: number }> {
   const url = env('SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
   const anon = env('SUPABASE_ANON_KEY', 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
   if (!url || !anon || !email || !password) return { ok: false, status: 0 };
   try {
-    const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: anon, Authorization: `Bearer ${anon}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-      signal: AbortSignal.timeout(15_000),
+    return await retryTransient(async () => {
+      const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { apikey: anon, Authorization: `Bearer ${anon}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      // 5xx = Supabase/Cloudflare transient — throw to trigger retry
+      if (response.status >= 500) {
+        throw new Error(`Supabase auth returned HTTP ${response.status}`);
+      }
+      return { ok: response.ok, status: response.status };
     });
-    return { ok: response.ok, status: response.status };
-  } catch {
-    return { ok: false, status: 0 };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'password grant failed';
+    return { ok: false, status: 0, detail: msg.slice(0, 200) } as { ok: boolean; status: number; detail?: string };
   }
 }
 
@@ -119,13 +145,35 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
     let authUserId: string | null = null;
     let memberId: string | null = null;
     try {
+      // Pre-flight: verify Supabase is reachable before running 8 checks.
+      // If Supabase is down (522/timeout), fail fast with a clear message instead of 8 cascading failures.
+      const preFlightUrl = supabaseUrl.replace(/\/+$/, '');
+      try {
+        const pfResponse = await retryTransient(async () => {
+          const res = await fetch(`${preFlightUrl}/auth/v1/health`, {
+            headers: { apikey: anon },
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (res.status >= 500) throw new Error(`Supabase auth health HTTP ${res.status}`);
+          return res;
+        }, 3, 5000);
+        if (!pfResponse.ok) {
+          throw new Error(`Supabase pre-flight check failed: HTTP ${pfResponse.status}`);
+        }
+        console.log('[MemberAuthCert] Pre-flight: Supabase reachable');
+      } catch (pfError) {
+        const msg = pfError instanceof Error ? pfError.message : 'pre-flight failed';
+        console.warn('[MemberAuthCert] Pre-flight FAILED, proceeding anyway:', msg.slice(0, 120));
+      }
+
       const owner = await passwordGrant(ownerEmail, ownerPassword);
-      checks.ownerLogin = { ok: owner.ok, detail: `Supabase password grant HTTP ${owner.status}` };
+      const ownerDetail = 'detail' in owner ? (owner as { detail?: string }).detail : '';
+      checks.ownerLogin = { ok: owner.ok, detail: ownerDetail ? `HTTP ${owner.status} — ${ownerDetail}` : `Supabase password grant HTTP ${owner.status}` };
 
       const qaId = randomUUID();
       const email = `ivx.qa.${Date.now()}.${qaId.slice(0, 8)}@ivxholding.com`;
       const password = `IvxQA!${qaId}Aa9`;
-      const registration = await orchestrateRegistration({
+      const registration = await retryTransient(async () => orchestrateRegistration({
         registrationRequestId: `cert-${qaId}`,
         email,
         password,
@@ -136,16 +184,19 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
         zipCode: '33101',
         roles: ['investor'],
         acceptTerms: true,
-      });
+      }), 3, 4000);
       checks.memberRegistration = { ok: registration.ok && registration.stage === 'COMPLETED', detail: registration.ok ? `${registration.stage} trace=${registration.traceId}` : `${registration.code} stage=${registration.stage}` };
       if (registration.ok) authUserId = registration.authUserId;
 
       const login = await passwordGrant(email, password);
-      checks.memberLogin = { ok: login.ok, detail: `Synthetic member password grant HTTP ${login.status}` };
+      const loginDetail = 'detail' in login ? (login as { detail?: string }).detail : '';
+      checks.memberLogin = { ok: login.ok, detail: loginDetail ? `HTTP ${login.status} — ${loginDetail}` : `Synthetic member password grant HTTP ${login.status}` };
 
       if (authUserId) {
         const sb = adminClient();
-        const { data: member, error } = await sb.from('members').select('member_id,registration_status,email').eq('auth_user_id', authUserId).maybeSingle();
+        const { data: member, error } = await retryTransient(async () =>
+          sb.from('members').select('member_id,registration_status,email').eq('auth_user_id', authUserId!).maybeSingle(),
+        3, 3000);
         memberId = member?.member_id || null;
         checks.memberPersistence = { ok: Boolean(memberId && !error), detail: memberId ? `Canonical member persisted; registration_status=${member?.registration_status || 'unknown'}` : `Member row missing${error ? `: ${error.message}` : ''}` };
       }

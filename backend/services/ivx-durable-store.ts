@@ -109,6 +109,30 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Retry transient 5xx/timeout errors with exponential backoff. HTTP 522 = Cloudflare origin timeout. */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 4,
+  baseDelayMs = 2000,
+): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      // Retry on 5xx, 522, timeout, or connection refused — NOT on 4xx auth errors
+      const isTransient = /5\d\d|522|timeout|timed out|ECONNREFUSED|fetch failed|HTTP 000/i.test(msg);
+      if (!isTransient || attempt === maxAttempts) throw error;
+      const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500);
+      console.warn(`[IvxDurableStore] Retry ${attempt}/${maxAttempts} after ${delay}ms: ${msg.slice(0, 120)}`);
+      await sleep(delay);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('retry exhausted');
+}
+
 class DurableStore {
   private schemaReady: Promise<void> | null = null;
 
@@ -123,19 +147,21 @@ class DurableStore {
   private async executeSql(sql: string): Promise<void> {
     const statement = sql.trim();
     if (!statement) return;
-    const response = await fetch(`${this.restBaseUrl()}/rpc/ivx_exec_sql`, {
-      method: 'POST',
-      headers: buildHeaders(),
-      body: JSON.stringify({ sql_text: statement }),
-      signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+    await retryWithBackoff(async () => {
+      const response = await fetch(`${this.restBaseUrl()}/rpc/ivx_exec_sql`, {
+        method: 'POST',
+        headers: buildHeaders(),
+        body: JSON.stringify({ sql_text: statement }),
+        signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+      });
+      const payload = await parseResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(payload, `Supabase SQL RPC returned HTTP ${response.status}.`));
+      }
+      if (payload && typeof payload === 'object' && (payload as Record<string, unknown>).ok === false) {
+        throw new Error(extractErrorMessage(payload, 'Supabase SQL RPC reported failure.'));
+      }
     });
-    const payload = await parseResponsePayload(response);
-    if (!response.ok) {
-      throw new Error(extractErrorMessage(payload, `Supabase SQL RPC returned HTTP ${response.status}.`));
-    }
-    if (payload && typeof payload === 'object' && (payload as Record<string, unknown>).ok === false) {
-      throw new Error(extractErrorMessage(payload, 'Supabase SQL RPC reported failure.'));
-    }
   }
 
   private async ensureSchema(): Promise<void> {
@@ -180,24 +206,36 @@ class DurableStore {
     prefer?: string,
     retrySchemaCache: boolean = true,
   ): Promise<T> {
-    const response = await fetch(`${this.restBaseUrl()}${pathName}`, {
-      ...init,
-      headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
-      signal: AbortSignal.timeout(REST_TIMEOUT_MS),
-    });
-    const payload = await parseResponsePayload(response);
-    if (!response.ok) {
-      const message = extractErrorMessage(payload, `Supabase REST returned HTTP ${response.status}.`);
-      const schemaCacheMiss = retrySchemaCache
-        && (message.includes('schema cache') || message.includes('PGRST205') || message.includes('Could not find the table'));
-      if (schemaCacheMiss) {
-        await this.executeSql("select pg_notify('pgrst','reload schema')");
-        await sleep(750);
-        return await this.restRequest<T>(pathName, init, prefer, false);
+    return retryWithBackoff(async () => {
+      const response = await fetch(`${this.restBaseUrl()}${pathName}`, {
+        ...init,
+        headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
+        signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+      });
+      const payload = await parseResponsePayload(response);
+      if (!response.ok) {
+        const message = extractErrorMessage(payload, `Supabase REST returned HTTP ${response.status}.`);
+        const schemaCacheMiss = retrySchemaCache
+          && (message.includes('schema cache') || message.includes('PGRST205') || message.includes('Could not find the table'));
+        if (schemaCacheMiss) {
+          await this.executeSql("select pg_notify('pgrst','reload schema')");
+          await sleep(750);
+          // Retry once after schema reload (bypass retryWithBackoff for this specific case)
+          const retryResponse = await fetch(`${this.restBaseUrl()}${pathName}`, {
+            ...init,
+            headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
+            signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+          });
+          const retryPayload = await parseResponsePayload(retryResponse);
+          if (!retryResponse.ok) {
+            throw new Error(extractErrorMessage(retryPayload, `Supabase REST returned HTTP ${retryResponse.status}.`));
+          }
+          return retryPayload as T;
+        }
+        throw new Error(message);
       }
-      throw new Error(message);
-    }
-    return payload as T;
+      return payload as T;
+    });
   }
 
   async readJson<T>(docKey: string, fallback: T): Promise<T> {
