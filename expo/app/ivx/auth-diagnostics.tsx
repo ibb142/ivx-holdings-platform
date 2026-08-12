@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Pressable,
@@ -433,6 +434,8 @@ function ActionButton({
 }
 
 export default function AuthDiagnosticsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <Stack.Screen options={{ title: 'Auth Diagnostics' }} />

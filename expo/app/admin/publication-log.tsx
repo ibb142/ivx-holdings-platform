@@ -10,6 +10,7 @@ import {View,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   ArrowLeft,
   RotateCcw,
@@ -28,6 +29,7 @@ import { getPublicationLog, restoreFromPublicationLog } from '@/lib/jv-storage';
 import type { PublicationLogEntry } from '@/lib/jv-storage';
 import { invalidateAllJVQueries } from '@/lib/jv-realtime';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
 
 const ACTION_CONFIG: Record<string, { label: string; color: string; icon: 'publish' | 'unpublish' | 'restore' }> = {
   PUBLISH: { label: 'Published', color: '#00C48C', icon: 'publish' },
@@ -62,6 +64,8 @@ function ActionIcon({ action }: { action: string }) {
 }
 
 export default function PublicationLogScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);

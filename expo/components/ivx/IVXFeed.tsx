@@ -124,6 +124,7 @@ function IVXFeedInner<ItemT>(
   // Expose ref
   React.useImperativeHandle(ref, () => listRef.current as FlatList<ItemT>, []);
 
+
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && onLoadMore) {
       onLoadMore();

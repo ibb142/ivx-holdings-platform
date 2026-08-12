@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -51,6 +52,7 @@ import {
   CircleDot} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   SMTPConfig,
   EmailCampaign,
@@ -140,6 +142,8 @@ const STATUS_COLORS: Record<string, string> = {
   failed: Colors.error};
 
 export default function EmailEngineScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>(mockSmtpConfigs);

@@ -33,9 +33,12 @@ import {
   Building2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { useAnalytics } from '@/lib/analytics-context';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type ExperienceLevelType = 'junior' | 'mid' | 'senior' | 'principal';
 type SpecializationType = 'private_lenders' | 'individual_investors' | 'institutional' | 'family_office' | 'mixed';
@@ -65,6 +68,8 @@ interface BrokerFormData {
 }
 
 export default function BrokerApplyScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);

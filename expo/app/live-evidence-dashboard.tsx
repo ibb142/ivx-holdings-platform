@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -46,6 +47,7 @@ import {
   SignalZero} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   runFullEvidenceCheck,
   runSingleEvidenceCheck,
@@ -579,6 +581,8 @@ const sectionHeaderStyles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 
 export default function LiveEvidenceDashboard() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 

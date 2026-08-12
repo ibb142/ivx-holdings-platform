@@ -34,7 +34,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   fetchIntentDashboard,
   fetchIntentStatus,
@@ -182,6 +184,9 @@ export default function IntentEngineScreen() {
   const statusQuery = useQuery({
     queryKey: ['intent-engine-status'],
     queryFn: fetchIntentStatus});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const dashboardQuery = useQuery<IntentDashboard>({
     queryKey: ['intent-engine-dashboard'],

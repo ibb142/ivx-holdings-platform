@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -33,6 +34,9 @@ import {
   Globe,
   Award} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { trustFeatures, ownerProtections, TrustFeature, OwnerProtection } from '@/mocks/competitive-stats';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 
@@ -139,6 +143,8 @@ function OwnerProtectionCard({ protection, index }: { protection: OwnerProtectio
 }
 
 export default function TrustCenterScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [activeSection, setActiveSection] = useState<'trust' | 'owner'>('trust');

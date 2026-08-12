@@ -3,10 +3,14 @@ import { StyleSheet, View } from 'react-native';
 import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '@/constants/ivx-owner-ai';
 import { useAuth } from '@/lib/auth-context';
 import { ChatModule } from '@/src/modules/chat';
 import { getChatConversationTitle, resolveChatActorId, resolveChatConversationId } from '@/src/modules/chat/services/chatRooms';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 function normalizeOptionalParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
@@ -22,6 +26,8 @@ function normalizeOptionalParam(value: string | string[] | undefined): string | 
 }
 
 export default function ChatRoomRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const params = useLocalSearchParams<{ conversationId?: string | string[]; title?: string | string[] }>();
   const { user } = useAuth();
 

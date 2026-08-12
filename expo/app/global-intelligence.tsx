@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -25,6 +26,9 @@ import {
   Minus} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
 import {
   useGlobalMarkets,
   formatPrice,
@@ -158,6 +162,8 @@ function CommodityRow({ item, index }: { item: Commodity; index: number }) {
 }
 
 export default function GlobalIntelligenceScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const _dimensions = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<TabType>('overview');

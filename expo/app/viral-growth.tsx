@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -38,6 +39,9 @@ import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   growthMilestones,
   viralChannels,
@@ -443,6 +447,8 @@ function ReferralCodeCard({ onCopy, onShare }: { onCopy: () => void; onShare: ()
 }
 
 export default function ViralGrowthScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
 
   const handleCopyCode = useCallback(async () => {

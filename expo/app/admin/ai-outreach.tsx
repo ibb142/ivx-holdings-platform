@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -40,6 +41,8 @@ import { discoveredLenders } from '@/mocks/lender-discovery';
 import { properties } from '@/mocks/properties';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const formatCurrency = (amount: number): string => formatCurrencyCompact(amount);
 
@@ -131,6 +134,8 @@ Here's your monthly update from IVX HOLDINGS LLC with the latest investment oppo
 I would like to introduce IVX HOLDINGS's institutional partnership program designed for leading organizations like {{lender_name}}...`}};
 
 export default function AIOutreachScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<StepType>('select_property');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);

@@ -12,6 +12,7 @@ import {
   Platform,
   Dimensions,
   RefreshControl} from 'react-native';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import {
@@ -182,6 +183,8 @@ const EmailRow = React.memo(function EmailRow({ email, onPress, onStarToggle }: 
 });
 
 export default function EmailScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const {
     accountsWithUnread,
@@ -397,6 +400,8 @@ export default function EmailScreen() {
         )}
 
         <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
           data={emails}
           renderItem={renderEmail}
           keyExtractor={keyExtractor}

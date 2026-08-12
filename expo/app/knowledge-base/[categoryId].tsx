@@ -5,6 +5,7 @@
  * Route: /knowledge-base/[categoryId]
  */
 import React, { useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -30,6 +31,9 @@ import {
   ClipboardCheck,
   Shield} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   getCategoryById,
   getArticlesByCategory,
@@ -94,6 +98,8 @@ function ArticleRow({
 }
 
 export default function KnowledgeBaseCategoryScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{ categoryId: string }>();
   const { width } = useWindowDimensions();

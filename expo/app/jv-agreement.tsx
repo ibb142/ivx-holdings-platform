@@ -59,9 +59,11 @@ import { uploadDealPhotosParallel } from '@/lib/photo-upload';
 import { invalidateAllJVQueries } from '@/lib/jv-realtime';
 import { syncToLandingPage } from '@/lib/landing-sync';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import type { JVAgreement, JVPartner, PoolTier } from '@/types/jv';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
 
 const JV_AGREEMENT_TYPES = [
   { id: 'equity_split', label: 'Equity Split', icon: '📊', desc: 'Partners share ownership proportional to contribution', color: '#4A90D9' },
@@ -316,6 +318,9 @@ export default function JVAgreementScreen() {
     queryFn: async () => {
       console.log('[JV] Fetching all JV deals for agreements screen (Platform:', Platform.OS, ')...');
       const result = await fetchJVDeals({});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
       console.log('[JV] fetchJVDeals returned', result.deals.length, 'deals, total:', result.total);
       if (result.deals.length === 0) {
         console.log('[JV] No deals returned — retrying with forceReset...');

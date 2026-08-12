@@ -22,6 +22,7 @@ import {
 import Colors from '@/constants/colors';
 import { formatCurrencyWithDecimals, formatNumber } from '@/lib/formatters';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { buyResaleListing, cancelResaleListing } from '@/lib/investment-service';
 import type { ResaleListing } from '@/lib/investment-service';
@@ -29,6 +30,8 @@ import { useAuth } from '@/lib/auth-context';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export default function ResaleMarketplaceScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();

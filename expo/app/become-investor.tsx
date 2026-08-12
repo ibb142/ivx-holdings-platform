@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -26,6 +27,8 @@ import {
 import Colors from '@/constants/colors';
 import * as MemberService from '@/lib/member-service';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const STEP_TITLES = ['Personal', 'Investment', 'Interests', 'Locations', 'Goals', 'Verification'] as const;
 
@@ -62,6 +65,8 @@ const GOAL_OPTIONS: { id: MemberService.InvestmentGoal; label: string }[] = [
 const NET_WORTH_OPTIONS = ['Under $250K', '$250K – $1M', '$1M – $5M', '$5M – $25M', '$25M+'] as const;
 
 export default function BecomeInvestorScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{ userId?: string }>();
   const userId = typeof params.userId === 'string' ? params.userId : '';

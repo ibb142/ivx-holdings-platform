@@ -35,7 +35,9 @@ import {
   Lock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   fetchOverview,
   fetchReport,
@@ -58,6 +60,9 @@ export default function RestoreCenterScreen() {
     queryKey: ['restore-center-overview'],
     queryFn: fetchOverview,
     staleTime: 60_000});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const reportQuery = useQuery({
     queryKey: ['restore-center-report'],

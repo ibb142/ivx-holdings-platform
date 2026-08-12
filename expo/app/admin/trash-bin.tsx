@@ -23,6 +23,7 @@ import {
   Inbox} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchTrashDeals, restoreFromTrash, permanentlyDeleteJVDeal } from '@/lib/jv-storage';
 import { formatCurrency } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
@@ -44,6 +45,8 @@ interface TrashedDeal {
 }
 
 export default function TrashBinScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);

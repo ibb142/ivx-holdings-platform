@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import {
   View,
@@ -17,6 +18,10 @@ import {
   Shield} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { useAnalytics } from '@/lib/analytics-context';
 
 interface TaxDocument {
@@ -81,6 +86,8 @@ const TAX_DOCUMENTS: TaxDocument[] = [
 ];
 
 export default function TaxDocumentsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [selectedYear, setSelectedYear] = useState('2024');
 
   const years = [...new Set(TAX_DOCUMENTS.map(d => d.year))].sort((a, b) => Number(b) - Number(a));

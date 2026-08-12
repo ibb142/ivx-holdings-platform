@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -40,6 +41,7 @@ import {
   Filter,
   BarChart3} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
 import {
   runFullHealthCheck,
   type SystemHealthSnapshot,
@@ -399,6 +401,8 @@ function CheckCard({ check, expanded, onToggle }: { check: HealthCheck; expanded
 }
 
 export default function SystemHealthScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<SystemHealthSnapshot | null>(null);
   const [loading, setLoading] = useState(true);

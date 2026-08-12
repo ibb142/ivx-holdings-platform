@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 import {
   Alert,
@@ -344,6 +345,8 @@ function TrackedVariableRow({ row }: { row: IVXMergedVariableRow }) {
 }
 
 export default function IVXVariablesToolRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const [draftValues, setDraftValues] = useState<Partial<Record<IVXOwnerVariableName, string>>>({});

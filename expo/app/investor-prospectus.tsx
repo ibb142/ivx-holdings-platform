@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -10,6 +11,8 @@ import {
   Share} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import {
   ArrowLeft,
@@ -102,6 +105,8 @@ const generateProspectusText = (investment: number): string => {
 };
 
 export default function InvestorProspectusScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [selectedAmount, setSelectedAmount] = useState<number>(10000);
   const [expandedSection, setExpandedSection] = useState<string | null>('projections');
 

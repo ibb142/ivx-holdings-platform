@@ -32,9 +32,12 @@ import {
   Star} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { useAnalytics } from '@/lib/analytics-context';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type ExperienceLevelType = 'junior' | 'mid' | 'senior' | 'broker';
 type SpecializationType = 'residential' | 'commercial' | 'luxury' | 'industrial' | 'mixed';
@@ -61,6 +64,8 @@ interface AgentFormData {
 }
 
 export default function AgentApplyScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);

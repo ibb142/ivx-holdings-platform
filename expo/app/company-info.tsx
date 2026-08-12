@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import logger from '@/lib/logger';
 import {
@@ -28,6 +29,9 @@ import {
   Copy,
   ExternalLink} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'ipx_company_info';
@@ -54,6 +58,8 @@ const DEFAULT_INFO: CompanyInfo = {
   website: 'www.ivxholding.com'};
 
 export default function CompanyInfoScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [info, setInfo] = useState<CompanyInfo>(DEFAULT_INFO);

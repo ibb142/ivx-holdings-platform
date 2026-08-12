@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -49,10 +50,15 @@ function calculateTokenization(property: DebtAcquisitionProperty, tokens: number
 }
 import { formatDollar, formatCurrencyWithDecimals } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
 
 type FilterType = 'all' | 'available' | 'tokenizing' | 'first_lien_secured';
 
 export default function DebtAcquisitionScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedProperty, setSelectedProperty] = useState<DebtAcquisitionProperty | null>(null);

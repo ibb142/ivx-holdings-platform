@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack, router } from 'expo-router';
 import {
   KeyboardAvoidingView,
@@ -26,6 +27,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   importContacts,
   type ImportReceipt,
@@ -269,6 +272,8 @@ function ImportScreenInner() {
 }
 
 export default function CrmImportScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <ImportScreenInner />

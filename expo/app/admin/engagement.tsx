@@ -36,9 +36,11 @@ import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { MemberEngagementStats, MemberActivity } from '@/types';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
 import { generateText } from '@/lib/ai-service';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
 
 const formatCurrency = (amount: number) => _fmtCurr(amount);
 
@@ -76,6 +78,8 @@ type DraftMessage = {
 };
 
 export default function EngagementScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const engagementQuery = useQuery({

@@ -24,6 +24,7 @@ import {
   MapPin,
   Layers} from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import Colors from '@/constants/colors';
 import { fetchRawEvents } from '@/lib/analytics-compute';
 import type { RawEvent } from '@/lib/analytics-compute';
@@ -217,6 +218,8 @@ function computeTrafficData(events: RawEvent[]) {
 }
 
 export default function TrafficControlCenter() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState<PeriodType>('all');

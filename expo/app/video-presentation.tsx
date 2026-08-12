@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -48,6 +49,8 @@ import {
 import Colors from '@/constants/colors';
 import { SCREEN_MOCKUP_MAP } from '@/components/ScreenMockups';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const SPEED_FACTOR = 0.35;
@@ -331,6 +334,8 @@ function ProgressSegments({ total, current, progress, onPress, accentColor }: {
 }
 
 export default function VideoPresentationScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [mode, setMode] = useState<'hub' | 'presentation'>('hub');
   const [presentationStyle, setPresentationStyle] = useState<'investor' | 'product'>('investor');

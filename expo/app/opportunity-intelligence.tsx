@@ -5,6 +5,7 @@
  * top opportunities, and 5-hour executive reports.
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -140,6 +141,8 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function OpportunityIntelligenceScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [state, setState] = useState<DashboardState>({
     loading: true,

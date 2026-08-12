@@ -48,6 +48,7 @@ import { Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchJVDeals, fetchJVDealsPaginated, updateJVDeal, archiveJVDeal, restoreJVDeal, permanentlyDeleteJVDeal, recoverPhotosForDeal, adminRestorePhotos, resetSupabaseCheck, updateDealDisplayOrders } from '@/lib/jv-storage';
 import { uploadDealPhotosParallel } from '@/lib/photo-upload';
 import { fetchPhotosFromStorageBucket } from '@/constants/deal-photos';
@@ -230,6 +231,8 @@ const DEFAULT_EDIT_FORM: EditFormState = {
   endDate: ''};
 
 export default function AdminJVDealsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');

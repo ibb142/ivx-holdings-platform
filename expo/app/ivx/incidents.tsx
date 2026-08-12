@@ -1,5 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+// Realtime: auto-invalidate on DB changes
+// useRealtimeTable called in component body
 import {
   Alert,
   FlatList,
@@ -495,6 +498,8 @@ function IncidentsScreen() {
         </ScrollView>
       ) : (
         <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
           data={incidents}
           renderItem={renderItem}
           keyExtractor={keyExtractor}

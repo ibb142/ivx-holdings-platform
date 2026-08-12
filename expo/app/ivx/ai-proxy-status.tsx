@@ -4,6 +4,9 @@ import { Stack } from 'expo-router';
 import { Bot, RefreshCw, ShieldCheck, AlertTriangle } from 'lucide-react-native';
 import { getIVXAccessToken, getIVXOwnerAIEndpoint } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 type ProxyStatusPayload = {
   ok?: boolean;
@@ -62,6 +65,8 @@ function deriveProxyStatusEndpoint(): string | null {
 }
 
 export default function IVXAIProxyStatusScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [state, setState] = useState<LoadState>(INITIAL_STATE);
 
   const runCheck = useCallback(async () => {

@@ -32,8 +32,10 @@ import Colors from '@/constants/colors';
 import { useDeviceIP } from '@/lib/use-device-ip';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { validateEmail, validatePassword, validatePhone } from '@/lib/auth-helpers';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 type AuditStatus = 'pass' | 'fail' | 'warn' | 'checking';
 
@@ -53,6 +55,8 @@ interface AuditCategory {
 }
 
 export default function RegistrationAuditScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const ipInfo = useDeviceIP();
   const { user, isAuthenticated } = useAuth();
   const [auditing, setAuditing] = useState(true);

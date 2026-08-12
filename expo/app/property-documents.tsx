@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -29,6 +30,8 @@ import {
   RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   REQUIRED_TITLE_DOCUMENTS,
   propertyDocumentSubmissions,
@@ -47,6 +50,8 @@ const STATUS_CONFIG: Record<TitleDocumentStatus, { color: string; label: string;
   rejected: { color: Colors.error, label: 'Rejected', icon: XCircle }};
 
 export default function PropertyDocumentsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { propertyId } = useLocalSearchParams<{ propertyId: string }>();
 

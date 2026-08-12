@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -45,6 +46,8 @@ import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   FUNCTIONALITY_REGISTRY,
   getTotalFeatures,
@@ -242,6 +245,8 @@ const INTEGRATIONS: IntegrationItem[] = [
 type TabType = 'features' | 'integrations';
 
 export default function AppReportScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('features');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());

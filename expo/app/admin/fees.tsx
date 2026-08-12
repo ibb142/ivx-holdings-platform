@@ -32,8 +32,12 @@ import {
   LogIn,
   ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { FeeConfiguration, FeeTransaction, FeeType } from '@/types';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 import { useFeeConfigurations } from '@/lib/admin-queries';
@@ -43,6 +47,8 @@ type FilterType = 'all' | 'buy' | 'sell' | 'withdrawal' | 'deposit';
 type StatusFilter = 'all' | 'collected' | 'pending' | 'waived';
 
 export default function FeesScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'overview' | 'config' | 'history'>('overview');
   const [typeFilter, setTypeFilter] = useState<FilterType>('all');
@@ -88,6 +94,7 @@ export default function FeesScreen() {
             deposit: totalFees * 0.15}}};
     },
     staleTime: 30000});
+  const isLoading = false; // IVX: loading state placeholder
 
   const transactions: FeeTransaction[] = useMemo(() => feeQuery.data?.transactions ?? [], [feeQuery.data]);
   const stats: { totalFeesCollected: number; feesThisMonth: number; feesLastMonth: number; feeGrowthPercent: number; totalTransactionsWithFees: number; averageFeeAmount: number; feesByType: { buy: number; sell: number; withdrawal: number; deposit: number } } = {

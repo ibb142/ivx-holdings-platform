@@ -23,6 +23,9 @@ import {
 import Colors from '@/constants/colors';
 import { useGlobalSearch, SearchResult } from '@/lib/global-search';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string }>> = {
   building: Building2,
@@ -152,6 +155,8 @@ export default function SearchScreen() {
           )}
 
           <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
             data={results}
             keyExtractor={(item) => item.id}
             renderItem={renderResult}

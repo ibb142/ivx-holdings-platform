@@ -36,6 +36,7 @@ import { supabase } from '@/lib/supabase';
 import { runLandingReadinessAudit, type ReadinessAuditMode } from '@/lib/landing-readiness-audit';
 import { inspectPasswordResetRedirect } from '@/lib/auth-password-recovery';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
 
 type AuditStatus = 'pass' | 'fail' | 'warn' | 'info' | 'checking';
 

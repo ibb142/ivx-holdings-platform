@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack, useRouter } from 'expo-router';
 import {
   Platform,
@@ -28,6 +29,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { RefreshControl } from 'react-native';
 import { ivxDiagnostics, type DiagnosticsSnapshot } from '@/src/modules/ivx-developer/diagnosticsStore';
 import { ivxAIWatchdog, type WatchdogSnapshot } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
 import { getMetricsSnapshot, type MetricsSnapshot, type LatencyStats, type SuccessStats } from '@/src/modules/ivx-developer/metricsService';
@@ -651,6 +653,8 @@ function kindStyle(kind: DiagnosticsSnapshot['recentEvents'][number]['kind']): {
 }
 
 export default function DiagnosticsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary fallbackTitle="Diagnostics unavailable">
       <DiagnosticsContent />

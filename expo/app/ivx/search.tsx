@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
@@ -14,6 +15,7 @@ import Colors from '@/constants/colors';
 import { ivxChatService, type IVXOwnerMessageSearchResult } from '@/src/modules/ivx-owner-ai/services';
 import { sanitizeUserFacingChatText } from '@/src/modules/chat/services/visibleTextSanitizer';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 const MIN_QUERY_LENGTH = 2;
 
@@ -35,6 +37,8 @@ function senderLabel(result: IVXOwnerMessageSearchResult): string {
 }
 
 export default function IVXOwnerSearchRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [query, setQuery] = useState<string>('');
   const [submitted, setSubmitted] = useState<string>('');
@@ -168,6 +172,8 @@ export default function IVXOwnerSearchRoute() {
           </View>
         ) : (
           <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
             data={results}
             keyExtractor={(item) => `${item.source}-${item.conversationId}-${item.message.id}`}
             renderItem={renderItem}

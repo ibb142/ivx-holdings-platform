@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import {View,
   Text,
@@ -31,6 +32,8 @@ import {
   Lock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   propertyDocumentSubmissions,
   REQUIRED_TITLE_DOCUMENTS} from '@/mocks/title-company';
@@ -47,6 +50,8 @@ const STATUS_CONFIG: Record<TitleDocumentStatus, { color: string; label: string 
   rejected: { color: Colors.error, label: 'Rejected' }};
 
 export default function TitleReviewScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { submissionId } = useLocalSearchParams<{ submissionId: string }>();
 

@@ -6,6 +6,7 @@
  * destructive actions, risk level, and engine wiring.
  */
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -41,6 +42,7 @@ import {
   RefreshCw,
   Activity} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { getAgentById, type AgentTool } from '@/lib/ivx-agents-data';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -93,6 +95,8 @@ function ToolCard({ tool, onPressEndpoint }: { tool: AgentTool; onPressEndpoint:
 }
 
 export default function AgentDetailScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { agentId } = useLocalSearchParams<{ agentId: string }>();
   const { width: screenWidth } = useWindowDimensions();

@@ -29,6 +29,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import Colors from '@/constants/colors';
 import { fetchWaitlistStats, fetchWaitlistEntries, type WaitlistEntry } from '@/lib/waitlist-service';
 import { exportCSV } from '@/lib/csv-export';
@@ -403,6 +404,9 @@ export default function WaitlistAdminScreen() {
     queryKey: ['waitlist-admin-stats'],
     queryFn: fetchWaitlistStats,
     staleTime: 15000});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const entriesQuery = useQuery({
     queryKey: ['waitlist-admin-entries', searchText, statusFilter],

@@ -24,6 +24,7 @@ import {
   Filter} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
@@ -47,6 +48,8 @@ interface ApplicationItem {
 }
 
 export default function ApplicationsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<FilterType>('all');
@@ -391,6 +394,8 @@ export default function ApplicationsScreen() {
         </View>
       ) : (
         <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
           data={applications}
           keyExtractor={keyExtractor}
           renderItem={renderApplication}

@@ -34,6 +34,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 
 import Colors from '@/constants/colors';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchVideoFeed, type FeedVideo } from '@/lib/video-feed';
 import {
   toggleVideoFollow,

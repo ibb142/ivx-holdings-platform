@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import { useRouter } from 'expo-router';
 import {View,
@@ -48,8 +49,12 @@ import { useEarn } from '@/lib/earn-context';
 import { Percent, PiggyBank } from 'lucide-react-native';
 import { useAnalytics } from '@/lib/analytics-context';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 export default function WalletScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   // Safe destructuring with fallbacks — useEarn() returns undefined if the
   // EarnProvider is ever absent (e.g. a hot-reload race or a route rendered

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useRouter } from 'expo-router';
 import {
   Alert,
@@ -102,6 +103,8 @@ async function loadInboxRuntimeProof(ownerLabel: string, ownerSessionReady: bool
 }
 
 export default function IVXOwnerInboxRoute() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -436,6 +439,8 @@ export default function IVXOwnerInboxRoute() {
           </View>
         ) : (
           <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
             data={inboxItems}
             keyExtractor={(item) => item.conversationId}
             renderItem={renderInboxItem}

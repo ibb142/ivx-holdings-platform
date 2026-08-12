@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   RefreshControl,
@@ -234,6 +235,8 @@ function IndependenceContent() {
 }
 
 export default function IndependenceScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <Stack.Screen options={{ title: 'Rork Independence', headerStyle: { backgroundColor: Colors.background }, headerTintColor: Colors.text }} />

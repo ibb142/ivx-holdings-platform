@@ -6,6 +6,7 @@
  * Pulls from the backend /api/ivx/investor-performance endpoint.
  */
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -83,6 +84,8 @@ type FilterType = 'all' | 'active' | 'completed' | 'distributions';
 // ---------------------------------------------------------------------------
 
 export default function InvestorPerformanceScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const [data, setData] = useState<InvestorPerformanceData | null>(null);

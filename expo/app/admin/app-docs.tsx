@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -49,6 +50,8 @@ import * as Print from 'expo-print';
 
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   FUNCTIONALITY_REGISTRY,
   APP_INFO,
@@ -82,6 +85,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Plug: <Plug size={20} color="#00C48C" />};
 
 export default function AppDocsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);

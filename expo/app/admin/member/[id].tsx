@@ -29,9 +29,13 @@ import {
   IdCard} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 import {
   fetchAdminMemberRegistryRecord,
   syncMemberRegistryFromSupabase,
@@ -120,6 +124,9 @@ export default function MemberDetailScreen() {
         role: data.role} as MemberData;
     },
     enabled: !!id});
+
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const walletQuery = useQuery({
     queryKey: ['admin-member-wallet', id],

@@ -13,6 +13,7 @@
  *   - Self-improvement tasks
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -247,6 +248,8 @@ function SubsystemCard({
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function LiveOperationsCenter() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

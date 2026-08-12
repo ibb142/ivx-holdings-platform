@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Platform,
@@ -291,6 +292,8 @@ function ProductionDiagnosticsContent() {
 }
 
 export default function ProductionDiagnosticsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary fallbackTitle="Production diagnostics unavailable">
       <ProductionDiagnosticsContent />

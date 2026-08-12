@@ -24,13 +24,19 @@ import {
   Check,
   Edit2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { EmptyState } from '@/components/ivx';
 
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useAnalytics } from '@/lib/analytics-context';
 
 export default function PersonalInfoScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { profileData, refetchProfile } = useAuth();
   const { trackAction } = useAnalytics();

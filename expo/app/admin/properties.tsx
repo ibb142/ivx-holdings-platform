@@ -25,6 +25,7 @@ import Colors from '@/constants/colors';
 import { Property } from '@/types';
 import { formatCurrencyWithDecimals, formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { useProgressiveList } from '@/lib/use-progressive-list';
 import { EmptyState, ErrorState, ListFooter } from '@/components/ProgressiveStates';
@@ -37,6 +38,8 @@ import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 type FilterType = 'all' | 'live' | 'coming_soon' | 'funded' | 'closed';
 
 export default function PropertiesScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');

@@ -24,7 +24,10 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const TEST_PHONE = '';
 const TEST_PHONE_DISPLAY = 'No test phone configured';
@@ -45,6 +48,8 @@ Powered by AWS SNS | Enterprise-Grade Delivery`;
 type SendStatus = 'idle' | 'sending' | 'success' | 'error';
 
 export default function SendTestSMSScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
 
   const [status, setStatus] = useState<SendStatus>('idle');

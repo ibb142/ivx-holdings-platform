@@ -42,9 +42,13 @@ import { useWalletBalance } from '@/lib/data-hooks';
 import { useProperty } from '@/lib/data-hooks';
 import { purchaseShares } from '@/lib/investment-service';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 
 type PaymentMethod = 'wire' | 'wallet' | 'card';
 
@@ -58,6 +62,8 @@ const WIRE_TRANSFER_DETAILS = {
   reference: 'IVX-SHARES'};
 
 export default function BuySharesScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();

@@ -45,6 +45,7 @@ import { useInvestmentGuard } from '@/hooks/useInvestmentGuard';
 import InvestorDisclosure from '@/components/InvestorDisclosure';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { purchaseJVInvestment } from '@/lib/investment-service';
 import { fetchJVDealById } from '@/lib/jv-storage';
 import type { PoolTier } from '@/types/jv';
@@ -239,6 +240,8 @@ const POOL_CONFIG: Record<InvestmentPool, { label: string; desc: string; icon: t
     color: '#00C48C'}};
 
 export default function JVInvestScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { jvId } = useLocalSearchParams<{ jvId: string }>();

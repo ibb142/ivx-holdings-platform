@@ -32,6 +32,7 @@ import {
   User} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { validateEmail, validatePassword, validatePhone } from '@/lib/auth-helpers';
 import { fetchPublicGeoData } from '@/lib/public-geo';
@@ -82,6 +83,8 @@ const REGISTRATION_TESTS: { id: string; name: string; icon: React.ComponentType<
 ];
 
 export default function RegistrationAuditScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'device' | 'tests' | 'registrations'>('device');

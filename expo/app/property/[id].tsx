@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -48,6 +49,8 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import { PropertyDocument, TimeRange } from '@/types';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { formatCurrencyWithDecimals, formatCurrencyCompact, formatDollar, formatNumber, formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import { useProperty, useMarketData, useWalletBalance, useCurrentUser } from '@/lib/data-hooks';
 import ImageSlider from '@/components/ImageSlider';
@@ -58,6 +61,8 @@ import { Camera } from 'lucide-react-native';
 import { getDealExitProjection, INVESTOR_TIMELINE_STEPS } from '@/lib/investor-intake';
 
 export default function PropertyDetailScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);

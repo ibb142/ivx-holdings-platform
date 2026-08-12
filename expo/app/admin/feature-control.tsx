@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -83,6 +84,8 @@ function getDefaultState(): ControlState {
 }
 
 export default function FeatureControlScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [controlState, setControlState] = useState<ControlState>(getDefaultState);
   const [searchQuery, setSearchQuery] = useState('');

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -26,6 +27,8 @@ import {
   Server,
   RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 interface ApiKeyItem {
   id: string;
@@ -111,6 +114,8 @@ function buildKeys(): ApiKeyItem[] {
 }
 
 export default function ApiKeysScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<Record<string, boolean>>({});

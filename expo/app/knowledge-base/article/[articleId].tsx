@@ -5,6 +5,7 @@
  * Route: /knowledge-base/article/[articleId]
  */
 import React, { useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -28,6 +29,8 @@ import {
   ChevronRight,
   BookOpen} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   getArticleById,
   getCategoryById,
@@ -137,6 +140,8 @@ function RelatedArticleRow({ article, onPress }: { article: KBArticle; onPress: 
 // ─── Main Screen ────────────────────────────────────────────────────────
 
 export default function KnowledgeBaseArticleScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{ articleId: string }>();
   const { width } = useWindowDimensions();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -41,6 +42,8 @@ import {
   type HealthStatus} from '@/lib/system-health-checker';
 import { runAIOpsScan, type AIOpsOverallStatus, type AIOpsSeverity, type AIOpsSnapshot } from '@/lib/ai-ops';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   getOwnerAlertFeed,
   getOwnerAlertSettings,
@@ -758,6 +761,8 @@ function OwnerEscalationLanes({
 }
 
 export default function SystemBlueprintScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<SystemHealthSnapshot | null>(null);
   const [loading, setLoading] = useState(true);

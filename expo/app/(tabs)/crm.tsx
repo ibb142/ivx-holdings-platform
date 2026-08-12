@@ -17,6 +17,7 @@ import {View,
   RefreshControl} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -36,6 +37,7 @@ import {
   Lock,
   type LucideIcon} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
 import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { Skeleton, ListItemSkeleton } from '@/components/SkeletonLoader';

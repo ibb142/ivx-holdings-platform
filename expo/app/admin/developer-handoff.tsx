@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Alert,
   Linking,
@@ -56,6 +57,7 @@ import {
   getReadyCount} from '@/mocks/developer-handoff';
 import type { IntegrationOwner, IntegrationPriority, IntegrationStatus } from '@/mocks/developer-handoff';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   Database: <Database size={18} color="#4A90D9" />,
@@ -111,6 +113,8 @@ function getPriorityDisplay(item: { priority: IntegrationPriority; status: Integ
 }
 
 export default function DeveloperHandoffScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DEVELOPER_HANDOFF_CATEGORIES.map((category) => category.id)));
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());

@@ -8,6 +8,7 @@ import {
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState} from 'expo-audio';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
@@ -41,6 +42,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { SafeIcon } from '@/lib/safe-icon';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
 import Colors from '@/constants/colors';
+import { IVXImage } from '@/components/ivx';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID } from '@/constants/ivx-owner-ai';
 import { useAuth } from '@/lib/auth-context';
 import { isAdminRole } from '@/lib/auth-helpers';
@@ -852,6 +854,8 @@ const DateSeparator = React.memo(function DateSeparator({ value }: { value: stri
 });
 
 export default function IVXOwnerChatRoute() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const queryClient = useQueryClient();
   const router = useRouter();
   const flatListRef = useRef<FlatList<IVXMessage> | null>(null);

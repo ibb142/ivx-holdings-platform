@@ -55,6 +55,7 @@ import {
   type PaymentConfigResponse} from '@/lib/payment-api-client';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 interface DealPathwayData {
@@ -82,6 +83,8 @@ interface DealPathwayData {
 type PaymentStep = 'select' | 'processing' | 'success' | 'failed';
 
 export default function TokenizedParticipationPage() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const { user } = useAuth();

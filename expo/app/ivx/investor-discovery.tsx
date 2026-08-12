@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
@@ -24,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   generateInvestorReport,
   runInvestorDiscovery,
@@ -284,6 +286,8 @@ function InvestorDiscoveryScreen() {
 }
 
 export default function InvestorDiscoveryScreenWithBoundary() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <InvestorDiscoveryScreen />

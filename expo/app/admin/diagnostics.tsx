@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Platform,
@@ -30,6 +31,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
+import { RefreshControl } from 'react-native';
 import { getIVXBuildInfo, type IVXBuildInfo } from '@/constants/build-info';
 import { getStartupTraceInfo } from '@/lib/startup-trace';
 import { useAuth } from '@/lib/auth-context';
@@ -437,6 +439,8 @@ function DiagnosticsContent() {
 }
 
 export default function DiagnosticsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary fallbackTitle="Diagnostics unavailable">
       <DiagnosticsContent />

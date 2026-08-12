@@ -40,8 +40,11 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { submitJVApplication, formatCents } from '@/lib/payment-api-client';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 interface DealData {
   id: string;
@@ -60,6 +63,8 @@ interface DealData {
 type JVStep = 'form' | 'submitting' | 'submitted' | 'failed';
 
 export default function JVApplicationPage() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const { user } = useAuth();

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useRouter } from 'expo-router';
 import {
   Pressable,
@@ -13,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   getIVXIndependenceStatus,
   type IVXIndependenceChecklistItem,
@@ -128,6 +130,8 @@ function DayCard({ item }: { item: IVXIndependenceChecklistItem }) {
 }
 
 export default function IVXIndependenceTrackerRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const statusQuery = useQuery<IVXIndependenceStatus, Error>({

@@ -38,7 +38,9 @@ import { IVX_SECURITY_HOTFIX_SQL } from '@/constants/ivx-security-hotfix-sql';
 import { safeSetString } from '@/lib/safe-clipboard';
 import { executeSupabaseSqlScript, isSupabaseSqlExecMissing } from '@/lib/supabase-sql-executor';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 console.log('[Supabase Status] Live dashboard loaded');
 
@@ -579,6 +581,8 @@ const IVX_OWNER_AI_STORAGE_BUCKETS = ['ivx-owner-files'] as const;
 const STORAGE_BUCKETS = [...BASE_STORAGE_BUCKETS, ...IVX_OWNER_AI_STORAGE_BUCKETS];
 
 export default function SupabaseStatusPage() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [scanning, setScanning] = useState(false);
   const [lastScanAt, setLastScanAt] = useState<string | null>(null);

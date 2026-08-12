@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   KeyboardAvoidingView,
@@ -489,6 +490,8 @@ function CapitalPipelineContent() {
 }
 
 export default function CapitalPipelineScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <Stack.Screen options={{ title: 'Capital Pipeline' }} />

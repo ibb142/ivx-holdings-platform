@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import {
   View,
@@ -22,6 +23,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type UserRole = 'investor' | 'private_lender' | 'property_owner';
 type StatementType = 'monthly' | 'quarterly' | 'annual';
@@ -247,6 +251,8 @@ function StatementCard({ statement, onDownload }: { statement: Statement; onDown
 }
 
 export default function StatementsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [activeRole, setActiveRole] = useState<UserRole>('investor');
   const [filterType, setFilterType] = useState<'all' | StatementType>('all');
 

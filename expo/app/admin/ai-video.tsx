@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -53,6 +54,8 @@ import Colors from '@/constants/colors';
 import { generateText, generateImage as aiGenerateImage } from '@/lib/ai-service';
 import { SCREEN_MOCKUP_MAP } from '@/components/ScreenMockups';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WAVE_BAR_COUNT = 5;
@@ -203,6 +206,8 @@ const PHOTO_TEMPLATES = [
 ];
 
 export default function AIVideoStudio() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [slides, setSlides] = useState<PresentationSlide[]>([]);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);

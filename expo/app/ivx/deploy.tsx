@@ -12,7 +12,10 @@ import { Stack } from 'expo-router';
 import { CheckCircle2, ChevronRight, RefreshCw, Rocket, ShieldAlert, Undo2 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const API_BASE = ((process.env.EXPO_PUBLIC_IVX_API_BASE_URL ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.ivxholding.com') as string).replace(/\/$/, '');
 
@@ -125,6 +128,8 @@ function stageTone(stage: DeployStage): 'success' | 'warning' | 'error' | 'neutr
 }
 
 export default function IVXDeployScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [stage, setStage] = useState<DeployStage>('idle');
   const [deployResult, setDeployResult] = useState<ApproveAndRunResponse | null>(null);
   const [rollbackResult, setRollbackResult] = useState<RollbackResponse | null>(null);

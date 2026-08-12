@@ -4,6 +4,8 @@ import { Stack } from 'expo-router';
 import { Activity, AlertTriangle, CheckCircle2, Clock3, LayoutDashboard, RefreshCw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 type FeatureAreaStatus = 'live' | 'in_progress' | 'planned';
 
@@ -66,6 +68,8 @@ const STATUS_META: Record<FeatureAreaStatus, { label: string; color: string }> =
   planned: { label: 'Planned', color: '#7DD3FC' }};
 
 export default function IVXProjectDashboardRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [state, setState] = useState<LoadState>(INITIAL_STATE);
 
   const runFetch = useCallback(async () => {

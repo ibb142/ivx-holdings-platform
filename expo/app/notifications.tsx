@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EmptyState, ListFooter } from '@/components/ProgressiveStates';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 const PAGE_SIZE = 20;
 
@@ -21,6 +22,9 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const queryClient = useQueryClient();
+
+  // Realtime: invalidate notifications on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {

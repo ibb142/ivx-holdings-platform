@@ -18,6 +18,7 @@ import {View,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Shield,
   ShieldCheck,
@@ -262,6 +263,8 @@ function withdrawalColor(status: string): string {
 type TabKey = 'overview' | 'accounts' | 'withdrawals' | 'wires' | 'compliance' | 'audit';
 
 export default function InvestorProtectionScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('overview');

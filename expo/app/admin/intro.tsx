@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -41,6 +42,9 @@ import {
   ArrowLeft} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { EmptyState } from '@/components/ivx';
 import { useIntro, OnboardingStep, OnboardingFeature } from '@/lib/intro-context';
 
 const ICON_OPTIONS = [
@@ -63,6 +67,8 @@ const COLOR_PRESETS = [
 ];
 
 export default function IntroManagement() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const {
     steps,

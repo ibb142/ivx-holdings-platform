@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -31,6 +32,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import { safeSetString } from '@/lib/safe-clipboard';
 
 interface TaskItem {
@@ -209,6 +212,8 @@ function generateReport(): string {
 }
 
 export default function DeveloperBreakdownScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(['phase1']));
   const [copied, setCopied] = useState<boolean>(false);

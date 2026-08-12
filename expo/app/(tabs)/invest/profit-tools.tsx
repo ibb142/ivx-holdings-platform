@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -28,6 +29,10 @@ import {
   Shield,
   Star} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 interface ToolStat {
   label: string;
@@ -408,6 +413,8 @@ function ToolDetailModal({ tool, onClose }: { tool: ProfitTool; onClose: () => v
 }
 
 export default function ProfitToolsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [selectedTool, setSelectedTool] = useState<ProfitTool | null>(null);
   const [filter, setFilter] = useState<'all' | 'lender' | 'investor'>('all');
 

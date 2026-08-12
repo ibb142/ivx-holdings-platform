@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -64,10 +65,13 @@ import {
   AIMarketingInsight} from '@/types';
 import { generateText } from '@/lib/ai-service';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 type TabType = 'overview' | 'content' | 'campaigns' | 'referrals' | 'insights';
 
 export default function GrowthScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [socialContent, setSocialContent] = useState<SocialMediaContent[]>(mockSocialContent);

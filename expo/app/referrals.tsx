@@ -36,7 +36,9 @@ import { Referral } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 const mockUserReferrals: Referral[] = [
   {
@@ -83,6 +85,8 @@ const mockUserReferrals: Referral[] = [
 ];
 
 export default function ReferralsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
 
   const referralsQuery = useQuery({

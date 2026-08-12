@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -51,6 +52,8 @@ import { z } from 'zod';
 import { DocumentVerificationStatus } from '@/types';
 import { formatDollar } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type PropertyType = 'residential' | 'commercial' | 'mixed' | 'industrial' | 'land';
 type IDType = 'drivers_license' | 'passport' | 'national_id';
@@ -107,6 +110,8 @@ const idVerificationSchema = z.object({
   issues: z.array(z.string()).describe('List of potential issues or concerns with the ID')});
 
 export default function SubmitPropertyScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({

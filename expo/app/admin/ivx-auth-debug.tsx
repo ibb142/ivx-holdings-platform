@@ -24,8 +24,10 @@ import {
   Zap} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { getIVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 type EndpointProbe = {
   label: string;
@@ -66,6 +68,8 @@ function maskEmail(email: string | null | undefined): string | null {
 }
 
 export default function IVXAuthDebugScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [state, setState] = useState<AuthDebugState>({
     tokenPresent: null,

@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -40,6 +41,7 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 interface PaymentConfig {
   provider: string;
@@ -64,6 +66,8 @@ interface PaymentStats {
 }
 
 export default function AdminPaymentSettings() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { user } = useAuth();
   const [config, setConfig] = useState<PaymentConfig | null>(null);

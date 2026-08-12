@@ -11,6 +11,7 @@
  * Auto-refreshes every 15s (faster than other dashboards for live work) + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -186,6 +187,8 @@ function formatDuration(ms: number | undefined): string {
 }
 
 export default function LiveWorkPanelScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [liveWork, setLiveWork] = useState<LiveWorkSnapshot | null>(null);
   const [tasks, setTasks] = useState<TaskEntry[]>([]);

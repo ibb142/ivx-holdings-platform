@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   RefreshControl,
   ScrollView,
@@ -18,6 +19,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 type AuditEntry = {
   type: string;
@@ -136,6 +138,8 @@ function LeadAuditLogScreen() {
 }
 
 export default function LeadAuditLogScreenWithBoundary() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <LeadAuditLogScreen />

@@ -26,6 +26,7 @@ import {
   Clock,
   Wrench} from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   getBackupStats,
@@ -45,6 +46,9 @@ export default function ImageBackupScreen() {
     queryKey: ['image-backup-stats'],
     queryFn: getBackupStats,
     staleTime: 30_000});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const reportQuery = useQuery({
     queryKey: ['image-health-report'],

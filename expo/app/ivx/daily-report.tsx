@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
@@ -338,6 +339,8 @@ function DailyReportContent() {
 }
 
 export default function DailyReportScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <Stack.Screen options={{ title: 'Daily Report' }} />

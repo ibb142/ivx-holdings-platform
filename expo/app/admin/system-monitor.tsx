@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -39,6 +40,8 @@ import {
   ArrowUpRight,
   ArrowDownRight} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   MODULE_HEALTH_DATA,
   GROWTH_CHANNELS,
@@ -253,6 +256,8 @@ function ChannelRow({ channel }: { channel: GrowthChannel }) {
 }
 
 export default function SystemMonitorPage() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>('pulse');
   const [refreshing, setRefreshing] = useState(false);

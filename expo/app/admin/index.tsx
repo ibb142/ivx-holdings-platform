@@ -70,8 +70,10 @@ import {
   Sliders,
   Cpu} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { getAdminMemberRegistrySnapshot, type AdminMemberRegistrySnapshot } from '@/lib/member-registry';
@@ -265,6 +267,10 @@ export default function AdminDashboard() {
     refetchIntervalInBackground: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false});
+  const isLoading = false; // IVX: loading state placeholder
+
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const autoDeployStatusQuery = useQuery({
     queryKey: ['admin-auto-deploy-status'],

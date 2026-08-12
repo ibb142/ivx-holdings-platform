@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import {
   Linking,
@@ -348,6 +349,8 @@ function ContactProfileContent({ id }: { id: string }) {
 }
 
 export default function ContactProfileScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] ?? '' : '';
   return (

@@ -15,6 +15,7 @@ import {
   TextInput,
   View,
   useWindowDimensions} from "react-native";
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Archive, MessageCirclePlus, RefreshCw, Send, ShieldCheck, Sparkles, Square, Wifi, WifiOff } from 'lucide-react-native';
 import ChatBubble from '@/components/ChatBubble';
@@ -234,6 +235,9 @@ export default function ChatHubScreen() {
     enabled: isHydrated,
     staleTime: 10_000,
     retry: 1});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   useEffect(() => {
     Animated.loop(
@@ -581,6 +585,8 @@ export default function ChatHubScreen() {
                   renderItem={renderSession}
                   keyExtractor={(item) => item.sessionId}
                   showsHorizontalScrollIndicator={false}
+                  onEndReachedThreshold={5}
+                  onEndReached={() => { /* IVX: pagination hook point */ }}
                   contentContainerStyle={styles.sessionListContent}
                   ListEmptyComponent={(
                     <Text style={styles.emptySessionText}>Saved sessions appear here after your first message.</Text>

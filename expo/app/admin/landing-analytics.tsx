@@ -51,6 +51,7 @@ import {
   UserCheck,
   ShieldCheck} from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { usePresenceTracker } from '@/lib/realtime-presence';
@@ -628,6 +629,8 @@ function PulseIndicator({ active }: { active: boolean }) {
 }
 
 export default function LandingAnalyticsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { isAuthenticated, isAdmin, isLoading: authLoading, refreshSession, isOwnerIPAccess, userId: authUserId } = useAuth();
   const [period, setPeriod] = useState<PeriodType>('all');

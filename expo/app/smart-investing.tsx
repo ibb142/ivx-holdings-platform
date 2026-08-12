@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -26,6 +27,10 @@ import {
   Shield,
   Clock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { smartFeatures, SmartFeature, globalPresence } from '@/mocks/competitive-stats';
 import { getResponsiveSize, isExtraSmallScreen } from '@/lib/responsive';
 
@@ -158,6 +163,8 @@ function GlobalReachSection() {
 }
 
 export default function SmartInvestingScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const screenSize = getResponsiveSize(width);

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -23,6 +24,8 @@ import {
   Zap,
   Target} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   assetClassComparison,
   returnProjections,
@@ -192,6 +195,8 @@ function ProjectionCalculator() {
 }
 
 export default function CompareInvestmentsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const maxReturn = Math.max(...assetClassComparison.map(a => a.annualReturn));
 

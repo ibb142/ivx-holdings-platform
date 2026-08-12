@@ -44,6 +44,7 @@ import {
   ScanLine,
   Play} from 'lucide-react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { landingTracker } from '@/lib/landing-tracker';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -73,6 +74,7 @@ import {
   createSupportTicket} from '@/lib/support-chat';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
 
 const IVX_BUSINESS_CARD_URL = require('@/assets/images/ivx-logo-stacked.png');
 
@@ -822,6 +824,8 @@ function LandingWaitlistForm() {
 
 
 export default function LandingScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const openAccessMode = isOpenAccessModeEnabled();
   const {

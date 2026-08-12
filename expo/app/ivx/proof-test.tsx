@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import { Stack } from 'expo-router';
 import { AlertTriangle, CheckCircle2, FlaskConical, RefreshCw } from 'lucide-react-native';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 type ProofTestPayload = {
   status?: string;
@@ -39,6 +41,8 @@ const INITIAL_STATE: LoadState = {
   fetchedAt: null};
 
 export default function IVXProofTestRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [state, setState] = useState<LoadState>(INITIAL_STATE);
 
   const runFetch = useCallback(async () => {

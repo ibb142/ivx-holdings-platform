@@ -1,5 +1,9 @@
 // template
 import { router } from "expo-router";
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState, EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { StatusBar } from "expo-status-bar";
 import {
   Modal,
@@ -11,6 +15,8 @@ import {
   View} from "react-native";
 
 export default function ModalScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <Modal
       animationType="fade"

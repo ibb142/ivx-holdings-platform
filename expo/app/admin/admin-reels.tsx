@@ -36,7 +36,10 @@ import {
 import { Image } from 'expo-image';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { EmptyState } from '@/components/ivx';
 import {
   fetchAllVideos,
   addVideo,
@@ -65,6 +68,9 @@ export default function AdminReelsScreen() {
     queryKey: ['admin-reels', filterType],
     queryFn: () => fetchAllVideos(filterType !== 'all' ? filterType : undefined),
     staleTime: 30_000});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const videos = useMemo(() => videosQuery.data ?? [], [videosQuery.data]);
 
@@ -334,6 +340,8 @@ export default function AdminReelsScreen() {
             </View>
           ) : (
             <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
               data={videos}
               keyExtractor={(v) => v.id}
               renderItem={renderVideo}

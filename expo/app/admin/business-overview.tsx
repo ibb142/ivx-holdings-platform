@@ -40,10 +40,12 @@ import {
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
 import { useScreenFocusState } from '@/hooks/useScreenFocusState';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const REFRESH_MS = 1000 * 60 * 2;
@@ -110,6 +112,8 @@ function HealthBadge({ status }: { status: 'healthy' | 'degraded' | 'down' }) {
 }
 
 export default function BusinessOverviewScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const isScreenFocused = useScreenFocusState(true);

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -46,6 +47,9 @@ import Colors from '@/constants/colors';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { LandPartnerFormData, DocumentScan, LandPartnerCalculation, CompSearchResult } from '@/types';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 
 const DEAL_TERMS = {
   cashPaymentPercent: 60,
@@ -84,6 +88,8 @@ const initialFormData: LandPartnerFormData = {
   paymentStructure: 'immediate'};
 
 export default function LandPartnerScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState(0);

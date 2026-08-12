@@ -26,7 +26,9 @@ import {
   AlertTriangle,
   RefreshCw} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchRawEvents, computeAnalytics, fetchExtraCounts } from '@/lib/analytics-compute';
 import type { TrendDelta, AcquisitionChannel, SessionQuality } from '@/lib/analytics-compute';
 import { usePresenceTracker } from '@/lib/realtime-presence';
@@ -172,6 +174,8 @@ const STANDARD_ANALYTICS_REFRESH_INTERVAL_MS = 180_000;
 const ANALYTICS_STALE_TIME_MS = 60_000;
 
 export default function AnalyticsReportScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const adminGuard = useAdminGuard({ redirectOnFail: false });
   const [period, setPeriod] = useState<PeriodType>('all');

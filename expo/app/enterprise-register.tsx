@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -81,6 +82,7 @@ import {
   EnterpriseRegistrationDraft} from '@/lib/enterprise-registration-shared';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 // ---------------------------------------------------------------------------
 // SecureStore-backed draft adapter (passwords never persisted)
@@ -418,6 +420,8 @@ function SelectField({ label, value, options, onSelect, error, icon, accessibili
 // ---------------------------------------------------------------------------
 
 export default function EnterpriseRegisterScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [state, setState] = useState<EnterpriseRegistrationState>(createInitialState);
   const [showPassword, setShowPassword] = useState(false);

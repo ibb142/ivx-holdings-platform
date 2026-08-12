@@ -43,7 +43,10 @@ import {
   Edit3,
   ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import {
   BroadcastChannel,
@@ -78,6 +81,8 @@ const RECIPIENT_FILTERS: { key: RecipientFilter; label: string; icon: React.Reac
 ];
 
 export default function BroadcastScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('compose');
   const [channels, setChannels] = useState<BroadcastChannel[]>(['email']);

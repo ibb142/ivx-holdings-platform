@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -30,6 +31,10 @@ import {
   File} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 import { useEmail } from '@/lib/email-context';
 import { EmailAttachment } from '@/types/email';
 
@@ -75,6 +80,8 @@ function isVideoAttachment(att: EmailAttachment): boolean {
 }
 
 export default function EmailDetailScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const {

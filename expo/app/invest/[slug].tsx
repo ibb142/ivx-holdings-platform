@@ -4,6 +4,7 @@
  * with ROI calculator, investment calculator, FAQ, AI chat, registration.
  */
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -38,6 +39,8 @@ import {
   MapPin} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
 
 interface LandingPageData {
@@ -78,6 +81,8 @@ const FAQ_ITEMS = [
 const API_BASE = DIRECT_API_BASE_URL || 'https://api.ivxholding.com';
 
 export default function InvestLandingPage() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { width } = useWindowDimensions();

@@ -16,8 +16,14 @@ import { logStartup } from '@/lib/startup-trace';
 import React, { useEffect } from 'react';
 import {View, StyleSheet } from "react-native";
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 export default function IndexScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {

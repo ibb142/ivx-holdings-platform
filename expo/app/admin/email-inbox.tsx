@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -124,6 +125,8 @@ const STATUS_COLORS: Record<string, string> = {
   archived: Colors.textTertiary};
 
 export default function EmailInboxScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [emails, setEmails] = useState<InboxEmail[]>([]);
   const [loadingEmails, setLoadingEmails] = useState(true);

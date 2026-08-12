@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Alert,
@@ -111,6 +112,8 @@ function StatRow({ label, value, tone }: { label: string; value: string; tone?: 
 }
 
 export default function IVXWorkerProofRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const queryClient = useQueryClient();
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const query = useQuery<WorkerProofData, Error>({

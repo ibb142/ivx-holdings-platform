@@ -8,6 +8,7 @@
  * Capital, Research.
  */
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -38,6 +39,7 @@ import {
   Zap,
   ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import {
   IVX_DOMAIN_AGENTS,
   getAgentById,
@@ -130,6 +132,8 @@ function AgentCard({
 }
 
 export default function AgentHubScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const isCompact = screenWidth < 380;

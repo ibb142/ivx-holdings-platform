@@ -1,4 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState, EmptyState, IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   View,
   Text,
@@ -199,6 +203,8 @@ const pb = StyleSheet.create({
   segFill: { height: '100%', borderRadius: 2 }});
 
 export default function InvestorPitchScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(true);

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import {
   View,
@@ -20,6 +21,10 @@ import {
   DollarSign,
   Calendar} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { useHoldings } from '@/lib/data-hooks';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 
@@ -34,6 +39,8 @@ interface DRIPSetting {
 }
 
 export default function AutoReinvestScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { holdings } = useHoldings();
   const pulseAnim = useRef(new Animated.Value(1)).current;

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -35,6 +36,10 @@ import {
   Activity,
   Sparkles} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   lenderEngagements,
   campaignAnalytics,
@@ -80,6 +85,8 @@ const PRIORITY_COLORS: Record<FollowUpPriority, string> = {
 type TabType = 'overview' | 'engagement' | 'campaigns' | 'smart' | 'costs';
 
 export default function OutreachAnalyticsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [engagementFilter, setEngagementFilter] = useState<EngagementLevel | 'all'>('all');

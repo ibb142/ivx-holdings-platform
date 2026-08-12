@@ -36,6 +36,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -133,6 +134,8 @@ function getKycBadge(kyc: string): { label: string; color: string } {
 }
 
 export default function LeadIntelligence() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const isScreenFocused = useScreenFocusState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');

@@ -38,6 +38,7 @@ import {
 import Colors from '@/constants/colors';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { fetchAdminMemberRegistry } from '@/lib/member-registry';
 import { IVXAutonomousProofCard } from '@/components/IVXAutonomousProofCard';
@@ -187,6 +188,8 @@ function normalizeInvestment(value: unknown): InvestmentShape | null {
 }
 
 export default function AdminDashboardScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width } = useWindowDimensions();
 

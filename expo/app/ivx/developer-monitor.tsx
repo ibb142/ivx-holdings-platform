@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import {
   Pressable,
@@ -86,6 +87,9 @@ function DeveloperMonitorContent() {
     queryKey: ['ivx-developer-monitor', 'tasks'],
     queryFn: listMonitorTasks,
     refetchInterval: POLL_INTERVAL_MS});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   // Resolve which task to show: explicit selection, else the most recent task.
   const resolvedTaskId = useMemo<string | null>(() => {

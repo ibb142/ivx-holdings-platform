@@ -21,6 +21,7 @@ import {
   StyleSheet,
   Animated,
   Platform,
+  TouchableOpacity,
   type StyleProp,
   type ViewStyle,
   type ImageStyle,
@@ -212,7 +213,7 @@ const IVXImage = React.memo(function IVXImage({
         key={sourceKey}
       >
         <ExpoImage
-          source={source}
+          source={source ?? undefined}
           style={StyleSheet.absoluteFill}
           contentFit={contentFit}
           transition={loaded ? undefined : { duration: transitionDuration }}
@@ -230,16 +231,16 @@ const IVXImage = React.memo(function IVXImage({
 
 function TouchableOpacityOnRetry({ onRetry, testID }: { onRetry: () => void; testID?: string }) {
   return (
-    <View
+    <TouchableOpacity
       style={styles.retryIcon}
-      onTouchEnd={onRetry}
+      onPress={onRetry}
       accessibilityRole="button"
       accessibilityLabel="Retry image load"
       testID={testID ? `${testID}-retry` : undefined}
     >
       <View style={styles.retryIconLine} />
       <View style={[styles.retryIconLine, styles.retryIconLineRotated]} />
-    </View>
+    </TouchableOpacity>
   );
 }
 

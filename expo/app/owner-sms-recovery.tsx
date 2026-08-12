@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -22,8 +23,13 @@ import {
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import { Image } from 'react-native';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 
 export default function OwnerSmsRecoveryScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const { login } = useAuth();

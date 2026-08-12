@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   RefreshControl,
   ScrollView,
@@ -22,6 +23,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 type ScaleResult = 'VERIFIED' | 'FAILED' | 'BLOCKED_FOR_APPROVAL' | 'never';
 
@@ -376,6 +378,8 @@ function AutonomousActivityScreen() {
 }
 
 export default function AutonomousActivityScreenWithBoundary() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <AutonomousActivityScreen />

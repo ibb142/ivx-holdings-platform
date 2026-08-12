@@ -20,6 +20,7 @@ import {
   Phone} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   fetchLandingSubmissions,
   updateSubmissionStatus,
@@ -38,6 +39,9 @@ export default function LandingSubmissionsScreen() {
     queryKey: ['landing-submissions'],
     queryFn: () => fetchLandingSubmissions(0, 500),
     staleTime: 10000});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const statusMutation = useMutation({
     mutationFn: async (params: { id: string; status: string }) => {

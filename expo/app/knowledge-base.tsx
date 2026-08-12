@@ -5,6 +5,7 @@
  * Accessible from Profile tab → "Knowledge Base".
  */
 import React, { useMemo, useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -33,6 +34,9 @@ import {
   Clock,
   BookOpen} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   KB_CATEGORIES,
   KB_ARTICLES,
@@ -149,6 +153,8 @@ function SearchArticleRow({
 }
 
 export default function KnowledgeBaseScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -233,6 +239,8 @@ export default function KnowledgeBaseScreen() {
       {/* Content */}
       {isSearching ? (
         <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
           data={searchResults}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (

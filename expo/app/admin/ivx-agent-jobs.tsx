@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   View} from "react-native";
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -69,6 +70,9 @@ export default function IVXAgentJobsScreen() {
     queryKey: ['ivx-agent-jobs-status'],
     queryFn: getIVXAgentJobsStatus,
     refetchInterval: 15_000});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const jobsQuery = useQuery({
     queryKey: jobsKey,
     queryFn: () => listIVXAgentJobs(status),

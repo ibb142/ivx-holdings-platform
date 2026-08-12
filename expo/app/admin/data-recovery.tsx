@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   ScrollView,
@@ -23,6 +24,7 @@ import {
   ChevronLeft, Activity, Archive, Lock} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   fetchRecoveryOverview,
   triggerSnapshot,
@@ -37,6 +39,8 @@ const BLUE = '#4A90D9';
 const ORANGE = '#F59E0B';
 
 export default function DataRecoveryScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [overview, setOverview] = useState<RecoveryOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

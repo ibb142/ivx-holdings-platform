@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -45,6 +46,9 @@ import {
   FileText} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type TabType = 'viral' | 'campaigns' | 'fomo' | 'content' | 'loops';
 
@@ -181,6 +185,8 @@ const getStatusColor = (status: Campaign['status']) => {
 };
 
 export default function ViralGrowthHub() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('viral');
   const [cards, setCards] = useState<ShareCard[]>(SHARE_CARDS);

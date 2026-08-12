@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import {
   View,
@@ -27,6 +28,10 @@ import {
   Mail,
   MessageSquare} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { useHoldings } from '@/lib/data-hooks';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 
@@ -78,6 +83,8 @@ const OCCASION_MESSAGES: Record<GiftOccasion, string[]> = {
   ]};
 
 export default function GiftSharesScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const successAnim = useRef(new Animated.Value(0)).current;

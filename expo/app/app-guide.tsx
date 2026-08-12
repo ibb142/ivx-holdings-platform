@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -58,6 +59,8 @@ import {
   Database,
   Package} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 interface GuideStep {
   icon: React.ReactNode;
@@ -1087,6 +1090,8 @@ function ExpandableSection({ section }: { section: GuideSection }) {
 }
 
 export default function AppGuideScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isSmall = width < 380;

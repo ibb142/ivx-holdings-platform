@@ -6,15 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Image,
   useWindowDimensions,
   Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
+import { IVXImage } from '@/components/ivx';
+import { MarketSkeleton } from '@/components/InstantSkeleton';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { TrendingUp, TrendingDown, Activity, BarChart3, Clock, Zap, Globe, ArrowUpRight, ArrowDownRight, ChevronRight, Tag, ShoppingCart } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { EmptyState } from '@/components/ivx';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -48,10 +51,13 @@ const MarketPropertyThumb = React.memo(function MarketPropertyThumb({ uri, name,
   }
 
   return (
-    <Image
-      source={{ uri }}
-      style={[styles.propertyImage, { width: size, height: size, borderRadius, marginRight }]}
-      onError={() => { setFailed(true); console.log('[Market] Image failed:', uri?.substring(0, 60)); }}
+    <IVXImage
+      uri={uri}
+      width={size}
+      height={size}
+      style={[styles.propertyImage, { borderRadius, marginRight }]}
+      testID="market-property-thumb"
+      showLoader={false}
     />
   );
 });
@@ -473,6 +479,11 @@ export default function MarketScreen() {
     totalInvestors: 5000}), []);
   const { t } = useTranslation();
   const { trackScreen, trackAction: _trackAction, trackTransaction } = useAnalytics();
+
+  // Realtime: invalidate market data + properties on DB changes
+  useRealtimeTable('market_data', [['market', 'all'], ['market', 'top-movers']]);
+  useRealtimeTable('properties', [['properties', 'market']]);
+  useRealtimeTable('resale_listings', [['resale-listings', 'active']]);
 
   useEffect(() => {
     trackScreen('Market');

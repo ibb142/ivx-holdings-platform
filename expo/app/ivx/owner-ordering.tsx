@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View} from "react-native";
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Archive,
@@ -387,6 +388,8 @@ function OwnerOrderingScreen() {
 }
 
 export default function OwnerOrderingScreenWrapper() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <OwnerOrderingScreen />

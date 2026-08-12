@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -32,6 +33,10 @@ import {
   Sparkles} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { VIP_TIERS, getUserVIPProgress, getTierByLevel, VIPTier, VIPTierLevel } from '@/mocks/vip-tiers';
 import { useCurrentUser } from '@/lib/data-hooks';
 import { formatNumber } from '@/lib/formatters';
@@ -57,6 +62,8 @@ const TIER_GLOW: Record<VIPTierLevel, string> = {
   platinum: '#E5E4E220'};
 
 export default function VIPTiersScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const fadeIn = useRef(new Animated.Value(0)).current;

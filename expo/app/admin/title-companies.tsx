@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -28,6 +29,7 @@ import {
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   titleCompanies as mockCompanies,
   titleCompanyAssignments as mockAssignments,
@@ -51,6 +53,8 @@ const ASSIGNMENT_COLORS: Record<string, string> = {
   revoked: Colors.error};
 
 export default function TitleCompaniesScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [tab, setTab] = useState<TabType>('companies');
   const [companies, setCompanies] = useState<TitleCompany[]>(mockCompanies);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -1057,6 +1058,8 @@ function SystemDiagramMap() {
 }
 
 export default function SystemMapScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeView, setActiveView] = useState<'diagram' | 'architecture' | 'dataflows'>('diagram');
 

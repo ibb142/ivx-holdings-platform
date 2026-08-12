@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -60,6 +61,7 @@ import {
   type SeniorDeveloperPreflight} from '@/src/modules/ivx-developer/seniorDeveloperPreflightService';
 import { getIVXRuntimeInfo, type IVXRuntimeInfo } from '@/lib/runtime-environment';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   BLOCK18_DEVELOPER_WORKSPACE_MARKER,
   PATCH_REPLY_FORMAT_INSTRUCTION,
@@ -156,6 +158,8 @@ type RunState =
   | { kind: 'error'; message: string };
 
 export default function IVXDeveloperWorkspaceScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{ seniorGoal?: string; seniorPlan?: string; seniorSource?: string }>();
   const [tab, setTab] = useState<TabId>('approve');

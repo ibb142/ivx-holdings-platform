@@ -33,13 +33,17 @@ import { formatCurrencyWithDecimals, formatNumber } from '@/lib/formatters';
 import { useProperty } from '@/lib/data-hooks';
 import { sellShares } from '@/lib/investment-service';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import type { HoldingRow } from '@/types/database';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 type SellMode = 'instant' | 'resale';
 
 export default function SellSharesScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();

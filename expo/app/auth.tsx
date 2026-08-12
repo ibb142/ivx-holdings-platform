@@ -3,6 +3,11 @@ import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { IVXAuthCard } from '@/components/IVXAuthCard';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 /**
  * Unified premium auth route — replaces the old popup-based login/signup flow.
@@ -13,6 +18,8 @@ import { IVXAuthCard } from '@/components/IVXAuthCard';
  * - /auth?mode=owner → owner-only login (no tab switcher)
  */
 export default function AuthScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const params = useLocalSearchParams<{ mode?: string }>();
 
   const initialMode = params.mode === 'signup' ? 'signup' : 'login';

@@ -28,7 +28,10 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import {
   authenticateWithBiometric,
@@ -91,6 +94,8 @@ function isReauthenticationError(message: string): boolean {
 }
 
 export default function SecuritySettingsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const { trackAction } = useAnalytics();
   const queryClient = useQueryClient();
 

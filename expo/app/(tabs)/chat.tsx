@@ -12,6 +12,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
+import { ChatSkeleton } from '@/components/InstantSkeleton';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Clock, HelpCircle, MessageCircle, Radio, ScanLine, User, X, Sparkles } from 'lucide-react-native';
@@ -148,6 +150,9 @@ export default function ChatScreen() {
   const ticketsQuery = useQuery<SupportTicketRow[]>({
     queryKey: ['support-tickets'],
     queryFn: fetchUserSupportTickets});
+
+  // Realtime: invalidate support tickets on DB changes
+  useRealtimeTable('support_tickets', [['support-tickets']]);
 
   const deployProofQuery = useQuery({
     queryKey: ['chat-room-proof', 'deploy'],

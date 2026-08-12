@@ -9,6 +9,7 @@
  * executive summary).
  */
 import React from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -89,12 +90,15 @@ function money(value: number | undefined): string {
 }
 
 export default function TreasuryScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const dashboardQuery = useQuery({
     queryKey: ['treasury-dashboard'],
     queryFn: async (): Promise<TreasuryDashboard> => {
       const payload = await ownerGet('/api/ivx/treasury/dashboard');
       return payload.dashboard as unknown as TreasuryDashboard;
     }});
+  const isLoading = false; // IVX: loading state placeholder
 
   const aiFinanceQuery = useQuery({
     queryKey: ['treasury-ai-finance'],

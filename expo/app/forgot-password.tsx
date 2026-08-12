@@ -15,11 +15,17 @@ import Colors from '@/constants/colors';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import { validateEmail, sanitizeEmail } from '@/lib/auth-helpers';
 import { supabase, isSupabaseConfigured, getSupabaseConfigAudit } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { getPasswordResetRedirectUrl, inspectPasswordResetRedirect } from '@/lib/auth-password-recovery';
 import { clearAuthAttempts } from '@/lib/auth-rate-limiter';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 
 export default function ForgotPasswordScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const [email, setEmail] = useState<string>(typeof params.email === 'string' ? params.email : '');

@@ -29,9 +29,12 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -117,6 +120,8 @@ const TEMPLATE_CATEGORIES = ['All', 'Onboarding', 'Compliance', 'Deals', 'Transa
 type SendStatus = 'idle' | 'sending' | 'success' | 'error';
 
 export default function SMSComposeScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [message, setMessage] = useState('');

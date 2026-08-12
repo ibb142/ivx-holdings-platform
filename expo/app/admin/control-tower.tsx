@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -32,6 +33,8 @@ import {
   Waypoints,
   Workflow} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   getIVXOwnerAIConfigAudit,
   type IVXOwnerAIConfigAudit} from '@/lib/ivx-supabase-client';
@@ -649,6 +652,8 @@ function renderTab(tab: TabId, snapshot: NerveCenterSnapshot, live: LiveIntellig
 }
 
 export default function ControlTowerScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('nerve');
   const [refreshing, setRefreshing] = useState<boolean>(false);

@@ -21,6 +21,7 @@ import {
   Send} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -63,6 +64,8 @@ type FilterType = 'all' | 'hourly' | 'emergency' | 'manual' | 'daily_summary' | 
 const PAGE_SIZE = 20;
 
 export default function SMSHistoryScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [filter, setFilter] = useState<FilterType>('all');
   const [page, setPage] = useState(1);
@@ -220,6 +223,8 @@ export default function SMSHistoryScreen() {
         <View style={styles.filterContainer}>
           <Filter size={14} color={Colors.textTertiary} />
           <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
             horizontal
             data={filters}
             keyExtractor={(item) => item}

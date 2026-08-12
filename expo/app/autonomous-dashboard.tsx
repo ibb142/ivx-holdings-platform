@@ -9,6 +9,7 @@
  * Auto-refreshes via controlled polling (30s) + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -287,6 +288,8 @@ function formatTime(iso: string | null | undefined): string {
 }
 
 export default function AutonomousDashboardScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [data, setData] = useState<LedgerResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);

@@ -20,8 +20,10 @@ import {
   CheckCircle2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { getIVXOwnerAIResolvedEndpoint } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 /**
  * IVX Private Lender Network — Admin UI (Module 3 of the Autonomous Business
@@ -118,6 +120,8 @@ function fitScoreColor(score: number): string {
 }
 
 export default function LenderNetworkScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const apiBase = getIVXOwnerAIResolvedEndpoint() ?? 'https://api.ivxholding.com';
 

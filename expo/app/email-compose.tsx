@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -29,6 +30,10 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 import { useEmail } from '@/lib/email-context';
 import { EmailAttachment } from '@/types/email';
 import { EMAIL_TEMPLATES, EMAIL_TEMPLATE_CATEGORIES, EmailTemplate } from '@/mocks/email-templates';
@@ -61,6 +66,8 @@ function getFileName(uri: string, fallback: string): string {
 }
 
 export default function EmailComposeScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { replyTo, forwardFrom } = useLocalSearchParams<{ replyTo?: string; forwardFrom?: string }>();
   const { activeAccount, sendEmail, saveDraft, getEmailById } = useEmail();

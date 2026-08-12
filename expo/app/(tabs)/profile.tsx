@@ -6,10 +6,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Alert,
   useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import Constants from 'expo-constants';
 import {
   User,
@@ -42,6 +44,7 @@ import {
   CreditCard,
   Cpu} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
 import { useQuery } from '@tanstack/react-query';
@@ -118,6 +121,11 @@ export default function ProfileScreen() {
     },
     staleTime: 1000 * 60 * 2,
     enabled: !!profileData});
+  const isLoading = false; // IVX: loading state placeholder
+
+  // Realtime: invalidate wallet and profile data on DB changes
+  useRealtimeTable('wallets', [['wallet-balance']]);
+  useRealtimeTable('profiles', [['member-classification']]);
 
   const currentUser = useMemo(() => {
     const pd = profileData;
@@ -239,10 +247,14 @@ export default function ProfileScreen() {
         >
           <View style={[styles.profileCard, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 16 : 20 }]}>
             {avatarUriValid ? (
-              <Image
-                source={{ uri: avatarUri }}
-                style={[styles.avatar, { width: isXs ? 60 : 72, height: isXs ? 60 : 72, borderRadius: isXs ? 30 : 36 }]}
+              <IVXImage
+                uri={avatarUri}
+                width={isXs ? 60 : 72}
+                height={isXs ? 60 : 72}
+                style={[styles.avatar, { borderRadius: isXs ? 30 : 36 }]}
                 accessibilityLabel="Profile avatar"
+                testID="profile-avatar"
+                showLoader={false}
               />
             ) : (
               <View

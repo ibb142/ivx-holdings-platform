@@ -9,6 +9,8 @@ import {
   useWindowDimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
+import { PortfolioSkeleton } from '@/components/LoadingSkeleton';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useRouter } from 'expo-router';
 import { TrendingUp, TrendingDown, Wallet, Building2, ChevronRight, PiggyBank, Percent, Globe, DollarSign, Activity, Tag, ShoppingCart } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -315,6 +317,11 @@ export default function PortfolioScreen() {
   const apyRate = earnContext?.apyRate ?? 0.10;
   const { t } = useTranslation();
   const { trackScreen: _trackScreen } = useAnalytics();
+
+  // Realtime: invalidate holdings and resale listings on DB changes
+  useRealtimeTable('holdings', [['portfolio', 'holdings']]);
+  useRealtimeTable('resale_listings', [['resale-listings', 'mine-portfolio']]);
+  useRealtimeTable('wallets', [['wallet-balance']]);
 
   const screenSize = getResponsiveSize(width);
   const isCompact = isCompactScreen(screenSize);

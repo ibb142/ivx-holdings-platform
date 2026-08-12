@@ -65,6 +65,7 @@ import {
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchJVDeals, archiveJVDeal } from '@/lib/jv-storage';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
 import { useAuth, getStoredOwnerIP, clearOwnerIP } from '@/lib/auth-context';
@@ -291,6 +292,8 @@ const ipCardStyles = StyleSheet.create({
     color: Colors.negative}});
 
 export default function OwnerControlsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'revenue' | 'properties' | 'fees' | 'settings' | 'modules'>('modules');
   const [moduleSearch, setModuleSearch] = useState<string>('');

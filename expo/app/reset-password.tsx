@@ -11,9 +11,11 @@ import { useMutation } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { validatePassword } from '@/lib/auth-helpers';
 import { updateOwnerPasswordViaBackend } from '@/lib/owner-password-update-bypass';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 type RecoveryBootstrapState = 'checking' | 'ready' | 'failed';
 
@@ -32,6 +34,8 @@ function pickFirstParam(value: RouteParamValue): string {
 }
 
 export default function ResetPasswordScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const params = useLocalSearchParams<{
     code?: string | string[];

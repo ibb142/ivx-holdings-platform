@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -12,6 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { Check, Search, X, Globe } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { useI18n, SUPPORTED_LANGUAGES, LanguageCode } from '@/lib/i18n-context';
 
 const FLAG_EMOJIS: Record<string, string> = {
@@ -47,6 +51,8 @@ const FLAG_EMOJIS: Record<string, string> = {
   ms: '🇲🇾'};
 
 export default function LanguageScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { language, setLanguage, currentLanguage } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');

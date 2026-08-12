@@ -1,4 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   View,
   Text,
@@ -48,6 +52,8 @@ const QR_OPTIONS: QROption[] = [
 ];
 
 export default function QRCodeScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [selectedTarget, setSelectedTarget] = useState<QRTarget>('website');
   const [copied, setCopied] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;

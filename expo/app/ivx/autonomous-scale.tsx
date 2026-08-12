@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View} from "react-native";
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Activity,
@@ -22,6 +23,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 type ScaleResult = 'VERIFIED' | 'FAILED' | 'BLOCKED_FOR_APPROVAL' | 'never';
 
@@ -272,6 +274,8 @@ function AutonomousScaleScreen() {
 }
 
 export default function AutonomousScaleScreenWithBoundary() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <AutonomousScaleScreen />

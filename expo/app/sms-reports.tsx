@@ -39,6 +39,7 @@ import {
   Radio} from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -126,6 +127,8 @@ const TYPE_LABELS: Record<string, string> = {
   smart_update: "AI Smart"};
 
 export default function SMSReportsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [logFilter, setLogFilter] = useState<LogType>("all");

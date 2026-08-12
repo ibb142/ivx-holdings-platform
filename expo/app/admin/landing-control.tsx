@@ -56,7 +56,9 @@ import {
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getDeployAccessDiagnostic,
@@ -382,6 +384,10 @@ export default function LandingControlScreen() {
       return null;
     },
     staleTime: Infinity});
+  const isLoading = false; // IVX: loading state placeholder
+
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {

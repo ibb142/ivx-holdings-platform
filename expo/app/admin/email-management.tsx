@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -42,6 +43,7 @@ import {
   Globe} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { EMAIL_ACCOUNTS } from '@/mocks/emails';
 import { teamMembers as mockTeamMembers } from '@/mocks/admin';
 import { useEmail } from '@/lib/email-context';
@@ -208,6 +210,8 @@ const ACTIVITY_TYPE_CONFIG: Record<string, { color: string; icon: typeof Send }>
   auto_reply: { color: Colors.textSecondary, icon: Reply }};
 
 export default function EmailManagementScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { allEmails, totalUnread } = useEmail();
   const [activeTab, setActiveTab] = useState<TabKey>('overview');

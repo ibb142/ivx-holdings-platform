@@ -24,7 +24,6 @@ export {
 export { AccessibilityAnnouncer } from './AccessibilityAnnouncer';
 export type { AccessibilityAnnouncerProps } from './AccessibilityAnnouncer';
 
-// Hooks (re-exported for convenience)
 export { useRealtimeChannel, useRealtimeTable } from '@/hooks/useRealtimeChannel';
 export type {
   RealtimeChannelConfig,

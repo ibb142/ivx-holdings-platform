@@ -7,6 +7,7 @@
  * → Verified Investor → Investment Made, with rate at every step.
  */
 import React from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -98,12 +99,15 @@ async function ownerGet(path: string): Promise<Record<string, unknown>> {
 }
 
 export default function MemberFunnelScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const dashboardQuery = useQuery({
     queryKey: ['member-admin-dashboard'],
     queryFn: async (): Promise<FunnelDashboard> => {
       const payload = await ownerGet('/api/ivx/member-admin/dashboard');
       return payload.dashboard as unknown as FunnelDashboard;
     }});
+  const isLoading = false; // IVX: loading state placeholder
 
   const applicationsQuery = useQuery({
     queryKey: ['member-admin-applications'],

@@ -32,6 +32,7 @@ import {
   Sparkles,
   Bell} from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import Colors from '@/constants/colors';
 import { fetchRawEvents, computeVisitorIntelligence, type RawEvent } from '@/lib/analytics-compute';
 
@@ -195,6 +196,8 @@ function HeatmapBar({ data, maxVal }: { data: Array<{ hour: number; count: numbe
 }
 
 export default function VisitorIntelligenceScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [period, setPeriod] = useState<PeriodType>('all');
   const [activeTab, setActiveTab] = useState<TabType>('overview');

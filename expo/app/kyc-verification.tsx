@@ -61,7 +61,11 @@ import {
   getRiskColor,
   getStatusColor} from '@/lib/verification-service';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 
 type KYCStep = 'personal' | 'documents' | 'selfie' | 'liveness' | 'verification' | 'review';
 type DocumentStatus = 'pending' | 'uploading' | 'uploaded' | 'verified' | 'rejected';
@@ -72,6 +76,8 @@ interface DocumentState {
 }
 
 export default function KYCVerificationScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<KYCStep>('personal');
   const [isLoading, setIsLoading] = useState(false);
@@ -1538,6 +1544,8 @@ export default function KYCVerificationScreen() {
             />
           </View>
           <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
             data={filteredCountries}
             keyExtractor={(item) => item.code}
             renderItem={renderCountryItem}

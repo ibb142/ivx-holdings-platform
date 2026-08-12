@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -22,6 +23,8 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useEmail } from '@/lib/email-context';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const TEST_RECIPIENT = 'osconstructors@gmail.com';
 
@@ -90,6 +93,8 @@ CONFIDENTIALITY NOTICE: This email and any attachments are confidential and inte
 type SendStatus = 'idle' | 'sending' | 'success' | 'error';
 
 export default function SendTestEmailScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { sendEmail, activeAccount, sesStatus } = useEmail();
   const [status, setStatus] = useState<SendStatus>('idle');

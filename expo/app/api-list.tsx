@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -39,6 +40,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as ExpoClipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { safeSetString } from '@/lib/safe-clipboard';
 
 type Priority = 'must' | 'important' | 'optional';
@@ -243,6 +245,8 @@ function formatTime(date: Date): string {
 }
 
 export default function APIListScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [copied, setCopied] = useState<boolean>(false);
   const [pastedFromClipboard, setPastedFromClipboard] = useState<boolean>(false);

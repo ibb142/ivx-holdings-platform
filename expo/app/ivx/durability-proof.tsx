@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useMutation } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import {
@@ -11,6 +12,8 @@ import { CheckCircle2, ShieldCheck, XCircle } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   runOwnerAIDurabilityProof,
   type OwnerAIDurabilityProofResult} from '@/src/modules/ivx-owner-ai/services/ivxDurabilityProofService';
@@ -54,6 +57,8 @@ function idText(value: string | null): string {
 }
 
 export default function IVXDurabilityProofRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [result, setResult] = useState<OwnerAIDurabilityProofResult | null>(null);
 
   const proofMutation = useMutation<OwnerAIDurabilityProofResult, Error, void>({

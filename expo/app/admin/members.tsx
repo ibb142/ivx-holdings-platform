@@ -34,8 +34,10 @@ import Colors from '@/constants/colors';
 import { Image } from 'expo-image';
 import { formatCurrency as _fmtCurr } from '@/lib/formatters';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
 import {
   fetchAdminMemberRegistry,
   syncMemberRegistryFromSupabase,
@@ -73,6 +75,8 @@ interface MemberItem {
 }
 
 export default function MembersScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

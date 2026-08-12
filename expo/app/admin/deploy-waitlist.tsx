@@ -37,6 +37,7 @@ import { safeSetString } from '@/lib/safe-clipboard';
 import { executeSupabaseSqlScript, isSupabaseSqlExecMissing } from '@/lib/supabase-sql-executor';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -124,6 +125,8 @@ CREATE TRIGGER waitlist_updated_at
   EXECUTE FUNCTION update_waitlist_updated_at();`;
 
 export default function DeployWaitlistScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [deployStatus, setDeployStatus] = useState<DeployStatus>('idle');

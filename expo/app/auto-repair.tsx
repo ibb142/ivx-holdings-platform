@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import * as Haptics from 'expo-haptics';
 import {
   AlertTriangle,
@@ -265,6 +266,8 @@ function IncidentCard({
 }
 
 export default function AutoRepairScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const pulseAnim = useRef(new Animated.Value(0.85)).current;

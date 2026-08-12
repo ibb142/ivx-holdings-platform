@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -83,6 +84,8 @@ import {
   generateTrackableLink} from '@/mocks/marketing';
 import { MemberEngagementStats, Influencer, AIMarketingInsight, TrackableLink, LinkEvent, SocialPlatform } from '@/types';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type TabType = 'intelligence' | 'engage' | 'content' | 'influencers' | 'analytics' | 'links';
 
@@ -133,6 +136,8 @@ const formatNumber = (num: number) => {
 };
 
 export default function AIMarketingHub() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('intelligence');
   const [searchQuery, setSearchQuery] = useState('');

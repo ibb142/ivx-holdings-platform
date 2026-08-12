@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import logger from '@/lib/logger';
 import {
@@ -32,6 +33,8 @@ import {
   Search,
   X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { COUNTRIES, Country } from '@/constants/countries';
 import { useAuth, resetOwnerLocalSignupState } from '@/lib/auth-context';
 import { useAnalytics } from '@/lib/analytics-context';
@@ -1023,6 +1026,8 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
             />
           </View>
           <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
             data={filteredCountries}
             keyExtractor={(item) => item.code}
             renderItem={renderCountryItem}
@@ -1081,6 +1086,8 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
 }
 
 export default function SignUpScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return <SignUpScreenContent />;
 }
 

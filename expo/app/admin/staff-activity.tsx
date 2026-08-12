@@ -27,6 +27,7 @@ import {
   X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -80,6 +81,8 @@ function parseStaffAction(details: string): string {
 }
 
 export default function StaffActivityScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);

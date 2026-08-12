@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -57,6 +58,8 @@ import Colors from '@/constants/colors';
 import { generateText } from '@/lib/ai-service';
 import * as Haptics from 'expo-haptics';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   socialPlatforms,
   aiAgents,
@@ -90,6 +93,8 @@ const SURFACE2 = '#1C1C1C';
 const BORDER = '#2A2A2A';
 
 export default function SocialCommandScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);

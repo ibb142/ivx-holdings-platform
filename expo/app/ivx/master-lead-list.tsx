@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Pressable,
   RefreshControl,
@@ -14,6 +15,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 
 type LeadCategory =
   | 'buyer'
@@ -279,6 +281,8 @@ function MasterLeadListScreen() {
 }
 
 export default function MasterLeadListScreenWithBoundary() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <MasterLeadListScreen />

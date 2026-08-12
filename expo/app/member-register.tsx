@@ -38,8 +38,11 @@ import Colors from '@/constants/colors';
 import { COUNTRIES, Country } from '@/constants/countries';
 import { validateEmail, validatePassword, validatePhone, formatBirthdayInput, parseBirthday } from '@/lib/auth-helpers';
 import { supabase } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import * as MemberService from '@/lib/member-service';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const STEPS = ['Register', 'Verify', 'Dashboard'] as const;
 type Step = (typeof STEPS)[number];
@@ -52,6 +55,8 @@ const MARKET_INTEREST_OPTIONS: { id: MemberService.MemberRoleInterest; label: st
 ];
 
 export default function MemberRegisterScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
 
   const [step, setStep] = useState<Step>('Register');
@@ -648,6 +653,8 @@ export default function MemberRegisterScreen() {
           />
         </View>
         <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
           data={filteredCountries}
           keyExtractor={(item) => item.code}
           renderItem={({ item }) => (

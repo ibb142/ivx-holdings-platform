@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -58,6 +59,8 @@ import { z } from 'zod';
 import Colors from '@/constants/colors';
 import { generateContractHTML, ContractData } from '@/lib/contract-template';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 type DocType = 'id' | 'passport' | 'license';
 
@@ -91,6 +94,8 @@ const getTodayDate = (): string => {
 };
 
 export default function ContractGeneratorScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 

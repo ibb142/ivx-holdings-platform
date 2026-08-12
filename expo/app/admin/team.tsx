@@ -30,8 +30,12 @@ import {
   ArrowLeft} from 'lucide-react-native';
 import IVXBrandIcon from '@/components/IVXBrandIcon';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { EmptyState } from '@/components/ivx';
 import { TeamMember, AdminRole } from '@/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 
 const DEFAULT_ROLES: AdminRole[] = [
@@ -53,6 +57,8 @@ const CURRENT_ADMIN = {
   createdAt: '2024-01-01T00:00:00Z'};
 
 export default function TeamManagement() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const _queryClient = useQueryClient();
@@ -76,6 +82,7 @@ export default function TeamManagement() {
         createdAt: p.created_at || new Date().toISOString()}));
     },
     staleTime: 30000});
+  const isLoading = false; // IVX: loading state placeholder
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);

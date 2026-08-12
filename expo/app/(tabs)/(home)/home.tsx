@@ -34,6 +34,7 @@ import { resolvePrimaryDealPhoto, usePublishedJVDeals, triggerManualJVRefresh } 
 import { HomeSkeleton } from '@/components/SkeletonLoader';
 import { supabase } from '@/lib/supabase';
 import { useJVRealtime, usePublicationWatchdog } from '@/lib/jv-realtime';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useTranslation } from '@/lib/i18n-context';
 import { useAnalytics } from '@/lib/analytics-context';
 import { useAuth } from '@/lib/auth-context';

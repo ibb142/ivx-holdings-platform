@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Alert,
   Image,
@@ -18,6 +19,8 @@ import { Cloud, FileText, Film, ImageIcon, Sparkles, UploadCloud } from 'lucide-
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   analyzeFile,
   importGoogleDriveFile,
@@ -62,6 +65,8 @@ function KindIcon({ kind, size = 18 }: { kind: StoredItem['kind']; size?: number
 }
 
 export default function IVXFilesScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<StoredItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);

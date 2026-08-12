@@ -19,6 +19,7 @@ import {View,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Shield,
   Wallet,
@@ -195,6 +196,8 @@ const INVESTMENT_ICON: Record<InvestmentRecord['investmentType'], React.ReactNod
 type TabKey = 'wallet' | 'investments' | 'withdrawals' | 'compliance' | 'sessions';
 
 export default function InvestorProtectionScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('wallet');

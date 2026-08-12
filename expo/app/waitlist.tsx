@@ -1,4 +1,5 @@
 import React from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -9,6 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Shield, Wallet, BarChart3, Sparkles } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import InvestorIntakeForm from '@/components/InvestorIntakeForm';
 
 const MEMBER_READY_ITEMS = [
@@ -33,6 +37,8 @@ const MEMBER_READY_ITEMS = [
 ] as const;
 
 export default function WaitlistScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
 
   return (

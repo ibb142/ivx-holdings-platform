@@ -1,4 +1,8 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState, IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   View,
   Text,
@@ -46,6 +50,8 @@ const CONTACT_INFO = [
 ];
 
 export default function BusinessCardScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const cardScale = useRef(new Animated.Value(0.92)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;

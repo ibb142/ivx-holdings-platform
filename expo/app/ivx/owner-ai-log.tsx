@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { FlatList, RefreshControl, StyleSheet, Text, View, type ListRenderItem } from "react-native";
 import { Activity, AlertCircle, CheckCircle2, Clock, Database, Radio, Server, Zap } from 'lucide-react-native';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -120,6 +121,8 @@ const KEY_EXTRACTOR = (entry: OwnerAIDiagnosticsEntry): string => entry.requestI
 const renderItem: ListRenderItem<OwnerAIDiagnosticsEntry> = ({ item }) => <EntryRow entry={item} />;
 
 export default function OwnerAILogScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const query = useQuery({
     queryKey: ['ivx', 'owner-ai', 'diagnostics-log'],
@@ -158,6 +161,8 @@ export default function OwnerAILogScreen() {
           </View>
         ) : null}
         <FlatList
+        onEndReachedThreshold={5}
+        onEndReached={() => { /* IVX: pagination hook point */ }}
           data={entries}
           keyExtractor={KEY_EXTRACTOR}
           renderItem={renderItem}

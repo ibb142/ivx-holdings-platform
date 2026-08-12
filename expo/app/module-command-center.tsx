@@ -13,6 +13,7 @@
  * Auto-refreshes every 30s + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -159,6 +160,8 @@ function formatTime(iso: string | null | undefined): string {
 }
 
 export default function ModuleCommandCenterScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [status, setStatus] = useState<EngineeringStatus | null>(null);
   const [teams, setTeams] = useState<TeamEntry[]>([]);

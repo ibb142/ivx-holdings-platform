@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -46,6 +47,7 @@ import {
   rejectAction} from '@/src/modules/ivx-developer/developerApprovedActionsService';
 import { listPatches, type PatchProposal } from '@/src/modules/ivx-developer/developerWorkspaceService';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 const OWNER_LABEL = 'owner' as const;
 const SUPABASE_DOUBLE_CONFIRM_PHRASE = 'I CONFIRM DESTRUCTIVE SQL';
@@ -74,6 +76,8 @@ const STATUS_COLOR: Record<ApprovedAction['status'], string> = {
   rejected: Colors.textTertiary};
 
 export default function IVXDeveloperActionsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('queue');
   const [actions, setActions] = useState<ApprovedAction[]>([]);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import {
   Pressable,
@@ -125,6 +126,9 @@ function LiveCodingStreamContent() {
     queryKey: ['ivx-live-coding', 'tasks'],
     queryFn: listMonitorTasks,
     refetchInterval: POLL_INTERVAL_MS});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const resolvedTaskId = useMemo<string | null>(() => {
     if (activeTaskId) return activeTaskId;

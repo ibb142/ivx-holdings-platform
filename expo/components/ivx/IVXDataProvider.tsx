@@ -23,13 +23,10 @@
  * </IVXDataProvider>
  * ```
  */
-import React, { useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { View, AccessibilityInfo, type ViewStyle } from 'react-native';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { ErrorState } from './IVXStates';
-import { EmptyState } from './IVXStates';
-import { OfflineState } from './IVXStates';
-import { TimeoutState } from './IVXStates';
+import { ErrorState, EmptyState, OfflineState, TimeoutState } from './IVXStates';
 import { useNetwork } from '@/lib/network-context';
 
 export interface IVXDataProviderProps<T> {
@@ -95,7 +92,7 @@ export function IVXDataProvider<T>({
   const { isOffline, refresh: refreshNetwork } = useNetwork();
   const { isLoading, isError, error, data, refetch, isFetching, isLoadingError } = result;
   const loadStartTime = useRef<number>(Date.now());
-  const [isTimeout, setIsTimeout] = React.useState(false);
+  const [isTimeout, setIsTimeout] = useState(false);
   const lastAnnounced = useRef<string>('');
 
   // Track load start time

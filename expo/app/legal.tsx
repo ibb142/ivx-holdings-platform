@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -28,6 +29,7 @@ import {
   Globe,
   Mail} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { RefreshControl } from 'react-native';
 
 interface LegalDocument {
   id: string;
@@ -1115,6 +1117,8 @@ function DocumentCard({
 }
 
 export default function LegalScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 

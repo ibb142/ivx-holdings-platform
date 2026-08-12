@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   ScrollView,
   StyleSheet,
@@ -23,6 +24,9 @@ import {
   Users,
   WandSparkles} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import {
   IVX_OWNER_AI_BRIEF_DEFAULTS,
   IVX_OWNER_AI_FEATURE_LABELS,
@@ -163,6 +167,8 @@ function parseCustomFeatures(rawValue: string): string[] {
 }
 
 export default function V1BriefScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [platform, setPlatform] = useState<BriefPlatform>(IVX_OWNER_AI_BRIEF_DEFAULTS.platform);
   const [audience, setAudience] = useState<BriefAudience>(IVX_OWNER_AI_BRIEF_DEFAULTS.audience);
   const [aiName, setAiName] = useState<string>(IVX_OWNER_AI_BRIEF_DEFAULTS.aiName);

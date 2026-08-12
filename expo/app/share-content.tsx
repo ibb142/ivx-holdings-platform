@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import logger from '@/lib/logger';
 import {
   View,
@@ -41,6 +42,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -140,6 +143,8 @@ const SHAREABLE_CONTENT: ShareableContent[] = [
 ];
 
 export default function ShareContentScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);

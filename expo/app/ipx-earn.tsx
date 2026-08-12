@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -31,8 +32,11 @@ import Colors from '@/constants/colors';
 import { useEarn, PROFIT_TIERS } from '@/lib/earn-context';
 import { formatCurrencyWithDecimals, formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 export default function IPXEarnScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   // Safe access with fallbacks — useEarn() returns undefined if EarnProvider
   // is ever absent (hot-reload race, route above provider boundary). Without
   // the fallback, destructuring throws "Cannot read property 'totalDeposited'

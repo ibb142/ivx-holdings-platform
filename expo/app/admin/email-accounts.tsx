@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -32,6 +33,7 @@ import {
   Inbox,
   AlertTriangle} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { EMAIL_ACCOUNTS } from '@/mocks/emails';
 import { teamMembers as mockTeamMembers } from '@/mocks/admin';
 import { EmailAccount } from '@/types/email';
@@ -124,6 +126,8 @@ const generateInitialAccess = (): EmailAccountWithAccess[] => {
 };
 
 export default function EmailAccountsScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [accounts, setAccounts] = useState<EmailAccountWithAccess[]>(generateInitialAccess);
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);

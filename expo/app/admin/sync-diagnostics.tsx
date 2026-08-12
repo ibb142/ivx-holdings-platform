@@ -24,6 +24,7 @@ import {
   Image as ImageIcon} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { useAuth } from '@/lib/auth-context';
 import { getLandingSyncStatus, syncToLandingPage } from '@/lib/landing-sync';
 import { usePublishedJVDeals } from '@/lib/parse-deal';
@@ -80,6 +81,9 @@ export default function SyncDiagnosticsScreen() {
     gcTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
     refetchInterval: false});
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
 
   const imageAuditQuery = useQuery<DealPhotoDiagnostic[]>({
     queryKey: ['sync-diagnostics-image-audit'],

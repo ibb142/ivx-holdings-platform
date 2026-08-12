@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   Linking,
@@ -12,6 +13,7 @@ import { CheckCircle2, CircleDashed, Play, ShieldCheck, XCircle } from 'lucide-r
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 import {
   deriveFinalStatus,
   fetchLatestProofLedger,
@@ -101,6 +103,8 @@ function StepPill({ label, done, active }: { label: string; done: boolean; activ
 }
 
 export default function IVXProofLedgerRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [envelope, setEnvelope] = useState<IVXProofLedgerEnvelope | null>(null);
 
   const latestQuery = useQuery<IVXProofLedgerEnvelope, Error>({

@@ -31,7 +31,9 @@ import {
   Bell,
   Activity} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -259,6 +261,8 @@ function formatNumber(val: number): string {
 }
 
 export default function RetargetingDashboard() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('campaigns');

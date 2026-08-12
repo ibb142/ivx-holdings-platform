@@ -14,6 +14,7 @@
  * Auto-refreshes every 30s + pull-to-refresh.
  */
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -174,6 +175,8 @@ const HOURLY_JOBS: Array<{ time: string; job: string; team: string }> = [
 type CalendarView = 'TODAY' | 'HOURS24' | 'WEEK' | 'TEAM' | 'MODULE' | 'PRIORITY' | 'DEPLOYS' | 'APPROVALS' | 'BLOCKERS' | 'COMPLETED';
 
 export default function AutonomousEngineeringCalendarScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [scheduler, setScheduler] = useState<SchedulerResponse['scheduler'] | null>(null);
   const [tasks, setTasks] = useState<TaskEntry[]>([]);

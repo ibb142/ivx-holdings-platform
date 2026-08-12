@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -60,6 +61,8 @@ const _getFileSystemLegacy = async () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 
 const { width: SW } = Dimensions.get('window');
 const IMAGE_WIDTH = SW - 48;
@@ -332,6 +335,8 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
 ];
 
 export default function AIGalleryScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [dailyGens, setDailyGens] = useState<DailyGenData>({ date: getTodayKey(), count: 0 });
   const [images, setImages] = useState<GeneratedImage[]>([]);

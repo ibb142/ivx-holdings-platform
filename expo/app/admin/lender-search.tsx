@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {View,
   Text,
   StyleSheet,
@@ -51,6 +52,7 @@ import { LenderProvider, useLenders } from '@/lib/lender-context';
 import { searchSECEdgar, SECSearchResult } from '@/lib/sec-edgar-service';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { RefreshControl } from 'react-native';
 
 const formatCurrency = (amount: number): string => formatCurrencyCompact(amount);
 

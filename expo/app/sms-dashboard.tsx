@@ -23,6 +23,7 @@ import {
   History} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -60,6 +61,8 @@ const TYPE_LABELS: Record<string, string> = {
 const SMS_DASHBOARD_REFRESH_MS = 60_000;
 
 export default function SMSDashboardScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -26,6 +27,10 @@ import {
   ExternalLink,
   ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
+import { EmptyState } from '@/components/ivx';
 
 interface Banner {
   id: string;
@@ -99,6 +104,8 @@ const TARGET_SCREENS = [
 ];
 
 export default function BannersScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const [banners, setBanners] = useState<Banner[]>(INITIAL_BANNERS);
   const [showModal, setShowModal] = useState(false);

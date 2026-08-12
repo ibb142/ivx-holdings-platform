@@ -19,6 +19,7 @@ import {
   ArrowLeft} from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { supabase } from '@/lib/supabase';
 import { AdminTransaction } from '@/types';
 import { formatCurrencyWithDecimals } from '@/lib/formatters';
@@ -28,6 +29,8 @@ type FilterType = 'all' | 'deposit' | 'withdrawal' | 'buy' | 'sell' | 'dividend'
 type StatusFilter = 'all' | 'completed' | 'pending' | 'failed';
 
 export default function TransactionsScreen() {
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isSmall = width < 375;

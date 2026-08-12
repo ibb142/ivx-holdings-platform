@@ -8,6 +8,7 @@ import {View,
   TextInput} from "react-native";
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   ShieldCheck,
   KeyRound,
@@ -234,6 +235,9 @@ export default function OwnerAccessScreen() {
     staleTime: 10000,
     refetchOnWindowFocus: true,
     enabled: !openAccessMode});
+
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const ownerIdentityAuditQuery = useQuery({
     queryKey: ['owner-identity-audit-hub', requestedOwnerEmail, auth.user?.id ?? 'anon', auth.userRole, auth.isOwnerIPAccess],
     queryFn: () => auth.auditOwnerIdentity(requestedOwnerEmail || undefined),

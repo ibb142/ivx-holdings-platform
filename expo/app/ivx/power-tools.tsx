@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View} from "react-native";
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   CheckCircle2,
   ChevronDown,
@@ -205,6 +206,9 @@ function PowerToolsContent() {
 
   const dashQuery = useQuery<PowerToolsDashboard | null>({ queryKey: ['ivx-power-tools-dash'], queryFn: getPowerToolsDashboard });
   const leadsQuery = useQuery({ queryKey: ['ivx-power-tools-leads'], queryFn: listLeads });
+
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const packetsQuery = useQuery({ queryKey: ['ivx-power-tools-packets'], queryFn: listDealPackets });
 
   const dash = dashQuery.data ?? null;

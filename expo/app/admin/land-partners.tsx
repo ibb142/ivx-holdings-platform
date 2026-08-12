@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -26,6 +27,8 @@ import {
   Briefcase,
   Play} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import { landPartnerDeals, landPartnerStats } from '@/mocks/ipx-invest';
 import { LandPartnerDeal, LandPartnerStatus } from '@/types';
 import { formatCurrencyCompact } from '@/lib/formatters';
@@ -43,6 +46,8 @@ const STATUS_CONFIG: Record<LandPartnerStatus, { label: string; color: string; b
   rejected: { label: 'Rejected', color: Colors.error, bgColor: Colors.error + '20' }};
 
 export default function LandPartnersScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');

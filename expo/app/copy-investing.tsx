@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -19,6 +20,9 @@ import {
   BarChart3,
   Building2} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { IVXImage } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { topInvestors, TopInvestor } from '@/mocks/social-portfolios';
 import { formatCurrencyWithDecimals, formatNumber } from '@/lib/formatters';
 
@@ -31,6 +35,8 @@ const RISK_COLORS: Record<string, string> = {
   aggressive: Colors.error};
 
 export default function CopyInvestingScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const fadeAnims = useRef(topInvestors.map(() => new Animated.Value(0))).current;
   const [sortBy, setSortBy] = useState<SortOption>('return');

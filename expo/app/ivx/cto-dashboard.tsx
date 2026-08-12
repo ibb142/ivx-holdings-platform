@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Alert,
   Modal,
@@ -36,6 +37,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Colors from '@/constants/colors';
 import { getIVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { EmptyState } from '@/components/ivx';
 import {
   getIVXAgentLiveActivity,
   type IVXLiveActivityResponse,
@@ -819,6 +821,8 @@ function ActionButton({ icon, label, onPress, tone, disabled, loading }: {
 }
 
 export default function IVXCTODashboardRoute() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   View,
   Text,
@@ -32,6 +33,9 @@ import {
   CircleDot,
   X} from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { ErrorState } from '@/components/ivx';
+import { RefreshControl } from 'react-native';
 import { Lender, LenderType, LenderCategory, LenderStatus } from '@/types';
 import { useLenders } from '@/lib/lender-context';
 import { formatCurrencyCompact } from '@/lib/formatters';
@@ -179,6 +183,8 @@ const LenderCard = React.memo(({ lender, onPress }: { lender: Lender; onPress: (
 });
 
 export default function LenderDirectoryScreen() {
+  // Realtime: auto-invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
   const { allLenders, stats } = useLenders();
   const [searchQuery, setSearchQuery] = useState('');
