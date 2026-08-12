@@ -1,12 +1,9 @@
 # IVX Holdings — Enterprise Blueprint v6
 # Multi-instance backend, autoscaling, Redis cache, background worker,
 # separate staging, zero-downtime deploys with automatic rollback.
-# Updated: 2026-07-14T19:00:00Z
+# Updated: 2026-08-12T09:25:00Z
 
 services:
-  # ============================================================
-  # PRODUCTION API — multi-instance with autoscaling
-  # ============================================================
   - type: web
     name: ivx-holdings-platform
     repo: https://github.com/ibb142/ivx-holdings-platform.git
@@ -16,7 +13,6 @@ services:
     dockerContext: .
     dockerCommand: node /app/node_modules/tsx/dist/cli.mjs /app/server.ts
     plan: standard
-    # Autoscaling: 1→3 instances based on CPU/memory
     scaling:
       minInstances: 1
       maxInstances: 3
@@ -70,7 +66,6 @@ services:
         value: main-room
       - key: EXPO_PUBLIC_CHAT_DEFAULT_ROOM_ID
         value: main-room
-      # Redis for cache + Socket.IO adapter + pub/sub
       - key: REDIS_URL
         fromService:
           name: ivx-redis
@@ -82,7 +77,6 @@ services:
         value: "true"
       - key: IVX_RATE_LIMIT_REDIS
         value: "true"
-      # JWT_SECRET
       - key: JWT_SECRET
         sync: false
       - key: APP_SECRET
@@ -105,6 +99,8 @@ services:
         sync: false
       - key: AWS_REGION
         sync: false
+      - key: IVX_OWNER_RECOVERY_PHONE
+        sync: false
       - key: S3_BUCKET_NAME
         sync: false
       - key: CLOUDFRONT_DISTRIBUTION_ID
@@ -125,8 +121,6 @@ services:
         sync: false
       - key: RENDER_SERVICE_NAME
         value: ivx-holdings-platform
-      # Internal-only HMAC credentials for signed autonomous deployment requests.
-      # Values are configured in Render; they never reach client builds.
       - key: IVX_INTERNAL_DEPLOY_SECRET
         sync: false
       - key: IVX_INTERNAL_WORKER_ID
@@ -151,9 +145,6 @@ services:
         value: https://api.ivxholding.com
       - fromGroup: my-env-group
 
-  # ============================================================
-  # BACKGROUND WORKER — queue processing, scheduled tasks
-  # ============================================================
   - type: worker
     name: ivx-holdings-worker
     repo: https://github.com/ibb142/ivx-holdings-platform.git
@@ -192,9 +183,6 @@ services:
           property: connectionString
       - fromGroup: my-env-group
 
-  # ============================================================
-  # IVX AUTONOMOUS SENIOR DEVELOPER WORKER — IVX-SENIOR-DEV-01
-  # ============================================================
   - type: worker
     name: ivx-senior-dev-01
     repo: https://github.com/ibb142/ivx-holdings-platform.git
@@ -228,19 +216,14 @@ services:
         sync: false
       - key: EXPO_PUBLIC_IVX_AI_GATEWAY_URL
         sync: false
-      # Must exactly match the production API's internal deployment credentials.
       - key: IVX_INTERNAL_DEPLOY_SECRET
         sync: false
       - key: IVX_INTERNAL_WORKER_ID
         sync: false
-      # Explicitly route signed authorization consumption to the production API.
       - key: IVX_INTERNAL_API_URL
         value: https://api.ivxholding.com
       - fromGroup: my-env-group
 
-  # ============================================================
-  # STAGING API — separate environment for pre-prod testing
-  # ============================================================
   - type: web
     name: ivx-holdings-staging
     repo: https://github.com/ibb142/ivx-holdings-platform.git
@@ -285,9 +268,6 @@ services:
         sync: false
       - fromGroup: my-env-group
 
-  # ============================================================
-  # CHAT FRONTEND — static site on Render
-  # ============================================================
   - type: web
     name: ivx-holdings-chat-frontend
     repo: https://github.com/ibb142/ivx-holdings-platform.git
@@ -358,9 +338,6 @@ services:
       - key: EXPO_PUBLIC_TEAM_ID
         sync: false
 
-  # ============================================================
-  # MINIO — object storage
-  # ============================================================
   - type: pserv
     name: minio
     runtime: docker
@@ -379,28 +356,18 @@ services:
       mountPath: /data
       sizeGB: 10
 
-# ============================================================
-# REDIS — production cache + pub/sub + Socket.IO adapter
-# ============================================================
 - type: redis
   name: ivx-redis
   plan: starter
   ipAllowList: []
   maxmemoryPolicy: allkeys-lru
 
-# ============================================================
-# REDIS — staging
-# ============================================================
 - type: redis
   name: ivx-redis-staging
   plan: free
   ipAllowList: []
 
-# ============================================================
-# DATABASES
-# ============================================================
 databases:
-  # Production — upgraded for enterprise workloads
   - name: mydatabase
     plan: standard-1gb
     databaseName: ivx
@@ -409,7 +376,6 @@ databases:
     ipAllowList: []
     highAvailability:
       enabled: true
-  # Staging — separate database
   - name: mydatabase-staging
     plan: basic-256mb
     databaseName: ivx_staging
@@ -417,9 +383,6 @@ databases:
     postgresMajorVersion: "16"
     ipAllowList: []
 
-# ============================================================
-# ENV GROUPS
-# ============================================================
 envVarGroups:
   - name: my-env-group
     envVars:
