@@ -1,4 +1,4 @@
-name: IVX Merge PR (Admin Override)
+name: IVX Merge PR
 
 on:
   workflow_dispatch:
@@ -11,70 +11,36 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  administration: write
 
 jobs:
   merge:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    runs-on: ubuntu-latest
     steps:
-      - name: Remove branch protection on main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Removing branch protection on main..."
-          curl -s -X DELETE \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/branches/main/protection || true
-          echo "Branch protection removal attempted"
-
-      - name: Merge PR
+      - name: Merge PR through normal repository rules
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          echo "Merging PR #$PR_NUMBER..."
-          curl -s -X PUT \
-            -H "Authorization: token $GH_TOKEN" \
+          set -euo pipefail
+          echo "Merging PR #$PR_NUMBER through normal repository rules..."
+          response="$(curl --fail-with-body -sS -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/merge \
-            -d '{"merge_method":"squash"}'
-          echo "Merge attempted"
-
-      - name: Restore branch protection on main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Restoring branch protection on main..."
-          curl -s -X PUT \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/branches/main/protection \
-            -d '{
-              "required_status_checks": {
-                "strict": false,
-                "contexts": []
-              },
-              "enforce_admins": false,
-              "required_pull_request_reviews": null,
-              "restrictions": null,
-              "required_linear_history": false,
-              "allow_force_pushes": false,
-              "allow_deletions": false
-            }' || true
-          echo "Branch protection restoration attempted"
+            "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/merge" \
+            -d '{"merge_method":"squash"}')"
+          echo "$response" | jq .
+          test "$(echo "$response" | jq -r '.merged')" = "true"
 
       - name: Verify main HEAD
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Verifying main HEAD..."
-          curl -s \
-            -H "Authorization: token $GH_TOKEN" \
+          set -euo pipefail
+          curl --fail-with-body -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/branches/main | jq -r '.commit.sha + " " + .commit.commit.message[:80]'
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/branches/main" \
+            | jq -r '.commit.sha + " " + .commit.commit.message[:80]'
