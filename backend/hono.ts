@@ -2859,6 +2859,9 @@ app.use('*', async (context, next) => {
   }
 });
 
+// Point 9: Security middleware — rate limiting, fraud prevention, security headers
+app.use('*', securityMiddleware);
+
 app.get('/', async (context) => {
   const webResponse = await loadWebResponse('/', context.req.method);
   if (webResponse) {
@@ -2937,6 +2940,41 @@ import {
   handleREGetClosingDocs,
   handleREDeliverClosingDoc,
 } from './api/ivx-real-estate-flow';
+
+// Platform extensions: owner system, compliance, payments, global core, pilot markets
+import {
+  handleOwnerProfileGet,
+  handleOwnerProfileUpdate,
+  handleOwnerHoldingsList,
+  handleOwnerHoldingsCreate,
+  handleOwnerHoldingsUpdate,
+  handleOwnerIncomeExpensesList,
+  handleOwnerIncomeExpensesCreate,
+  handleOwnerDocumentsList,
+  handleOwnerDocumentsCreate,
+  handleOwnerPortfolio,
+  handleOwnerPortfolioSnapshots,
+  handleComplianceWorkflowList,
+  handleComplianceWorkflowCreate,
+  handleComplianceWorkflowReview,
+  handleConsentsList,
+  handleConsentsCreate,
+  handlePermissionsList,
+  handlePaymentRecordsList,
+  handlePaymentRecordsCreate,
+  handleFeeStructuresList,
+  handleFeeStructuresCreate,
+  handleReconciliationList,
+  handleReconciliationCreate,
+  handleLanguagesList,
+  handleTimezonesList,
+  handleTaxRulesList,
+  handlePilotMarketsList,
+  handlePilotMarketsCreate,
+  handlePilotMarketsUpdate,
+} from './api/ivx-platform-extensions';
+
+import { securityMiddleware, handleSecurityStatus } from './services/ivx-security-middleware';
 
 app.get('/api/ivx/wire-instructions', async (context) => {
   // Items 153-154: Wire instructions only available to authenticated users.
@@ -6627,5 +6665,52 @@ app.get('/api/ivx/re/kyc/status', (c) => handleREKYCStatus(c.req.raw));
 app.post('/api/ivx/re/proof-of-funds', (c) => handleREProofOfFunds(c.req.raw));
 app.get('/api/ivx/re/closing-docs/:contractId', (c) => handleREGetClosingDocs(c.req.raw, c.req.param('contractId')));
 app.post('/api/ivx/re/closing-docs/:docId/deliver', (c) => handleREDeliverClosingDoc(c.req.raw, c.req.param('docId')));
+
+// ============================================================================
+// IVX Platform Extensions — Points 5-8, 10
+// Owner system, compliance, payments, global core, pilot markets
+// ============================================================================
+
+// Point 5: Owner system
+app.get('/api/ivx/owner/profile', (c) => handleOwnerProfileGet(c.req.raw));
+app.put('/api/ivx/owner/profile', (c) => handleOwnerProfileUpdate(c.req.raw));
+app.get('/api/ivx/owner/holdings', (c) => handleOwnerHoldingsList(c.req.raw));
+app.post('/api/ivx/owner/holdings', (c) => handleOwnerHoldingsCreate(c.req.raw));
+app.put('/api/ivx/owner/holdings/:holdingId', (c) => handleOwnerHoldingsUpdate(c.req.raw, c.req.param('holdingId')));
+app.get('/api/ivx/owner/income-expenses', (c) => handleOwnerIncomeExpensesList(c.req.raw));
+app.post('/api/ivx/owner/income-expenses', (c) => handleOwnerIncomeExpensesCreate(c.req.raw));
+app.get('/api/ivx/owner/documents', (c) => handleOwnerDocumentsList(c.req.raw));
+app.post('/api/ivx/owner/documents', (c) => handleOwnerDocumentsCreate(c.req.raw));
+app.get('/api/ivx/owner/portfolio', (c) => handleOwnerPortfolio(c.req.raw));
+app.get('/api/ivx/owner/portfolio/snapshots', (c) => handleOwnerPortfolioSnapshots(c.req.raw));
+
+// Point 6: Compliance workflow
+app.get('/api/ivx/compliance/workflow', (c) => handleComplianceWorkflowList(c.req.raw));
+app.post('/api/ivx/compliance/workflow', (c) => handleComplianceWorkflowCreate(c.req.raw));
+app.put('/api/ivx/compliance/workflow/:stepId', (c) => handleComplianceWorkflowReview(c.req.raw, c.req.param('stepId')));
+app.get('/api/ivx/compliance/consents', (c) => handleConsentsList(c.req.raw));
+app.post('/api/ivx/compliance/consents', (c) => handleConsentsCreate(c.req.raw));
+app.get('/api/ivx/compliance/permissions', (c) => handlePermissionsList(c.req.raw));
+
+// Point 7: Payments
+app.get('/api/ivx/payments/records', (c) => handlePaymentRecordsList(c.req.raw));
+app.post('/api/ivx/payments/records', (c) => handlePaymentRecordsCreate(c.req.raw));
+app.get('/api/ivx/payments/fees', (c) => handleFeeStructuresList(c.req.raw));
+app.post('/api/ivx/payments/fees', (c) => handleFeeStructuresCreate(c.req.raw));
+app.get('/api/ivx/payments/reconciliation', (c) => handleReconciliationList(c.req.raw));
+app.post('/api/ivx/payments/reconciliation', (c) => handleReconciliationCreate(c.req.raw));
+
+// Point 8: Global core
+app.get('/api/ivx/global/languages', (c) => handleLanguagesList(c.req.raw));
+app.get('/api/ivx/global/timezones', (c) => handleTimezonesList(c.req.raw));
+app.get('/api/ivx/global/tax-rules', (c) => handleTaxRulesList(c.req.raw));
+
+// Point 10: Pilot markets
+app.get('/api/ivx/pilot/markets', (c) => handlePilotMarketsList(c.req.raw));
+app.post('/api/ivx/pilot/markets', (c) => handlePilotMarketsCreate(c.req.raw));
+app.put('/api/ivx/pilot/markets/:marketId', (c) => handlePilotMarketsUpdate(c.req.raw, c.req.param('marketId')));
+
+// Point 9: Security status
+app.get('/api/ivx/security/status', () => handleSecurityStatus());
 
 export default app;// CI trigger comment
