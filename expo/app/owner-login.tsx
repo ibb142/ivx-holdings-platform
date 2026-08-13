@@ -7,4 +7,8 @@ import { LoginScreenContent } from './login';
  * Do not subscribe to Realtime tables here: opening a DB websocket before the
  * owner is authenticated adds avoidable latency and couples sign-in UX to
  * database/realtime availability. Authenticated screens can subscribe after
- * session
+ * session creation.
+ */
+export default function OwnerLoginScreen() {
+  return <LoginScreenContent ownerMode />;
+}
