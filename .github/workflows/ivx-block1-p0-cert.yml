@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 15
     env:
       API_BASE: https://api.ivxholding.com
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +54,6 @@ jobs:
               cat /tmp/health.json || true
               health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
               db_config=$(jq -r '.databaseConfigured // .database_configured // false' /tmp/health.json 2>/dev/null || echo false)
-              ai_ok=$(jq -r '.aiOk // .ai.ok // .ai_ok // empty' /tmp/health.json 2>/dev/null || true)
               if [ "$health_ok" = "true" ] && [ "$db_config" = "true" ]; then
                 ok=1
                 break
@@ -71,7 +71,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cert_code=$(curl -sS -m 30 -o /tmp/member-cert.json -w '%{http_code}' "${API_BASE}/api/ivx/certification/member-auth" || true)
+          if [ -z "${IVX_AI_SYSTEM_SECRET:-}" ]; then
+            echo 'IVX_AI_SYSTEM_SECRET is unavailable in Actions runtime'
+            exit 1
+          fi
+          cert_code=$(curl -sS -m 30 -o /tmp/member-cert.json -w '%{http_code}' \
+            -H "X-IVX-System-Key: ${IVX_AI_SYSTEM_SECRET}" \
+            "${API_BASE}/api/ivx/certification/member-auth" || true)
           echo "member_auth_cert_http=$cert_code"
           cat /tmp/member-cert.json || true
           if [ "$cert_code" != "200" ]; then
