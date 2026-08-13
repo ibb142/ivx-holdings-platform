@@ -152,6 +152,7 @@
   <!-- ═══ AD TRACKING — Google Ads (active) + others (add IDs to activate) ═══ -->
   <script>
   (function() {
+    try { if (localStorage.getItem('ivx_cookie_consent') !== 'all') { console.log('[IVX Ads] Google deferred — no consent'); return; } } catch(e) { return; }
     var gadsKey = document.querySelector('meta[name="ivx-gads-key"]') ? document.querySelector('meta[name="ivx-gads-key"]').content : '';
     if (gadsKey && gadsKey.indexOf('__IVX_') !== 0 && gadsKey.length > 5) {
       var s = document.createElement('script');
@@ -172,6 +173,7 @@
   <!-- Meta Pixel — reads ID from meta tag, only loads if a real ID is set -->
   <script>
   (function() {
+    try { if (localStorage.getItem('ivx_cookie_consent') !== 'all') { console.log('[IVX Ads] Meta deferred — no consent'); return; } } catch(e) { return; }
     var metaPixelMeta = document.querySelector('meta[name="ivx-meta-pixel-id"]');
     var metaPixelId = metaPixelMeta ? metaPixelMeta.content : '';
     if (metaPixelId && metaPixelId.indexOf('__IVX_') !== 0 && metaPixelId.length > 5) {
@@ -197,6 +199,7 @@
   <!-- TikTok Pixel — reads ID from meta tag, only loads if a real ID is set -->
   <script>
   (function() {
+    try { if (localStorage.getItem('ivx_cookie_consent') !== 'all') { console.log('[IVX Ads] TikTok deferred — no consent'); return; } } catch(e) { return; }
     var ttPixelMeta = document.querySelector('meta[name="ivx-tiktok-pixel-id"]');
     var ttPixelId = ttPixelMeta ? ttPixelMeta.content : '';
     if (ttPixelId && ttPixelId.indexOf('__IVX_') !== 0 && ttPixelId.length > 5) {
@@ -221,6 +224,7 @@
   <!-- LinkedIn Insight Tag — reads ID from meta tag, only loads if a real ID is set -->
   <script>
   (function() {
+    try { if (localStorage.getItem('ivx_cookie_consent') !== 'all') { console.log('[IVX Ads] LinkedIn deferred — no consent'); return; } } catch(e) { return; }
     var liMeta = document.querySelector('meta[name="ivx-linkedin-partner-id"]');
     var liId = liMeta ? liMeta.content : '';
     if (liId && liId.indexOf('__IVX_') !== 0 && liId.length > 3) {
@@ -288,6 +292,88 @@ IVX.track = function(eventName, data) {
 IVX.trackPageView = function() {
   IVX.track('landing_page_view', { referrer: document.referrer });
 };
+
+// Ad pixel loader — gated by cookie consent (items 90-97)
+// Pixels are NOT loaded until user clicks "Accept All" on the cookie banner.
+// Returning users with prior consent get pixels loaded by the IIFEs in <head>.
+// New users get pixels loaded when acceptCookies() calls this function.
+IVX._pixelsLoaded = false;
+IVX.loadAdPixels = function() {
+  if (IVX._pixelsLoaded) return;
+  IVX._pixelsLoaded = true;
+  console.log('[IVX Ads] Loading ad pixels after consent...');
+  // Google Ads / GA4
+  var gadsKey = document.querySelector('meta[name="ivx-gads-key"]') ? document.querySelector('meta[name="ivx-gads-key"]').content : '';
+  if (gadsKey && gadsKey.indexOf('__IVX_') !== 0 && gadsKey.length > 5) {
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gadsKey;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function() { dataLayer.push(arguments); };
+    gtag('js', new Date());
+    gtag('config', gadsKey);
+    console.log('[IVX Ads] Google Ads/GA4 initialized:', gadsKey);
+  } else { window.gtag = function() {}; }
+  // Meta Pixel
+  var metaPixelMeta = document.querySelector('meta[name="ivx-meta-pixel-id"]');
+  var metaPixelId = metaPixelMeta ? metaPixelMeta.content : '';
+  if (metaPixelId && metaPixelId.indexOf('__IVX_') !== 0 && metaPixelId.length > 5) {
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+    document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', metaPixelId);
+    fbq('track', 'PageView');
+    console.log('[IVX Ads] Meta Pixel initialized:', metaPixelId);
+  } else { window.fbq = function() {}; }
+  // TikTok Pixel
+  var ttPixelMeta = document.querySelector('meta[name="ivx-tiktok-pixel-id"]');
+  var ttPixelId = ttPixelMeta ? ttPixelMeta.content : '';
+  if (ttPixelId && ttPixelId.indexOf('__IVX_') !== 0 && ttPixelId.length > 5) {
+    !function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=
+    ["page","track","identify","instances","debug","on","off","once","ready","alias",
+    "group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){
+    t._q.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;
+    i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){
+    for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);
+    return e};ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";
+    ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,
+    ttq._o=ttq._o||{},ttq._o[e]=n||{};var o=document.createElement("script");o.type="text/javascript",
+    o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];
+    a.parentNode.insertBefore(o,a)};ttq.load(ttPixelId);ttq.page();
+    }(window,document,'ttq');
+    console.log('[IVX Ads] TikTok Pixel initialized:', ttPixelId);
+  }
+  // LinkedIn Insight Tag
+  var liMeta = document.querySelector('meta[name="ivx-linkedin-partner-id"]');
+  var liId = liMeta ? liMeta.content : '';
+  if (liId && liId.indexOf('__IVX_') !== 0 && liId.length > 3) {
+    _linkedin_partner_id = liId;
+    window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+    window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+    (function(l){if(!l){window.lintrk=function(a,b){window.lintrk.q.push([a,b])};
+    window.lintrk.q=[]}var s=document.getElementsByTagName("script")[0];
+    var b=document.createElement("script");b.type="text/javascript";b.async=true;
+    b.src="https://snap.licdn.com/li.lms-analytics/insight.min.js";
+    s.parentNode.insertBefore(b,s)})(window.lintrk);
+    console.log('[IVX Ads] LinkedIn Insight Tag initialized:', liId);
+  }
+  IVX.trackPageView();
+};
+
+// On page load, mark pixels as loaded if consent was already given (returning user)
+(function() {
+  try {
+    if (localStorage.getItem('ivx_cookie_consent') === 'all') {
+      IVX._pixelsLoaded = true; // IIFEs already loaded them
+    } else {
+      window.gtag = function() {};
+      window.fbq = function() {};
+    }
+  } catch(e) {}
+})();
 
 IVX.trackCTA = function(ctaName, ctaLocation) {
   IVX.track('primary_cta_click', { cta_name: ctaName, cta_location: ctaLocation });
@@ -437,7 +523,7 @@ if (document.readyState === 'loading') {
 <!-- MEMBER REGISTRATION CTA + MODAL -->
 <section id="join" style="padding: 40px 24px 0;">
   <div class="wrap">
-    <div class="mreg-cta-band reveal">
+    <div class="mreg-cta-band reveal" id="join">
       <h3>Become an IVX Member &mdash; Free</h3>
       <p>Create your free member account to follow live projects, save deals, and unlock the full investor flow in the app.</p>
       <button class="mreg-cta-btn" onclick="openFunnel()">Create Free Account &#8594;</button>
@@ -581,7 +667,7 @@ if (document.readyState === 'loading') {
         <div class="step-num">STEP 2</div><span class="step-ico">&#128274;</span>
         <div class="step-ttl">Real Investor Activation</div>
         <div class="step-dsc">Verified members upgrade to real investor status: identity (KYC) review, accreditation check, investment preferences, investor account creation, and allocation access to live opportunities.</div>
-        <button class="mreg-cta-btn" style="margin-top:14px;" onclick="document.getElementById('investor-chat') ? document.getElementById('investor-chat').scrollIntoView({behavior:'smooth'}) : openMemberReg()">Start Step 2 &#8594; Real Investor Activation</button>
+        <button class="mreg-cta-btn" style="margin-top:14px;" onclick="document.getElementById('investor-chat') ? document.getElementById('investor-chat').scrollIntoView({behavior:'smooth'}) : openFunnel()">Start Step 2 &#8594; Real Investor Activation</button>
       </div>
     </div>
   </div>
@@ -707,7 +793,7 @@ if (document.readyState === 'loading') {
       </div>
     </div>
     <div class="credibility-actions reveal">
-      <a href="#waitlist" class="credibility-action primary">Start investor intake →</a>
+      <a href="#" class="credibility-action primary" onclick="openFunnel(); return false;">Start investor intake →</a>
       <a href="mailto:investors@ivxholding.com" class="credibility-action">Email investor relations</a>
       <a href="mailto:investors@ivxholding.com" class="credibility-action">Request management call</a>
     </div>
@@ -845,7 +931,7 @@ if (document.readyState === 'loading') {
         </div>
         <div class="landing-chat-actions">
           <button type="button" id="landing-chat-human" class="landing-chat-human">Request Live Investor Support</button>
-          <a href="#waitlist" class="landing-chat-intake">Start Investor Intake</a>
+          <a href="#" class="landing-chat-intake" onclick="openFunnel(); return false;">Start Investor Intake</a>
         </div>
       </div>
     </div>
@@ -1016,12 +1102,12 @@ if (document.readyState === 'loading') {
     <h2>Ready to Own<br><span>Real Estate?</span></h2>
     <p class="cta-sub">Start with a screened intake built for real investor review.<br>Access documented opportunities and request allocation only after deal-specific review.</p>
     <div class="cta-btns">
-      <a href="#waitlist" class="btn-primary" style="font-size:16px; padding:18px 38px;">Start Investor Intake &rarr;</a>
+      <a href="#" class="btn-primary" style="font-size:16px; padding:18px 38px;" onclick="openFunnel(); return false;">Start Investor Intake &rarr;</a>
       <a href="#investor-chat" class="btn-outline" style="font-size:15px; padding:18px 28px;">Open Investor Chat</a>
       <a href="mailto:investors@ivxholding.com" class="btn-outline" style="font-size:15px; padding:18px 28px;">Talk to Investor Relations</a>
     </div>
     <div class="app-badges">
-      <a href="#waitlist" class="app-badge" id="ios-badge">
+      <a href="#" class="app-badge" id="ios-badge" onclick="openFunnel(); return false;">
         <span class="app-badge-ico"><svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M19.11 14.85c-.03-3.11 2.54-4.62 2.66-4.69-1.45-2.12-3.7-2.41-4.5-2.44-1.91-.19-3.74 1.13-4.71 1.13-.98 0-2.48-1.1-4.09-1.07-2.1.03-4.05 1.22-5.12 3.09-2.19 3.8-.56 9.42 1.57 12.5 1.04 1.51 2.28 3.2 3.91 3.14 1.57-.06 2.16-1.02 4.07-1.02 1.89 0 2.44 1.02 4.1.98 1.69-.03 2.76-1.54 3.79-3.06a13.1 13.1 0 0 0 1.73-3.54c-.04-.02-3.38-1.3-3.41-5.02Z" fill="white"/><path d="M16.1 5.76c.86-1.05 1.44-2.5 1.28-3.96-1.24.05-2.75.83-3.63 1.87-.8.92-1.5 2.4-1.31 3.82 1.38.11 2.79-.71 3.66-1.73Z" fill="white"/></svg></span>
         <div class="app-badge-copy"><small>Coming Soon on</small><strong>App Store</strong></div>
       </a>
@@ -1127,7 +1213,7 @@ if (document.readyState === 'loading') {
           </a>
         </div>
       </div>
-      <div class="footer-col"><h4>Platform</h4><ul><li><a href="#properties">Properties</a></li><li><a href="#how-it-works">How It Works</a></li><li><a href="#investor-chat">Investor Chat</a></li><li><a href="#partners">Partner & Earn</a></li><li><a href="#waitlist">Start Investor Intake</a></li></ul></div>
+      <div class="footer-col"><h4>Platform</h4><ul><li><a href="#properties">Properties</a></li><li><a href="#how-it-works">How It Works</a></li><li><a href="#investor-chat">Investor Chat</a></li><li><a href="#partners">Partner & Earn</a></li><li><a href="#" onclick="openFunnel(); return false;">Start Investor Intake</a></li></ul></div>
       <div class="footer-col"><h4>Register Interest</h4><ul><li><a href="/enterprise-register">Enterprise Registration</a></li><li><a href="/capture">Investor / Accredited</a></li><li><a href="/capture">JV / Capital Partner</a></li><li><a href="/capture">Buyer / Deal Inquiry</a></li><li><a href="/capture">Seller / Land Owner</a></li><li><a href="/capture">Realtor / Builder / Developer</a></li></ul></div>
       <div class="footer-col"><h4>Company</h4><ul><li><a href="#trust">About & Security</a></li><li><a href="#credibility">Company Facts</a></li><li><a href="#disclosures">Investor Disclosures</a></li></ul></div>
       <div class="footer-col"><h4>Contact</h4><ul><li><a href="mailto:investors@ivxholding.com">investors@ivxholding.com</a></li><li><a href="mailto:compliance@ivxholding.com">compliance@ivxholding.com</a></li><li><a href="mailto:privacy@ivxholding.com">privacy@ivxholding.com</a></li><li><a href="mailto:investors@ivxholding.com">investors@ivxholding.com</a></li><li><a href="https://maps.google.com/?q=1001+Brickell+Bay+Drive+Suite+2700+Miami+FL+33131" target="_blank" rel="noopener">1001 Brickell Bay Dr, Suite 2700</a></li></ul></div>
@@ -1477,13 +1563,17 @@ if (document.readyState === 'loading') {
           <input type="hidden" id="f-utm-campaign" value="" />
           <input type="hidden" id="f-utm-content" value="" />
           <input type="hidden" id="f-utm-term" value="" />
-          <input type="text" class="funnel-input" id="f-name" placeholder="Full name" required autocomplete="name"
-                 aria-label="Full name" />
-          <input type="email" class="funnel-input" id="f-email" placeholder="Email address" required autocomplete="email"
-                 aria-label="Email address" />
-          <input type="tel" class="funnel-input" id="f-phone" placeholder="Phone number" required autocomplete="tel"
-                 aria-label="Phone number" />
-          <select class="funnel-input" id="f-range" required aria-label="Investment range">
+          <!-- Honeypot field for bot protection (item 89) -->
+          <input type="text" name="company_website" id="f-company-website" style="display:none !important;position:absolute;left:-9999px;" tabindex="-1" autocomplete="off" aria-hidden="true" />
+          <!-- Idempotency token (item 88) -->
+          <input type="hidden" id="f-idempotency-key" value="" />
+          <input type="text" class="funnel-input" id="f-name" placeholder="Full name *" required autocomplete="name"
+                 aria-label="Full name" aria-required="true" aria-describedby="funnel-error" />
+          <input type="email" class="funnel-input" id="f-email" placeholder="Email address *" required autocomplete="email"
+                 aria-label="Email address" aria-required="true" aria-describedby="funnel-error" />
+          <input type="tel" class="funnel-input" id="f-phone" placeholder="Phone number (optional)" autocomplete="tel"
+                 inputmode="tel" aria-label="Phone number (optional)" />
+          <select class="funnel-input" id="f-range" required aria-label="Investment range" aria-required="true" aria-describedby="funnel-error">
             <option value="">Investment range…</option>
             <option value="0-5k">$0 – $5,000</option>
             <option value="5k-25k">$5,000 – $25,000</option>
@@ -1495,7 +1585,8 @@ if (document.readyState === 'loading') {
             <input type="checkbox" id="f-consent" required style="margin-top:3px;flex-shrink:0;" />
             <span>I agree to the <a href="/legal/terms.html" target="_blank" style="color:var(--gold);">Terms of Service</a> and <a href="/legal/privacy.html" target="_blank" style="color:var(--gold);">Privacy Policy</a>, and I authorize IVX to contact me about investor onboarding.</span>
           </label>
-          <div class="funnel-error" id="funnel-error"></div>
+          <p style="font-size:11px;color:var(--text3,#777);margin:6px 0 0;line-height:1.4;">We collect your name and email to create your investor review and contact you about onboarding. Phone is optional — provide it only if you want SMS updates. We never sell your data.</p>
+          <div class="funnel-error" id="funnel-error" role="alert" aria-live="assertive"></div>
           <button type="submit" class="funnel-submit" id="funnel-submit-btn">Start Investor Review &rarr;</button>
           <p class="funnel-disclaimer">By continuing, you agree to our Terms of Service and Privacy Policy. No spam — ever.</p>
         </form>
@@ -1527,11 +1618,11 @@ if (document.readyState === 'loading') {
             <div class="fns-item"><div class="fns-icon">&#128737;</div><div class="fns-text"><div class="fns-label">Create your account</div><div class="fns-desc">Free member registration with email verification — KYC and accreditation come later</div></div></div>
             <div class="fns-item"><div class="fns-icon">&#128176;</div><div class="fns-text"><div class="fns-label">Review live opportunities</div><div class="fns-desc">Deal access opens only after approval and offering-specific review</div></div></div>
           </div>
-          <button class="funnel-submit" onclick="closeFunnel();openMemberReg();" style="margin-bottom:10px;">Complete full investor intake &rarr;</button>
+          <button class="funnel-submit" onclick="closeFunnel();" style="margin-bottom:10px;">Close &amp; Continue &rarr;</button>
           <div class="funnel-referral-box open" id="referral-box" style="margin-top:10px;">
             <div class="frb-title">NEXT STEP</div>
             <div class="frb-link-row">
-              <div class="frb-link" id="referral-link">Create your free member account to complete phone verification and unlock the investor onboarding flow.</div>
+              <div class="frb-link" id="referral-link">We will contact you within 1-2 business days to continue your investor onboarding. No further action needed right now.</div>
             </div>
           </div>
         </div>

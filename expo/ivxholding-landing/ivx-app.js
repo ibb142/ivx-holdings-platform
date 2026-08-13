@@ -535,54 +535,6 @@
     if (m && m.content && m.content.indexOf('__IVX_') !== 0 && m.content.length > 10) return m.content.replace(/\/$/, '');
     return 'https://ivxholding.com';
   }
-  window.submitZoneCapture = function (event) {
-    event.preventDefault();
-    var errEl = document.getElementById('zc-error');
-    var okEl = document.getElementById('zc-success');
-    var btn = document.getElementById('zc-submit');
-    if (errEl) errEl.textContent = '';
-    if (okEl) okEl.style.display = 'none';
-    var roleEl = document.querySelector('input[name="zc-role"]:checked');
-    var val = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
-    var zip = val('zc-zip'), city = val('zc-city'), county = val('zc-county'), state = val('zc-state');
-    var radius = val('zc-radius'), zoneType = val('zc-zone-type');
-    var zoneLabel = zoneType === 'investment_zone' ? 'Investment zone' : (zoneType === 'both' ? 'Purchase zone + Investment zone' : 'Purchase zone');
-    var attr = zcChannelAttr();
-    var payload = {
-      name: val('zc-name'),
-      email: val('zc-email'),
-      role: roleEl ? roleEl.value : 'buyer',
-      preferredMarket: [city, county, state, zip].filter(Boolean).join(', '),
-      consent: true,
-      ctaType: 'zone_capture',
-      source: 'lead_form',
-      sourceDetail: 'landing_zone_capture' + (attr.channel ? ' via ' + attr.channel : ''),
-      campaign: attr.utm_campaign || '',
-      page: window.location.pathname + '#zone-capture',
-      notes: 'ZONE CAPTURE | ' + zoneLabel + ' | ZIP: ' + zip + ' | City: ' + (city || '-') + ' | County: ' + (county || '-') + ' | State: ' + (state || '-') + ' | Radius: ' + radius + ' miles' + (attr.channel ? ' | Channel: ' + attr.channel : ''),
-      signals: { zoneType: zoneType, zip: zip, city: city, county: county, state: state, radiusMiles: radius, attribution: attr }
-    };
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving zone\u2026'; }
-    fetch(zcApi() + '/api/ivx/leads/capture', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; }); })
-      .then(function (res) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Save My Zone \u2192'; }
-        if (res.ok) {
-          if (okEl) okEl.style.display = 'block';
-          var form = document.getElementById('zone-capture-form');
-          if (form) form.reset();
-        } else {
-          if (errEl) errEl.textContent = (res.body && res.body.error) || 'Could not save your zone. Please try again.';
-        }
-      })
-      .catch(function () {
-        if (btn) { btn.disabled = false; btn.textContent = 'Save My Zone \u2192'; }
-        if (errEl) errEl.textContent = 'Network error. Please try again.';
-      });
-  };
 })();
 
 // === Extracted Script Block 3 (3839 lines) ===
@@ -1199,7 +1151,7 @@
     document.addEventListener('focusin', function(e) {
       var inp = e.target;
       if (inp && (inp.tagName === 'INPUT' || inp.tagName === 'TEXTAREA' || inp.tagName === 'SELECT')) {
-        var form = inp.closest('form') || inp.closest('.waitlist-form') || inp.closest('.funnel-step');
+        var form = inp.closest('form') || inp.closest('.funnel-step');
         if (form && !formTracked) {
           formTracked = true;
           ivxTrack('form_focus', { field: inp.name || inp.id || inp.type, formId: form.id || 'unknown' });
@@ -1250,107 +1202,6 @@
     }
   });
 
-  // ── Real waitlist submit handler ──
-  // Collects all fields from the rich intake form and POSTs to the backend.
-  window.handleWaitlist = function(e) {
-    e.preventDefault();
-    ivxTrack('waitlist_attempt', { source: 'landing_form' });
-    ivxTrack('registration_start', { source: 'landing_form' });
-    try { if (typeof fireAdEvent === 'function') fireAdEvent('initiate_checkout', { category: 'registration' }); } catch(x) {}
-
-    var errEl = document.getElementById('waitlist-error');
-    var successEl = document.getElementById('waitlist-success');
-    var btn = document.getElementById('waitlist-submit-btn');
-    var form = document.getElementById('waitlist-form');
-    if (errEl) errEl.style.display = 'none';
-    if (successEl) successEl.style.display = 'none';
-
-    // Gather form fields
-    var firstName = (document.getElementById('waitlist-first-name') || {}).value || '';
-    var lastName = (document.getElementById('waitlist-last-name') || {}).value || '';
-    var email = (document.getElementById('waitlist-email') || {}).value || '';
-    var phone = (document.getElementById('waitlist-phone') || {}).value || '';
-    var investmentRange = (document.getElementById('waitlist-investment-range') || {}).value || '';
-    var returnExpectation = (document.getElementById('waitlist-return-expectation') || {}).value || '';
-    var callTime = (document.getElementById('waitlist-call-time') || {}).value || '';
-    var accreditedStatus = (document.getElementById('waitlist-accredited-status') || {}).value || 'unsure';
-    var entityType = (document.getElementById('waitlist-entity-type') || {}).value || 'individual';
-    var primaryIdType = (document.getElementById('waitlist-primary-id-type') || {}).value || '';
-    var primaryIdRef = (document.getElementById('waitlist-primary-id-reference') || {}).value || '';
-    var secondaryIdType = (document.getElementById('waitlist-secondary-id-type') || {}).value || '';
-    var secondaryIdRef = (document.getElementById('waitlist-secondary-id-reference') || {}).value || '';
-    var docCountry = (document.getElementById('waitlist-document-country') || {}).value || '';
-    var taxCountry = (document.getElementById('waitlist-tax-country') || {}).value || '';
-    var taxIdRef = (document.getElementById('waitlist-tax-id-reference') || {}).value || '';
-    var signatureName = (document.getElementById('waitlist-signature-name') || {}).value || '';
-    var consent = (document.getElementById('waitlist-consent') || {}).checked || false;
-
-    // Validate required fields
-    if (!firstName || !lastName) { if (errEl) { errEl.textContent = 'First and last name are required.'; errEl.style.display = 'block'; } return; }
-    if (!email || email.indexOf('@') === -1) { if (errEl) { errEl.textContent = 'A valid email is required.'; errEl.style.display = 'block'; } return; }
-    if (!phone) { if (errEl) { errEl.textContent = 'Phone number is required.'; errEl.style.display = 'block'; } return; }
-    if (!investmentRange) { if (errEl) { errEl.textContent = 'Please select an investment range.'; errEl.style.display = 'block'; } return; }
-    if (!primaryIdRef || !secondaryIdRef) { if (errEl) { errEl.textContent = 'Both ID references are required.'; errEl.style.display = 'block'; } return; }
-    if (!docCountry || !taxCountry) { if (errEl) { errEl.textContent = 'Document and tax residency countries are required.'; errEl.style.display = 'block'; } return; }
-    if (!signatureName || signatureName.trim().toLowerCase() !== (firstName + ' ' + lastName).trim().toLowerCase()) {
-      if (errEl) { errEl.textContent = 'Your typed signature must match your first and last name.'; errEl.style.display = 'block'; } return;
-    }
-    if (!consent) { if (errEl) { errEl.textContent = 'Please authorize IVX to contact you.'; errEl.style.display = 'block'; } return; }
-
-    // Build payload for backend
-    var fullName = (firstName + ' ' + lastName).trim();
-    var interest = 'investor';
-    if (entityType === 'corporate') interest = 'investor';
-
-    var payload = {
-      name: fullName,
-      email: email.trim().toLowerCase(),
-      phone: phone,
-      interest: interest,
-      source: 'landing_page',
-      sourceDetail: 'investor intake form',
-      metadata: {
-        firstName: firstName, lastName: lastName, entityType: entityType,
-        investmentRange: investmentRange, returnExpectation: returnExpectation,
-        callTime: callTime, accreditedStatus: accreditedStatus,
-        primaryIdType: primaryIdType, primaryIdRef: primaryIdRef,
-        secondaryIdType: secondaryIdType, secondaryIdRef: secondaryIdRef,
-        docCountry: docCountry, taxCountry: taxCountry, taxIdRef: taxIdRef,
-        signatureName: signatureName
-      }
-    };
-
-    // Submit to backend
-    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
-    var apiBase = (window.IVX_API || window.__IVX_BACKEND_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
-    fetch(apiBase + '/api/ivx/waitlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function(res) { return res.json(); }).then(function(data) {
-      if (data.ok) {
-        if (form) form.style.display = 'none';
-        if (successEl) successEl.style.display = 'block';
-        ivxTrack('waitlist_submit', { source: 'landing_form', status: 'success' });
-        try { if (typeof fireAdEvent === 'function') fireAdEvent('purchase', { category: 'registration' }); } catch(x) {}
-        // Also mirror to IVX CRM lead capture
-        try {
-          mirrorLeadToIVXCRM({
-            firstName: firstName, lastName: lastName, email: email, phone: phone,
-            investmentInterest: interest, source: 'ivxholding_landing'
-          });
-        } catch(x) {}
-      } else {
-        if (errEl) { errEl.textContent = (data.error || data.message || 'Submission failed. Please try again.'); errEl.style.display = 'block'; }
-        if (btn) { btn.disabled = false; btn.textContent = 'Submit investor intake \u2192'; }
-        ivxTrack('waitlist_submit', { source: 'landing_form', status: 'error' });
-      }
-    }).catch(function(err) {
-      if (errEl) { errEl.textContent = 'Network error. Please check your connection and try again.'; errEl.style.display = 'block'; }
-      if (btn) { btn.disabled = false; btn.textContent = 'Submit investor intake \u2192'; }
-      ivxTrack('waitlist_submit', { source: 'landing_form', status: 'network_error' });
-    });
-  };
 
   var _funnelOrigOpen = window.openFunnel;
   window.openFunnel = function() {
@@ -1456,7 +1307,6 @@
   }
 
 
-
   // ══════════════════════════════════════════════════════════════════════════════
   // LIVE ACTIVITY TICKER
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1498,7 +1348,6 @@
   setInterval(updateTicker, 3000);
 
 
-
   // ══════════════════════════════════════════════════════════════════════════════
   // ON LOAD
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1528,210 +1377,6 @@
   }
 
 
-
-  var WAITLIST_OTP_SENT = false;
-  var WAITLIST_PHONE_VERIFIED = false;
-  var WAITLIST_OTP_COOLDOWN = 0;
-  var WAITLIST_OTP_TIMER = null;
-  var WAITLIST_SB = null;
-
-  function waitlistField(id) {
-    return document.getElementById(id);
-  }
-
-  function escapeWaitlistHtml(value) {
-    return String(value || '').replace(/[&<>"']/g, function(ch) {
-      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] || ch;
-    });
-  }
-
-  function normalizeWaitlistEmail(email) {
-    return String(email || '').trim().toLowerCase();
-  }
-
-  function normalizeWaitlistPhone(phone) {
-    var digits = String(phone || '').replace(/[^\d+]/g, '');
-    if (!digits) return '';
-    if (digits.charAt(0) === '+') return digits;
-    if (digits.length === 10) return '+1' + digits;
-    if (digits.length === 11 && digits.charAt(0) === '1') return '+' + digits;
-    return '+' + digits;
-  }
-
-  function isValidWaitlistEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeWaitlistEmail(email));
-  }
-
-  function isValidWaitlistPhone(phone) {
-    return normalizeWaitlistPhone(phone).replace(/\D/g, '').length >= 11;
-  }
-
-  function getWaitlistSupabaseClient() {
-    if (WAITLIST_SB) return WAITLIST_SB;
-    if (!window.supabase || isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY)) return null;
-    WAITLIST_SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    return WAITLIST_SB;
-  }
-
-  function setWaitlistError(message) {
-    var el = waitlistField('waitlist-error');
-    if (!el) return;
-    el.textContent = message || '';
-    el.style.display = message ? 'block' : 'none';
-  }
-
-  function refreshWaitlistOtpButton() {
-    var btn = waitlistField('waitlist-send-otp-btn');
-    if (!btn) return;
-    if (WAITLIST_OTP_COOLDOWN > 0) {
-      btn.textContent = 'Resend in ' + WAITLIST_OTP_COOLDOWN + 's';
-      btn.disabled = true;
-      return;
-    }
-    btn.disabled = false;
-    btn.textContent = WAITLIST_OTP_SENT ? 'Resend OTP' : 'Send OTP';
-  }
-
-  function startWaitlistOtpCooldown() {
-    WAITLIST_OTP_COOLDOWN = 30;
-    refreshWaitlistOtpButton();
-    if (WAITLIST_OTP_TIMER) clearInterval(WAITLIST_OTP_TIMER);
-    WAITLIST_OTP_TIMER = setInterval(function() {
-      WAITLIST_OTP_COOLDOWN = Math.max(0, WAITLIST_OTP_COOLDOWN - 1);
-      refreshWaitlistOtpButton();
-      if (WAITLIST_OTP_COOLDOWN === 0 && WAITLIST_OTP_TIMER) {
-        clearInterval(WAITLIST_OTP_TIMER);
-        WAITLIST_OTP_TIMER = null;
-      }
-    }, 1000);
-  }
-
-  function setWaitlistPhoneVerified(verified) {
-    WAITLIST_PHONE_VERIFIED = !!verified;
-    var status = waitlistField('waitlist-phone-status');
-    var phone = waitlistField('waitlist-phone');
-    var otpWrap = waitlistField('waitlist-otp-verify-wrap');
-    if (status) {
-      status.textContent = verified ? 'Cell verified for investor intake' : (WAITLIST_OTP_SENT ? 'OTP sent — enter the code to verify your cell' : 'OTP required before submission');
-      status.className = verified ? 'waitlist-phone-status verified' : 'waitlist-phone-status';
-    }
-    if (phone) phone.readOnly = verified;
-    if (otpWrap) otpWrap.style.display = verified ? 'none' : (WAITLIST_OTP_SENT ? 'grid' : 'none');
-  }
-
-  function setWaitlistEntityType(type) {
-    var entityField = waitlistField('waitlist-entity-type');
-    if (entityField) entityField.value = type === 'corporate' ? 'corporate' : 'individual';
-    var chips = document.querySelectorAll('[data-entity-type]');
-    chips.forEach(function(chip) {
-      if (chip.getAttribute('data-entity-type') === entityField.value) {
-        chip.classList.add('active');
-      } else {
-        chip.classList.remove('active');
-      }
-    });
-    var corporateFields = waitlistField('waitlist-corporate-fields');
-    var individualFields = waitlistField('waitlist-individual-fields');
-    var authorityAckWrap = waitlistField('waitlist-authority-ack-wrap');
-    if (corporateFields) corporateFields.style.display = entityField.value === 'corporate' ? 'grid' : 'none';
-    if (individualFields) individualFields.style.display = entityField.value === 'corporate' ? 'none' : 'grid';
-    if (authorityAckWrap) authorityAckWrap.style.display = entityField.value === 'corporate' ? 'flex' : 'none';
-  }
-
-  async function sendWaitlistOtp() {
-    setWaitlistError('');
-    var phone = waitlistField('waitlist-phone') ? waitlistField('waitlist-phone').value.trim() : '';
-    if (!isValidWaitlistPhone(phone)) {
-      setWaitlistError('Enter a valid cell number before sending the OTP.');
-      return;
-    }
-    var btn = waitlistField('waitlist-send-otp-btn');
-    var sb = getWaitlistSupabaseClient();
-    if (!sb) {
-      setWaitlistError('Supabase is not ready yet. Refresh the page and try again.');
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
-    try {
-      var phoneE164 = normalizeWaitlistPhone(phone);
-      var result = await sb.auth.signInWithOtp({ phone: phoneE164 });
-      if (result && result.error) throw result.error;
-      WAITLIST_OTP_SENT = true;
-      setWaitlistPhoneVerified(false);
-      startWaitlistOtpCooldown();
-      console.log('[IVX Waitlist] OTP sent to:', phoneE164);
-    } catch (err) {
-      console.warn('[IVX Waitlist] OTP send failed:', err && err.message ? err.message : err);
-      setWaitlistError('We could not send your OTP right now. Please check the number and try again.');
-      refreshWaitlistOtpButton();
-    }
-  }
-
-  async function verifyWaitlistOtpCode() {
-    setWaitlistError('');
-    var phone = waitlistField('waitlist-phone') ? waitlistField('waitlist-phone').value.trim() : '';
-    var code = waitlistField('waitlist-otp-code') ? waitlistField('waitlist-otp-code').value.trim() : '';
-    if (!WAITLIST_OTP_SENT) {
-      setWaitlistError('Send the OTP first.');
-      return;
-    }
-    if (code.length !== 6) {
-      setWaitlistError('Enter the 6-digit code sent to your cell number.');
-      return;
-    }
-    var btn = waitlistField('waitlist-verify-otp-btn');
-    var sb = getWaitlistSupabaseClient();
-    if (!sb) {
-      setWaitlistError('Supabase is not ready yet. Refresh the page and try again.');
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = 'Verifying...';
-    try {
-      var phoneE164 = normalizeWaitlistPhone(phone);
-      var verifyResult = await sb.auth.verifyOtp({ phone: phoneE164, token: code, type: 'sms' });
-      if (verifyResult && verifyResult.error) throw verifyResult.error;
-      setWaitlistPhoneVerified(true);
-      if (waitlistField('waitlist-otp-code')) waitlistField('waitlist-otp-code').value = '';
-      try { await sb.auth.signOut(); } catch (signOutErr) {}
-      console.log('[IVX Waitlist] OTP verified for:', phoneE164);
-    } catch (err) {
-      console.warn('[IVX Waitlist] OTP verify failed:', err && err.message ? err.message : err);
-      setWaitlistError('That OTP code is invalid or expired. Please try again.');
-      setWaitlistPhoneVerified(false);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Verify cell';
-    }
-  }
-
-  function getWaitlistAttribution() {
-    var params = new URLSearchParams(window.location.search || '');
-    return {
-      pagePath: (window.location.pathname || '/') + (window.location.search || ''),
-      referrer: document.referrer || null,
-      utm_source: params.get('utm_source') || null,
-      utm_medium: params.get('utm_medium') || null,
-      utm_campaign: params.get('utm_campaign') || null,
-      utm_content: params.get('utm_content') || null,
-      utm_term: params.get('utm_term') || null,
-    };
-  }
-
-  function parseRangeMidpoint(label) {
-    var matches = String(label || '').replace(/,/g, '').match(/\$?(\d+(?:\.\d+)?)/g) || [];
-    var values = matches.map(function(value) {
-      return Number(String(value).replace('$', ''));
-    }).filter(function(value) {
-      return Number.isFinite(value) && value > 0;
-    });
-    if (values.length === 0) return 0;
-    if (String(label || '').indexOf('+') !== -1) return values[0];
-    if (values.length === 1) return values[0];
-    return Math.round((values[0] + values[1]) / 2);
-  }
-
   // ══════════════════════════════════════════════════════════════════════════════
   // SMART 3-STEP FUNNEL
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1739,6 +1384,21 @@
     document.getElementById('funnel-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     showFunnelStep(1);
+    // Populate UTM hidden fields from captured attribution (item 98)
+    try {
+      var attr = JSON.parse(localStorage.getItem('ivx_channel_attribution') || '{}');
+      var setVal = function(id, val) { var el = document.getElementById(id); if (el && val) el.value = val; };
+      setVal('f-utm-source', attr.utm_source || '');
+      setVal('f-utm-medium', attr.utm_medium || '');
+      setVal('f-utm-campaign', attr.utm_campaign || '');
+      setVal('f-utm-content', attr.utm_content || '');
+      setVal('f-utm-term', attr.utm_term || '');
+    } catch(e) {}
+    // Generate idempotency token if not set (item 88)
+    var idemEl = document.getElementById('f-idempotency-key');
+    if (idemEl && !idemEl.value) {
+      idemEl.value = 'ivx-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    }
     fireAdEvent('initiate_checkout', { content_name: 'Investment Funnel', value: 0 });
   }
 
@@ -1792,9 +1452,18 @@
     // Inline validation
     if (!fullName) { errEl.textContent = 'Enter your full name'; errEl.style.display = 'block'; if (window.IVX && IVX.trackFormError) IVX.trackFormError('name', 'required'); return; }
     if (!email || email.indexOf('@') === -1) { errEl.textContent = 'Enter a valid email address'; errEl.style.display = 'block'; if (window.IVX && IVX.trackFormError) IVX.trackFormError('email', 'invalid'); return; }
-    if (!phone) { errEl.textContent = 'Enter your phone number'; errEl.style.display = 'block'; if (window.IVX && IVX.trackFormError) IVX.trackFormError('phone', 'required'); return; }
+    // Phone is optional (item 72) — only validate format if provided
+    if (phone && phone.replace(/\D/g, '').length < 7) { errEl.textContent = 'Enter a valid phone number or leave it blank'; errEl.style.display = 'block'; if (window.IVX && IVX.trackFormError) IVX.trackFormError('phone', 'invalid'); return; }
     if (!investRange) { errEl.textContent = 'Select your investment range'; errEl.style.display = 'block'; if (window.IVX && IVX.trackFormError) IVX.trackFormError('range', 'required'); return; }
     if (!consent) { errEl.textContent = 'You must accept the Terms and Privacy Policy'; errEl.style.display = 'block'; if (window.IVX && IVX.trackFormError) IVX.trackFormError('consent', 'required'); return; }
+
+    // Honeypot check — if filled, silently reject (item 89)
+    var honeypot = document.getElementById('f-company-website');
+    if (honeypot && honeypot.value) { console.warn('[IVX] Honeypot triggered — bot detected'); return; }
+
+    // Idempotency token (item 88)
+    var idempotencyKey = document.getElementById('f-idempotency-key');
+    var idempotencyValue = idempotencyKey ? idempotencyKey.value : '';
 
     // Fire analytics: registration started
     if (window.IVX && IVX.trackRegStart) IVX.trackRegStart();
@@ -1805,7 +1474,7 @@
       document.getElementById('success-name').textContent = fullName;
       document.getElementById('success-position').textContent = 'Investor review started';
       var timedOutReferral = document.getElementById('referral-link');
-      if (timedOutReferral) timedOutReferral.textContent = 'Create your free member account to complete phone verification and unlock the investor onboarding flow.';
+      if (timedOutReferral) timedOutReferral.textContent = 'We will contact you within 1-2 business days to continue your investor onboarding. No further action needed right now.';
       showFunnelStep(3);
       btn.textContent = 'Start Investor Review \u2192'; btn.disabled = false;
     }, 12000);
@@ -1823,13 +1492,14 @@
         utmCampaign: utmCampaign || undefined,
         utmContent: utmContent || undefined,
         utmTerm: utmTerm || undefined,
+        idempotencyKey: idempotencyValue || undefined,
       });
 
       clearTimeout(_fnlTimeout);
       document.getElementById('success-name').textContent = fullName;
       document.getElementById('success-position').textContent = 'Investor review started';
       var successReferral = document.getElementById('referral-link');
-      if (successReferral) successReferral.textContent = 'Create your free member account to complete phone verification and unlock the investor onboarding flow.';
+      if (successReferral) successReferral.textContent = 'We will contact you within 1-2 business days to continue your investor onboarding. No further action needed right now.';
 
       showFunnelStep(3);
       fireAdEvent('lead', { content_name: 'Investor Review Request', value: 0, category: 'conversion' });
@@ -1844,7 +1514,7 @@
       document.getElementById('success-name').textContent = fullName;
       document.getElementById('success-position').textContent = 'Investor review started';
       var fallbackReferral = document.getElementById('referral-link');
-      if (fallbackReferral) fallbackReferral.textContent = 'Create your free member account to complete phone verification and unlock the investor onboarding flow.';
+      if (fallbackReferral) fallbackReferral.textContent = 'We will contact you within 1-2 business days to continue your investor onboarding. No further action needed right now.';
       showFunnelStep(3);
       fireAdEvent('lead', { content_name: 'Investor Review Request (fallback)', value: 0 });
       // Track backend error
@@ -1917,7 +1587,6 @@
     document.getElementById('partner-overlay').classList.remove('open');
     document.body.style.overflow = '';
   }
-
 
 
   async function handlePartnerSubmit(e) {
@@ -4423,15 +4092,6 @@
   });
 
 
-
-
-
-
-
-
-
-
-
   // Cookie Consent
   (function initCookieConsent() {
     try {
@@ -4447,12 +4107,16 @@
   function acceptCookies() {
     try { localStorage.setItem('ivx_cookie_consent', 'all'); } catch(e) {}
     document.getElementById('cookie-banner').classList.remove('visible');
+    // Load ad pixels only after explicit consent (items 90-97)
+    if (window.IVX && typeof IVX.loadAdPixels === 'function') {
+      IVX.loadAdPixels();
+    }
   }
   function rejectCookies() {
     try { localStorage.setItem('ivx_cookie_consent', 'essential'); } catch(e) {}
     document.getElementById('cookie-banner').classList.remove('visible');
+    // Do NOT load ad pixels — essentials only (item 97)
   }
-
 
 
 // === Extracted Script Block 4 (89 lines) ===

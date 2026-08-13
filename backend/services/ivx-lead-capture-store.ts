@@ -302,6 +302,11 @@ export function validateCaptureLead(input: CaptureLeadInput): LeadValidation {
   if (!asTrimmedString(input.email) && !asTrimmedString(input.phone)) {
     return { ok: false, error: 'A real contact is required (email or phone) — IVX never invents contact details.' };
   }
+  // Email format validation — replicate frontend validation (item 87)
+  const email = asTrimmedString(input.email);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: 'A valid email address is required.' };
+  }
   const source: LeadSource = VALID_SOURCES.has(asTrimmedString(input.source)) ? (input.source as LeadSource) : 'lead_form';
   if (source === 'lead_form' && !asBool(input.consent)) {
     return { ok: false, error: 'Consent is required to capture a lead form submission.' };

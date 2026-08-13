@@ -181,6 +181,10 @@ async function syncLeadToCrmContact(lead: LeadRecord): Promise<InvestorRecord | 
 export async function handleLeadCaptureRequest(request: Request): Promise<Response> {
   try {
     const body = await readJsonBody(request);
+    // Honeypot check — if filled, silently reject (item 89, defense in depth)
+    if (asString(body.company_website)) {
+      return ownerOnlyJson({ ok: false, error: 'Invalid submission.' }, 400);
+    }
     const input: CaptureLeadInput = {
       name: asString(body.name),
       email: asString(body.email),
