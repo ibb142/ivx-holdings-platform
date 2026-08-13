@@ -168,6 +168,9 @@ async function bootRegisterAppGenerator(): Promise<void> {
 }
 // Fire-and-forget at module load (runs once per server boot).
 void bootRegisterAppGenerator();
+
+// Validate environment at startup — logs sanitized warnings only (variable names, never values)
+logEnvironmentValidation();
 import {
   OPTIONS as credentialReadinessOptions,
   handleCredentialReadinessRequest,
@@ -492,6 +495,7 @@ import { startSmsNotificationScheduler, getSmsNotifierStatus, sendOwnerStatusSms
 import { runFactoryActivation, getFactoryActivationStatus, IVX_FACTORY_ACTIVATION_MARKER } from './services/ivx-factory-activation';
 import { startLandingSeoAutodeploy } from './services/ivx-landing-seo-autodeploy';
 import { buildVersionResponse } from './services/ivx-version-endpoint';
+import { logEnvironmentValidation } from './services/ivx-env-validator';
 import {
   OPTIONS as deliverablesOptions,
   handleDeliverableCreateRequest,
@@ -893,6 +897,20 @@ async function withRateLimit<T extends Response>(
   const blocked = checkRateLimit(raw, { burst, refillPerSecond, scope });
   if (blocked) return blocked;
   return await handler();
+}
+
+/** Require owner authentication for diagnostic endpoints. Returns null on success, 401 Response on failure. */
+async function requireOwnerAuth(request: Request): Promise<Response | null> {
+  const { assertIVXOwnerOnly, ownerOnlyJson } = await import('./api/owner-only');
+  try {
+    await assertIVXOwnerOnly(request);
+    return null;
+  } catch (err) {
+    return ownerOnlyJson({
+      ok: false,
+      error: err instanceof Error ? err.message : 'Authentication required.',
+    }, 401);
+  }
 }
 import {
   OPTIONS as autonomyOptions,
@@ -2977,16 +2995,10 @@ import {
 import { securityMiddleware, handleSecurityStatus } from './services/ivx-security-middleware';
 
 app.get('/api/ivx/wire-instructions', async (context) => {
-  // Items 153-154: Wire instructions only available to authenticated users.
+  // Wire instructions only available to authenticated users.
   // Sensitive bank details must never be exposed publicly.
-  const authHeader = context.req.header('authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return Response.json({
-      ok: false,
-      error: 'authentication_required',
-      message: 'Wire instructions are only available to authenticated investors. Sign in to view bank details.',
-    }, { status: 401 });
-  }
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
 
   const instructions = getWireInstructions();
   if (!instructions) {
@@ -3168,10 +3180,7 @@ app.get('/health', async (context) => {
       ok: aiServiceAvailable,
       model: aiStartup.model,
     },
-    seniorDeveloper: {
-      enabled: sdEnabled,
-      blockers: sdBlockers.length,
-    },
+    // seniorDeveloper details redacted from public health — use /api/ivx/owner-ai/status with auth
     queue: {
       workerRunning: workerInfo.running,
       activeTasks: workerInfo.activeTasks,
@@ -3345,8 +3354,16 @@ app.options('/tool/:toolName', () => ownerAIOptions());
 app.options('/api/tool/:toolName', () => ownerAIOptions());
 app.get('/ivx/owner-ai', () => GET());
 app.get('/api/ivx/owner-ai', () => GET());
-app.get('/tool/:toolName', async (context) => handleRenderProofToolRequest(context.req.param('toolName'), `/tool/${context.req.param('toolName')}`));
-app.get('/api/tool/:toolName', async (context) => handleRenderProofToolRequest(context.req.param('toolName'), `/api/tool/${context.req.param('toolName')}`));
+app.get('/tool/:toolName', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleRenderProofToolRequest(context.req.param('toolName'), `/tool/${context.req.param('toolName')}`);
+});
+app.get('/api/tool/:toolName', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleRenderProofToolRequest(context.req.param('toolName'), `/api/tool/${context.req.param('toolName')}`);
+});
 /**
  * P0 Phase 1 instrumentation: every 5xx leaving the Owner AI route is recorded
  * with trace id, duration and exact source classification (application vs
@@ -3388,38 +3405,16 @@ app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context
 // Public-safe AI status — minimal info, no credentials, no internal details.
 app.get('/api/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
 app.get('/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
-// Temporary diagnostic: surface the last AI error and provider health for debugging
-app.get('/api/ivx/chat-debug', () => {
-  const lastErr = (globalThis as Record<string, unknown>).__ivxLastChatError as { message: string; name: string } | undefined;
+// Secured diagnostic: requires owner auth, returns minimal redacted info only
+app.get('/api/ivx/chat-debug', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
   const health = getProviderHealth();
   const startup = validateIVXAIStartup();
   return Response.json({
     ok: true,
-    lastError: lastErr ?? null,
-    providerHealth: {
-      state: health.state,
-      provider: health.provider,
-      model: health.model,
-      adapterVersion: health.adapterVersion,
-      credentialLoaded: health.credentialLoaded,
-      credentialValid: health.credentialValid,
-      lastHttpStatus: health.lastHttpStatus,
-      fallbackEnabled: health.fallbackEnabled,
-      fallbackUsed: health.fallbackUsed,
-      error: health.error ? health.error.slice(0, 200) : null,
-      traceId: health.traceId,
-    },
-    startup: {
-      ok: startup.ok,
-      providerType: startup.providerType,
-      model: startup.model,
-      adapterVersion: startup.adapterVersion,
-      keyLoaded: startup.keyLoaded,
-      keyPrefix: startup.keyPrefix,
-      baseUrl: startup.baseUrl,
-      endpoint: startup.endpoint,
-      errors: startup.errors,
-    },
+    aiConfigured: startup.ok,
+    providerState: health.state,
     timestamp: new Date().toISOString(),
   });
 });
@@ -3440,10 +3435,18 @@ app.post('/api/ivx/owner-ai/diagnostics/client-event', async (context) => handle
 app.options('/api/ivx/owner-ai/diagnostics/:requestId', () => ivxOwnerAIDiagnosticsOptions());
 app.get('/api/ivx/owner-ai/diagnostics/:requestId', async (context) => handleIVXOwnerAIDiagnosticsGetRequest(context.req.raw, context.req.param('requestId')));
 app.options('/api/ivx/owner-ai/auth-diagnostic', () => ivxOwnerAIAuthDiagnosticOptions());
-app.get('/api/ivx/owner-ai/auth-diagnostic', () => handleIVXOwnerAIAuthDiagnosticGet());
+app.get('/api/ivx/owner-ai/auth-diagnostic', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleIVXOwnerAIAuthDiagnosticGet();
+});
 app.post('/api/ivx/owner-ai/auth-diagnostic', async (context) => handleIVXOwnerAIAuthDiagnosticPost(context.req.raw));
 app.options('/ivx/owner-ai/auth-diagnostic', () => ivxOwnerAIAuthDiagnosticOptions());
-app.get('/ivx/owner-ai/auth-diagnostic', () => handleIVXOwnerAIAuthDiagnosticGet());
+app.get('/ivx/owner-ai/auth-diagnostic', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleIVXOwnerAIAuthDiagnosticGet();
+});
 app.post('/ivx/owner-ai/auth-diagnostic', async (context) => handleIVXOwnerAIAuthDiagnosticPost(context.req.raw));
 
 // Owner AI streaming (SSE) — renders partial tokens immediately, escapes the 10s watchdog wall
@@ -4029,7 +4032,11 @@ app.options('/api/ivx/metrics', () => metricsOptions());
 app.get('/api/ivx/metrics', async (context) => handleMetricsRequest(context.req.raw));
 
 app.options('/api/ivx/verify/env-status', () => ownerStatusOptions());
-app.get('/api/ivx/verify/env-status', async (context) => handleEnvStatusRequest(context.req.raw));
+app.get('/api/ivx/verify/env-status', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleEnvStatusRequest(context.req.raw);
+});
 app.options('/api/ivx/autonomous/status', () => ownerStatusOptions());
 app.get('/api/ivx/autonomous/status', async (context) => handleAutonomousStatusRequest(context.req.raw));
 app.options('/api/ivx/autonomous/run', () => ownerStatusOptions());
@@ -4044,7 +4051,11 @@ app.options('/api/ivx/ordering/action', () => orderingOptions());
 app.post('/api/ivx/ordering/action', async (context) => handleOrderingActionRequest(context.req.raw));
 
 app.options('/api/ivx/runtime-variables', () => runtimeVariablesOptions());
-app.get('/api/ivx/runtime-variables', async (context) => handleRuntimeVariablesRequest(context.req.raw));
+app.get('/api/ivx/runtime-variables', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleRuntimeVariablesRequest(context.req.raw);
+});
 app.options('/api/ivx/runtime-variables/verify', () => runtimeVariablesOptions());
 app.post('/api/ivx/runtime-variables/verify', async (context) => handleRuntimeVariablesVerifyRequest(context.req.raw));
 app.options('/api/ivx/runtime-variables/sync', () => runtimeVariablesOptions());
@@ -4052,7 +4063,11 @@ app.post('/api/ivx/runtime-variables/sync', async (context) => handleRuntimeVari
 app.options('/api/ivx/runtime-variables/save', () => runtimeVariablesOptions());
 app.post('/api/ivx/runtime-variables/save', async (context) => handleRuntimeVariablesSaveRequest(context.req.raw));
 app.options('/api/ivx/runtime-variables/audit', () => runtimeVariablesOptions());
-app.get('/api/ivx/runtime-variables/audit', async (context) => handleRuntimeVariablesAuditRequest(context.req.raw));
+app.get('/api/ivx/runtime-variables/audit', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleRuntimeVariablesAuditRequest(context.req.raw);
+});
 
 app.options('/api/ivx/development-control', () => ivxDevelopmentControlOptions());
 app.get('/api/ivx/development-control', async (context) => handleIVXDevelopmentControlRequest(context.req.raw));
@@ -4548,7 +4563,11 @@ app.post('/api/ivx/agent-jobs/test-run', async (context) => handleIVXAgentTestRu
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
 app.options('/api/ivx/render-diagnostic', () => renderDiagnosticOptions());
-app.get('/api/ivx/render-diagnostic', async (context) => handleIVXRenderDiagnosticRequest(context.req.raw));
+app.get('/api/ivx/render-diagnostic', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleIVXRenderDiagnosticRequest(context.req.raw);
+});
 
 // Owner-only APK/AAB distribution — mints a short-lived presigned S3 PUT URL
 // (apk/ prefix only) so build artifacts upload without secrets leaving the runtime.
@@ -4767,7 +4786,11 @@ const supabaseInspectionRoutePairs: Array<[string, 'tables' | 'schema' | 'column
 
 for (const [routePath, kind] of supabaseInspectionRoutePairs) {
   app.options(routePath, () => supabaseInspectionOptions());
-  app.get(routePath, async (context) => handleIVXSupabaseInspectionRequest(context.req.raw, kind));
+  app.get(routePath, async (context) => {
+    const authFail = await requireOwnerAuth(context.req.raw);
+    if (authFail) return authFail;
+    return handleIVXSupabaseInspectionRequest(context.req.raw, kind);
+  });
 }
 
 app.options('/api/ivx/supabase/owner-action', () => supabaseOwnerActionOptions());
@@ -5852,6 +5875,13 @@ app.options('/api/ivx/financial-protection/*', () => enterpriseRecoveryOptions()
 app.get('/api/ivx/financial-protection/audit', async (c) => handleFinancialProtectionAudit(c.req.raw));
 
 // ── IVX Deployment Tools Brain (Unified Dashboard) ──────────────────
+// Secure diagnostic endpoints — require owner auth for deployment tools
+app.use('/api/ivx/deploy-tools/*', async (c, next) => {
+  if (c.req.method === 'OPTIONS') { await next(); return; }
+  const authFail = await requireOwnerAuth(c.req.raw);
+  if (authFail) return authFail;
+  await next();
+});
 app.options('/api/ivx/deploy-tools/*', () => deployToolsOptions());
 app.get('/api/ivx/deploy-tools/brain', async (c) => handleBrain());
 app.get('/api/ivx/deploy-tools/brain/health', async (c) => handleBrainHealth());

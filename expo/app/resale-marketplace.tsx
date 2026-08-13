@@ -87,7 +87,7 @@ export default function ResaleMarketplaceScreen() {
     mutationFn: async (listingId: string) => {
       return buyResaleListing(listingId);
     },
-    onSuccess: (result) => {
+    onSuccess: (result: { success: boolean; message: string }) => {
       if (result.success) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Purchase Complete', result.message, [
@@ -112,7 +112,7 @@ export default function ResaleMarketplaceScreen() {
     mutationFn: async (listingId: string) => {
       return cancelResaleListing(listingId);
     },
-    onSuccess: (result) => {
+    onSuccess: (result: { success: boolean; message: string }) => {
       if (result.success) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Cancelled', result.message);
@@ -165,7 +165,7 @@ export default function ResaleMarketplaceScreen() {
   const listingsData = listingsQuery.data;
   const otherListings = useMemo(() => {
     const all = listingsData ?? [];
-    return all.filter(l => l.seller_id !== userId);
+    return all.filter((l: any) => l.seller_id !== userId);
   }, [listingsData, userId]);
 
   return (
@@ -204,7 +204,7 @@ export default function ResaleMarketplaceScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>
-              {formatCurrencyWithDecimals(listings.reduce((s, l) => s + l.total_ask, 0))}
+              {formatCurrencyWithDecimals(listings.reduce((s: number, l: any) => s + l.total_ask, 0))}
             </Text>
             <Text style={styles.statLabel}>Total Available</Text>
           </View>
@@ -213,7 +213,7 @@ export default function ResaleMarketplaceScreen() {
         {myListings.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your Active Listings</Text>
-            {myListings.map(listing => (
+            {myListings.map((listing: any) => (
               <View key={listing.id} style={styles.myListingCard}>
                 <View style={styles.myListingInfo}>
                   <Text style={styles.listingPropertyName} numberOfLines={1}>{listing.property_name}</Text>
@@ -260,7 +260,7 @@ export default function ResaleMarketplaceScreen() {
               </Text>
             </View>
           ) : (
-            otherListings.map(listing => {
+            otherListings.map((listing: any) => {
               const premiumPercent = listing.original_cost_basis > 0
                 ? ((listing.ask_price_per_share - listing.original_cost_basis) / listing.original_cost_basis * 100)
                 : 0;
