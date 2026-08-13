@@ -42,10 +42,72 @@ const GLOBAL_JSX = new Set<string>([
   'VirtualizedList', 'Button', 'Suspense',
 ]);
 
-/** Returns JSX element identifiers used in `src` that are neither imported nor defined. */
+function stripCommentsPreserveLines(src: string): string {
+  type State = 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment';
+  let state: State = 'code';
+  let out = '';
+
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    if (state === 'line-comment') {
+      if (ch === '\n') {
+        out += '\n';
+        state = 'code';
+      } else out += ' ';
+      continue;
+    }
+
+    if (state === 'block-comment') {
+      if (ch === '*' && next === '/') {
+        out += '  ';
+        i += 1;
+        state = 'code';
+      } else out += ch === '\n' ? '\n' : ' ';
+      continue;
+    }
+
+    if (state === 'single' || state === 'double' || state === 'template') {
+      out += ch;
+      if (ch === '\\' && next !== undefined) {
+        out += next;
+        i += 1;
+        continue;
+      }
+      if (
+        (state === 'single' && ch === "'") ||
+        (state === 'double' && ch === '"') ||
+        (state === 'template' && ch === '`')
+      ) state = 'code';
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      out += '  ';
+      i += 1;
+      state = 'line-comment';
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      out += '  ';
+      i += 1;
+      state = 'block-comment';
+      continue;
+    }
+    if (ch === "'") state = 'single';
+    else if (ch === '"') state = 'double';
+    else if (ch === '`') state = 'template';
+    out += ch;
+  }
+
+  return out;
+}
+
 function findUndefinedJsxIdentifiers(src: string): { name: string; line: number }[] {
+  const analyzable = stripCommentsPreserveLines(src);
   const imported = new Set<string>();
-  for (const m of src.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/g)) {
+  for (const m of analyzable.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/g)) {
     const clause = m[1];
     const def = clause.match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
     if (def && !clause.trim().startsWith('{') && !clause.trim().startsWith('*')) imported.add(def[1]);
@@ -60,16 +122,13 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
 
   const local = new Set<string>();
   for (const m of src.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
-  // object/array destructure bindings: const { A } = ...
   for (const m of src.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
     m[1].split(',').forEach((x) => {
       const n = x.trim().split(':').pop()!.trim().split(/\s+as\s+/).pop()!.trim();
       if (/^[A-Za-z_$][\w$]*$/.test(n)) local.add(n);
     });
   }
-  // rename bindings anywhere: `foo: Name` (e.g. .map(({ icon: Icon }) => ...))
   for (const m of src.matchAll(/[A-Za-z0-9_$]+\s*:\s*([A-Z][A-Za-z0-9_]*)/g)) local.add(m[1]);
-  // shorthand bindings inside any destructure block { ... Name ... }
   for (const m of src.matchAll(/\{([^{}]*)\}/g)) {
     m[1].split(',').forEach((x) => {
       const n = x.trim();
@@ -78,12 +137,11 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
   }
 
   const offenders: { name: string; line: number }[] = [];
-  // Real JSX only: '<' not preceded by a word char, '<' or '.' (excludes generics like useState<X>)
-  for (const m of src.matchAll(/(^|[^A-Za-z0-9_<.])<([A-Z][A-Za-z0-9_]*)(?=[\s/>])/g)) {
+  for (const m of analyzable.matchAll(/(^|[^A-Za-z0-9_<.])<([A-Z][A-Za-z0-9_]*)(?=[\s/>])/g)) {
     const name = m[2];
-    if (name.length === 1) continue; // single-letter generic type params (T, K, V, S, P)
+    if (name.length === 1) continue;
     if (GLOBAL_JSX.has(name) || imported.has(name) || local.has(name)) continue;
-    const line = src.slice(0, m.index).split('\n').length;
+    const line = analyzable.slice(0, m.index).split('\n').length;
     offenders.push({ name, line });
   }
   return offenders;
@@ -91,27 +149,29 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
 
 describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () => {
   test('no screen uses a JSX icon/component that is not imported or defined', () => {
-    const files = [
-      ...collectTsx('app'),
-      ...collectTsx('components'),
-      ...collectTsx('src'),
-    ];
+    const files = [...collectTsx('app'), ...collectTsx('components'), ...collectTsx('src')];
     expect(files.length).toBeGreaterThan(0);
-
     const failures: string[] = [];
     for (const f of files) {
       const offenders = findUndefinedJsxIdentifiers(readFileSync(f, 'utf8'));
-      for (const o of offenders) {
-        failures.push(`${f.replace(APP_ROOT + '/', '')}:${o.line} <${o.name}`);
-      }
+      for (const o of offenders) failures.push(`${f.replace(APP_ROOT + '/', '')}:${o.line} <${o.name}`);
     }
     expect(failures).toEqual([]);
   });
 
   test('the analyzer catches a missing import (self-check)', () => {
     const bad = `import { View } from 'react-native';\nexport default () => <View><Mail /></View>;`;
-    const offenders = findUndefinedJsxIdentifiers(bad);
-    expect(offenders.some((o) => o.name === 'Mail')).toBe(true);
+    expect(findUndefinedJsxIdentifiers(bad).some((o) => o.name === 'Mail')).toBe(true);
+  });
+
+  test('the analyzer ignores JSX examples inside comments', () => {
+    const documented = `import { View } from 'react-native';\n/** <MissingDocOnly /> */\n// <AlsoMissingDocOnly />\nexport default () => <View />;`;
+    expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
+  });
+
+  test('the analyzer preserves URL strings and following declarations', () => {
+    const withUrl = `import { View } from 'react-native';\nconst docs = 'https://ivxholding.com';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
+    expect(findUndefinedJsxIdentifiers(withUrl)).toEqual([]);
   });
 
   test('the analyzer does not flag an imported icon (self-check)', () => {
@@ -135,7 +195,6 @@ describe('IVX Crash Shield — route error-boundary coverage', () => {
       const p = join(APP_ROOT, rel);
       expect(existsSync(p)).toBe(true);
       const src = readFileSync(p, 'utf8');
-      // expo-router treats an exported `ErrorBoundary` as the segment's route boundary.
       const hasBoundary =
         /export\s*\{\s*ErrorBoundary\s*\}\s*from\s*['"]expo-router['"]/.test(src) ||
         /export\s+(?:const|function|class)\s+ErrorBoundary\b/.test(src) ||

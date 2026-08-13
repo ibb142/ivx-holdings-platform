@@ -8,7 +8,7 @@
  * Use this anywhere you would use ActivityIndicator. Same props API.
  */
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Platform } from 'react-native';
+import { View, Animated, StyleSheet } from 'react-native';
 import Colors from '@/constants/colors';
 
 type ShimmerIndicatorProps = {
@@ -16,6 +16,8 @@ type ShimmerIndicatorProps = {
   color?: string;
   style?: any;
   animating?: boolean;
+  /** Backward-compatible status text accepted by legacy call sites. */
+  message?: string;
 };
 
 const SIZE_MAP = {
