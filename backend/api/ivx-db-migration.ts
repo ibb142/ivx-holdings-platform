@@ -31,8 +31,16 @@ function getSupabaseProjectRef(): string {
   return match ? match[1] : '';
 }
 
-function getSupabaseAccessToken(): string {
-  return process.env.SUPABASE_ACCESS_TOKEN || '';
+async function getSupabaseAccessToken(): Promise<string> {
+  const direct = process.env.SUPABASE_ACCESS_TOKEN || process.env.IVX_OWNER_SUPABASE_ACCESS_TOKEN || '';
+  if (direct) return direct;
+  try {
+    const { getIVXOwnerVariableRuntimeValue } = await import('./ivx-owner-variables');
+    const token = await getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN');
+    return token || '';
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -41,7 +49,7 @@ function getSupabaseAccessToken(): string {
  */
 async function executeSqlViaManagementApi(sql: string): Promise<{ ok: boolean; result?: unknown; error?: string }> {
   const projectRef = getSupabaseProjectRef();
-  const accessToken = getSupabaseAccessToken();
+  const accessToken = await getSupabaseAccessToken();
 
   if (!projectRef) {
     return { ok: false, error: 'SUPABASE_URL not configured or project ref could not be extracted.' };
@@ -131,6 +139,8 @@ export async function handleRunMigrationRequest(request: Request): Promise<Respo
   // Only allow known migrations (when reading from disk)
   const ALLOWED_MIGRATIONS: Record<string, string> = {
     'IVX-ENTERPRISE-REGISTRATION': path.join(process.cwd(), 'expo', 'supabase', 'IVX-ENTERPRISE-REGISTRATION.sql'),
+    'ivx-real-estate-platform': path.join(process.cwd(), 'supabase', 'migrations', 'ivx-real-estate-platform.sql'),
+    'ivx-platform-extensions': path.join(process.cwd(), 'supabase', 'migrations', 'ivx-platform-extensions.sql'),
   };
 
   // Read the SQL — either inline from the request body, or from the server disk.
@@ -203,7 +213,7 @@ export async function handleMigrationStatusRequest(request: Request): Promise<Re
   }
 
   const projectRef = getSupabaseProjectRef();
-  const hasAccessToken = !!getSupabaseAccessToken();
+  const hasAccessToken = !!(await getSupabaseAccessToken());
   const hasServiceRoleKey = !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY);
 
   return jsonResponse({

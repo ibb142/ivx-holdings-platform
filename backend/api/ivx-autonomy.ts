@@ -334,7 +334,7 @@ type RenderDeployStatusEntry = {
 };
 
 async function readRenderCreds(): Promise<{ apiKey: string; serviceId: string }> {
-  const apiKey = (process.env.RENDER_API_KEY ?? '').trim() || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY');
+  const apiKey = (process.env.RENDER_API_KEY ?? '').trim() || (process.env.IVX_RENDER_API_KEY ?? '').trim() || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY') || await getIVXOwnerVariableRuntimeValue('IVX_RENDER_API_KEY');
   const serviceId = (process.env.RENDER_SERVICE_ID ?? '').trim() || await getIVXOwnerVariableRuntimeValue('RENDER_SERVICE_ID');
   return { apiKey, serviceId };
 }

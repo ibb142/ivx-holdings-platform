@@ -171,6 +171,8 @@ void bootRegisterAppGenerator();
 
 // Validate environment at startup — logs sanitized warnings only (variable names, never values)
 logEnvironmentValidation();
+// Pre-fetch AI gateway key from encrypted Owner Variables store (fire-and-forget at boot)
+void preloadIVXAIGatewayKeyFromOwnerVariables();
 import {
   OPTIONS as credentialReadinessOptions,
   handleCredentialReadinessRequest,
@@ -496,6 +498,7 @@ import { runFactoryActivation, getFactoryActivationStatus, IVX_FACTORY_ACTIVATIO
 import { startLandingSeoAutodeploy } from './services/ivx-landing-seo-autodeploy';
 import { buildVersionResponse } from './services/ivx-version-endpoint';
 import { logEnvironmentValidation } from './services/ivx-env-validator';
+import { preloadIVXAIGatewayKeyFromOwnerVariables } from './ivx-ai-runtime';
 import {
   OPTIONS as deliverablesOptions,
   handleDeliverableCreateRequest,

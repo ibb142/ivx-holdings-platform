@@ -25,6 +25,9 @@ const OWNER_VARIABLES = [
   { name: 'OWNER_NEW_PASSWORD', provider: 'security', required: false, secret: true, description: 'Emergency owner password reset value used only by backend owner-access repair.' },
   { name: 'S3_BUCKET_NAME', provider: 'storage', required: false, secret: false, description: 'Optional S3 bucket name.' },
   { name: 'CLOUDFRONT_DISTRIBUTION_ID', provider: 'storage', required: false, secret: false, description: 'Optional CloudFront distribution ID.' },
+  { name: 'IVX_RENDER_API_KEY', provider: 'render', required: false, secret: true, description: 'Alternative Render API key alias (checked when RENDER_API_KEY is absent).' },
+  { name: 'AI_GATEWAY_API_KEY', provider: 'ai', required: false, secret: true, description: 'Alternative AI gateway key alias (checked when IVX_AI_GATEWAY_KEY is absent).' },
+  { name: 'SUPABASE_ACCESS_TOKEN', provider: 'supabase', required: false, secret: true, description: 'Supabase Management API token for database migrations.' },
 ] as const;
 
 type OwnerVariableMetadata = typeof OWNER_VARIABLES[number];
@@ -962,7 +965,7 @@ async function testGithubProvider(values: StoredSecretMap): Promise<ProviderRead
 }
 
 async function testRenderProvider(values: StoredSecretMap): Promise<ProviderReadiness> {
-  const apiKey = values.RENDER_API_KEY;
+  const apiKey = values.RENDER_API_KEY || values.IVX_RENDER_API_KEY;
   const serviceId = values.RENDER_SERVICE_ID;
   const required: OwnerVariableName[] = ['RENDER_API_KEY', 'RENDER_SERVICE_ID'];
   const missing = required.filter((name) => !values[name]);

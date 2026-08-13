@@ -218,7 +218,7 @@ export async function handleIVXAdminSyncGithubSyncRequest(request: Request): Pro
       : 24;
 
     const { token, repoUrl, repoSlug, branch } = await readGithubCreds();
-    const renderApiKey = await readEnvOrOwnerVar('RENDER_API_KEY');
+    const renderApiKey = (await readEnvOrOwnerVar('RENDER_API_KEY')) || (await readEnvOrOwnerVar('IVX_RENDER_API_KEY'));
     const renderServiceId = await readEnvOrOwnerVar('RENDER_SERVICE_ID');
     const productionBaseUrl = await readEnvOrOwnerVar('PRODUCTION_BASE_URL');
 

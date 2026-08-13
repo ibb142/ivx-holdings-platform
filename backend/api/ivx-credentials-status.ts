@@ -230,7 +230,8 @@ async function testGitHub(): Promise<CredentialRow> {
 async function testRender(): Promise<CredentialRow> {
   const testedAt = new Date().toISOString();
   const evidenceId = makeEvidenceId('Render');
-  const stored = envPresent('RENDER_API_KEY') && envPresent('RENDER_SERVICE_ID');
+  const renderKey = envClean('RENDER_API_KEY') || envClean('IVX_RENDER_API_KEY');
+  const stored = renderKey.length > 0 && envPresent('RENDER_SERVICE_ID');
   const base = {
     service: 'Render',
     variable: 'RENDER_API_KEY',
@@ -258,7 +259,7 @@ async function testRender(): Promise<CredentialRow> {
     };
   }
   const serviceId = envClean('RENDER_SERVICE_ID');
-  const result = await safeFetch(`https://api.render.com/v1/services/${serviceId}`, { headers: { Authorization: `Bearer ${envClean('RENDER_API_KEY')}` } });
+  const result = await safeFetch(`https://api.render.com/v1/services/${serviceId}`, { headers: { Authorization: `Bearer ${renderKey}` } });
   const authenticated = result.status === 200;
   let serviceName: string | null = null;
   try {
@@ -521,7 +522,7 @@ async function testAiGateway(): Promise<CredentialRow> {
   // 2026-07-26 fix: IVX_AI_GATEWAY_KEY takes priority over OPENAI_API_KEY.
   // The owner rotates IVX_AI_GATEWAY_KEY on Render; OPENAI_API_KEY is a legacy alias.
   // If OPENAI_API_KEY were preferred, a stale key would shadow the fresh gateway key.
-  const gatewayKey = envClean('IVX_AI_GATEWAY_KEY');
+  const gatewayKey = envClean('IVX_AI_GATEWAY_KEY') || envClean('AI_GATEWAY_API_KEY');
   const openaiKey = envClean('OPENAI_API_KEY');
   const key = gatewayKey || openaiKey;
   const stored = key.length > 0;

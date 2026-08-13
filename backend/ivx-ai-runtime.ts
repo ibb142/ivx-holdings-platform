@@ -188,6 +188,18 @@ function isOpenAIDirectKey(key: string): boolean {
   return key.startsWith('sk-');
 }
 
+let _ownerVariableGatewayKey = '';
+
+export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> {
+  try {
+    const { getIVXOwnerVariableRuntimeValue } = await import('./api/ivx-owner-variables');
+    const key = await getIVXOwnerVariableRuntimeValue('IVX_AI_GATEWAY_KEY');
+    if (key) _ownerVariableGatewayKey = key;
+  } catch {
+    // Owner Variables store not available — process.env is the only source
+  }
+}
+
 function getIVXAIGatewayApiKey(): string {
   // Phase 4 independence: owner-owned keys take priority over Rork-managed keys.
   //
@@ -202,6 +214,7 @@ function getIVXAIGatewayApiKey(): string {
   // api.openai.com/v1 — no Vercel AI Gateway dependency.
   // When IVX_AI_GATEWAY_KEY is set, the owner controls their own Vercel gateway
   // key — this counts as independence because the owner owns the Vercel account.
+  if (_ownerVariableGatewayKey) return _ownerVariableGatewayKey;
   const ivxOpenAiKey = readTrimmed(process.env.IVX_OPENAI_API_KEY);
   if (ivxOpenAiKey) return ivxOpenAiKey;
 

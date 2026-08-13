@@ -88,7 +88,7 @@ export async function handleAutonomousProofRequest(request: Request): Promise<Re
   let renderDeploySha: string | null = healthSha;
   let lastDeploymentTimestamp: string | null = bootTime;
   try {
-    const renderKey = process.env.RENDER_API_KEY;
+    const renderKey = process.env.RENDER_API_KEY || process.env.IVX_RENDER_API_KEY;
     if (renderKey) {
       const deploys = await fetchJson(
         'https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys?limit=1',
