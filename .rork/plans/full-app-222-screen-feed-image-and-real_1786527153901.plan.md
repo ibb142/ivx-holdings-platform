@@ -52,7 +52,8 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 **Phase 5 — Deployment** [COMPLETED]
 - [x] Local security fixes committed and rebased onto GitHub main.
 - [x] Unified merge commit `a4e50aa870a793c95823c0262e4e28591abe6c55` pushed to Rork origin and GitHub.
-- [x] Render auto-deploy triggered; production serving `a4e50aa8` (boot 2026-08-13T13:39:18.305Z).
+- [x] Additional fix `fcedc08b942e19d8ff22a06f7c3357542f8afd9a` pushed (audit-log useRealtimeTable import).
+- [x] Render auto-deploy triggered; production serving `fcedc08b` (boot 2026-08-13T15:07:41.369Z).
 - [x] HTTP smoke tests against production executed 2026-08-13 — all diagnostic endpoints return HTTP 401 to unauthenticated callers; `seniorDeveloper` redacted from `/health`.
 
 **Evidence gate**
@@ -64,12 +65,12 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - The project uses a mix of `useQuery`, `useInfiniteQuery`, custom `fetch`, and raw Supabase calls. Full unification across all 255 files is a large effort; the plan prioritizes the most common patterns first and repairs the rest screen-by-screen.
 
 **Phase 6 — AI Gateway 401 fix and key monitoring** [DEPLOYED]
-- [x] Source implemented and deployed in commit `a4e50aa8`.
+- [x] Source implemented and deployed in commit `fcedc08b`.
 - [x] `/health/ai/live` endpoint live — returns HTTP 503 with `ok: false`, reason: "No AI gateway key configured", `ownerActionRequired` message.
 - [ ] Owner must set `IVX_AI_GATEWAY_KEY` (or `OPENAI_API_KEY`) on the Render service to enable AI chat.
 - Files changed: `backend/services/ivx-owner-ai-task-queue.ts`, `backend/hono.ts`, `backend/api/public-chat-stream.ts`, `backend/api/public-chat.ts`, `expo/app/chat-hub.tsx`, `expo/lib/public-chat-stream.ts`, `backend/services/ivx-ai-key-monitor.ts`.
 
 **Phase 7 — Wire transfer funding flow** [DEPLOYED]
-- [x] Source implemented and deployed in commit `a4e50aa8`.
+- [x] Source implemented and deployed in commit `fcedc08b`.
 - [x] `/api/ivx/wire-instructions` now returns HTTP 401 to unauthenticated callers — security fix confirmed live.
 - Files changed: `backend/api/ivx-wire-transfer.ts`, `expo/app/wire-transfer.tsx`.
