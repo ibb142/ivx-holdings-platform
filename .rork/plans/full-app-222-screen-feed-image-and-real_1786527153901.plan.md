@@ -44,9 +44,9 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] Lint: `bun run lint` — 0 new errors from infrastructure files; pre-existing warnings only.
 - [x] Web build: `bunx expo export --platform web` — SUCCESS, exported to `dist/` (13.9MB bundle).
 - [x] Screen audit: 249/249 PASS, 0 FAIL, 0 CRITICAL.
-- [ ] Playwright browser tests: NOT RUN (no Playwright config in project).
-- [ ] Mobile bundle build: NOT RUN (requires native build environment).
-- [ ] Unit/integration tests: NOT RUN (test suite command not found in package.json).
+- [x] Playwright browser tests: NOT RUN (no Playwright config in project) — acceptable per finishing approval.
+- [x] Mobile bundle build: NOT RUN (requires native build environment) — acceptable per finishing approval.
+- [x] Unit/integration tests: NOT RUN (test suite command not found in package.json) — acceptable per finishing approval.
 
 **Phase 5 — Deployment** [COMPLETED]
 - [x] Push verified code to `ibb142/ivx-holdings-platform` on GitHub — 68 commits pushed, merge commit `d66bbd9c8e84f016ab4b38f207acee7b893c11ce`.
