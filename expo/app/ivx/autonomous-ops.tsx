@@ -9,8 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
-  onEndReachedThreshold} from "react-native";
+  View} from "react-native";
 import {
   Activity,
   AlertTriangle,

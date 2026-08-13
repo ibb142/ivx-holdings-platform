@@ -43,7 +43,7 @@ type WireInstructions = {
   note?: string;
 };
 
-export default function WireTransferScreen(): JSX.Element {
+export default function WireTransferScreen(): React.ReactElement {
   const router = useRouter();
   const [instructions, setInstructions] = useState<WireInstructions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,7 +146,10 @@ export default function WireTransferScreen(): JSX.Element {
           <Text style={styles.title}>Wire Transfer</Text>
           <View style={styles.placeholder} />
         </View>
-        <ShimmerIndicator message="Loading wire instructions..." />
+        <>
+          <ShimmerIndicator />
+          <Text style={styles.loadingText}>Loading wire instructions...</Text>
+        </>
       </SafeAreaView>
     );
   }
@@ -322,6 +325,12 @@ const styles = StyleSheet.create({
   backBtn: { padding: 8 },
   title: { fontSize: 18, fontWeight: '700', color: Colors.text },
   placeholder: { width: 38 },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 12,
+  },
   scroll: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: Colors.card,

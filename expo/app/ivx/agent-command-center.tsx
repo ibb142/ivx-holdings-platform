@@ -13,8 +13,7 @@ import {View,
   Modal,
   StyleSheet,
   FlatList,
-  Linking,
-  onEndReachedThreshold} from "react-native";
+  Linking} from "react-native";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { router } from 'expo-router';

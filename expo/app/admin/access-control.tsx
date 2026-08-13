@@ -9,8 +9,7 @@ import {View,
   Modal,
   Switch,
   RefreshControl,
-  FlatList,
-  onEndReachedThreshold} from "react-native";
+  FlatList} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

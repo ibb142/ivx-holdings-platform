@@ -3008,7 +3008,10 @@ app.get('/api/ivx/wire-instructions', async (context) => {
     return Response.json({ ok: false, error: 'Wire instructions not configured' }, { status: 503 });
   }
 
-  const userId = authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon';
+  const authHeader = context.req.header('authorization') || '';
+  const userId = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon'
+    : 'anon';
   const referenceCode = generateWireReferenceCode(userId + Date.now().toString());
 
   // Item 168: Log sanitized audit entry (no account numbers in logs)

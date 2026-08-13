@@ -123,14 +123,14 @@ export default function AuditLogScreen() {
     return () => { mounted = false; };
   }, []);
 
+  // Realtime: invalidate on DB changes
+  useRealtimeTable('notifications', [['notifications']]);
+
   const auditQuery = useQuery({
     queryKey: ['audit-trail'],
     queryFn: async () => {
       console.log('[AuditLog] Fetching audit trail...');
       const entries = await getAuditTrail({ limit: 500 });
-
-  // Realtime: invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
       const stats = await getAuditStats();
       console.log('[AuditLog] Fetched', entries.length, 'entries');
       return { entries, stats };

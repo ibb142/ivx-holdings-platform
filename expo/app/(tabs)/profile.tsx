@@ -2,15 +2,16 @@ import React, { useEffect, useMemo } from 'react';
 import { IVX_LOGO_SOURCE } from '@/constants/brand';
 import {
   View,
+  Image,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
-  useWindowDimensions} from 'react-native';
+  useWindowDimensions,
+} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IVXImage } from '@/components/ivx';
-import { RefreshControl } from 'react-native';
 import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import Constants from 'expo-constants';
 import {

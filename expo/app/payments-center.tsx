@@ -82,8 +82,8 @@ export default function PaymentsCenterScreen() {
   });
 
   const records: PaymentRecord[] = paymentsData?.records ?? [];
-  const fees: Record<string, unknown>[] = feesData?.fees ?? [];
-  const reconRecords: Record<string, unknown>[] = reconciliationData?.records ?? [];
+  const fees: Record<string, unknown>[] = (feesData?.fees ?? []) as Record<string, unknown>[];
+  const reconRecords: Record<string, unknown>[] = (reconciliationData?.records ?? []) as Record<string, unknown>[];
 
   const summary = useMemo(() => {
     const totalAmount = records.reduce((sum, r) => sum + (r.amount || 0), 0);
