@@ -40,24 +40,21 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] Final audit: 249 PASS, 0 FAIL, 0 CRITICAL.
 
 **Phase 4 — QA and verification** [COMPLETED]
-- [x] TypeScript: `bun x tsc --noEmit` — 0 errors from new/modified files.
-- [x] Lint: `bun run lint` — 0 new errors from infrastructure files; pre-existing warnings only.
-- [x] Web build: `bunx expo export --platform web` — SUCCESS, exported to `dist/` (13.9MB bundle).
+- [x] TypeScript: `./node_modules/.bin/tsc --noEmit --project tsconfig.json` — 0 errors (2026-08-13).
+- [x] Expo static checks: `runChecks({ appPath: "expo" })` — passed, 0 errors (2026-08-13).
+- [x] Lint errors fixed in source; remaining warnings are pre-existing.
+- [ ] Web build: `bunx expo export --platform web` — BLOCKED by sandbox Watchman priority fatal error.
 - [x] Screen audit: 249/249 PASS, 0 FAIL, 0 CRITICAL.
-- [x] Playwright browser tests: NOT RUN (no Playwright config in project) — acceptable per finishing approval.
-- [x] Mobile bundle build: NOT RUN (requires native build environment) — acceptable per finishing approval.
-- [x] Unit/integration tests: NOT RUN (test suite command not found in package.json) — acceptable per finishing approval.
+- [x] Playwright browser tests: NOT RUN (no Playwright config in project).
+- [x] Mobile bundle build: NOT RUN (requires native build environment).
+- [x] Unit/integration tests: NOT RUN (test suite command not found in package.json).
 
-**Phase 5 — Deployment** [COMPLETED]
-- [x] Push verified code to `ibb142/ivx-holdings-platform` on GitHub — 68 commits pushed, merge commit `d66bbd9c8e84f016ab4b38f207acee7b893c11ce`.
-- [x] Deploy to Render production — deploy triggered via Render API (HTTP 202), deploy ID `dep-d9u4mcgae00c73brh14g`, status `live` at 2026-08-12T10:31:30Z.
-- [x] Confirm live production URL serves verified commit SHA — `https://api.ivxholding.com/health` returns `commit: d66bbd9c8e84f016ab4b38f207acee7b893c11ce`, `status: healthy`, `databaseConfigured: true`, `bootTime: 2026-08-12T10:31:24.295Z`.
-- [x] Run HTTP smoke tests against production:
-  - Health (`GET /health`): HTTP 200, commit `d66bbd9c`, status `healthy`, DB configured.
-  - Readiness (`GET /readiness`): HTTP 200, `ready: true`, `ok: true`.
-  - SMS (`POST /api/ivx/autonomous/sms/send`): HTTP 200, `ok: true`, provider `signalwire`, messageId `1774bbe9-3872-4ac0-9a61-377c742965ca`, delivered to `+15616443503`.
-  - API root (`GET /`): HTTP 200, service `ivx-owner-ai-backend`, all endpoints listed.
-- [x] Previous Render deploy `f47f4f7a` deactivated, replaced by `d66bbd9c`.
+**Phase 5 — Deployment** [IN PROGRESS / BLOCKED]
+- [x] Local security fixes committed: `bb657a4c943ec89784c5c64f54b3455e8e9909ea`.
+- [x] Pushed to Rork managed origin: `bb657a4c943ec89784c5c64f54b3455e8e9909ea` via `rork-agent git-push`.
+- [ ] Push verified code to GitHub `main` — BLOCKED: GitHub main (`05b586256e73f5095b71901738873325fb7f1f95`) has divergent autonomous commits not in Rork origin; Rork auto-sync cannot fast-forward.
+- [ ] Deploy to Render production — BLOCKED pending GitHub sync; production currently serves GitHub commit `05b58625...` (boot 2026-08-13T13:02:59.478Z), not the local security fixes.
+- [x] HTTP smoke tests against production executed 2026-08-13; endpoint certification in final report.
 
 **Evidence gate**
 - The final deliverable will include: exact files changed, real Git diff summary, QA matrix with PASS/FAIL counts, test commands and output, build output, browser-test report, failure screenshots/traces, verified GitHub branch and commit SHA, live production URL, deployment identifier and timestamp, and independent HTTP smoke-test results.
@@ -67,31 +64,11 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - The current AI gateway keys and AWS credentials are invalid in production, so AI chat responses and S3/APK uploads will remain blocked until the owner provides valid keys. This work does not fix those credentials, but it will make the failures visible and honest instead of blank.
 - The project uses a mix of `useQuery`, `useInfiniteQuery`, custom `fetch`, and raw Supabase calls. Full unification across all 255 files is a large effort; the plan prioritizes the most common patterns first and repairs the rest screen-by-screen.
 
-**Phase 6 — AI Gateway 401 fix and key monitoring** [COMPLETED]
-- [x] Add `probeAIGatewayLive()` to `backend/services/ivx-owner-ai-task-queue.ts` to send a real request to the Vercel AI Gateway and detect 401/403/429/timeout with specific owner-action messages.
-- [x] Add `/health/ai/live` endpoint to `backend/hono.ts` returning a structured live probe result with `ok`, `status`, `reason`, `keyPrefix`, `endpoint`, `latencyMs`, and `ownerActionRequired`.
-- [x] Fix `backend/api/public-chat-stream.ts` and `backend/api/public-chat.ts` to emit `errorType: 'auth_expired'` instead of hiding failures behind generic fallback text.
-- [x] Fix `expo/app/chat-hub.tsx` and `expo/lib/public-chat-stream.ts` to surface `auth_expired` errors with a clear message and Vercel dashboard link.
-- [x] Deploy to production; verify `/health/ai/live` returns `ok: true` with the new Vercel AI Gateway key provided by the owner.
-- [x] Add `backend/services/ivx-ai-key-monitor.ts` that probes the gateway every 4 hours and sends an SMS alert to the owner when the key expires or recovers.
-- [x] Wire monitor into `backend/hono.ts` startup and add `/health/ai/monitor` status endpoint.
-- Live verification: `/health/ai/live` → HTTP 200, `ok: true`, `PROVIDER_READY`, `openai/gpt-4o`, ~900ms latency.
+**Phase 6 — AI Gateway 401 fix and key monitoring** [SOURCE COMPLETE / DEPLOYMENT BLOCKED]
+- [x] Source implemented.
+- [ ] Deploy to production and verify `/health/ai/live` returns `ok: true` — BLOCKED by GitHub sync failure. Current production `/health/ai/live` returns HTTP 503, `ok: false`, reason: "No AI gateway key configured".
 - Files changed: `backend/services/ivx-owner-ai-task-queue.ts`, `backend/hono.ts`, `backend/api/public-chat-stream.ts`, `backend/api/public-chat.ts`, `expo/app/chat-hub.tsx`, `expo/lib/public-chat-stream.ts`, `backend/services/ivx-ai-key-monitor.ts`.
 
-**Phase 7 — Wire transfer funding flow** [COMPLETED]
-- [x] Create secure backend service `backend/api/ivx-wire-transfer.ts` that reads bank details from Render environment variables and never stores them in code or GitHub.
-- [x] Add `/api/ivx/wire-instructions` endpoint that returns sanitized wire instructions plus a unique reference code for the caller.
-- [x] Add `/api/ivx/wire-submission` endpoint that records a wire notification and sends an SMS alert to the owner phone number.
-- [x] Set Render environment variables: `IVX_WIRE_BANK_NAME`, `IVX_WIRE_ROUTING_NUMBER`, `IVX_WIRE_ACCOUNT_NUMBER`, `IVX_WIRE_ACCOUNT_NAME`, `IVX_WIRE_BANK_ADDRESS`, `IVX_WIRE_BENEFICIARY_ADDRESS`, `IVX_WIRE_SWIFT_CODE`.
-- [x] Create Expo app screen `expo/app/wire-transfer.tsx` with bank details, copy-to-clipboard, share instructions, unique reference code, and "I sent the wire" confirmation form.
-- [x] Add "Fund by Wire" section to `expo/ivxholding-landing/index.html` with the same instructions and a CTA to the authenticated app.
-- [x] Build and deploy to production; verify both endpoints respond correctly and SMS alert is delivered.
-- Wire details verified live:
-  - Bank: U.S. Century Bank
-  - Routing: 067015397
-  - Account: 1052026057
-  - Account Name: IVX Holdings
-  - SWIFT/BIC: USCEUS3M
-  - Beneficiary Address: 1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131
-  - Bank Address: 2301 NW 87th Ave, Doral, FL 33172
-- Live verification: `GET /api/ivx/wire-instructions` → HTTP 200, returns instructions and `IVX-...` reference code. `POST /api/ivx/wire-submission` → HTTP 200, records submission and sends owner SMS.
+**Phase 7 — Wire transfer funding flow** [SOURCE COMPLETE / DEPLOYMENT BLOCKED]
+- [x] Source implemented.
+- [ ] Build and deploy to production; verify both endpoints respond correctly — BLOCKED by GitHub sync failure. Current production `/api/ivx/wire-instructions` returns HTTP 200 to unauthenticated callers (security fix not deployed).
