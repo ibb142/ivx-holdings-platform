@@ -56,10 +56,29 @@ jobs:
           echo "isolated_test_files=$count failed_files=$failed" | tee -a backend-test-results.txt
           if [ "$failed" -ne 0 ]; then exit 1; fi
 
-      - name: '3. Expo unit tests'
+      - name: '3. Expo unit tests — process isolated'
+        shell: bash
         run: |
-          set -o pipefail
-          cd expo && bun test --reporter=dots 2>&1 | tee ../expo-test-results.txt
+          set -euo pipefail
+          : > expo-test-results.txt
+          mkdir -p "$GITHUB_WORKSPACE/.tmp/expo-test-logs"
+          failed=0
+          count=0
+          while IFS= read -r test_file; do
+            count=$((count + 1))
+            safe_name=$(printf '%s' "$test_file" | tr '/ ' '__')
+            test_log="$GITHUB_WORKSPACE/.tmp/expo-test-logs/${safe_name}.log"
+            echo "=== $test_file ===" | tee -a expo-test-results.txt
+            if ! (cd expo && NODE_ENV=test bun test "$GITHUB_WORKSPACE/$test_file" --reporter=dots) 2>&1 | tee "$test_log"; then
+              cat "$test_log" >> expo-test-results.txt
+              failed=$((failed + 1))
+              echo "FAILED_FILE=$test_file" | tee -a expo-test-results.txt
+            else
+              cat "$test_log" >> expo-test-results.txt
+            fi
+          done < <(find expo -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) -not -path '*/node_modules/*' -print | sort)
+          echo "isolated_expo_test_files=$count failed_files=$failed" | tee -a expo-test-results.txt
+          if [ "$failed" -ne 0 ]; then exit 1; fi
 
       - name: '4. Critical file protection test'
         run: |
