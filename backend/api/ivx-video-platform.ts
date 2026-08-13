@@ -99,14 +99,14 @@ function feedCacheKey(path: string): string {
 function getCachedEntry(key: string): CacheEntry | null {
   const entry = FEED_CACHE.get(key);
   if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    FEED_CACHE.delete(key);
-    return null;
-  }
+  if (Date.now() > entry.expiresAt) return null;
   return entry;
 }
 
 function setCachedEntry(key: string, body: string, status: number): void {
+  // Never cache upstream failures. Keep the last successful entry available
+  // for stale-on-error recovery after its normal freshness window expires.
+  if (status < 200 || status >= 300) return;
   if (FEED_CACHE.size >= FEED_CACHE_MAX) {
     const oldest = [...FEED_CACHE.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0];
     if (oldest) FEED_CACHE.delete(oldest[0]);
@@ -137,9 +137,22 @@ async function withFeedCache(key: string, handler: () => Promise<Response>): Pro
   }
 
   const promise = (async () => {
-    const resp = await handler();
+    let resp = await handler();
+    // One bounded retry covers transient Supabase/Cloudflare 5xx failures
+    // without turning the request into an unbounded retry loop.
+    if (resp.status >= 500) {
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      resp = await handler();
+    }
     const body = await resp.text();
-    setCachedEntry(key, body, resp.status);
+    if (resp.status >= 200 && resp.status < 300) {
+      setCachedEntry(key, body, resp.status);
+      return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
+    }
+    const stale = FEED_CACHE.get(key);
+    if (stale && stale.status >= 200 && stale.status < 300) {
+      return { ...stale, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
+    }
     return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
   })();
   FEED_CACHE_LOCKS.set(key, promise);
