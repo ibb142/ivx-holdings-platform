@@ -42,10 +42,86 @@ const GLOBAL_JSX = new Set<string>([
   'VirtualizedList', 'Button', 'Suspense',
 ]);
 
+/**
+ * Remove comments while preserving strings, newlines, and source offsets.
+ *
+ * Regex comment stripping is unsafe for TSX because comment-looking text can
+ * legally occur inside strings and template literals (`https://...`, `/* ... */`).
+ * This tiny lexer blanks only actual comments, leaving executable source intact.
+ */
+function stripCommentsPreserveLines(src: string): string {
+  type State = 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment';
+  let state: State = 'code';
+  let out = '';
+
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    if (state === 'line-comment') {
+      if (ch === '\n') {
+        out += '\n';
+        state = 'code';
+      } else {
+        out += ' ';
+      }
+      continue;
+    }
+
+    if (state === 'block-comment') {
+      if (ch === '*' && next === '/') {
+        out += '  ';
+        i += 1;
+        state = 'code';
+      } else {
+        out += ch === '\n' ? '\n' : ' ';
+      }
+      continue;
+    }
+
+    if (state === 'single' || state === 'double' || state === 'template') {
+      out += ch;
+      if (ch === '\\' && next !== undefined) {
+        out += next;
+        i += 1;
+        continue;
+      }
+      if (
+        (state === 'single' && ch === "'") ||
+        (state === 'double' && ch === '"') ||
+        (state === 'template' && ch === '`')
+      ) {
+        state = 'code';
+      }
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      out += '  ';
+      i += 1;
+      state = 'line-comment';
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      out += '  ';
+      i += 1;
+      state = 'block-comment';
+      continue;
+    }
+    if (ch === "'") state = 'single';
+    else if (ch === '"') state = 'double';
+    else if (ch === '`') state = 'template';
+    out += ch;
+  }
+
+  return out;
+}
+
 /** Returns JSX element identifiers used in `src` that are neither imported nor defined. */
 function findUndefinedJsxIdentifiers(src: string): { name: string; line: number }[] {
+  const analyzable = stripCommentsPreserveLines(src);
   const imported = new Set<string>();
-  for (const m of src.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/g)) {
+  for (const m of analyzable.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/g)) {
     const clause = m[1];
     const def = clause.match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
     if (def && !clause.trim().startsWith('{') && !clause.trim().startsWith('*')) imported.add(def[1]);
@@ -59,6 +135,9 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
   }
 
   const local = new Set<string>();
+  // Collect declarations from the raw TypeScript source. Comment sanitization is
+  // only needed for JSX-use detection; using sanitized text for declarations can
+  // hide real components when a preceding template literal contains code samples.
   for (const m of src.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
   // object/array destructure bindings: const { A } = ...
   for (const m of src.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
@@ -79,11 +158,11 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
 
   const offenders: { name: string; line: number }[] = [];
   // Real JSX only: '<' not preceded by a word char, '<' or '.' (excludes generics like useState<X>)
-  for (const m of src.matchAll(/(^|[^A-Za-z0-9_<.])<([A-Z][A-Za-z0-9_]*)(?=[\s/>])/g)) {
+  for (const m of analyzable.matchAll(/(^|[^A-Za-z0-9_<.])<([A-Z][A-Za-z0-9_]*)(?=[\s/>])/g)) {
     const name = m[2];
     if (name.length === 1) continue; // single-letter generic type params (T, K, V, S, P)
     if (GLOBAL_JSX.has(name) || imported.has(name) || local.has(name)) continue;
-    const line = src.slice(0, m.index).split('\n').length;
+    const line = analyzable.slice(0, m.index).split('\n').length;
     offenders.push({ name, line });
   }
   return offenders;
@@ -112,6 +191,31 @@ describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () =
     const bad = `import { View } from 'react-native';\nexport default () => <View><Mail /></View>;`;
     const offenders = findUndefinedJsxIdentifiers(bad);
     expect(offenders.some((o) => o.name === 'Mail')).toBe(true);
+  });
+
+  test('the analyzer ignores JSX examples inside block comments', () => {
+    const documented = `import { View } from 'react-native';\n/** Example: <MissingDocOnly /> */\nexport default () => <View />;`;
+    expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
+  });
+
+  test('the analyzer ignores JSX examples inside line comments', () => {
+    const documented = `import { View } from 'react-native';\n// Example: <MissingDocOnly />\nexport default () => <View />;`;
+    expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
+  });
+
+  test('the analyzer preserves declarations after URL strings', () => {
+    const withUrl = `import { View } from 'react-native';\nconst docs = 'https://ivxholding.com';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
+    expect(findUndefinedJsxIdentifiers(withUrl)).toEqual([]);
+  });
+
+  test('comment markers inside strings do not erase following declarations', () => {
+    const withMarkers = `import { View } from 'react-native';\nconst docs = 'literal /* not a comment */';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
+    expect(findUndefinedJsxIdentifiers(withMarkers)).toEqual([]);
+  });
+
+  test('raw declaration discovery survives template-literal code examples', () => {
+    const withTemplate = "import { View } from 'react-native';\nconst sample = `const fake = '<DocOnly />'`;\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;";
+    expect(findUndefinedJsxIdentifiers(withTemplate)).toEqual([]);
   });
 
   test('the analyzer does not flag an imported icon (self-check)', () => {
