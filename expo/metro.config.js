@@ -1,6 +1,8 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { withRorkMetro } = require("@rork-ai/toolkit-sdk/metro");
 
+// IVX-owned Metro configuration. Keep the mobile production bundle independent
+// from Rork-specific transforms so native QA and release builds use standard
+// Expo/React Native semantics.
 const config = getDefaultConfig(__dirname);
 
-module.exports = withRorkMetro(config);
+module.exports = config;
