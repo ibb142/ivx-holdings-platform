@@ -43,15 +43,78 @@ const GLOBAL_JSX = new Set<string>([
 ]);
 
 /**
- * Remove block/documentation comments while preserving newlines and source offsets.
+ * Remove comments while preserving strings, newlines, and source offsets.
  *
- * Do not strip `//` with a regex here: URLs such as https://ivxholding.com are
- * valid string content and a naive line-comment regex corrupts executable TSX.
- * Replacing block-comment characters with spaces keeps line numbers stable for
- * any real offender that remains.
+ * Regex comment stripping is unsafe for TSX because comment-looking text can
+ * legally occur inside strings and template literals (`https://...`, `/* ... */`).
+ * This tiny lexer blanks only actual comments, leaving executable source intact.
  */
 function stripCommentsPreserveLines(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
+  type State = 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment';
+  let state: State = 'code';
+  let out = '';
+
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    if (state === 'line-comment') {
+      if (ch === '\n') {
+        out += '\n';
+        state = 'code';
+      } else {
+        out += ' ';
+      }
+      continue;
+    }
+
+    if (state === 'block-comment') {
+      if (ch === '*' && next === '/') {
+        out += '  ';
+        i += 1;
+        state = 'code';
+      } else {
+        out += ch === '\n' ? '\n' : ' ';
+      }
+      continue;
+    }
+
+    if (state === 'single' || state === 'double' || state === 'template') {
+      out += ch;
+      if (ch === '\\' && next !== undefined) {
+        out += next;
+        i += 1;
+        continue;
+      }
+      if (
+        (state === 'single' && ch === "'") ||
+        (state === 'double' && ch === '"') ||
+        (state === 'template' && ch === '`')
+      ) {
+        state = 'code';
+      }
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      out += '  ';
+      i += 1;
+      state = 'line-comment';
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      out += '  ';
+      i += 1;
+      state = 'block-comment';
+      continue;
+    }
+    if (ch === "'") state = 'single';
+    else if (ch === '"') state = 'double';
+    else if (ch === '`') state = 'template';
+    out += ch;
+  }
+
+  return out;
 }
 
 /** Returns JSX element identifiers used in `src` that are neither imported nor defined. */
@@ -132,9 +195,19 @@ describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () =
     expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
   });
 
+  test('the analyzer ignores JSX examples inside line comments', () => {
+    const documented = `import { View } from 'react-native';\n// Example: <MissingDocOnly />\nexport default () => <View />;`;
+    expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
+  });
+
   test('the analyzer preserves declarations after URL strings', () => {
     const withUrl = `import { View } from 'react-native';\nconst docs = 'https://ivxholding.com';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
     expect(findUndefinedJsxIdentifiers(withUrl)).toEqual([]);
+  });
+
+  test('comment markers inside strings do not erase following declarations', () => {
+    const withMarkers = `import { View } from 'react-native';\nconst docs = 'literal /* not a comment */';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
+    expect(findUndefinedJsxIdentifiers(withMarkers)).toEqual([]);
   });
 
   test('the analyzer does not flag an imported icon (self-check)', () => {
