@@ -135,18 +135,21 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
   }
 
   const local = new Set<string>();
-  for (const m of analyzable.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
+  // Collect declarations from the raw TypeScript source. Comment sanitization is
+  // only needed for JSX-use detection; using sanitized text for declarations can
+  // hide real components when a preceding template literal contains code samples.
+  for (const m of src.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
   // object/array destructure bindings: const { A } = ...
-  for (const m of analyzable.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
+  for (const m of src.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
     m[1].split(',').forEach((x) => {
       const n = x.trim().split(':').pop()!.trim().split(/\s+as\s+/).pop()!.trim();
       if (/^[A-Za-z_$][\w$]*$/.test(n)) local.add(n);
     });
   }
   // rename bindings anywhere: `foo: Name` (e.g. .map(({ icon: Icon }) => ...))
-  for (const m of analyzable.matchAll(/[A-Za-z0-9_$]+\s*:\s*([A-Z][A-Za-z0-9_]*)/g)) local.add(m[1]);
+  for (const m of src.matchAll(/[A-Za-z0-9_$]+\s*:\s*([A-Z][A-Za-z0-9_]*)/g)) local.add(m[1]);
   // shorthand bindings inside any destructure block { ... Name ... }
-  for (const m of analyzable.matchAll(/\{([^{}]*)\}/g)) {
+  for (const m of src.matchAll(/\{([^{}]*)\}/g)) {
     m[1].split(',').forEach((x) => {
       const n = x.trim();
       if (/^[A-Z][A-Za-z0-9_]*$/.test(n)) local.add(n);
@@ -208,6 +211,11 @@ describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () =
   test('comment markers inside strings do not erase following declarations', () => {
     const withMarkers = `import { View } from 'react-native';\nconst docs = 'literal /* not a comment */';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
     expect(findUndefinedJsxIdentifiers(withMarkers)).toEqual([]);
+  });
+
+  test('raw declaration discovery survives template-literal code examples', () => {
+    const withTemplate = "import { View } from 'react-native';\nconst sample = `const fake = '<DocOnly />'`;\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;";
+    expect(findUndefinedJsxIdentifiers(withTemplate)).toEqual([]);
   });
 
   test('the analyzer does not flag an imported icon (self-check)', () => {
