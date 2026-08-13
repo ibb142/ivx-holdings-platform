@@ -281,5 +281,9 @@ export async function securityHeadersMiddleware(context: Context, next: Next): P
   context.res.headers.set('X-Frame-Options', 'DENY');
   context.res.headers.set('X-XSS-Protection', '1; mode=block');
   context.res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Item 164: HSTS — enforce HTTPS for 2 years, include subdomains, allow preload
+  context.res.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  // Item 164: Permissions-Policy — restrict browser features to prevent abuse
+  context.res.headers.set('Permissions-Policy', 'geolocation=(), interest-cohort=(), browsing-topics=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()');
   context.res.headers.set('X-IVX-Enterprise', IVX_ENTERPRISE_MIDDLEWARE_MARKER);
 }

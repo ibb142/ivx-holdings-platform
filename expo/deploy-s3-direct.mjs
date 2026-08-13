@@ -17,12 +17,21 @@ import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-clo
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 
 // ── AWS Configuration ─────────────────────────────────
-const ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID || process.env.IVX_AWS_ACCESS_KEY_ID || 'AKIASAJBIV7CECCECRRV';
-const SECRET_KEY = process.env.AWS_SECRET_ACCESS_KEY || process.env.IVX_AWS_SECRET_ACCESS_KEY || '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';
+const ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID || process.env.IVX_AWS_ACCESS_KEY_ID || '';
+const SECRET_KEY = process.env.AWS_SECRET_ACCESS_KEY || process.env.IVX_AWS_SECRET_ACCESS_KEY || '';
 const REGION = process.env.AWS_REGION || 'us-east-1';
-const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || 'E1C0DEI0VKCUYN';
+const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || '';
 const BUCKET = process.env.S3_BUCKET_NAME || 'ivxholding.com';
 
+if (!ACCESS_KEY || !SECRET_KEY) {
+  console.error('❌ AWS credentials not set. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars.');
+  console.error('   NEVER hardcode credentials in source files.');
+  process.exit(1);
+}
+if (!DIST_ID) {
+  console.error('❌ CLOUDFRONT_DISTRIBUTION_ID not set.');
+  process.exit(1);
+}
 const s3 = new S3Client({ region: REGION, credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY } });
 const cf = new CloudFrontClient({ region: 'us-east-1', credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY } });
 

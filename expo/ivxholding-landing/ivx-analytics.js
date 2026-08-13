@@ -1,16 +1,66 @@
 /**
  * IVX Analytics Event Layer (items 104-106 — extracted from inline <script>)
  * Centralized, safe, no secrets. Provides IVX.track(), IVX.loadAdPixels(),
- * and auto-tracking helpers. Replaces the 4 duplicate ad pixel IIFEs that were
- * in the <head> — pixels now load only through this single canonical function.
+ * and auto-tracking helpers.
+ *
+ * Item 156: PII is sanitized before tracking — emails, phones, account numbers
+ * are masked before sending to any analytics platform.
+ * Item 171: Consent version, timestamp, and selection are recorded.
+ * Item 196: Release version is included in error reports.
  */
 window.IVX = window.IVX || {};
 
+// ── Item 156: PII Sanitizer — masks sensitive data before analytics ──────────
+IVX._sanitizePII = function(str) {
+  if (typeof str !== 'string') return str;
+  // Mask email: u***@example.com
+  str = str.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, function(m) {
+    var parts = m.split('@');
+    return parts[0].slice(0, 1) + '***@' + parts[1];
+  });
+  // Mask phone: +1***5678
+  str = str.replace(/(\+?1[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/g, function(m) {
+    var d = m.replace(/\D/g, '');
+    return d.length > 4 ? '+' + '*'.repeat(d.length - 4) + d.slice(-4) : '****';
+  });
+  // Mask SSN
+  str = str.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '***-**-****');
+  // Mask EIN
+  str = str.replace(/\b\d{2}-\d{7}\b/g, '**-*******');
+  // Mask account numbers (6+ consecutive digits)
+  str = str.replace(/\b\d{6,}\b/g, function(m) {
+    return '*'.repeat(m.length - 4) + m.slice(-4);
+  });
+  return str;
+};
+
+IVX._sanitizeData = function(data) {
+  if (!data || typeof data !== 'object') return data;
+  var result = {};
+  for (var key in data) {
+    if (typeof data[key] === 'string') {
+      result[key] = IVX._sanitizePII(data[key]);
+    } else if (typeof data[key] === 'object' && data[key] !== null) {
+      result[key] = IVX._sanitizeData(data[key]);
+    } else {
+      result[key] = data[key];
+    }
+  }
+  return result;
+};
+
+// ── Item 196: Release version for error monitoring ────────────────────────────
+IVX.RELEASE_VERSION = 'v20260813';
+
+// ── Core tracking function (item 156: PII sanitized) ──────────────────────────
 IVX.track = function(eventName, data) {
   data = data || {};
+  // Item 156: Sanitize PII before sending to any analytics platform
+  data = IVX._sanitizeData(data);
   data.timestamp = new Date().toISOString();
   data.page_url = window.location.href;
   data.page_path = window.location.pathname;
+  data.release_version = IVX.RELEASE_VERSION;
 
   if (typeof window.gtag === 'function') { window.gtag('event', eventName, data); }
   if (typeof window.fbq === 'function') { window.fbq('trackCustom', eventName, data); }
@@ -112,6 +162,33 @@ IVX.loadAdPixels = function() {
   }
 })();
 
+// ── Item 171: Consent recording (version, date, selection) ──────────────────
+IVX.CONSENT_VERSION = 'v1.0-20260813';
+IVX.recordConsent = function(selection) {
+  var consent = {
+    version: IVX.CONSENT_VERSION,
+    selection: selection,
+    timestamp: new Date().toISOString(),
+    page: window.location.pathname,
+  };
+  try {
+    localStorage.setItem('ivx_cookie_consent', selection);
+    localStorage.setItem('ivx_consent_record', JSON.stringify(consent));
+  } catch(e) {}
+  IVX.track('cookie_consent_recorded', { selection: selection, version: IVX.CONSENT_VERSION });
+  return consent;
+};
+
+IVX.getConsentRecord = function() {
+  try {
+    var record = localStorage.getItem('ivx_consent_record');
+    return record ? JSON.parse(record) : null;
+  } catch(e) {
+    return null;
+  }
+};
+
+// ── Tracking helpers ──────────────────────────────────────────────────────────
 IVX.trackCTA = function(ctaName, ctaLocation) {
   IVX.track('primary_cta_click', { cta_name: ctaName, cta_location: ctaLocation });
 };
@@ -119,6 +196,7 @@ IVX.trackRegStart = function() {
   IVX.track('registration_started', { form: 'smart_funnel' });
 };
 IVX.trackRegComplete = function(userId) {
+  // userId is already sanitized by IVX.track → IVX._sanitizeData
   IVX.track('registration_completed', { user_id: userId || 'anonymous' });
 };
 IVX.trackAPKDownload = function(action) {
@@ -128,5 +206,6 @@ IVX.trackFormError = function(field, message) {
   IVX.track('form_validation_error', { field: field, message: message });
 };
 IVX.trackBackendError = function(endpoint, status) {
-  IVX.track('backend_submission_error', { endpoint: endpoint, status: status });
+  // Item 196: Include release version in error reports
+  IVX.track('backend_submission_error', { endpoint: endpoint, status: status, release: IVX.RELEASE_VERSION });
 };

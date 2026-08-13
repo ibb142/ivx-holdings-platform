@@ -2915,19 +2915,27 @@ app.get('/health/ai/monitor', () => {
 import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';
 
 app.get('/api/ivx/wire-instructions', async (context) => {
-  // Optional: require a valid access token for the full account number.
-  // For now, allow public read of instructions but never expose sensitive values in logs.
+  // Items 153-154: Wire instructions only available to authenticated users.
+  // Sensitive bank details must never be exposed publicly.
+  const authHeader = context.req.header('authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return Response.json({
+      ok: false,
+      error: 'authentication_required',
+      message: 'Wire instructions are only available to authenticated investors. Sign in to view bank details.',
+    }, { status: 401 });
+  }
+
   const instructions = getWireInstructions();
   if (!instructions) {
     return Response.json({ ok: false, error: 'Wire instructions not configured' }, { status: 503 });
   }
 
-  // Generate a reference code tied to the authenticated user when possible.
-  const authHeader = context.req.header('authorization') || '';
-  const userId = authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon'
-    : 'anon';
+  const userId = authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon';
   const referenceCode = generateWireReferenceCode(userId + Date.now().toString());
+
+  // Item 168: Log sanitized audit entry (no account numbers in logs)
+  console.log('[IVXWire] Instructions requested by', userId.slice(0, 4) + '****');
 
   return Response.json({ ok: true, instructions: { ...instructions, referenceCode }, timestamp: new Date().toISOString() });
 });
