@@ -13,7 +13,6 @@ import {View,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import {
   Shield,
   ChevronRight,
@@ -76,9 +75,6 @@ export default function AccessControlScreen() {
   const rolesQuery = useQuery({
     queryKey: ['ivx-access-control'],
     queryFn: fetchRolesAndAssignments});
-
-  // Realtime: invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
 
   const invalidateAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['ivx-access-control'] });

@@ -115,49 +115,6 @@ try {
   // Already mocked or bun:test not available
 }
 
-// Mock @/lib/supabase with a Proxy that delegates to a global override.
-//
-// Bun's mock.module is first-come-first-served. Prior test files (e.g.
-// canonical-query.test.ts) transitively load @/lib/supabase through modules
-// like @/lib/canonical-query, caching the real module before ivx-chat.test.ts
-// can register its own mock. This causes ivxChat.ts to get the wrong supabase
-// object and all exports to be undefined in CI.
-//
-// The fix: mock @/lib/supabase in the preload with a Proxy that delegates to
-// globalThis.__IVX_TEST_SUPABASE__. Test files that need a specific supabase
-// mock (like ivx-chat.test.ts) set globalThis.__IVX_TEST_SUPABASE__ to their
-// mock object before importing modules that use supabase.
-const _noopSupabase = {
-  auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    signInWithPassword: async () => ({ data: {}, error: null }),
-    signOut: async () => ({ error: null }),
-  },
-  from: () => ({
-    select: () => ({
-      eq: () => ({ single: async () => ({ data: null, error: null }) }),
-      order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
-    }),
-    insert: () => ({ select: () => Promise.resolve({ data: null, error: null }) }),
-    upsert: () => Promise.resolve({ data: null, error: null }),
-  }),
-  storage: { from: () => ({ upload: async () => ({ error: null }), getPublicUrl: () => ({ data: { publicUrl: '' } }) }) },
-  channel: () => ({ on: () => ({ subscribe: () => ({}) }) }),
-  removeChannel: () => Promise.resolve('ok'),
-};
-
-try {
-  mock.module('@/lib/supabase', () => ({
-    supabase: new Proxy(_noopSupabase, {
-      get(_target, prop) {
-        const override = (globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__;
-        const target = override ?? _noopSupabase;
-        const value = Reflect.get(target as object, prop);
-        return typeof value === 'function' ? (value as Function).bind(target) : value;
-      },
-    }),
-  }));
-} catch (e) {
-  // Already mocked or bun:test not available
-}
+// NOTE: @/lib/supabase is intentionally mocked only by supabase-test-preload.ts.
+// bunfig.toml loads that dedicated preload first. Registering a second mock here
+// creates an export race and can hide named exports such as getSupabaseClient.

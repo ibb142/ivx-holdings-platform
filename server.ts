@@ -15,6 +15,13 @@ import { startAutonomousScheduler } from './backend/services/ivx-autonomous-sche
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
+import {
+  autonomousVoiceOptions,
+  handleAutonomousVoiceCallback,
+  handleAutonomousVoiceLaml,
+  handleAutonomousVoiceStatus,
+  handleAutonomousVoiceTest,
+} from './backend/api/ivx-autonomous-voice';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -25,6 +32,15 @@ console.log('[IVX Server] Starting Hono API server...', {
   port: PORT,
   nodeEnv: process.env.NODE_ENV || 'development',
 });
+
+// Autonomous Voice Escalation routes. Status/test are owner-only. LaML and
+// provider callback use a short-lived trace signature and never expose secrets.
+app.options('/api/ivx/autonomous/voice', () => autonomousVoiceOptions());
+app.get('/api/ivx/autonomous/voice', async (c) => handleAutonomousVoiceStatus(c.req.raw));
+app.options('/api/ivx/autonomous/voice/test', () => autonomousVoiceOptions());
+app.post('/api/ivx/autonomous/voice/test', async (c) => handleAutonomousVoiceTest(c.req.raw));
+app.all('/api/ivx/autonomous/voice/laml', async (c) => handleAutonomousVoiceLaml(c.req.raw));
+app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCallback(c.req.raw));
 
 startAutonomousScheduler();
 
@@ -52,11 +68,13 @@ campaignTimer.unref?.();
 
 startSmsNotificationScheduler();
 const smsStatus = getSmsNotifierStatus();
-console.log('[IVX Server] Autonomous SMS notifier initialized', {
+console.log('[IVX Server] Autonomous owner communications initialized', {
   configured: smsStatus.phoneConfigured,
   destination: smsStatus.phoneMasked,
   schedulerRunning: smsStatus.schedulerRunning,
-  dailyCap: smsStatus.smsDailyCap,
+  smsDailyCap: smsStatus.smsDailyCap,
+  voiceConfigured: smsStatus.voice.configured,
+  voiceDailyCap: smsStatus.voice.dailyCap,
 });
 
 // Production member/auth certificate runner. It performs a real synthetic

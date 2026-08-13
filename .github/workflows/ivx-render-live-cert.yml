@@ -8,7 +8,7 @@ on:
 jobs:
   render-live-cert:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
@@ -17,20 +17,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate existing Render binding
+      - name: Resolve deploy mode
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${RENDER_API_KEY:-}" ]; then
-            echo "RENDER_API_KEY is not bound in GitHub Actions secrets"
-            exit 1
-          fi
           SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
-          echo "Using Render service: ${SERVICE_ID}"
           echo "SERVICE_ID=${SERVICE_ID}" >> "$GITHUB_ENV"
+          if [ -n "${RENDER_API_KEY:-}" ]; then
+            echo "DEPLOY_MODE=render_api" >> "$GITHUB_ENV"
+            echo "Render API secret is bound; explicit deploy will be triggered."
+          else
+            echo "DEPLOY_MODE=auto_deploy" >> "$GITHUB_ENV"
+            echo "Render API secret is not bound in GitHub; using Render's repository auto-deploy and certifying by production SHA parity."
+          fi
 
-      - name: Trigger Render deploy
+      - name: Trigger Render deploy when API binding exists
         id: deploy
+        if: env.DEPLOY_MODE == 'render_api'
         shell: bash
         run: |
           set -euo pipefail
@@ -45,15 +48,15 @@ jobs:
             printf '%s\n' "$RESPONSE" | jq '.' || true
             exit 1
           fi
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
           echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
           echo "Triggered Render deploy $DEPLOY_ID"
 
-      - name: Wait for Render live
+      - name: Wait for explicit Render deploy when API binding exists
+        if: env.DEPLOY_MODE == 'render_api'
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 72); do
+          for i in $(seq 1 90); do
             RESPONSE=$(curl -fsS "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
               -H "Authorization: Bearer ${RENDER_API_KEY}" \
               -H "Accept: application/json")
@@ -70,32 +73,48 @@ jobs:
             fi
             sleep 5
           done
-          echo "Timed out waiting for Render live"
+          echo "Timed out waiting for explicit Render deploy"
           exit 1
 
-      - name: Verify production health and SHA
+      - name: Wait for production SHA parity
         shell: bash
         run: |
           set -euo pipefail
-          HEALTH=$(curl -fsS --retry 5 --retry-delay 3 "${API_BASE}/health")
+          matched=0
+          for i in $(seq 1 72); do
+            code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+            if [ "$code" = "200" ]; then
+              HEALTH_COMMIT=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json 2>/dev/null || true)
+              OK=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
+              echo "poll=$i health=$OK production_sha=${HEALTH_COMMIT:-missing} expected=${GITHUB_SHA}"
+              if [ "$OK" = "true" ] && { [ "$HEALTH_COMMIT" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$HEALTH_COMMIT"* ]] || [[ "$HEALTH_COMMIT" == "$GITHUB_SHA"* ]]; }; then
+                matched=1
+                echo "RENDER_COMMIT=$HEALTH_COMMIT" >> "$GITHUB_ENV"
+                break
+              fi
+            else
+              echo "poll=$i health_http=$code"
+            fi
+            sleep 10
+          done
+          if [ "$matched" != "1" ]; then
+            echo "Production never reached current main SHA ${GITHUB_SHA}."
+            exit 1
+          fi
+          echo "sha_parity=PASS"
+
+      - name: Verify production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH=$(cat /tmp/health.json)
           printf '%s\n' "$HEALTH" | jq '.'
           OK=$(printf '%s' "$HEALTH" | jq -r '.ok // false')
-          HEALTH_COMMIT=$(printf '%s' "$HEALTH" | jq -r '.commit // .sha // .gitCommit // empty')
           if [ "$OK" != "true" ]; then
             echo "Production /health did not return ok=true"
             exit 1
           fi
-          if [ -n "$HEALTH_COMMIT" ]; then
-            echo "Production commit: $HEALTH_COMMIT"
-            case "${GITHUB_SHA}" in
-              "$HEALTH_COMMIT"*) ;;
-              *)
-                case "$HEALTH_COMMIT" in
-                  "${GITHUB_SHA}"*) ;;
-                  *) echo "WARN: health commit does not yet match GitHub SHA ${GITHUB_SHA}" ;;
-                esac
-            esac
-          fi
+          echo "health=PASS"
 
       - name: Verify AI provider authentication
         shell: bash
@@ -104,13 +123,11 @@ jobs:
           DEBUG=$(curl -sS --retry 4 --retry-delay 2 "${API_BASE}/api/ivx/chat-debug")
           printf '%s\n' "$DEBUG" | jq '.' || true
           HTTP_STATUS=$(printf '%s' "$DEBUG" | jq -r '.providerHealth.lastHttpStatus // .lastHttpStatus // empty')
-          CRED_VALID=$(printf '%s' "$DEBUG" | jq -r '.providerHealth.credentialValid // .credentialValid // empty')
-          STATE=$(printf '%s' "$DEBUG" | jq -r '.providerHealth.state // .state // empty')
-          echo "provider state=$STATE http=$HTTP_STATUS credentialValid=$CRED_VALID"
           if [ "$HTTP_STATUS" = "401" ] || [ "$HTTP_STATUS" = "403" ]; then
             echo "AI provider authentication is still rejected"
             exit 1
           fi
+          echo "ai_authentication_probe=PASS"
 
       - name: Verify real public AI inference
         shell: bash
@@ -140,9 +157,11 @@ jobs:
           {
             "certified": true,
             "githubSha": "${GITHUB_SHA}",
-            "renderDeployId": "${DEPLOY_ID}",
+            "deployMode": "${DEPLOY_MODE}",
+            "renderDeployId": "${DEPLOY_ID:-auto-deploy}",
             "renderCommit": "${RENDER_COMMIT:-}",
             "health": "PASS",
+            "shaParity": "PASS",
             "aiAuthentication": "PASS",
             "liveInference": "PASS",
             "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

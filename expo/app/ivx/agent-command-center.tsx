@@ -15,7 +15,6 @@ import {View,
   FlatList,
   Linking} from "react-native";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { router } from 'expo-router';
 import {
   getAgentAuditOverview,
@@ -66,8 +65,6 @@ type AgentFilter = 'all' | SeniorityLevel;
 type LedgerFilter = 'all' | 'completed' | 'failed' | 'blocked' | 'deployed' | 'verified';
 
 export default function AgentCommandCenterScreen() {
-  // Realtime: auto-invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
   const queryClient = useQueryClient();
   const [agentFilter, setAgentFilter] = useState<AgentFilter>('all');
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all');

@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { Stack } from 'expo-router';
 import {
   FlatList,
@@ -880,8 +879,6 @@ function SummaryStat({ label, value, color }: { label: string; value: number; co
 }
 
 export default function AutonomousOpsDashboardScreen() {
-  // Realtime: auto-invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
   return (
     <ErrorBoundary>
       <Stack.Screen options={{ title: 'Autonomous Operations' }} />
