@@ -153,19 +153,42 @@ describe('public chat SSE streaming', () => {
     expect(events[3]?.data.text).toBe('Hello world');
   });
 
-  test('emits response.error when AI stream fails', async () => {
+  test('falls back and completes when a non-auth AI stream fails', async () => {
     mockStreamIVXAIText.mockImplementation(async function* () {
       yield { type: 'error', error: 'provider unavailable' };
     });
     const response = await handlePublicChatStreamPost(makeRequest({
       message: 'Hello',
       sessionId: 'test-session',
-      requestId: 'test-error',
+      requestId: 'test-fallback',
+      history: [],
+    }));
+    const events = await readSSE(response);
+    expect(events.map((e) => e.event)).toEqual([
+      'response.started',
+      'response.delta',
+      'response.completed',
+    ]);
+    expect(events[1]?.data.delta).toBe('Fallback: Hello');
+    expect(events[2]?.data.source).toBe('fallback');
+  });
+
+  test('emits response.error for an AI provider authentication failure', async () => {
+    mockStreamIVXAIText.mockImplementation(async function* () {
+      yield { type: 'error', error: 'status=401 unauthorized' };
+    });
+    const response = await handlePublicChatStreamPost(makeRequest({
+      message: 'Hello',
+      sessionId: 'test-session',
+      requestId: 'test-auth-error',
       history: [],
     }));
     const events = await readSSE(response);
     expect(events[0]?.event).toBe('response.started');
-    expect(events.at(-1)?.event).toBe('response.error');
+    expect(events.some((event) => event.event === 'response.error')).toBe(true);
+    expect(events.find((event) => event.event === 'response.error')?.data.errorType).toBe('auth_expired');
+    expect(events.at(-1)?.event).toBe('response.completed');
+    expect(events.at(-1)?.data.source).toBe('error');
   });
 
   test('deterministic identity answer emits one delta and completed', async () => {
