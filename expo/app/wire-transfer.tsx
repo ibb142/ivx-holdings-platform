@@ -18,12 +18,9 @@ import {
   Building2,
   Check,
   Copy,
-  Globe,
-  MapPin,
   Receipt,
   Share2,
   ShieldCheck,
-  User,
   Wallet,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -43,7 +40,7 @@ type WireInstructions = {
   note?: string;
 };
 
-export default function WireTransferScreen(): JSX.Element {
+export default function WireTransferScreen(): React.ReactElement {
   const router = useRouter();
   const [instructions, setInstructions] = useState<WireInstructions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +65,7 @@ export default function WireTransferScreen(): JSX.Element {
       } else {
         Alert.alert('Wire instructions unavailable', json.error || 'Please try again later.');
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Network error', 'Could not load wire instructions.');
     } finally {
       setLoading(false);
@@ -117,10 +114,7 @@ export default function WireTransferScreen(): JSX.Element {
       const res = await fetch(`${API_BASE}/api/ivx/wire-submission`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          referenceCode: instructions.referenceCode,
-        }),
+        body: JSON.stringify({ ...form, referenceCode: instructions.referenceCode }),
       });
       const json = await res.json();
       if (json.ok) {
@@ -128,7 +122,7 @@ export default function WireTransferScreen(): JSX.Element {
       } else {
         Alert.alert('Failed to report wire', json.error || 'Please try again.');
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Network error', 'Could not submit wire notification.');
     } finally {
       setSubmitting(false);
@@ -146,7 +140,10 @@ export default function WireTransferScreen(): JSX.Element {
           <Text style={styles.title}>Wire Transfer</Text>
           <View style={styles.placeholder} />
         </View>
-        <ShimmerIndicator message="Loading wire instructions..." />
+        <View style={styles.loadingState}>
+          <ShimmerIndicator />
+          <Text style={styles.loadingText}>Loading wire instructions...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -185,9 +182,7 @@ export default function WireTransferScreen(): JSX.Element {
               <CopyRow label="Bank Name" value={instructions.bankName} />
               <CopyRow label="Routing Number" value={instructions.routingNumber} />
               <CopyRow label="Bank Address" value={instructions.bankAddress} />
-              {instructions.swiftCode && (
-                <CopyRow label="SWIFT/BIC (International)" value={instructions.swiftCode} />
-              )}
+              {instructions.swiftCode && <CopyRow label="SWIFT/BIC (International)" value={instructions.swiftCode} />}
             </View>
 
             <View style={styles.card}>
@@ -206,9 +201,7 @@ export default function WireTransferScreen(): JSX.Element {
                 <Text style={styles.sectionTitle}>Your Reference Code</Text>
               </View>
               <Text style={styles.refCode}>{instructions.referenceCode}</Text>
-              <Text style={styles.refHint}>
-                Add this code to the wire memo / reference field so we can match your funds automatically.
-              </Text>
+              <Text style={styles.refHint}>Add this code to the wire memo / reference field so we can match your funds automatically.</Text>
               <TouchableOpacity
                 style={styles.primaryBtn}
                 onPress={() => instructions.referenceCode && copyToClipboard(instructions.referenceCode, 'Reference code')}
@@ -228,67 +221,20 @@ export default function WireTransferScreen(): JSX.Element {
                 <Check size={20} color={Colors.primary} />
                 <Text style={styles.sectionTitle}>I Already Sent the Wire</Text>
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Amount (e.g. 50000)"
-                placeholderTextColor={Colors.textTertiary}
-                keyboardType="decimal-pad"
-                value={form.amount}
-                onChangeText={(text) => setForm({ ...form, amount: text })}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Currency (e.g. USD)"
-                placeholderTextColor={Colors.textTertiary}
-                autoCapitalize="characters"
-                value={form.currency}
-                onChangeText={(text) => setForm({ ...form, currency: text.toUpperCase() })}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Sent Date (YYYY-MM-DD)"
-                placeholderTextColor={Colors.textTertiary}
-                value={form.sentAt}
-                onChangeText={(text) => setForm({ ...form, sentAt: text })}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Your Bank Name"
-                placeholderTextColor={Colors.textTertiary}
-                value={form.senderBankName}
-                onChangeText={(text) => setForm({ ...form, senderBankName: text })}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Your Account Last 4 Digits"
-                placeholderTextColor={Colors.textTertiary}
-                keyboardType="number-pad"
-                maxLength={4}
-                value={form.senderAccountLast4}
-                onChangeText={(text) => setForm({ ...form, senderAccountLast4: text })}
-              />
-              <TextInput
-                style={[styles.input, styles.multiline]}
-                placeholder="Notes (optional)"
-                placeholderTextColor={Colors.textTertiary}
-                multiline
-                value={form.notes}
-                onChangeText={(text) => setForm({ ...form, notes: text })}
-              />
-              <TouchableOpacity
-                style={[styles.primaryBtn, submitting && styles.disabledBtn]}
-                onPress={submitWire}
-                disabled={submitting}
-              >
+              <TextInput style={styles.input} placeholder="Amount (e.g. 50000)" placeholderTextColor={Colors.textTertiary} keyboardType="decimal-pad" value={form.amount} onChangeText={(text) => setForm({ ...form, amount: text })} />
+              <TextInput style={styles.input} placeholder="Currency (e.g. USD)" placeholderTextColor={Colors.textTertiary} autoCapitalize="characters" value={form.currency} onChangeText={(text) => setForm({ ...form, currency: text.toUpperCase() })} />
+              <TextInput style={styles.input} placeholder="Sent Date (YYYY-MM-DD)" placeholderTextColor={Colors.textTertiary} value={form.sentAt} onChangeText={(text) => setForm({ ...form, sentAt: text })} />
+              <TextInput style={styles.input} placeholder="Your Bank Name" placeholderTextColor={Colors.textTertiary} value={form.senderBankName} onChangeText={(text) => setForm({ ...form, senderBankName: text })} />
+              <TextInput style={styles.input} placeholder="Your Account Last 4 Digits" placeholderTextColor={Colors.textTertiary} keyboardType="number-pad" maxLength={4} value={form.senderAccountLast4} onChangeText={(text) => setForm({ ...form, senderAccountLast4: text })} />
+              <TextInput style={[styles.input, styles.multiline]} placeholder="Notes (optional)" placeholderTextColor={Colors.textTertiary} multiline value={form.notes} onChangeText={(text) => setForm({ ...form, notes: text })} />
+              <TouchableOpacity style={[styles.primaryBtn, submitting && styles.disabledBtn]} onPress={submitWire} disabled={submitting}>
                 <Text style={styles.primaryBtnText}>{submitting ? 'Submitting...' : 'Notify Investor Relations'}</Text>
               </TouchableOpacity>
             </View>
           </>
         )}
 
-        <Text style={styles.footer}>
-          Questions? Email investors@ivxholding.com
-        </Text>
+        <Text style={styles.footer}>Questions? Email investors@ivxholding.com</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -310,85 +256,31 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
   backBtn: { padding: 8 },
   title: { fontSize: 18, fontWeight: '700', color: Colors.text },
   placeholder: { width: 38 },
+  loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  loadingText: { color: Colors.textSecondary, fontSize: 14 },
   scroll: { padding: 16, paddingBottom: 40 },
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
+  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: Colors.border },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   notice: { flex: 1, fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
-  copyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+  copyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border },
   copyRowText: { flex: 1, paddingRight: 12 },
   copyLabel: { fontSize: 12, color: Colors.textTertiary, marginBottom: 2 },
   copyValue: { fontSize: 15, color: Colors.text, fontWeight: '500' },
   copyIcon: { padding: 6 },
-  refCode: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.primary,
-    letterSpacing: 1,
-    textAlign: 'center',
-    marginVertical: 12,
-  },
+  refCode: { fontSize: 22, fontWeight: '800', color: Colors.primary, letterSpacing: 1, textAlign: 'center', marginVertical: 12 },
   refHint: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', marginBottom: 16 },
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-  },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14 },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   disabledBtn: { opacity: 0.6 },
-  shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginBottom: 16,
-  },
+  shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: Colors.primary, borderRadius: 12, paddingVertical: 14, marginBottom: 16 },
   shareBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 15 },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
-    color: Colors.text,
-    marginBottom: 12,
-    backgroundColor: Colors.background,
-  },
+  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: 15, color: Colors.text, marginBottom: 12, backgroundColor: Colors.background },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
   footer: { textAlign: 'center', color: Colors.textTertiary, fontSize: 13, marginTop: 8 },
 });
