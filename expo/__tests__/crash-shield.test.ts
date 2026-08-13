@@ -42,10 +42,24 @@ const GLOBAL_JSX = new Set<string>([
   'VirtualizedList', 'Button', 'Suspense',
 ]);
 
+/**
+ * Remove comments while preserving newlines and source offsets.
+ *
+ * The JSX sweep must inspect executable TSX, not JSX examples embedded in
+ * documentation comments. Replacing comment characters with spaces keeps line
+ * numbers stable for any real offender that remains.
+ */
+function stripCommentsPreserveLines(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, (comment) => ' '.repeat(comment.length));
+}
+
 /** Returns JSX element identifiers used in `src` that are neither imported nor defined. */
 function findUndefinedJsxIdentifiers(src: string): { name: string; line: number }[] {
+  const analyzable = stripCommentsPreserveLines(src);
   const imported = new Set<string>();
-  for (const m of src.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/g)) {
+  for (const m of analyzable.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/g)) {
     const clause = m[1];
     const def = clause.match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
     if (def && !clause.trim().startsWith('{') && !clause.trim().startsWith('*')) imported.add(def[1]);
@@ -59,18 +73,18 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
   }
 
   const local = new Set<string>();
-  for (const m of src.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
+  for (const m of analyzable.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
   // object/array destructure bindings: const { A } = ...
-  for (const m of src.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
+  for (const m of analyzable.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
     m[1].split(',').forEach((x) => {
       const n = x.trim().split(':').pop()!.trim().split(/\s+as\s+/).pop()!.trim();
       if (/^[A-Za-z_$][\w$]*$/.test(n)) local.add(n);
     });
   }
   // rename bindings anywhere: `foo: Name` (e.g. .map(({ icon: Icon }) => ...))
-  for (const m of src.matchAll(/[A-Za-z0-9_$]+\s*:\s*([A-Z][A-Za-z0-9_]*)/g)) local.add(m[1]);
+  for (const m of analyzable.matchAll(/[A-Za-z0-9_$]+\s*:\s*([A-Z][A-Za-z0-9_]*)/g)) local.add(m[1]);
   // shorthand bindings inside any destructure block { ... Name ... }
-  for (const m of src.matchAll(/\{([^{}]*)\}/g)) {
+  for (const m of analyzable.matchAll(/\{([^{}]*)\}/g)) {
     m[1].split(',').forEach((x) => {
       const n = x.trim();
       if (/^[A-Z][A-Za-z0-9_]*$/.test(n)) local.add(n);
@@ -79,11 +93,11 @@ function findUndefinedJsxIdentifiers(src: string): { name: string; line: number 
 
   const offenders: { name: string; line: number }[] = [];
   // Real JSX only: '<' not preceded by a word char, '<' or '.' (excludes generics like useState<X>)
-  for (const m of src.matchAll(/(^|[^A-Za-z0-9_<.])<([A-Z][A-Za-z0-9_]*)(?=[\s/>])/g)) {
+  for (const m of analyzable.matchAll(/(^|[^A-Za-z0-9_<.])<([A-Z][A-Za-z0-9_]*)(?=[\s/>])/g)) {
     const name = m[2];
     if (name.length === 1) continue; // single-letter generic type params (T, K, V, S, P)
     if (GLOBAL_JSX.has(name) || imported.has(name) || local.has(name)) continue;
-    const line = src.slice(0, m.index).split('\n').length;
+    const line = analyzable.slice(0, m.index).split('\n').length;
     offenders.push({ name, line });
   }
   return offenders;
@@ -112,6 +126,11 @@ describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () =
     const bad = `import { View } from 'react-native';\nexport default () => <View><Mail /></View>;`;
     const offenders = findUndefinedJsxIdentifiers(bad);
     expect(offenders.some((o) => o.name === 'Mail')).toBe(true);
+  });
+
+  test('the analyzer ignores JSX examples inside comments', () => {
+    const documented = `import { View } from 'react-native';\n/** Example: <MissingDocOnly /> */\nexport default () => <View />;`;
+    expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
   });
 
   test('the analyzer does not flag an imported icon (self-check)', () => {
