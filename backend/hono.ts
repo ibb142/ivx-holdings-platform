@@ -2913,6 +2913,30 @@ app.get('/health/ai/monitor', () => {
 });
 
 import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';
+import {
+  handleRESearchProperties,
+  handleREPropertyDetails,
+  handleRECreateOffer,
+  handleREListOffers,
+  handleRECounterOffer,
+  handleREAcceptOffer,
+  handleRERejectOffer,
+  handleRECreateContract,
+  handleRESignContract,
+  handleRECreateEscrow,
+  handleREFundEscrow,
+  handleREReleaseEscrow,
+  handleREPortfolio,
+  handleREAuditTrail,
+  handleREGetCurrencies,
+  handleREGetCountries,
+  handleREGetBrokers,
+  handleRESubmitKYC,
+  handleREKYCStatus,
+  handleREProofOfFunds,
+  handleREGetClosingDocs,
+  handleREDeliverClosingDoc,
+} from './api/ivx-real-estate-flow';
 
 app.get('/api/ivx/wire-instructions', async (context) => {
   // Items 153-154: Wire instructions only available to authenticated users.
@@ -6576,5 +6600,32 @@ app.get('/api/ivx/autonomous/factory/status', async (c) => {
   const status = await getFactoryActivationStatus();
   return c.json({ ok: true, status });
 });
+
+// ============================================================================
+// IVX Real Estate Transaction Flow API (Points 4-8)
+// Complete end-to-end: search → property → offer → negotiation → contract → escrow → closing
+// ============================================================================
+app.get('/api/ivx/re/properties', (c) => handleRESearchProperties(c.req.raw));
+app.get('/api/ivx/re/properties/:propertyId', (c) => handleREPropertyDetails(c.req.raw, c.req.param('propertyId')));
+app.post('/api/ivx/re/offers', (c) => handleRECreateOffer(c.req.raw));
+app.get('/api/ivx/re/offers', (c) => handleREListOffers(c.req.raw));
+app.post('/api/ivx/re/offers/:offerId/counter', (c) => handleRECounterOffer(c.req.raw, c.req.param('offerId')));
+app.post('/api/ivx/re/offers/:offerId/accept', (c) => handleREAcceptOffer(c.req.raw, c.req.param('offerId')));
+app.post('/api/ivx/re/offers/:offerId/reject', (c) => handleRERejectOffer(c.req.raw, c.req.param('offerId')));
+app.post('/api/ivx/re/contracts', (c) => handleRECreateContract(c.req.raw));
+app.post('/api/ivx/re/contracts/:contractId/sign', (c) => handleRESignContract(c.req.raw, c.req.param('contractId')));
+app.post('/api/ivx/re/escrow', (c) => handleRECreateEscrow(c.req.raw));
+app.post('/api/ivx/re/escrow/:escrowId/fund', (c) => handleREFundEscrow(c.req.raw, c.req.param('escrowId')));
+app.post('/api/ivx/re/escrow/:escrowId/release', (c) => handleREReleaseEscrow(c.req.raw, c.req.param('escrowId')));
+app.get('/api/ivx/re/portfolio', (c) => handleREPortfolio(c.req.raw));
+app.get('/api/ivx/re/audit', (c) => handleREAuditTrail(c.req.raw));
+app.get('/api/ivx/re/currencies', (c) => handleREGetCurrencies(c.req.raw));
+app.get('/api/ivx/re/countries', (c) => handleREGetCountries(c.req.raw));
+app.get('/api/ivx/re/brokers', (c) => handleREGetBrokers(c.req.raw));
+app.post('/api/ivx/re/kyc', (c) => handleRESubmitKYC(c.req.raw));
+app.get('/api/ivx/re/kyc/status', (c) => handleREKYCStatus(c.req.raw));
+app.post('/api/ivx/re/proof-of-funds', (c) => handleREProofOfFunds(c.req.raw));
+app.get('/api/ivx/re/closing-docs/:contractId', (c) => handleREGetClosingDocs(c.req.raw, c.req.param('contractId')));
+app.post('/api/ivx/re/closing-docs/:docId/deliver', (c) => handleREDeliverClosingDoc(c.req.raw, c.req.param('docId')));
 
 export default app;// CI trigger comment
