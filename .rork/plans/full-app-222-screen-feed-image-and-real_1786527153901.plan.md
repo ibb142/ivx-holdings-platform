@@ -49,12 +49,11 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] Mobile bundle build: NOT RUN (requires native build environment).
 - [x] Unit/integration tests: NOT RUN (test suite command not found in package.json).
 
-**Phase 5 — Deployment** [IN PROGRESS / BLOCKED]
-- [x] Local security fixes committed: `bb657a4c943ec89784c5c64f54b3455e8e9909ea`.
-- [x] Pushed to Rork managed origin: `bb657a4c943ec89784c5c64f54b3455e8e9909ea` via `rork-agent git-push`.
-- [ ] Push verified code to GitHub `main` — BLOCKED: GitHub main (`05b586256e73f5095b71901738873325fb7f1f95`) has divergent autonomous commits not in Rork origin; Rork auto-sync cannot fast-forward.
-- [ ] Deploy to Render production — BLOCKED pending GitHub sync; production currently serves GitHub commit `05b58625...` (boot 2026-08-13T13:02:59.478Z), not the local security fixes.
-- [x] HTTP smoke tests against production executed 2026-08-13; endpoint certification in final report.
+**Phase 5 — Deployment** [COMPLETED]
+- [x] Local security fixes committed and rebased onto GitHub main.
+- [x] Unified merge commit `a4e50aa870a793c95823c0262e4e28591abe6c55` pushed to Rork origin and GitHub.
+- [x] Render auto-deploy triggered; production serving `a4e50aa8` (boot 2026-08-13T13:39:18.305Z).
+- [x] HTTP smoke tests against production executed 2026-08-13 — all diagnostic endpoints return HTTP 401 to unauthenticated callers; `seniorDeveloper` redacted from `/health`.
 
 **Evidence gate**
 - The final deliverable will include: exact files changed, real Git diff summary, QA matrix with PASS/FAIL counts, test commands and output, build output, browser-test report, failure screenshots/traces, verified GitHub branch and commit SHA, live production URL, deployment identifier and timestamp, and independent HTTP smoke-test results.
@@ -64,11 +63,13 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - The current AI gateway keys and AWS credentials are invalid in production, so AI chat responses and S3/APK uploads will remain blocked until the owner provides valid keys. This work does not fix those credentials, but it will make the failures visible and honest instead of blank.
 - The project uses a mix of `useQuery`, `useInfiniteQuery`, custom `fetch`, and raw Supabase calls. Full unification across all 255 files is a large effort; the plan prioritizes the most common patterns first and repairs the rest screen-by-screen.
 
-**Phase 6 — AI Gateway 401 fix and key monitoring** [SOURCE COMPLETE / DEPLOYMENT BLOCKED]
-- [x] Source implemented.
-- [ ] Deploy to production and verify `/health/ai/live` returns `ok: true` — BLOCKED by GitHub sync failure. Current production `/health/ai/live` returns HTTP 503, `ok: false`, reason: "No AI gateway key configured".
+**Phase 6 — AI Gateway 401 fix and key monitoring** [DEPLOYED]
+- [x] Source implemented and deployed in commit `a4e50aa8`.
+- [x] `/health/ai/live` endpoint live — returns HTTP 503 with `ok: false`, reason: "No AI gateway key configured", `ownerActionRequired` message.
+- [ ] Owner must set `IVX_AI_GATEWAY_KEY` (or `OPENAI_API_KEY`) on the Render service to enable AI chat.
 - Files changed: `backend/services/ivx-owner-ai-task-queue.ts`, `backend/hono.ts`, `backend/api/public-chat-stream.ts`, `backend/api/public-chat.ts`, `expo/app/chat-hub.tsx`, `expo/lib/public-chat-stream.ts`, `backend/services/ivx-ai-key-monitor.ts`.
 
-**Phase 7 — Wire transfer funding flow** [SOURCE COMPLETE / DEPLOYMENT BLOCKED]
-- [x] Source implemented.
-- [ ] Build and deploy to production; verify both endpoints respond correctly — BLOCKED by GitHub sync failure. Current production `/api/ivx/wire-instructions` returns HTTP 200 to unauthenticated callers (security fix not deployed).
+**Phase 7 — Wire transfer funding flow** [DEPLOYED]
+- [x] Source implemented and deployed in commit `a4e50aa8`.
+- [x] `/api/ivx/wire-instructions` now returns HTTP 401 to unauthenticated callers — security fix confirmed live.
+- Files changed: `backend/api/ivx-wire-transfer.ts`, `expo/app/wire-transfer.tsx`.
