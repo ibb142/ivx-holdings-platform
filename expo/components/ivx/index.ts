@@ -7,7 +7,7 @@
 export { IVXDataProvider } from './IVXDataProvider';
 export type { IVXDataProviderProps } from './IVXDataProvider';
 
-export { IVXImage } from './IVXImage';
+export { default as IVXImage } from './IVXImage';
 export type { IVXImageProps } from './IVXImage';
 
 export { IVXFeed } from './IVXFeed';
