@@ -319,7 +319,10 @@ function round2(value: number): number {
 // ---------------------------------------------------------------------------
 
 function encryptionKey(): Buffer {
-  const raw = (process.env.IVX_WIRE_ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'ivx-default-dev-key-please-override-in-prod').trim();
+  const raw = (process.env.IVX_WIRE_ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!raw) {
+    throw new Error('IVX_WIRE_ENCRYPTION_KEY or SUPABASE_SERVICE_ROLE_KEY must be configured for wire instruction encryption.');
+  }
   // Derive a 32-byte key via SHA-256 so any-length secret produces a valid AES-256 key.
   return createHash('sha256').update(raw).digest();
 }

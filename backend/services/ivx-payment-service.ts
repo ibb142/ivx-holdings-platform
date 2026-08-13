@@ -124,7 +124,7 @@ function getSB(): SupabaseClient {
 let _stripe: any = null;
 function getStripe(): any | null {
   if (_stripe) return _stripe;
-  const secretKey = (process.env.STRIPE_SECRET_KEY || '').trim();
+  const secretKey = (process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '').trim();
   if (!secretKey) return null;
   try {
     // require works in Bun/Node — stripe is in package.json dependencies
@@ -137,11 +137,11 @@ function getStripe(): any | null {
 }
 
 function isStripeConfigured(): boolean {
-  return !!(process.env.STRIPE_SECRET_KEY || '').trim();
+  return !!(process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '').trim();
 }
 
 function isTestMode(): boolean {
-  const key = (process.env.STRIPE_SECRET_KEY || '').trim();
+  const key = (process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '').trim();
   return !key || key.startsWith('sk_test_');
 }
 
@@ -919,7 +919,7 @@ export function getPaymentConfigStatus(): {
     refunds: boolean;
   };
 } {
-  const secretKey = (process.env.STRIPE_SECRET_KEY || '').trim();
+  const secretKey = (process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '').trim();
   const publishableKey = (process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '').trim();
   const webhookSecret = (process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 
