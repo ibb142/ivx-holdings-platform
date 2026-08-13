@@ -43,16 +43,15 @@ const GLOBAL_JSX = new Set<string>([
 ]);
 
 /**
- * Remove comments while preserving newlines and source offsets.
+ * Remove block/documentation comments while preserving newlines and source offsets.
  *
- * The JSX sweep must inspect executable TSX, not JSX examples embedded in
- * documentation comments. Replacing comment characters with spaces keeps line
- * numbers stable for any real offender that remains.
+ * Do not strip `//` with a regex here: URLs such as https://ivxholding.com are
+ * valid string content and a naive line-comment regex corrupts executable TSX.
+ * Replacing block-comment characters with spaces keeps line numbers stable for
+ * any real offender that remains.
  */
 function stripCommentsPreserveLines(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (comment) => ' '.repeat(comment.length));
+  return src.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
 }
 
 /** Returns JSX element identifiers used in `src` that are neither imported nor defined. */
@@ -128,9 +127,14 @@ describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () =
     expect(offenders.some((o) => o.name === 'Mail')).toBe(true);
   });
 
-  test('the analyzer ignores JSX examples inside comments', () => {
+  test('the analyzer ignores JSX examples inside block comments', () => {
     const documented = `import { View } from 'react-native';\n/** Example: <MissingDocOnly /> */\nexport default () => <View />;`;
     expect(findUndefinedJsxIdentifiers(documented)).toEqual([]);
+  });
+
+  test('the analyzer preserves declarations after URL strings', () => {
+    const withUrl = `import { View } from 'react-native';\nconst docs = 'https://ivxholding.com';\nfunction LocalCard() { return <View />; }\nexport default () => <LocalCard />;`;
+    expect(findUndefinedJsxIdentifiers(withUrl)).toEqual([]);
   });
 
   test('the analyzer does not flag an imported icon (self-check)', () => {
