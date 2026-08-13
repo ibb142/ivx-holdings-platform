@@ -28,6 +28,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAuditTrail, getAuditStats } from '@/lib/audit-trail';
 import { formatAuditTimestamp, loadTimezoneProfile, getOffsetString, type IanaTimezone } from '@/lib/time-service';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 const ACTION_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   CREATE: { label: 'Created', color: '#00C48C', icon: 'plus' },

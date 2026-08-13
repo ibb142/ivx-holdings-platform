@@ -72,3 +72,4 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 **Phase 7 — Wire transfer funding flow** [DEPLOYED]
 - [x] Source implemented and deployed in commit `a4e50aa8`.
 - [x] `/api/ivx/wire-instructions` now returns HTTP 401 to unauthenticated callers — security fix confirmed live.
+- Files changed: `backend/api/ivx-wire-transfer.ts`, `expo/app/wire-transfer.tsx`.
