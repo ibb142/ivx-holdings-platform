@@ -20,11 +20,32 @@ const noop = {
   removeChannel: () => Promise.resolve('ok'),
 };
 
+type Override = Record<PropertyKey, unknown>;
+let latestOverride: Override | null = null;
+let latestDataOverride: Override | null = null;
+
+Object.defineProperty(globalThis, '__IVX_TEST_SUPABASE__', {
+  configurable: true,
+  get() {
+    return latestOverride;
+  },
+  set(value: unknown) {
+    const next = value && typeof value === 'object' ? value as Override : null;
+    latestOverride = next;
+    if (next && typeof next.from === 'function' && next.storage) {
+      latestDataOverride = next;
+    }
+  },
+});
+
+const dataProperties = new Set<PropertyKey>(['from', 'storage', 'channel', 'removeChannel']);
 const client = new Proxy(noop, {
   get(_target, prop) {
-    const override = (globalThis as Record<string, unknown>).__IVX_TEST_SUPABASE__;
-    const target = override && typeof override === 'object' ? override as object : noop;
-    const value = Reflect.get(target, prop);
+    const target = (dataProperties.has(prop) ? latestDataOverride : latestOverride)
+      ?? latestOverride
+      ?? latestDataOverride
+      ?? noop;
+    const value = Reflect.get(target as object, prop);
     return typeof value === 'function' ? value.bind(target) : value;
   },
 });
