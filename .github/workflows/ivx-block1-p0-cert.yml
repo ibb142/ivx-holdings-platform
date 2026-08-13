@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 15
     env:
       API_BASE: https://api.ivxholding.com
+      IVX_CERT_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +72,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cert_code=$(curl -sS -m 30 -o /tmp/member-cert.json -w '%{http_code}' "${API_BASE}/api/ivx/certification/member-auth" || true)
+          if [ -z "${IVX_CERT_SYSTEM_KEY:-}" ]; then
+            echo 'IVX_AI_SYSTEM_SECRET is not bound to this workflow'
+            exit 1
+          fi
+          cert_code=$(curl -sS -m 30 -o /tmp/member-cert.json -w '%{http_code}' \
+            -H "X-IVX-System-Key: ${IVX_CERT_SYSTEM_KEY}" \
+            "${API_BASE}/api/ivx/certification/member-auth" || true)
           echo "member_auth_cert_http=$cert_code"
           cat /tmp/member-cert.json || true
           if [ "$cert_code" != "200" ]; then
