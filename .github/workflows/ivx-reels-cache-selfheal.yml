@@ -1,0 +1,96 @@
+name: IVX Reels Cache Self-Heal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ivx-reels-cache-selfheal.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden-reels-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Apply verified stale-on-error cache repair and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/api/ivx-video-platform.ts')
+          src = path.read_text()
+
+          old_expiry = """  if (Date.now() > entry.expiresAt) {
+              FEED_CACHE.delete(key);
+              return null;
+            }
+            return entry;"""
+          new_expiry = """  if (Date.now() > entry.expiresAt) return null;
+            return entry;"""
+
+          old_set = """function setCachedEntry(key: string, body: string, status: number): void {
+            if (FEED_CACHE.size >= FEED_CACHE_MAX) {"""
+          new_set = """function setCachedEntry(key: string, body: string, status: number): void {
+            // Never cache upstream failures. Keep the last successful entry available
+            // for stale-on-error recovery after its normal freshness window expires.
+            if (status < 200 || status >= 300) return;
+            if (FEED_CACHE.size >= FEED_CACHE_MAX) {"""
+
+          old_promise = """  const promise = (async () => {
+              const resp = await handler();
+              const body = await resp.text();
+              setCachedEntry(key, body, resp.status);
+              return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
+            })();"""
+          new_promise = """  const promise = (async () => {
+              let resp = await handler();
+              // One bounded retry covers transient Supabase/Cloudflare 5xx failures
+              // without turning the request into an unbounded retry loop.
+              if (resp.status >= 500) {
+                await new Promise((resolve) => setTimeout(resolve, 750));
+                resp = await handler();
+              }
+              const body = await resp.text();
+              if (resp.status >= 200 && resp.status < 300) {
+                setCachedEntry(key, body, resp.status);
+                return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
+              }
+              const stale = FEED_CACHE.get(key);
+              if (stale && stale.status >= 200 && stale.status < 300) {
+                return { ...stale, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
+              }
+              return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
+            })();"""
+
+          replacements = [
+              ('expiry', old_expiry, new_expiry),
+              ('set', old_set, new_set),
+              ('promise', old_promise, new_promise),
+          ]
+          for name, old, new in replacements:
+              count = src.count(old)
+              print(f'{name}_matches={count}')
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one {name} block; found {count}')
+              src = src.replace(old, new, 1)
+
+          path.write_text(src)
+          PY
+
+          grep -q 'Never cache upstream failures' backend/api/ivx-video-platform.ts
+          grep -q 'One bounded retry covers transient' backend/api/ivx-video-platform.ts
+          grep -q 'const stale = FEED_CACHE.get(key)' backend/api/ivx-video-platform.ts
+          rm -f .github/workflows/ivx-reels-cache-selfheal.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/api/ivx-video-platform.ts .github/workflows/ivx-reels-cache-selfheal.yml
+          git commit -m 'fix(reels): retry transient 5xx and serve stale successful feed'
+          git push origin HEAD:main
