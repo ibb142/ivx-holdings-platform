@@ -525,12 +525,17 @@ export async function updateMemberKYCStatus(
 export async function updateMemberLastLogin(userId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   try {
-    await supabase
-      .from('profiles')
-      .update({ last_login_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', userId);
+    await Promise.race([
+      supabase
+        .from('profiles')
+        .update({ last_login_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', userId),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('updateMemberLastLogin timed out')), 3_000),
+      ),
+    ]);
   } catch {
-    // non-critical
+    // non-critical — Supabase may be down
   }
 }
 
@@ -611,21 +616,31 @@ export async function loginMember(email: string, password: string): Promise<Memb
   // 1. Durable fallback store first (covers members registered during Supabase email rate-limit).
   const fallbackUserId = await verifyFallbackMemberPassword(normalizedEmail, password);
   if (fallbackUserId) {
-    await updateMemberLastLogin(fallbackUserId);
-    try {
-      const supabase = getSupabaseAdmin();
-      await supabase.from('audit_logs').insert({
-        user_id: fallbackUserId,
-        action: 'member_login',
-        details: JSON.stringify({ source: 'fallback_store', email: normalizedEmail }),
-        created_at: new Date().toISOString(),
-      });
-    } catch { /* non-critical */ }
-    // Mint a real Supabase session for this fallback member via magic-link.
+    // Fire-and-forget: updateMemberLastLogin + audit log + mintSession — all non-blocking
+    // with internal timeouts so a stalled Supabase never hangs the login response.
+    void updateMemberLastLogin(fallbackUserId).catch(() => {});
+    void (async () => {
+      try {
+        const supabase = getSupabaseAdmin();
+        await Promise.race([
+          supabase.from('audit_logs').insert({
+            user_id: fallbackUserId,
+            action: 'member_login',
+            details: JSON.stringify({ source: 'fallback_store', email: normalizedEmail }),
+            created_at: new Date().toISOString(),
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('audit log timed out')), 3_000)),
+        ]);
+      } catch { /* non-critical */ }
+    })();
+    // Mint a real Supabase session for this fallback member via magic-link (with 5s timeout).
     let session: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;
     try {
       const admin = getSupabaseAdmin();
-      session = await mintSessionForFallbackMember(admin, normalizedEmail);
+      session = await Promise.race([
+        mintSessionForFallbackMember(admin, normalizedEmail),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),
+      ]);
     } catch { /* non-fatal — still return userId */ }
     return {
       success: true,
@@ -672,17 +687,25 @@ export async function loginMember(email: string, password: string): Promise<Memb
     const accessToken = data.session?.access_token || '';
     const refreshToken = data.session?.refresh_token || '';
     const expiresAt = typeof data.session?.expires_at === 'number' ? data.session.expires_at : 0;
-    await updateMemberLastLogin(userId);
+    await Promise.race([
+      updateMemberLastLogin(userId),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('updateMemberLastLogin timed out')), 3_000)),
+    ]);
     // Best-effort audit log (does not block login).
-    try {
-      const admin = getSupabaseAdmin();
-      await admin.from('audit_logs').insert({
-        user_id: userId,
-        action: 'member_login',
-        details: JSON.stringify({ source: 'supabase_auth', email: normalizedEmail }),
-        created_at: new Date().toISOString(),
-      });
-    } catch { /* non-critical */ }
+    void (async () => {
+      try {
+        const admin = getSupabaseAdmin();
+        await Promise.race([
+          admin.from('audit_logs').insert({
+            user_id: userId,
+            action: 'member_login',
+            details: JSON.stringify({ source: 'supabase_auth', email: normalizedEmail }),
+            created_at: new Date().toISOString(),
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('audit log timed out')), 3_000)),
+        ]);
+      } catch { /* non-critical */ }
+    })();
     return {
       success: true,
       message: 'Login successful.',

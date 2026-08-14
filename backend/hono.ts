@@ -3095,18 +3095,47 @@ app.post('/api/ivx/wire-submission', async (context) => {
 });
 
 app.get('/health/database', async () => {
-  const result = await checkOwnerAIDatabaseHealth();
-  return Response.json({
-    ok: result.ok,
-    ...result.detail,
-    envAudit: auditDatabaseEnvConfig(),
-    timestamp: new Date().toISOString(),
-  }, { status: result.ok ? 200 : 503 });
+  try {
+    const result = await Promise.race([
+      checkOwnerAIDatabaseHealth(),
+      new Promise<{ ok: false; detail: { error: string; hint: string } }>((resolve) =>
+        setTimeout(() => resolve({ ok: false, detail: { error: 'Database health check timed out after 5s', hint: 'Supabase may be paused or unreachable. Check the Supabase project status in the dashboard.' } }), 5_000)
+      ),
+    ]);
+    return Response.json({
+      ok: result.ok,
+      ...result.detail,
+      envAudit: auditDatabaseEnvConfig(),
+      timestamp: new Date().toISOString(),
+    }, { status: result.ok ? 200 : 503 });
+  } catch (err) {
+    return Response.json({ ok: false, error: err instanceof Error ? err.message : 'Database health check failed', hint: 'Supabase may be paused or unreachable.', timestamp: new Date().toISOString() }, { status: 503 });
+  }
 });
 
 app.get('/health/queue', async () => {
-  const result = await checkOwnerAIQueueHealth();
-  return Response.json({ ok: result.ok, ...result.detail, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
+  try {
+    const result = await Promise.race([
+      checkOwnerAIQueueHealth(),
+      new Promise<{ ok: false; detail: { error: string } }>((resolve) =>
+        setTimeout(() => resolve({ ok: false, detail: { error: 'Queue health check timed out after 5s' } }), 5_000)
+      ),
+    ]);
+    return Response.json({ ok: result.ok, ...result.detail, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
+  } catch (err) {
+    return Response.json({ ok: false, error: err instanceof Error ? err.message : 'Queue health check failed', timestamp: new Date().toISOString() }, { status: 503 });
+  }
+});
+
+// Email provider status — public endpoint showing whether an email provider is configured.
+app.get('/api/ivx/email/provider-status', async () => {
+  try {
+    const { detectConfiguredEmailProvider } = await import('./services/ivx-email-provider');
+    const status = detectConfiguredEmailProvider();
+    return Response.json({ ok: true, ...status, timestamp: new Date().toISOString(), deploymentMarker: DEPLOYMENT_MARKER });
+  } catch (err) {
+    return Response.json({ ok: false, error: err instanceof Error ? err.message : 'Email provider status check failed', timestamp: new Date().toISOString() }, { status: 500 });
+  }
 });
 
 app.get('/health/provider', () => {
@@ -5170,7 +5199,7 @@ app.post('/api/members/verify-phone', async (c) => handleVerifyPhone(c.req.raw))
 app.get('/api/members/me', async (c) => handleGetMemberProfile(c.req.raw));
 app.post('/api/members/start-kyc', async (c) => handleStartKYC(c.req.raw));
 app.get('/api/members/verification-status', async (c) => handleVerificationStatus(c.req.raw));
-app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => handleMemberLogin(c.req.raw)) as Promise<Response>);
+app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(() => handleMemberLogin(c.req.raw), () => Response.json({ success: false, message: 'Login service temporarily unavailable. Please try again.', deploymentMarker: DEPLOYMENT_MARKER }, 503))) as Promise<Response>));
 app.post('/api/ivx/owner/authorize', async (c) => handleOwnerAuthorize(c.req.raw));
 app.post('/api/members/forgot-password', async (c) => withRateLimit(c.req.raw, 'member-forgot', 3, 0.1, () => handleMemberForgotPassword(c.req.raw)) as Promise<Response>);
 app.post('/api/members/reset-password', async (c) => handleMemberResetPassword(c.req.raw));
@@ -5536,7 +5565,7 @@ app.post('/api/projects/:projectId/click', (c) => handleProjectTrackClick(c));
 
 // Featured Properties
 app.options('/api/ivx/properties/featured', () => publicFeatureOptions());
-app.get('/api/ivx/properties/featured', async (c) => handleFeaturedProperties(c.req.raw));
+app.get('/api/ivx/properties/featured', async (c) => withTimeout(() => handleFeaturedProperties(c.req.raw), () => Response.json({ properties: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 
 // Property Details
 app.options('/api/ivx/properties/:propertyId', () => publicFeatureOptions());
@@ -5552,7 +5581,7 @@ app.post('/api/ivx/auth/verify-sms', async (c) => handleVerifyPhone(c.req.raw));
 
 // Featured Properties
 app.options('/api/ivx/featured-properties', () => publicFeatureOptions());
-app.get('/api/ivx/featured-properties', async (c) => handleFeaturedProperties(c.req.raw));
+app.get('/api/ivx/featured-properties', async (c) => withTimeout(() => handleFeaturedProperties(c.req.raw), () => Response.json({ properties: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 
 // Property Details
 app.options('/api/ivx/properties/:propertyId', () => publicFeatureOptions());
@@ -5572,17 +5601,17 @@ app.get('/api/ivx/crm', async (c) => handleCRMMain(c.req.raw));
 
 // JV Deals
 app.options('/api/ivx/jv-deals', () => publicFeatureOptions());
-app.get('/api/ivx/jv-deals', async (c) => handleJVDealsList(c.req.raw));
+app.get('/api/ivx/jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 // Canonical aliases — /api/deals and /api/properties map to the ivx-prefixed routes
 app.options('/api/deals', () => publicFeatureOptions());
-app.get('/api/deals', async (c) => handleJVDealsList(c.req.raw));
+app.get('/api/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 // Public published-JV-deals and landing-deals aliases — app fetches these for content display
 app.options('/api/published-jv-deals', () => publicFeatureOptions());
-app.get('/api/published-jv-deals', async (c) => handleJVDealsList(c.req.raw));
+app.get('/api/published-jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 app.options('/api/landing-deals', () => publicFeatureOptions());
-app.get('/api/landing-deals', async (c) => handleJVDealsList(c.req.raw));
+app.get('/api/landing-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 app.options('/api/properties', () => publicFeatureOptions());
-app.get('/api/properties', async (c) => handleFeaturedProperties(c.req.raw));
+app.get('/api/properties', async (c) => withTimeout(() => handleFeaturedProperties(c.req.raw), () => Response.json({ properties: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 app.options('/api/properties/:propertyId', () => publicFeatureOptions());
 app.get('/api/properties/:propertyId', async (c) => handlePropertyDetails(c.req.raw, c.req.param('propertyId')));
 
