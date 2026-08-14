@@ -52,6 +52,19 @@ SplashScreen.preventAutoHideAsync().catch((err: unknown) => {
   console.warn("[IVX] SplashScreen.preventAutoHideAsync failed:", err);
 });
 
+// Safety net: if the root component crashes or hangs before useEffect runs,
+// the native splash would stay visible forever. Force-hide it after a hard
+// deadline so the user at least sees an error/loading screen instead of a
+// frozen logo. The normal useEffect path clears this timer and hides sooner.
+const SPLASH_HARD_DEADLINE_MS = 2500;
+let splashFallbackTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+  splashFallbackTimer = null;
+  console.warn('[IVX] Splash hard deadline reached — forcing hide');
+  SplashScreen.hideAsync().catch((err: unknown) => {
+    console.warn('[IVX] SplashScreen.hideAsync (fallback) failed:', err);
+  });
+}, SPLASH_HARD_DEADLINE_MS);
+
 // Re-export expo-router's ErrorBoundary for route-level catches
 export { ErrorBoundary } from "expo-router";
 
@@ -193,6 +206,10 @@ export default function RootLayout() {
     return () => {
       clearTimeout(hideTimer);
       clearTimeout(deferredTimer);
+      if (splashFallbackTimer) {
+        clearTimeout(splashFallbackTimer);
+        splashFallbackTimer = null;
+      }
     };
   }, []);
 

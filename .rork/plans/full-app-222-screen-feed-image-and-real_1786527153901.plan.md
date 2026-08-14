@@ -49,6 +49,8 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] Screen audit: 249/249 PASS, 0 FAIL, 0 CRITICAL.
 - [x] Playwright browser tests: NOT RUN (no Playwright config in project).
 - [x] Mobile bundle build: `./gradlew assembleQa` — SUCCESS (2026-08-14). Produced `expo/android/app/build/outputs/apk/qa/app-qa.apk` (≈82 MB, debug-signed QA variant, applicationId `com.ivxholdings.app.owner`).
+- [x] Splash screen hang fix: added a 2.5s hard-deadline fallback in `expo/app/_layout.tsx` that forces `SplashScreen.hideAsync()` even if the root React tree hangs before `useEffect` runs.
+- [x] Rebuilt APK after splash fix and uploaded to GitHub releases.
 - [x] Unit/integration tests: NOT RUN (test suite command not found in package.json).
 
 **Phase 5 — Deployment** [COMPLETED]
@@ -88,5 +90,5 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
   - JS bundle contains 2,710 `ivx` / 2,670 `IVX` / 2,051 `Invest` / 733 `deals` / 250 `Holdings` / 248 `portfolio` / 140 `wire` / 53 `reels` string occurrences.
   - Playwright rendered text shows real IVX sign-in UI: "Sign In", "Email Address", "Password", "Forgot?", "Remember Me", "Troubleshoot access", "Need a new account?", "Create regular user account", "Bank-grade encryption · Escrow protected · Regulated structure".
   - Screenshot saved at `expo/ivx-live-screenshot.png`; average color #0A0A0F confirms the dark black/gold IVX theme, not a blank white screen.
-  - Note: the GitHub token used for direct push/API dispatch expired during this session; the live deployment was already produced by the previous workflow run and is verified working.
+  - Note: the GitHub token used for direct push/API dispatch refreshed and is working again for direct push/API dispatch and release asset uploads.
 - Files changed: `expo/metro.config.js`, `expo/app.config.ts`, `expo/.watchmanconfig`, `expo/scripts/apply-patches.mjs`, `expo/patches/*.patch`, `.github/workflows/landing-s3-production-deploy.yml`.
