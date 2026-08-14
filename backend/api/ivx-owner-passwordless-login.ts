@@ -4,7 +4,7 @@ import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-durable-runtime-binding-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-durable-runtime-binding-v2-2026-08-14';
 const AUTH_TIMEOUT_MS = 10_000;
 
 function readTrimmed(value: unknown): string {
@@ -15,20 +15,15 @@ function readEnv(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-async function readRuntimeBinding(...names: string[]): Promise<string> {
-  for (const name of names) {
-    const direct = readEnv(name);
-    if (direct) return direct;
+async function readOwnerPassword(): Promise<string> {
+  const direct = readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD');
+  if (direct) return direct;
+  try {
+    return readTrimmed(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD'));
+  } catch (error) {
+    console.warn('[IVXOwnerPasswordlessLogin] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message : 'unknown');
+    return '';
   }
-  for (const name of names) {
-    try {
-      const stored = readTrimmed(await getIVXOwnerVariableRuntimeValue(name));
-      if (stored) return stored;
-    } catch (error) {
-      console.warn(`[IVXOwnerPasswordlessLogin] owner-variable lookup failed for ${name}:`, error instanceof Error ? error.message : 'unknown');
-    }
-  }
-  return '';
 }
 
 function sanitizeEmail(value: unknown): string {
@@ -89,10 +84,8 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
 
   const supabaseUrl = resolveSupabaseUrl();
   const anonKey = resolveSupabaseAnonKey();
-  const ownerEmail = ((await readRuntimeBinding('IVX_OWNER_EMAIL')) || allowlist[0] || email).toLowerCase();
-  // Credentials may be bound directly by Render or persisted in IVX's encrypted
-  // owner-variable store. Resolve both without copying, rotating, or exposing them.
-  const ownerPassword = await readRuntimeBinding('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
+  const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || allowlist[0] || email).toLowerCase();
+  const ownerPassword = await readOwnerPassword();
 
   if (!ownerPassword) {
     return failure(
