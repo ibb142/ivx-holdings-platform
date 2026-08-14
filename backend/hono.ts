@@ -5199,7 +5199,7 @@ app.post('/api/members/verify-phone', async (c) => handleVerifyPhone(c.req.raw))
 app.get('/api/members/me', async (c) => handleGetMemberProfile(c.req.raw));
 app.post('/api/members/start-kyc', async (c) => handleStartKYC(c.req.raw));
 app.get('/api/members/verification-status', async (c) => handleVerificationStatus(c.req.raw));
-app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(() => handleMemberLogin(c.req.raw), () => Response.json({ success: false, message: 'Login service temporarily unavailable. Please try again.', deploymentMarker: DEPLOYMENT_MARKER }, 503))) as Promise<Response>);
+app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(() => handleMemberLogin(c.req.raw), () => Response.json({ success: false, message: 'Login service temporarily unavailable. Please try again.', deploymentMarker: DEPLOYMENT_MARKER }, { status: 503 }))) as Promise<Response>);
 app.post('/api/ivx/owner/authorize', async (c) => handleOwnerAuthorize(c.req.raw));
 app.post('/api/members/forgot-password', async (c) => withRateLimit(c.req.raw, 'member-forgot', 3, 0.1, () => handleMemberForgotPassword(c.req.raw)) as Promise<Response>);
 app.post('/api/members/reset-password', async (c) => handleMemberResetPassword(c.req.raw));
