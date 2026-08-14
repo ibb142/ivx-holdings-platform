@@ -18,7 +18,6 @@ const DIAGNOSTIC_ENDPOINTS = [
   '/api/tool/render-status',
   '/api/tool/github-status',
   '/api/ivx/chat-debug',
-  '/api/ivx/wire-instructions',
   '/api/ivx/deploy-tools/credentials',
   '/api/ivx/deploy-tools/dashboard',
   '/api/ivx/deploy-tools/evidence',
