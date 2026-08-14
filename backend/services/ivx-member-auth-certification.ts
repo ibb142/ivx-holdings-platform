@@ -7,7 +7,7 @@ import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v3-durable-runtime-binding-2026-08-14';
+export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v3-durable-runtime-binding-v2-2026-08-14';
 const STATE_KEY = 'logs/audit/member-auth-certification/latest.json';
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUTH_TIMEOUT_MS = 10_000;
@@ -43,20 +43,6 @@ function env(...names: string[]): string {
   return '';
 }
 
-async function runtimeBinding(...names: string[]): Promise<string> {
-  const direct = env(...names);
-  if (direct) return direct;
-  for (const name of names) {
-    try {
-      const stored = String(await getIVXOwnerVariableRuntimeValue(name) || '').trim();
-      if (stored) return stored;
-    } catch (error) {
-      console.warn(`[MemberAuthCert] owner-variable lookup failed for ${name}:`, error instanceof Error ? error.message.slice(0, 140) : 'unknown');
-    }
-  }
-  return '';
-}
-
 function canonicalSupabaseUrl(): string {
   return resolveSupabaseUrl().replace(/\/+$/, '');
 }
@@ -65,14 +51,21 @@ function canonicalAnonKey(): string {
   return resolveSupabaseAnonKey();
 }
 
-async function ownerEmailFromRuntime(): Promise<string> {
-  const configured = (await runtimeBinding('IVX_OWNER_EMAIL')).toLowerCase();
+function ownerEmailFromRuntime(): string {
+  const configured = env('IVX_OWNER_EMAIL').toLowerCase();
   if (configured) return configured;
   return (getIVXOwnerEmailAllowlist()[0] || '').toLowerCase();
 }
 
 async function ownerPasswordFromRuntime(): Promise<string> {
-  return await runtimeBinding('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
+  const direct = env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
+  if (direct) return direct;
+  try {
+    return String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD') || '').trim();
+  } catch (error) {
+    console.warn('[MemberAuthCert] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message.slice(0, 140) : 'unknown');
+    return '';
+  }
 }
 
 function adminClient() {
@@ -121,9 +114,7 @@ async function passwordGrant(email: string, password: string): Promise<{ ok: boo
         body: JSON.stringify({ email, password }),
         signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
       });
-      if (response.status >= 500) {
-        throw new Error(`Supabase auth returned HTTP ${response.status}`);
-      }
+      if (response.status >= 500) throw new Error(`Supabase auth returned HTTP ${response.status}`);
       const detail = response.ok ? undefined : (await response.text().catch(() => '')).slice(0, 180);
       return { ok: response.ok, status: response.status, detail };
     });
@@ -153,9 +144,7 @@ async function cleanupSynthetic(authUserId: string | null, memberId: string | nu
   await del('landing_investments', 'investor_id', authUserId);
   await del('investors', 'user_id', authUserId);
   await del('buyers', 'id', authUserId);
-  for (const table of ['jv_partners', 'brokers', 'agents', 'land_owners', 'tokenized_investors']) {
-    await del(table, 'auth_user_id', authUserId);
-  }
+  for (const table of ['jv_partners', 'brokers', 'agents', 'land_owners', 'tokenized_investors']) await del(table, 'auth_user_id', authUserId);
   await del('members', 'auth_user_id', authUserId);
   try {
     const { error } = await sb.auth.admin.deleteUser(authUserId);
@@ -180,7 +169,7 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
     const supabaseUrl = canonicalSupabaseUrl();
     const service = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
     const anon = canonicalAnonKey();
-    const ownerEmail = await ownerEmailFromRuntime();
+    const ownerEmail = ownerEmailFromRuntime();
     const ownerPassword = await ownerPasswordFromRuntime();
     checks.runtimeConfig = {
       ok: Boolean(supabaseUrl && service && anon && ownerEmail && ownerPassword),
@@ -190,9 +179,7 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
     let authUserId: string | null = null;
     let memberId: string | null = null;
     try {
-      if (!checks.runtimeConfig.ok) {
-        throw new Error(`Runtime auth binding incomplete: ${checks.runtimeConfig.detail}`);
-      }
+      if (!checks.runtimeConfig.ok) throw new Error(`Runtime auth binding incomplete: ${checks.runtimeConfig.detail}`);
 
       const pfResponse = await retryTransient(async () => {
         const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
@@ -203,13 +190,9 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
         return res;
       }, 2, 750);
       if (!pfResponse.ok) throw new Error(`Supabase pre-flight check failed: HTTP ${pfResponse.status}`);
-      console.log('[MemberAuthCert] Pre-flight: canonical Supabase reachable');
 
       const owner = await passwordGrant(ownerEmail, ownerPassword);
-      checks.ownerLogin = {
-        ok: owner.ok,
-        detail: owner.detail ? `HTTP ${owner.status} — ${owner.detail}` : `Supabase password grant HTTP ${owner.status}`,
-      };
+      checks.ownerLogin = { ok: owner.ok, detail: owner.detail ? `HTTP ${owner.status} — ${owner.detail}` : `Supabase password grant HTTP ${owner.status}` };
 
       const qaId = randomUUID();
       const email = `ivx.qa.${Date.now()}.${qaId.slice(0, 8)}@ivxholding.com`;
@@ -226,28 +209,17 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
         roles: ['investor'],
         acceptTerms: true,
       }), 2, 1000);
-      checks.memberRegistration = {
-        ok: registration.ok && registration.stage === 'COMPLETED',
-        detail: registration.ok ? `${registration.stage} trace=${registration.traceId}` : `${registration.code} stage=${registration.stage}`,
-      };
+      checks.memberRegistration = { ok: registration.ok && registration.stage === 'COMPLETED', detail: registration.ok ? `${registration.stage} trace=${registration.traceId}` : `${registration.code} stage=${registration.stage}` };
       if (registration.ok) authUserId = registration.authUserId;
 
       const login = await passwordGrant(email, password);
-      checks.memberLogin = {
-        ok: login.ok,
-        detail: login.detail ? `HTTP ${login.status} — ${login.detail}` : `Synthetic member password grant HTTP ${login.status}`,
-      };
+      checks.memberLogin = { ok: login.ok, detail: login.detail ? `HTTP ${login.status} — ${login.detail}` : `Synthetic member password grant HTTP ${login.status}` };
 
       if (authUserId) {
         const sb = adminClient();
-        const { data: member, error } = await retryTransient(async () =>
-          sb.from('members').select('member_id,registration_status,email').eq('auth_user_id', authUserId!).maybeSingle(),
-        2, 750);
+        const { data: member, error } = await retryTransient(async () => sb.from('members').select('member_id,registration_status,email').eq('auth_user_id', authUserId!).maybeSingle(), 2, 750);
         memberId = member?.member_id || null;
-        checks.memberPersistence = {
-          ok: Boolean(memberId && !error),
-          detail: memberId ? `Canonical member persisted; registration_status=${member?.registration_status || 'unknown'}` : `Member row missing${error ? `: ${error.message}` : ''}`,
-        };
+        checks.memberPersistence = { ok: Boolean(memberId && !error), detail: memberId ? `Canonical member persisted; registration_status=${member?.registration_status || 'unknown'}` : `Member row missing${error ? `: ${error.message}` : ''}` };
       }
 
       const baseMember = {
@@ -273,9 +245,7 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
     const result: MemberAuthCertification = { marker: IVX_MEMBER_AUTH_CERT_MARKER, startedAt, completedAt: new Date().toISOString(), commit, checks, certified, secretValuesReturned: false };
     if (isDurableStoreConfigured()) {
       try { await writeDurableJson(STATE_KEY, result); }
-      catch (persistError) {
-        console.warn('[MemberAuthCert] Durable store write failed (non-fatal):', persistError instanceof Error ? persistError.message.slice(0, 120) : persistError);
-      }
+      catch (persistError) { console.warn('[MemberAuthCert] Durable store write failed (non-fatal):', persistError instanceof Error ? persistError.message.slice(0, 120) : persistError); }
     }
     return result;
   })();
@@ -284,22 +254,14 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
 
 export async function getLatestMemberAuthCertification(): Promise<MemberAuthCertification | null> {
   if (!isDurableStoreConfigured()) return null;
-  try {
-    return await readDurableJson<MemberAuthCertification | null>(STATE_KEY, null);
-  } catch (error) {
-    console.warn('[MemberAuthCert] Durable store read failed:', error instanceof Error ? error.message.slice(0, 120) : error);
-    return null;
-  }
+  try { return await readDurableJson<MemberAuthCertification | null>(STATE_KEY, null); }
+  catch (error) { console.warn('[MemberAuthCert] Durable store read failed:', error instanceof Error ? error.message.slice(0, 120) : error); return null; }
 }
 
 export function startMemberAuthCertificationScheduler(): void {
   if (timer) return;
-  const boot = setTimeout(() => {
-    void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] boot failed', error instanceof Error ? error.message : error));
-  }, 20_000);
+  const boot = setTimeout(() => { void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] boot failed', error instanceof Error ? error.message : error)); }, 20_000);
   boot.unref?.();
-  timer = setInterval(() => {
-    void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] interval failed', error instanceof Error ? error.message : error));
-  }, INTERVAL_MS);
+  timer = setInterval(() => { void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] interval failed', error instanceof Error ? error.message : error)); }, INTERVAL_MS);
   timer.unref?.();
 }
