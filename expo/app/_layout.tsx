@@ -259,7 +259,7 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: Colors.background, color: Colors.text },
   providerError: {
     flex: 1,
     backgroundColor: Colors.background,

@@ -86,6 +86,18 @@ export function injectWebKeyboardCSS() {
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `
+    /* IVX dark theme: override react-native-web's default black text color.
+       react-native-web sets color: rgb(0,0,0) on all Text elements by default.
+       On a black background, this makes text invisible. Override to inherit
+       so the root View's color (#FFFFFF) cascades down. */
+    #root {
+      color: #FFFFFF;
+      background-color: #000000;
+    }
+    .css-146c3p1 {
+      color: inherit;
+    }
+
     /* IVX Samsung keyboard fix — ensure inputs are focusable and editable */
     textarea, input[type="text"], input[type="email"], input[type="password"],
     input[type="search"], input[type="tel"], input[type="url"], [contenteditable] {
