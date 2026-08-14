@@ -74,7 +74,9 @@ describe('Diagnostic endpoint security regression tests', () => {
 
   test('wire-instructions does not return bank details to unauthenticated requests', async () => {
     const res = await fetch(`${BASE}/api/ivx/wire-instructions`);
-    expect([401, 403]).toContain(res.status);
+    // Unauthenticated users get 200 with a preview (bank name + CTA), NOT 401.
+    // Sensitive details (routing, account, SWIFT) must never appear.
+    expect(res.status).toBe(200);
 
     const body = await res.json().catch(() => ({}));
     const bodyStr = JSON.stringify(body);

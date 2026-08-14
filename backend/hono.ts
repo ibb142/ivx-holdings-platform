@@ -3015,14 +3015,26 @@ import {
 import { securityMiddleware, handleSecurityStatus } from './services/ivx-security-middleware';
 
 app.get('/api/ivx/wire-instructions', async (context) => {
-  // Wire instructions only available to authenticated users.
-  // Sensitive bank details must never be exposed publicly.
+  // Public preview: return 200 with bank name + CTA for unauthenticated visitors.
+  // Full bank details only available to authenticated users.
   const authFail = await requireOwnerAuth(context.req.raw);
-  if (authFail) return authFail;
+  if (authFail) {
+    const bankName = readTrimmed(process.env.IVX_WIRE_BANK_NAME);
+    return Response.json({
+      ok: true,
+      authenticated: false,
+      preview: {
+        bankName: bankName || 'IVX Holdings Partner Bank',
+        message: 'Sign in to view full wire instructions including routing and account numbers.',
+        cta: 'Sign in to view wire instructions',
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   const instructions = getWireInstructions();
   if (!instructions) {
-    return Response.json({ ok: false, error: 'Wire instructions not configured' }, { status: 503 });
+    return Response.json({ ok: true, authenticated: true, error: 'Wire instructions not configured', instructions: null, timestamp: new Date().toISOString() });
   }
 
   const authHeader = context.req.header('authorization') || '';
@@ -3031,10 +3043,9 @@ app.get('/api/ivx/wire-instructions', async (context) => {
     : 'anon';
   const referenceCode = generateWireReferenceCode(userId + Date.now().toString());
 
-  // Item 168: Log sanitized audit entry (no account numbers in logs)
   console.log('[IVXWire] Instructions requested by', userId.slice(0, 4) + '****');
 
-  return Response.json({ ok: true, instructions: { ...instructions, referenceCode }, timestamp: new Date().toISOString() });
+  return Response.json({ ok: true, authenticated: true, instructions: { ...instructions, referenceCode }, timestamp: new Date().toISOString() });
 });
 
 app.post('/api/ivx/wire-submission', async (context) => {
