@@ -138,7 +138,7 @@ async function deploy() {
   let ok = 0, fail = 0;
   const results = [];
 
-  // ── HTML files (no-cache) ───────────────────────────
+  // ── HTML files (no-cache, security headers) ─────────────────
   const htmlFiles = [
     { path: LANDING_DIR + '/index.html', key: 'index.html', inject: true },
     { path: LANDING_DIR + '/capture.html', key: 'capture.html' },
@@ -147,6 +147,12 @@ async function deploy() {
     { path: LANDING_DIR + '/enterprise-register.html', key: 'enterprise-register', injectBackend: true },
     { path: LANDING_DIR + '/reset-password.html', key: 'reset-password.html', injectBackend: true },
     { path: LANDING_DIR + '/reset-password.html', key: 'reset-password', injectBackend: true },
+    // ── Standalone legal pages ──
+    { path: LANDING_DIR + '/privacy.html', key: 'privacy.html' },
+    { path: LANDING_DIR + '/terms.html', key: 'terms.html' },
+    { path: LANDING_DIR + '/disclosures.html', key: 'disclosures.html' },
+    { path: LANDING_DIR + '/cookie.html', key: 'cookie.html' },
+    { path: LANDING_DIR + '/legal.html', key: 'legal.html' },
   ];
 
   for (const f of htmlFiles) {
@@ -162,6 +168,14 @@ async function deploy() {
         Bucket: BUCKET, Key: f.key, Body: body,
         ContentType: 'text/html; charset=utf-8',
         CacheControl: 'no-cache, no-store, must-revalidate',
+        // Security headers via S3 metadata (CloudFront can forward these)
+        Metadata: {
+          'x-ivx-hsts': 'max-age=31536000; includeSubDomains; preload',
+          'x-ivx-xfo': 'DENY',
+          'x-ivx-xcto': 'nosniff',
+          'x-ivx-referrer': 'strict-origin-when-cross-origin',
+          'x-ivx-permissions': 'geolocation=(), microphone=(), camera=(), payment=()',
+        },
       }));
       console.log('✅ UPLOADED', f.key, '(' + body.length + ' bytes)');
       results.push({ key: f.key, status: 'ok', size: body.length });
@@ -201,14 +215,19 @@ async function deploy() {
     }
   }
 
-  // ── CSS/JS files (immutable, long cache) ───────────
+  // ── CSS/JS files (immutable, long cache, security headers) ───
   const assetFiles = [
     { path: LANDING_DIR + '/ivx-styles.css', key: 'ivx-styles.css', type: 'text/css; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-analytics.js', key: 'ivx-analytics.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-home-feed.js', key: 'ivx-home-feed.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-invest.js', key: 'ivx-invest.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-portal.js', key: 'ivx-portal.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-lazy-bridge.js', key: 'ivx-lazy-bridge.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-ui-utils.js', key: 'ivx-ui-utils.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-web-vitals.js', key: 'ivx-web-vitals.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-wire.js', key: 'ivx-wire.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/landing-support-chat.js', key: 'landing-support-chat.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/landing-support-chat.css', key: 'landing-support-chat.css', type: 'text/css; charset=utf-8' },
   ];
@@ -221,6 +240,9 @@ async function deploy() {
         Bucket: BUCKET, Key: f.key, Body: body,
         ContentType: f.type,
         CacheControl: 'public, max-age=31536000, immutable',
+        Metadata: {
+          'x-ivx-xcto': 'nosniff',
+        },
       }));
       console.log('✅ UPLOADED', f.key, '(' + body.length + ' bytes, immutable cache)');
       results.push({ key: f.key, status: 'ok', size: body.length });

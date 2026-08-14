@@ -134,7 +134,12 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 export async function handleJVDealsList(req: Request): Promise<Response> {
   try {
     const sb = await getSB();
-    const { data, error, count } = await sb.from('jv_deals').select('*', { count: 'exact', head: false }).eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(50);
+    const { data, error, count } = await sb.from('jv_deals')
+      .select('id,title,slug,description,location,property_type,target_raise,minimum_investment,projected_roi,term_length,status,published,display_order,featured_image_url,gallery_urls,updated_at')
+      .eq('published', true)
+      .order('display_order', { ascending: true, nullsFirst: false })
+      .order('updated_at', { ascending: false })
+      .limit(50);
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ deals: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) { return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500); }
