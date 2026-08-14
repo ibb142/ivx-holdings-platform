@@ -1666,6 +1666,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     };
   }, [clearTwoFactorState, handleSession, requireTwoFactorIfNeeded]);
 
+  // Absolute hard timeout: no matter what happens during auth bootstrap,
+  // the router must never stay locked on a loading state. If isLoading is
+  // still true after 3s, force it false so the login screen can render.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('[Auth] Hard unlock timeout reached — forcing isLoading=false');
+        logStartup('AUTH_HARD_UNLOCK');
+        setIsLoading(false);
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
   const loginOwnerPasswordless = useCallback(async (ownerEmail: string): Promise<LoginResult> => {
     const normalizedOwnerEmail = sanitizeEmail(ownerEmail);
     if (!normalizedOwnerEmail) {

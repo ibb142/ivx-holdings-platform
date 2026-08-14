@@ -11,11 +11,11 @@
  * In a production APK this produces a permanent black screen with no error.
  *
  * By keeping _layout.tsx ultra-minimal, the first frame always paints a
- * visible loading screen. Then _providers.tsx is require()'d inside a
- * try/catch — if it throws, we show the full error on screen.
+ * visible loading screen. Then _providers.tsx is import()'d asynchronously.
+ * If it throws or times out, we show the full error on screen.
  */
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
@@ -35,7 +35,7 @@ export { ErrorBoundary } from 'expo-router';
 // -------------------------------------------------------------------
 // Visible loading screen — always renders on first paint.
 // -------------------------------------------------------------------
-function VisibleLoadingScreen() {
+function VisibleLoadingScreen({ elapsedMs }: { elapsedMs: number }) {
   useEffect(() => {
     // Hide splash as soon as this visible loading screen paints.
     requestAnimationFrame(() => {
@@ -47,6 +47,7 @@ function VisibleLoadingScreen() {
       <Text style={loadingStyles.title}>IVX Holdings</Text>
       <ActivityIndicator size="large" color="#E6C200" style={{ marginTop: 24 }} />
       <Text style={loadingStyles.subtitle}>Loading secure session…</Text>
+      <Text style={loadingStyles.elapsed}>{`Elapsed: ${(elapsedMs / 1000).toFixed(1)}s`}</Text>
     </View>
   );
 }
@@ -60,9 +61,9 @@ function logHideSplash() {
 }
 
 // -------------------------------------------------------------------
-// Error screen shown when provider import fails.
+// Error screen shown when provider import fails or times out.
 // -------------------------------------------------------------------
-function ImportCrashScreen({ error }: { error: Error }) {
+function ImportCrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) {
   return (
     <View style={crashStyles.container}>
       <Text style={crashStyles.title}>IVX Startup Error</Text>
@@ -70,6 +71,9 @@ function ImportCrashScreen({ error }: { error: Error }) {
       {error.stack ? (
         <Text style={crashStyles.stack}>{error.stack.slice(0, 1500)}</Text>
       ) : null}
+      <TouchableOpacity style={crashStyles.button} onPress={onRetry}>
+        <Text style={crashStyles.buttonText}>Retry</Text>
+      </TouchableOpacity>
       <Text style={crashStyles.hint}>
         If this persists, clear app data or reinstall.
       </Text>
@@ -80,38 +84,77 @@ function ImportCrashScreen({ error }: { error: Error }) {
 // -------------------------------------------------------------------
 // Root component.
 // -------------------------------------------------------------------
+const PROVIDER_LOAD_TIMEOUT_MS = 15000;
+
 export default function RootLayout() {
   const [providersModule, setProvidersModule] = useState<{ AppProviders: React.ComponentType } | null>(null);
   const [importError, setImportError] = useState<Error | null>(null);
+  const [startTime] = useState(() => Date.now());
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    const elapsedTimer = setInterval(() => {
+      setElapsedMs(Date.now() - startTime);
+    }, 200);
+    return () => clearInterval(elapsedTimer);
+  }, [startTime]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProviders = async () => {
+      if (!cancelled) {
+        setProvidersModule(null);
+        setImportError(null);
+      }
+      try {
+        const mod = await Promise.race([
+          import('./_providers'),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Provider bundle load timed out after ${PROVIDER_LOAD_TIMEOUT_MS}ms`)),
+              PROVIDER_LOAD_TIMEOUT_MS,
+            ),
+          ),
+        ]);
+        if (!cancelled) {
+          setProvidersModule({ AppProviders: mod.AppProviders });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          console.error('[IVX] Provider import crashed:', error.message, error.stack);
+          setImportError(error);
+          logHideSplash();
+        }
+      }
+    };
+
     // Defer provider loading to the next frame so the loading screen paints first.
     const timer = setTimeout(() => {
-      try {
-        // Dynamic require — if any provider module throws during import
-        // evaluation, we catch it here and show the error on screen.
-        const mod = require('./_providers');
-        setProvidersModule({ AppProviders: mod.AppProviders });
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        console.error('[IVX] Provider import crashed:', error.message, error.stack);
-        setImportError(error);
-        // Still hide splash if it hasn't been hidden yet.
-        logHideSplash();
-      }
+      void loadProviders();
     }, 50);
 
-    return () => clearTimeout(timer);
-  }, []);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [attempt]);
 
   // Phase 1: show visible loading screen (no providers, no Stack).
   if (!providersModule && !importError) {
-    return <VisibleLoadingScreen />;
+    return <VisibleLoadingScreen elapsedMs={elapsedMs} />;
   }
 
   // Phase 2: provider import failed — show error.
   if (importError) {
-    return <ImportCrashScreen error={importError} />;
+    return (
+      <ImportCrashScreen
+        error={importError}
+        onRetry={() => setAttempt((a) => a + 1)}
+      />
+    );
   }
 
   // Phase 3: providers loaded successfully — render the full app.
@@ -136,9 +179,14 @@ const loadingStyles = StyleSheet.create({
     letterSpacing: 2,
   },
   subtitle: {
-    color: '#555555',
+    color: '#888888',
     fontSize: 13,
     marginTop: 12,
+  },
+  elapsed: {
+    color: '#555555',
+    fontSize: 11,
+    marginTop: 8,
   },
 });
 
@@ -168,8 +216,22 @@ const crashStyles = StyleSheet.create({
     lineHeight: 14,
     marginBottom: 16,
   },
+  button: {
+    backgroundColor: '#FFD700',
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  buttonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   hint: {
     color: '#888',
     fontSize: 12,
+    textAlign: 'center',
   },
 });

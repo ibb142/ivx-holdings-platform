@@ -13,7 +13,7 @@ import { Redirect } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { logStartup } from '@/lib/startup-trace';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {View, StyleSheet } from "react-native";
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { EmptyState } from '@/components/ivx';
@@ -21,19 +21,34 @@ import { ErrorState } from '@/components/ivx';
 import { RefreshControl } from 'react-native';
 import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
+const INDEX_LOADING_TIMEOUT_MS = 4000;
+
 export default function IndexScreen() {
   // Realtime: auto-invalidate on DB changes
   useRealtimeTable('notifications', [['notifications']]);
   const { isAuthenticated, isLoading } = useAuth();
+  const [forceLogin, setForceLogin] = useState(false);
 
   useEffect(() => {
     logStartup('INITIAL_ROUTE_SELECTED', 'index');
   }, []);
 
+  // Hard timeout: never stay on a loading spinner longer than 4s.
+  // If auth bootstrap hangs for any reason, send the user to login.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('[Index] Auth bootstrap hard timeout — redirecting to login');
+        setForceLogin(true);
+      }
+    }, INDEX_LOADING_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
   // During the brief auth bootstrap window, show a dark loading screen
   // instead of a black frame. isLoading is set to false in a microtask
   // so this is at most one frame.
-  if (isLoading) {
+  if (isLoading && !forceLogin) {
     return (
       <View style={styles.container}>
         <ShimmerIndicator size="large" color="#FFD700" />
