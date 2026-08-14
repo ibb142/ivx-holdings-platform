@@ -1,311 +1,175 @@
-import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, Component, type ReactNode } from "react";
-import { StyleSheet, View, Text, Platform, TouchableOpacity } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+/**
+ * Root layout — MINIMAL module surface.
+ *
+ * This file imports ONLY React, expo-router, expo-splash-screen, and basic
+ * react-native primitives. All provider imports are deferred to _providers.tsx
+ * which is loaded dynamically AFTER the first paint.
+ *
+ * Why: if any provider module crashes during `import` evaluation (a missing
+ * native binding, a circular dependency, a Supabase init throw), the error
+ * boundary can never catch it because the module never finishes evaluating.
+ * In a production APK this produces a permanent black screen with no error.
+ *
+ * By keeping _layout.tsx ultra-minimal, the first frame always paints a
+ * visible loading screen. Then _providers.tsx is require()'d inside a
+ * try/catch — if it throws, we show the full error on screen.
+ */
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 
-// Diagnostic error boundary — shows the FULL crash on screen
-import { DiagnosticErrorBoundary } from "@/components/DiagnosticErrorBoundary";
-import { injectWebKeyboardCSS } from "@/hooks/useWebKeyboard";
-import { checkForUpdates } from "@/lib/app-update-checker";
-import { logStartup, logStartupError } from "@/lib/startup-trace";
+// Prevent native splash from auto-hiding.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// Static imports — all providers with per-provider error boundaries
-import { I18nProvider } from "@/lib/i18n-context";
-import { AuthProvider } from "@/lib/auth-context";
-import { AnalyticsProvider } from "@/lib/analytics-context";
-import { IPXProvider } from "@/lib/ipx-context";
-import { WalletProvider } from "@/lib/wallet-context";
-import { EarnProvider } from "@/lib/earn-context";
-import { EmailProvider } from "@/lib/email-context";
-import { NetworkProvider } from "@/lib/network-context";
-import Colors from "@/constants/colors";
-
-// Instagram-style cache-first QueryClient:
-// - Long staleTime so cached data renders instantly (no spinner)
-// - Long gcTime so cache survives navigation between tabs
-// - refetchOnMount: false to avoid refetch on tab switches (served from cache immediately)
-// - placeholderData: keepPreviousData so paginated feeds never flash blank
-// - retry: 1 with short delays for fast recovery
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60_000, // 5 minutes — data stays fresh, no refetch on mount
-      gcTime: 30 * 60_000, // 30 minutes — cache survives tab navigation
-      retry: 1,
-      refetchOnMount: false, // Don't refetch when switching tabs — serve cache instantly
-      refetchOnReconnect: true,
-      refetchOnWindowFocus: false,
-      networkMode: 'online',
-      // keepPreviousData: true — serve stale data while refetching (Instagram pattern)
-    },
-    mutations: {
-      retry: 1,
-      networkMode: 'online'}}});
-
-// Prevent native splash from auto-hiding before React renders.
-// Without this, Android dismisses the native splash before the JS bundle
-// has loaded and rendered the first screen, producing a black screen.
-SplashScreen.preventAutoHideAsync().catch((err: unknown) => {
-  console.warn("[IVX] SplashScreen.preventAutoHideAsync failed:", err);
-});
-
-// Safety net: if the root component crashes or hangs before useEffect runs,
-// the native splash would stay visible forever. Force-hide it after a hard
-// deadline so the user at least sees an error/loading screen instead of a
-// frozen logo. The normal useEffect path clears this timer and hides sooner.
-const SPLASH_HARD_DEADLINE_MS = 2500;
+// Hard deadline: force-hide splash even if React never mounts useEffect.
 let splashFallbackTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
   splashFallbackTimer = null;
   console.warn('[IVX] Splash hard deadline reached — forcing hide');
-  SplashScreen.hideAsync().catch((err: unknown) => {
-    console.warn('[IVX] SplashScreen.hideAsync (fallback) failed:', err);
-  });
-}, SPLASH_HARD_DEADLINE_MS);
+  SplashScreen.hideAsync().catch(() => {});
+}, 2500);
 
-// Re-export expo-router's ErrorBoundary for route-level catches
-export { ErrorBoundary } from "expo-router";
+// Re-export expo-router's ErrorBoundary for route-level catches.
+export { ErrorBoundary } from 'expo-router';
 
-// --- Per-provider error boundary: isolates which provider crashed
-interface ProviderBoundaryProps {
-  name: string;
-  children: ReactNode;
-}
-interface ProviderBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-  traceId: string | null;
-}
-function classifyProviderError(error: Error): 'RENDER_ERROR' | 'AUTH_ERROR' | 'NETWORK_ERROR' | 'CONFIG_ERROR' | 'UNKNOWN_ERROR' {
-  const msg = (error.message || '').toLowerCase();
-  if (msg.includes('maximum update depth') || msg.includes('render') || msg.includes('component')) return 'RENDER_ERROR';
-  if (msg.includes('auth') || msg.includes('session') || msg.includes('token')) return 'AUTH_ERROR';
-  if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return 'NETWORK_ERROR';
-  if (msg.includes('supabase url') || msg.includes('config') || msg.includes('api key')) return 'CONFIG_ERROR';
-  return 'UNKNOWN_ERROR';
-}
-class ProviderBoundary extends Component<ProviderBoundaryProps, ProviderBoundaryState> {
-  constructor(props: ProviderBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null, traceId: null };
-  }
-  static getDerivedStateFromError(error: Error): Partial<ProviderBoundaryState> {
-    return {
-      hasError: true,
-      error,
-      traceId: 'IVX-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8)};
-  }
-  componentDidCatch(error: Error) {
-    const category = classifyProviderError(error);
-    console.warn(`[IVX] Provider "${this.props.name}" crashed — category: ${category}`, error.message, error.stack);
-  }
-  render() {
-    if (this.state.hasError) {
-      const category = this.state.error ? classifyProviderError(this.state.error) : 'UNKNOWN_ERROR';
-      return (
-        <View style={styles.providerError}>
-          <Text style={styles.providerErrorName}>IVX encountered a rendering error</Text>
-          <Text style={styles.providerErrorMsg}>
-            {category}: {this.state.error?.message || "Unknown error"}
-          </Text>
-          {this.state.traceId && (
-            <Text style={styles.providerErrorTrace}>Trace ID: {this.state.traceId}</Text>
-          )}
-          <TouchableOpacity style={styles.providerErrorButton} onPress={() => this.setState({ hasError: false, error: null, traceId: null })}>
-            <Text style={styles.providerErrorButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-/** Lightweight probe that logs the checkpoint when the provider tree is mounted. */
-function ProviderMountProbe({ children }: { children: ReactNode }) {
+// -------------------------------------------------------------------
+// Visible loading screen — always renders on first paint.
+// -------------------------------------------------------------------
+function VisibleLoadingScreen() {
   useEffect(() => {
-    logStartup('PROVIDERS_STARTED');
-    logStartup('PROVIDERS_COMPLETED');
-    logStartup('PROVIDERS_MOUNTED');
-  }, []);
-  return <>{children}</>;
-}
-
-export default function RootLayout() {
-  logStartup('ROOT_COMPONENT_MOUNTED');
-  logStartup('APP_MOUNTED');
-  logStartup('ROOT_LAYOUT_RENDERED');
-  logStartup('ERROR_BOUNDARY_MOUNTED');
-
-  useEffect(() => {
-    // Inject Samsung keyboard CSS on web — ensures inputs are focusable
-    // and editable on Samsung Internet / Android Chrome.
-    try {
-      injectWebKeyboardCSS();
-    } catch (err) {
-      console.warn("[IVX] injectWebKeyboardCSS failed:", err);
-    }
-
-    // Defer splash screen dismissal to the next frame so the React tree has
-    // rendered at least one frame before the native splash disappears.
-    // This prevents the black frame between splash and first paint.
-    const hideTimer = setTimeout(() => {
-      logStartup('SPLASH_HIDE_STARTED');
-      SplashScreen.hideAsync()
-        .then(() => {
-          logStartup('SPLASH_HIDE_COMPLETED');
-          logStartup('APP_INTERACTIVE');
-        })
-        .catch((err: unknown) => {
-          logStartupError('SPLASH_HIDE_COMPLETED', err);
-          // Even if splash hide fails, the React tree is already rendered
-          // underneath — the app is interactive.
-          logStartup('APP_INTERACTIVE');
-          console.warn('[IVX] SplashScreen.hideAsync failed:', err);
-        });
-    }, 0);
-
-    // Non-fatal OTA update check — runs in background, NEVER crashes the app.
-    // If the update server is unreachable, the app continues with the
-    // embedded or cached bundle. See lib/ota-error-handler.ts for details.
-    checkForUpdates().catch((err) => {
-      console.warn("[IVX] OTA update check failed (non-fatal):", err);
+    // Hide splash as soon as this visible loading screen paints.
+    requestAnimationFrame(() => {
+      logHideSplash();
     });
-
-    // Defer all startup instrumentation to after first paint.
-    // These modules (incident capture, owner AI watchdog) are owner-only
-    // and should not block the initial bundle download or app boot.
-    const deferredTimer = setTimeout(() => {
-      try {
-        const { installTextNodeGuard } = require("@/lib/text-node-guard");
-        installTextNodeGuard();
-      } catch (err) {
-        console.warn("[IVX] installTextNodeGuard failed", err);
-      }
-      try {
-        const { installIVXIncidentCapture } = require("@/lib/ivx-incident-client");
-        installIVXIncidentCapture();
-      } catch (err) {
-        console.warn("[IVX] installIVXIncidentCapture failed", err);
-      }
-      // Owner AI watchdog bridge — only needed when owner chat is active.
-      // Load lazily so it doesn't block startup for non-owner users.
-      try {
-        const { installIVXWatchdogIncidentBridge } = require("@/lib/ivx-incident-client");
-        const { ivxAIWatchdog } = require("@/src/modules/ivx-owner-ai/services/ivxAIWatchdog");
-        installIVXWatchdogIncidentBridge((listener: unknown) =>
-          ivxAIWatchdog.subscribe(listener),
-        );
-      } catch (err) {
-        console.warn("[IVX] installIVXWatchdogIncidentBridge failed", err);
-      }
-    }, 3000);
-
-    return () => {
-      clearTimeout(hideTimer);
-      clearTimeout(deferredTimer);
-      if (splashFallbackTimer) {
-        clearTimeout(splashFallbackTimer);
-        splashFallbackTimer = null;
-      }
-    };
   }, []);
-
   return (
-    <DiagnosticErrorBoundary>
-      <GestureHandlerRootView
-        style={styles.root}
-        {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}
-      >
-        <QueryClientProvider client={queryClient}>
-          <ProviderBoundary name="I18n">
-            <I18nProvider>
-              <ProviderBoundary name="Auth">
-                <AuthProvider>
-                  <ProviderBoundary name="Analytics">
-                    <AnalyticsProvider>
-                      <ProviderBoundary name="IPX">
-                        <IPXProvider>
-                          <ProviderBoundary name="Wallet">
-                            <WalletProvider>
-                              <ProviderBoundary name="Earn">
-                                <EarnProvider>
-                                  <ProviderBoundary name="Email">
-                                    <EmailProvider>
-                              <ProviderBoundary name="Network">
-                                    <NetworkProvider>
-                              <ProviderMountProbe>
-                                <StatusBar style="light" />
-                                <Stack
-                                  screenOptions={{
-                                    headerShown: false,
-                                    contentStyle: { backgroundColor: Colors.background }}}
-                                >
-                                  <Stack.Screen name="login" options={{ headerShown: false }} />
-                                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                                  <Stack.Screen name="admin" options={{ headerShown: false }} />
-                                  <Stack.Screen name="ivx" options={{ headerShown: false }} />
-                                  <Stack.Screen name="property" options={{ headerShown: false }} />
-                                  <Stack.Screen name="landing" options={{ headerShown: false }} />
-                                  <Stack.Screen name="signup" options={{ headerShown: false }} />
-                                  <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-                                </Stack>
-                              </ProviderMountProbe>
-                                    </NetworkProvider>
-                                  </ProviderBoundary>
-                                    </EmailProvider>
-                                  </ProviderBoundary>
-                                </EarnProvider>
-                              </ProviderBoundary>
-                            </WalletProvider>
-                          </ProviderBoundary>
-                        </IPXProvider>
-                      </ProviderBoundary>
-                    </AnalyticsProvider>
-                  </ProviderBoundary>
-                </AuthProvider>
-              </ProviderBoundary>
-            </I18nProvider>
-          </ProviderBoundary>
-        </QueryClientProvider>
-      </GestureHandlerRootView>
-    </DiagnosticErrorBoundary>
+    <View style={loadingStyles.container}>
+      <Text style={loadingStyles.title}>IVX Holdings</Text>
+      <ActivityIndicator size="large" color="#E6C200" style={{ marginTop: 24 }} />
+      <Text style={loadingStyles.subtitle}>Loading secure session…</Text>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background, color: Colors.text },
-  providerError: {
+function logHideSplash() {
+  SplashScreen.hideAsync().catch(() => {});
+  if (splashFallbackTimer) {
+    clearTimeout(splashFallbackTimer);
+    splashFallbackTimer = null;
+  }
+}
+
+// -------------------------------------------------------------------
+// Error screen shown when provider import fails.
+// -------------------------------------------------------------------
+function ImportCrashScreen({ error }: { error: Error }) {
+  return (
+    <View style={crashStyles.container}>
+      <Text style={crashStyles.title}>IVX Startup Error</Text>
+      <Text style={crashStyles.message}>{error.message}</Text>
+      {error.stack ? (
+        <Text style={crashStyles.stack}>{error.stack.slice(0, 1500)}</Text>
+      ) : null}
+      <Text style={crashStyles.hint}>
+        If this persists, clear app data or reinstall.
+      </Text>
+    </View>
+  );
+}
+
+// -------------------------------------------------------------------
+// Root component.
+// -------------------------------------------------------------------
+export default function RootLayout() {
+  const [providersModule, setProvidersModule] = useState<{ AppProviders: React.ComponentType } | null>(null);
+  const [importError, setImportError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    // Defer provider loading to the next frame so the loading screen paints first.
+    const timer = setTimeout(() => {
+      try {
+        // Dynamic require — if any provider module throws during import
+        // evaluation, we catch it here and show the error on screen.
+        const mod = require('./_providers');
+        setProvidersModule({ AppProviders: mod.AppProviders });
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        console.error('[IVX] Provider import crashed:', error.message, error.stack);
+        setImportError(error);
+        // Still hide splash if it hasn't been hidden yet.
+        logHideSplash();
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Phase 1: show visible loading screen (no providers, no Stack).
+  if (!providersModule && !importError) {
+    return <VisibleLoadingScreen />;
+  }
+
+  // Phase 2: provider import failed — show error.
+  if (importError) {
+    return <ImportCrashScreen error={importError} />;
+  }
+
+  // Phase 3: providers loaded successfully — render the full app.
+  const { AppProviders } = providersModule!;
+  return <AppProviders />;
+}
+
+// -------------------------------------------------------------------
+// Styles
+// -------------------------------------------------------------------
+const loadingStyles = StyleSheet.create({
+  container: {
     flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24},
-  providerErrorName: {
-    color: Colors.error,
-    fontSize: 16,
-    fontWeight: "700" as const,
-    marginBottom: 8},
-  providerErrorMsg: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontFamily: "monospace" as const,
-    textAlign: "center" as const,
-    marginBottom: 8},
-  providerErrorTrace: {
-    color: Colors.textTertiary,
+    backgroundColor: '#0A0A0F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    color: '#E6C200',
+    fontSize: 28,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  subtitle: {
+    color: '#555555',
+    fontSize: 13,
+    marginTop: 12,
+  },
+});
+
+const crashStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#1a0000',
+    padding: 20,
+    justifyContent: 'center',
+  },
+  title: {
+    color: '#FF4444',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  message: {
+    color: '#FFAAAA',
+    fontSize: 14,
+    fontFamily: 'monospace',
+    marginBottom: 16,
+  },
+  stack: {
+    color: '#DDAAAA',
     fontSize: 10,
-    fontFamily: "monospace" as const,
-    textAlign: "center" as const,
-    marginBottom: 16},
-  providerErrorButton: {
-    backgroundColor: Colors.gold,
-    borderRadius: 12,
-    paddingHorizontal: 32,
-    paddingVertical: 14},
-  providerErrorButtonText: {
-    color: Colors.black,
-    fontSize: 16,
-    fontWeight: "700" as const}});
+    fontFamily: 'monospace',
+    lineHeight: 14,
+    marginBottom: 16,
+  },
+  hint: {
+    color: '#888',
+    fontSize: 12,
+  },
+});
