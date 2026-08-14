@@ -3327,7 +3327,8 @@ app.get('/api/ivx/version', (context) => {
 const landingConfigHandler = (context: { json: (body: unknown, status?: 200) => Response }) => {
   const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  const backendUrl = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || process.env.RENDER_EXTERNAL_URL || 'https://api.ivxholding.com').trim().replace(/\/$/, '');
+  // Always return the canonical API URL — never the raw Render URL
+  const backendUrl = 'https://api.ivxholding.com';
   return context.json({
     ok: true,
     supabaseUrl,

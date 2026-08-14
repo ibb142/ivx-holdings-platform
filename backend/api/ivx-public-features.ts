@@ -134,15 +134,27 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 export async function handleJVDealsList(req: Request): Promise<Response> {
   try {
     const sb = await getSB();
+    // Use a AbortController timeout to prevent Supabase 522 from hanging the request
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const { data, error, count } = await sb.from('jv_deals')
       .select('id,title,slug,description,location,property_type,target_raise,minimum_investment,projected_roi,term_length,status,published,display_order,featured_image_url,gallery_urls,updated_at')
       .eq('published', true)
       .order('display_order', { ascending: true, nullsFirst: false })
       .order('updated_at', { ascending: false })
-      .limit(50);
+      .limit(50)
+      .abortSignal(controller.signal);
+    clearTimeout(timeout);
     if (error) return json({ error: error.message, deploymentMarker: DEPLOYMENT_MARKER }, 500);
     return json({ deals: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
-  } catch (err: unknown) { return json({ error: (err instanceof Error ? err.message : String(err)), deploymentMarker: DEPLOYMENT_MARKER }, 500); }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // If Supabase is unreachable, return empty deals instead of hanging
+    if (msg.includes('abort') || msg.includes('timeout') || msg.includes('522') || msg.includes('timed out')) {
+      return json({ deals: [], count: 0, error: 'Deals temporarily unavailable', deploymentMarker: DEPLOYMENT_MARKER }, 200);
+    }
+    return json({ error: msg, deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  }
 }
 
 // ── Property Admin ────────────────────────────────────────────────────────
