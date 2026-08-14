@@ -3,10 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { orchestrateRegistration } from './ivx-registration-orchestrator';
 import { calculateFinancialSummary, determineTier } from './ivx-member-classification';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
+import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
+import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v1-2026-08-12';
+export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v2-canonical-binding-2026-08-14';
 const STATE_KEY = 'logs/audit/member-auth-certification/latest.json';
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
+const AUTH_TIMEOUT_MS = 10_000;
 
 type Check = { ok: boolean; detail: string };
 export type MemberAuthCertification = {
@@ -39,14 +42,41 @@ function env(...names: string[]): string {
   return '';
 }
 
-function adminClient() {
-  const url = env('SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL');
-  const service = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
-  return createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+function canonicalSupabaseUrl(): string {
+  return resolveSupabaseUrl().replace(/\/+$/, '');
 }
 
-/** Retry transient Supabase 5xx/timeout errors with exponential backoff. */
-async function retryTransient<T>(fn: () => Promise<T>, maxAttempts = 4, baseMs = 3000): Promise<T> {
+function canonicalAnonKey(): string {
+  return resolveSupabaseAnonKey();
+}
+
+function ownerEmailFromRuntime(): string {
+  const configured = env('IVX_OWNER_EMAIL').toLowerCase();
+  if (configured) return configured;
+  return (getIVXOwnerEmailAllowlist()[0] || '').toLowerCase();
+}
+
+function ownerPasswordFromRuntime(): string {
+  return env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
+}
+
+function adminClient() {
+  const url = canonicalSupabaseUrl();
+  const service = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
+  return createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: ((input: RequestInfo | URL, init: RequestInit = {}) =>
+        fetch(input, {
+          ...init,
+          signal: init.signal ?? AbortSignal.timeout(AUTH_TIMEOUT_MS),
+        })) as typeof fetch,
+    },
+  });
+}
+
+/** Retry transient Supabase 5xx/timeout errors with bounded exponential backoff. */
+async function retryTransient<T>(fn: () => Promise<T>, maxAttempts = 3, baseMs = 1000): Promise<T> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -54,9 +84,9 @@ async function retryTransient<T>(fn: () => Promise<T>, maxAttempts = 4, baseMs =
     } catch (error) {
       lastError = error;
       const msg = error instanceof Error ? error.message : String(error);
-      const isTransient = /5\d\d|522|timeout|timed out|ECONNREFUSED|fetch failed|HTTP 000/i.test(msg);
+      const isTransient = /5\d\d|522|timeout|timed out|aborted|ECONNREFUSED|fetch failed|HTTP 000/i.test(msg);
       if (!isTransient || attempt === maxAttempts) throw error;
-      const delay = baseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 800);
+      const delay = baseMs * Math.pow(2, attempt - 1);
       console.warn(`[MemberAuthCert] Retry ${attempt}/${maxAttempts} after ${delay}ms: ${msg.slice(0, 140)}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
@@ -64,27 +94,27 @@ async function retryTransient<T>(fn: () => Promise<T>, maxAttempts = 4, baseMs =
   throw lastError instanceof Error ? lastError : new Error('retry exhausted');
 }
 
-async function passwordGrant(email: string, password: string): Promise<{ ok: boolean; status: number }> {
-  const url = env('SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
-  const anon = env('SUPABASE_ANON_KEY', 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
-  if (!url || !anon || !email || !password) return { ok: false, status: 0 };
+async function passwordGrant(email: string, password: string): Promise<{ ok: boolean; status: number; detail?: string }> {
+  const url = canonicalSupabaseUrl();
+  const anon = canonicalAnonKey();
+  if (!url || !anon || !email || !password) return { ok: false, status: 0, detail: 'missing canonical auth binding' };
   try {
     return await retryTransient(async () => {
       const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: { apikey: anon, Authorization: `Bearer ${anon}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
       });
-      // 5xx = Supabase/Cloudflare transient — throw to trigger retry
       if (response.status >= 500) {
         throw new Error(`Supabase auth returned HTTP ${response.status}`);
       }
-      return { ok: response.ok, status: response.status };
+      const detail = response.ok ? undefined : (await response.text().catch(() => '')).slice(0, 180);
+      return { ok: response.ok, status: response.status, detail };
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'password grant failed';
-    return { ok: false, status: 0, detail: msg.slice(0, 200) } as { ok: boolean; status: number; detail?: string };
+    return { ok: false, status: 0, detail: msg.slice(0, 200) };
   }
 }
 
@@ -132,43 +162,41 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
       memberPersistence: { ok: false, detail: 'Not run' }, regularClassification: { ok: false, detail: 'Not run' },
       vipClassification: { ok: false, detail: 'Not run' }, cleanup: { ok: false, detail: 'Not run' },
     };
-    const supabaseUrl = env('SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL');
+    const supabaseUrl = canonicalSupabaseUrl();
     const service = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
-    const anon = env('SUPABASE_ANON_KEY', 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
-    const ownerEmail = env('IVX_OWNER_EMAIL').toLowerCase();
-    const ownerPassword = env('IVX_OWNER_PASSWORD');
+    const anon = canonicalAnonKey();
+    const ownerEmail = ownerEmailFromRuntime();
+    const ownerPassword = ownerPasswordFromRuntime();
     checks.runtimeConfig = {
       ok: Boolean(supabaseUrl && service && anon && ownerEmail && ownerPassword),
-      detail: `supabase=${Boolean(supabaseUrl)} serviceRole=${Boolean(service)} anon=${Boolean(anon)} ownerCredentials=${Boolean(ownerEmail && ownerPassword)}`,
+      detail: `canonicalSupabase=${Boolean(supabaseUrl)} serviceRole=${Boolean(service)} canonicalAnon=${Boolean(anon)} ownerEmail=${Boolean(ownerEmail)} ownerPasswordAlias=${Boolean(ownerPassword)}`,
     };
 
     let authUserId: string | null = null;
     let memberId: string | null = null;
     try {
-      // Pre-flight: verify Supabase is reachable before running 8 checks.
-      // If Supabase is down (522/timeout), fail fast with a clear message instead of 8 cascading failures.
-      const preFlightUrl = supabaseUrl.replace(/\/+$/, '');
-      try {
-        const pfResponse = await retryTransient(async () => {
-          const res = await fetch(`${preFlightUrl}/auth/v1/health`, {
-            headers: { apikey: anon },
-            signal: AbortSignal.timeout(15_000),
-          });
-          if (res.status >= 500) throw new Error(`Supabase auth health HTTP ${res.status}`);
-          return res;
-        }, 3, 5000);
-        if (!pfResponse.ok) {
-          throw new Error(`Supabase pre-flight check failed: HTTP ${pfResponse.status}`);
-        }
-        console.log('[MemberAuthCert] Pre-flight: Supabase reachable');
-      } catch (pfError) {
-        const msg = pfError instanceof Error ? pfError.message : 'pre-flight failed';
-        console.warn('[MemberAuthCert] Pre-flight FAILED, proceeding anyway:', msg.slice(0, 120));
+      if (!checks.runtimeConfig.ok) {
+        throw new Error(`Runtime auth binding incomplete: ${checks.runtimeConfig.detail}`);
       }
 
+      // Fast bounded pre-flight. A bad host binding now fails in seconds rather
+      // than blocking the public certificate endpoint for many minutes.
+      const pfResponse = await retryTransient(async () => {
+        const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
+          headers: { apikey: anon },
+          signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+        });
+        if (res.status >= 500) throw new Error(`Supabase auth health HTTP ${res.status}`);
+        return res;
+      }, 2, 750);
+      if (!pfResponse.ok) throw new Error(`Supabase pre-flight check failed: HTTP ${pfResponse.status}`);
+      console.log('[MemberAuthCert] Pre-flight: canonical Supabase reachable');
+
       const owner = await passwordGrant(ownerEmail, ownerPassword);
-      const ownerDetail = 'detail' in owner ? (owner as { detail?: string }).detail : '';
-      checks.ownerLogin = { ok: owner.ok, detail: ownerDetail ? `HTTP ${owner.status} — ${ownerDetail}` : `Supabase password grant HTTP ${owner.status}` };
+      checks.ownerLogin = {
+        ok: owner.ok,
+        detail: owner.detail ? `HTTP ${owner.status} — ${owner.detail}` : `Supabase password grant HTTP ${owner.status}`,
+      };
 
       const qaId = randomUUID();
       const email = `ivx.qa.${Date.now()}.${qaId.slice(0, 8)}@ivxholding.com`;
@@ -184,21 +212,29 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
         zipCode: '33101',
         roles: ['investor'],
         acceptTerms: true,
-      }), 3, 4000);
-      checks.memberRegistration = { ok: registration.ok && registration.stage === 'COMPLETED', detail: registration.ok ? `${registration.stage} trace=${registration.traceId}` : `${registration.code} stage=${registration.stage}` };
+      }), 2, 1000);
+      checks.memberRegistration = {
+        ok: registration.ok && registration.stage === 'COMPLETED',
+        detail: registration.ok ? `${registration.stage} trace=${registration.traceId}` : `${registration.code} stage=${registration.stage}`,
+      };
       if (registration.ok) authUserId = registration.authUserId;
 
       const login = await passwordGrant(email, password);
-      const loginDetail = 'detail' in login ? (login as { detail?: string }).detail : '';
-      checks.memberLogin = { ok: login.ok, detail: loginDetail ? `HTTP ${login.status} — ${loginDetail}` : `Synthetic member password grant HTTP ${login.status}` };
+      checks.memberLogin = {
+        ok: login.ok,
+        detail: login.detail ? `HTTP ${login.status} — ${login.detail}` : `Synthetic member password grant HTTP ${login.status}`,
+      };
 
       if (authUserId) {
         const sb = adminClient();
         const { data: member, error } = await retryTransient(async () =>
           sb.from('members').select('member_id,registration_status,email').eq('auth_user_id', authUserId!).maybeSingle(),
-        3, 3000);
+        2, 750);
         memberId = member?.member_id || null;
-        checks.memberPersistence = { ok: Boolean(memberId && !error), detail: memberId ? `Canonical member persisted; registration_status=${member?.registration_status || 'unknown'}` : `Member row missing${error ? `: ${error.message}` : ''}` };
+        checks.memberPersistence = {
+          ok: Boolean(memberId && !error),
+          detail: memberId ? `Canonical member persisted; registration_status=${member?.registration_status || 'unknown'}` : `Member row missing${error ? `: ${error.message}` : ''}`,
+        };
       }
 
       const baseMember = {
@@ -222,8 +258,6 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
 
     const certified = Object.values(checks).every((check) => check.ok);
     const result: MemberAuthCertification = { marker: IVX_MEMBER_AUTH_CERT_MARKER, startedAt, completedAt: new Date().toISOString(), commit, checks, certified, secretValuesReturned: false };
-    // Persist to durable store — non-fatal if Supabase is unavailable.
-    // The certification result is still returned to the caller even if persistence fails.
     if (isDurableStoreConfigured()) {
       try { await writeDurableJson(STATE_KEY, result); }
       catch (persistError) {
@@ -247,8 +281,12 @@ export async function getLatestMemberAuthCertification(): Promise<MemberAuthCert
 
 export function startMemberAuthCertificationScheduler(): void {
   if (timer) return;
-  const boot = setTimeout(() => { void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] boot failed', error instanceof Error ? error.message : error)); }, 45_000);
+  const boot = setTimeout(() => {
+    void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] boot failed', error instanceof Error ? error.message : error));
+  }, 20_000);
   boot.unref?.();
-  timer = setInterval(() => { void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] interval failed', error instanceof Error ? error.message : error)); }, INTERVAL_MS);
+  timer = setInterval(() => {
+    void runMemberAuthCertification().catch((error) => console.error('[MemberAuthCert] interval failed', error instanceof Error ? error.message : error));
+  }, INTERVAL_MS);
   timer.unref?.();
 }
