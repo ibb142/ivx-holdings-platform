@@ -11,17 +11,19 @@ permissions:
 
 env:
   EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
-  NODE_ENV: production
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_QA_BUILD: 'true'
-  OWNER_EMAIL: iperez4242@gmail.com
-  OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+  NODE_ENV: production
+  OWNER_EMAIL: ${{ secrets.IVX_OWNER_EMAIL }}
+  OWNER_PASSWORD: ${{ secrets.IVX_OWNER_PASSWORD }}
+  IVX_OWNER_EMAIL: ${{ secrets.IVX_OWNER_EMAIL }}
+  IVX_OWNER_PASSWORD: ${{ secrets.IVX_OWNER_PASSWORD }}
 
 jobs:
   certify:
     runs-on: macos-14
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -33,15 +35,15 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1 emulator system-images;android-34;google_apis;x86_64'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1 emulator system-images;android-34;google_apis;arm64-v8a'
       - name: Verify owner QA binding
         shell: bash
         run: |
           set -euo pipefail
           test -n "${EXPO_PUBLIC_SUPABASE_URL:-}" || { echo '::error::EXPO_PUBLIC_SUPABASE_URL is not bound'; exit 1; }
           test -n "${EXPO_PUBLIC_SUPABASE_ANON_KEY:-}" || { echo '::error::EXPO_PUBLIC_SUPABASE_ANON_KEY is not bound'; exit 1; }
-          test -n "${OWNER_EMAIL:-}" || { echo '::error::OWNER_EMAIL is not bound'; exit 1; }
-          test -n "${OWNER_PASSWORD:-}" || { echo '::error::OWNER_PASSWORD is not bound'; exit 1; }
+          test -n "${OWNER_EMAIL:-}" || { echo '::error::IVX_OWNER_EMAIL is not bound'; exit 1; }
+          test -n "${OWNER_PASSWORD:-}" || { echo '::error::IVX_OWNER_PASSWORD is not bound'; exit 1; }
           echo 'Owner QA bindings present.'
       - name: Install dependencies
         shell: bash
@@ -50,6 +52,12 @@ jobs:
           bun install --frozen-lockfile
           cd expo
           bun install --frozen-lockfile
+      - name: Server-side owner sign-in audit
+        working-directory: expo
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/audit-owner-signin.mjs | tee "$GITHUB_WORKSPACE/owner-server-audit.json"
       - name: Prepare QA signer
         shell: bash
         run: |
@@ -94,13 +102,14 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          arch: x86_64
+          arch: arm64-v8a
           profile: pixel_7
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             set -euo pipefail
+            cd "$GITHUB_WORKSPACE"
             adb devices
             adb install -r "${{ steps.apk.outputs.path }}"
             adb shell pm path com.ivxholdings.app.owner | tee package.txt
@@ -126,6 +135,7 @@ jobs:
         with:
           name: ivx-owner-sign-in-e2e-evidence-${{ github.sha }}
           path: |
+            owner-server-audit.json
             package.txt
             launch.txt
             process.txt
