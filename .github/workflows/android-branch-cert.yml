@@ -118,11 +118,9 @@ jobs:
             adb shell pidof com.ivxholdings.app.owner | tee process.txt
             adb shell dumpsys activity activities | grep "com.ivxholdings.app.owner" | head -20 > activity.txt
             adb exec-out screencap -p > launch.png
-
             cd "$GITHUB_WORKSPACE/expo"
             sed 's/^appId:.*/appId: com.ivxholdings.app.owner/' .maestro/ivx-owner-login.yaml > .maestro/ivx-owner-login-android-cert.yaml
             maestro test .maestro/ivx-owner-login-android-cert.yaml --format junit --output "$GITHUB_WORKSPACE/owner-login-results.xml" 2>&1 | tee "$GITHUB_WORKSPACE/owner-login.log"
-
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/owner-login-success.png"
             adb logcat -d -t 600 > "$GITHUB_WORKSPACE/logcat.txt"
             ! grep -E "FATAL EXCEPTION|AndroidRuntime: Process: com.ivxholdings.app.owner" "$GITHUB_WORKSPACE/logcat.txt"
