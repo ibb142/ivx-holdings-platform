@@ -109,13 +109,16 @@ async function deploy() {
   console.log('Build version:', BUILD_VER);
   console.log('');
 
-  // ── Test bucket access ──────────────────────────────
+  // ── Test bucket access (non-blocking — try uploads even if HeadBucket fails) ──
+  let bucketAccessible = false;
   try {
     await s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
+    bucketAccessible = true;
     console.log('✅ Bucket accessible: YES');
   } catch (e) {
-    console.error('❌ Bucket access FAILED:', e.name, e.message);
-    if (e.message && e.message.includes('CompromisedKeyQuarantine')) {
+    console.warn('⚠️  HeadBucket check failed:', e?.name || 'Unknown', e?.message || 'Unknown error');
+    if (e?.$metadata) console.warn('   HTTP status:', e.$metadata.httpStatusCode || 'N/A', '| Request ID:', e.$metadata.requestId || 'N/A');
+    if (e?.message && e.message.includes('CompromisedKeyQuarantine')) {
       console.error('');
       console.error('═══ AWS KEY QUARANTINED ═══');
       console.error('The AWS access key has been quarantined by AWS');
@@ -128,11 +131,12 @@ async function deploy() {
       console.error('1. Go to AWS IAM console');
       console.error('2. Delete the quarantined key');
       console.error('3. Create a new access key for a user with S3 + CloudFront permissions');
-      console.error('4. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars');
+      console.error('4. Update GitHub secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY');
       console.error('5. NEVER hardcode credentials in source files');
       console.error('═══════════════════════════');
+      process.exit(1);
     }
-    process.exit(1);
+    console.warn('   Continuing anyway — will try direct PutObject (IAM may allow PutObject without ListBucket)...');
   }
 
   let ok = 0, fail = 0;
@@ -181,8 +185,13 @@ async function deploy() {
       results.push({ key: f.key, status: 'ok', size: body.length });
       ok++;
     } catch (e) {
-      console.error('❌ FAILED', f.key + ':', e.message);
-      results.push({ key: f.key, status: 'fail', error: e.message });
+      console.error('❌ FAILED', f.key + ':', e?.name || 'Unknown', e?.message || 'Unknown error');
+      if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+      if (e?.message && e.message.includes('CompromisedKeyQuarantine')) {
+        console.error('═══ AWS KEY QUARANTINED — aborting deploy ═══');
+        process.exit(1);
+      }
+      results.push({ key: f.key, status: 'fail', error: e?.message || 'Unknown' });
       fail++;
     }
   }
@@ -254,7 +263,7 @@ async function deploy() {
     }
   }
 
-  // ── Extracted base64 images (immutable) ────────────
+  // ── Image files (immutable) ────────────────────────
   const imageFiles = [
     { path: LANDING_DIR + '/ivx-inline-img-1.png', key: 'ivx-inline-img-1.png', type: 'image/png' },
     { path: LANDING_DIR + '/ivx-inline-img-2.png', key: 'ivx-inline-img-2.png', type: 'image/png' },
@@ -262,6 +271,11 @@ async function deploy() {
     { path: ASSETS_DIR + '/ivx-symbol.png', key: 'ivx-symbol.png', type: 'image/png' },
     { path: ASSETS_DIR + '/ivx-og-image.png', key: 'ivx-og-image.png', type: 'image/png' },
     { path: ASSETS_DIR + '/favicon.png', key: 'favicon.png', type: 'image/png' },
+    // Favicon variants referenced in index.html
+    { path: ASSETS_DIR + '/favicon-16.png', key: 'favicon-16.png', type: 'image/png' },
+    { path: ASSETS_DIR + '/favicon-32.png', key: 'favicon-32.png', type: 'image/png' },
+    { path: ASSETS_DIR + '/favicon-180.png', key: 'favicon-180.png', type: 'image/png' },
+    { path: ASSETS_DIR + '/favicon-192.png', key: 'favicon-192.png', type: 'image/png' },
   ];
 
   for (const f of imageFiles) {
@@ -277,8 +291,9 @@ async function deploy() {
       results.push({ key: f.key, status: 'ok', size: body.length });
       ok++;
     } catch (e) {
-      console.error('❌ FAILED', f.key + ':', e.message);
-      results.push({ key: f.key, status: 'fail', error: e.message });
+      console.error('❌ FAILED', f.key + ':', e?.name || 'Unknown', e?.message || 'Unknown error');
+      if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+      results.push({ key: f.key, status: 'fail', error: e?.message || 'Unknown' });
       fail++;
     }
   }
@@ -301,8 +316,9 @@ async function deploy() {
       results.push({ key: f.key, status: 'ok', size: body.length });
       ok++;
     } catch (e) {
-      console.error('❌ FAILED', f.key + ':', e.message);
-      results.push({ key: f.key, status: 'fail', error: e.message });
+      console.error('❌ FAILED', f.key + ':', e?.name || 'Unknown', e?.message || 'Unknown error');
+      if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+      results.push({ key: f.key, status: 'fail', error: e?.message || 'Unknown' });
       fail++;
     }
   }
@@ -333,8 +349,9 @@ async function deploy() {
     results.push({ key: 'ivx-config.json', status: 'ok' });
     ok++;
   } catch (e) {
-    console.error('❌ FAILED ivx-config.json:', e.message);
-    results.push({ key: 'ivx-config.json', status: 'fail', error: e.message });
+    console.error('❌ FAILED ivx-config.json:', e?.name || 'Unknown', e?.message || 'Unknown error');
+    if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+    results.push({ key: 'ivx-config.json', status: 'fail', error: e?.message || 'Unknown' });
     fail++;
   }
 
@@ -357,8 +374,8 @@ async function deploy() {
         results.push({ key: a.key, status: 'ok', size: apkBody.length, type: 'apk' });
         ok++;
       } catch (e) {
-        console.error('❌ FAILED', a.key + ':', e.message);
-        results.push({ key: a.key, status: 'fail', error: e.message });
+        console.error('❌ FAILED', a.key + ':', e?.name || 'Unknown', e?.message || 'Unknown error');
+        results.push({ key: a.key, status: 'fail', error: e?.message || 'Unknown' });
         fail++;
       }
     }
@@ -380,7 +397,8 @@ async function deploy() {
     }));
     console.log('✅ CloudFront invalidated:', inv.Invalidation?.Id || 'unknown');
   } catch (e) {
-    console.error('❌ CloudFront invalidation FAILED:', e.message);
+    console.error('❌ CloudFront invalidation FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
+    if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
   }
 
   // ── Summary ────────────────────────────────────────
@@ -394,10 +412,20 @@ async function deploy() {
   console.log('  Build version:', BUILD_VER);
   console.log('═══════════════════════════════════════════════════');
 
+  // Abort early if ALL uploads fail and bucket wasn't accessible
+  if (fail > 0 && ok === 0) {
+    console.error('═══════════════════════════════════════════════════');
+    console.error('  ALL UPLOADS FAILED. The AWS key likely lacks s3:PutObject');
+    console.error('  permission or has been quarantined by AWS.');
+    console.error('  OWNER: Verify IAM permissions or rotate the key.');
+    console.error('═══════════════════════════════════════════════════');
+    process.exit(1);
+  }
+
   // Write results for verification
   writeFileSync(LANDING_DIR + '/deploy-results.json', JSON.stringify({ ok, fail, results, buildVer: BUILD_VER, timestamp: new Date().toISOString() }, null, 2));
 
   return { ok, fail };
 }
 
-deploy().catch(e => { console.error('FATAL:', e.message); process.exit(1); });
+deploy().catch(e => { console.error('FATAL:', e?.name || 'Unknown', e?.message || 'Unknown error'); process.exit(1); });
