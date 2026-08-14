@@ -566,7 +566,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Auditing full startup chain\", \"content\": \"Audit full startup chain: _layout → _providers → auth → supabase → index → login\", \"status\": \"in_progress\"}, {\"activeForm\": \"Fixing useRealtimeTable infinite re-render loop\", \"content\": \"Fix useRealtimeTable infinite re-render loop (root cause of black screen)\", \"status\": \"pending\"}, {\"activeForm\": \"Fixing tree restructure in _providers.tsx\", \"content\": \"Fix tree restructure in _providers.tsx that unmounts AppStack\", \"status\": \"pending\"}, {\"activeForm\": \"Cleaning up index.tsx and login.tsx\", \"content\": \"Remove useRealtimeTable and unused imports from index.tsx and login.tsx\", \"status\": \"pending\"}, {\"activeForm\": \"Rebuilding QA APK with verified fix\", \"content\": \"Rebuild QA APK with verified fix\", \"status\": \"pending\"}, {\"activeForm\": \"Uploading fixed APK to GitHub release\", \"content\": \"Upload fixed APK to GitHub release\", \"status\": \"pending\"}]}",
       "createdAt": 1786739539838,
-      "completedAt": 1786739542278
+      "completedAt": 1786739542278,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -657,7 +658,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Auditing full startup chain\", \"content\": \"Audit full startup chain: _layout → _providers → auth → supabase → index → login\", \"status\": \"completed\"}, {\"activeForm\": \"Rewriting _providers.tsx with stable tree (no remount)\", \"content\": \"Rewrite _providers.tsx: synchronous imports, no tree restructure, ProviderBoundary on each\", \"status\": \"in_progress\"}, {\"activeForm\": \"Cleaning up index.tsx\", \"content\": \"Remove useRealtimeTable and unused imports from index.tsx\", \"status\": \"pending\"}, {\"activeForm\": \"Cleaning up login.tsx unused imports\", \"content\": \"Remove unused imports from login.tsx\", \"status\": \"pending\"}, {\"activeForm\": \"Rebuilding QA APK with verified fix\", \"content\": \"Rebuild QA APK with verified fix\", \"status\": \"pending\"}, {\"activeForm\": \"Uploading fixed APK to GitHub release\", \"content\": \"Upload fixed APK to GitHub release\", \"status\": \"pending\"}]}",
       "createdAt": 1786739603429,
-      "completedAt": 1786739605698
+      "completedAt": 1786739605698,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -687,7 +689,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"/**\\n * Full provider tree — ALL providers imported synchronously.\\n *\\n * The tree structure NEVER changes between renders. Every provider is\\n * wrapped in a ProviderBoundary so a crash in one provider does not\\n * kill the entire app. This is the stable approach: no dynamic imports,\\n * no staged loading, no tree restructure that unmounts the navigation\\n * stack and causes a black screen.\\n *\\n * If a provider module crashes during import evaluation, the\\n * DiagnosticErrorBoundary at the top level catches it and shows the\\n * error on screen with a retry button.\\n */\\nimport React, { Component, type ReactNode } from 'react';\\nimport { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';\\nimport { GestureHandlerRootView } from 'react-native-gesture-handler';\\nimport { QueryClient, QueryClientProvider } from '@tanstack/react-query';\\nimport { Stack } from 'expo-router';\\nimport { StatusBar } from 'expo-status-bar';\\n\\nimport { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';\\nimport { injectWebKeyboardCSS } from '@/hooks/useWebKeyboard';\\nimport { checkForUpdates } from '@/lib/app-update-checker';\\nimport { logStartup, logStartupError } from '@/lib/startup-trace';\\nimport Colors from '@/constants/colors';\\n\\n// All providers imported synchronously — the tree is stable from first render.\\nimport { I18nProvider } from '@/lib/i18n-context';\\nimport { AuthProvider } from '@/lib/auth-context';\\nimport { AnalyticsProvider } from '@/lib/analytics-context';\\nimport { IPXProvider } from '@/lib/ipx-context';\\nimport { WalletProvider } from '@/lib/wallet-context';\\nimport { EarnProvider } from '@/lib/earn-context';\\nimport { EmailProvider } from '@/lib/email-context';\\nimport { NetworkProvider } from '@/lib/network-context';\\n\\nconst queryClient = new QueryClient({\\n  defaultOptions: {\\n    queries: {\\n      staleTime: 5 * 60_000,\\n      gcTime: 30 * 60_000,\\n      retry: 1,\\n      refetchOnMount: false,\\n      refetchOnReconnect: true,\\n      refetchOnWindowFocus: false,\\n      networkMode: 'online',\\n    },\\n    mutations: {\\n      retry: 1,\\n      networkMode: 'online',\\n    },\\n  },\\n});\\n\\n// --- Per-provider error boundary ---\\ninterface ProviderBoundaryProps {\\n  name: string;\\n  children: ReactNode;\\n}\\ninterface ProviderBoundaryState {\\n  hasError: boolean;\\n  error: Error | null;\\n  traceId: string | null;\\n}\\nfunction classifyProviderError(error: Error): 'RENDER_ERROR' | 'AUTH_ERROR' | 'NETWORK_ERROR' | 'CONFIG_ERROR' | 'UNKNOWN_ERROR' {\\n  const msg = (error.message || '').toLowerCase();\\n  if (msg.includes('maximum update depth') || msg.includes('render') || msg.includes('component')) return 'RENDER_ERROR';\\n  if (msg.includes('auth') || msg.includes('session') || msg.includes('token')) return 'AUTH_ERROR';\\n  if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return 'NETWORK_ERROR';\\n  if (msg.includes('supabase url') || msg.includes('config') || msg.includes('api key')) return 'CONFIG_ERROR';\\n  return 'UNKNOWN_ERROR';\\n}\\nclass ProviderBoundary extends Component<ProviderBoundaryProps, ProviderBoundaryState> {\\n  state: ProviderBoundaryState = { hasError: false, error: null, traceId: null };\\n  static getDerivedStateFromError(error: Error): Partial<ProviderBoundaryState> {\\n    return {\\n      hasError: true,\\n      error,\\n      traceId: 'IVX-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8),\\n    };\\n  }\\n  componentDidCatch(error: Error) {\\n    const category = classifyProviderError(error);\\n    console.warn(`[IVX] Provider \\\"${this.props.name}\\\" crashed — category: ${category}`, error.message, error.stack);\\n  }\\n  handleReset = () => {\\n    this.setState({ hasError: false, error: null, traceId: null });\\n  };\\n  render() {\\n    if (this.state.hasError) {\\n      const category = this.state.error ? classifyProviderError(this.state.error) : 'UNKNOWN_ERROR';\\n      return (\\n        <View style={providerErrorStyles.container}>\\n          <Text style={providerErrorStyles.title}>IVX Provider Error</Text>\\n          <Text style={providerErrorStyles.name}>{this.props.name}</Text>\\n          <Text style={providerErrorStyles.message}>\\n            {category}: {this.state.error?.message || 'Unknown error'}\\n          </Text>\\n          {this.state.traceId && (\\n            <Text style={providerErrorStyles.trace}>Trace: {this.state.traceId}</Text>\\n          )}\\n          <TouchableOpacity style={providerErrorStyles.button} onPress={this.handleReset}>\\n            <Text style={providerErrorStyles.buttonText}>Retry</Text>\\n          </TouchableOpacity>\\n        </View>\\n      );\\n    }\\n    return this.props.children;\\n  }\\n}\\n\\nfunction AppStack() {\\n  return (\\n    <Stack\\n      screenOptions={{\\n        headerShown: false,\\n        contentStyle: { backgroundColor: Colors.background },\\n      }}\\n    >\\n      <Stack.Screen name=\\\"index\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"login\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"(tabs)\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"admin\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"ivx\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"property\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"landing\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"signup\\\" options={{ headerShown: false }} />\\n      <Stack.Screen name=\\\"modal\\\" options={{ presentation: 'modal' }} />\\n    </Stack>\\n  );\\n}\\n\\n/**\\n * STABLE TREE: The provider nesting never changes between renders.\\n * Every provider is wrapped in a ProviderBoundary so a crash in one\\n * provider shows an error screen for THAT provider only, without\\n * unmounting the rest of the tree.\\n *\\n * The order matters: QueryClient must be outside everything that uses\\n * React Query. Auth must be inside QueryClient (uses React Query).\\n * The extra providers (Analytics, IPX, Wallet, Earn, Email, Network)\\n * are also inside QueryClient and Auth because they depend on auth state.\\n */\\nexport function AppProviders() {\\n  React.useEffect(() => {\\n    logStartup('PROVIDERS_STARTED');\\n    logStartup('PROVIDERS_COMPLETED');\\n    logStartup('PROVIDERS_MOUNTED');\\n\\n    try {\\n      injectWebKeyboardCSS();\\n    } catch (err) {\\n      console.warn('[IVX] injectWebKeyboardCSS failed:', err);\\n    }\\n\\n    checkForUpdates().catch((err) => {\\n      console.warn('[IVX] OTA update check failed (non-fatal):', err);\\n    });\\n\\n    const deferredTimer = setTimeout(() => {\\n      try {\\n        const { installTextNodeGuard } = require('@/lib/text-node-guard');\\n        installTextNodeGuard();\\n      } catch (err) {\\n        console.warn('[IVX] installTextNodeGuard failed', err);\\n      }\\n      try {\\n        const { installIVXIncidentCapture } = require('@/lib/ivx-incident-client');\\n        installIVXIncidentCapture();\\n      } catch (err) {\\n        console.warn('[IVX] installIVXIncidentCapture failed', err);\\n      }\\n    }, 3000);\\n\\n    return () => clearTimeout(deferredTimer);\\n  }, []);\\n\\n  return (\\n    <DiagnosticErrorBoundary>\\n      <GestureHandlerRootView\\n        style={providerStyles.root}\\n        {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}\\n      >\\n        <QueryClientProvider client={queryClient}>\\n          <ProviderBoundary name=\\\"I18n\\\">\\n            <I18nProvider>\\n              <ProviderBoundary name=\\\"Auth\\\">\\n                <AuthProvider>\\n                  <ProviderBoundary name=\\\"Analytics\\\">\\n                    <AnalyticsProvider>\\n                      <ProviderBoundary name=\\\"IPX\\\">\\n                        <IPXProvider>\\n                          <ProviderBoundary name=\\\"Wallet\\\">\\n                            <WalletProvider>\\n                              <ProviderBoundary name=\\\"Earn\\\">\\n                                <EarnProvider>\\n                                  <ProviderBoundary name=\\\"Email\\\">\\n                                    <EmailProvider>\\n                                      <ProviderBoundary name=\\\"Network\\\">\\n                                        <NetworkProvider>\\n                                          <StatusBar style=\\\"light\\\" />\\n                                          <AppStack />\\n                                        </NetworkProvider>\\n                                      </ProviderBoundary>\\n                                    </EmailProvider>\\n                                  </ProviderBoundary>\\n                                </EarnProvider>\\n                              </ProviderBoundary>\\n                            </WalletProvider>\\n                          </ProviderBoundary>\\n                        </IPXProvider>\\n                      </ProviderBoundary>\\n                    </AnalyticsProvider>\\n                  </ProviderBoundary>\\n                </AuthProvider>\\n              </ProviderBoundary>\\n            </I18nProvider>\\n          </ProviderBoundary>\\n        </QueryClientProvider>\\n      </GestureHandlerRootView>\\n    </DiagnosticErrorBoundary>\\n  );\\n}\\n\\nconst providerStyles = StyleSheet.create({\\n  root: { flex: 1, backgroundColor: Colors.background },\\n});\\n\\nconst providerErrorStyles = StyleSheet.create({\\n  container: {\\n    flex: 1,\\n    backgroundColor: '#1a0000',\\n    justifyContent: 'center',\\n    alignItems: 'center',\\n    padding: 24,\\n  },\\n  title: {\\n    color: '#FF4444',\\n    fontSize: 18,\\n    fontWeight: 'bold' as const,\\n    marginBottom: 8,\\n  },\\n  name: {\\n    color: '#FFD700',\\n    fontSize: 14,\\n    fontWeight: 'bold' as const,\\n    marginBottom: 8,\\n  },\\n  message: {\\n    color: '#FFAAAA',\\n    fontSize: 12,\\n    fontFamily: 'monospace' as const,\\n    textAlign: 'center' as const,\\n    marginBottom: 8,\\n  },\\n  trace: {\\n    color: '#888',\\n    fontSize: 10,\\n    fontFamily: 'monospace' as const,\\n    marginBottom: 16,\\n  },\\n  button: {\\n    backgroundColor: '#FFD700',\\n    borderRadius: 12,\\n    paddingHorizontal: 32,\\n    paddingVertical: 14,\\n  },\\n  buttonText: {\\n    color: '#000',\\n    fontSize: 16,\\n    fontWeight: 'bold' as const,\\n  },\\n});\\n\", \"filePath\": \"expo/app/_providers.tsx\"}",
       "createdAt": 1786739624463,
-      "completedAt": 1786739649106
+      "completedAt": 1786739649106,
+      "compactedAt": 1786747043412
     },
     {
       "type": "tool",
@@ -704,7 +707,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"/**\\n * Root initial route — redirects to /login on every cold launch.\\n *\\n * Without this file, Expo Router has no route for \\\"/\\\" and may render a\\n * blank/black screen or fall through to +not-found. The auth context\\n * signs out any persisted Supabase session on cold launch, so the owner\\n * must always enter credentials manually.\\n *\\n * If the user is already authenticated (e.g. hot-reload in dev), redirect\\n * to the tabs so they don't get stuck on login.\\n */\\nimport { Redirect } from 'expo-router';\\nimport { useAuth } from '@/lib/auth-context';\\nimport { isOpenAccessModeEnabled } from '@/lib/open-access';\\nimport { logStartup } from '@/lib/startup-trace';\\nimport React, { useEffect, useState } from 'react';\\nimport { View, StyleSheet } from 'react-native';\\nimport { ShimmerIndicator } from '@/components/ShimmerIndicator';\\n\\nconst INDEX_LOADING_TIMEOUT_MS = 4000;\\n\\nexport default function IndexScreen() {\\n  const { isAuthenticated, isLoading } = useAuth();\\n  const [forceLogin, setForceLogin] = useState(false);\\n\\n  useEffect(() => {\\n    logStartup('INITIAL_ROUTE_SELECTED', 'index');\\n  }, []);\\n\\n  // Hard timeout: never stay on a loading spinner longer than 4s.\\n  // If auth bootstrap hangs for any reason, send the user to login.\\n  useEffect(() => {\\n    const timer = setTimeout(() => {\\n      if (isLoading) {\\n        console.warn('[Index] Auth bootstrap hard timeout — redirecting to login');\\n        setForceLogin(true);\\n      }\\n    }, INDEX_LOADING_TIMEOUT_MS);\\n    return () => clearTimeout(timer);\\n  }, [isLoading]);\\n\\n  // During the brief auth bootstrap window, show a dark loading screen\\n  // instead of a black frame. isLoading is set to false in a microtask\\n  // so this is at most one frame.\\n  if (isLoading && !forceLogin) {\\n    return (\\n      <View style={styles.container}>\\n        <ShimmerIndicator size=\\\"large\\\" color=\\\"#FFD700\\\" />\\n      </View>\\n    );\\n  }\\n\\n  // Open access mode bypasses login (dev only — disabled in production).\\n  if (isOpenAccessModeEnabled()) {\\n    return <Redirect href=\\\"/(tabs)/(home)/home\\\" />;\\n  }\\n\\n  // Cold launch: always go to login. The auth context has already\\n  // signed out any persisted session, so isAuthenticated is false.\\n  if (!isAuthenticated) {\\n    return <Redirect href=\\\"/login\\\" />;\\n  }\\n\\n  // Already authenticated (e.g. hot reload): go to the app.\\n  return <Redirect href=\\\"/(tabs)/(home)/home\\\" />;\\n}\\n\\nconst styles = StyleSheet.create({\\n  container: {\\n    flex: 1,\\n    backgroundColor: '#0A0A0F',\\n    alignItems: 'center',\\n    justifyContent: 'center',\\n  },\\n});\\n\", \"filePath\": \"expo/app/index.tsx\"}",
       "createdAt": 1786739643916,
-      "completedAt": 1786739649110
+      "completedAt": 1786739649110,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -745,7 +749,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';\\nimport { useQuery } from '@tanstack/react-query';\", \"oldString\": \"import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';\\nimport { useQuery } from '@tanstack/react-query';\\nimport { useRealtimeTable } from '@/hooks/useRealtimeChannel';\"}, {\"newString\": \"import { ShimmerIndicator } from '@/components/ShimmerIndicator';\\nimport { IVXImage } from '@/components/ivx';\", \"oldString\": \"import { ShimmerIndicator } from '@/components/ShimmerIndicator';\\nimport { IVXImage } from '@/components/ivx';\\nimport { RefreshControl } from 'react-native';\"}], \"filePath\": \"expo/app/login.tsx\"}",
       "createdAt": 1786739668409,
-      "completedAt": 1786739671060
+      "completedAt": 1786739671060,
+      "compactedAt": 1786747043412
     },
     {
       "type": "tool",
@@ -764,7 +769,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android && nohup ./gradlew assembleQa --build-cache --stacktrace > /tmp/gradle-build.log 2>&1 & echo $! > /tmp/gradle-build.pid && echo \\\"Build started PID $(cat /tmp/gradle-build.pid)\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739670132,
-      "completedAt": 1786739671090
+      "completedAt": 1786739671090,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -791,7 +797,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"if [ -f /tmp/gradle-build.pid ]; then PID=$(cat /tmp/gradle-build.pid); if ps -p $PID > /dev/null 2>&1; then echo \\\"BUILD RUNNING (PID $PID)\\\"; tail -15 /tmp/gradle-build.log; else echo \\\"BUILD DONE (PID $PID)\\\"; tail -30 /tmp/gradle-build.log; fi; else echo \\\"No PID file\\\"; fi\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739679124,
-      "completedAt": 1786739679613
+      "completedAt": 1786739679613,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -818,7 +825,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 30 && if [ -f /tmp/gradle-build.pid ]; then PID=$(cat /tmp/gradle-build.pid); if ps -p $PID > /dev/null 2>&1; then echo \\\"BUILD RUNNING (PID $PID)\\\"; tail -15 /tmp/gradle-build.log; else echo \\\"BUILD DONE\\\"; tail -30 /tmp/gradle-build.log; fi; fi\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739688986,
-      "completedAt": 1786739719841
+      "completedAt": 1786739719841,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -850,7 +858,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"PID=$(cat /tmp/gradle-build.pid); if ps -p $PID > /dev/null 2>&1; then echo \\\"STILL RUNNING (PID $PID)\\\"; tail -10 /tmp/gradle-build.log; else echo \\\"BUILD DONE\\\"; tail -30 /tmp/gradle-build.log; fi\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739731209,
-      "completedAt": 1786739732003
+      "completedAt": 1786739732003,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -877,7 +886,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"PID=$(cat /tmp/gradle-build.pid); if ps -p $PID > /dev/null 2>&1; then echo \\\"STILL RUNNING (PID $PID)\\\"; tail -10 /tmp/gradle-build.log; else echo \\\"BUILD DONE\\\"; tail -30 /tmp/gradle-build.log; fi\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739741070,
-      "completedAt": 1786739741325
+      "completedAt": 1786739741325,
+      "compactedAt": 1786747043412
     },
     {
       "type": "tool",
@@ -896,7 +906,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"PID=$(cat /tmp/gradle-build.pid); if ps -p $PID > /dev/null 2>&1; then echo \\\"STILL RUNNING (PID $PID)\\\"; tail -5 /tmp/gradle-build.log; else echo \\\"BUILD DONE\\\"; tail -30 /tmp/gradle-build.log; fi\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739747641,
-      "completedAt": 1786739748249
+      "completedAt": 1786739748249,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -923,7 +934,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"PID=$(cat /tmp/gradle-build.pid); if ps -p $PID > /dev/null 2>&1; then echo \\\"STILL RUNNING (PID $PID)\\\"; tail -5 /tmp/gradle-build.log; else echo \\\"BUILD DONE\\\"; tail -40 /tmp/gradle-build.log; fi\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739757053,
-      "completedAt": 1786739757262
+      "completedAt": 1786739757262,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -955,7 +967,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"bun /home/user/rork-app/tmp/upload-apk.mjs 2>&1 | tail -10\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739764068,
-      "completedAt": 1786739770011
+      "completedAt": 1786739770011,
+      "compactedAt": 1786747043412
     },
     {
       "type": "tool",
@@ -974,7 +987,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"git add expo/app/_providers.tsx expo/app/index.tsx expo/app/login.tsx && git commit -m \\\"fix(expo): stable provider tree + remove infinite re-render loop causing black screen\\\" 2>&1 | tail -10 && git push https://github.com/ibb142/ivx-holdings-platform.git main 2>&1 | tail -10\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739764342,
-      "completedAt": 1786739775764
+      "completedAt": 1786739775764,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -1001,7 +1015,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"git pull --rebase https://github.com/ibb142/ivx-holdings-platform.git main 2>&1 | tail -20\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739784013,
-      "completedAt": 1786739784153
+      "completedAt": 1786739784153,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -1028,7 +1043,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git stash 2>&1 | tail -5 && git pull --rebase https://github.com/ibb142/ivx-holdings-platform.git main 2>&1 | tail -10 && git stash pop 2>&1 | tail -5\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739791431,
-      "completedAt": 1786739793365
+      "completedAt": 1786739793365,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -1055,7 +1071,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"git push https://github.com/ibb142/ivx-holdings-platform.git main 2>&1 | tail -10\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786739802153,
-      "completedAt": 1786739804582
+      "completedAt": 1786739804582,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
@@ -1141,7 +1158,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Auditing full startup chain\", \"content\": \"Audit full startup chain: _layout → _providers → auth → supabase → index → login\", \"status\": \"completed\"}, {\"activeForm\": \"Rewriting _providers.tsx with stable tree (no remount)\", \"content\": \"Rewrite _providers.tsx: synchronous imports, no tree restructure, ProviderBoundary on each\", \"status\": \"completed\"}, {\"activeForm\": \"Cleaning up index.tsx\", \"content\": \"Remove useRealtimeTable and unused imports from index.tsx\", \"status\": \"completed\"}, {\"activeForm\": \"Cleaning up login.tsx unused imports\", \"content\": \"Remove unused imports from login.tsx\", \"status\": \"completed\"}, {\"activeForm\": \"Rebuilding QA APK with verified fix\", \"content\": \"Rebuild QA APK with verified fix\", \"status\": \"completed\"}, {\"activeForm\": \"Uploading fixed APK to GitHub release\", \"content\": \"Upload fixed APK to GitHub release\", \"status\": \"completed\"}]}",
       "createdAt": 1786739812629,
-      "completedAt": 1786739814471
+      "completedAt": 1786739814471,
+      "compactedAt": 1786747043412
     },
     {
       "type": "reasoning",
