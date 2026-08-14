@@ -1,23 +1,44 @@
 /**
  * IVX Wire Instructions (item 104 — extracted from inline <script>)
- * Fetches wire transfer instructions from the authenticated API and renders them.
- * Items 153-154: No hardcoded fallback values — bank details only come from
- * the authenticated API endpoint. Unauthenticated users see a sign-in CTA.
+ * Fetches wire transfer instructions from the API and renders them.
+ * Unauthenticated users see a 200 with preview (bank name + sign-in CTA).
+ * Authenticated users get full bank details with routing/account numbers.
  */
 (function() {
   fetch('/api/ivx/wire-instructions').then(function(r) {
-    if (r.status === 401) {
-      // Not authenticated — show sign-in CTA instead of bank details
+    if (!r.ok) {
+      // Network/server error — show CTA to get instructions in the app
       var cta = document.getElementById('wire-cta-btn');
       if (cta) {
-        cta.textContent = 'Sign in to view wire instructions';
-        cta.href = '/wire-transfer';
+        cta.textContent = 'Get wire instructions in the app';
       }
       return null;
     }
     return r.json();
   }).then(function(j) {
-    if (!j || !j.ok || !j.instructions) return;
+    if (!j || !j.ok) return;
+
+    // Unauthenticated: show bank name + sign-in CTA
+    if (j.authenticated === false && j.preview) {
+      var set0 = function(id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = val || '\u2014';
+      };
+      set0('wire-bank-name', j.preview.bankName);
+      var ctaBtn = document.getElementById('wire-cta-btn');
+      if (ctaBtn) {
+        ctaBtn.textContent = j.preview.cta || 'Sign in to view wire instructions';
+        ctaBtn.href = '/wire-transfer';
+        ctaBtn.style.display = 'inline-flex';
+      }
+      // Show grid with just the bank name visible
+      var grid0 = document.getElementById('wire-instructions-grid');
+      if (grid0) grid0.style.display = 'grid';
+      return;
+    }
+
+    // Authenticated: show full bank details
+    if (!j.instructions) return;
     var i = j.instructions;
     var set = function(id, val) {
       var el = document.getElementById(id);
@@ -34,7 +55,6 @@
     var grid = document.getElementById('wire-instructions-grid');
     if (grid) grid.style.display = 'grid';
   }).catch(function() {
-    // Network error — show CTA to get instructions in the app
     var cta = document.getElementById('wire-cta-btn');
     if (cta) {
       cta.textContent = 'Get wire instructions in the app';
