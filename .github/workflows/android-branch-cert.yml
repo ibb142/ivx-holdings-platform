@@ -53,6 +53,8 @@ jobs:
           cd expo
           bun install --frozen-lockfile
       - name: Server-side owner sign-in audit
+        id: server_audit
+        continue-on-error: true
         working-directory: expo
         shell: bash
         run: |
@@ -99,6 +101,7 @@ jobs:
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Emulator launch + Owner Sign-In certification
         id: owner_e2e
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -152,9 +155,24 @@ jobs:
           echo '## IVX Owner Sign-In Certification' >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- APK SHA256: \`${{ steps.apk.outputs.hash }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Server auth gate: \`${{ steps.server_audit.outcome }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Owner E2E gate: \`${{ steps.owner_e2e.outcome }}\`" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ steps.owner_e2e.outcome }}" = 'success' ]; then
+          if [ "${{ steps.server_audit.outcome }}" = 'success' ] && [ "${{ steps.owner_e2e.outcome }}" = 'success' ]; then
             echo '- Result: **CERTIFIED PASS**' >> "$GITHUB_STEP_SUMMARY"
           else
             echo '- Result: **NOT CERTIFIED**' >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Enforce final certification gate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.server_audit.outcome }}" != 'success' ]; then
+            echo '::error::Server-side Owner authentication gate failed. See owner-server-audit.json.'
+            exit 1
+          fi
+          if [ "${{ steps.owner_e2e.outcome }}" != 'success' ]; then
+            echo '::error::Android Owner E2E gate failed. See uploaded emulator/Maestro evidence.'
+            exit 1
+          fi
+          echo 'CERTIFIED PASS: server auth and Android Owner E2E both passed.'
