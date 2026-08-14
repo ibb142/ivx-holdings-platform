@@ -14,7 +14,7 @@ import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
-import { startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
+import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
 import { preloadAIProviderCredentialFromOwnerVariables } from './backend/services/ivx-ai-owner-variable-preload';
 import {
   autonomousVoiceOptions,
@@ -40,6 +40,39 @@ void preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
   console.warn('[IVX Server] AI owner-variable preload unavailable', {
     error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
   });
+});
+
+// Non-secret machine-readable proof produced by the production certification
+// scheduler. It intentionally exposes only boolean checks and deployment IDs —
+// never credentials, user records, tokens, or diagnostic details.
+app.get('/api/ivx/certification/member-auth-public', async (c) => {
+  try {
+    const certificate = await getLatestMemberAuthCertification();
+    if (!certificate) {
+      return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503);
+    }
+    const checks = certificate.checks;
+    return c.json({
+      ok: true,
+      certified: certificate.certified,
+      marker: certificate.marker,
+      commit: certificate.commit,
+      completedAt: certificate.completedAt,
+      checks: {
+        runtimeConfig: checks.runtimeConfig.ok,
+        ownerLogin: checks.ownerLogin.ok,
+        memberRegistration: checks.memberRegistration.ok,
+        memberLogin: checks.memberLogin.ok,
+        memberPersistence: checks.memberPersistence.ok,
+        regularClassification: checks.regularClassification.ok,
+        vipClassification: checks.vipClassification.ok,
+        cleanup: checks.cleanup.ok,
+      },
+      secretValuesReturned: false,
+    });
+  } catch {
+    return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503);
+  }
 });
 
 // Autonomous Voice Escalation routes. Status/test are owner-only. LaML and
