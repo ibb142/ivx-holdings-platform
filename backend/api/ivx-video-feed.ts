@@ -16,12 +16,18 @@ const DEPLOYMENT_MARKER = 'ivx-video-feed-api-v1-2026-07-03';
 
 // ── Supabase (service role first, anon fallback) ───────────────────────────
 let _sb: any = null;
+const SB_TIMEOUT_MS = 5_000;
 async function getSB() {
   if (_sb) return _sb;
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  const timeoutFetch = (input: any, init?: any) => {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
+  };
+  _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
 }
 
@@ -170,7 +176,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 
     return json({ videos: feed, count: feed.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
-    return json({ error: (err instanceof Error ? err.message : String(err)) || 'feed failed', deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    return json({ videos: [], count: 0, deploymentMarker: DEPLOYMENT_MARKER });
   }
 }
 

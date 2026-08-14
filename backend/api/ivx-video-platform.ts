@@ -183,12 +183,18 @@ function str(v: unknown): string {
 /* ---------------- Supabase ---------------- */
 
 let _sb: any = null;
+const SB_TIMEOUT_MS = 5_000;
 async function getSB() {
   if (_sb) return _sb;
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  const timeoutFetch = (input: any, init?: any) => {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
+  };
+  _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
 }
 
@@ -492,7 +498,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'feed failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+    return json({ videos: [], count: 0, total: 0, next_cursor: null, channel: null, feed_type: 'unified', ordering: 'canonical-unified-v2', personalized: false, marker: VIDEO_PLATFORM_MARKER }, 200);
   }
   }); // withFeedCache
 }
@@ -768,7 +774,7 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'home feed failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+    return json({ deals: [], blocks: [], count: 0, deal_count: 0, video_count: 0, total_approved_videos: 0, pattern: '3-deals-1-featured-project-video', ordering: 'canonical-home-v3', personalized: false, marker: VIDEO_PLATFORM_MARKER }, 200);
   }
   }); // withFeedCache
 }
@@ -825,7 +831,7 @@ export async function handlePlatformChannels(): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'channels failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+    return json({ audiences: [], properties: [], marker: VIDEO_PLATFORM_MARKER }, 200);
   }
 }
 
@@ -957,7 +963,7 @@ export async function handlePlatformStoriesList(): Promise<Response> {
     }).sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at)));
     return json({ stories, count: stories.length, marker: VIDEO_PLATFORM_MARKER });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'stories failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+    return json({ stories: [], count: 0, marker: VIDEO_PLATFORM_MARKER }, 200);
   }
 }
 
@@ -989,7 +995,7 @@ export async function handlePlatformLiveList(req: Request): Promise<Response> {
     const sessions = await listLiveSessions(includeEnded);
     return json({ sessions, count: sessions.length, marker: VIDEO_PLATFORM_MARKER });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'live list failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+    return json({ sessions: [], count: 0, marker: VIDEO_PLATFORM_MARKER }, 200);
   }
 }
 

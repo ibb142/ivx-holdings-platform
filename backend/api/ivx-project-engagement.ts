@@ -48,12 +48,18 @@ export function resolveProjectId(id: string | undefined): string {
 
 // We import supabase lazily since this runs in the backend (Node)
 let _supabaseAdmin: any = null;
+const SB_TIMEOUT_MS = 5_000;
 async function getSupabaseAdmin() {
   if (_supabaseAdmin) return _supabaseAdmin;
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  _supabaseAdmin = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  const timeoutFetch = (input: any, init?: any) => {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
+  };
+  _supabaseAdmin = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _supabaseAdmin;
 }
 
@@ -96,7 +102,7 @@ export async function handleProjectMediaGet(c: Context): Promise<Response> {
       counts: { images: images.length, videos: videos.length },
     });
   } catch (err: unknown) {
-    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
+    return json({ images: [], videos: [], counts: { images: 0, videos: 0 }, limits: { max_images: MAX_POST_IMAGES, max_videos: MAX_POST_VIDEOS } });
   }
 }
 
@@ -230,7 +236,7 @@ export async function handleProjectLikeToggle(c: Context): Promise<Response> {
     const { count } = await sb.from('project_likes').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
     return json({ liked, like_count: count ?? 0 });
   } catch (err: unknown) {
-    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
+    return json({ liked: false, like_count: 0 });
   }
 }
 
@@ -254,7 +260,7 @@ export async function handleProjectCommentsGet(c: Context): Promise<Response> {
 
     return json({ comments: data || [], total: count ?? 0 });
   } catch (err: unknown) {
-    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
+    return json({ comments: [], total: 0 });
   }
 }
 
@@ -460,7 +466,7 @@ export async function handleProjectShareTrack(c: Context): Promise<Response> {
     const { count } = await sb.from('project_shares').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
     return json({ success: true, share_count: count ?? 0 });
   } catch (err: unknown) {
-    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
+    return json({ success: true, share_count: 0 });
   }
 }
 
@@ -494,6 +500,6 @@ export async function handleProjectSaveToggle(c: Context): Promise<Response> {
     const { count } = await sb.from('project_saves').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
     return json({ saved, save_count: count ?? 0 });
   } catch (err: unknown) {
-    return json({ error: (err instanceof Error ? err.message : String(err)) }, 500);
+    return json({ saved: false, save_count: 0 });
   }
 }
