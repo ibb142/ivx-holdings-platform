@@ -2,9 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
-import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-durable-runtime-binding-v2-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-render-runtime-safe-2026-08-14';
 const AUTH_TIMEOUT_MS = 10_000;
 
 function readTrimmed(value: unknown): string {
@@ -13,6 +12,14 @@ function readTrimmed(value: unknown): string {
 
 function readEnv(name: string): string {
   return (process.env[name] ?? '').trim();
+}
+
+function resolveSupabaseUrl(): string {
+  return readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+}
+
+function resolveSupabaseAnonKey(): string {
+  return readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
 }
 
 async function readOwnerPassword(): Promise<string> {
@@ -84,6 +91,10 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
 
   const supabaseUrl = resolveSupabaseUrl();
   const anonKey = resolveSupabaseAnonKey();
+  if (!supabaseUrl || !anonKey) {
+    return failure('Supabase authentication binding is unavailable on the backend runtime.', 'supabase_auth_binding_unavailable', 503);
+  }
+
   const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || allowlist[0] || email).toLowerCase();
   const ownerPassword = await readOwnerPassword();
 
