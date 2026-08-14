@@ -15,11 +15,13 @@ env:
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_QA_BUILD: 'true'
+  OWNER_EMAIL: iperez4242@gmail.com
+  OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
 
 jobs:
   certify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: macos-14
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -31,13 +33,25 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
-      - name: Install dependencies
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1 emulator system-images;android-34;google_apis;x86_64'
+      - name: Verify owner QA binding
+        shell: bash
         run: |
+          set -euo pipefail
+          test -n "${EXPO_PUBLIC_SUPABASE_URL:-}" || { echo '::error::EXPO_PUBLIC_SUPABASE_URL is not bound'; exit 1; }
+          test -n "${EXPO_PUBLIC_SUPABASE_ANON_KEY:-}" || { echo '::error::EXPO_PUBLIC_SUPABASE_ANON_KEY is not bound'; exit 1; }
+          test -n "${OWNER_EMAIL:-}" || { echo '::error::OWNER_EMAIL is not bound'; exit 1; }
+          test -n "${OWNER_PASSWORD:-}" || { echo '::error::OWNER_PASSWORD is not bound'; exit 1; }
+          echo 'Owner QA bindings present.'
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
           bun install --frozen-lockfile
           cd expo
           bun install --frozen-lockfile
       - name: Prepare QA signer
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.android"
@@ -45,25 +59,38 @@ jobs:
           keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=IVX CI QA, OU=Engineering, O=IVX Holdings, L=Miami, ST=Florida, C=US"
       - name: Build QA APK
         working-directory: expo/android
+        shell: bash
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew assembleQa --no-daemon -x lint
       - name: Locate APK
         id: apk
         working-directory: expo/android
+        shell: bash
         run: |
+          set -euo pipefail
           APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           ABS="$(cd "$(dirname "$APK")" && pwd)/$(basename "$APK")"
           echo "path=$ABS" >> "$GITHUB_OUTPUT"
-          sha256sum "$ABS"
+          HASH=$(shasum -a 256 "$ABS" | awk '{print $1}')
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "APK SHA256: $HASH"
           ls -lh "$ABS"
       - uses: actions/upload-artifact@v4
         with:
           name: ivx-android-branch-cert-${{ github.sha }}
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
-      - name: Emulator install and launch certification
+      - name: Install Maestro
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -Ls https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Emulator launch + Owner Sign-In certification
+        id: owner_e2e
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -73,23 +100,53 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -eu
+            set -euo pipefail
+            adb devices
             adb install -r "${{ steps.apk.outputs.path }}"
-            adb shell pm path com.ivxholdings.app.owner
+            adb shell pm path com.ivxholdings.app.owner | tee package.txt
             adb shell am start -W -n com.ivxholdings.app.owner/.MainActivity | tee launch.txt
-            sleep 10
-            adb shell pidof com.ivxholdings.app.owner
-            adb shell dumpsys activity activities | grep -q "com.ivxholdings.app.owner"
+            sleep 8
+            adb shell pidof com.ivxholdings.app.owner | tee process.txt
+            adb shell dumpsys activity activities | grep "com.ivxholdings.app.owner" | head -20 > activity.txt
             adb exec-out screencap -p > launch.png
-            adb logcat -d -t 300 > logcat.txt
-            ! grep -E "FATAL EXCEPTION|AndroidRuntime: Process: com.ivxholdings.app.owner" logcat.txt
-      - name: Upload runtime evidence
+
+            cd "$GITHUB_WORKSPACE/expo"
+            sed 's/^appId:.*/appId: com.ivxholdings.app.owner/' .maestro/ivx-owner-login.yaml > .maestro/ivx-owner-login-android-cert.yaml
+            maestro test .maestro/ivx-owner-login-android-cert.yaml --format junit --output "$GITHUB_WORKSPACE/owner-login-results.xml" 2>&1 | tee "$GITHUB_WORKSPACE/owner-login.log"
+
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/owner-login-success.png"
+            adb logcat -d -t 600 > "$GITHUB_WORKSPACE/logcat.txt"
+            ! grep -E "FATAL EXCEPTION|AndroidRuntime: Process: com.ivxholdings.app.owner" "$GITHUB_WORKSPACE/logcat.txt"
+            echo 'OWNER_SIGN_IN_E2E=PASS' | tee "$GITHUB_WORKSPACE/owner-sign-in-certificate.txt"
+            echo "COMMIT=${GITHUB_SHA}" >> "$GITHUB_WORKSPACE/owner-sign-in-certificate.txt"
+            echo "APK_SHA256=${{ steps.apk.outputs.hash }}" >> "$GITHUB_WORKSPACE/owner-sign-in-certificate.txt"
+      - name: Upload Owner Sign-In evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ivx-android-runtime-evidence-${{ github.sha }}
+          name: ivx-owner-sign-in-e2e-evidence-${{ github.sha }}
           path: |
+            package.txt
             launch.txt
+            process.txt
+            activity.txt
             launch.png
+            owner-login-results.xml
+            owner-login.log
+            owner-login-success.png
             logcat.txt
+            owner-sign-in-certificate.txt
           if-no-files-found: warn
+      - name: Certification summary
+        if: always()
+        shell: bash
+        run: |
+          echo '## IVX Owner Sign-In Certification' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- APK SHA256: \`${{ steps.apk.outputs.hash }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Owner E2E gate: \`${{ steps.owner_e2e.outcome }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.owner_e2e.outcome }}" = 'success' ]; then
+            echo '- Result: **CERTIFIED PASS**' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '- Result: **NOT CERTIFIED**' >> "$GITHUB_STEP_SUMMARY"
+          fi
