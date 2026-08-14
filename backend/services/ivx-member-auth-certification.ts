@@ -4,10 +4,9 @@ import { orchestrateRegistration } from './ivx-registration-orchestrator';
 import { calculateFinancialSummary, determineTier } from './ivx-member-classification';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
 import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
-import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v3-durable-runtime-binding-v2-2026-08-14';
+export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v4-render-runtime-safe-2026-08-14';
 const STATE_KEY = 'logs/audit/member-auth-certification/latest.json';
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUTH_TIMEOUT_MS = 10_000;
@@ -44,11 +43,11 @@ function env(...names: string[]): string {
 }
 
 function canonicalSupabaseUrl(): string {
-  return resolveSupabaseUrl().replace(/\/+$/, '');
+  return (env('EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL')).replace(/\/+$/, '');
 }
 
 function canonicalAnonKey(): string {
-  return resolveSupabaseAnonKey();
+  return env('EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY');
 }
 
 function ownerEmailFromRuntime(): string {
@@ -83,7 +82,6 @@ function adminClient() {
   });
 }
 
-/** Retry transient Supabase 5xx/timeout errors with bounded exponential backoff. */
 async function retryTransient<T>(fn: () => Promise<T>, maxAttempts = 3, baseMs = 1000): Promise<T> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
