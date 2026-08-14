@@ -17,8 +17,8 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-  S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+  CLOUDFRONT_DISTRIBUTION_ID: E1C0DEI0VKCUYN
+  S3_BUCKET_NAME: ivxholding.com
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_GOOGLE_ADS_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_ADS_KEY }}
@@ -33,13 +33,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - name: Validate required deployment secrets
+      - name: Validate required deployment configuration
         shell: bash
         run: |
           set -euo pipefail
           test -n "$AWS_ACCESS_KEY_ID" || { echo 'AWS_ACCESS_KEY_ID missing'; exit 1; }
           test -n "$AWS_SECRET_ACCESS_KEY" || { echo 'AWS_SECRET_ACCESS_KEY missing'; exit 1; }
-          test -n "$CLOUDFRONT_DISTRIBUTION_ID" || { echo 'CLOUDFRONT_DISTRIBUTION_ID missing'; exit 1; }
+          test "$CLOUDFRONT_DISTRIBUTION_ID" = 'E1C0DEI0VKCUYN' || { echo 'CloudFront distribution mismatch'; exit 1; }
+          test "$S3_BUCKET_NAME" = 'ivxholding.com' || { echo 'S3 bucket mismatch'; exit 1; }
       - name: Install Expo deployment dependencies
         working-directory: expo
         run: bun install --frozen-lockfile
