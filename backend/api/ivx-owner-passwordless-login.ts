@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-canonical-supabase-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-durable-runtime-binding-2026-08-14';
 const AUTH_TIMEOUT_MS = 10_000;
 
 function readTrimmed(value: unknown): string {
@@ -12,6 +13,22 @@ function readTrimmed(value: unknown): string {
 
 function readEnv(name: string): string {
   return (process.env[name] ?? '').trim();
+}
+
+async function readRuntimeBinding(...names: string[]): Promise<string> {
+  for (const name of names) {
+    const direct = readEnv(name);
+    if (direct) return direct;
+  }
+  for (const name of names) {
+    try {
+      const stored = readTrimmed(await getIVXOwnerVariableRuntimeValue(name));
+      if (stored) return stored;
+    } catch (error) {
+      console.warn(`[IVXOwnerPasswordlessLogin] owner-variable lookup failed for ${name}:`, error instanceof Error ? error.message : 'unknown');
+    }
+  }
+  return '';
 }
 
 function sanitizeEmail(value: unknown): string {
@@ -70,21 +87,16 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     );
   }
 
-  // Use the same project-aware sanitizer as the Expo auth path. This prevents
-  // a stale/polluted SUPABASE_URL or EXPO_PUBLIC_* binding from sending owner
-  // credentials to a different Supabase project. The resolver falls back to
-  // the canonical production project and its public anon key when necessary.
   const supabaseUrl = resolveSupabaseUrl();
   const anonKey = resolveSupabaseAnonKey();
-  const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || allowlist[0] || email).toLowerCase();
-  // Render's production blueprint already declares OWNER_NEW_PASSWORD. Keep
-  // IVX_OWNER_PASSWORD as the preferred alias without requiring credential
-  // recreation or a manual secret copy.
-  const ownerPassword = readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD');
+  const ownerEmail = ((await readRuntimeBinding('IVX_OWNER_EMAIL')) || allowlist[0] || email).toLowerCase();
+  // Credentials may be bound directly by Render or persisted in IVX's encrypted
+  // owner-variable store. Resolve both without copying, rotating, or exposing them.
+  const ownerPassword = await readRuntimeBinding('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
 
   if (!ownerPassword) {
     return failure(
-      'Owner emergency authentication password binding is unavailable on the backend runtime.',
+      'Owner emergency authentication password binding is unavailable on the backend runtime and durable IVX variable store.',
       'owner_password_binding_unavailable',
       503,
     );
@@ -132,6 +144,7 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
       passwordSelfHealed: false,
       passwordPreserved: true,
       sessionMethod: 'bounded_password_grant',
+      credentialBinding: 'runtime_or_durable_owner_variable',
       authUserCreated: false,
       deploymentMarker: DEPLOYMENT_MARKER,
       timestamp: nowIso(),
