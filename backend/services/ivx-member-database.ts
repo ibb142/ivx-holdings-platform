@@ -17,15 +17,33 @@ import {
 
 const DEPLOYMENT_MARKER = 'ivx-member-database-v2-ratelimit-fallback';
 
+// Production Supabase project constants. The anon key is a PUBLIC client key
+// protected by RLS; embedding it as a fallback is the standard Supabase pattern.
+const PRODUCTION_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
+const PRODUCTION_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
+
+function resolveSupabaseUrl(): string {
+  const envUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  if (envUrl && envUrl.includes('.supabase.co')) return envUrl.trim();
+  return PRODUCTION_SUPABASE_URL;
+}
+
+function resolveSupabaseAnonKey(): string {
+  return (
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    PRODUCTION_SUPABASE_ANON_KEY
+  );
+}
+
 function getSupabaseAdmin(): SupabaseClient {
-  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const url = resolveSupabaseUrl();
   // Service-role key first; anon key as a working fallback (service key was rotated).
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-    '';
+    resolveSupabaseAnonKey();
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -534,8 +552,8 @@ export interface MemberLoginResult {
 
 /** Create a Supabase client using the anon key (required for signInWithPassword to return a real session). */
 function getSupabaseAnonClient(): SupabaseClient {
-  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+  const url = resolveSupabaseUrl();
+  const anonKey = resolveSupabaseAnonKey();
   if (!url || !anonKey) {
     throw new Error('Supabase URL or anon key is not configured on the backend.');
   }
@@ -630,7 +648,8 @@ export async function loginMember(email: string, password: string): Promise<Memb
       password,
     });
     if (error) {
-      const msg = error.message.toLowerCase();
+      const errorMessage = (error.message || error.msg || JSON.stringify(error) || 'unknown error').trim();
+      const msg = errorMessage.toLowerCase();
       if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
         return { success: false, message: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER };
       }
@@ -640,7 +659,7 @@ export async function loginMember(email: string, password: string): Promise<Memb
       if (msg.includes('rate limit')) {
         return { success: false, message: 'Too many attempts. Please wait a minute and try again.', deploymentMarker: DEPLOYMENT_MARKER };
       }
-      return { success: false, message: `Login failed: ${error.message}`, deploymentMarker: DEPLOYMENT_MARKER };
+      return { success: false, message: `Login failed: ${errorMessage}`, deploymentMarker: DEPLOYMENT_MARKER };
     }
     const userId = data.user?.id;
     if (!userId) {
