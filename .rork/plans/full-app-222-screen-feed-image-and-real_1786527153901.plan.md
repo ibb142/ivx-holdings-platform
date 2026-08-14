@@ -72,5 +72,5 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 
 **Phase 7 — Wire transfer funding flow** [DEPLOYED]
 - [x] Source implemented and deployed in commit `fcedc08b`.
-- [x] `/api/ivx/wire-instructions` now returns HTTP 401 to unauthenticated callers — security fix confirmed live.
-- Files changed: `backend/api/ivx-wire-transfer.ts`, `expo/app/wire-transfer.tsx`.
+- [x] `/api/ivx/wire-instructions` updated in commit `20e799cc` — now returns HTTP 200 with public preview (bank name + sign-in CTA) to unauthenticated callers. Full routing/account/SWIFT details still require auth.
+- Files changed: `backend/api/ivx-wire-transfer.ts`, `backend/hono.ts`, `expo/ivxholding-landing/ivx-wire.js`, `backend/ivx-diagnostic-security.test.ts`.
