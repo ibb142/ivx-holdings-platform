@@ -640,13 +640,17 @@ export async function loginMember(email: string, password: string): Promise<Memb
   }
 
   // 2. Supabase Auth path — use the ANON key client so signInWithPassword returns a real session.
-  //    No global timeout wrapper: the client/network layer handles per-request timeouts.
+  //    Hard 10s timeout so a stalled Supabase connection never hangs the login endpoint.
   try {
     const anonClient = getSupabaseAnonClient();
-    const { data, error } = await anonClient.auth.signInWithPassword({
+    const signInPromise = anonClient.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase sign-in timed out after 10s')), 10_000),
+    );
+    const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
     if (error) {
       const errorMessage = (error.message || error.msg || JSON.stringify(error) || 'unknown error').trim();
       const msg = errorMessage.toLowerCase();
