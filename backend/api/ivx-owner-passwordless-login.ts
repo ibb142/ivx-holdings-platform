@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
+import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-render-alias-bridge-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-canonical-supabase-2026-08-14';
 const AUTH_TIMEOUT_MS = 10_000;
 
 function readTrimmed(value: unknown): string {
@@ -69,17 +70,22 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     );
   }
 
-  const supabaseUrl = readEnv('SUPABASE_URL') || readEnv('EXPO_PUBLIC_SUPABASE_URL');
-  const anonKey = readEnv('SUPABASE_ANON_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-  const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || email).toLowerCase();
-  // Render's existing secret is named OWNER_NEW_PASSWORD. Preserve support for
-  // the IVX-specific alias without requiring any credential recreation.
+  // Use the same project-aware sanitizer as the Expo auth path. This prevents
+  // a stale/polluted SUPABASE_URL or EXPO_PUBLIC_* binding from sending owner
+  // credentials to a different Supabase project. The resolver falls back to
+  // the canonical production project and its public anon key when necessary.
+  const supabaseUrl = resolveSupabaseUrl();
+  const anonKey = resolveSupabaseAnonKey();
+  const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || allowlist[0] || email).toLowerCase();
+  // Render's production blueprint already declares OWNER_NEW_PASSWORD. Keep
+  // IVX_OWNER_PASSWORD as the preferred alias without requiring credential
+  // recreation or a manual secret copy.
   const ownerPassword = readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD');
 
-  if (!supabaseUrl || !anonKey || !ownerPassword) {
+  if (!ownerPassword) {
     return failure(
-      'Owner emergency authentication is not fully configured on the backend runtime.',
-      'owner_runtime_auth_not_configured',
+      'Owner emergency authentication password binding is unavailable on the backend runtime.',
+      'owner_password_binding_unavailable',
       503,
     );
   }
