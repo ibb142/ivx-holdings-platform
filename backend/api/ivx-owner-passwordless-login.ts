@@ -3,8 +3,14 @@ import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-render-runtime-safe-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-backend-supabase-fallback-2026-08-14';
 const AUTH_TIMEOUT_MS = 10_000;
+const PRODUCTION_SUPABASE_PROJECT_REF = 'kvclcdjmjghndxsngfzb';
+const PRODUCTION_SUPABASE_URL = `https://${PRODUCTION_SUPABASE_PROJECT_REF}.supabase.co`;
+const PRODUCTION_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
+const HOSTED_SUPABASE_URL_PATTERN = /https:\/\/([a-z0-9-]+)\.supabase\.co\b/i;
+const JWT_PATTERN = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -14,12 +20,61 @@ function readEnv(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-function resolveSupabaseUrl(): string {
-  return readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payloadSegment = token.split('.')[1] ?? '';
+    const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
-function resolveSupabaseAnonKey(): string {
-  return readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+function extractSupabaseUrl(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  const hosted = value.match(HOSTED_SUPABASE_URL_PATTERN);
+  if (hosted?.[0]) {
+    const projectRef = hosted[1]?.toLowerCase() ?? '';
+    return projectRef === PRODUCTION_SUPABASE_PROJECT_REF ? hosted[0].replace(/\/$/, '') : null;
+  }
+  return null;
+}
+
+function extractSupabaseAnonKey(raw: string): string | null {
+  const matches = raw.trim().match(JWT_PATTERN) ?? [];
+  for (const candidate of matches) {
+    const payload = decodeJwtPayload(candidate);
+    if (payload?.role === 'anon' && payload?.ref === PRODUCTION_SUPABASE_PROJECT_REF) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function resolveSupabaseUrl(): string {
+  return extractSupabaseUrl(readEnv('EXPO_PUBLIC_SUPABASE_URL'))
+    || extractSupabaseUrl(readEnv('SUPABASE_URL'))
+    || PRODUCTION_SUPABASE_URL;
+}
+
+async function resolveSupabaseAnonKey(): Promise<string> {
+  const direct = extractSupabaseAnonKey(readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY'))
+    || extractSupabaseAnonKey(readEnv('SUPABASE_ANON_KEY'));
+  if (direct) return direct;
+  try {
+    const durable = extractSupabaseAnonKey(
+      readTrimmed(await getIVXOwnerVariableRuntimeValue('EXPO_PUBLIC_SUPABASE_ANON_KEY')),
+    );
+    if (durable) return durable;
+  } catch (error) {
+    console.warn(
+      '[IVXOwnerPasswordlessLogin] durable EXPO_PUBLIC_SUPABASE_ANON_KEY lookup failed:',
+      error instanceof Error ? error.message : 'unknown',
+    );
+  }
+  return PRODUCTION_SUPABASE_ANON_KEY;
 }
 
 async function readOwnerPassword(): Promise<string> {
@@ -90,7 +145,7 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   }
 
   const supabaseUrl = resolveSupabaseUrl();
-  const anonKey = resolveSupabaseAnonKey();
+  const anonKey = await resolveSupabaseAnonKey();
   if (!supabaseUrl || !anonKey) {
     return failure('Supabase authentication binding is unavailable on the backend runtime.', 'supabase_auth_binding_unavailable', 503);
   }
