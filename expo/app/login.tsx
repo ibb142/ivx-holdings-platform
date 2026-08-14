@@ -2235,8 +2235,6 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
 }
 
 export default function LoginScreen() {
-  // Realtime: auto-invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
   return <LoginScreenContent />;
 }
 
