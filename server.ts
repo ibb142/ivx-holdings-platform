@@ -16,6 +16,7 @@ import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/s
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
 import { preloadAIProviderCredentialFromOwnerVariables } from './backend/services/ivx-ai-owner-variable-preload';
+import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
 import {
   autonomousVoiceOptions,
   handleAutonomousVoiceCallback,
@@ -134,8 +135,21 @@ if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
   });
 }
 
+const productionFetch: typeof app.fetch = async (request, env, executionCtx) => {
+  const url = new URL(request.url);
+  const type = (url.searchParams.get('type') || '').trim().toLowerCase();
+  if (
+    request.method === 'GET'
+    && url.pathname === '/api/ivx/video-platform/feed'
+    && (type === 'reel' || type === 'reels')
+  ) {
+    return handleCanonicalReelsFeed(request);
+  }
+  return app.fetch(request, env, executionCtx);
+};
+
 serve(
-  { fetch: app.fetch, port: PORT, hostname: HOST },
+  { fetch: productionFetch, port: PORT, hostname: HOST },
   (info) => {
     console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
   },
