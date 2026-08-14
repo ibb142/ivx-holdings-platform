@@ -14,18 +14,12 @@ import { useAuth } from '@/lib/auth-context';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { logStartup } from '@/lib/startup-trace';
 import React, { useEffect, useState } from 'react';
-import {View, StyleSheet } from "react-native";
+import { View, StyleSheet } from 'react-native';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
-import { EmptyState } from '@/components/ivx';
-import { ErrorState } from '@/components/ivx';
-import { RefreshControl } from 'react-native';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 
 const INDEX_LOADING_TIMEOUT_MS = 4000;
 
 export default function IndexScreen() {
-  // Realtime: auto-invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
   const { isAuthenticated, isLoading } = useAuth();
   const [forceLogin, setForceLogin] = useState(false);
 
@@ -76,4 +70,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0F',
     alignItems: 'center',
-    justifyContent: 'center'}});
+    justifyContent: 'center',
+  },
+});
