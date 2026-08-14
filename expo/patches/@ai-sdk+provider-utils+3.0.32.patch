@@ -1,0 +1,13 @@
+--- /tmp/orig-pkgs/package/dist/index.mjs	1985-10-26 08:15:00.000000000 +0000
++++ node_modules/@ai-sdk/react/node_modules/@ai-sdk/provider-utils/dist/index.mjs	2026-08-14 16:45:58.076966286 +0000
+@@ -399,7 +399,9 @@
+   return builtinModule == null ? await importNodeModule(id) : builtinModule;
+ }
+ function importNodeModule(id) {
+-  return import(id);
++  // IVX web build: Metro cannot statically analyze dynamic `import(id)`.
++  // This path is only used for Node built-in modules; reject on web.
++  return Promise.reject(new Error('Node module "' + id + '" loading is not supported in web builds'));
+ }
+ function getCurrentModulePath() {
+   const originalPrepareStackTrace = Error.prepareStackTrace;

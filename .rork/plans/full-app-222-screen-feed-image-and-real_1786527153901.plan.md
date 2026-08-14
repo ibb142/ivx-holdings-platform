@@ -43,7 +43,9 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] TypeScript: `./node_modules/.bin/tsc --noEmit --project tsconfig.json` — 0 errors (2026-08-13).
 - [x] Expo static checks: `runChecks({ appPath: "expo" })` — passed, 0 errors (2026-08-13).
 - [x] Lint errors fixed in source; remaining warnings are pre-existing.
-- [ ] Web build: `bunx expo export --platform web` — BLOCKED by sandbox Watchman priority fatal error.
+- [x] Web build: `bunx expo export --platform web` — SUCCESS (2026-08-14). Required two node_modules patches to bypass sandbox blockers:
+  - `fb-watchman/index.js`: disable Watchman entirely (sandbox runs at nice 19; Watchman refuses to start).
+  - `@ai-sdk/react/node_modules/@ai-sdk/provider-utils/dist/index.mjs`: replace dynamic `import(id)` with `Promise.reject(...)` so Metro's static analyzer can bundle the web app.
 - [x] Screen audit: 249/249 PASS, 0 FAIL, 0 CRITICAL.
 - [x] Playwright browser tests: NOT RUN (no Playwright config in project).
 - [x] Mobile bundle build: NOT RUN (requires native build environment).
@@ -74,3 +76,11 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] Source implemented and deployed in commit `fcedc08b`.
 - [x] `/api/ivx/wire-instructions` updated in commit `20e799cc` — now returns HTTP 200 with public preview (bank name + sign-in CTA) to unauthenticated callers. Full routing/account/SWIFT details still require auth.
 - Files changed: `backend/api/ivx-wire-transfer.ts`, `backend/hono.ts`, `expo/ivxholding-landing/ivx-wire.js`, `backend/ivx-diagnostic-security.test.ts`.
+
+**Phase 8 — Expo web app live deploy (white screen fix)** [IN PROGRESS]
+- [x] Local web build produces `expo/dist` with working `index.html`, 14.9 MB JS bundle, CSS, favicon, and IVX assets (2026-08-14).
+- [x] Persist node_modules patches via a custom `expo/scripts/apply-patches.mjs` script plus patch files under `expo/patches/`. `patch-package` cannot be used because the project is managed with `bun.lock`, not `package-lock.json`/`yarn.lock`. The workflow will run `bun scripts/apply-patches.mjs` after `bun install`.
+- [x] Update GitHub Actions workflow to build and deploy `expo/dist` to S3 under `/app/` on `ivxholding.com`. Workflow now applies patches, runs `bunx expo export --platform web`, and calls `bun run deploy-web-app.mjs`.
+- [ ] Trigger workflow and verify the live web app renders real IVX UI (not the blank "Welcome to Your Blank App" placeholder).
+- [ ] Provide live URL + screenshot/curl proof.
+- Files changed: `expo/metro.config.js`, `expo/app.config.ts`, `expo/.watchmanconfig`, `expo/scripts/apply-patches.mjs`, `expo/patches/*.patch`, `.github/workflows/landing-s3-production-deploy.yml`.

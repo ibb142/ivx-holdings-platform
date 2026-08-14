@@ -1,0 +1,30 @@
+--- /tmp/orig-pkgs/package/index.js	1985-10-26 08:15:00.000000000 +0000
++++ node_modules/fb-watchman/index.js	2026-08-14 16:44:02.340966286 +0000
+@@ -74,6 +74,27 @@
+ Client.prototype.connect = function() {
+   var self = this;
+ 
++  // IVX sandbox/CI: disable Watchman entirely. It cannot run at nice 19 and
++  // causes a fatal priority error. Emit the standard ENOENT message and cancel
++  // queued commands so Metro falls back to the Node file crawler instead of
++  // hanging forever waiting for a Watchman response.
++  var error = new Error(
++    'Watchman was not found in PATH. See ' +
++    'https://facebook.github.io/watchman/docs/install.html ' +
++    'for installation instructions'
++  );
++  error.code = 'ENOENT';
++  error.errno = 'ENOENT';
++  console.error('Watchman: ', error.message);
++  self.connecting = false;
++  self.cancelCommands('Watchman disabled in IVX sandbox/CI');
++  self.emit('error', error);
++  return;
++
++  // Original connect() body below is intentionally unreachable after the return.
++  // It is preserved so reverting this patch is a single deletion.
++  /* eslint-disable no-unreachable */
++
+   function makeSock(sockname) {
+     // bunser will decode the watchman BSER protocol for us
+     self.bunser = new bser.BunserBuf();

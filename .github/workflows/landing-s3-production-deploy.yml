@@ -2,12 +2,24 @@ name: Landing S3 Production Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      deployWebApp:
+        description: 'Also build and deploy the Expo web app to /app/'
+        required: false
+        default: 'true'
+        type: string
   push:
     branches: [main]
     paths:
       - 'expo/ivxholding-landing/**'
       - 'expo/assets/images/**'
       - 'expo/deploy-s3-direct.mjs'
+      - 'expo/app/**'
+      - 'expo/app.config.ts'
+      - 'expo/metro.config.js'
+      - 'expo/scripts/apply-patches.mjs'
+      - 'expo/patches/**'
+      - 'expo/deploy-web-app.mjs'
       - '.github/workflows/landing-s3-production-deploy.yml'
 
 permissions:
@@ -44,6 +56,9 @@ jobs:
       - name: Install Expo deployment dependencies
         working-directory: expo
         run: bun install --frozen-lockfile
+      - name: Apply node_modules patches (Watchman + ai-sdk web fixes)
+        working-directory: expo
+        run: bun scripts/apply-patches.mjs
       - name: Prepare deployment script runtime path
         shell: bash
         run: |
@@ -52,3 +67,11 @@ jobs:
       - name: Deploy all landing assets to S3 and invalidate CloudFront
         working-directory: expo
         run: bun run deploy-s3-direct.mjs
+      - name: Build Expo web app
+        if: github.event.inputs.deployWebApp != 'false'
+        working-directory: expo
+        run: bun x expo export --platform web
+      - name: Deploy Expo web app to /app/
+        if: github.event.inputs.deployWebApp != 'false'
+        working-directory: expo
+        run: bun run deploy-web-app.mjs

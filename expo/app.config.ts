@@ -66,7 +66,9 @@ const config: ExpoConfig = {
   web: {
     favicon: './assets/images/favicon.png', // Official IVX favicon (brand standardization 2026-07-21)
     bundler: 'metro',
+    output: 'single',
   },
+  platforms: ['ios', 'android', 'web'],
   plugins: [
     'expo-router',
     'expo-font',
