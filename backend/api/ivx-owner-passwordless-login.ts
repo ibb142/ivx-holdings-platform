@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-bounded-password-grant-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-render-alias-bridge-2026-08-14';
 const AUTH_TIMEOUT_MS = 10_000;
 
 function readTrimmed(value: unknown): string {
@@ -72,7 +72,9 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   const supabaseUrl = readEnv('SUPABASE_URL') || readEnv('EXPO_PUBLIC_SUPABASE_URL');
   const anonKey = readEnv('SUPABASE_ANON_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
   const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || email).toLowerCase();
-  const ownerPassword = readEnv('IVX_OWNER_PASSWORD');
+  // Render's existing secret is named OWNER_NEW_PASSWORD. Preserve support for
+  // the IVX-specific alias without requiring any credential recreation.
+  const ownerPassword = readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD');
 
   if (!supabaseUrl || !anonKey || !ownerPassword) {
     return failure(
