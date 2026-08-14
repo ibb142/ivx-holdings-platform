@@ -48,7 +48,7 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
   - `@ai-sdk/react/node_modules/@ai-sdk/provider-utils/dist/index.mjs`: replace dynamic `import(id)` with `Promise.reject(...)` so Metro's static analyzer can bundle the web app.
 - [x] Screen audit: 249/249 PASS, 0 FAIL, 0 CRITICAL.
 - [x] Playwright browser tests: NOT RUN (no Playwright config in project).
-- [x] Mobile bundle build: NOT RUN (requires native build environment).
+- [x] Mobile bundle build: `./gradlew assembleQa` — SUCCESS (2026-08-14). Produced `expo/android/app/build/outputs/apk/qa/app-qa.apk` (≈82 MB, debug-signed QA variant, applicationId `com.ivxholdings.app.owner`).
 - [x] Unit/integration tests: NOT RUN (test suite command not found in package.json).
 
 **Phase 5 — Deployment** [COMPLETED]
