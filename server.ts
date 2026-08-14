@@ -15,6 +15,7 @@ import { startAutonomousScheduler } from './backend/services/ivx-autonomous-sche
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
+import { preloadAIProviderCredentialFromOwnerVariables } from './backend/services/ivx-ai-owner-variable-preload';
 import {
   autonomousVoiceOptions,
   handleAutonomousVoiceCallback,
@@ -31,6 +32,14 @@ console.log('[IVX Server] Starting Hono API server...', {
   host: HOST,
   port: PORT,
   nodeEnv: process.env.NODE_ENV || 'development',
+});
+
+// Repair stale host bindings from the existing encrypted Owner Variables store.
+// No secret is logged or returned; the AI runtime reads these aliases lazily.
+void preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
+  console.warn('[IVX Server] AI owner-variable preload unavailable', {
+    error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
+  });
 });
 
 // Autonomous Voice Escalation routes. Status/test are owner-only. LaML and
