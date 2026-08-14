@@ -1437,6 +1437,23 @@ async function handleRoute53Request(
 }
 
 const app = new Hono();
+
+/** Hard timeout wrapper for Supabase-dependent routes.
+ *  Races the handler against a 6s deadline. If the handler doesn't finish
+ *  in time, returns empty JSON so the frontend gets a fast 200 instead of
+ *  a 15+ second hang when Supabase is unreachable. */
+const SB_HARD_TIMEOUT_MS = 6_000;
+async function withTimeout<T extends Response>(handler: () => Promise<T>, fallback: () => Response): Promise<Response> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<Response>((resolve) => {
+    timer = setTimeout(() => resolve(fallback()), SB_HARD_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([handler(), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 // NOTE: This is a static build label, NOT a deploy timestamp. Do not read freshness
 // from this string. Use the `commit` (RENDER_GIT_COMMIT) and `bootTime` fields on
 // /health for actual deploy verification.
@@ -5489,17 +5506,17 @@ app.delete('/api/projects/:projectId/media/:mediaId', (c) => handleProjectMediaD
 app.options('/api/projects/:projectId/videos/:videoId/pin', (c) => projectEngagementOptions(c));
 app.post('/api/projects/:projectId/videos/:videoId/pin', (c) => handleProjectVideoPin(c));
 app.options('/api/projects/:projectId/like', (c) => projectEngagementOptions(c));
-app.post('/api/projects/:projectId/like', (c) => handleProjectLikeToggle(c));
+app.post('/api/projects/:projectId/like', (c) => withTimeout(() => handleProjectLikeToggle(c), () => Response.json({ liked: false, like_count: 0 })));
 app.options('/api/projects/:projectId/comments', (c) => projectEngagementOptions(c));
-app.get('/api/projects/:projectId/comments', (c) => handleProjectCommentsGet(c));
+app.get('/api/projects/:projectId/comments', (c) => withTimeout(() => handleProjectCommentsGet(c), () => Response.json({ comments: [], total: 0 })));
 app.post('/api/projects/:projectId/comments', (c) => handleProjectCommentAdd(c));
 app.options('/api/projects/:projectId/comments/:commentId', (c) => projectEngagementOptions(c));
 app.delete('/api/projects/:projectId/comments/:commentId', (c) => handleProjectCommentDelete(c));
 app.post('/api/projects/:projectId/comments/:commentId/approve', (c) => handleProjectCommentApprove(c));
 app.options('/api/projects/:projectId/share', (c) => projectEngagementOptions(c));
-app.post('/api/projects/:projectId/share', (c) => handleProjectShareTrack(c));
+app.post('/api/projects/:projectId/share', (c) => withTimeout(() => handleProjectShareTrack(c), () => Response.json({ success: true, share_count: 0 })));
 app.options('/api/projects/:projectId/save', (c) => projectEngagementOptions(c));
-app.post('/api/projects/:projectId/save', (c) => handleProjectSaveToggle(c));
+app.post('/api/projects/:projectId/save', (c) => withTimeout(() => handleProjectSaveToggle(c), () => Response.json({ saved: false, save_count: 0 })));
 app.options('/api/projects/:projectId/analytics', (c) => projectEngagementOptions(c));
 app.get('/api/projects/:projectId/analytics', (c) => handleProjectAnalyticsGet(c));
 app.post('/api/projects/:projectId/click', (c) => handleProjectTrackClick(c));
@@ -5748,7 +5765,7 @@ app.post('/api/ivx/media/upload/document', async (c) => handleMediaUpload(c.req.
 
 // ── IVX Video Feed (Instagram-style videos: feed + HQ download) ─────────
 app.options('/api/ivx/videos/feed', () => videoFeedOptions());
-app.get('/api/ivx/videos/feed', async (c) => handleVideoFeed(c.req.raw));
+app.get('/api/ivx/videos/feed', async (c) => withTimeout(() => handleVideoFeed(c.req.raw), () => Response.json({ videos: [], count: 0, deploymentMarker: 'ivx-video-feed-api-v1-2026-07-03' })));
 app.options('/api/ivx/videos/:videoId/download', () => videoFeedOptions());
 app.get('/api/ivx/videos/:videoId/download', async (c) => handleVideoDownload(c.req.raw, c.req.param('videoId')));
 
@@ -5767,19 +5784,19 @@ app.post('/api/ivx/video-pipeline/:videoId/retry', async (c) => handleVideoPipel
 // ── IVX Video Platform (enterprise vertical feed: ranked channels, engagement,
 //    analytics, stories, live, creator dashboard, moderation) ──────────────
 app.options('/api/ivx/video-platform/*', () => videoPlatformOptions());
-app.get('/api/ivx/video-platform/feed', async (c) => handlePlatformFeed(c.req.raw));
-app.get('/api/ivx/video-platform/home-feed', async (c) => handlePlatformHomeFeed(c.req.raw));
+app.get('/api/ivx/video-platform/feed', async (c) => withTimeout(() => handlePlatformFeed(c.req.raw), () => Response.json({ videos: [], count: 0, total: 0, next_cursor: null, channel: null, feed_type: 'unified', ordering: 'canonical-unified-v2', personalized: false, marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
+app.get('/api/ivx/video-platform/home-feed', async (c) => withTimeout(() => handlePlatformHomeFeed(c.req.raw), () => Response.json({ deals: [], blocks: [], count: 0, deal_count: 0, video_count: 0, total_approved_videos: 0, pattern: '3-deals-1-featured-project-video', ordering: 'canonical-home-v3', personalized: false, marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
 app.post('/api/ivx/video-platform/deals/:dealId/meta', async (c) => handlePlatformDealMeta(c.req.raw, c.req.param('dealId')));
-app.get('/api/ivx/video-platform/channels', async () => handlePlatformChannels());
+app.get('/api/ivx/video-platform/channels', async () => withTimeout(() => handlePlatformChannels(), () => Response.json({ audiences: [], properties: [], marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
 app.post('/api/ivx/video-platform/events', async (c) => handlePlatformEvents(c.req.raw));
 app.get('/api/ivx/video-platform/videos/:videoId/analytics', async (c) => handlePlatformVideoAnalytics(c.req.param('videoId')));
 app.post('/api/ivx/video-platform/videos/:videoId/meta', async (c) => handlePlatformVideoMeta(c.req.raw, c.req.param('videoId')));
 app.post('/api/ivx/video-platform/videos/:videoId/report', async (c) => handlePlatformReport(c.req.raw, c.req.param('videoId')));
 app.post('/api/ivx/video-platform/follow', async (c) => handlePlatformFollowToggle(c.req.raw));
 app.get('/api/ivx/video-platform/follow/:followerId', async (c) => handlePlatformFollowList(c.req.param('followerId')));
-app.get('/api/ivx/video-platform/stories', async () => handlePlatformStoriesList());
+app.get('/api/ivx/video-platform/stories', async () => withTimeout(() => handlePlatformStoriesList(), () => Response.json({ stories: [], count: 0, marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
 app.post('/api/ivx/video-platform/stories', async (c) => handlePlatformStoryCreate(c.req.raw));
-app.get('/api/ivx/video-platform/live', async (c) => handlePlatformLiveList(c.req.raw));
+app.get('/api/ivx/video-platform/live', async (c) => withTimeout(() => handlePlatformLiveList(c.req.raw), () => Response.json({ sessions: [], count: 0, marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
 app.post('/api/ivx/video-platform/live/start', async (c) => handlePlatformLiveStart(c.req.raw));
 app.get('/api/ivx/video-platform/live/:sessionId/status', async (c) => handlePlatformLiveStatus(c.req.param('sessionId')));
 app.post('/api/ivx/video-platform/live/:sessionId/ingest', async (c) => handlePlatformLiveIngest(c.req.raw, c.req.param('sessionId')));
