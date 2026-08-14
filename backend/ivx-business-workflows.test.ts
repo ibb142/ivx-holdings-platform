@@ -107,6 +107,7 @@ describe('IVX Business Workflows — JV / private-lender / tokenized deals', () 
     if (created.ok) {
       expect(created.deal.dealType).toBe('jv');
       expect(created.deal.participants).toEqual([]);
+      expect(created.deal.documents).toEqual([]);
     }
   });
 
