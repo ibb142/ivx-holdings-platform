@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { orchestrateRegistration } from './ivx-registration-orchestrator';
 import { calculateFinancialSummary, determineTier } from './ivx-member-classification';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
+import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../../expo/lib/supabase-env';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 
-export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v2-canonical-binding-2026-08-14';
+export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v3-durable-runtime-binding-2026-08-14';
 const STATE_KEY = 'logs/audit/member-auth-certification/latest.json';
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUTH_TIMEOUT_MS = 10_000;
@@ -42,6 +43,20 @@ function env(...names: string[]): string {
   return '';
 }
 
+async function runtimeBinding(...names: string[]): Promise<string> {
+  const direct = env(...names);
+  if (direct) return direct;
+  for (const name of names) {
+    try {
+      const stored = String(await getIVXOwnerVariableRuntimeValue(name) || '').trim();
+      if (stored) return stored;
+    } catch (error) {
+      console.warn(`[MemberAuthCert] owner-variable lookup failed for ${name}:`, error instanceof Error ? error.message.slice(0, 140) : 'unknown');
+    }
+  }
+  return '';
+}
+
 function canonicalSupabaseUrl(): string {
   return resolveSupabaseUrl().replace(/\/+$/, '');
 }
@@ -50,14 +65,14 @@ function canonicalAnonKey(): string {
   return resolveSupabaseAnonKey();
 }
 
-function ownerEmailFromRuntime(): string {
-  const configured = env('IVX_OWNER_EMAIL').toLowerCase();
+async function ownerEmailFromRuntime(): Promise<string> {
+  const configured = (await runtimeBinding('IVX_OWNER_EMAIL')).toLowerCase();
   if (configured) return configured;
   return (getIVXOwnerEmailAllowlist()[0] || '').toLowerCase();
 }
 
-function ownerPasswordFromRuntime(): string {
-  return env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
+async function ownerPasswordFromRuntime(): Promise<string> {
+  return await runtimeBinding('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
 }
 
 function adminClient() {
@@ -165,11 +180,11 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
     const supabaseUrl = canonicalSupabaseUrl();
     const service = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
     const anon = canonicalAnonKey();
-    const ownerEmail = ownerEmailFromRuntime();
-    const ownerPassword = ownerPasswordFromRuntime();
+    const ownerEmail = await ownerEmailFromRuntime();
+    const ownerPassword = await ownerPasswordFromRuntime();
     checks.runtimeConfig = {
       ok: Boolean(supabaseUrl && service && anon && ownerEmail && ownerPassword),
-      detail: `canonicalSupabase=${Boolean(supabaseUrl)} serviceRole=${Boolean(service)} canonicalAnon=${Boolean(anon)} ownerEmail=${Boolean(ownerEmail)} ownerPasswordAlias=${Boolean(ownerPassword)}`,
+      detail: `canonicalSupabase=${Boolean(supabaseUrl)} serviceRole=${Boolean(service)} canonicalAnon=${Boolean(anon)} ownerEmail=${Boolean(ownerEmail)} ownerPasswordBinding=${Boolean(ownerPassword)}`,
     };
 
     let authUserId: string | null = null;
@@ -179,8 +194,6 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
         throw new Error(`Runtime auth binding incomplete: ${checks.runtimeConfig.detail}`);
       }
 
-      // Fast bounded pre-flight. A bad host binding now fails in seconds rather
-      // than blocking the public certificate endpoint for many minutes.
       const pfResponse = await retryTransient(async () => {
         const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
           headers: { apikey: anon },
