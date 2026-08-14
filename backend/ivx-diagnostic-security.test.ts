@@ -71,7 +71,7 @@ describe('Diagnostic endpoint security regression tests', () => {
     });
   }
 
-  test('wire-instructions does not return bank details to unauthenticated requests', async () => {
+  test('wire-instructions does not return sensitive bank details to unauthenticated requests', async () => {
     const res = await fetch(`${BASE}/api/ivx/wire-instructions`);
     // Unauthenticated users get 200 with a preview (bank name + CTA), NOT 401.
     // Sensitive details (routing, account, SWIFT) must never appear.
@@ -82,7 +82,6 @@ describe('Diagnostic endpoint security regression tests', () => {
     expect(bodyStr).not.toContain('routingNumber');
     expect(bodyStr).not.toContain('accountNumber');
     expect(bodyStr).not.toContain('swiftCode');
-    expect(bodyStr).not.toContain('U.S. Century Bank');
   });
 
   test('chat-debug does not return key prefixes or provider internals', async () => {
