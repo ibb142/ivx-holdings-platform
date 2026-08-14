@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import type { LoginFailureReason, OwnerDirectAccessAuditResult } from '@/lib/auth-context';
 import {View,
   Text,
@@ -72,7 +71,6 @@ import { SupabaseAuthDiagnostic } from '@/components/SupabaseAuthDiagnostic';
 import { OwnerAuthActions } from '@/components/OwnerAuthActions';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { IVXImage } from '@/components/ivx';
-import { RefreshControl } from 'react-native';
 
 
 /** True when the Supabase client failed to initialize (URL/key missing).

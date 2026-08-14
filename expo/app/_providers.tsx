@@ -1,14 +1,17 @@
 /**
- * Full provider tree — loaded in two stages so the app can paint quickly.
+ * Full provider tree — ALL providers imported synchronously.
  *
- * Stage 1 (synchronous): essential providers only (I18n, Auth, QueryClient,
- * GestureHandlerRootView). This is enough to render the login screen.
+ * The tree structure NEVER changes between renders. Every provider is
+ * wrapped in a ProviderBoundary so a crash in one provider does not
+ * kill the entire app. This is the stable approach: no dynamic imports,
+ * no staged loading, no tree restructure that unmounts the navigation
+ * stack and causes a black screen.
  *
- * Stage 2 (asynchronous): remaining providers are loaded in the background
- * and wrapped around the app once ready. If they fail or hang, the app still
- * works with Stage 1 providers.
+ * If a provider module crashes during import evaluation, the
+ * DiagnosticErrorBoundary at the top level catches it and shows the
+ * error on screen with a retry button.
  */
-import React, { useEffect, useState, Component, type ReactNode, type ComponentType } from 'react';
+import React, { Component, type ReactNode } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -21,9 +24,15 @@ import { checkForUpdates } from '@/lib/app-update-checker';
 import { logStartup, logStartupError } from '@/lib/startup-trace';
 import Colors from '@/constants/colors';
 
-// Stage 1: essential providers — keep these synchronous so the first paint is fast.
+// All providers imported synchronously — the tree is stable from first render.
 import { I18nProvider } from '@/lib/i18n-context';
 import { AuthProvider } from '@/lib/auth-context';
+import { AnalyticsProvider } from '@/lib/analytics-context';
+import { IPXProvider } from '@/lib/ipx-context';
+import { WalletProvider } from '@/lib/wallet-context';
+import { EarnProvider } from '@/lib/earn-context';
+import { EmailProvider } from '@/lib/email-context';
+import { NetworkProvider } from '@/lib/network-context';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,46 +109,6 @@ class ProviderBoundary extends Component<ProviderBoundaryProps, ProviderBoundary
   }
 }
 
-function ProviderMountProbe({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    logStartup('PROVIDERS_STARTED');
-    logStartup('PROVIDERS_COMPLETED');
-    logStartup('PROVIDERS_MOUNTED');
-  }, []);
-  return <>{children}</>;
-}
-
-// Stage 2: remaining providers — loaded asynchronously so they cannot block first paint.
-type ProviderComponent = ComponentType<{ children: ReactNode }>;
-type ExtraProviders = {
-  AnalyticsProvider: ProviderComponent;
-  IPXProvider: ProviderComponent;
-  WalletProvider: ProviderComponent;
-  EarnProvider: ProviderComponent;
-  EmailProvider: ProviderComponent;
-  NetworkProvider: ProviderComponent;
-};
-
-async function loadExtraProviders(): Promise<ExtraProviders> {
-  const [AnalyticsProvider, IPXProvider, WalletProvider, EarnProvider, EmailProvider, NetworkProvider] =
-    await Promise.all([
-      import('@/lib/analytics-context').then((m) => m.AnalyticsProvider),
-      import('@/lib/ipx-context').then((m) => m.IPXProvider),
-      import('@/lib/wallet-context').then((m) => m.WalletProvider),
-      import('@/lib/earn-context').then((m) => m.EarnProvider),
-      import('@/lib/email-context').then((m) => m.EmailProvider),
-      import('@/lib/network-context').then((m) => m.NetworkProvider),
-    ]);
-  return {
-    AnalyticsProvider,
-    IPXProvider,
-    WalletProvider,
-    EarnProvider,
-    EmailProvider,
-    NetworkProvider,
-  };
-}
-
 function AppStack() {
   return (
     <Stack
@@ -161,60 +130,23 @@ function AppStack() {
   );
 }
 
-function EssentialProviders({ children }: { children: ReactNode }) {
-  return (
-    <DiagnosticErrorBoundary>
-      <GestureHandlerRootView
-        style={providerStyles.root}
-        {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}
-      >
-        <QueryClientProvider client={queryClient}>
-          <ProviderBoundary name="I18n">
-            <I18nProvider>
-              <ProviderBoundary name="Auth">
-                <AuthProvider>{children}</AuthProvider>
-              </ProviderBoundary>
-            </I18nProvider>
-          </ProviderBoundary>
-        </QueryClientProvider>
-      </GestureHandlerRootView>
-    </DiagnosticErrorBoundary>
-  );
-}
-
-function FullProviders({ extras, children }: { extras: ExtraProviders; children: ReactNode }) {
-  return (
-    <ProviderBoundary name="Analytics">
-      <extras.AnalyticsProvider>
-        <ProviderBoundary name="IPX">
-          <extras.IPXProvider>
-            <ProviderBoundary name="Wallet">
-              <extras.WalletProvider>
-                <ProviderBoundary name="Earn">
-                  <extras.EarnProvider>
-                    <ProviderBoundary name="Email">
-                      <extras.EmailProvider>
-                        <ProviderBoundary name="Network">
-                          <extras.NetworkProvider>{children}</extras.NetworkProvider>
-                        </ProviderBoundary>
-                      </extras.EmailProvider>
-                    </ProviderBoundary>
-                  </extras.EarnProvider>
-                </ProviderBoundary>
-              </extras.WalletProvider>
-            </ProviderBoundary>
-          </extras.IPXProvider>
-        </ProviderBoundary>
-      </extras.AnalyticsProvider>
-    </ProviderBoundary>
-  );
-}
-
+/**
+ * STABLE TREE: The provider nesting never changes between renders.
+ * Every provider is wrapped in a ProviderBoundary so a crash in one
+ * provider shows an error screen for THAT provider only, without
+ * unmounting the rest of the tree.
+ *
+ * The order matters: QueryClient must be outside everything that uses
+ * React Query. Auth must be inside QueryClient (uses React Query).
+ * The extra providers (Analytics, IPX, Wallet, Earn, Email, Network)
+ * are also inside QueryClient and Auth because they depend on auth state.
+ */
 export function AppProviders() {
-  const [extras, setExtras] = useState<ExtraProviders | null>(null);
-  const [extrasError, setExtrasError] = useState<Error | null>(null);
+  React.useEffect(() => {
+    logStartup('PROVIDERS_STARTED');
+    logStartup('PROVIDERS_COMPLETED');
+    logStartup('PROVIDERS_MOUNTED');
 
-  useEffect(() => {
     try {
       injectWebKeyboardCSS();
     } catch (err) {
@@ -224,32 +156,6 @@ export function AppProviders() {
     checkForUpdates().catch((err) => {
       console.warn('[IVX] OTA update check failed (non-fatal):', err);
     });
-
-    let cancelled = false;
-    const loadExtras = async () => {
-      try {
-        const loaded = await Promise.race([
-          loadExtraProviders(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Extra providers load timed out after 12s')), 12_000),
-          ),
-        ]);
-        if (!cancelled) {
-          setExtras(loaded);
-          logStartup('EXTRA_PROVIDERS_LOADED');
-        }
-      } catch (err) {
-        console.warn('[IVX] Extra providers failed to load (non-fatal):', err);
-        if (!cancelled) {
-          setExtrasError(err instanceof Error ? err : new Error(String(err)));
-        }
-      }
-    };
-
-    // Defer extra provider loading so the first paint is never blocked.
-    const timer = setTimeout(() => {
-      void loadExtras();
-    }, 100);
 
     const deferredTimer = setTimeout(() => {
       try {
@@ -264,42 +170,55 @@ export function AppProviders() {
       } catch (err) {
         console.warn('[IVX] installIVXIncidentCapture failed', err);
       }
-      try {
-        const { installIVXWatchdogIncidentBridge } = require('@/lib/ivx-incident-client');
-        const { ivxAIWatchdog } = require('@/src/modules/ivx-owner-ai/services/ivxAIWatchdog');
-        installIVXWatchdogIncidentBridge((listener: unknown) => ivxAIWatchdog.subscribe(listener));
-      } catch (err) {
-        console.warn('[IVX] installIVXWatchdogIncidentBridge failed', err);
-      }
     }, 3000);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      clearTimeout(deferredTimer);
-    };
+    return () => clearTimeout(deferredTimer);
   }, []);
 
   return (
-    <EssentialProviders>
-      <ProviderMountProbe>
-        <StatusBar style="light" />
-        {extras ? (
-          <FullProviders extras={extras}>
-            <AppStack />
-          </FullProviders>
-        ) : (
-          <AppStack />
-        )}
-        {extrasError ? (
-          <View style={extrasErrorStyles.banner} pointerEvents="none">
-            <Text style={extrasErrorStyles.bannerText}>
-              Some features are unavailable offline. Pull-to-refresh to retry.
-            </Text>
-          </View>
-        ) : null}
-      </ProviderMountProbe>
-    </EssentialProviders>
+    <DiagnosticErrorBoundary>
+      <GestureHandlerRootView
+        style={providerStyles.root}
+        {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}
+      >
+        <QueryClientProvider client={queryClient}>
+          <ProviderBoundary name="I18n">
+            <I18nProvider>
+              <ProviderBoundary name="Auth">
+                <AuthProvider>
+                  <ProviderBoundary name="Analytics">
+                    <AnalyticsProvider>
+                      <ProviderBoundary name="IPX">
+                        <IPXProvider>
+                          <ProviderBoundary name="Wallet">
+                            <WalletProvider>
+                              <ProviderBoundary name="Earn">
+                                <EarnProvider>
+                                  <ProviderBoundary name="Email">
+                                    <EmailProvider>
+                                      <ProviderBoundary name="Network">
+                                        <NetworkProvider>
+                                          <StatusBar style="light" />
+                                          <AppStack />
+                                        </NetworkProvider>
+                                      </ProviderBoundary>
+                                    </EmailProvider>
+                                  </ProviderBoundary>
+                                </EarnProvider>
+                              </ProviderBoundary>
+                            </WalletProvider>
+                          </ProviderBoundary>
+                        </IPXProvider>
+                      </ProviderBoundary>
+                    </AnalyticsProvider>
+                  </ProviderBoundary>
+                </AuthProvider>
+              </ProviderBoundary>
+            </I18nProvider>
+          </ProviderBoundary>
+        </QueryClientProvider>
+      </GestureHandlerRootView>
+    </DiagnosticErrorBoundary>
   );
 }
 
@@ -350,24 +269,5 @@ const providerErrorStyles = StyleSheet.create({
     color: '#000',
     fontSize: 16,
     fontWeight: 'bold' as const,
-  },
-});
-
-const extrasErrorStyles = StyleSheet.create({
-  banner: {
-    position: 'absolute' as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(255, 215, 0, 0.12)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 215, 0, 0.3)',
-  },
-  bannerText: {
-    color: '#FFD700',
-    fontSize: 11,
-    textAlign: 'center' as const,
   },
 });
