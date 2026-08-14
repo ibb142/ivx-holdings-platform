@@ -1,0 +1,43 @@
+name: IVX Syntax Hotfix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Repair member login route syntax
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/hono.ts')
+          s = p.read_text()
+          old = "app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(() => handleMemberLogin(c.req.raw), () => Response.json({ success: false, message: 'Login service temporarily unavailable. Please try again.', deploymentMarker: DEPLOYMENT_MARKER }, 503))) as Promise<Response>));"
+          new = "app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(() => handleMemberLogin(c.req.raw), () => Response.json({ success: false, message: 'Login service temporarily unavailable. Please try again.', deploymentMarker: DEPLOYMENT_MARKER }, 503))) as Promise<Response>);"
+          if old not in s:
+              print('hotfix_target_not_present')
+          else:
+              p.write_text(s.replace(old, new, 1))
+              print('hotfix_applied')
+          PY
+      - name: Commit repair if needed
+        shell: bash
+        run: |
+          if git diff --quiet -- backend/hono.ts; then
+            echo 'No syntax repair needed.'
+            exit 0
+          fi
+          git config user.name 'IVX Hotfix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add backend/hono.ts
+          git commit -m 'fix: repair member login route syntax'
+          git push origin HEAD:main
