@@ -11,7 +11,6 @@ jobs:
     timeout-minutes: 15
     env:
       API_BASE: https://api.ivxholding.com
-      IVX_CERT_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +53,6 @@ jobs:
               cat /tmp/health.json || true
               health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
               db_config=$(jq -r '.databaseConfigured // .database_configured // false' /tmp/health.json 2>/dev/null || echo false)
-              ai_ok=$(jq -r '.aiOk // .ai.ok // .ai_ok // empty' /tmp/health.json 2>/dev/null || true)
               if [ "$health_ok" = "true" ] && [ "$db_config" = "true" ]; then
                 ok=1
                 break
@@ -72,27 +70,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${IVX_CERT_SYSTEM_KEY:-}" ]; then
-            echo 'IVX_AI_SYSTEM_SECRET is not bound to this workflow'
+          passed=0
+          for i in $(seq 1 30); do
+            cert_code=$(curl -sS -m 20 -o /tmp/member-cert.json -w '%{http_code}' \
+              "${API_BASE}/api/ivx/certification/member-auth-public" || true)
+            echo "member_auth_cert poll=$i http=$cert_code"
+            if [ "$cert_code" = "200" ]; then
+              cat /tmp/member-cert.json || true
+              cert_sha=$(jq -r '.commit // empty' /tmp/member-cert.json 2>/dev/null || true)
+              certified=$(jq -r '.certified // false' /tmp/member-cert.json 2>/dev/null || echo false)
+              if [ "$certified" = "true" ] && { [ "$cert_sha" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$cert_sha"* ]] || [[ "$cert_sha" == "$GITHUB_SHA"* ]]; }; then
+                passed=1
+                break
+              fi
+            fi
+            sleep 10
+          done
+          if [ "$passed" != "1" ]; then
+            echo 'Current production member/auth certificate did not become certified on this SHA'
+            cat /tmp/member-cert.json 2>/dev/null || true
             exit 1
           fi
-          cert_code=$(curl -sS -m 30 -o /tmp/member-cert.json -w '%{http_code}' \
-            -H "X-IVX-System-Key: ${IVX_CERT_SYSTEM_KEY}" \
-            "${API_BASE}/api/ivx/certification/member-auth" || true)
-          echo "member_auth_cert_http=$cert_code"
-          cat /tmp/member-cert.json || true
-          if [ "$cert_code" != "200" ]; then
-            echo 'Member/owner certification endpoint unavailable'
-            exit 1
-          fi
-          runtime_ok=$(jq -r '.certificate.checks.runtimeConfig.ok // .checks.runtimeConfig.ok // false' /tmp/member-cert.json)
-          owner_ok=$(jq -r '.certificate.checks.ownerLogin.ok // .checks.ownerLogin.ok // false' /tmp/member-cert.json)
-          member_login_ok=$(jq -r '.certificate.checks.memberLogin.ok // .checks.memberLogin.ok // false' /tmp/member-cert.json)
-          persist_ok=$(jq -r '.certificate.checks.memberPersistence.ok // .checks.memberPersistence.ok // false' /tmp/member-cert.json)
+          runtime_ok=$(jq -r '.checks.runtimeConfig // false' /tmp/member-cert.json)
+          owner_ok=$(jq -r '.checks.ownerLogin // false' /tmp/member-cert.json)
+          registration_ok=$(jq -r '.checks.memberRegistration // false' /tmp/member-cert.json)
+          member_login_ok=$(jq -r '.checks.memberLogin // false' /tmp/member-cert.json)
+          persist_ok=$(jq -r '.checks.memberPersistence // false' /tmp/member-cert.json)
+          regular_ok=$(jq -r '.checks.regularClassification // false' /tmp/member-cert.json)
+          vip_ok=$(jq -r '.checks.vipClassification // false' /tmp/member-cert.json)
+          cleanup_ok=$(jq -r '.checks.cleanup // false' /tmp/member-cert.json)
           if [ "$runtime_ok" != "true" ]; then echo 'Runtime Supabase/service-role/anon/owner binding FAIL'; exit 1; fi
           if [ "$owner_ok" != "true" ]; then echo 'Live owner password grant FAIL'; exit 1; fi
+          if [ "$registration_ok" != "true" ]; then echo 'Live member registration FAIL'; exit 1; fi
           if [ "$member_login_ok" != "true" ]; then echo 'Live member password grant FAIL'; exit 1; fi
           if [ "$persist_ok" != "true" ]; then echo 'Live Supabase REST/member persistence FAIL'; exit 1; fi
+          if [ "$regular_ok" != "true" ] || [ "$vip_ok" != "true" ]; then echo 'Member classification runtime FAIL'; exit 1; fi
+          if [ "$cleanup_ok" != "true" ]; then echo 'Synthetic certification cleanup FAIL'; exit 1; fi
           echo 'supabase_auth_rest_binding=PASS'
 
       - name: 18-20 DB resilience code gate
