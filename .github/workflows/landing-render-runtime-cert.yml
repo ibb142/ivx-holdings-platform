@@ -1,0 +1,101 @@
+name: Landing Render Runtime Certificate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/ivxholding-landing/**'
+      - 'expo/assets/images/**'
+      - 'backend/api/ivx-landing-full-deploy.ts'
+      - 'backend/services/ivx-cloudfront-invalidation.ts'
+      - '.github/workflows/landing-render-runtime-cert.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-and-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for IVX production backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 15 https://api.ivxholding.com/health || true)
+            if [ "$code" = "200" ]; then
+              echo "Backend health PASS"
+              cat /tmp/health.json | head -c 1000
+              exit 0
+            fi
+            echo "Backend not ready (HTTP $code), retry $i/30"
+            sleep 10
+          done
+          echo '::error::Production backend did not become healthy.'
+          exit 1
+
+      - name: Execute landing deployment inside Render runtime
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/deploy.json -w '%{http_code}' --max-time 180 \
+            -X POST https://api.ivxholding.com/api/ivx/landing-deploy \
+            -H 'Content-Type: application/json' \
+            --data '{"confirm":"DEPLOY_IVX_LANDING_FULL"}')
+          echo "HTTP=$code"
+          cat /tmp/deploy.json
+          test "$code" = "200" || { echo "::error::Render runtime landing deploy returned HTTP $code"; exit 1; }
+          node - <<'NODE'
+          const fs = require('fs');
+          const x = JSON.parse(fs.readFileSync('/tmp/deploy.json','utf8'));
+          const d = x.result || x;
+          if (d.ok !== true) throw new Error('landing deploy result ok != true');
+          if (!Array.isArray(d.uploads) || d.uploads.length === 0) throw new Error('no upload evidence');
+          const bad = d.uploads.filter(u => u.ok !== true);
+          if (bad.length) throw new Error(`${bad.length} uploads failed: ${bad.slice(0,5).map(u=>u.key+':'+u.error).join(', ')}`);
+          if (!d.cloudFront || d.cloudFront.attempted !== true || d.cloudFront.ok !== true) throw new Error(`CloudFront invalidation not verified: ${JSON.stringify(d.cloudFront)}`);
+          console.log(`CERT_DEPLOY_PASS uploads=${d.uploads.length} invalidationId=${d.cloudFront.invalidationId || 'n/a'}`);
+          NODE
+
+      - name: Verify live CloudFront website
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl -fsS --max-time 30 -D /tmp/index.headers -o /tmp/index.html 'https://ivxholding.com/?ivx_cert=${{ github.sha }}'
+          grep -qi '^content-type:.*text/html' /tmp/index.headers
+          test $(wc -c < /tmp/index.html) -gt 1000
+
+          curl -fsS --max-time 30 -D /tmp/js.headers -o /tmp/ivx-app.js 'https://ivxholding.com/ivx-app.js?ivx_cert=${{ github.sha }}'
+          grep -qi '^content-type:.*\(javascript\|text/javascript\)' /tmp/js.headers
+          test $(wc -c < /tmp/ivx-app.js) -gt 100
+
+          curl -fsS --max-time 30 -D /tmp/robots.headers -o /tmp/robots.txt 'https://ivxholding.com/robots.txt?ivx_cert=${{ github.sha }}'
+          grep -qi '^content-type:.*text/plain' /tmp/robots.headers
+          grep -qi 'Sitemap:' /tmp/robots.txt
+
+          curl -fsS --max-time 30 -D /tmp/sitemap.headers -o /tmp/sitemap.xml 'https://ivxholding.com/sitemap.xml?ivx_cert=${{ github.sha }}'
+          grep -qi '^content-type:.*\(application/xml\|text/xml\)' /tmp/sitemap.headers
+          grep -qi '<urlset' /tmp/sitemap.xml
+
+          echo "LIVE_CLOUDFRONT_CERT_PASS commit=${GITHUB_SHA}"
+
+      - name: Certificate summary
+        if: success()
+        shell: bash
+        run: |
+          echo '## IVX Landing Production Certificate' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Render runtime deployment: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- S3 uploads: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- CloudFront invalidation: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Live index/html: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Live JS MIME/content: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- robots.txt: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- sitemap.xml: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Result: **CERTIFIED PASS**' >> "$GITHUB_STEP_SUMMARY"
