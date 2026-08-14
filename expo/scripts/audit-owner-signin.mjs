@@ -14,11 +14,7 @@ const OWNER_EMAIL = process.env.IVX_OWNER_EMAIL ?? '';
 const OWNER_PASSWORD = process.env.IVX_OWNER_PASSWORD ?? '';
 const BACKEND_BASE = process.env.EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL ?? 'https://api.ivxholding.com';
 
-function sanitizeForLog(value) {
-  if (!value || typeof value !== 'string') return value;
-  if (value.length <= 8) return '*'.repeat(value.length);
-  return `${value.slice(0, 3)}...${value.slice(-3)}`;
-}
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function decodeJwtIssuer(token) {
   try {
@@ -33,15 +29,40 @@ function decodeJwtIssuer(token) {
   }
 }
 
+async function fetchWithTransientRetry(url, init, label, attempts = 5) {
+  let lastResponse = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      lastResponse = response;
+      if (response.status < 500 && response.status !== 429) return response;
+      if (attempt === attempts) return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) throw error;
+    }
+    const delayMs = Math.min(8000, 1000 * (2 ** (attempt - 1)));
+    console.error(`${label} transient failure; retry ${attempt}/${attempts} after ${delayMs}ms`);
+    await sleep(delayMs);
+  }
+  if (lastResponse) return lastResponse;
+  throw lastError ?? new Error(`${label} failed without a response`);
+}
+
 async function signInOwner() {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: ANON_KEY,
+  const response = await fetchWithTransientRetry(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: ANON_KEY,
+      },
+      body: JSON.stringify({ email: OWNER_EMAIL, password: OWNER_PASSWORD }),
     },
-    body: JSON.stringify({ email: OWNER_EMAIL, password: OWNER_PASSWORD }),
-  });
+    'Supabase owner sign-in',
+  );
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const details = JSON.stringify({
@@ -54,9 +75,7 @@ async function signInOwner() {
     throw new Error(`Supabase sign-in failed: ${details}`);
   }
   const accessToken = body?.access_token;
-  if (!accessToken) {
-    throw new Error('Supabase sign-in succeeded but no access_token was returned.');
-  }
+  if (!accessToken) throw new Error('Supabase sign-in succeeded but no access_token was returned.');
   return {
     accessToken,
     refreshToken: body?.refresh_token ?? null,
@@ -68,7 +87,7 @@ async function signInOwner() {
 }
 
 async function probeBackendAuthDiagnostic(accessToken) {
-  const response = await fetch(`${BACKEND_BASE}/api/ivx/owner-ai/auth-diagnostic`, {
+  const response = await fetchWithTransientRetry(`${BACKEND_BASE}/api/ivx/owner-ai/auth-diagnostic`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -76,7 +95,7 @@ async function probeBackendAuthDiagnostic(accessToken) {
       Authorization: `Bearer ${accessToken}`,
     },
     body: '{}',
-  });
+  }, 'Owner auth diagnostic');
   const body = await response.json().catch(() => null);
   return {
     httpStatus: response.status,
@@ -88,7 +107,7 @@ async function probeBackendAuthDiagnostic(accessToken) {
 }
 
 async function probeOwnerAI(accessToken) {
-  const response = await fetch(`${BACKEND_BASE}/api/ivx/owner-ai`, {
+  const response = await fetchWithTransientRetry(`${BACKEND_BASE}/api/ivx/owner-ai`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -96,14 +115,10 @@ async function probeOwnerAI(accessToken) {
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ message: 'Return one word only: ALIVE', mode: 'chat' }),
-  });
+  }, 'Owner AI reachability');
   const text = await response.text().catch(() => '');
   let body = null;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    body = { preview: text.slice(0, 200) };
-  }
+  try { body = JSON.parse(text); } catch { body = { preview: text.slice(0, 200) }; }
   return {
     httpStatus: response.status,
     bodyPreview: typeof body === 'string' ? body.slice(0, 200) : JSON.stringify(body).slice(0, 200),
@@ -130,34 +145,28 @@ async function main() {
     auditedAt: startedAt,
     supabaseProject: SUPABASE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, ''),
     ownerEmail: OWNER_EMAIL.toLowerCase(),
-    signIn: signIn
-      ? {
-          success: true,
-          userId: signIn.userId,
-          email: signIn.email,
-          issuer: signIn.issuer,
-          tokenLength: signIn.accessToken.length,
-          expiresAt: signIn.expiresAt ? new Date(signIn.expiresAt * 1000).toISOString() : null,
-        }
-      : { success: false, error },
-    backendAuthDiagnostic: diagnostic
-      ? {
-          httpStatus: diagnostic.httpStatus,
-          accepted: diagnostic.ok,
-          rootCause: diagnostic.rootCause,
-          tokenExpired: diagnostic.checks?.tokenExpired ?? null,
-          issuerMatchesBackend: diagnostic.checks?.issuerMatchesBackendProject ?? null,
-          supabaseUserFound: diagnostic.supabaseLookup?.userFound ?? null,
-          ownerEmailAllowlisted: diagnostic.checks?.ownerEmailAllowlisted ?? null,
-          authenticatedEmailMasked: diagnostic.supabaseLookup?.emailMasked ?? null,
-        }
-      : null,
-    ownerAIReachability: ownerAi
-      ? {
-          httpStatus: ownerAi.httpStatus,
-          bodyPreview: ownerAi.bodyPreview,
-        }
-      : null,
+    signIn: signIn ? {
+      success: true,
+      userId: signIn.userId,
+      email: signIn.email,
+      issuer: signIn.issuer,
+      tokenLength: signIn.accessToken.length,
+      expiresAt: signIn.expiresAt ? new Date(signIn.expiresAt * 1000).toISOString() : null,
+    } : { success: false, error },
+    backendAuthDiagnostic: diagnostic ? {
+      httpStatus: diagnostic.httpStatus,
+      accepted: diagnostic.ok,
+      rootCause: diagnostic.rootCause,
+      tokenExpired: diagnostic.checks?.tokenExpired ?? null,
+      issuerMatchesBackend: diagnostic.checks?.issuerMatchesBackendProject ?? null,
+      supabaseUserFound: diagnostic.supabaseLookup?.userFound ?? null,
+      ownerEmailAllowlisted: diagnostic.checks?.ownerEmailAllowlisted ?? null,
+      authenticatedEmailMasked: diagnostic.supabaseLookup?.emailMasked ?? null,
+    } : null,
+    ownerAIReachability: ownerAi ? {
+      httpStatus: ownerAi.httpStatus,
+      bodyPreview: ownerAi.bodyPreview,
+    } : null,
     verdict: error
       ? 'FAILED'
       : diagnostic?.ok && ownerAi?.httpStatus === 200
