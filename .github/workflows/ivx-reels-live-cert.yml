@@ -15,26 +15,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for production API
+      - name: Wait for production SHA parity
         shell: bash
         run: |
           set -euo pipefail
-          ready=0
+          matched=0
           for i in $(seq 1 60); do
             code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 5 --max-time 15 "${API_BASE}/health" || true)
             if [ "$code" = "200" ]; then
-              echo "Production API responded on poll $i"
-              cat /tmp/health.json
-              ready=1
-              break
+              health_sha=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json 2>/dev/null || true)
+              ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
+              echo "poll=$i health=$ok production_sha=${health_sha:-missing} expected=${GITHUB_SHA}"
+              if [ "$ok" = "true" ] && { [ "$health_sha" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$health_sha"* ]] || [[ "$health_sha" == "$GITHUB_SHA"* ]]; }; then
+                matched=1
+                break
+              fi
+            else
+              echo "poll=$i health_http=$code"
             fi
-            echo "poll=$i health_http=$code"
             sleep 10
           done
-          if [ "$ready" != "1" ]; then
-            echo "Production API never became reachable"
+          if [ "$matched" != "1" ]; then
+            echo "Production never reached current main SHA ${GITHUB_SHA}"
             exit 1
           fi
+          echo "sha_parity=PASS"
 
       - name: Verify production health
         shell: bash
@@ -122,7 +127,7 @@ jobs:
           count=$(jq -r '.count // (.videos | length) // 0' /tmp/reels.json)
           marker=$(jq -r '.marker // empty' /tmp/reels.json)
           cat > qa/evidence/reels-live-cert.json <<EOF
-          {"certified":true,"scope":"IVX Reels live advertising readiness","githubSha":"${GITHUB_SHA}","health":"PASS","reelsFeed":"PASS","publishedReels":${count},"feedDeterminism":"PASS","mediaPlayback":"PASS","landingReelsSurface":"PASS","platformMarker":"${marker}","verifiedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+          {"certified":true,"scope":"IVX Reels live advertising readiness","githubSha":"${GITHUB_SHA}","shaParity":"PASS","health":"PASS","reelsFeed":"PASS","publishedReels":${count},"feedDeterminism":"PASS","mediaPlayback":"PASS","landingReelsSurface":"PASS","platformMarker":"${marker}","verifiedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
           EOF
           cat qa/evidence/reels-live-cert.json
 
