@@ -142,6 +142,7 @@ function buildUploadPlan(): PlannedUpload[] {
   const plan: PlannedUpload[] = [];
   const htmlCache = 'no-cache, no-store, must-revalidate';
   const seoCache = 'public, max-age=3600';
+  const assetCache = 'public, max-age=31536000, immutable';
 
   // robots.txt — prefer the shipped file, fall back to the embedded constant.
   const robots = tryReadLandingFile('robots.txt') ?? EMBEDDED_ROBOTS_TXT;
@@ -151,11 +152,16 @@ function buildUploadPlan(): PlannedUpload[] {
   const sitemap = tryReadLandingFile('sitemap.xml') ?? EMBEDDED_SITEMAP_XML;
   plan.push({ key: 'sitemap.xml', body: sitemap, contentType: 'application/xml; charset=utf-8', cacheControl: seoCache });
 
-  // NOTE: index.html is intentionally NOT redeployed here. The live index.html is
-  // produced by expo/deploy-landing.mjs with a special live-deals card renderer +
-  // sanitizer; overwriting it with a plain substitution would drop that. The SEO
-  // gap this autodeployer closes is the missing robots.txt / sitemap.xml / capture
-  // files (which S3's ErrorDocument fallback was masking as 200 text/html).
+  // index.html — deploy with env placeholder substitution (phone number, legal links, etc.)
+  const indexHtml = tryReadLandingFile('index.html');
+  if (indexHtml) {
+    plan.push({
+      key: 'index.html',
+      body: substituteLandingPlaceholders(indexHtml),
+      contentType: 'text/html; charset=utf-8',
+      cacheControl: htmlCache,
+    });
+  }
 
   // capture.html — served at both /capture.html and /capture.
   const captureHtml = tryReadLandingFile('capture.html');
@@ -166,9 +172,66 @@ function buildUploadPlan(): PlannedUpload[] {
     }
   }
 
+  // Standalone legal pages — deploy with env substitution
+  const legalPages = ['privacy.html', 'terms.html', 'disclosures.html', 'cookie.html', 'legal.html'];
+  for (const page of legalPages) {
+    const content = tryReadLandingFile(page);
+    if (content) {
+      plan.push({
+        key: page,
+        body: substituteLandingPlaceholders(content),
+        contentType: 'text/html; charset=utf-8',
+        cacheControl: htmlCache,
+      });
+    }
+  }
+
+  // enterprise-register.html and reset-password.html
+  for (const page of ['enterprise-register.html', 'reset-password.html']) {
+    const content = tryReadLandingFile(page);
+    if (content) {
+      plan.push({
+        key: page,
+        body: substituteLandingPlaceholders(content),
+        contentType: 'text/html; charset=utf-8',
+        cacheControl: htmlCache,
+      });
+    }
+  }
+
+  // JS assets — deploy with correct content-type (previously served as HTML by S3 fallback)
+  const jsAssets = [
+    'ivx-app.js', 'ivx-analytics.js', 'ivx-home-feed.js', 'ivx-invest.js',
+    'ivx-portal.js', 'ivx-reels.js', 'ivx-lazy-bridge.js', 'ivx-ui-utils.js',
+    'ivx-web-vitals.js', 'ivx-wire.js', 'landing-support-chat.js',
+  ];
+  for (const jsFile of jsAssets) {
+    const content = tryReadLandingFile(jsFile);
+    if (content) {
+      plan.push({
+        key: jsFile,
+        body: content,
+        contentType: 'application/javascript; charset=utf-8',
+        cacheControl: assetCache,
+      });
+    }
+  }
+
+  // CSS assets
+  const cssAssets = ['ivx-styles.css', 'landing-support-chat.css'];
+  for (const cssFile of cssAssets) {
+    const content = tryReadLandingFile(cssFile);
+    if (content) {
+      plan.push({
+        key: cssFile,
+        body: content,
+        contentType: 'text/css; charset=utf-8',
+        cacheControl: assetCache,
+      });
+    }
+  }
+
   // ivx-config.json — Supabase fallback config the landing reads client-side.
-  // MUST be substituted like capture.html: uploading it raw leaks __IVX_*__
-  // placeholders to production and breaks client-side config fallback readers.
   const configJson = tryReadLandingFile('ivx-config.json');
   if (configJson) {
     plan.push({
