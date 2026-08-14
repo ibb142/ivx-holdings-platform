@@ -56,9 +56,11 @@ describe('IVX Business Workflows — member account control', () => {
 
   test('loginMember returns false for unknown email', async () => {
     const result = await loginMember(`nobody-${Date.now()}@ivx-test.local`, TEST_PASSWORD);
-    // Either the durable store has no record (success:false) or Supabase rejects.
+    // loginMember intentionally bounds a stalled Supabase auth request at 10 seconds.
+    // Give the integration-style unit case enough time to observe that controlled
+    // failure instead of Bun's default 5-second test timeout winning the race.
     expect(result.success).toBe(false);
-  });
+  }, 15_000);
 
   test('requestMemberPasswordReset rejects empty email', async () => {
     const result = await requestMemberPasswordReset('');
