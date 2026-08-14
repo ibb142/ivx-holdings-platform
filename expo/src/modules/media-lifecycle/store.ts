@@ -298,6 +298,6 @@ export const useMediaLifecycleStore = create<MediaLifecycleStore>()(
         });
       },
     }),
-    { name: 'media-lifecycle-store', enabled: typeof __DEV__ !== 'undefined' ? __DEV__ : false },
+    { name: 'media-lifecycle-store', enabled: typeof __DEV__ !== 'undefined' ? Boolean(__DEV__) : false },
   ),
 );

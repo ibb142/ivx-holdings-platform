@@ -35,7 +35,8 @@ export function recordLifecycleEvent(
   };
   store.recordEvent(entry);
 
-  if (typeof __DEV__ !== 'undefined' && Boolean(__DEV__)) {
+  const isDev = typeof __DEV__ !== 'undefined' ? Boolean(__DEV__) : false;
+  if (isDev) {
     // Keep console traffic low to avoid Metro flooding.
     const events = store.events;
     if (events.length > MAX_EVENTS) {
