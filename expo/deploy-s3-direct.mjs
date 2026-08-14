@@ -13,7 +13,15 @@
  * If env vars are not set, falls back to legacy credentials with a warning.
  */
 import { S3Client, PutObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
-import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+  GetDistributionConfigCommand,
+  UpdateDistributionCommand,
+  ListResponseHeadersPoliciesCommand,
+  CreateResponseHeadersPolicyCommand,
+  GetResponseHeadersPolicyCommand,
+} from '@aws-sdk/client-cloudfront';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 
 // ── AWS Configuration ─────────────────────────────────
@@ -382,6 +390,106 @@ async function deploy() {
   } else {
     console.log('⚠️  APK not found at', APK_PATH, '— skipping APK upload');
     results.push({ key: 'apk/download', status: 'skipped', reason: 'APK not built' });
+  }
+
+  // ── CloudFront Response Headers Policy (security headers) ───────
+  console.log('');
+  console.log('CloudFront Response Headers Policy...');
+  const POLICY_NAME = 'IVXSecurityHeaders';
+  let policyETag = '';
+  let policyId = '';
+
+  try {
+    // List existing policies to find ours
+    const listRes = await cf.send(new ListResponseHeadersPoliciesCommand({}));
+    const existing = listRes.ResponseHeadersPolicyList?.Items?.find(
+      (p) => p.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Name === POLICY_NAME
+    );
+
+    if (existing?.ResponseHeadersPolicy?.Id) {
+      policyId = existing.ResponseHeadersPolicy.Id;
+      console.log('  Found existing policy:', policyId);
+      const getRes = await cf.send(new GetResponseHeadersPolicyCommand({ Id: policyId }));
+      policyETag = getRes.ETag || '';
+    }
+  } catch (e) {
+    console.warn('  Could not list existing policies:', e?.message || 'Unknown');
+  }
+
+  const policyConfig = {
+    Name: POLICY_NAME,
+    Comment: 'Security headers for IVX Holdings landing page',
+    CorsConfig: {
+      AccessControlAllowOrigins: { Quantity: 1, Items: ['https://ivxholding.com'] },
+      AccessControlAllowHeaders: { Quantity: 3, Items: ['Content-Type', 'Authorization', 'X-Requested-With'] },
+      AccessControlAllowMethods: { Quantity: 2, Items: ['GET', 'OPTIONS'] },
+      AccessControlAllowCredentials: false,
+      OriginOverride: false,
+    },
+    SecurityHeadersConfig: {
+      StrictTransportSecurity: {
+        AccessControlMaxAgeSec: 31536000,
+        IncludeSubdomains: true,
+        Preload: true,
+        Override: true,
+      },
+      FrameOptions: { FrameOption: 'DENY', Override: true },
+      ContentTypeOptions: { Override: true },
+      ReferrerPolicy: { ReferrerPolicy: 'strict-origin-when-cross-origin', Override: true },
+      XSSProtection: { Protection: true, ModeBlock: true, Override: true },
+    },
+  };
+
+  try {
+    if (policyId) {
+      console.log('  Policy already exists:', policyId);
+    } else {
+      const createRes = await cf.send(new CreateResponseHeadersPolicyCommand({
+        ResponseHeadersPolicyConfig: policyConfig,
+      }));
+      policyId = createRes.ResponseHeadersPolicy?.Id || '';
+      console.log('  Created policy:', policyId);
+    }
+  } catch (e) {
+    console.warn('  Could not create/find policy:', e?.message || 'Unknown');
+  }
+
+  // Attach policy to distribution if we have one
+  if (policyId) {
+    try {
+      const distRes = await cf.send(new GetDistributionConfigCommand({ Id: DIST_ID }));
+      const distConfig = distRes.DistributionConfig;
+      const currentETag = distRes.ETag || '';
+
+      if (distConfig) {
+        if (!distConfig.DefaultCacheBehavior) {
+          distConfig.DefaultCacheBehavior = {
+            TargetOriginId: distConfig.Origins?.Items?.[0]?.Id || 'ivxholding-origin',
+            ViewerProtocolPolicy: 'redirect-to-https',
+            TrustedSigners: { Enabled: false, Quantity: 0 },
+            ForwardedValues: { QueryString: false, Cookies: { Forward: 'none' } },
+            MinTTL: 0,
+          };
+        }
+
+        const currentPolicyId = distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId;
+        if (currentPolicyId !== policyId) {
+          distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId = policyId;
+
+          await cf.send(new UpdateDistributionCommand({
+            Id: DIST_ID,
+            DistributionConfig: distConfig,
+            IfMatch: currentETag,
+          }));
+          console.log('  ✅ Attached security headers policy to distribution');
+        } else {
+          console.log('  Policy already attached to distribution');
+        }
+      }
+    } catch (e) {
+      console.warn('  Could not attach policy to distribution:', e?.message || 'Unknown');
+      if (e?.$metadata) console.warn('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+    }
   }
 
   // ── CloudFront invalidation ────────────────────────
