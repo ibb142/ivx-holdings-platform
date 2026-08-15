@@ -1,0 +1,61 @@
+name: IVX Complete Runtime Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-complete-runtime-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Repair authoritative Owner Variable runtime binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ai = Path('backend/ivx-ai-runtime.ts')
+          text = ai.read_text()
+          old = """export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> {\n  try {\n    const { getIVXOwnerVariableRuntimeValue } = await import('./api/ivx-owner-variables');\n    const key = await getIVXOwnerVariableRuntimeValue('IVX_AI_GATEWAY_KEY');\n    if (key) _ownerVariableGatewayKey = key;\n  } catch {\n    // Owner Variables store not available — process.env is the only source\n  }\n}\n"""
+          new = """export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> {\n  try {\n    const { getIVXOwnerVariableRuntimeValue } = await import('./api/ivx-owner-variables');\n    for (const name of ['IVX_AI_GATEWAY_KEY', 'AI_GATEWAY_API_KEY'] as const) {\n      const key = await getIVXOwnerVariableRuntimeValue(name, { preferStored: true });\n      if (!key) continue;\n      _ownerVariableGatewayKey = key;\n      process.env.IVX_AI_GATEWAY_KEY = key;\n      process.env.AI_GATEWAY_API_KEY = key;\n      return;\n    }\n  } catch {\n    // Owner Variables store unavailable; process.env remains the fallback source.\n  }\n}\n"""
+          if old not in text:
+              raise SystemExit('AI runtime preload target not found')
+          ai.write_text(text.replace(old, new, 1))
+
+          cert = Path('backend/services/ivx-member-auth-certification.ts')
+          text = cert.read_text()
+          old = """async function ownerPasswordFromRuntime(): Promise<string> {\n  const direct = env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');\n  if (direct) return direct;\n  try {\n    return String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD') || '').trim();\n  } catch (error) {\n    console.warn('[MemberAuthCert] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message.slice(0, 140) : 'unknown');\n    return '';\n  }\n}\n"""
+          new = """async function ownerPasswordFromRuntime(): Promise<string> {\n  try {\n    const stored = String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD', { preferStored: true }) || '').trim();\n    if (stored) return stored;\n  } catch (error) {\n    console.warn('[MemberAuthCert] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message.slice(0, 140) : 'unknown');\n  }\n  return env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');\n}\n"""
+          if old not in text:
+              raise SystemExit('member auth password target not found')
+          cert.write_text(text.replace(old, new, 1))
+          PY
+      - name: Verify frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Verify repair markers
+        run: |
+          grep -q "getIVXOwnerVariableRuntimeValue(name, { preferStored: true })" backend/ivx-ai-runtime.ts
+          grep -q "getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD', { preferStored: true })" backend/services/ivx-member-auth-certification.ts
+      - name: Commit runtime repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/ivx-ai-runtime.ts backend/services/ivx-member-auth-certification.ts
+          git commit -m 'fix: bind AI and owner auth from encrypted owner variables'
+          git push origin HEAD:main
