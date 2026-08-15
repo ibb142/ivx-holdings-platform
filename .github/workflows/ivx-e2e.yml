@@ -9,7 +9,7 @@ on:
 
 jobs:
   typecheck:
-    name: TypeScript typecheck (non-blocking)
+    name: TypeScript typecheck — HARD GATE
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,42 +18,39 @@ jobs:
           bun-version: 1.3.9
       - name: Install deps (root + expo)
         run: |
-          bun install
-          bun install --cwd expo
-      - name: Typecheck (root) — non-blocking
+          bun install --frozen-lockfile
+          bun install --cwd expo --frozen-lockfile
+      - name: Typecheck (root) — HARD GATE
         run: |
-          set +e
-          bunx tsc --noEmit 2>&1 | tail -20
-          echo 'root_typecheck=SOFT_PASS'
-          exit 0
-      - name: Typecheck (expo) — non-blocking
+          set -euo pipefail
+          bunx tsc --noEmit
+          echo 'root_typecheck=PASS'
+      - name: Typecheck (expo) — HARD GATE
         run: |
-          set +e
-          cd expo && bunx tsc --noEmit 2>&1 | tail -20
-          echo 'expo_typecheck=SOFT_PASS'
-          exit 0
+          set -euo pipefail
+          cd expo && bunx tsc --noEmit
+          echo 'expo_typecheck=PASS'
         env:
-          NODE_OPTIONS: --max-old-space-size=4096
+          NODE_OPTIONS: --max-old-space-size=6144
 
   lint:
-    name: Lint (non-blocking)
+    name: Lint — HARD GATE
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - run: bun install
-      - run: cd expo && bun install
-      - name: Lint — non-blocking
+      - run: bun install --frozen-lockfile
+      - run: cd expo && bun install --frozen-lockfile
+      - name: Lint — HARD GATE
         run: |
-          set +e
-          cd expo && bun run lint 2>&1 | tail -20
-          echo 'lint=SOFT_PASS'
-          exit 0
+          set -euo pipefail
+          cd expo && bun run lint
+          echo 'lint=PASS'
 
   e2e-playwright:
-    name: Playwright E2E (web surface) — non-blocking
+    name: Playwright E2E (web surface) — HARD GATE
     runs-on: ubuntu-latest
     needs: [typecheck]
     steps:
@@ -61,17 +58,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - run: cd expo && bun install
+      - run: cd expo && bun install --frozen-lockfile
       - name: Install Playwright browsers
         working-directory: expo
         run: bunx playwright install --with-deps chromium
-      - name: Run Playwright tests — non-blocking
+      - name: Run Playwright tests — HARD GATE
         working-directory: expo
         run: |
-          set +e
-          bunx playwright test --config=playwright.config.ts 2>&1 | tail -30
-          echo 'playwright=SOFT_PASS'
-          exit 0
+          set -euo pipefail
+          bunx playwright test --config=playwright.config.ts
+          echo 'playwright=PASS'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -79,7 +75,7 @@ jobs:
           path: expo/playwright-report
 
   e2e-maestro:
-    name: Maestro E2E (mobile surface) — non-blocking
+    name: Maestro E2E (mobile surface) — HARD GATE
     runs-on: macos-latest
     needs: [typecheck]
     steps:
@@ -87,13 +83,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - run: cd expo && bun install
+      - run: cd expo && bun install --frozen-lockfile
       - name: Start the Expo development server
         working-directory: expo
         env:
           CI: '1'
         run: |
-          set +e
+          set -euo pipefail
           nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
           for attempt in {1..30}; do
             if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
@@ -102,28 +98,25 @@ jobs:
             sleep 2
           done
           cat "$RUNNER_TEMP/expo-metro.log"
-          echo 'expo_start=SOFT_PASS'
-          exit 0
-      - name: Build and launch the iOS simulator app — non-blocking
+          echo 'Expo dev server failed to start'
+          exit 1
+      - name: Build and launch the iOS simulator app — HARD GATE
         working-directory: expo
         timeout-minutes: 45
         run: |
-          set +e
-          bunx expo run:ios --configuration debug --no-bundler 2>&1 | tail -30
-          echo 'ios_build=SOFT_PASS'
-          exit 0
+          set -euo pipefail
+          bunx expo run:ios --configuration debug --no-bundler
+          echo 'ios_build=PASS'
       - name: Install Maestro
         run: |
-          set +e
-          curl -Ls "https://get.maestro.mobile.dev" | bash 2>&1 | tail -5
-          echo 'maestro_install=SOFT_PASS'
-          exit 0
-      - name: Run Maestro launch smoke test — non-blocking
+          set -euo pipefail
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo 'maestro_install=PASS'
+      - name: Run Maestro launch smoke test — HARD GATE
         run: |
-          set +e
-          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tail -20
-          echo 'maestro_test=SOFT_PASS'
-          exit 0
+          set -euo pipefail
+          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+          echo 'maestro_test=PASS'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
