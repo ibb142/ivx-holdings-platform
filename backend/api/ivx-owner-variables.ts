@@ -1014,6 +1014,7 @@ async function testSupabaseProvider(values: StoredSecretMap): Promise<ProviderRe
   const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
   const anonKey = values.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   const serviceRoleKey = values.SUPABASE_SERVICE_ROLE_KEY;
+  const managementToken = values.SUPABASE_ACCESS_TOKEN;
   const required: OwnerVariableName[] = ['EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];
   const missing = required.filter((name) => !values[name]);
   if (!supabaseUrl) {
@@ -1023,12 +1024,27 @@ async function testSupabaseProvider(values: StoredSecretMap): Promise<ProviderRe
     return { provider: 'supabase', status: 'missing', requiredVariableNames: required, savedVariableNames: required.filter((name) => Boolean(values[name])), missingVariableNames: missing, lastTestedAt: null, secretValuesReturned: false };
   }
   try {
-    const [anonResponse, serviceResponse] = await Promise.all([
+    const [anonResponse, serviceResponse, managementResponse] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/`, { headers: { apikey: anonKey ?? '', Authorization: `Bearer ${anonKey}` }, signal: createTimeoutSignal(10_000) }),
       fetch(`${supabaseUrl}/auth/v1/admin/users?per_page=1`, { headers: { apikey: serviceRoleKey ?? '', Authorization: `Bearer ${serviceRoleKey}` }, signal: createTimeoutSignal(10_000) }),
+      managementToken
+        ? fetch(`https://api.supabase.com/v1/projects/${getSupabaseProjectRef()}`, { headers: { Authorization: `Bearer ${managementToken}` }, signal: createTimeoutSignal(10_000) })
+        : Promise.resolve(null),
     ]);
-    const ok = anonResponse.status < 500 && serviceResponse.ok;
-    return { provider: 'supabase', status: ok ? 'tested' : 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, httpStatus: serviceResponse.status, error: ok ? undefined : `Supabase anon/service-role verification returned anon=${anonResponse.status}, service=${serviceResponse.status}.` };
+    const managementOk = !managementResponse || managementResponse.ok;
+    const ok = anonResponse.status < 500 && serviceResponse.ok && managementOk;
+    const savedNames = managementToken ? [...required, 'SUPABASE_ACCESS_TOKEN' as OwnerVariableName] : required;
+    return {
+      provider: 'supabase',
+      status: ok ? 'tested' : 'invalid',
+      requiredVariableNames: required,
+      savedVariableNames: savedNames,
+      missingVariableNames: [],
+      lastTestedAt: nowIso(),
+      secretValuesReturned: false,
+      httpStatus: managementResponse ? managementResponse.status : serviceResponse.status,
+      error: ok ? undefined : `Supabase verification returned anon=${anonResponse.status}, service=${serviceResponse.status}, management=${managementResponse ? managementResponse.status : 'not_saved'}.`,
+    };
   } catch (error) {
     return { provider: 'supabase', status: 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, httpStatus: null, error: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'Supabase provider test failed.' };
   }
