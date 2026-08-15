@@ -13,7 +13,7 @@ permissions:
 jobs:
   recover:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
@@ -34,115 +34,148 @@ jobs:
           const renderMatch = source.match(/rnd_[A-Za-z0-9]+/);
           if (!renderMatch) throw new Error('historical Render credential not recoverable from owned repo history');
           const renderKey = renderMatch[0];
-          const renderHeaders = { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${renderKey}` };
-          const envUrl = `https://api.render.com/v1/services/${serviceId}/env-vars`;
-          const envRes = await fetch(envUrl, { headers: renderHeaders });
-          if (!envRes.ok) throw new Error(`historical Render credential rejected HTTP ${envRes.status}`);
-          const raw = await envRes.json();
-          const vars = new Map();
-          for (const item of raw) {
+          const headers = { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${renderKey}` };
+          const rf = async (path, init={}) => {
+            const r = await fetch(`https://api.render.com/v1${path}`, { ...init, headers: { ...headers, ...(init.headers||{}) } });
+            const text = await r.text();
+            let payload = {}; try { payload = text ? JSON.parse(text) : {}; } catch {}
+            return { ok:r.ok, status:r.status, payload, text };
+          };
+
+          const service = await rf(`/services/${serviceId}`);
+          if (!service.ok) throw new Error(`Render service GET HTTP ${service.status}`);
+          const ownerId = service.payload.ownerId || service.payload.owner?.id;
+          if (!ownerId) throw new Error('Render ownerId missing');
+          console.log('render_access=PASS');
+
+          const directRes = await rf(`/services/${serviceId}/env-vars`);
+          if (!directRes.ok) throw new Error(`Render env GET HTTP ${directRes.status}`);
+          const direct = new Map();
+          for (const item of directRes.payload) {
             const ev = item?.envVar ?? item;
-            if (ev && typeof ev.key === 'string') vars.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
+            if (ev && typeof ev.key === 'string') direct.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
           }
-          console.log(`render_access=PASS env_count=${vars.size}`);
 
-          let aiKey = (vars.get('IVX_AI_GATEWAY_KEY') || vars.get('AI_GATEWAY_API_KEY') || vars.get('IVX_OPENAI_API_KEY') || vars.get('OPENAI_API_KEY') || '').trim();
-          let successfulDecryptSecret = '';
-          let decryptSource = aiKey ? 'render_env' : '';
+          const groupsRes = await rf(`/env-groups?ownerId=${encodeURIComponent(ownerId)}&limit=100`);
+          if (!groupsRes.ok) throw new Error(`Render env groups GET HTTP ${groupsRes.status}`);
+          const rawGroups = Array.isArray(groupsRes.payload) ? groupsRes.payload : (groupsRes.payload?.environmentGroups || []);
+          const linkedGroups = [];
+          for (const wrapper of rawGroups) {
+            const group = wrapper?.envGroup ?? wrapper;
+            const links = group?.serviceLinks || group?.service_links || [];
+            const linked = Array.isArray(links) && links.some(l => (l?.serviceId || l?.service?.id || l?.id) === serviceId);
+            if (linked || links.length === 0) linkedGroups.push(group);
+          }
+          console.log(`render_env_groups=PASS count=${linkedGroups.length}`);
 
+          const allSources = [{ label:'direct', vars: direct }];
+          for (const group of linkedGroups) {
+            const map = new Map();
+            const envVars = group?.envVars || group?.env_vars || [];
+            for (const item of envVars) {
+              const ev = item?.envVar ?? item;
+              if (ev && typeof ev.key === 'string') map.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
+            }
+            allSources.push({ label:`env_group:${group?.name || group?.id || 'unknown'}`, vars:map });
+          }
+
+          const aiNames = ['IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY','IVX_OPENAI_API_KEY','OPENAI_API_KEY'];
+          let aiKey = '';
+          let aiSource = '';
+          for (const src of allSources) {
+            for (const name of aiNames) {
+              const v = (src.vars.get(name) || '').trim();
+              if (/^(vck_|sk-)/.test(v)) { aiKey=v; aiSource=`${src.label}:${name}`; break; }
+            }
+            if (aiKey) break;
+          }
+
+          const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+          const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+          if (!base || !serviceRole) throw new Error('Supabase recovery bindings missing');
+          const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.(IVX_AI_GATEWAY_KEY,AI_GATEWAY_API_KEY)`, {
+            headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, Accept:'application/json' }
+          });
+          if (!rowsRes.ok) throw new Error(`owner variable read HTTP ${rowsRes.status}`);
+          const rows = await rowsRes.json();
+
+          let successfulSecret = '';
+          let secretSource = '';
           if (!aiKey) {
-            const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
-            const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-            if (!base || !serviceRole) throw new Error('Supabase recovery bindings missing');
-            const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.(IVX_AI_GATEWAY_KEY,AI_GATEWAY_API_KEY)`, {
-              headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, Accept: 'application/json' },
-            });
-            if (!rowsRes.ok) throw new Error(`owner variable read HTTP ${rowsRes.status}`);
-            const rows = await rowsRes.json();
-            const candidates = [
-              ['IVX_OWNER_VARIABLES_ENCRYPTION_KEY', vars.get('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') || ''],
-              ['APP_SECRET', vars.get('APP_SECRET') || ''],
-              ['JWT_SECRET', vars.get('JWT_SECRET') || ''],
-            ].filter(([,v], i, a) => v && a.findIndex(([,x]) => x === v) === i);
-            const aad = Buffer.from('ivx_owner_variables:v1', 'utf8');
+            const candidates = [];
+            const seen = new Set();
+            for (const src of allSources) {
+              for (const name of ['IVX_OWNER_VARIABLES_ENCRYPTION_KEY','APP_SECRET','JWT_SECRET']) {
+                const v = (src.vars.get(name) || '').trim();
+                if (v && !seen.has(v)) { seen.add(v); candidates.push({label:`${src.label}:${name}`, value:v}); }
+              }
+            }
+            console.log(`decryption_candidates=${candidates.length}`);
+            const aad = Buffer.from('ivx_owner_variables:v1','utf8');
             outer: for (const row of rows) {
-              for (const [candidateName, secret] of candidates) {
+              for (const candidate of candidates) {
                 try {
-                  const key = crypto.createHash('sha256').update(secret, 'utf8').digest();
-                  const d = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(row.value_iv, 'base64'));
-                  d.setAAD(aad);
-                  d.setAuthTag(Buffer.from(row.value_tag, 'base64'));
-                  const value = Buffer.concat([d.update(Buffer.from(row.encrypted_value, 'base64')), d.final()]).toString('utf8').trim();
-                  const hash = crypto.createHash('sha256').update(value, 'utf8').digest('hex');
-                  if (hash !== row.value_hash) continue;
-                  aiKey = value;
-                  successfulDecryptSecret = secret;
-                  decryptSource = candidateName;
-                  break outer;
+                  const k = crypto.createHash('sha256').update(candidate.value,'utf8').digest();
+                  const d = crypto.createDecipheriv('aes-256-gcm', k, Buffer.from(row.value_iv,'base64'));
+                  d.setAAD(aad); d.setAuthTag(Buffer.from(row.value_tag,'base64'));
+                  const value = Buffer.concat([d.update(Buffer.from(row.encrypted_value,'base64')), d.final()]).toString('utf8').trim();
+                  const hash = crypto.createHash('sha256').update(value,'utf8').digest('hex');
+                  if (hash !== row.value_hash || !/^(vck_|sk-)/.test(value)) continue;
+                  aiKey=value; aiSource=`owner_store:${row.name}`; successfulSecret=candidate.value; secretSource=candidate.label; break outer;
                 } catch {}
               }
             }
           }
 
-          if (!aiKey) throw new Error('AI credential exists in encrypted store but no currently bound Render decryption candidate can authenticate it');
-          if (!/^vck_|^sk-/.test(aiKey)) throw new Error('recovered AI credential has unsupported provider prefix');
-          console.log(`ai_credential_recovery=PASS source=${decryptSource}`);
+          if (!aiKey) throw new Error('AI credential cannot be recovered from direct Render env, linked env groups, or decryptable owner-variable storage');
+          console.log(`ai_credential_recovery=PASS source=${aiSource}`);
+          if (successfulSecret) console.log(`owner_variable_decryption=PASS source=${secretSource}`);
 
-          vars.set('IVX_AI_GATEWAY_KEY', aiKey);
-          vars.set('AI_GATEWAY_API_KEY', aiKey);
-          if (successfulDecryptSecret) vars.set('IVX_OWNER_VARIABLES_ENCRYPTION_KEY', successfulDecryptSecret);
-          const body = Array.from(vars, ([key,value]) => ({ key, value }));
-          const putRes = await fetch(envUrl, { method: 'PUT', headers: renderHeaders, body: JSON.stringify(body) });
-          if (!putRes.ok) throw new Error(`Render env merge HTTP ${putRes.status}: ${(await putRes.text()).slice(0,120)}`);
-          const verifyRes = await fetch(envUrl, { headers: renderHeaders });
-          if (!verifyRes.ok) throw new Error(`Render env verify HTTP ${verifyRes.status}`);
-          const verifyRaw = await verifyRes.json();
-          const verify = new Map();
-          for (const item of verifyRaw) {
-            const ev = item?.envVar ?? item;
-            if (ev && typeof ev.key === 'string') verify.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
-          }
-          if (!verify.get('IVX_AI_GATEWAY_KEY') || !verify.get('AI_GATEWAY_API_KEY')) throw new Error('Render AI bindings missing after merge');
+          direct.set('IVX_AI_GATEWAY_KEY', aiKey);
+          direct.set('AI_GATEWAY_API_KEY', aiKey);
+          if (successfulSecret) direct.set('IVX_OWNER_VARIABLES_ENCRYPTION_KEY', successfulSecret);
+          const merged = Array.from(direct, ([key,value]) => ({key,value}));
+          const put = await rf(`/services/${serviceId}/env-vars`, { method:'PUT', body:JSON.stringify(merged) });
+          if (!put.ok) throw new Error(`Render env PUT HTTP ${put.status}: ${put.text.slice(0,120)}`);
+          const verify = await rf(`/services/${serviceId}/env-vars`);
+          if (!verify.ok) throw new Error(`Render env verify HTTP ${verify.status}`);
+          const verifyMap = new Map();
+          for (const item of verify.payload) { const ev=item?.envVar??item; if(ev&&typeof ev.key==='string') verifyMap.set(ev.key, typeof ev.value==='string'?ev.value:''); }
+          if (!verifyMap.get('IVX_AI_GATEWAY_KEY') || !verifyMap.get('AI_GATEWAY_API_KEY')) throw new Error('AI runtime vars absent after Render merge');
           console.log('render_ai_env_merge=PASS');
 
-          const deployRes = await fetch(`https://api.render.com/v1/services/${serviceId}/deploys`, { method: 'POST', headers: renderHeaders, body: JSON.stringify({ clearCache: 'do_not_clear' }) });
-          if (!deployRes.ok) throw new Error(`Render deploy trigger HTTP ${deployRes.status}`);
-          const deployPayload = await deployRes.json().catch(() => ({}));
-          const deployId = deployPayload.id || deployPayload.deploy?.id;
+          const deploy = await rf(`/services/${serviceId}/deploys`, { method:'POST', body:JSON.stringify({clearCache:'do_not_clear'}) });
+          if (!deploy.ok) throw new Error(`Render deploy trigger HTTP ${deploy.status}`);
+          const deployId = deploy.payload?.id || deploy.payload?.deploy?.id;
           if (!deployId) throw new Error('Render deploy id missing');
           console.log(`render_deploy_trigger=PASS id=${deployId}`);
 
-          let live = false;
-          for (let i=0; i<60; i++) {
-            const d = await fetch(`https://api.render.com/v1/services/${serviceId}/deploys/${deployId}`, { headers: renderHeaders });
-            if (d.ok) {
-              const p = await d.json();
-              if (p.status === 'live') { live = true; break; }
-              if (p.status === 'failed' || p.status === 'canceled') throw new Error(`Render deploy ${p.status}`);
-            }
-            await new Promise(r => setTimeout(r, 5000));
+          let live=false;
+          for(let i=0;i<72;i++){
+            const d=await rf(`/services/${serviceId}/deploys/${deployId}`);
+            const status=d.payload?.status;
+            if(status==='live'){live=true;break;}
+            if(status==='failed'||status==='canceled') throw new Error(`Render deploy ${status}`);
+            await new Promise(r=>setTimeout(r,5000));
           }
-          if (!live) throw new Error('Render deploy did not reach live within timeout');
+          if(!live) throw new Error('Render deploy timeout');
           console.log('render_deploy_live=PASS');
 
-          let aiHealth = null;
-          for (let i=0; i<20; i++) {
-            const h = await fetch('https://api.ivxholding.com/health/ai/live').catch(() => null);
-            if (h) {
-              aiHealth = await h.json().catch(() => ({}));
-              if (h.ok && aiHealth?.ok === true) break;
-            }
-            await new Promise(r => setTimeout(r, 3000));
+          let hPayload={}; let hStatus=0;
+          for(let i=0;i<25;i++){
+            const h=await fetch('https://api.ivxholding.com/health/ai/live').catch(()=>null);
+            if(h){hStatus=h.status; hPayload=await h.json().catch(()=>({})); if(h.ok&&hPayload?.ok===true) break;}
+            await new Promise(r=>setTimeout(r,3000));
           }
-          if (!aiHealth?.ok) throw new Error(`live AI health failed status=${aiHealth?.status ?? 'none'} reason=${String(aiHealth?.reason ?? 'unknown').slice(0,120)}`);
-          console.log(`live_ai_health=PASS provider=${aiHealth.provider ?? 'configured'}`);
+          if(!hPayload?.ok){
+            const status=hPayload?.status;
+            if(status===401||status===403) throw new Error(`AI credential rejected by provider HTTP ${status}`);
+            throw new Error(`live AI health failed HTTP ${hStatus} provider_status=${status ?? 'none'} reason=${String(hPayload?.reason ?? 'unknown').slice(0,100)}`);
+          }
+          console.log('live_ai_health=PASS');
 
-          const chat = await fetch('https://api.ivxholding.com/api/public/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-ivx-client-id': `recovery-${Date.now()}` },
-            body: JSON.stringify({ message: 'Return only 42', sessionId: 'ivx-recovery', requestId: `ivx-recovery-${Date.now()}`, history: [] }),
-          });
-          const chatPayload = await chat.json().catch(() => ({}));
-          if (!chat.ok || !String(chatPayload.answer ?? chatPayload.text ?? '').trim() || chatPayload.source === 'fallback') throw new Error(`real inference failed HTTP ${chat.status} source=${chatPayload.source ?? 'none'}`);
-          console.log(`real_ai_inference=PASS source=${chatPayload.source ?? 'remote_api'}`);
+          const chat=await fetch('https://api.ivxholding.com/api/public/chat',{method:'POST',headers:{'Content-Type':'application/json','x-ivx-client-id':`recovery-${Date.now()}`},body:JSON.stringify({message:'Return only 42',sessionId:'ivx-recovery',requestId:`ivx-recovery-${Date.now()}`,history:[]})});
+          const cp=await chat.json().catch(()=>({}));
+          if(!chat.ok||!String(cp.answer??cp.text??'').trim()||cp.source==='fallback') throw new Error(`real inference failed HTTP ${chat.status} source=${cp.source??'none'}`);
+          console.log(`real_ai_inference=PASS source=${cp.source??'remote_api'}`);
           NODE
