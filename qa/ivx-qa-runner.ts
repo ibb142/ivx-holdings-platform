@@ -319,7 +319,7 @@ const TESTS: TestDef[] = [
           const body = await res.json().catch(() => ({})) as Record<string, unknown>;
           const rootCause = String(body.rootCause || '');
           if (rootCause.includes('password_binding_unavailable') || rootCause.includes('not_configured')) {
-            return { actual: 'Owner password not configured on backend runtime (503)', status: 'SKIP' as TestStatus, evidenceRef: 'owner-password-not-configured' };
+            return { actual: `Owner password binding unavailable: ${rootCause || 'HTTP 503'}`, status: 'FAIL' as TestStatus, evidenceRef: 'owner-password-binding-unavailable' };
           }
         }
         const d = await res.json().catch(() => ({})) as Record<string, unknown>;
@@ -330,7 +330,7 @@ const TESTS: TestDef[] = [
           evidenceRef: 'owner-login',
         };
       } catch (err) {
-        return { actual: `Owner login error: ${String(err).slice(0, 200)}`, status: 'SKIP' as TestStatus, evidenceRef: 'owner-login-error' };
+        return { actual: `Owner login error: ${String(err).slice(0, 200)}`, status: 'ERROR' as TestStatus, evidenceRef: 'owner-login-error' };
       }
     },
   },

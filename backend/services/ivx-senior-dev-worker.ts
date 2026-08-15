@@ -48,7 +48,7 @@ import {
 
 export const IVX_SENIOR_DEV_WORKER_ID = 'IVX-SENIOR-DEV-01';
 export const WORKER_HEARTBEAT_SECONDS = 30;
-export const TASK_POLL_INTERVAL_MS = 5_000;
+export const TASK_POLL_INTERVAL_MS = 20_000; // ivx-supabase-load-shed-v1
 export const TASK_CLAIM_TIMEOUT_MS = 3 * 60 * 1000;
 
 export type IVXSeniorDevWorkerPhase =

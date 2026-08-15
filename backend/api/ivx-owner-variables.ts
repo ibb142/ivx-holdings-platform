@@ -7,6 +7,7 @@ const RENDER_API_BASE_URL = 'https://api.render.com/v1';
 const OWNER_VARIABLES_TABLE = 'ivx_owner_variables';
 const OWNER_VARIABLES_AUDIT_TABLE = 'ivx_owner_variable_audit';
 const MAX_VARIABLE_VALUE_LENGTH = 16_384;
+const OWNER_VARIABLES_REST_TIMEOUT_MS = 5_000; // ivx-supabase-recovery-v1
 const ENCRYPTION_AAD = Buffer.from('ivx_owner_variables:v1', 'utf8');
 
 const OWNER_VARIABLES = [
@@ -311,6 +312,7 @@ async function supabaseRestRequest<T>(path: string, init: RequestInit = {}, pref
       ...supabaseRestHeaders(prefer),
       ...(init.headers ?? {}),
     },
+    signal: init.signal ?? AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS),
   });
   const payload = await parseSupabaseRestResponse(response);
   if (!response.ok) {
@@ -379,9 +381,9 @@ async function getPool(): Promise<PgPool> {
     connectionString,
     ssl: { rejectUnauthorized: false },
     application_name: 'ivx_owner_variables',
-    max: 2,
+    max: 1,
     idleTimeoutMillis: 5_000,
-    connectionTimeoutMillis: 8_000,
+    connectionTimeoutMillis: 5_000,
   });
   return cachedPool;
 }
@@ -781,10 +783,32 @@ export async function getIVXOwnerVariableRuntimeValue(name: OwnerVariableName): 
     }
     return decrypted.plaintext.trim();
   } catch (error) {
-    console.log('[IVXOwnerVariables] Runtime value bridge unavailable:', {
+    console.log('[IVXOwnerVariables] Runtime REST value bridge unavailable; trying direct Postgres fallback:', {
       name,
       message: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'unknown',
     });
+    if (getDatabaseUrl()) {
+      try {
+        const row = await withClient(async (client) => {
+          const result = await client.query<OwnerVariableRow>(
+            'select * from public.ivx_owner_variables where name = $1 limit 1',
+            [name],
+          );
+          return result.rows[0] ?? null;
+        });
+        if (row) {
+          const decrypted = tryDecryptRowValue(row);
+          if (decrypted?.plaintext.trim()) {
+            return decrypted.plaintext.trim();
+          }
+        }
+      } catch (fallbackError) {
+        console.log('[IVXOwnerVariables] Direct Postgres runtime fallback unavailable:', {
+          name,
+          message: fallbackError instanceof Error ? sanitizeExternalErrorDetail(fallbackError.message) : 'unknown',
+        });
+      }
+    }
     return '';
   }
 }
