@@ -896,14 +896,48 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
     return { ok: false, detail: { reason: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in runtime' } };
   }
   const started = Date.now();
+  const url = `${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?select=id&limit=1`;
   try {
-    const res = await restFetch(`${TASKS_TABLE}?select=id&limit=1`, { method: 'GET', headers: restHeaders() });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4_000);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: restHeaders(),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const latencyMs = Date.now() - started;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return {
+        ok: false,
+        detail: {
+          httpStatus: res.status,
+          latencyMs,
+          table: TASKS_TABLE,
+          supabaseStatus: res.statusText,
+          supabaseBody: body.slice(0, 500),
+          reason: `Supabase returned HTTP ${res.status} (${res.statusText})`,
+        },
+      };
+    }
     return {
-      ok: res.ok,
+      ok: true,
       detail: { httpStatus: res.status, latencyMs: Date.now() - started, table: TASKS_TABLE },
     };
   } catch (error) {
-    return { ok: false, detail: { reason: error instanceof Error ? error.message : 'database probe failed', latencyMs: Date.now() - started } };
+    const latencyMs = Date.now() - started;
+    const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('abort') || error.message.includes('timeout'));
+    return {
+      ok: false,
+      detail: {
+        reason: isTimeout ? 'Database probe timed out after 4s' : (error instanceof Error ? error.message : 'database probe failed'),
+        latencyMs,
+        table: TASKS_TABLE,
+        urlHost: new URL(url).host,
+        isTimeout,
+      },
+    };
   }
 }
 
