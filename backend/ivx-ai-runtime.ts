@@ -192,6 +192,13 @@ let _ownerVariableGatewayKey = '';
 
 export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> {
   try {
+    // ENV-FIRST PRIORITY: Render dashboard env vars are the owner's direct control.
+    // Only fall back to the Owner Variables store when process.env is empty.
+    const envKey = readTrimmed(process.env.IVX_AI_GATEWAY_KEY) || readTrimmed(process.env.AI_GATEWAY_API_KEY);
+    if (envKey) {
+      _ownerVariableGatewayKey = envKey;
+      return;
+    }
     const { getIVXOwnerVariableRuntimeValue } = await import('./api/ivx-owner-variables');
     for (const name of ['IVX_AI_GATEWAY_KEY', 'AI_GATEWAY_API_KEY'] as const) {
       const key = await getIVXOwnerVariableRuntimeValue(name, { preferStored: true });
