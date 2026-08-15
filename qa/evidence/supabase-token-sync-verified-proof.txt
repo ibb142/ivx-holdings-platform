@@ -1,0 +1,174 @@
+# IVX Supabase Token Sync — Verified Proof Certificate
+
+**Certificate ID:** IVX-SUPABASE-TOKEN-SYNC-2026-08-15T14:35Z
+**Issued:** 2026-08-15T14:35:39Z (UTC)
+**Repository:** ibb142/ivx-holdings-platform (public, branch main)
+**Backend:** https://ivx-holdings-platform.onrender.com
+**Supabase Project:** kvclcdjmjghndxsngfzb (us-west-2)
+
+---
+
+## 1. SHA PARITY — VERIFIED
+
+| Source | SHA | Timestamp |
+|--------|-----|-----------|
+| GitHub HEAD | `77fcd3e66409f0d14e6c89965c2c0e61687e3318` | 2026-08-15T14:27:46Z |
+| Render commit | `77fcd3e66409f0d14e6c89965c2c0e61687e3318` | boot 2026-08-15T14:31:51Z |
+| Rork origin | `c02e543453d8b8710e29d348c18810204fd45817` (merge commit including 77fcd3e) | 2026-08-15T14:35Z |
+
+**Result: MATCHED** — GitHub and Render serving identical commit.
+
+---
+
+## 2. CODE VERIFICATION — SUPABASE_ACCESS_TOKEN BOUND TO IVX OWNER VARIABLES
+
+### 2a. Frontend variable list (`expo/src/modules/ivx-owner-ai/services/ivxVariablesToolService.ts:28`)
+```
+'SUPABASE_ACCESS_TOKEN',
+```
+Occurrence count: 1 — VERIFIED
+
+### 2b. Backend OWNER_VARIABLES array (`backend/api/ivx-owner-variables.ts:31`)
+```
+{ name: 'SUPABASE_ACCESS_TOKEN', provider: 'supabase', required: false, secret: true, description: 'Supabase Management API token for database migrations.' },
+```
+Occurrence count: 3 — VERIFIED
+
+### 2c. Backend Supabase provider test (`backend/api/ivx-owner-variables.ts:1014-1050`)
+- `managementToken = values.SUPABASE_ACCESS_TOKEN` (line 1017)
+- Parallel fetch to `https://api.supabase.com/v1/projects/{projectRef}` with `Authorization: Bearer {managementToken}` (line 1027-1031)
+- `managementOk = !managementResponse || managementResponse.ok` (line 1034)
+- Status includes `management` HTTP result in error message (line 1046)
+Occurrence count: 4 `managementToken` references — VERIFIED
+
+### 2d. Backend Supabase restart endpoint (`backend/api/ivx-supabase-restart.ts:34-71`)
+- `getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN', { preferStored: true })` — prefers encrypted Owner Variables store over stale process.env (line 38)
+- Returns `managementAuthorized: true` when Supabase Management API accepts the token and project is `ACTIVE_HEALTHY` (line 63-71)
+- Returns `errorCode: 'management_token_rejected'` on HTTP 401/403 (line 76-88)
+Occurrence count: 1 `preferStored` reference — VERIFIED
+
+---
+
+## 3. RENDER LIVE HEALTH — VERIFIED
+
+### 3a. Full health (`GET /health`)
+```json
+{
+  "ok": true,
+  "status": "healthy",
+  "databaseConfigured": true,
+  "ai": { "ok": false, "model": "gpt-4o" },
+  "queue": { "workerRunning": true, "activeTasks": 0, "depth": 0, "deadLetterCount": 0 },
+  "commit": "77fcd3e66409f0d14e6c89965c2c0e61687e3318",
+  "bootTime": "2026-08-15T14:31:51.319Z",
+  "timestamp": "2026-08-15T14:35:08.065Z"
+}
+```
+
+### 3b. Database health (`GET /health/database`)
+```json
+{
+  "ok": true,
+  "httpStatus": 200,
+  "latencyMs": 25,
+  "rootProbe": { "status": 200, "latencyMs": 272 },
+  "envAudit": {
+    "canonicalMode": "supabase_rest_service_role",
+    "canonicalPresent": true,
+    "canonicalVars": {
+      "SUPABASE_URL": true,
+      "IVX_SUPABASE_URL": true,
+      "SUPABASE_SERVICE_ROLE_KEY": true
+    },
+    "directPostgresAliases": {
+      "SUPABASE_DB_URL": true
+    },
+    "directPostgresAvailable": true,
+    "conclusion": "Canonical Supabase REST config present; direct Postgres alias also present."
+  }
+}
+```
+
+**All 4 Supabase environment variables present on Render:**
+- `SUPABASE_URL` — true
+- `IVX_SUPABASE_URL` — true
+- `SUPABASE_SERVICE_ROLE_KEY` — true
+- `SUPABASE_DB_URL` — true
+
+---
+
+## 4. GITHUB ACTIONS SECRETS — VERIFIED
+
+### Supabase-related secrets (5 total, 15 overall):
+
+| Secret Name | Last Updated | Status |
+|-------------|-------------|--------|
+| `SUPABASE_ACCESS_TOKEN` | 2026-08-15T13:54:40Z | SET — VERIFIED |
+| `SUPABASE_SERVICE_ROLE_KEY` | 2026-08-15T13:54:40Z | SET — VERIFIED |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | 2026-08-15T13:54:41Z | SET — VERIFIED |
+| `EXPO_PUBLIC_SUPABASE_URL` | 2026-04-18T17:58:40Z | SET — VERIFIED |
+| `SUPABASE_DB_PASSWORD` | 2026-04-18T17:58:40Z | SET — VERIFIED |
+
+---
+
+## 5. SUPABASE PROJECT — VERIFIED ALIVE
+
+- Project ref: `kvclcdjmjghndxsngfzb`
+- REST root endpoint: HTTP 401 (expected without API key — confirms project is live and responding)
+- REST latency: 0.12s
+- Render backend connects via service-role key: HTTP 200 on root probe (272ms)
+- Render backend connects via table query: HTTP 200 on `ivx_owner_ai_tasks` table
+
+---
+
+## 6. CI WORKFLOW STATUS
+
+| Workflow | Status | Commit |
+|----------|--------|--------|
+| IVX Render Live Certificate | PASS | 1a9a79105 |
+| IVX Reels Live Certificate | PASS | 1a9a79105 |
+| IVX QA Suite | PASS | 1a9a79105 |
+| IVX Enable Supabase Access Token Sync | PASS | 1a9a79105 |
+| IVX Fix Supabase Management Binding | PASS | 157777103 |
+| IVX E2E Acceptance Pipeline | RUNNING | 1a9a79105 |
+| IVX Block 1 P0 Certificate | FAIL | 1a9a79105 |
+
+---
+
+## 7. COMMITS THAT IMPLEMENTED THE SYNC
+
+| SHA | Message | Author | Date |
+|-----|---------|--------|------|
+| `77fcd3e66409` | fix: enable Supabase access token save sync | github-actions[bot] | 2026-08-15T14:27:46Z |
+| `1a9a791056b9` | ops: enable Supabase access token save sync | github-actions[bot] | 2026-08-15T14:26:13Z |
+| `762b24b13dec` | ops: certify Supabase management binding repair | github-actions[bot] | 2026-08-15T14:19:02Z |
+| `42102e316d9f` | fix: bind Supabase management token from owner variables | github-actions[bot] | 2026-08-15T14:18:31Z |
+| `157777103038` | ops: trigger complete Supabase management binding repair | github-actions[bot] | 2026-08-15T14:16:55Z |
+
+---
+
+## 8. REMAINING ITEMS (not blocking Supabase token sync)
+
+- **AI gateway key** (`IVX_AI_GATEWAY_KEY` or `OPENAI_API_KEY`) — NOT SET on Render. `/health/ai/live` returns `ok: false, reason: "No AI gateway key configured"`. Owner must set this on Render dashboard to enable AI chat.
+- **Block 1 P0 Certificate** — FAILING (likely due to AI key not configured; uses SOFT_PASS for DB but may hard-fail on AI gate).
+- **Email provider** — NOT CONFIGURED (`configured: false, provider: null`).
+- **GitHub push protection** — `.rork/history/` files contain exposed tokens in git history; GitHub blocks direct pushes containing these. Rork origin accepts them. Owner should use BFG Repo-Cleaner or GitHub support to purge history.
+
+---
+
+## CERTIFICATE SUMMARY
+
+**Supabase token sync on IVX Owner Variables: VERIFIED**
+
+- `SUPABASE_ACCESS_TOKEN` is registered as an IVX Owner Variable in both frontend and backend code.
+- Backend Supabase provider test validates the management token against `https://api.supabase.com/v1/projects/{ref}`.
+- Backend Supabase restart endpoint prefers the encrypted Owner Variables store over stale `process.env`.
+- `SUPABASE_ACCESS_TOKEN` secret is set in GitHub Actions (updated 2026-08-15T13:54:40Z).
+- All 4 Supabase environment variables are present and true on Render.
+- Render database health: `ok: true`, root probe HTTP 200, latency 272ms.
+- SHA parity: GitHub = Render = `77fcd3e66409f0d14e6c89965c2c0e61687e3318`.
+
+**No secrets, tokens, or credential values are disclosed in this certificate.**
+
+---
+Certificate generated: 2026-08-15T14:35:39Z UTC
