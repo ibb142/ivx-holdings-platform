@@ -1,0 +1,76 @@
+name: IVX Owner APK Release
+
+on:
+  push:
+    paths:
+      - '.github/workflows/ivx-owner-apk-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}
+      IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}
+      IVX_RELEASE_KEY_ALIAS: ${{ secrets.IVX_RELEASE_KEY_ALIAS }}
+      IVX_RELEASE_KEY_PASSWORD: ${{ secrets.IVX_RELEASE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate signing inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in IVX_RELEASE_KEYSTORE_BASE64 IVX_RELEASE_KEYSTORE_PASSWORD IVX_RELEASE_KEY_ALIAS IVX_RELEASE_KEY_PASSWORD; do
+            test -n "${!variable}" || { echo "::error::$variable unavailable"; exit 1; }
+          done
+          umask 077
+          KEYSTORE_PATH="$RUNNER_TEMP/ivx-release.keystore"
+          printf '%s' "$IVX_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" >/dev/null
+          echo "IVX_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+      - name: Build signed APK
+        working-directory: expo/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -x lint
+      - name: Verify APK signature
+        working-directory: expo/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee "$RUNNER_TEMP/apk.sha256"
+      - name: Publish APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          TAG="ivx-owner-signin-${SHORT_SHA}"
+          APK_SRC="expo/android/app/build/outputs/apk/release/app-release.apk"
+          APK_NAME="ivx-holdings-owner-signin-${SHORT_SHA}.apk"
+          cp "$APK_SRC" "$APK_NAME"
+          gh release create "$TAG" "$APK_NAME" --target "$GITHUB_SHA" --title "IVX Owner Sign-In APK ${SHORT_SHA}" --notes "Signed Android release containing the deployed owner sign-in recovery fix. Source SHA: ${GITHUB_SHA}."
+          echo "APK_RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "APK_FILE_NAME=$APK_NAME" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-owner-signin-apk-${{ github.sha }}
+          path: ivx-holdings-owner-signin-*.apk
+          retention-days: 30
