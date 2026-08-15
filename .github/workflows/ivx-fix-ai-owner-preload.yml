@@ -26,71 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           git pull --rebase origin main
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('backend/services/ivx-owner-ai-task-queue.ts')
-          s = p.read_text()
-          old = """  const startup = validateIVXAIStartup();
-  // Use the AI runtime's unified key resolver, which checks the encrypted
-  // IVX Owner Variables store FIRST, then falls back to process.env.
-  // This is the same binding pattern already used for SUPABASE_ACCESS_TOKEN.
-  const { getIVXAIGatewayApiKey } = await import('../ivx-ai-runtime');
-  const apiKey = getIVXAIGatewayApiKey();
-"""
-          new = """  // Deterministically load the encrypted Owner Variables credential before
-  // reading the synchronous runtime resolver. Boot-time preload is best-effort
-  // and must not race a live health or inference request.
-  const { getIVXAIGatewayApiKey, preloadIVXAIGatewayKeyFromOwnerVariables } = await import('../ivx-ai-runtime');
-  await preloadIVXAIGatewayKeyFromOwnerVariables();
-  const startup = validateIVXAIStartup();
-  const apiKey = getIVXAIGatewayApiKey();
-"""
-          if old not in s:
-              raise SystemExit('target probe block not found')
-          p.write_text(s.replace(old, new, 1))
-
-          p = Path('server.ts')
-          s = p.read_text()
-          old = """// Repair stale host bindings from the existing encrypted Owner Variables store.
-// No secret is logged or returned; the AI runtime reads these aliases lazily.
-void preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
-  console.warn('[IVX Server] AI owner-variable preload unavailable', {
-    error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
-  });
-});
-"""
-          new = """// Repair stale host bindings from the existing encrypted Owner Variables store.
-// Retain a boot promise so serving the API can wait for credential binding.
-// No secret is logged or returned.
-const aiOwnerVariablePreloadPromise = preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
-  console.warn('[IVX Server] AI owner-variable preload unavailable', {
-    error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
-  });
-});
-"""
-          if old not in s:
-              raise SystemExit('server preload block not found')
-          s = s.replace(old, new, 1)
-          oldserve = """serve(
-  { fetch: productionFetch, port: PORT, hostname: HOST },
-  (info) => {
-    console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
-  },
-);
-"""
-          newserve = """void aiOwnerVariablePreloadPromise.finally(() => {
-  serve(
-    { fetch: productionFetch, port: PORT, hostname: HOST },
-    (info) => {
-      console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
-    },
-  );
-});
-"""
-          if oldserve not in s:
-              raise SystemExit('server serve block not found')
-          p.write_text(s.replace(oldserve, newserve, 1))
-          PY
+          python3 -c "from pathlib import Path; p=Path('backend/services/ivx-owner-ai-task-queue.ts'); s=p.read_text(); old=\"  const startup = validateIVXAIStartup();\\n  // Use the AI runtime's unified key resolver, which checks the encrypted\\n  // IVX Owner Variables store FIRST, then falls back to process.env.\\n  // This is the same binding pattern already used for SUPABASE_ACCESS_TOKEN.\\n  const { getIVXAIGatewayApiKey } = await import('../ivx-ai-runtime');\\n  const apiKey = getIVXAIGatewayApiKey();\\n\"; new=\"  const { getIVXAIGatewayApiKey, preloadIVXAIGatewayKeyFromOwnerVariables } = await import('../ivx-ai-runtime');\\n  await preloadIVXAIGatewayKeyFromOwnerVariables();\\n  const startup = validateIVXAIStartup();\\n  const apiKey = getIVXAIGatewayApiKey();\\n\"; assert old in s, 'target probe block not found'; p.write_text(s.replace(old,new,1))"
       - name: Verify source compiles
         run: |
           bun install --frozen-lockfile
@@ -101,7 +37,7 @@ const aiOwnerVariablePreloadPromise = preloadAIProviderCredentialFromOwnerVariab
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add backend/services/ivx-owner-ai-task-queue.ts server.ts
+          git add backend/services/ivx-owner-ai-task-queue.ts
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: await encrypted AI credential before live runtime checks'
+          git commit -m 'fix: load encrypted AI credential before live probe'
           git push origin HEAD:main
