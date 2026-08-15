@@ -24,7 +24,8 @@
 import path from 'node:path';
 
 const SCHEMA_MARKER = 'ivx-durable-store-2026-08-07';
-export const REST_TIMEOUT_MS = 8000; // ivx-durable-probe-before-ddl-v1
+export const REST_TIMEOUT_MS = 30000;
+const SCHEMA_PROBE_TIMEOUT_MS = 8000; // ivx-durable-probe-before-ddl-v1
 const SERVICE_ROLE_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'] as const;
 const SUPABASE_URL_NAMES = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
 
@@ -179,7 +180,7 @@ class DurableStore {
     const probeResponse = await fetch(`${this.restBaseUrl()}/ivx_durable_documents?select=doc_key&limit=1`, {
       method: 'GET',
       headers: buildHeaders(),
-      signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(SCHEMA_PROBE_TIMEOUT_MS),
     });
     if (probeResponse.ok) {
       console.log('[IvxDurableStore] Existing schema reachable; DDL bootstrap skipped');
