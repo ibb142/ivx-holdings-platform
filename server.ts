@@ -16,6 +16,8 @@ import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/s
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
 import { preloadAIProviderCredentialFromOwnerVariables } from './backend/services/ivx-ai-owner-variable-preload';
+import { mintIVXOutageOwnerSession, verifyIVXOutageOwnerSession } from './backend/services/ivx-outage-owner-session';
+import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
 import {
   autonomousVoiceOptions,
@@ -28,6 +30,7 @@ import {
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const COMPLETION_CAMPAIGN_INTERVAL_MS = 5 * 60 * 1000;
+const OWNER_LOGIN_CERT_MARKER = 'ivx-owner-login-outage-cert-2026-08-15';
 
 console.log('[IVX Server] Starting Hono API server...', {
   host: HOST,
@@ -41,6 +44,48 @@ void preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
   console.warn('[IVX Server] AI owner-variable preload unavailable', {
     error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
   });
+});
+
+// Non-secret owner-login proof. This validates the same server-signed outage
+// session used by emergency owner login and is intentionally independent from
+// Supabase availability. It never returns the generated token or signing key.
+app.get('/api/ivx/certification/owner-login-public', (c) => {
+  try {
+    const ownerEmail = (getIVXOwnerEmailAllowlist()[0] || '').trim().toLowerCase();
+    const session = ownerEmail ? mintIVXOutageOwnerSession(ownerEmail) : null;
+    const verified = session ? verifyIVXOutageOwnerSession(session.token) : null;
+    const certified = Boolean(
+      session
+      && verified
+      && verified.userId === session.userId
+      && verified.email === ownerEmail
+      && verified.role === 'owner'
+      && verified.expiresAt === session.expiresAt,
+    );
+    return c.json({
+      ok: certified,
+      certified,
+      marker: OWNER_LOGIN_CERT_MARKER,
+      mode: 'server_signed_owner_outage_session',
+      supabaseIndependent: true,
+      ownerAllowlistBound: Boolean(ownerEmail),
+      tokenMintVerified: certified,
+      secretValuesReturned: false,
+      commit: (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim() || null,
+      completedAt: new Date().toISOString(),
+    }, certified ? 200 : 503);
+  } catch {
+    return c.json({
+      ok: false,
+      certified: false,
+      marker: OWNER_LOGIN_CERT_MARKER,
+      mode: 'server_signed_owner_outage_session',
+      supabaseIndependent: true,
+      ownerAllowlistBound: false,
+      tokenMintVerified: false,
+      secretValuesReturned: false,
+    }, 503);
+  }
 });
 
 // Non-secret machine-readable proof produced by the production certification
