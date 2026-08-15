@@ -505,7 +505,7 @@ export function validateIVXAIStartup(): IVXAIStartupValidation {
   const adapterVersion = getAdapterVersion();
 
   if (!keyLoaded) {
-    errors.push('OPENAI_API_KEY is not set');
+    errors.push('AI gateway key is not set — set IVX_AI_GATEWAY_KEY, AI_GATEWAY_API_KEY, or OPENAI_API_KEY on the backend host');
   }
   if (!rootUrl) {
     errors.push('AI gateway root URL is empty');
