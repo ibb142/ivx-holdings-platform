@@ -1,0 +1,90 @@
+name: IVX Fix Supabase Management Binding
+
+on:
+  push:
+    paths:
+      - '.github/workflows/ivx-fix-supabase-management-binding.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Patch active Supabase management token binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          owner = Path('backend/api/ivx-owner-variables.ts')
+          s = owner.read_text()
+          old = """export async function getIVXOwnerVariableRuntimeValue(name: OwnerVariableName): Promise<string> {\n  const envValue = readEnv(name);\n  if (envValue) return envValue;\n  try {"""
+          new = """export async function getIVXOwnerVariableRuntimeValue(\n  name: OwnerVariableName,\n  options: { preferStored?: boolean } = {},\n): Promise<string> {\n  const envValue = readEnv(name);\n  if (envValue && !options.preferStored) return envValue;\n  try {"""
+          if old not in s:
+              raise SystemExit('runtime value function signature block not found')
+          s = s.replace(old, new, 1)
+          s = s.replace("    if (!row) return '';", "    if (!row) return envValue;", 1)
+          marker = """    return '';\n  }\n}\n\n/**\n * Re-encrypt a stored row's plaintext value"""
+          replacement = """    return envValue;\n  }\n}\n\n/**\n * Re-encrypt a stored row's plaintext value"""
+          if marker not in s:
+              raise SystemExit('runtime value final fallback block not found')
+          owner.write_text(s.replace(marker, replacement, 1))
+
+          restart = Path('backend/api/ivx-supabase-restart.ts')
+          s = restart.read_text()
+          s = s.replace(
+              "import { ownerOnlyOptions } from './owner-only';",
+              "import { ownerOnlyOptions } from './owner-only';\nimport { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';",
+              1,
+          )
+          s = s.replace(
+              "const DEPLOYMENT_MARKER = 'ivx-supabase-restart-2026-08-05';",
+              "const DEPLOYMENT_MARKER = 'ivx-supabase-restart-owner-variable-binding-2026-08-15';",
+              1,
+          )
+          old = """  const accessToken = readTrimmed(process.env.SUPABASE_ACCESS_TOKEN);\n  if (!accessToken) {\n    return Response.json(\n      { ok: false, error: 'SUPABASE_ACCESS_TOKEN is not configured on the backend.', errorCode: 'no_access_token', deploymentMarker: DEPLOYMENT_MARKER },\n      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },\n    );\n  }\n\n  const projectRef = getSupabaseProjectRef();"""
+          new = """  // Prefer the encrypted Owner Variables value because it is owner-rotatable at\n  // runtime. A stale process.env value remains only as a fallback. No secret is\n  // returned or logged.\n  const accessToken = await getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN', { preferStored: true });\n  if (!accessToken) {\n    return Response.json(\n      { ok: false, error: 'Supabase Management API token is not available in Owner Variables or backend runtime.', errorCode: 'no_access_token', tokenSource: 'unavailable', deploymentMarker: DEPLOYMENT_MARKER },\n      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },\n    );\n  }\n\n  const projectRef = getSupabaseProjectRef();"""
+          if old not in s:
+              raise SystemExit('restart token binding block not found')
+          s = s.replace(old, new, 1)
+          old = """      if (statusResponse.ok) {\n        const statusData = await statusResponse.json() as { status?: string; region?: string; name?: string };\n        projectStatus = statusData.status ?? 'unknown';\n        console.log(`[IVX Supabase Restart] Project status: ${projectStatus}, name: ${statusData.name}, region: ${statusData.region}`);\n      }"""
+          new = """      if (statusResponse.ok) {\n        const statusData = await statusResponse.json() as { status?: string; region?: string; name?: string };\n        projectStatus = statusData.status ?? 'unknown';\n        console.log(`[IVX Supabase Restart] Project status: ${projectStatus}, name: ${statusData.name}, region: ${statusData.region}`);\n        const normalizedStatus = projectStatus.trim().toUpperCase();\n        if (normalizedStatus === 'ACTIVE_HEALTHY' || normalizedStatus === 'ACTIVE') {\n          return Response.json(\n            {\n              ok: true,\n              message: 'Supabase Management API authorization verified; project is already healthy.',\n              projectRef,\n              previousStatus: projectStatus,\n              action: 'noop',\n              managementAuthorized: true,\n              secretValuesReturned: false,\n              deploymentMarker: DEPLOYMENT_MARKER,\n              timestamp: new Date().toISOString(),\n            },\n            { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } },\n          );\n        }\n      } else if (statusResponse.status === 401 || statusResponse.status === 403) {\n        const detail = await statusResponse.text().catch(() => '');\n        return Response.json(\n          {\n            ok: false,\n            error: `Supabase Management API token rejected during validation (HTTP ${statusResponse.status}).`,\n            errorCode: 'management_token_rejected',\n            managementHttpStatus: statusResponse.status,\n            managementResponse: detail.slice(0, 180),\n            projectRef,\n            secretValuesReturned: false,\n            deploymentMarker: DEPLOYMENT_MARKER,\n          },\n          { status: 502, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } },\n        );\n      }"""
+          if old not in s:
+              raise SystemExit('management token validation block not found')
+          restart.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          grep -q "preferStored: true" backend/api/ivx-supabase-restart.ts
+          grep -q "management_token_rejected" backend/api/ivx-supabase-restart.ts
+          grep -q "managementAuthorized: true" backend/api/ivx-supabase-restart.ts
+          grep -q "options: { preferStored?: boolean }" backend/api/ivx-owner-variables.ts
+      - name: Install and typecheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd expo
+          bun install
+          bunx tsc --noEmit
+      - name: Commit and push binding repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/api/ivx-owner-variables.ts backend/api/ivx-supabase-restart.ts
+          if git diff --cached --quiet; then
+            echo 'Binding repair already applied.'
+            exit 0
+          fi
+          git commit -m 'fix: bind Supabase management token from owner variables'
+          git push origin HEAD:main

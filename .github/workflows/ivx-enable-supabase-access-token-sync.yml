@@ -1,0 +1,75 @@
+name: IVX Enable Supabase Access Token Sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/ivx-enable-supabase-access-token-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Enable IVX Supabase access-token save/sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          frontend = Path('expo/src/modules/ivx-owner-ai/services/ivxVariablesToolService.ts')
+          s = frontend.read_text()
+          old = """  'SUPABASE_SERVICE_ROLE_KEY',\n  'IVX_AWS_READONLY_ACCESS_KEY_ID',"""
+          new = """  'SUPABASE_SERVICE_ROLE_KEY',\n  'SUPABASE_ACCESS_TOKEN',\n  'IVX_AWS_READONLY_ACCESS_KEY_ID',"""
+          if old not in s:
+              raise SystemExit('frontend owner variable list insertion point not found')
+          s = s.replace(old, new, 1)
+          frontend.write_text(s)
+
+          backend = Path('backend/api/ivx-owner-variables.ts')
+          s = backend.read_text()
+          old = """  const serviceRoleKey = values.SUPABASE_SERVICE_ROLE_KEY;\n  const required: OwnerVariableName[] = ['EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];"""
+          new = """  const serviceRoleKey = values.SUPABASE_SERVICE_ROLE_KEY;\n  const managementToken = values.SUPABASE_ACCESS_TOKEN;\n  const required: OwnerVariableName[] = ['EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];"""
+          if old not in s:
+              raise SystemExit('backend Supabase provider token insertion point not found')
+          s = s.replace(old, new, 1)
+
+          old = """    const [anonResponse, serviceResponse] = await Promise.all([\n      fetch(`${supabaseUrl}/rest/v1/`, { headers: { apikey: anonKey ?? '', Authorization: `Bearer ${anonKey}` }, signal: createTimeoutSignal(10_000) }),\n      fetch(`${supabaseUrl}/auth/v1/admin/users?per_page=1`, { headers: { apikey: serviceRoleKey ?? '', Authorization: `Bearer ${serviceRoleKey}` }, signal: createTimeoutSignal(10_000) }),\n    ]);\n    const ok = anonResponse.status < 500 && serviceResponse.ok;\n    return { provider: 'supabase', status: ok ? 'tested' : 'invalid', requiredVariableNames: required, savedVariableNames: required, missingVariableNames: [], lastTestedAt: nowIso(), secretValuesReturned: false, httpStatus: serviceResponse.status, error: ok ? undefined : `Supabase anon/service-role verification returned anon=${anonResponse.status}, service=${serviceResponse.status}.` };"""
+          new = """    const [anonResponse, serviceResponse, managementResponse] = await Promise.all([\n      fetch(`${supabaseUrl}/rest/v1/`, { headers: { apikey: anonKey ?? '', Authorization: `Bearer ${anonKey}` }, signal: createTimeoutSignal(10_000) }),\n      fetch(`${supabaseUrl}/auth/v1/admin/users?per_page=1`, { headers: { apikey: serviceRoleKey ?? '', Authorization: `Bearer ${serviceRoleKey}` }, signal: createTimeoutSignal(10_000) }),\n      managementToken\n        ? fetch(`https://api.supabase.com/v1/projects/${getSupabaseProjectRef()}`, { headers: { Authorization: `Bearer ${managementToken}` }, signal: createTimeoutSignal(10_000) })\n        : Promise.resolve(null),\n    ]);\n    const managementOk = !managementResponse || managementResponse.ok;\n    const ok = anonResponse.status < 500 && serviceResponse.ok && managementOk;\n    const savedNames = managementToken ? [...required, 'SUPABASE_ACCESS_TOKEN' as OwnerVariableName] : required;\n    return {\n      provider: 'supabase',\n      status: ok ? 'tested' : 'invalid',\n      requiredVariableNames: required,\n      savedVariableNames: savedNames,\n      missingVariableNames: [],\n      lastTestedAt: nowIso(),\n      secretValuesReturned: false,\n      httpStatus: managementResponse ? managementResponse.status : serviceResponse.status,\n      error: ok ? undefined : `Supabase verification returned anon=${anonResponse.status}, service=${serviceResponse.status}, management=${managementResponse ? managementResponse.status : 'not_saved'}.`,\n    };"""
+          if old not in s:
+              raise SystemExit('backend Supabase provider test block not found')
+          s = s.replace(old, new, 1)
+          backend.write_text(s)
+          PY
+          git diff --check
+          grep -q "'SUPABASE_ACCESS_TOKEN'" expo/src/modules/ivx-owner-ai/services/ivxVariablesToolService.ts
+          grep -q "managementResponse" backend/api/ivx-owner-variables.ts
+      - name: Typecheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd expo
+          bun install
+          bunx tsc --noEmit
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add expo/src/modules/ivx-owner-ai/services/ivxVariablesToolService.ts backend/api/ivx-owner-variables.ts
+          if git diff --cached --quiet; then
+            echo 'Supabase access-token save/sync already enabled.'
+            exit 0
+          fi
+          git commit -m 'fix: enable Supabase access token save sync'
+          git push origin HEAD:main

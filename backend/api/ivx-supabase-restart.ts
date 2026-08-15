@@ -7,8 +7,9 @@
  * Route: POST /api/ivx/auth/restart-supabase
  */
 import { ownerOnlyOptions } from './owner-only';
+import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 
-const DEPLOYMENT_MARKER = 'ivx-supabase-restart-2026-08-05';
+const DEPLOYMENT_MARKER = 'ivx-supabase-restart-owner-variable-binding-2026-08-15';
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -31,10 +32,13 @@ export async function handleIVXSupabaseRestart(request: Request): Promise<Respon
     );
   }
 
-  const accessToken = readTrimmed(process.env.SUPABASE_ACCESS_TOKEN);
+  // Prefer the encrypted Owner Variables value because it is owner-rotatable at
+  // runtime. A stale process.env value remains only as a fallback. No secret is
+  // returned or logged.
+  const accessToken = await getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN', { preferStored: true });
   if (!accessToken) {
     return Response.json(
-      { ok: false, error: 'SUPABASE_ACCESS_TOKEN is not configured on the backend.', errorCode: 'no_access_token', deploymentMarker: DEPLOYMENT_MARKER },
+      { ok: false, error: 'Supabase Management API token is not available in Owner Variables or backend runtime.', errorCode: 'no_access_token', tokenSource: 'unavailable', deploymentMarker: DEPLOYMENT_MARKER },
       { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },
     );
   }
@@ -55,6 +59,38 @@ export async function handleIVXSupabaseRestart(request: Request): Promise<Respon
         const statusData = await statusResponse.json() as { status?: string; region?: string; name?: string };
         projectStatus = statusData.status ?? 'unknown';
         console.log(`[IVX Supabase Restart] Project status: ${projectStatus}, name: ${statusData.name}, region: ${statusData.region}`);
+        const normalizedStatus = projectStatus.trim().toUpperCase();
+        if (normalizedStatus === 'ACTIVE_HEALTHY' || normalizedStatus === 'ACTIVE') {
+          return Response.json(
+            {
+              ok: true,
+              message: 'Supabase Management API authorization verified; project is already healthy.',
+              projectRef,
+              previousStatus: projectStatus,
+              action: 'noop',
+              managementAuthorized: true,
+              secretValuesReturned: false,
+              deploymentMarker: DEPLOYMENT_MARKER,
+              timestamp: new Date().toISOString(),
+            },
+            { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } },
+          );
+        }
+      } else if (statusResponse.status === 401 || statusResponse.status === 403) {
+        const detail = await statusResponse.text().catch(() => '');
+        return Response.json(
+          {
+            ok: false,
+            error: `Supabase Management API token rejected during validation (HTTP ${statusResponse.status}).`,
+            errorCode: 'management_token_rejected',
+            managementHttpStatus: statusResponse.status,
+            managementResponse: detail.slice(0, 180),
+            projectRef,
+            secretValuesReturned: false,
+            deploymentMarker: DEPLOYMENT_MARKER,
+          },
+          { status: 502, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } },
+        );
       }
     } catch (e) {
       console.log('[IVX Supabase Restart] Status check failed:', (e as Error)?.message);
