@@ -148,52 +148,43 @@ jobs:
           fi
           echo "health=PASS"
 
-      - name: Verify AI provider status (public endpoint)
+      - name: Verify AI provider status - HARD GATE
         shell: bash
         run: |
           set -euo pipefail
           AI_HEALTH=$(curl -sS --retry 4 --retry-delay 2 "${API_BASE}/health/ai/live" || echo '{}')
           printf '%s\n' "$AI_HEALTH" | jq '.' || true
           AI_OK=$(printf '%s' "$AI_HEALTH" | jq -r '.ok // false')
-          if [ "$AI_OK" = "true" ]; then
-            echo "ai_provider=PASS (AI gateway is live)"
-          else
+          if [ "$AI_OK" != "true" ]; then
             REASON=$(printf '%s' "$AI_HEALTH" | jq -r '.reason // .error // "unknown"')
-            echo "AI gateway is not ready: $REASON"
-            echo "ai_provider=SKIP — code 10/10 complete, key pending owner action (IVX_AI_GATEWAY_KEY)"
+            echo "AI provider hard gate failed: $REASON"
+            exit 1
           fi
+          echo "ai_provider=PASS"
 
-      - name: Verify public chat endpoint responds
+      - name: Verify public chat real inference - HARD GATE
         shell: bash
         run: |
           set -euo pipefail
           RESPONSE=$(curl -fsS --retry 3 --retry-delay 2 -X POST "${API_BASE}/api/public/chat" \
             -H "Content-Type: application/json" \
-            --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"github-live-cert","requestId":"github-live-cert-'"${GITHUB_RUN_ID}"'","history":[]}' || true)
-          if [ -z "$RESPONSE" ]; then
-            echo "Public chat endpoint did not respond — WARNING (AI key pending owner action)"
-            echo "live_inference=SKIP — code 10/10 complete, runtime key pending owner action"
-            exit 0
-          fi
+            --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"github-live-cert","requestId":"github-live-cert-'"${GITHUB_RUN_ID}"'","history":[]}')
           SOURCE=$(printf '%s' "$RESPONSE" | jq -r '.source // empty')
           ANSWER=$(printf '%s' "$RESPONSE" | jq -r '.answer // .text // empty')
           if [ -z "$ANSWER" ]; then
-            echo "No AI answer returned — WARNING (AI key pending owner action)"
-            echo "live_inference=SKIP — code 10/10 complete, runtime key pending owner action"
-            exit 0
+            echo "No AI answer returned - HARD FAIL"
+            exit 1
           fi
           if [ "$SOURCE" = "fallback" ]; then
-            echo "Public chat returned fallback — WARNING (AI key not configured)"
-            echo "live_inference=SKIP — code 10/10 complete, runtime key pending owner action"
-            exit 0
-          else
-            echo "Live AI inference passed; source=${SOURCE:-unknown}"
-            echo "live_inference=PASS"
+            echo "Public chat returned fallback - HARD FAIL"
+            exit 1
           fi
+          echo "live_inference=PASS source=${SOURCE:-unknown}"
 
       - name: Emit certificate evidence
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p qa/evidence
           cat > qa/evidence/render-live-cert.json <<EOF
           {
@@ -203,6 +194,8 @@ jobs:
             "renderDeployId": "${DEPLOY_ID:-bridge-or-auto}",
             "renderCommit": "${RENDER_COMMIT:-}",
             "health": "PASS",
+            "aiProvider": "PASS",
+            "realInference": "PASS",
             "shaParity": "PASS",
             "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }

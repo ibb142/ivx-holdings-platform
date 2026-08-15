@@ -1,7 +1,7 @@
 /**
  * IVX AI Provider Credential Monitor
  *
- * Probes the active AI provider every 4 hours. If authentication fails,
+ * Probes the active AI provider every 15 minutes. If authentication fails,
  * sends ONE SMS alert to the owner (not repeated every cycle). When service
  * recovers, sends a recovery SMS.
  *
@@ -9,14 +9,14 @@
  * certificate error. The alert intentionally avoids telling the owner to rotate
  * a Vercel key unless the runtime actually selected the Vercel AI Gateway.
  *
- * Marker: ivx-ai-key-monitor-provider-aware-2026-08-12
+ * Marker: ivx-ai-key-monitor-provider-aware-2026-08-15
  */
 
 import { probeAIGatewayLive } from './ivx-owner-ai-task-queue';
 import { sendSnsSms } from './ivx-sns-sms';
 import { getIVXAIProviderType } from '../ivx-ai-runtime';
 
-const PROBE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const PROBE_INTERVAL_MS = 15 * 60 * 1000;
 const OWNER_PHONE = process.env.IVX_OWNER_RECOVERY_PHONE || '';
 
 export type MonitorState = {
@@ -110,7 +110,7 @@ async function runProbe(): Promise<void> {
 
 export function startAIKeyMonitor(): void {
   if (intervalHandle) return;
-  console.log('[IVXAIKeyMonitor] Starting provider-aware monitor — probes every 4h');
+  console.log('[IVXAIKeyMonitor] Starting provider-aware monitor — probes every 15m');
 
   const bootProbe = setTimeout(() => { void runProbe().catch(() => {}); }, 30_000);
   bootProbe.unref?.();
