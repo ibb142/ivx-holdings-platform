@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: agent/supabase-recovery
-          fetch-depth: 0
+          fetch-depth: 1
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -43,10 +43,8 @@ jobs:
               print(f'patched: {path}')
               return True
 
-          changed = False
-
           path = 'backend/api/ivx-owner-variables.ts'
-          changed |= replace_once(
+          replace_once(
               path,
               "const MAX_VARIABLE_VALUE_LENGTH = 16_384;\n",
               "const MAX_VARIABLE_VALUE_LENGTH = 16_384;\nconst OWNER_VARIABLES_REST_TIMEOUT_MS = 5_000; // ivx-supabase-recovery-v1\n",
@@ -61,7 +59,6 @@ jobs:
               text = text.replace(old, new, 1)
           elif 'AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS)' not in text:
               raise SystemExit('owner variable REST timeout anchor missing')
-
           old = """  } catch (error) {\n    console.log('[IVXOwnerVariables] Runtime value bridge unavailable:', {\n      name,\n      message: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'unknown',\n    });\n    return '';\n  }\n}"""
           new = """  } catch (error) {\n    console.log('[IVXOwnerVariables] Runtime REST value bridge unavailable; trying direct Postgres fallback:', {\n      name,\n      message: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'unknown',\n    });\n    if (getDatabaseUrl()) {\n      try {\n        const row = await withClient(async (client) => {\n          const result = await client.query<OwnerVariableRow>(\n            'select * from public.ivx_owner_variables where name = $1 limit 1',\n            [name],\n          );\n          return result.rows[0] ?? null;\n        });\n        if (row) {\n          const decrypted = tryDecryptRowValue(row);\n          if (decrypted?.plaintext.trim()) {\n            return decrypted.plaintext.trim();\n          }\n        }\n      } catch (fallbackError) {\n        console.log('[IVXOwnerVariables] Direct Postgres runtime fallback unavailable:', {\n          name,\n          message: fallbackError instanceof Error ? sanitizeExternalErrorDetail(fallbackError.message) : 'unknown',\n        });\n      }\n    }\n    return '';\n  }\n}"""
           if old in text:
@@ -99,14 +96,13 @@ jobs:
               text = text.replace('export const REST_TIMEOUT_MS = 30000;', 'export const REST_TIMEOUT_MS = 8000; // ivx-durable-probe-before-ddl-v1', 1)
               text = text.replace('  maxAttempts = 4,\n  baseDelayMs = 2000,', '  maxAttempts = 2,\n  baseDelayMs = 1000,', 1)
               old = """  private async ensureSchemaInternal(): Promise<void> {\n    const statements = ["""
-              new = """  private async ensureSchemaInternal(): Promise<void> {\n    // Existing production tables should be read directly. Never hammer the DDL\n    // RPC during a transient database outage: probe first and only bootstrap on\n    // a genuine missing-table/schema-cache response.\n    const probeResponse = await fetch(`${this.restBaseUrl()}/ivx_durable_documents?select=doc_key&limit=1`, {\n      method: 'GET',\n      headers: buildHeaders(),\n      signal: AbortSignal.timeout(REST_TIMEOUT_MS),\n    });\n    if (probeResponse.ok) {\n      console.log('[IvxDurableStore] Existing schema reachable; DDL bootstrap skipped');\n      return;\n    }\n    const probePayload = await parseResponsePayload(probeResponse);\n    const probeMessage = extractErrorMessage(probePayload, `Supabase schema probe returned HTTP ${probeResponse.status}.`);\n    const missingSchema = probeResponse.status === 404\n      || probeMessage.includes('PGRST205')\n      || probeMessage.includes('Could not find the table')\n      || probeMessage.includes('schema cache');\n    if (!missingSchema) {\n      throw new Error(`Supabase schema probe unavailable; DDL suppressed: ${probeMessage}`);\n    }\n\n    const statements = ["""
+              new = """  private async ensureSchemaInternal(): Promise<void> {\n    // ivx-durable-probe-before-ddl-v1: do not amplify a transient outage with DDL retries.\n    const probeResponse = await fetch(`${this.restBaseUrl()}/ivx_durable_documents?select=doc_key&limit=1`, {\n      method: 'GET',\n      headers: buildHeaders(),\n      signal: AbortSignal.timeout(REST_TIMEOUT_MS),\n    });\n    if (probeResponse.ok) {\n      console.log('[IvxDurableStore] Existing schema reachable; DDL bootstrap skipped');\n      return;\n    }\n    const probePayload = await parseResponsePayload(probeResponse);\n    const probeMessage = extractErrorMessage(probePayload, `Supabase schema probe returned HTTP ${probeResponse.status}.`);\n    const missingSchema = probeResponse.status === 404\n      || probeMessage.includes('PGRST205')\n      || probeMessage.includes('Could not find the table')\n      || probeMessage.includes('schema cache');\n    if (!missingSchema) {\n      throw new Error(`Supabase schema probe unavailable; DDL suppressed: ${probeMessage}`);\n    }\n\n    const statements = ["""
               if old not in text:
                   raise SystemExit('durable store ensureSchema anchor missing')
               text = text.replace(old, new, 1)
           p.write_text(text)
 
-          test = Path('backend/ivx-supabase-resilience-static.test.ts')
-          test.write_text("""import { describe, expect, test } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n\ndescribe('IVX Supabase production resilience guards', () => {\n  test('owner variable runtime lookup has bounded REST and direct PG fallback', () => {\n    const source = readFileSync(new URL('./api/ivx-owner-variables.ts', import.meta.url), 'utf8');\n    expect(source).toContain('AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS)');\n    expect(source).toContain('Runtime REST value bridge unavailable; trying direct Postgres fallback');\n    expect(source).toContain('select * from public.ivx_owner_variables where name = $1 limit 1');\n  });\n\n  test('task queue sheds load during Supabase outages', () => {\n    const source = readFileSync(new URL('./services/ivx-owner-ai-task-queue.ts', import.meta.url), 'utf8');\n    expect(source).toContain('SUPABASE_FAILURE_THRESHOLD = 2');\n    expect(source).toContain('SUPABASE_BACKOFF_MS = 30_000');\n    expect(source).toContain('startOwnerAITaskWorker(intervalMs: number = 20_000)');\n  });\n\n  test('durable store probes before DDL and uses bounded retry', () => {\n    const source = readFileSync(new URL('./services/ivx-durable-store.ts', import.meta.url), 'utf8');\n    expect(source).toContain('Existing schema reachable; DDL bootstrap skipped');\n    expect(source).toContain('DDL suppressed');\n    expect(source).toContain('REST_TIMEOUT_MS = 8000');\n  });\n\n  test('senior developer worker no longer polls every five seconds', () => {\n    const source = readFileSync(new URL('./services/ivx-senior-dev-worker.ts', import.meta.url), 'utf8');\n    expect(source).toContain('TASK_POLL_INTERVAL_MS = 20_000');\n  });\n});\n""")
+          Path('backend/ivx-supabase-resilience-static.test.ts').write_text("""import { describe, expect, test } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n\ndescribe('IVX Supabase production resilience guards', () => {\n  test('owner variable runtime lookup has bounded REST and direct PG fallback', () => {\n    const source = readFileSync(new URL('./api/ivx-owner-variables.ts', import.meta.url), 'utf8');\n    expect(source).toContain('AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS)');\n    expect(source).toContain('Runtime REST value bridge unavailable; trying direct Postgres fallback');\n    expect(source).toContain('select * from public.ivx_owner_variables where name = $1 limit 1');\n  });\n  test('task queue sheds load during Supabase outages', () => {\n    const source = readFileSync(new URL('./services/ivx-owner-ai-task-queue.ts', import.meta.url), 'utf8');\n    expect(source).toContain('SUPABASE_FAILURE_THRESHOLD = 2');\n    expect(source).toContain('SUPABASE_BACKOFF_MS = 30_000');\n    expect(source).toContain('startOwnerAITaskWorker(intervalMs: number = 20_000)');\n  });\n  test('durable store probes before DDL and uses bounded retry', () => {\n    const source = readFileSync(new URL('./services/ivx-durable-store.ts', import.meta.url), 'utf8');\n    expect(source).toContain('Existing schema reachable; DDL bootstrap skipped');\n    expect(source).toContain('DDL suppressed');\n    expect(source).toContain('REST_TIMEOUT_MS = 8000');\n  });\n  test('senior developer worker no longer polls every five seconds', () => {\n    const source = readFileSync(new URL('./services/ivx-senior-dev-worker.ts', import.meta.url), 'utf8');\n    expect(source).toContain('TASK_POLL_INTERVAL_MS = 20_000');\n  });\n});\n""")
           print('patch_complete=true')
           PY
 
