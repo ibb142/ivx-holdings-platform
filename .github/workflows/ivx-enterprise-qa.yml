@@ -232,15 +232,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: enterprise-qa-${GITHUB_RUN_ID}" --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"enterprise-qa","requestId":"enterprise-qa-'"$GITHUB_RUN_ID"'","history":[]}' -o /tmp/chat.json
+          curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: enterprise-qa-${GITHUB_RUN_ID}" --data '{"message":"In one sentence, compare fixed-rate and floating-rate debt for a commercial real-estate acquisition and state one tradeoff of each.","sessionId":"enterprise-qa","requestId":"enterprise-qa-'"$GITHUB_RUN_ID"'","history":[]}' -o /tmp/chat.json
           jq '.' /tmp/chat.json
           test -n "$(jq -r '.answer // .text // empty' /tmp/chat.json)"
-          test "$(jq -r '.source // empty' /tmp/chat.json)" != "fallback"
+          test "$(jq -r '.source // empty' /tmp/chat.json)" = "chatgpt"
+          test -n "$(jq -r '.endpoint // empty' /tmp/chat.json)"
 
   android-build:
     name: Android Release Bundle Compile
     runs-on: ubuntu-24.04
+    environment: production
     timeout-minutes: 60
+    env:
+      IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}
+      IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}
+      IVX_RELEASE_KEY_ALIAS: ${{ secrets.IVX_RELEASE_KEY_ALIAS }}
+      IVX_RELEASE_KEY_PASSWORD: ${{ secrets.IVX_RELEASE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -256,11 +263,34 @@ jobs:
       - run: |
           bun install --frozen-lockfile
           bun install --cwd expo --frozen-lockfile
+      - name: Validate protected release signing inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in IVX_RELEASE_KEYSTORE_BASE64 IVX_RELEASE_KEYSTORE_PASSWORD IVX_RELEASE_KEY_ALIAS IVX_RELEASE_KEY_PASSWORD; do
+            if [ -z "${!variable}" ]; then
+              echo "::error::Required protected release-signing input is unavailable: $variable"
+              exit 1
+            fi
+          done
+          umask 077
+          KEYSTORE_PATH="$RUNNER_TEMP/ivx-release.keystore"
+          printf '%s' "$IVX_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" >/dev/null
+          echo "IVX_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "Release key validated without printing signing material."
       - name: Build Android release AAB
         working-directory: expo/android
         run: |
           chmod +x gradlew
           ./gradlew bundleRelease --no-daemon -x lint
+      - name: Verify signed AAB
+        working-directory: expo/android
+        run: |
+          set -euo pipefail
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify -strict "$AAB"
+          sha256sum "$AAB"
       - name: Record bundle evidence
         run: find expo/android/app/build/outputs/bundle -name '*.aab' -type f -print -exec sha256sum {} \;
       - uses: actions/upload-artifact@v4
@@ -303,3 +333,9 @@ jobs:
           test "$failures" -eq 0
           echo "ENTERPRISE_QA_CERTIFIED=true"
           echo "SHA=${GITHUB_SHA}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-enterprise-qa-certificate-${{ github.sha }}
+          path: |
+            screen-inventory.txt
+          if-no-files-found: ignore
