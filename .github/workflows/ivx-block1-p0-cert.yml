@@ -98,19 +98,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -m 30 -o /tmp/chat-debug.json -w '%{http_code}' "${API_BASE}/api/ivx/chat-debug" || true)
-          echo "chat_debug_http=$code"
-          cat /tmp/chat-debug.json || true
-          if [ "$code" = "401" ]; then
-            echo 'AI debug endpoint requires auth — HARD FAIL'
-            exit 1
-          fi
+          # Use the public AI status endpoint (no auth required) instead of owner-only chat-debug
+          code=$(curl -sS -m 30 -o /tmp/ai-status.json -w '%{http_code}' "${API_BASE}/api/ivx/owner-ai/public-status" || true)
+          echo "ai_status_http=$code"
+          cat /tmp/ai-status.json || true
           if [ "$code" != "200" ]; then
-            echo 'AI debug endpoint unavailable — HARD FAIL'
+            echo 'AI public status endpoint unavailable — HARD FAIL'
             exit 1
           fi
-          if grep -Eqi '"(lastHttpStatus|status)"[[:space:]]*:[[:space:]]*(401|403)' /tmp/chat-debug.json; then
-            echo 'AI credential rejected — HARD FAIL (owner must set IVX_AI_GATEWAY_KEY on Render)'
+          ai_ready=$(jq -r '.aiProviderReady // false' /tmp/ai-status.json)
+          if [ "$ai_ready" != "true" ]; then
+            echo 'AI provider not ready — HARD FAIL (owner must set IVX_AI_GATEWAY_KEY on Render)'
             exit 1
           fi
           grep -q 'openai_direct' backend/services/ivx-ai-provider-fallback.ts

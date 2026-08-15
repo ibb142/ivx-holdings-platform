@@ -193,10 +193,16 @@ let _ownerVariableGatewayKey = '';
 export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> {
   try {
     const { getIVXOwnerVariableRuntimeValue } = await import('./api/ivx-owner-variables');
-    const key = await getIVXOwnerVariableRuntimeValue('IVX_AI_GATEWAY_KEY');
-    if (key) _ownerVariableGatewayKey = key;
+    for (const name of ['IVX_AI_GATEWAY_KEY', 'AI_GATEWAY_API_KEY'] as const) {
+      const key = await getIVXOwnerVariableRuntimeValue(name, { preferStored: true });
+      if (!key) continue;
+      _ownerVariableGatewayKey = key;
+      process.env.IVX_AI_GATEWAY_KEY = key;
+      process.env.AI_GATEWAY_API_KEY = key;
+      return;
+    }
   } catch {
-    // Owner Variables store not available — process.env is the only source
+    // Owner Variables store unavailable; process.env remains the fallback source.
   }
 }
 
@@ -499,7 +505,7 @@ export function validateIVXAIStartup(): IVXAIStartupValidation {
   const adapterVersion = getAdapterVersion();
 
   if (!keyLoaded) {
-    errors.push('OPENAI_API_KEY is not set');
+    errors.push('AI gateway key is not set — set IVX_AI_GATEWAY_KEY, AI_GATEWAY_API_KEY, or OPENAI_API_KEY on the backend host');
   }
   if (!rootUrl) {
     errors.push('AI gateway root URL is empty');
