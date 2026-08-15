@@ -750,12 +750,15 @@ async function buildStoredSecretMap(): Promise<StoredSecretMap> {
 /**
  * Reads one encrypted Owner Variable for backend runtime use without exposing it to API responses.
  */
-export async function getIVXOwnerVariableRuntimeValue(name: OwnerVariableName): Promise<string> {
+export async function getIVXOwnerVariableRuntimeValue(
+  name: OwnerVariableName,
+  options: { preferStored?: boolean } = {},
+): Promise<string> {
   const envValue = readEnv(name);
-  if (envValue) return envValue;
+  if (envValue && !options.preferStored) return envValue;
   try {
     const row = await getStoredRow(name);
-    if (!row) return '';
+    if (!row) return envValue;
     const decrypted = tryDecryptRowValue(row);
     if (!decrypted) {
       console.log('[IVXOwnerVariables] Runtime value bridge: decryption failed for all key candidates', {
@@ -809,7 +812,7 @@ export async function getIVXOwnerVariableRuntimeValue(name: OwnerVariableName): 
         });
       }
     }
-    return '';
+    return envValue;
   }
 }
 
