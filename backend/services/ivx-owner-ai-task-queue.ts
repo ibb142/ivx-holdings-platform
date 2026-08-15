@@ -1008,11 +1008,9 @@ export async function probeAIGatewayLive(): Promise<{
   latencyMs: number;
   ownerActionRequired: string | null;
 }> {
+  const { getIVXAIGatewayApiKey, preloadIVXAIGatewayKeyFromOwnerVariables } = await import('../ivx-ai-runtime');
+  await preloadIVXAIGatewayKeyFromOwnerVariables();
   const startup = validateIVXAIStartup();
-  // Use the AI runtime's unified key resolver, which checks the encrypted
-  // IVX Owner Variables store FIRST, then falls back to process.env.
-  // This is the same binding pattern already used for SUPABASE_ACCESS_TOKEN.
-  const { getIVXAIGatewayApiKey } = await import('../ivx-ai-runtime');
   const apiKey = getIVXAIGatewayApiKey();
   const keyPrefix = apiKey ? `${apiKey.slice(0, 4)}***` : 'none';
   const endpoint = startup.baseUrl;

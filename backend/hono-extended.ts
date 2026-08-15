@@ -63,16 +63,13 @@ app.get('/api/ivx/certification/member-auth', async (c) => {
 // Public read-only endpoint for CI certification gates — returns latest cert without owner auth
 app.get('/api/ivx/certification/member-auth-public', async (c) => {
   try {
-    const latest = await getLatestMemberAuthCertification();
-    if (!latest) {
-      // No cached cert — run one on demand so CI gates get a fresh result
-      const fresh = await runMemberAuthCertification();
-      return c.json(fresh, 200);
-    }
-    return c.json(latest, 200);
+    // Always run a fresh certification so CI gates get the current runtime state,
+    // not a stale cached result from a previous run with different env vars.
+    const fresh = await runMemberAuthCertification();
+    return c.json(fresh, 200);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'failed to read certification';
-    return c.json({ certified: false, error: 'Certification store unavailable', detail: msg.slice(0, 200) }, 200);
+    const msg = error instanceof Error ? error.message : 'failed to run certification';
+    return c.json({ certified: false, error: 'Certification run failed', detail: msg.slice(0, 200) }, 200);
   }
 });
 app.post('/api/ivx/certification/member-auth/run', async (c) => {
