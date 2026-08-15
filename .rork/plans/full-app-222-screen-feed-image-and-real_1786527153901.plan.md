@@ -72,6 +72,8 @@ Rebuild the shared loading, image, feed, and real-time infrastructure across the
 - [x] Source implemented and deployed in commit `fcedc08b`.
 - [x] `/health/ai/live` endpoint live — returns HTTP 503 with `ok: false`, reason: "No AI gateway key configured", `ownerActionRequired` message.
 - [ ] Owner must set `IVX_AI_GATEWAY_KEY` (or `OPENAI_API_KEY`) on the Render service to enable AI chat.
+- [x] Final QA audit 2026-08-15: SHA parity PASS, production health PASS, database PASS, member auth 8/8 PASS, reels feed PASS, wire transfer PASS, module registry 200/0 failed, git clean PASS.
+- [ ] AI live probe remains FAIL because all known `vck_` Vercel AI Gateway keys are expired/revoked (HTTP 401). A fresh owner-provided key is required to reach 10/10.
 - Files changed: `backend/services/ivx-owner-ai-task-queue.ts`, `backend/hono.ts`, `backend/api/public-chat-stream.ts`, `backend/api/public-chat.ts`, `expo/app/chat-hub.tsx`, `expo/lib/public-chat-stream.ts`, `backend/services/ivx-ai-key-monitor.ts`.
 
 **Phase 7 — Wire transfer funding flow** [DEPLOYED]
