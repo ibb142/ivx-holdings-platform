@@ -14,6 +14,10 @@ jobs:
   recover:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+      IVX_VERCEL_TOKEN: ${{ secrets.IVX_VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,19 +50,26 @@ jobs:
           }
           console.log(`render_access=PASS env_count=${env.size}`);
 
-          const vercelAliases = ['VERCEL_TOKEN','VERCEL_API_TOKEN','IVX_VERCEL_TOKEN'];
+          const vercelCandidates = [
+            ['github_secret:VERCEL_TOKEN', process.env.VERCEL_TOKEN || ''],
+            ['github_secret:VERCEL_API_TOKEN', process.env.VERCEL_API_TOKEN || ''],
+            ['github_secret:IVX_VERCEL_TOKEN', process.env.IVX_VERCEL_TOKEN || ''],
+            ['render:VERCEL_TOKEN', env.get('VERCEL_TOKEN') || ''],
+            ['render:VERCEL_API_TOKEN', env.get('VERCEL_API_TOKEN') || ''],
+            ['render:IVX_VERCEL_TOKEN', env.get('IVX_VERCEL_TOKEN') || ''],
+          ];
           let vercelToken = '';
-          let vercelAlias = '';
-          for (const name of vercelAliases) {
-            const value = String(env.get(name) || '').trim();
-            if (value) { vercelToken = value; vercelAlias = name; break; }
+          let vercelSource = '';
+          for (const [source, value] of vercelCandidates) {
+            const token = String(value || '').trim();
+            if (token) { vercelToken = token; vercelSource = source; break; }
           }
-          if (!vercelToken) throw new Error('vercel_runtime_token_missing');
+          if (!vercelToken) throw new Error('vercel_management_token_missing_in_github_and_render');
 
           const vh = { Authorization: `Bearer ${vercelToken}`, 'Content-Type':'application/json' };
           const user = await fetch('https://api.vercel.com/v2/user', { headers: vh });
           if (!user.ok) throw new Error(`vercel_token_rejected_http_${user.status}`);
-          console.log(`vercel_runtime_auth=PASS alias=${vercelAlias}`);
+          console.log(`vercel_runtime_auth=PASS source=${vercelSource}`);
 
           const teamsRes = await fetch('https://api.vercel.com/v2/teams?limit=100', { headers: vh });
           if (!teamsRes.ok) throw new Error(`vercel_teams_http_${teamsRes.status}`);
