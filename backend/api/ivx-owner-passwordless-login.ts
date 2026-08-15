@@ -2,8 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
+import { mintIVXOutageOwnerSession } from '../services/ivx-outage-owner-session';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-backend-supabase-fallback-2026-08-14';
+const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-outage-session-2026-08-15';
 const AUTH_TIMEOUT_MS = 10_000;
 const PRODUCTION_SUPABASE_PROJECT_REF = 'kvclcdjmjghndxsngfzb';
 const PRODUCTION_SUPABASE_URL = `https://${PRODUCTION_SUPABASE_PROJECT_REF}.supabase.co`;
@@ -153,16 +154,41 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || allowlist[0] || email).toLowerCase();
   const ownerPassword = await readOwnerPassword();
 
-  if (!ownerPassword) {
-    return failure(
-      'Owner emergency authentication password binding is unavailable on the backend runtime and durable IVX variable store.',
-      'owner_password_binding_unavailable',
-      503,
-    );
-  }
-
   if (ownerEmail !== email) {
     return failure('Requested owner email does not match the configured owner.', 'owner_runtime_email_mismatch', 403);
+  }
+
+  const buildOutageSessionResponse = (): Response | null => {
+    const outageSession = mintIVXOutageOwnerSession(email);
+    if (!outageSession) return null;
+    return ownerOnlyJson({
+      success: true,
+      accessToken: outageSession.token,
+      refreshToken: '',
+      expiresAt: outageSession.expiresAt,
+      expiresAtIso: new Date(outageSession.expiresAt * 1000).toISOString(),
+      userId: outageSession.userId,
+      email: outageSession.email,
+      role: outageSession.role,
+      passwordSelfHealed: false,
+      passwordPreserved: true,
+      sessionMethod: 'ivx_owner_outage_session',
+      credentialBinding: 'server_signed_owner_outage_session',
+      outageMode: true,
+      authUserCreated: false,
+      deploymentMarker: DEPLOYMENT_MARKER,
+      timestamp: nowIso(),
+    });
+  };
+
+  if (!ownerPassword) {
+    const outageResponse = buildOutageSessionResponse();
+    if (outageResponse) return outageResponse;
+    return failure(
+      'Owner emergency authentication bindings are unavailable on the backend runtime.',
+      'owner_emergency_binding_unavailable',
+      503,
+    );
   }
 
   try {
@@ -184,11 +210,16 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
 
     const session = data.session;
     if (error || !session?.access_token || !session.refresh_token) {
-      return failure(
-        error?.message || 'Supabase did not return an owner session.',
-        'owner_password_grant_failed',
-        502,
-      );
+      const errorStatus = typeof (error as { status?: unknown } | null)?.status === 'number'
+        ? Number((error as { status?: number }).status)
+        : 0;
+      const errorMessage = error?.message || 'Supabase did not return an owner session.';
+      const serviceUnavailable = errorStatus >= 500 || /timeout|abort|fetch|network|unavailable|522|503|504/i.test(errorMessage);
+      if (serviceUnavailable) {
+        const outageResponse = buildOutageSessionResponse();
+        if (outageResponse) return outageResponse;
+      }
+      return failure(errorMessage, 'owner_password_grant_failed', 502);
     }
 
     const expiresAt = session.expires_at ?? 0;
@@ -209,6 +240,8 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
       timestamp: nowIso(),
     });
   } catch (error) {
+    const outageResponse = buildOutageSessionResponse();
+    if (outageResponse) return outageResponse;
     const timedOut = error instanceof Error && /timeout|abort/i.test(error.message);
     return failure(
       timedOut ? 'Owner authentication timed out.' : (error instanceof Error ? error.message : 'Owner authentication failed.'),
