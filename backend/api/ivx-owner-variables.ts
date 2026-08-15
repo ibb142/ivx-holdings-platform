@@ -126,6 +126,11 @@ function decodeJwtRole(token: string): string | null {
   }
 }
 
+function getSupabaseProjectRef(): string {
+  const url = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('IVX_SUPABASE_URL') || readEnv('SUPABASE_URL');
+  return url.match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1] ?? 'kvclcdjmjghndxsngfzb';
+}
+
 function getSupabaseServiceRoleKey(): string {
   const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
   const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');

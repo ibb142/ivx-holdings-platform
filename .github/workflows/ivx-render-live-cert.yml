@@ -148,7 +148,7 @@ jobs:
           fi
           echo "health=PASS"
 
-      - name: Verify AI provider status (public endpoint)
+      - name: Verify AI provider status (public endpoint) — HARD GATE
         shell: bash
         run: |
           set -euo pipefail
@@ -160,10 +160,11 @@ jobs:
           else
             REASON=$(printf '%s' "$AI_HEALTH" | jq -r '.reason // .error // "unknown"')
             echo "AI gateway is not ready: $REASON"
-            echo "ai_provider=SOFT_PASS (gateway not configured, endpoint responsive)"
+            echo "ai_provider=FAIL (gateway not configured)"
+            exit 1
           fi
 
-      - name: Verify public chat endpoint responds
+      - name: Verify public chat endpoint responds — HARD GATE
         shell: bash
         run: |
           set -euo pipefail
@@ -173,12 +174,13 @@ jobs:
           SOURCE=$(printf '%s' "$RESPONSE" | jq -r '.source // empty')
           ANSWER=$(printf '%s' "$RESPONSE" | jq -r '.answer // .text // empty')
           if [ -z "$ANSWER" ]; then
-            echo "No AI answer returned"
+            echo "No AI answer returned — HARD FAIL"
             exit 1
           fi
           if [ "$SOURCE" = "fallback" ]; then
-            echo "Public chat returned fallback. SOFT PASS."
-            echo "live_inference=SOFT_PASS"
+            echo "Public chat returned fallback. HARD FAIL."
+            echo "live_inference=FAIL"
+            exit 1
           else
             echo "Live AI inference passed; source=${SOURCE:-unknown}"
             echo "live_inference=PASS"

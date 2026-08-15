@@ -146,18 +146,22 @@ jobs:
           test "$failed" -eq 0
       - name: Store config hard checks
         run: |
-          node - <<'NODE'
+          cd expo && node - <<'NODE'
           const fs=require('fs');
-          const eas=JSON.parse(fs.readFileSync('expo/eas.json','utf8'));
-          const cfg=fs.readFileSync('expo/app.config.ts','utf8');
+          // Evaluate the Expo config properly instead of fragile literal-text matching
+          const { getConfig } = require('expo/config');
+          const { exp } = getConfig(process.cwd(), { skipSDKVersionRequirement: true });
+          const eas=JSON.parse(fs.readFileSync('eas.json','utf8'));
           const errors=[];
-          if(!cfg.includes("bundleIdentifier: 'com.ivxholdings.app'")) errors.push('iOS bundleIdentifier mismatch');
-          if(!cfg.includes("package: 'com.ivxholdings.app'")) errors.push('Android package mismatch');
+          const iosBundle = exp.ios?.bundleIdentifier;
+          const androidPkg = exp.android?.package;
+          if(iosBundle !== 'com.ivxholdings.app') errors.push(`iOS bundleIdentifier mismatch: got ${iosBundle}`);
+          if(androidPkg !== 'com.ivxholdings.app') errors.push(`Android package mismatch: got ${androidPkg}`);
           if(eas?.build?.production?.distribution!=='store') errors.push('production distribution is not store');
           if(eas?.build?.production?.android?.buildType!=='app-bundle') errors.push('Android production build is not AAB');
           if(!eas?.submit?.production?.ios) errors.push('iOS submit config missing');
           if(!eas?.submit?.production?.android) errors.push('Android submit config missing');
-          console.log(JSON.stringify({iosBundle:'com.ivxholdings.app',androidPackage:'com.ivxholdings.app',production:eas.build.production,submit:eas.submit.production},null,2));
+          console.log(JSON.stringify({iosBundle,androidPackage,production:eas.build.production,submit:eas.submit.production},null,2));
           if(errors.length){ console.error(errors.join('\n')); process.exit(1); }
           NODE
 
