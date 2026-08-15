@@ -1,0 +1,89 @@
+name: IVX DB Pressure Relief
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-db-pressure-relief.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Add database outage circuit breaker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/api/ivx-agent-jobs.ts')
+          s = p.read_text()
+
+          old = "const WORKER_INTERVAL_MS = 15_000;"
+          new = "const WORKER_INTERVAL_MS = 60_000;\nconst SCHEMA_RETRY_COOLDOWN_MS = 10 * 60_000;"
+          if old not in s:
+              raise SystemExit('worker interval anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "let schemaReadyPromise: Promise<void> | null = null;"
+          new = "let schemaReadyPromise: Promise<void> | null = null;\nlet schemaRetryAfterMs = 0;"
+          if old not in s:
+              raise SystemExit('schema promise anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "async function ensureAgentSchema(): Promise<void> {\n  if (!schemaReadyPromise) {"
+          new = "async function ensureAgentSchema(): Promise<void> {\n  if (!schemaReadyPromise && Date.now() < schemaRetryAfterMs) {\n    throw new Error('IVX agent schema bootstrap is cooling down after a database connectivity failure.');\n  }\n  if (!schemaReadyPromise) {"
+          if old not in s:
+              raise SystemExit('ensureAgentSchema anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "    })().catch((error) => {\n      schemaReadyPromise = null;\n      throw error;\n    });"
+          new = "    })().then(() => {\n      schemaRetryAfterMs = 0;\n    }).catch((error) => {\n      schemaReadyPromise = null;\n      schemaRetryAfterMs = Date.now() + SCHEMA_RETRY_COOLDOWN_MS;\n      throw error;\n    });"
+          if old not in s:
+              raise SystemExit('schema catch anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+
+          grep -n "WORKER_INTERVAL_MS\|SCHEMA_RETRY_COOLDOWN_MS\|schemaRetryAfterMs\|cooling down" backend/api/ivx-agent-jobs.ts
+
+      - name: Validate backend TypeScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f bun.lockb ] || [ -f bun.lock ]; then
+            curl -fsSL https://bun.sh/install | bash >/dev/null 2>&1
+            export PATH="$HOME/.bun/bin:$PATH"
+            bun install
+            if [ -f backend/tsconfig.json ]; then bunx tsc --noEmit -p backend/tsconfig.json; else bunx tsc --noEmit; fi
+          elif [ -f package-lock.json ]; then
+            npm ci
+            if [ -f backend/tsconfig.json ]; then npx tsc --noEmit -p backend/tsconfig.json; else npx tsc --noEmit; fi
+          else
+            echo "No supported lockfile found; skipping install/typecheck"
+          fi
+
+      - name: Commit pressure relief
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- backend/api/ivx-agent-jobs.ts; then
+            echo "No patch required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/api/ivx-agent-jobs.ts
+          git commit -m "fix: back off agent worker during Supabase outage"
+          git reset --hard HEAD
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main

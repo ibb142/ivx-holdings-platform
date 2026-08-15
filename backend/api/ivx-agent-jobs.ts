@@ -79,11 +79,13 @@ const MAX_PROMPT_LENGTH = 6000;
 const MAX_JOB_LIMIT = 100;
 const DEFAULT_JOB_LIMIT = 50;
 const DEFAULT_MAX_ATTEMPTS = 3;
-const WORKER_INTERVAL_MS = 15_000;
+const WORKER_INTERVAL_MS = 60_000;
+const SCHEMA_RETRY_COOLDOWN_MS = 10 * 60_000;
 
 type WorkerTimer = ReturnType<typeof setInterval> & { unref?: () => void };
 
 let schemaReadyPromise: Promise<void> | null = null;
+let schemaRetryAfterMs = 0;
 let workerLoopStarted = false;
 let workerLoopTimer: WorkerTimer | null = null;
 let workerTickInFlight = false;
@@ -244,6 +246,9 @@ async function executeSchemaSql(sql: string): Promise<void> {
 }
 
 async function ensureAgentSchema(): Promise<void> {
+  if (!schemaReadyPromise && Date.now() < schemaRetryAfterMs) {
+    throw new Error('IVX agent schema bootstrap is cooling down after a database connectivity failure.');
+  }
   if (!schemaReadyPromise) {
     schemaReadyPromise = (async () => {
       const statements = [
@@ -304,8 +309,11 @@ async function ensureAgentSchema(): Promise<void> {
       for (const statement of statements) {
         await executeSchemaSql(statement);
       }
-    })().catch((error) => {
+    })().then(() => {
+      schemaRetryAfterMs = 0;
+    }).catch((error) => {
       schemaReadyPromise = null;
+      schemaRetryAfterMs = Date.now() + SCHEMA_RETRY_COOLDOWN_MS;
       throw error;
     });
   }

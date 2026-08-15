@@ -25,6 +25,7 @@ import path from 'node:path';
 
 const SCHEMA_MARKER = 'ivx-durable-store-2026-08-07';
 export const REST_TIMEOUT_MS = 30000;
+const SCHEMA_PROBE_TIMEOUT_MS = 8000; // ivx-durable-probe-before-ddl-v1
 const SERVICE_ROLE_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'] as const;
 const SUPABASE_URL_NAMES = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
 
@@ -112,8 +113,8 @@ async function sleep(ms: number): Promise<void> {
 /** Retry transient 5xx/timeout errors with exponential backoff. HTTP 522 = Cloudflare origin timeout. */
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  maxAttempts = 4,
-  baseDelayMs = 2000,
+  maxAttempts = 2,
+  baseDelayMs = 1000,
 ): Promise<T> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -175,6 +176,26 @@ class DurableStore {
   }
 
   private async ensureSchemaInternal(): Promise<void> {
+    // ivx-durable-probe-before-ddl-v1: do not amplify a transient outage with DDL retries.
+    const probeResponse = await fetch(`${this.restBaseUrl()}/ivx_durable_documents?select=doc_key&limit=1`, {
+      method: 'GET',
+      headers: buildHeaders(),
+      signal: AbortSignal.timeout(SCHEMA_PROBE_TIMEOUT_MS),
+    });
+    if (probeResponse.ok) {
+      console.log('[IvxDurableStore] Existing schema reachable; DDL bootstrap skipped');
+      return;
+    }
+    const probePayload = await parseResponsePayload(probeResponse);
+    const probeMessage = extractErrorMessage(probePayload, `Supabase schema probe returned HTTP ${probeResponse.status}.`);
+    const missingSchema = probeResponse.status === 404
+      || probeMessage.includes('PGRST205')
+      || probeMessage.includes('Could not find the table')
+      || probeMessage.includes('schema cache');
+    if (!missingSchema) {
+      throw new Error(`Supabase schema probe unavailable; DDL suppressed: ${probeMessage}`);
+    }
+
     const statements = [
       `create table if not exists public.ivx_durable_documents (
         doc_key text primary key,
