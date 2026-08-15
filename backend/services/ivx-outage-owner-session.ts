@@ -24,7 +24,11 @@ function resolveSigningSecret(): string {
   return getIVXOwnerServiceToken()
     || readEnv('IVX_AI_SYSTEM_SECRET')
     || readEnv('IVX_SYSTEM_SECRET')
-    || readEnv('JWT_SECRET');
+    || readEnv('JWT_SECRET')
+    || readEnv('SUPABASE_SERVICE_ROLE_KEY')
+    || readEnv('SUPABASE_SERVICE_KEY')
+    || readEnv('IVX_OWNER_PASSWORD')
+    || readEnv('OWNER_NEW_PASSWORD');
 }
 
 function normalizedOwnerEmail(email: string): string {
