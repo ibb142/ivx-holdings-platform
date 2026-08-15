@@ -57,14 +57,13 @@ function ownerEmailFromRuntime(): string {
 }
 
 async function ownerPasswordFromRuntime(): Promise<string> {
-  const direct = env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
-  if (direct) return direct;
   try {
-    return String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD') || '').trim();
+    const stored = String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD', { preferStored: true }) || '').trim();
+    if (stored) return stored;
   } catch (error) {
     console.warn('[MemberAuthCert] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message.slice(0, 140) : 'unknown');
-    return '';
   }
+  return env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
 }
 
 function adminClient() {
