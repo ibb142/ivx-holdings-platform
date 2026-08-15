@@ -1,0 +1,75 @@
+name: IVX Supabase Runtime Recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-supabase-runtime-recovery.yml'
+  workflow_dispatch:
+
+jobs:
+  recover-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - name: Restart Supabase through existing IVX runtime binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 45 -o /tmp/restart.json -w '%{http_code}' \
+            -X POST "${API_BASE}/api/ivx/auth/restart-supabase" \
+            -H 'Content-Type: application/json' || true)
+          echo "restart_http=$code"
+          cat /tmp/restart.json 2>/dev/null || true
+          if [ "$code" != "200" ]; then
+            echo "Supabase restart endpoint failed"
+            exit 1
+          fi
+          ok=$(jq -r '.ok // false' /tmp/restart.json 2>/dev/null || echo false)
+          if [ "$ok" != "true" ]; then
+            echo "Supabase restart was not accepted"
+            exit 1
+          fi
+
+      - name: Wait for production database and auth recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          passed=0
+          for i in $(seq 1 60); do
+            health_code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+            cert_code=$(curl -sS -m 25 -o /tmp/member-cert.json -w '%{http_code}' "${API_BASE}/api/ivx/certification/member-auth-public" || true)
+            health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
+            certified=$(jq -r '.certified // false' /tmp/member-cert.json 2>/dev/null || echo false)
+            echo "poll=$i health_http=$health_code health_ok=$health_ok cert_http=$cert_code certified=$certified"
+            if [ "$health_code" = "200" ] && [ "$health_ok" = "true" ] && [ "$cert_code" = "200" ] && [ "$certified" = "true" ]; then
+              passed=1
+              break
+            fi
+            sleep 10
+          done
+          cat /tmp/health.json 2>/dev/null || true
+          cat /tmp/member-cert.json 2>/dev/null || true
+          if [ "$passed" != "1" ]; then
+            echo "Production database/auth certificate did not recover"
+            exit 1
+          fi
+
+      - name: Verify owner binding specifically
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_ok=$(jq -r '.checks.runtimeConfig // false' /tmp/member-cert.json)
+          owner_ok=$(jq -r '.checks.ownerLogin // false' /tmp/member-cert.json)
+          if [ "$runtime_ok" != "true" ]; then
+            echo "Runtime Supabase/service-role/anon/owner binding FAIL"
+            exit 1
+          fi
+          if [ "$owner_ok" != "true" ]; then
+            echo "Live owner password grant FAIL"
+            exit 1
+          fi
+          echo "supabase_runtime_binding=PASS"
+          echo "owner_login=PASS"
