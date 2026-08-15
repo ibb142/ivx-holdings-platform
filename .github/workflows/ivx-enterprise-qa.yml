@@ -3,8 +3,6 @@ name: IVX Enterprise QA
 on:
   push:
     branches: [main]
-    paths:
-      - '**'
   workflow_dispatch:
 
 permissions:
@@ -65,10 +63,15 @@ jobs:
           failed=0
           for file in "${files[@]}"; do
             echo "=== $file ==="
-            if ! IVX_DATA_DIR="$RUNNER_TEMP/ivx-enterprise-${GITHUB_RUN_ID}" NODE_ENV=test bun test "$file" --reporter=dots; then
+            safe_name=$(printf '%s' "$file" | tr '/.' '__')
+            test_root="$RUNNER_TEMP/ivx-enterprise-${GITHUB_RUN_ID}-${safe_name}"
+            rm -rf "$test_root"
+            mkdir -p "$test_root"
+            if ! IVX_DATA_DIR="$test_root" IVX_WIRE_ENCRYPTION_KEY="ivx-enterprise-test-only-${GITHUB_RUN_ID}" NODE_ENV=test bun test "$file" --reporter=dots; then
               failed=$((failed + 1))
               echo "::error file=$file::Backend test failed"
             fi
+            rm -rf "$test_root"
           done
           test "$failed" -eq 0
       - name: Expo tests - every test file must pass
@@ -105,40 +108,19 @@ jobs:
           set -euo pipefail
           json=$(bun -e "import { IVX_MODULE_REGISTRY, MODULE_COUNT, getScoreDistribution } from './expo/lib/ivx-module-registry.ts'; const expected=Number(process.env.EXPECTED_MODULE_COUNT||0); const ids=new Set(IVX_MODULE_REGISTRY.map(m=>m.id)); const nums=new Set(IVX_MODULE_REGISTRY.map(m=>m.number)); const blocked=IVX_MODULE_REGISTRY.filter(m=>m.status==='BLOCKED'); const failed=IVX_MODULE_REGISTRY.filter(m=>m.status==='FAILED'); const scores=getScoreDistribution(); console.log(JSON.stringify({expectedClaim:expected,moduleRegistryCount:MODULE_COUNT,uniqueIds:ids.size,uniqueNumbers:nums.size,blocked:blocked.map(m=>({id:m.id,name:m.name,workRemaining:m.workRemaining})),failed:failed.map(m=>m.id),scores},null,2));")
           echo "$json" | jq '.'
-          # Verify registry integrity: unique IDs and numbers must match count
-          unique_ids=$(echo "$json" | jq '.uniqueIds')
           module_count=$(echo "$json" | jq '.moduleRegistryCount')
-          if [ "$unique_ids" != "$module_count" ]; then
-            echo "FAIL: unique IDs ($unique_ids) != module count ($module_count)"
-            exit 2
-          fi
-          # Verify module count matches expected
-          if [ "$module_count" != "$EXPECTED_MODULE_COUNT" ]; then
-            echo "FAIL: module count $module_count != expected $EXPECTED_MODULE_COUNT"
-            exit 3
-          fi
-          # FAILED modules are never acceptable
-          failed_count=$(echo "$json" | jq '.failed | length')
-          if [ "$failed_count" != "0" ]; then
-            echo "FAIL: $failed_count modules have FAILED status"
-            exit 4
-          fi
-          # BLOCKED modules require external credentials (Apple, Twilio, physical device)
-          # Document but do not fail — these are infrastructure-gated, not code defects
-          blocked_count=$(echo "$json" | jq '.blocked | length')
-          echo "BLOCKED modules (require external credentials/devices): $blocked_count"
-          echo "$json" | jq '.blocked'
-          echo "Module registry integrity: PASS"
+          unique_ids=$(echo "$json" | jq '.uniqueIds')
+          unique_numbers=$(echo "$json" | jq '.uniqueNumbers')
+          test "$unique_ids" = "$module_count"
+          test "$unique_numbers" = "$module_count"
+          test "$module_count" = "$EXPECTED_MODULE_COUNT"
+          test "$(echo "$json" | jq '.failed | length')" = "0"
       - name: Count real Expo screen route files
         shell: bash
         run: |
           set -euo pipefail
-          SCREEN_COUNT=$(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) \
-            ! -name '_layout.tsx' ! -name '+not-found.tsx' ! -name '*+api.ts' ! -name '*+api.tsx' | wc -l | tr -d ' ')
-          echo "real_expo_screen_route_files=$SCREEN_COUNT"
-          find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) \
-            ! -name '_layout.tsx' ! -name '+not-found.tsx' ! -name '*+api.ts' ! -name '*+api.tsx' | sort > screen-inventory.txt
-          cat screen-inventory.txt
+          find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) ! -name '_layout.tsx' ! -name '+not-found.tsx' ! -name '*+api.ts' ! -name '*+api.tsx' | sort > screen-inventory.txt
+          echo "real_expo_screen_route_files=$(wc -l < screen-inventory.txt | tr -d ' ')"
       - uses: actions/upload-artifact@v4
         with:
           name: enterprise-screen-inventory-${{ github.sha }}
@@ -150,40 +132,44 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
       - name: Secret scan hard gate
         shell: bash
         run: |
           set -euo pipefail
           failed=0
           for pattern in 'ghp_[A-Za-z0-9]{36}' 'github_pat_[A-Za-z0-9_]{60,}' 'sk-[A-Za-z0-9_-]{30,}' 'rnd_[A-Za-z0-9]{20,}' 'sbp_[A-Za-z0-9_-]{20,}'; do
-            found=$(grep -r --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.json' \
-              --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.rork --exclude='*.test.ts' --exclude='.env.example' \
-              -E "$pattern" . 2>/dev/null || true)
+            found=$(grep -r --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.json' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.rork --exclude='*.test.ts' --exclude='.env.example' -E "$pattern" . 2>/dev/null || true)
             if [ -n "$found" ]; then
               echo "::error::Potential secret material matched pattern $pattern"
-              echo "$found" | sed -E 's/[A-Za-z0-9_-]{12,}/[REDACTED]/g'
               failed=1
             fi
           done
           test "$failed" -eq 0
+      - name: Install Expo dependencies
+        run: bun install --cwd expo --frozen-lockfile
       - name: Store config hard checks
+        shell: bash
         run: |
-          cd expo && node - <<'NODE'
+          set -euo pipefail
+          cd expo
+          bunx expo config --json > /tmp/ivx-expo-config.json
+          node - <<'NODE'
           const fs=require('fs');
-          // Evaluate the Expo config properly instead of fragile literal-text matching
-          const { getConfig } = require('expo/config');
-          const { exp } = getConfig(process.cwd(), { skipSDKVersionRequirement: true });
+          const exp=JSON.parse(fs.readFileSync('/tmp/ivx-expo-config.json','utf8'));
           const eas=JSON.parse(fs.readFileSync('eas.json','utf8'));
           const errors=[];
-          const iosBundle = exp.ios?.bundleIdentifier;
-          const androidPkg = exp.android?.package;
-          if(iosBundle !== 'com.ivxholdings.app') errors.push(`iOS bundleIdentifier mismatch: got ${iosBundle}`);
-          if(androidPkg !== 'com.ivxholdings.app') errors.push(`Android package mismatch: got ${androidPkg}`);
+          const iosBundle=exp.ios?.bundleIdentifier;
+          const androidPkg=exp.android?.package;
+          if(iosBundle!=='com.ivxholdings.app') errors.push(`iOS bundleIdentifier mismatch: got ${iosBundle}`);
+          if(androidPkg!=='com.ivxholdings.app') errors.push(`Android package mismatch: got ${androidPkg}`);
           if(eas?.build?.production?.distribution!=='store') errors.push('production distribution is not store');
           if(eas?.build?.production?.android?.buildType!=='app-bundle') errors.push('Android production build is not AAB');
           if(!eas?.submit?.production?.ios) errors.push('iOS submit config missing');
           if(!eas?.submit?.production?.android) errors.push('Android submit config missing');
-          console.log(JSON.stringify({iosBundle,androidPackage,production:eas.build.production,submit:eas.submit.production},null,2));
+          console.log(JSON.stringify({iosBundle,androidPackage:androidPkg},null,2));
           if(errors.length){ console.error(errors.join('\n')); process.exit(1); }
           NODE
 
@@ -237,23 +223,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 "$API_BASE/health/ai/live" -o /tmp/ai.json
-          jq '.' /tmp/ai.json
+          code=$(curl -sS --retry 3 --retry-delay 2 -o /tmp/ai.json -w '%{http_code}' "$API_BASE/health/ai/live" || true)
+          cat /tmp/ai.json | jq '.'
+          test "$code" = "200"
           test "$(jq -r '.ok // false' /tmp/ai.json)" = "true"
       - name: Public chat must use real inference
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" \
-            -H 'Content-Type: application/json' \
-            -H "x-ivx-client-id: enterprise-qa-${GITHUB_RUN_ID}" \
-            --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"enterprise-qa","requestId":"enterprise-qa-'"$GITHUB_RUN_ID"'","history":[]}' \
-            -o /tmp/chat.json
+          curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: enterprise-qa-${GITHUB_RUN_ID}" --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"enterprise-qa","requestId":"enterprise-qa-'"$GITHUB_RUN_ID"'","history":[]}' -o /tmp/chat.json
           jq '.' /tmp/chat.json
-          answer=$(jq -r '.answer // .text // empty' /tmp/chat.json)
-          source=$(jq -r '.source // empty' /tmp/chat.json)
-          test -n "$answer"
-          test "$source" != "fallback"
+          test -n "$(jq -r '.answer // .text // empty' /tmp/chat.json)"
+          test "$(jq -r '.source // empty' /tmp/chat.json)" != "fallback"
 
   android-build:
     name: Android Release Bundle Compile
@@ -276,15 +257,11 @@ jobs:
           bun install --cwd expo --frozen-lockfile
       - name: Build Android release AAB
         working-directory: expo/android
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           chmod +x gradlew
           ./gradlew bundleRelease --no-daemon -x lint
       - name: Record bundle evidence
-        run: |
-          find expo/android/app/build/outputs/bundle -name '*.aab' -type f -print -exec sha256sum {} \;
+        run: find expo/android/app/build/outputs/bundle -name '*.aab' -type f -print -exec sha256sum {} \;
       - uses: actions/upload-artifact@v4
         with:
           name: enterprise-android-aab-${{ github.sha }}
@@ -322,9 +299,6 @@ jobs:
         run: |
           echo "$NEEDS_JSON" | jq '.'
           failures=$(echo "$NEEDS_JSON" | jq '[to_entries[] | select(.value.result != "success")] | length')
-          if [ "$failures" -ne 0 ]; then
-            echo "ENTERPRISE_QA_CERTIFIED=false"
-            exit 1
-          fi
+          test "$failures" -eq 0
           echo "ENTERPRISE_QA_CERTIFIED=true"
           echo "SHA=${GITHUB_SHA}"
