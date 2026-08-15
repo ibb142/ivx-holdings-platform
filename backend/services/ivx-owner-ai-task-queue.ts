@@ -773,7 +773,9 @@ export async function ensureTaskTable(): Promise<boolean> {
     tableEnsured = true;
     return true;
   }
-  const token = (process.env.SUPABASE_ACCESS_TOKEN ?? '').trim();
+  // Prefer the encrypted Owner Variables store over stale process.env.
+  const { getIVXOwnerVariableRuntimeValue } = await import('../api/ivx-owner-variables');
+  const token = (await getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN', { preferStored: true })).trim();
   if (!token) {
     console.log('[IVXOwnerAITaskQueue] table missing and SUPABASE_ACCESS_TOKEN absent — cannot self-bootstrap DDL');
     return false;
@@ -1007,7 +1009,11 @@ export async function probeAIGatewayLive(): Promise<{
   ownerActionRequired: string | null;
 }> {
   const startup = validateIVXAIStartup();
-  const apiKey = process.env.IVX_AI_GATEWAY_KEY || process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || '';
+  // Use the AI runtime's unified key resolver, which checks the encrypted
+  // IVX Owner Variables store FIRST, then falls back to process.env.
+  // This is the same binding pattern already used for SUPABASE_ACCESS_TOKEN.
+  const { getIVXAIGatewayApiKey } = await import('../ivx-ai-runtime');
+  const apiKey = getIVXAIGatewayApiKey();
   const keyPrefix = apiKey ? `${apiKey.slice(0, 4)}***` : 'none';
   const endpoint = startup.baseUrl;
   const started = Date.now();

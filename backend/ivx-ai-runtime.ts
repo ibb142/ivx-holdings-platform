@@ -200,7 +200,7 @@ export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> 
   }
 }
 
-function getIVXAIGatewayApiKey(): string {
+export function getIVXAIGatewayApiKey(): string {
   // Phase 4 independence: owner-owned keys take priority over Rork-managed keys.
   //
   // Priority order:
