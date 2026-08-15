@@ -173,6 +173,27 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
       detail: `canonicalSupabase=${Boolean(supabaseUrl)} serviceRole=${Boolean(service)} canonicalAnon=${Boolean(anon)} ownerEmail=${Boolean(ownerEmail)} ownerPasswordBinding=${Boolean(ownerPassword)}`,
     };
 
+    // Classification checks are pure code — they don't need auth credentials.
+    // Run them first so they always produce a result regardless of auth binding.
+    try {
+      const baseMember = {
+        member_id: 'runtime-cert', auth_user_id: null, email: 'cert@classification.local', email_verified: true, email_verified_at: startedAt,
+        sms_verified: true, phone_verified_at: startedAt, member_tier: null, investor_status: null,
+        kyc_status: 'approved', identity_status: 'active', registration_status: 'completed',
+      } as const;
+      const profile = { member_id: 'runtime-cert', kyc_status: 'approved', tax_status: 'completed', compliance_status: 'approved', investor_agreement_at: startedAt, approved_at: startedAt, restricted_at: null };
+      const regularSummary = calculateFinancialSummary('runtime-cert', []);
+      const regular = determineTier(baseMember, profile, regularSummary);
+      checks.regularClassification = { ok: regular.tier === 'REGULAR', detail: `Runtime engine tier=${regular.tier}` };
+      const vipSummary = calculateFinancialSummary('runtime-cert', [{ id: 'runtime-cert-txn', member_id: 'runtime-cert', amount: 50_000_000, status: 'completed', refunded_amount: 0, settled_at: startedAt, is_test: false, external_reference: 'runtime-cert', source: 'certification' }]);
+      const vip = determineTier(baseMember, profile, vipSummary);
+      checks.vipClassification = { ok: vip.tier === 'VIP' && vip.investorStatus === 'ACTIVE', detail: `Runtime engine tier=${vip.tier} qualifying=${vipSummary.qualifying_invested_capital}` };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'classification exception';
+      if (checks.regularClassification.detail === 'Not run') checks.regularClassification = { ok: false, detail: detail.slice(0, 500) };
+      if (checks.vipClassification.detail === 'Not run') checks.vipClassification = { ok: false, detail: detail.slice(0, 500) };
+    }
+
     let authUserId: string | null = null;
     let memberId: string | null = null;
     try {
@@ -238,6 +259,9 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
       checks.cleanup = await cleanupSynthetic(authUserId, memberId);
     }
 
+    // Only auth-dependent checks must be ok for certified: classification checks already ran above.
+    // Auth checks (runtimeConfig, ownerLogin, memberRegistration, memberLogin, memberPersistence) require owner password on Render.
+    // cleanup always runs. regularClassification and vipClassification are pure code.
     const certified = Object.values(checks).every((check) => check.ok);
     const result: MemberAuthCertification = { marker: IVX_MEMBER_AUTH_CERT_MARKER, startedAt, completedAt: new Date().toISOString(), commit, checks, certified, secretValuesReturned: false };
     if (isDurableStoreConfigured()) {
