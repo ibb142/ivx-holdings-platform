@@ -3753,7 +3753,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check current state\\necho \\\"=== LOCAL HEAD ===\\\"\\ngit log --oneline -5\\necho \\\"\\\"\\necho \\\"=== CURRENT RENDER ===\\\"\\ncurl -sS --max-time 10 \\\"https://ivx-holdings-platform.onrender.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('commit:', d.get('commit','')[:12]); print('boot:', d.get('bootTime','')); print('ok:', d.get('ok',False))\\\" 2>/dev/null\\necho \\\"\\\"\\necho \\\"=== GITHUB ACTIONS STATUS ===\\\"\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?per_page=10\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" 2>&1 | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nfor r in d.get('workflow_runs',[])[:10]:\\n    print(f'  #{r[\\\\\\\"run_number\\\\\\\"]}: {r[\\\\\\\"name\\\\\\\"]} | {r[\\\\\\\"conclusion\\\\\\\"] or r[\\\\\\\"status\\\\\\\"]} | sha={r[\\\\\\\"head_sha\\\\\\\"][:8]}')\\n\\\" 2>&1\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746491264,
-      "completedAt": 1786746497431
+      "completedAt": 1786746497431,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -3785,7 +3786,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Get the QA Suite failure details for commit 766c9486\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs/31846000320/logs\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" -L -o /tmp/qa-766c9486.zip 2>&1\\npython3 -c \\\"\\nimport zipfile\\ntry:\\n    with zipfile.ZipFile('/tmp/qa-766c9486.zip') as z:\\n        for name in z.namelist():\\n            if 'typescript' in name.lower() or 'typecheck' in name.lower():\\n                content = z.read(name).decode('utf-8', errors='replace')\\n                print(f'=== {name} ===')\\n                # Print last 2000 chars to see the error\\n                print(content[-2000:])\\n                break\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>&1 | head -40\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746516235,
-      "completedAt": 1786746520203
+      "completedAt": 1786746520203,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -3817,7 +3819,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Get the full QA Suite failure log for commit 766c9486\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs/31846000320/logs\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" -L -o /tmp/qa-latest.zip 2>&1\\npython3 -c \\\"\\nimport zipfile\\ntry:\\n    with zipfile.ZipFile('/tmp/qa-latest.zip') as z:\\n        for name in z.namelist():\\n            if 'typecheck' in name.lower() or 'typescript' in name.lower():\\n                content = z.read(name).decode('utf-8', errors='replace')\\n                # Print lines with error\\n                for line in content.split('\\\\n'):\\n                    if 'error' in line.lower() or '##[' in line or 'PASS' in line or 'FAIL' in line:\\n                        print(line.strip()[:400])\\n                print('---END---')\\n                break\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>&1\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746533833,
-      "completedAt": 1786746537548
+      "completedAt": 1786746537548,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -3849,7 +3852,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check the QA Suite failure more carefully - get all error lines from all log files\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs/31846000320/logs\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" -L -o /tmp/qa-full.zip 2>&1\\npython3 -c \\\"\\nimport zipfile\\ntry:\\n    with zipfile.ZipFile('/tmp/qa-full.zip') as z:\\n        for name in z.namelist():\\n            content = z.read(name).decode('utf-8', errors='replace')\\n            for line in content.split('\\\\n'):\\n                if '##[error]' in line or 'error TS' in line or 'Process completed' in line:\\n                    print(f'{name}: {line.strip()[:400]}')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>&1 | head -20\\necho \\\"\\\"\\necho \\\"=== CHECK IF MY LOGIN LINE HAS SYNTAX ISSUE ===\\\"\\n# Check line 5202 character 322\\nsed -n '5202p' backend/hono.ts | wc -c\\nsed -n '5202p' backend/hono.ts | cut -c315-330\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746558765,
-      "completedAt": 1786746563845
+      "completedAt": 1786746563845,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -3881,7 +3885,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check if my fixes are in the current HEAD\\necho \\\"=== MY LOGIN FIX PRESENT? ===\\\"\\ngrep -n \\\"withTimeout.*handleMemberLogin\\\" backend/hono.ts | head -3\\necho \\\"\\\"\\necho \\\"=== MY JV DEALS FIX PRESENT? ===\\\"\\ngrep -n \\\"withTimeout.*handleJVDealsList\\\" backend/hono.ts | head -3\\necho \\\"\\\"\\necho \\\"=== MY FEATURED PROPERTIES FIX PRESENT? ===\\\"\\ngrep -n \\\"withTimeout.*handleFeaturedProperties\\\" backend/hono.ts | head -3\\necho \\\"\\\"\\necho \\\"=== MY EMAIL PROVIDER ENDPOINT PRESENT? ===\\\"\\ngrep -n \\\"email/provider-status\\\" backend/hono.ts | head -3\\necho \\\"\\\"\\necho \\\"=== MY HEALTH/DATABASE TIMEOUT FIX PRESENT? ===\\\"\\ngrep -n \\\"Database health check timed out\\\" backend/hono.ts | head -3\\necho \\\"\\\"\\necho \\\"=== MY LOGIN MEMBER INTERNAL TIMEOUT FIX? ===\\\"\\ngrep -n \\\"updateMemberLastLogin timed out\\\" backend/services/ivx-member-database.ts | head -3\\necho \\\"\\\"\\necho \\\"=== CURRENT HEAD ===\\\"\\ngit log --oneline -3\\necho \\\"\\\"\\necho \\\"=== RENDER STATUS ===\\\"\\ncurl -sS --max-time 10 \\\"https://ivx-holdings-platform.onrender.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.load(sys.stdin); print('commit:', d.get('commit','')[:12]); print('boot:', d.get('bootTime',''))\\\" 2>/dev/null\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746585926,
-      "completedAt": 1786746592734
+      "completedAt": 1786746592734,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -3913,7 +3918,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check current Render deploy status + GitHub Actions\\necho \\\"=== RENDER HEALTH ===\\\"\\ncurl -sS --max-time 10 \\\"https://ivx-holdings-platform.onrender.com/health\\\" 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint('commit:', d.get('commit','')[:12])\\nprint('boot:', d.get('bootTime',''))\\nprint('ok:', d.get('ok',False))\\nprint('ai.ok:', d.get('ai',{}).get('ok',False))\\nprint('queue.workerRunning:', d.get('queue',{}).get('workerRunning',False))\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== GITHUB HEAD ===\\\"\\ngit log --oneline -1\\necho \\\"Expected Render commit: 766c9486\\\"\\n\\necho \\\"\\\"\\necho \\\"=== GITHUB ACTIONS (latest 5) ===\\\"\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?per_page=5\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" 2>&1 | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nfor r in d.get('workflow_runs',[])[:5]:\\n    print(f'  #{r[\\\\\\\"run_number\\\\\\\"]}: {r[\\\\\\\"name\\\\\\\"]} | {r[\\\\\\\"conclusion\\\\\\\"] or r[\\\\\\\"status\\\\\\\"]} | sha={r[\\\\\\\"head_sha\\\\\\\"][:8]}')\\n\\\" 2>&1\\n\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746607761,
-      "completedAt": 1786746614407
+      "completedAt": 1786746614407,
+      "compactedAt": 1786800038042
     },
     {
       "type": "text",
@@ -3937,7 +3943,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/backend\\n# Run tsc to find the exact error\\ntimeout 30 bunx tsc --noEmit 2>&1 | head -20\\necho \\\"=== EXIT CODE: $? ===\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746623993,
-      "completedAt": 1786746625404
+      "completedAt": 1786746625404,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -3969,7 +3976,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check current Render deploy status + verify all fixes\\necho \\\"=== RENDER HEALTH ===\\\"\\nHEALTH=$(curl -sS --max-time 10 \\\"https://ivx-holdings-platform.onrender.com/health\\\" 2>/dev/null || echo '{}')\\necho \\\"$HEALTH\\\" | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint('commit:', d.get('commit','')[:12])\\nprint('boot:', d.get('bootTime',''))\\nprint('ok:', d.get('ok',False))\\nprint('ai.ok:', d.get('ai',{}).get('ok',False))\\nprint('queue.workerRunning:', d.get('queue',{}).get('workerRunning',False))\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== GITHUB HEAD ===\\\"\\ngit log --oneline -1\\necho \\\"Expected Render commit: 766c9486\\\"\\necho \\\"\\\"\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746647053,
-      "completedAt": 1786746651953
+      "completedAt": 1786746651953,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -4001,7 +4009,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check current Render status\\necho \\\"=== RENDER HEALTH ===\\\"\\ncurl -sS --max-time 10 \\\"https://ivx-holdings-platform.onrender.com/health\\\" 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint('commit:', d.get('commit','')[:12])\\nprint('boot:', d.get('bootTime',''))\\nprint('ok:', d.get('ok',False))\\nprint('ai.ok:', d.get('ai',{}).get('ok',False))\\nprint('queue.workerRunning:', d.get('queue',{}).get('workerRunning',False))\\n\\\" 2>/dev/null\\necho \\\"Expected: 766c9486\\\"\\necho \\\"\\\"\\necho \\\"=== GITHUB ACTIONS STATUS ===\\\"\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?per_page=8\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" 2>&1 | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nfor r in d.get('workflow_runs',[])[:8]:\\n    print(f'  #{r[\\\\\\\"run_number\\\\\\\"]}: {r[\\\\\\\"name\\\\\\\"]} | {r[\\\\\\\"conclusion\\\\\\\"] or r[\\\\\\\"status\\\\\\\"]} | sha={r[\\\\\\\"head_sha\\\\\\\"][:8]}')\\n\\\" 2>&1\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746671287,
-      "completedAt": 1786746677187
+      "completedAt": 1786746677187,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
@@ -4033,7 +4042,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Comprehensive status check\\necho \\\"=== RENDER HEALTH ===\\\"\\ncurl -sS --max-time 10 \\\"https://ivx-holdings-platform.onrender.com/health\\\" 2>/dev/null | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nprint('commit:', d.get('commit','')[:12])\\nprint('boot:', d.get('bootTime',''))\\nprint('ok:', d.get('ok',False))\\nprint('ai.ok:', d.get('ai',{}).get('ok',False))\\nprint('queue.workerRunning:', d.get('queue',{}).get('workerRunning',False))\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== GITHUB HEAD ===\\\"\\ngit log --oneline -5\\n\\necho \\\"\\\"\\necho \\\"=== ALL CI RUNS FOR 766c9486 ===\\\"\\nTOKEN=$(git config --global --list 2>/dev/null | grep 'url.https://x-access-token:ghs' | head -1 | sed 's/.*x-access-token:\\\\([^@]*\\\\)@.*/\\\\1/')\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?per_page=10\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" 2>&1 | python3 -c \\\"\\nimport sys,json\\nd=json.load(sys.stdin)\\nfor r in d.get('workflow_runs',[])[:10]:\\n    print(f'  #{r[\\\\\\\"run_number\\\\\\\"]}: {r[\\\\\\\"name\\\\\\\"]} | {r[\\\\\\\"conclusion\\\\\\\"] or r[\\\\\\\"status\\\\\\\"]} | sha={r[\\\\\\\"head_sha\\\\\\\"][:8]}')\\n\\\" 2>&1\\n\\necho \\\"\\\"\\necho \\\"=== QA SUITE FAILURE DETAILS (766c9486) ===\\\"\\ncurl -sS --max-time 10 \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs/31846000320/logs\\\" \\\\\\n  -H \\\"Authorization: token $TOKEN\\\" -L -o /tmp/qa-final.zip 2>&1\\npython3 -c \\\"\\nimport zipfile\\ntry:\\n    with zipfile.ZipFile('/tmp/qa-final.zip') as z:\\n        for name in z.namelist():\\n            content = z.read(name).decode('utf-8', errors='replace')\\n            for line in content.split('\\\\n'):\\n                if '##[error]' in line or 'error TS' in line or 'FAIL' in line.upper():\\n                    print(f'{name}: {line.strip()[:400]}')\\nexcept Exception as e:\\n    print(f'Error: {e}')\\n\\\" 2>&1 | head -20\\n\\necho \\\"\\\"\\ndate -u +\\\"%Y-%m-%dT%H:%M:%SZ\\\"\", \"cwd\": \"/home/user/rork-app\"}",
       "createdAt": 1786746698950,
-      "completedAt": 1786746707711
+      "completedAt": 1786746707711,
+      "compactedAt": 1786800038042
     },
     {
       "type": "reasoning",
