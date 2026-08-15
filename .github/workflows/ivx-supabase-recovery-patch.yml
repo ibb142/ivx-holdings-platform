@@ -3,17 +3,13 @@ name: IVX Supabase Recovery Patch
 on:
   push:
     branches: [agent/supabase-recovery]
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  patch-and-verify:
+  qa-integrity-and-cleanup:
     runs-on: ubuntu-latest
-    env:
-      NODE_ENV: test
-      IVX_WIRE_ENCRYPTION_KEY: ivx-ci-wire-encryption-key-v1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,114 +20,59 @@ jobs:
         with:
           bun-version: 1.3.9
 
-      - name: Apply idempotent Supabase resilience patch
+      - name: Make QA-AUTH-001 proof strict
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
-
-          def replace_once(path: str, old: str, new: str, marker: str):
-              p = Path(path)
-              text = p.read_text()
-              if marker in text:
-                  print(f'already patched: {path} [{marker}]')
-                  return False
-              if old not in text:
-                  raise SystemExit(f'expected patch anchor missing: {path}')
-              p.write_text(text.replace(old, new, 1))
-              print(f'patched: {path}')
-              return True
-
-          path = 'backend/api/ivx-owner-variables.ts'
-          replace_once(
-              path,
-              "const MAX_VARIABLE_VALUE_LENGTH = 16_384;\n",
-              "const MAX_VARIABLE_VALUE_LENGTH = 16_384;\nconst OWNER_VARIABLES_REST_TIMEOUT_MS = 5_000; // ivx-supabase-recovery-v1\n",
-              'ivx-supabase-recovery-v1',
-          )
-          p = Path(path)
+          p = Path('qa/ivx-qa-runner.ts')
           text = p.read_text()
-          text = text.replace("    max: 2,\n    idleTimeoutMillis: 5_000,\n    connectionTimeoutMillis: 8_000,", "    max: 1,\n    idleTimeoutMillis: 5_000,\n    connectionTimeoutMillis: 5_000,")
-          old = """  const response = await fetch(`${baseUrl}${path}`, {\n    ...init,\n    headers: {\n      ...supabaseRestHeaders(prefer),\n      ...(init.headers ?? {}),\n    },\n  });"""
-          new = """  const response = await fetch(`${baseUrl}${path}`, {\n    ...init,\n    headers: {\n      ...supabaseRestHeaders(prefer),\n      ...(init.headers ?? {}),\n    },\n    signal: init.signal ?? AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS),\n  });"""
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS)' not in text:
-              raise SystemExit('owner variable REST timeout anchor missing')
-          old = """  } catch (error) {\n    console.log('[IVXOwnerVariables] Runtime value bridge unavailable:', {\n      name,\n      message: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'unknown',\n    });\n    return '';\n  }\n}"""
-          new = """  } catch (error) {\n    console.log('[IVXOwnerVariables] Runtime REST value bridge unavailable; trying direct Postgres fallback:', {\n      name,\n      message: error instanceof Error ? sanitizeExternalErrorDetail(error.message) : 'unknown',\n    });\n    if (getDatabaseUrl()) {\n      try {\n        const row = await withClient(async (client) => {\n          const result = await client.query<OwnerVariableRow>(\n            'select * from public.ivx_owner_variables where name = $1 limit 1',\n            [name],\n          );\n          return result.rows[0] ?? null;\n        });\n        if (row) {\n          const decrypted = tryDecryptRowValue(row);\n          if (decrypted?.plaintext.trim()) {\n            return decrypted.plaintext.trim();\n          }\n        }\n      } catch (fallbackError) {\n        console.log('[IVXOwnerVariables] Direct Postgres runtime fallback unavailable:', {\n          name,\n          message: fallbackError instanceof Error ? sanitizeExternalErrorDetail(fallbackError.message) : 'unknown',\n        });\n      }\n    }\n    return '';\n  }\n}"""
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'Runtime REST value bridge unavailable; trying direct Postgres fallback' not in text:
-              raise SystemExit('owner variable fallback anchor missing')
+          old1 = "return { actual: 'Owner password not configured on backend runtime (503)', status: 'SKIP' as TestStatus, evidenceRef: 'owner-password-not-configured' };"
+          new1 = "return { actual: `Owner password binding unavailable: ${rootCause || 'HTTP 503'}`, status: 'FAIL' as TestStatus, evidenceRef: 'owner-password-binding-unavailable' };"
+          old2 = "return { actual: `Owner login error: ${String(err).slice(0, 200)}`, status: 'SKIP' as TestStatus, evidenceRef: 'owner-login-error' };"
+          new2 = "return { actual: `Owner login error: ${String(err).slice(0, 200)}`, status: 'ERROR' as TestStatus, evidenceRef: 'owner-login-error' };"
+          if old1 in text:
+              text = text.replace(old1, new1, 1)
+          elif 'owner-password-binding-unavailable' not in text:
+              raise SystemExit('QA owner binding SKIP anchor missing')
+          if old2 in text:
+              text = text.replace(old2, new2, 1)
+          elif "status: 'ERROR' as TestStatus, evidenceRef: 'owner-login-error'" not in text:
+              raise SystemExit('QA owner exception SKIP anchor missing')
           p.write_text(text)
-
-          path = 'backend/services/ivx-owner-ai-task-queue.ts'
-          p = Path(path)
-          text = p.read_text()
-          marker = 'ivx-supabase-circuit-breaker-v1'
-          if marker not in text:
-              old = """async function restFetch(path: string, init: RequestInit): Promise<Response> {\n  const url = `${getSupabaseUrl()}/rest/v1/${path}`;\n  return fetch(url, init);\n}"""
-              new = """const SUPABASE_REST_TIMEOUT_MS = 8_000; // ivx-supabase-circuit-breaker-v1\nconst SUPABASE_FAILURE_THRESHOLD = 2;\nconst SUPABASE_BACKOFF_MS = 30_000;\nlet consecutiveSupabaseFailures = 0;\nlet supabaseBackoffUntil = 0;\n\nfunction transientSupabaseResponse(reason: string): Response {\n  return new Response(JSON.stringify({ error: reason }), {\n    status: 503,\n    headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },\n  });\n}\n\nasync function restFetch(path: string, init: RequestInit): Promise<Response> {\n  if (Date.now() < supabaseBackoffUntil) {\n    return transientSupabaseResponse('supabase_circuit_open');\n  }\n  const url = `${getSupabaseUrl()}/rest/v1/${path}`;\n  try {\n    const response = await fetch(url, {\n      ...init,\n      signal: init.signal ?? AbortSignal.timeout(SUPABASE_REST_TIMEOUT_MS),\n    });\n    if (response.status >= 500 || response.status === 429 || response.status === 408) {\n      consecutiveSupabaseFailures += 1;\n      if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {\n        supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;\n      }\n    } else {\n      consecutiveSupabaseFailures = 0;\n      supabaseBackoffUntil = 0;\n    }\n    return response;\n  } catch (error) {\n    consecutiveSupabaseFailures += 1;\n    if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {\n      supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;\n    }\n    console.log('[IVXOwnerAITaskQueue] Supabase REST unavailable; backing off', {\n      path: path.split('?')[0],\n      failures: consecutiveSupabaseFailures,\n      message: error instanceof Error ? error.message : 'network_error',\n    });\n    return transientSupabaseResponse('supabase_transient_failure');\n  }\n}"""
-              if old not in text:
-                  raise SystemExit('task queue restFetch anchor missing')
-              text = text.replace(old, new, 1)
-          text = text.replace('export function startOwnerAITaskWorker(intervalMs: number = 5_000): void {', 'export function startOwnerAITaskWorker(intervalMs: number = 20_000): void {')
-          p.write_text(text)
-
-          path = 'backend/services/ivx-senior-dev-worker.ts'
-          p = Path(path)
-          text = p.read_text()
-          if 'export const TASK_POLL_INTERVAL_MS = 20_000;' not in text:
-              if 'export const TASK_POLL_INTERVAL_MS = 5_000;' not in text:
-                  raise SystemExit('senior worker poll anchor missing')
-              text = text.replace('export const TASK_POLL_INTERVAL_MS = 5_000;', 'export const TASK_POLL_INTERVAL_MS = 20_000; // ivx-supabase-load-shed-v1', 1)
-          p.write_text(text)
-
-          path = 'backend/services/ivx-durable-store.ts'
-          p = Path(path)
-          text = p.read_text()
-          if 'ivx-durable-probe-before-ddl-v1' not in text:
-              text = text.replace('export const REST_TIMEOUT_MS = 30000;', 'export const REST_TIMEOUT_MS = 8000; // ivx-durable-probe-before-ddl-v1', 1)
-              text = text.replace('  maxAttempts = 4,\n  baseDelayMs = 2000,', '  maxAttempts = 2,\n  baseDelayMs = 1000,', 1)
-              old = """  private async ensureSchemaInternal(): Promise<void> {\n    const statements = ["""
-              new = """  private async ensureSchemaInternal(): Promise<void> {\n    // ivx-durable-probe-before-ddl-v1: do not amplify a transient outage with DDL retries.\n    const probeResponse = await fetch(`${this.restBaseUrl()}/ivx_durable_documents?select=doc_key&limit=1`, {\n      method: 'GET',\n      headers: buildHeaders(),\n      signal: AbortSignal.timeout(REST_TIMEOUT_MS),\n    });\n    if (probeResponse.ok) {\n      console.log('[IvxDurableStore] Existing schema reachable; DDL bootstrap skipped');\n      return;\n    }\n    const probePayload = await parseResponsePayload(probeResponse);\n    const probeMessage = extractErrorMessage(probePayload, `Supabase schema probe returned HTTP ${probeResponse.status}.`);\n    const missingSchema = probeResponse.status === 404\n      || probeMessage.includes('PGRST205')\n      || probeMessage.includes('Could not find the table')\n      || probeMessage.includes('schema cache');\n    if (!missingSchema) {\n      throw new Error(`Supabase schema probe unavailable; DDL suppressed: ${probeMessage}`);\n    }\n\n    const statements = ["""
-              if old not in text:
-                  raise SystemExit('durable store ensureSchema anchor missing')
-              text = text.replace(old, new, 1)
-          p.write_text(text)
-
-          Path('backend/ivx-supabase-resilience-static.test.ts').write_text("""import { describe, expect, test } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n\ndescribe('IVX Supabase production resilience guards', () => {\n  test('owner variable runtime lookup has bounded REST and direct PG fallback', () => {\n    const source = readFileSync(new URL('./api/ivx-owner-variables.ts', import.meta.url), 'utf8');\n    expect(source).toContain('AbortSignal.timeout(OWNER_VARIABLES_REST_TIMEOUT_MS)');\n    expect(source).toContain('Runtime REST value bridge unavailable; trying direct Postgres fallback');\n    expect(source).toContain('select * from public.ivx_owner_variables where name = $1 limit 1');\n  });\n  test('task queue sheds load during Supabase outages', () => {\n    const source = readFileSync(new URL('./services/ivx-owner-ai-task-queue.ts', import.meta.url), 'utf8');\n    expect(source).toContain('SUPABASE_FAILURE_THRESHOLD = 2');\n    expect(source).toContain('SUPABASE_BACKOFF_MS = 30_000');\n    expect(source).toContain('startOwnerAITaskWorker(intervalMs: number = 20_000)');\n  });\n  test('durable store probes before DDL and uses bounded retry', () => {\n    const source = readFileSync(new URL('./services/ivx-durable-store.ts', import.meta.url), 'utf8');\n    expect(source).toContain('Existing schema reachable; DDL bootstrap skipped');\n    expect(source).toContain('DDL suppressed');\n    expect(source).toContain('REST_TIMEOUT_MS = 8000');\n  });\n  test('senior developer worker no longer polls every five seconds', () => {\n    const source = readFileSync(new URL('./services/ivx-senior-dev-worker.ts', import.meta.url), 'utf8');\n    expect(source).toContain('TASK_POLL_INTERVAL_MS = 20_000');\n  });\n});\n""")
-          print('patch_complete=true')
           PY
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: bun install
 
-      - name: TypeScript typecheck
+      - name: Verify core Supabase repair still typechecks
         run: cd backend && bunx tsc --noEmit
 
-      - name: Supabase resilience regression tests
+      - name: Run Supabase resilience tests
         run: bun test backend/ivx-supabase-resilience-static.test.ts --reporter=dots
 
-      - name: Owner auth regression tests
+      - name: Verify QA owner-auth gate cannot skip binding failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "owner-password-binding-unavailable" qa/ivx-qa-runner.ts
+          grep -q "status: 'ERROR' as TestStatus, evidenceRef: 'owner-login-error'" qa/ivx-qa-runner.ts
+          if grep -q "owner-password-not-configured.*status: 'SKIP'" qa/ivx-qa-runner.ts; then
+            echo 'QA-AUTH-001 still hides owner binding failure as SKIP'
+            exit 1
+          fi
+
+      - name: Run owner auth regression tests
         run: cd expo && bun install && bun test __tests__/auth-timeout-fix.test.ts --reporter=dots
 
-      - name: Commit verified repair
+      - name: Commit strict QA gate and remove temporary workflow
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'IVX Recovery Bot'
           git config user.email 'ivx-recovery@users.noreply.github.com'
-          if git diff --quiet && git diff --cached --quiet; then
-            echo 'No patch changes to commit.'
-            exit 0
-          fi
-          git add backend/api/ivx-owner-variables.ts \
-            backend/services/ivx-owner-ai-task-queue.ts \
-            backend/services/ivx-senior-dev-worker.ts \
-            backend/services/ivx-durable-store.ts \
-            backend/ivx-supabase-resilience-static.test.ts
-          git commit -m 'fix(supabase): shed outage load and preserve owner auth fallback'
+          git add qa/ivx-qa-runner.ts
+          git rm .github/workflows/ivx-supabase-recovery-patch.yml
+          git commit -m 'fix(qa): require real owner auth proof during production QA'
           git push origin HEAD:agent/supabase-recovery
