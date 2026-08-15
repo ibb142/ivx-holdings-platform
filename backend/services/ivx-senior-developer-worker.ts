@@ -2428,17 +2428,57 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       return null;
     }
 
-    // Retries exhausted or non-transient failure — report BLOCKED with exact evidence.
+    // Retries exhausted or non-transient failure — report FAILED with exact evidence.
     const blockedReason = isTransient
       ? `Task failed after ${MAX_AUTO_RETRIES} auto-retries: ${message}`
       : `Task failed at execution: ${message}`;
+    console.log(`[IVXWorker] job_failed: job=${job.jobId} error=${message.slice(0, 300)}`);
+    const failedResult: IVXWorkerJobResult = {
+      jobId: job.jobId,
+      goal: job.input.goal.slice(0, 280),
+      ok: false,
+      endToEndProductionComplete: false,
+      changedFiles: [],
+      testsRun: false,
+      testsPassed: false,
+      typecheckRun: false,
+      typecheckPassed: false,
+      buildRun: false,
+      commitCreated: false,
+      commitSha: null,
+      commitUrl: null,
+      pushed: false,
+      branch: null,
+      prNumber: null,
+      prUrl: null,
+      prMerged: false,
+      prMergeCommitSha: null,
+      deployId: null,
+      deployStatus: null,
+      deployVerified: false,
+      deployRequested: false,
+      liveCommit: null,
+      commitMatch: false,
+      healthOk: false,
+      healthStatus: null,
+      versionEndpoint: null,
+      generatedFeatureSlug: null,
+      auditFiles: { json: '', jsonl: '' },
+      finalStatus: 'FAILED',
+      error: blockedReason,
+      durable: isDurableStoreConfigured(),
+      generatedAt: nowIso(),
+      taskType: classifyTaskType(job.input.goal),
+    };
     await updateJob(job.jobId, {
       status: 'failed',
       stage: 'FAILED',
       stageDetail: blockedReason,
       finishedAt: nowIso(),
       error: blockedReason,
+      result: failedResult,
     });
+    await appendLedger(failedResult).catch(() => {});
     activeJobControllers.delete(job.jobId);
     return null;
   }

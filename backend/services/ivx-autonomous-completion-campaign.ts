@@ -201,7 +201,7 @@ async function enqueueItem(item: CampaignItem): Promise<void> {
       secretValuesReturned: false,
     },
     ownerId: `completion-campaign:${item.id}`,
-    executionMode: 'code_change',
+    executionMode: 'read_only',
   });
   item.jobId = job.jobId;
   item.status = job.status === 'completed' ? 'verified' : 'queued';
