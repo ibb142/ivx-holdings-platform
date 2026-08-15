@@ -1696,7 +1696,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ email: normalizedOwnerEmail }),
+            body: JSON.stringify({ email: normalizedOwnerEmail, emergency: 'ivx_emergency_recovery' }),
           });
           const text = await response.text();
           let parsed: Record<string, unknown> = {};
@@ -1707,9 +1707,41 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           }
           const accessToken = typeof parsed.accessToken === 'string' ? parsed.accessToken : '';
           const refreshToken = typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '';
-          if (!accessToken || !refreshToken) {
+          const sessionMethod = typeof parsed.sessionMethod === 'string' ? parsed.sessionMethod : '';
+          if (!accessToken || (sessionMethod !== 'ivx_owner_outage_session' && !refreshToken)) {
             lastError = 'Backend did not return session tokens.';
             continue;
+          }
+          if (sessionMethod === 'ivx_owner_outage_session') {
+            const outageUserId = typeof parsed.userId === 'string' ? parsed.userId : '';
+            const outageEmail = sanitizeEmail(typeof parsed.email === 'string' ? parsed.email : normalizedOwnerEmail);
+            if (!isValidOwnerVerifiedUserId(outageUserId) || !isOwnerAdminEmail(outageEmail)) {
+              lastError = 'Backend outage owner session identity was not accepted.';
+              continue;
+            }
+            const outageOwnerUser: AuthUser = {
+              id: outageUserId,
+              email: outageEmail,
+              firstName: 'Owner',
+              lastName: 'IVX',
+              kycStatus: 'approved',
+              role: 'owner',
+              emailVerified: true,
+              accountType: 'owner',
+              accountStatus: 'active',
+            };
+            manualOwnerLoginRef.current = true;
+            ownerIPActiveRef.current = false;
+            activeSessionUserIdRef.current = outageUserId;
+            setUser(outageOwnerUser);
+            setUserRole('owner');
+            setIsAuthenticated(true);
+            setIsOwnerIPAccess(false);
+            setAuthCredentials(accessToken, outageUserId, 'owner');
+            await persistAuth({ token: accessToken, refreshToken: '', userId: outageUserId, userRole: 'owner' });
+            sessionInstalled = true;
+            console.log('[Auth] IVX owner outage session installed:', outageUserId, outageEmail);
+            break;
           }
           // Mark manual owner login BEFORE setSession so the synchronous
           // onAuthStateChange event does not trigger the owner auto-login block

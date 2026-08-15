@@ -2,10 +2,12 @@ import {
   IVX_OPEN_ACCESS_OWNER_TOKEN,
   getIVXOwnerEmailAllowlist,
   readIVXTrimmedString,
+  extractIVXBearerToken,
   resolveIVXAuthenticatedRequest,
   type IVXAuthenticatedRequestContext,
 } from '../../expo/shared/ivx';
 import { timingSafeEqual } from 'node:crypto';
+import { verifyIVXOutageOwnerSession } from '../services/ivx-outage-owner-session';
 
 export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;
 
@@ -139,6 +141,10 @@ export async function assertIVXOwnerOnly(request: Request): Promise<IVXOwnerRequ
   if (checkIVXAISystemKey(request)) {
     return makeSystemOwnerRequestContext();
   }
+  const outageSession = verifyIVXOutageOwnerSession(extractIVXBearerToken(request));
+  if (outageSession) {
+    return makeOutageOwnerRequestContext(outageSession);
+  }
   return await resolveIVXAuthenticatedRequest(request, '[IVXOwnerOnly]');
 }
 
@@ -254,6 +260,16 @@ export function evaluateIVXRegisteredOwnerBearerContext(
  * identity is internal (no Supabase-authenticated user), so it intentionally has
  * no real `client`/`roleAudit`; callers on the system path never touch those.
  */
+function makeOutageOwnerRequestContext(session: { token: string; userId: string; email: string }): IVXOwnerRequestContext {
+  return {
+    userId: session.userId,
+    email: session.email,
+    role: 'owner',
+    accessToken: session.token,
+    guardMode: 'strict',
+  } as unknown as IVXOwnerRequestContext;
+}
+
 function makeSystemOwnerRequestContext(): IVXOwnerRequestContext {
   return {
     userId: 'ivx-ai-system',
