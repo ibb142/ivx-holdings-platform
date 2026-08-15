@@ -1038,7 +1038,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\".github/workflows/ivx-sync-ai-render-from-owner-store.yml\",\"edits\":[{\"oldString\":\"    env:\\n      JWT_SECRET: ${{ secrets.JWT_SECRET }}\\n      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}\\n      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}\",\"newString\":\"    env:\\n      IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}\\n      APP_SECRET: ${{ secrets.APP_SECRET }}\\n      JWT_SECRET: ${{ secrets.JWT_SECRET }}\\n      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}\\n      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}\",\"replaceAll\":false},{\"oldString\":\"          const crypto = await import('node:crypto');\\n          const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\\\\/+$/, '');\\n          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';\\n          const encryptionSecret = process.env.JWT_SECRET || '';\\n          if (!base || !serviceKey || !encryptionSecret) throw new Error('required GitHub runtime bindings missing');\\n          const names = ['RENDER_API_KEY','RENDER_SERVICE_ID','IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY'];\\n          const query = encodeURIComponent(`(${names.join(',')})`);\\n          const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.${query}`, {\\n            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Accept: 'application/json' }\\n          });\\n          if (!rowsRes.ok) throw new Error(`owner variable read HTTP ${rowsRes.status}`);\\n          const rows = await rowsRes.json();\\n          const byName = new Map(rows.map(r => [r.name, r]));\\n          const key = crypto.createHash('sha256').update(encryptionSecret, 'utf8').digest();\\n          const aad = Buffer.from('ivx_owner_variables:v1', 'utf8');\\n          function decrypt(name) {\\n            const row = byName.get(name);\\n            if (!row) throw new Error(`${name} row missing`);\\n            const d = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(row.value_iv, 'base64'));\\n            d.setAAD(aad);\\n            d.setAuthTag(Buffer.from(row.value_tag, 'base64'));\\n            const value = Buffer.concat([d.update(Buffer.from(row.encrypted_value, 'base64')), d.final()]).toString('utf8').trim();\\n            const hash = crypto.createHash('sha256').update(value, 'utf8').digest('hex');\\n            if (hash !== row.value_hash) throw new Error(`${name} hash verification failed`);\\n            return value;\\n          }\",\"newString\":\"          const crypto = await import('node:crypto');\\n          const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\\\\/+$/, '');\\n          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';\\n          const encryptionSecrets = [\\n            process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY,\\n            process.env.APP_SECRET,\\n            process.env.JWT_SECRET,\\n          ].filter(Boolean);\\n          if (!base || !serviceKey || encryptionSecrets.length === 0) throw new Error('required GitHub runtime bindings missing');\\n          const names = ['RENDER_API_KEY','RENDER_SERVICE_ID','IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY'];\\n          const query = encodeURIComponent(`(${names.join(',')})`);\\n          const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.${query}`, {\\n            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Accept: 'application/json' }\\n          });\\n          if (!rowsRes.ok) throw new Error(`owner variable read HTTP ${rowsRes.status}`);\\n          const rows = await rowsRes.json();\\n          const byName = new Map(rows.map(r => [r.name, r]));\\n          const keyCandidates = [...new Set(encryptionSecrets)].map(secret => crypto.createHash('sha256').update(secret, 'utf8').digest());\\n          const aad = Buffer.from('ivx_owner_variables:v1', 'utf8');\\n          function decrypt(name) {\\n            const row = byName.get(name);\\n            if (!row) throw new Error(`${name} row missing`);\\n            let lastError = null;\\n            for (const key of keyCandidates) {\\n              try {\\n                const d = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(row.value_iv, 'base64'));\\n                d.setAAD(aad);\\n                d.setAuthTag(Buffer.from(row.value_tag, 'base64'));\\n                const value = Buffer.concat([d.update(Buffer.from(row.encrypted_value, 'base64')), d.final()]).toString('utf8').trim();\\n                const hash = crypto.createHash('sha256').update(value, 'utf8').digest('hex');\\n                if (hash !== row.value_hash) throw new Error(`${name} hash verification failed`);\\n                return value;\\n              } catch (err) {\\n                lastError = err;\\n              }\\n            }\\n            throw lastError || new Error(`${name} decryption failed with all key candidates`);\\n          }\",\"replaceAll\":false}]}",
       "createdAt": 1786825823298,
-      "completedAt": 1786825834999
+      "completedAt": 1786825834999,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1064,7 +1065,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Commit workflow fix ===\\\"\\ngit status --short\\ngit diff --stat .github/workflows/ivx-sync-ai-render-from-owner-store.yml\\ngit add .github/workflows/ivx-sync-ai-render-from-owner-store.yml\\ngit commit -m \\\"fix(sync-ai-render): try all owner-variable encryption key sources\\n\\nThe workflow only used JWT_SECRET to decrypt ivx_owner_variables rows,\\nbut the backend supports IVX_OWNER_VARIABLES_ENCRYPTION_KEY, APP_SECRET,\\nor JWT_SECRET. This caused GCM auth-tag mismatch and prevented the new\\nAI gateway key from being synced to Render. Now it tries every available\\nkey candidate until decryption succeeds.\\\" 2>&1 | tail -3\\n\\necho \\\"\\\"\\necho \\\"=== 2. Push ===\\\"\\ngit push github HEAD:main 2>&1 | tail -5\\n\\necho \\\"\\\"\\necho \\\"=== 3. Get commit SHA ===\\\"\\ngit log --oneline -1\\n\\necho \\\"\\\"\\necho \\\"=== 4. Trigger sync workflow ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request\\n\\nTOKEN = open('/tmp/gh_token.txt').read().strip()\\nREPO = \\\"ibb142/ivx-holdings-platform\\\"\\n\\nreq = urllib.request.Request(\\n    f\\\"https://api.github.com/repos/{REPO}/actions/workflows/335119104/dispatches\\\",\\n    data=json.dumps({\\\"ref\\\": \\\"main\\\"}).encode(),\\n    method=\\\"POST\\\",\\n    headers={\\n        \\\"Authorization\\\": f\\\"Bearer {TOKEN}\\\",\\n        \\\"Accept\\\": \\\"application/vnd.github+json\\\",\\n        \\\"Content-Type\\\": \\\"application/json\\\"\\n    }\\n)\\ntry:\\n    with urllib.request.urlopen(req) as resp:\\n        print(f\\\"Triggered sync workflow: HTTP {resp.status}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"HTTP {e.code}: {e.read().decode()[:300]}\\\")\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 5. Poll workflow completion ===\\\"\\nfor i in $(seq 1 30); do\\n    RUN=$(curl -s -H \\\"Authorization: Bearer $(cat /tmp/gh_token.txt)\\\" \\\\\\n        \\\"https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/runs?workflow_id=335119104&per_page=1\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nruns = d.get('workflow_runs', [])\\nif runs:\\n    r = runs[0]\\n    print(f\\\\\\\"{r['status']}|{r.get('conclusion') or 'none'}|{r['id']}\\\\\\\")\\nelse:\\n    print('no_runs')\\n\\\" 2>/dev/null)\\n    STATUS=$(echo \\\"$RUN\\\" | cut -d'|' -f1)\\n    CONCLUSION=$(echo \\\"$RUN\\\" | cut -d'|' -f2)\\n    echo \\\"Poll $i: $STATUS / $CONCLUSION\\\"\\n    if [ \\\"$STATUS\\\" = \\\"completed\\\" ]; then\\n        echo \\\"Workflow finished with conclusion: $CONCLUSION\\\"\\n        break\\n    fi\\n    sleep 10\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== 6. Production AI status after sync ===\\\"\\nsleep 3\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\"}",
       "createdAt": 1786825840786,
-      "completedAt": 1786825910264
+      "completedAt": 1786825910264,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1090,7 +1092,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app\\n\\nTOKEN=$(cat /tmp/gh_token.txt 2>/dev/null)\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"\\n\\necho \\\"=== 1. List recent sync workflow runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n    \\\"https://api.github.com/repos/$REPO/actions/runs?workflow_id=335119104&per_page=5\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nruns = d.get('workflow_runs', [])\\nprint(f'Total runs: {d.get(\\\\\\\"total_count\\\\\\\", 0)}')\\nfor r in runs:\\n    print(f\\\\\\\"  {r['id']} {r['status']:12s} {r.get('conclusion') or 'none':12s} {r['head_sha'][:8]} {r['created_at']}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 2. List ALL recent runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n    \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=10\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nfor r in d.get('workflow_runs', [])[:10]:\\n    print(f\\\\\\\"  {r['name']:50s} {r['status']:12s} {r.get('conclusion') or 'none':12s} {r['head_sha'][:8]}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 3. Production AI status ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Production commit ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\"}",
       "createdAt": 1786825916918,
-      "completedAt": 1786825924290
+      "completedAt": 1786825924290,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1116,7 +1119,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app\\n\\nTOKEN=$(cat /tmp/gh_token.txt 2>/dev/null)\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"\\n\\necho \\\"=== 1. Verify GitHub token ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/user\\\" 2>/dev/null | tail -3\\n\\necho \\\"\\\"\\necho \\\"=== 2. Raw workflows API response ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/workflows\\\" 2>/dev/null | head -c 500\\n\\necho \\\"\\\"\\necho \\\"\\\"\\necho \\\"=== 3. Raw runs API response ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=5\\\" 2>/dev/null | head -c 500\\n\\necho \\\"\\\"\\necho \\\"\\\"\\necho \\\"=== 4. Try dispatching again ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request\\n\\nTOKEN = open('/tmp/gh_token.txt').read().strip()\\nREPO = \\\"ibb142/ivx-holdings-platform\\\"\\n\\n# Find workflow ID\\nreq = urllib.request.Request(\\n    f\\\"https://api.github.com/repos/{REPO}/actions/workflows\\\",\\n    headers={\\\"Authorization\\\": f\\\"Bearer {TOKEN}\\\", \\\"Accept\\\": \\\"application/vnd.github+json\\\"}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    workflows = json.loads(resp.read())\\n\\nwf_id = None\\nfor wf in workflows.get('workflows', []):\\n    if 'ivx-sync-ai-render-from-owner-store' in wf['path']:\\n        wf_id = wf['id']\\n        print(f\\\"Found workflow: {wf['name']} ID {wf_id}\\\")\\n        break\\n\\nif not wf_id:\\n    print(\\\"Workflow not found\\\")\\n    exit(1)\\n\\nreq = urllib.request.Request(\\n    f\\\"https://api.github.com/repos/{REPO}/actions/workflows/{wf_id}/dispatches\\\",\\n    data=json.dumps({\\\"ref\\\": \\\"main\\\"}).encode(),\\n    method=\\\"POST\\\",\\n    headers={\\n        \\\"Authorization\\\": f\\\"Bearer {TOKEN}\\\",\\n        \\\"Accept\\\": \\\"application/vnd.github+json\\\",\\n        \\\"Content-Type\\\": \\\"application/json\\\"\\n    }\\n)\\ntry:\\n    with urllib.request.urlopen(req) as resp:\\n        print(f\\\"Dispatch: HTTP {resp.status}\\\")\\nexcept urllib.error.HTTPError as e:\\n    print(f\\\"Dispatch failed HTTP {e.code}: {e.read().decode()[:300]}\\\")\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 5. Wait and check runs again ===\\\"\\nsleep 5\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=5\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('total_count:', d.get('total_count', 0))\\nfor r in d.get('workflow_runs', [])[:5]:\\n    print(f\\\\\\\"  {r['name']} {r['status']} {r.get('conclusion') or ''}\\\\\\\")\\n\\\" 2>/dev/null\"}",
       "createdAt": 1786825931246,
-      "completedAt": 1786825946523
+      "completedAt": 1786825946523,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1147,7 +1151,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nTOKEN=$(cat /tmp/gh_token.txt 2>/dev/null)\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"\\n\\necho \\\"=== 1. Wait 60 seconds for rate limit reset ===\\\"\\nsleep 60\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check token status ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/user\\\" 2>/dev/null | tail -3\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check workflow runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?workflow_id=335119104&per_page=5\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('total_count:', d.get('total_count', 0))\\nfor r in d.get('workflow_runs', [])[:5]:\\n    print(f\\\\\\\"  {r['id']} {r['status']} {r.get('conclusion') or 'none'} {r['head_sha'][:8]} {r['created_at']}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 4. Check all recent runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=8\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('total_count:', d.get('total_count', 0))\\nfor r in d.get('workflow_runs', [])[:8]:\\n    print(f\\\\\\\"  {r['name'][:45]:45s} {r['status']:12s} {r.get('conclusion') or 'none':12s} {r['head_sha'][:8]}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 5. Production AI status ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\"}",
       "createdAt": 1786825971253,
-      "completedAt": 1786826031933
+      "completedAt": 1786826031933,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1173,7 +1178,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app\\n\\nTOKEN=$(cat /tmp/gh_token.txt 2>/dev/null)\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"\\n\\necho \\\"=== 1. Check token status ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/user\\\" 2>/dev/null | tail -3\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check sync workflow runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?workflow_id=335119104&per_page=5\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('total_count:', d.get('total_count', 0))\\nfor r in d.get('workflow_runs', [])[:5]:\\n    print(f\\\\\\\"  {r['id']} {r['status']} {r.get('conclusion') or 'none'} {r['head_sha'][:8]} {r['created_at']}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check all recent runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=8\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('total_count:', d.get('total_count', 0))\\nfor r in d.get('workflow_runs', [])[:8]:\\n    print(f\\\\\\\"  {r['name'][:45]:45s} {r['status']:12s} {r.get('conclusion') or 'none':12s} {r['head_sha'][:8]}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 4. Production AI status ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\"}",
       "createdAt": 1786826042120,
-      "completedAt": 1786826047690
+      "completedAt": 1786826047690,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1199,7 +1205,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Show what the user's commit changed ===\\\"\\ngit show --stat 23d86124e\\n\\necho \\\"\\\"\\necho \\\"=== 2. Read the modified workflow ===\\\"\\ngit show 23d86124e:.github/workflows/ivx-recover-render-ai-from-history.yml 2>/dev/null | head -120\"}",
       "createdAt": 1786826062308,
-      "completedAt": 1786826062317
+      "completedAt": 1786826062317,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1225,7 +1232,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Find commits with fix-github-token.mjs ===\\\"\\ngit log --all --oneline -- expo/scripts/fix-github-token.mjs 2>/dev/null | head -10\\n\\necho \\\"\\\"\\necho \\\"=== 2. Try extracting Render token from the commit the workflow references ===\\\"\\ngit show \\\"3388d5dd97cf107524d752bf9a80891315829405^:expo/scripts/fix-github-token.mjs\\\" 2>/dev/null | grep -oP 'rnd_[A-Za-z0-9]+' | head -3\\n\\necho \\\"\\\"\\necho \\\"=== 3. Search git history for rnd_ tokens ===\\\"\\ngit log --all -p -- expo/scripts/fix-github-token.mjs 2>/dev/null | grep -oP 'rnd_[A-Za-z0-9]+' | sort -u | head -10\\n\\necho \\\"\\\"\\necho \\\"=== 4. Search all history for Render API keys ===\\\"\\ngit log --all -p 2>/dev/null | grep -oP 'rnd_[A-Za-z0-9]+' | sort -u | head -20\"}",
       "createdAt": 1786826077427,
-      "completedAt": 1786826110391
+      "completedAt": 1786826110391,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1256,7 +1264,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\nNEW_KEY=\\\"vck_5prfc7DORMW84HpJWn8RQjf32VTQUTMJh9OJ7DvxpxEfKXvccj0jyJaV\\\"\\n\\necho \\\"=== 1. Test Render API key ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nraw = sys.stdin.read()\\nlines = raw.strip().split('\\\\n')\\nbody = '\\\\n'.join(lines[:-1])\\nhttp = lines[-1] if lines else ''\\nprint(http)\\ntry:\\n    d = json.loads(body)\\n    print('service:', d.get('service', {}).get('name') if isinstance(d.get('service'), dict) else d.get('name'))\\n    print('suspended:', d.get('service', {}).get('suspended') if isinstance(d.get('service'), dict) else d.get('suspended'))\\nexcept:\\n    print(body[:300])\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. List current env vars ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-vars\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('envVars', [])\\nfor item in items:\\n    ev = item.get('envVar', item)\\n    key = ev.get('key', '')\\n    val = ev.get('value', '')\\n    if 'AI' in key.upper() or 'GATEWAY' in key.upper() or key in ['RENDER_SERVICE_ID', 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY']:\\n        print(f'{key}: {val[:20] if val else \\\\\\\"(empty)\\\\\\\"}...')\\nprint(f'Total env vars: {len(items)}')\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 3. Set IVX_AI_GATEWAY_KEY ===\\\"\\npython3 << PYEOF\\nimport json, urllib.request, os\\n\\nRENDER_KEY = os.environ['RENDER_KEY']\\nSERVICE_ID = os.environ['SERVICE_ID']\\nNEW_KEY = os.environ['NEW_KEY']\\n\\ndef render_req(method, path, body=None):\\n    req = urllib.request.Request(\\n        f'https://api.render.com/v1{path}',\\n        method=method,\\n        headers={\\n            'Authorization': f'Bearer {RENDER_KEY}',\\n            'Accept': 'application/json',\\n            'Content-Type': 'application/json',\\n        },\\n        data=json.dumps(body).encode() if body else None,\\n    )\\n    try:\\n        with urllib.request.urlopen(req) as resp:\\n            text = resp.read().decode()\\n            return resp.status, text\\n    except urllib.error.HTTPError as e:\\n        return e.code, e.read().decode()\\n\\n# List existing env vars\\nstatus, text = render_req('GET', f'/services/{SERVICE_ID}/env-vars')\\nprint(f'GET env-vars: {status}')\\nitems = json.loads(text) if text else []\\nexisting = {}\\nfor item in items:\\n    ev = item.get('envVar', item)\\n    if ev and isinstance(ev.get('key'), str):\\n        existing[ev['key']] = ev.get('value', '')\\n\\nprint(f'Existing keys: {len(existing)}')\\nprint(f'Current IVX_AI_GATEWAY_KEY: {existing.get(\\\"IVX_AI_GATEWAY_KEY\\\", \\\"\\\")[:10]}...')\\nprint(f'Current AI_GATEWAY_API_KEY: {existing.get(\\\"AI_GATEWAY_API_KEY\\\", \\\"\\\")[:10]}...')\\n\\n# Update both keys\\nexisting['IVX_AI_GATEWAY_KEY'] = NEW_KEY\\nexisting['AI_GATEWAY_API_KEY'] = NEW_KEY\\n\\nstatus, text = render_req('PUT', f'/services/{SERVICE_ID}/env-vars', \\n    [{'key': k, 'value': v} for k, v in existing.items()])\\nprint(f'PUT env-vars: {status}')\\nif status >= 400:\\n    print(text[:500])\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 4. Verify updated env vars ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-vars\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('envVars', [])\\nfor item in items:\\n    ev = item.get('envVar', item)\\n    key = ev.get('key', '')\\n    val = ev.get('value', '')\\n    if key in ['IVX_AI_GATEWAY_KEY', 'AI_GATEWAY_API_KEY']:\\n        print(f'{key}: {val[:15]}... (len={len(val)})')\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 5. Trigger deploy ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -X POST -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"clearCache\\\":\\\"clear\\\"}' \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/deploys\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nraw = sys.stdin.read()\\nlines = raw.strip().split('\\\\n')\\nbody = '\\\\n'.join(lines[:-1])\\nhttp = lines[-1] if lines else ''\\nprint(f'HTTP: {http}')\\ntry:\\n    d = json.loads(body)\\n    print('deploy id:', d.get('id'))\\n    print('status:', d.get('status'))\\nexcept:\\n    print(body[:300])\\n\\\"\"}",
       "createdAt": 1786826122095,
-      "completedAt": 1786826133678
+      "completedAt": 1786826133678,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1287,7 +1296,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nexport RENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nexport SERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\nexport NEW_KEY=\\\"vck_5prfc7DORMW84HpJWn8RQjf32VTQUTMJh9OJ7DvxpxEfKXvccj0jyJaV\\\"\\n\\necho \\\"=== 1. Update Render env vars with new key ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, os\\n\\nRENDER_KEY = os.environ['RENDER_KEY']\\nSERVICE_ID = os.environ['SERVICE_ID']\\nNEW_KEY = os.environ['NEW_KEY']\\n\\ndef render_req(method, path, body=None):\\n    req = urllib.request.Request(\\n        f'https://api.render.com/v1{path}',\\n        method=method,\\n        headers={\\n            'Authorization': f'Bearer {RENDER_KEY}',\\n            'Accept': 'application/json',\\n            'Content-Type': 'application/json',\\n        },\\n        data=json.dumps(body).encode() if body else None,\\n    )\\n    try:\\n        with urllib.request.urlopen(req) as resp:\\n            text = resp.read().decode()\\n            return resp.status, text\\n    except urllib.error.HTTPError as e:\\n        return e.code, e.read().decode()\\n\\n# List existing env vars\\nstatus, text = render_req('GET', f'/services/{SERVICE_ID}/env-vars')\\nprint(f'GET env-vars: {status}')\\nitems = json.loads(text) if text else []\\nexisting = {}\\nfor item in items:\\n    ev = item.get('envVar', item)\\n    if ev and isinstance(ev.get('key'), str):\\n        existing[ev['key']] = ev.get('value', '')\\n\\nprint(f'Existing keys: {len(existing)}')\\nold_ai = existing.get('IVX_AI_GATEWAY_KEY', '')\\nold_alias = existing.get('AI_GATEWAY_API_KEY', '')\\nprint(f'Old IVX_AI_GATEWAY_KEY: {old_ai[:10]}...')\\nprint(f'Old AI_GATEWAY_API_KEY: {old_alias[:10]}...')\\n\\n# Update both keys\\nexisting['IVX_AI_GATEWAY_KEY'] = NEW_KEY\\nexisting['AI_GATEWAY_API_KEY'] = NEW_KEY\\n\\nstatus, text = render_req('PUT', f'/services/{SERVICE_ID}/env-vars', \\n    [{'key': k, 'value': v} for k, v in existing.items()])\\nprint(f'PUT env-vars: {status}')\\nif status >= 400:\\n    print(text[:500])\\nelse:\\n    print('Env vars updated successfully')\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 2. Verify updated env vars ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-vars\\\" | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('envVars', [])\\nfor item in items:\\n    ev = item.get('envVar', item)\\n    key = ev.get('key', '')\\n    val = ev.get('value', '')\\n    if key in ['IVX_AI_GATEWAY_KEY', 'AI_GATEWAY_API_KEY']:\\n        print(f'{key}: {val[:15]}... (len={len(val)})')\\n        print(f'  starts with vck_5prfc? {val.startswith(\\\\\\\"vck_5prfc\\\\\\\")}')\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Trigger fresh deploy with new key ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, os\\n\\nRENDER_KEY = os.environ['RENDER_KEY']\\nSERVICE_ID = os.environ['SERVICE_ID']\\n\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys',\\n    method='POST',\\n    headers={\\n        'Authorization': f'Bearer {RENDER_KEY}',\\n        'Accept': 'application/json',\\n        'Content-Type': 'application/json',\\n    },\\n    data=json.dumps({'clearCache': 'clear'}).encode(),\\n)\\ntry:\\n    with urllib.request.urlopen(req) as resp:\\n        text = resp.read().decode()\\n        d = json.loads(text)\\n        print(f'HTTP {resp.status}')\\n        print(f'deploy id: {d.get(\\\\\\\"id\\\\\\\")}')\\n        print(f'status: {d.get(\\\\\\\"status\\\\\\\")}')\\nexcept urllib.error.HTTPError as e:\\n    print(f'HTTP {e.code}: {e.read().decode()[:300]}')\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 4. Wait for deploy and verify production ===\\\"\\nfor i in $(seq 1 36); do\\n    sleep 10\\n    STATUS=$(curl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n        \\\"https://api.render.com/v1/services/$SERVICE_ID/deploys?limit=1\\\" | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('deploys', [])\\nif items:\\n    deploy = items[0].get('deploy', items[0])\\n    print(deploy.get('status', 'unknown'))\\nelse:\\n    print('no_deploys')\\n\\\")\\n    echo \\\"Poll $i: deploy status = $STATUS\\\"\\n    if [ \\\"$STATUS\\\" = \\\"live\\\" ]; then\\n        break\\n    fi\\n    if [ \\\"$STATUS\\\" = \\\"build_failed\\\" ] || [ \\\"$STATUS\\\" = \\\"update_failed\\\" ] || [ \\\"$STATUS\\\" = \\\"canceled\\\" ]; then\\n        echo \\\"Deploy failed with status $STATUS\\\"\\n        break\\n    fi\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== 5. Final production AI status ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('timestamp:', d.get('timestamp'))\\nprint('commit:', d.get('commit', '')[:12])\\n\\\"\"}",
       "createdAt": 1786826147112,
-      "completedAt": 1786826214980
+      "completedAt": 1786826214980,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1313,7 +1323,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== 1. Latest deploy status ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/deploys?limit=3\\\" | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('deploys', [])\\nfor i, item in enumerate(items[:3]):\\n    deploy = item.get('deploy', item)\\n    print(f\\\\\\\"{i+1}. {deploy.get('id')} {deploy.get('status')} commit={deploy.get('commit', {}).get('id', deploy.get('commitId', ''))[:12]}\\\\\\\")\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Production health ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Production AI live status ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Test a real AI chat request ===\\\"\\ncurl -s -X POST -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\": \\\"What is 15% of $240,000?\\\"}' \\\\\\n  https://api.ivxholding.com/api/public/chat | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('source:', d.get('source'))\\nprint('answer:', (d.get('answer', '') or '')[:200])\\nprint('error:', d.get('error'))\\n\\\"\"}",
       "createdAt": 1786826224263,
-      "completedAt": 1786826230843
+      "completedAt": 1786826230843,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1339,7 +1350,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Find how backend reads AI gateway key ===\\\"\\ngrep -r \\\"AI_GATEWAY_API_KEY\\\\|IVX_AI_GATEWAY_KEY\\\" backend/ --include=\\\"*.ts\\\" --include=\\\"*.js\\\" --include=\\\"*.mjs\\\" 2>/dev/null | grep -v \\\"test\\\" | head -30\\n\\necho \\\"\\\"\\necho \\\"=== 2. Find /health/ai/live implementation ===\\\"\\ngrep -r \\\"health/ai/live\\\\|ai/live\\\\|credentialValid\\\" backend/ --include=\\\"*.ts\\\" --include=\\\"*.js\\\" --include=\\\"*.mjs\\\" 2>/dev/null | head -20\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check backend chat implementation ===\\\"\\ngrep -r \\\"api/public/chat\\\\|openai/gpt-4o\\\\|ai-gateway.vercel\\\" backend/ --include=\\\"*.ts\\\" --include=\\\"*.js\\\" --include=\\\"*.mjs\\\" 2>/dev/null | head -30\"}",
       "createdAt": 1786826243240,
-      "completedAt": 1786826244204
+      "completedAt": 1786826244204,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1365,7 +1377,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nNEW_KEY=\\\"vck_5prfc7DORMW84HpJWn8RQjf32VTQUTMJh9OJ7DvxpxEfKXvccj0jyJaV\\\"\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== 1. Test new key directly against Vercel AI Gateway ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -X POST \\\"https://ai-gateway.vercel.sh/v1/chat/completions\\\" \\\\\\n  -H \\\"Authorization: Bearer $NEW_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"model\\\":\\\"openai/gpt-4o-mini\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Return only 42\\\"}],\\\"max_tokens\\\":16}' 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nraw = sys.stdin.read()\\nlines = raw.strip().split('\\\\n')\\nbody = '\\\\n'.join(lines[:-1])\\nhttp = lines[-1] if lines else ''\\nprint(f'HTTP: {http}')\\ntry:\\n    d = json.loads(body)\\n    if 'choices' in d:\\n        print('Key is VALID. Response:', d['choices'][0]['message']['content'])\\n    elif 'error' in d:\\n        print('Key error:', d['error'])\\nexcept Exception as e:\\n    print('Parse error:', e)\\n    print('Raw:', body[:300])\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check Render env groups attached to service ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-groups\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('envGroups', [])\\nprint(f'Env groups attached: {len(items)}')\\nfor item in items:\\n    eg = item.get('envGroup', item)\\n    print(f\\\\\\\"  {eg.get('id')} {eg.get('name')}\\\\\\\")\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check if service uses env group 'my-env-group' ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/env-groups?name=my-env-group&limit=20\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('envGroups', [])\\nprint(f'Env groups named my-env-group: {len(items)}')\\nfor item in items:\\n    eg = item.get('envGroup', item)\\n    print(f\\\\\\\"  {eg.get('id')} {eg.get('name')} serviceCount={eg.get('serviceCount')}\\\\\\\")\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Check backend debug endpoint ===\\\"\\ncurl -s https://api.ivxholding.com/api/ivx/chat-debug 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint(json.dumps(d, indent=2)[:1000])\\n\\\" 2>/dev/null || echo \\\"chat-debug not available\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 5. Check credentials status ===\\\"\\ncurl -s https://api.ivxholding.com/api/ivx/credentials-status 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint(json.dumps(d, indent=2)[:1500])\\n\\\" 2>/dev/null || echo \\\"credentials-status not available\\\"\"}",
       "createdAt": 1786826254959,
-      "completedAt": 1786826266314
+      "completedAt": 1786826266314,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1391,7 +1404,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app\\n\\nNEW_KEY=\\\"vck_5prfc7DORMW84HpJWn8RQjf32VTQUTMJh9OJ7DvxpxEfKXvccj0jyJaV\\\"\\n\\necho \\\"=== 1. Test key with gpt-4o (model backend uses) ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -X POST \\\"https://ai-gateway.vercel.sh/v1/chat/completions\\\" \\\\\\n  -H \\\"Authorization: Bearer $NEW_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"model\\\":\\\"openai/gpt-4o\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Return only 42\\\"}],\\\"max_tokens\\\":16}' 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nraw = sys.stdin.read()\\nlines = raw.strip().split('\\\\n')\\nbody = '\\\\n'.join(lines[:-1])\\nhttp = lines[-1] if lines else ''\\nprint(f'HTTP: {http}')\\ntry:\\n    d = json.loads(body)\\n    if 'choices' in d:\\n        print('Response:', d['choices'][0]['message']['content'])\\n    elif 'error' in d:\\n        print('Error:', d['error'])\\nexcept:\\n    print(body[:300])\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check /health/ai/live again (maybe state refreshed) ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check production health (commit, bootTime) ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Look at /health/ai/live source ===\\\"\\ngrep -A60 \\\"app.get('/health/ai/live'\\\" backend/hono.ts | head -70\"}",
       "createdAt": 1786826275911,
-      "completedAt": 1786826282216
+      "completedAt": 1786826282216,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1431,7 +1445,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"probeOwnerAIGatewayLive\", \"path\": \"backend\", \"include\": \"*.ts\"}",
       "createdAt": 1786826292933,
-      "completedAt": 1786826292938
+      "completedAt": 1786826292938,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1481,7 +1496,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\":\"probeAIGatewayLive|function probeAIGatewayLive|export async function probeAIGatewayLive|export function probeAIGatewayLive\",\"path\":\"backend\",\"include\":\"*.ts\"}",
       "createdAt": 1786826299439,
-      "completedAt": 1786826299845
+      "completedAt": 1786826299845,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1508,7 +1524,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/services/ivx-owner-ai-task-queue.ts\",\"offset\":990,\"limit\":120}",
       "createdAt": 1786826305930,
-      "completedAt": 1786826305934
+      "completedAt": 1786826305934,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1534,7 +1551,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/ivx-ai-runtime.ts\",\"limit\":120}",
       "createdAt": 1786826313783,
-      "completedAt": 1786826313787
+      "completedAt": 1786826313787,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1628,7 +1646,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"preloadIVXAIGatewayKeyFromOwnerVariables|getIVXAIGatewayApiKey|validateIVXAIStartup\", \"path\": \"backend/ivx-ai-runtime.ts\"}",
       "createdAt": 1786826320735,
-      "completedAt": 1786826320741
+      "completedAt": 1786826320741,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1655,7 +1674,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/ivx-ai-runtime.ts\",\"offset\":190,\"limit\":120}",
       "createdAt": 1786826327265,
-      "completedAt": 1786826327269
+      "completedAt": 1786826327269,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1681,7 +1701,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Check AI monitor state ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/monitor | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint(json.dumps(d, indent=2)[:1500])\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check if there is an OPENAI_API_KEY or other key shadowing ===\\\"\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\ncurl -s -H \\\"Authorization: Bearer $RENDER_KEY\\\" \\\\\\n  \\\"https://api.render.com/v1/services/$SERVICE_ID/env-vars\\\" | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nitems = d if isinstance(d, list) else d.get('envVars', [])\\nkeys = [item.get('envVar', item).get('key', '') for item in items]\\nfor key in sorted(keys):\\n    if 'AI' in key.upper() or 'OPENAI' in key.upper() or 'GATEWAY' in key.upper() or key in ['IVX_OWNER_VARIABLES_ENCRYPTION_KEY']:\\n        print(key)\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Test the exact request the backend makes ===\\\"\\nNEW_KEY=\\\"vck_5prfc7DORMW84HpJWn8RQjf32VTQUTMJh9OJ7DvxpxEfKXvccj0jyJaV\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -X POST \\\"https://ai-gateway.vercel.sh/v1/chat/completions\\\" \\\\\\n  -H \\\"Authorization: Bearer $NEW_KEY\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"model\\\":\\\"openai/gpt-4o-mini\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"ping\\\"}],\\\"max_tokens\\\":16}' | python3 -c \\\"\\nimport json, sys\\nraw = sys.stdin.read()\\nlines = raw.strip().split('\\\\n')\\nbody = '\\\\n'.join(lines[:-1])\\nhttp = lines[-1] if lines else ''\\nprint(f'HTTP: {http}')\\ntry:\\n    d = json.loads(body)\\n    if 'choices' in d:\\n        print('Response:', d['choices'][0]['message']['content'])\\n    elif 'error' in d:\\n        print('Error:', d['error'])\\nexcept:\\n    print(body[:300])\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Production AI live with verbose timing ===\\\"\\ntime curl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('latencyMs:', d.get('latencyMs'))\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('endpoint:', d.get('endpoint'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\"}",
       "createdAt": 1786826350053,
-      "completedAt": 1786826353702
+      "completedAt": 1786826353702,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1707,7 +1728,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nexport RENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nexport SERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\nexport NEW_KEY=\\\"vck_5prfc7DORMW84HpJWn8RQjf32VTQUTMJh9OJ7DvxpxEfKXvccj0jyJaV\\\"\\n\\necho \\\"=== 1. Re-verify Render env vars ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, os\\n\\nRENDER_KEY = os.environ['RENDER_KEY']\\nSERVICE_ID = os.environ['SERVICE_ID']\\nNEW_KEY = os.environ['NEW_KEY']\\n\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/env-vars',\\n    headers={'Authorization': f'Bearer {RENDER_KEY}', 'Accept': 'application/json'}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    items = json.loads(resp.read())\\n\\nfor item in items:\\n    ev = item.get('envVar', item)\\n    key = ev.get('key', '')\\n    val = ev.get('value', '')\\n    if key in ['IVX_AI_GATEWAY_KEY', 'AI_GATEWAY_API_KEY']:\\n        print(f'{key}: {val[:20]}... (len={len(val)}, matches provided key: {val == NEW_KEY})')\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 2. Trigger fresh deploy ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request, os\\n\\nRENDER_KEY = os.environ['RENDER_KEY']\\nSERVICE_ID = os.environ['SERVICE_ID']\\n\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys',\\n    method='POST',\\n    headers={\\n        'Authorization': f'Bearer {RENDER_KEY}',\\n        'Accept': 'application/json',\\n        'Content-Type': 'application/json',\\n    },\\n    data=json.dumps({'clearCache': 'clear'}).encode(),\\n)\\ntry:\\n    with urllib.request.urlopen(req) as resp:\\n        d = json.loads(resp.read())\\n        print(f'HTTP {resp.status}')\\n        print(f'deploy_id={d.get(\\\"id\\\")}')\\n        print(f'status={d.get(\\\"status\\\")}')\\nexcept urllib.error.HTTPError as e:\\n    print(f'HTTP {e.code}: {e.read().decode()[:300]}')\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 3. Wait for deploy to go live ===\\\"\\nfor i in $(seq 1 45); do\\n    sleep 5\\n    STATUS=$(python3 << 'PYEOF'\\nimport json, urllib.request, os\\nRENDER_KEY = os.environ['RENDER_KEY']\\nSERVICE_ID = os.environ['SERVICE_ID']\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys?limit=1',\\n    headers={'Authorization': f'Bearer {RENDER_KEY}', 'Accept': 'application/json'}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    items = json.loads(resp.read())\\nif items:\\n    deploy = items[0].get('deploy', items[0])\\n    print(deploy.get('status', 'unknown'))\\nPYEOF\\n)\\n    echo \\\"Poll $i: $STATUS\\\"\\n    if [ \\\"$STATUS\\\" = \\\"live\\\" ]; then\\n        break\\n    fi\\n    if [ \\\"$STATUS\\\" = \\\"build_failed\\\" ] || [ \\\"$STATUS\\\" = \\\"update_failed\\\" ] || [ \\\"$STATUS\\\" = \\\"canceled\\\" ]; then\\n        echo \\\"Deploy failed with status $STATUS\\\"\\n        break\\n    fi\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== 4. Production health ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 5. Production AI live ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('endpoint:', d.get('endpoint'))\\nprint('latencyMs:', d.get('latencyMs'))\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\"}",
       "createdAt": 1786826376535,
-      "completedAt": 1786826446176
+      "completedAt": 1786826446176,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1733,7 +1755,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== 1. Latest deploy status ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request\\nRENDER_KEY = \\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID = \\\"srv-d7t9ivreo5us73ftose0\\\"\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys?limit=3',\\n    headers={'Authorization': f'Bearer {RENDER_KEY}', 'Accept': 'application/json'}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    items = json.loads(resp.read())\\nfor i, item in enumerate(items[:3]):\\n    deploy = item.get('deploy', item)\\n    print(f\\\"{i+1}. {deploy.get('id')} {deploy.get('status')} commit={deploy.get('commit', {}).get('id', deploy.get('commitId', ''))[:12]}\\\")\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 2. Production health ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Production AI live ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('endpoint:', d.get('endpoint'))\\nprint('latencyMs:', d.get('latencyMs'))\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Test public chat ===\\\"\\ncurl -s -X POST -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\": \\\"What is 15% of $240,000?\\\"}' \\\\\\n  https://api.ivxholding.com/api/public/chat | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('source:', d.get('source'))\\nprint('answer:', (d.get('answer', '') or '')[:200])\\nprint('error:', d.get('error'))\\n\\\"\"}",
       "createdAt": 1786826453509,
-      "completedAt": 1786826460127
+      "completedAt": 1786826460127,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1759,7 +1782,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== 1. Check deploy status now ===\\\"\\npython3 << 'PYEOF'\\nimport json, urllib.request\\nRENDER_KEY = \\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID = \\\"srv-d7t9ivreo5us73ftose0\\\"\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys?limit=3',\\n    headers={'Authorization': f'Bearer {RENDER_KEY}', 'Accept': 'application/json'}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    items = json.loads(resp.read())\\nfor i, item in enumerate(items[:3]):\\n    deploy = item.get('deploy', item)\\n    print(f\\\"{i+1}. {deploy.get('id')} {deploy.get('status')} commit={deploy.get('commit', {}).get('id', deploy.get('commitId', ''))[:12]} created={deploy.get('createdAt')}\\\")\\nPYEOF\\n\\necho \\\"\\\"\\necho \\\"=== 2. Production health ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Production AI live ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('latencyMs:', d.get('latencyMs'))\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. If still 401, re-trigger deploy with fresh env vars ===\\\"\\n# If not live yet, trigger another deploy\\npython3 << 'PYEOF'\\nimport json, urllib.request\\nRENDER_KEY = \\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID = \\\"srv-d7t9ivreo5us73ftose0\\\"\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys?limit=1',\\n    headers={'Authorization': f'Bearer {RENDER_KEY}', 'Accept': 'application/json'}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    items = json.loads(resp.read())\\nif items:\\n    deploy = items[0].get('deploy', items[0])\\n    status = deploy.get('status', '')\\n    print(f'latest_status={status}')\\n    if status not in ['live', 'build_in_progress', 'update_in_progress']:\\n        # Trigger new deploy\\n        req = urllib.request.Request(\\n            f'https://api.render.com/v1/services/{SERVICE_ID}/deploys',\\n            method='POST',\\n            headers={\\n                'Authorization': f'Bearer {RENDER_KEY}',\\n                'Accept': 'application/json',\\n                'Content-Type': 'application/json',\\n            },\\n            data=json.dumps({'clearCache': 'clear'}).encode(),\\n        )\\n        with urllib.request.urlopen(req) as resp2:\\n            d = json.loads(resp2.read())\\n            print(f'triggered new deploy: {d.get(\\\"id\\\")}')\\nPYEOF\"}",
       "createdAt": 1786826474092,
-      "completedAt": 1786826479961
+      "completedAt": 1786826479961,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1785,7 +1809,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nRENDER_KEY=\\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID=\\\"srv-d7t9ivreo5us73ftose0\\\"\\n\\necho \\\"=== Wait for deploy to go live ===\\\"\\nfor i in $(seq 1 30); do\\n    sleep 5\\n    STATUS=$(python3 << 'PYEOF'\\nimport json, urllib.request\\nRENDER_KEY = \\\"rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\"\\nSERVICE_ID = \\\"srv-d7t9ivreo5us73ftose0\\\"\\nreq = urllib.request.Request(\\n    f'https://api.render.com/v1/services/{SERVICE_ID}/deploys?limit=1',\\n    headers={'Authorization': f'Bearer {RENDER_KEY}', 'Accept': 'application/json'}\\n)\\nwith urllib.request.urlopen(req) as resp:\\n    items = json.loads(resp.read())\\nif items:\\n    deploy = items[0].get('deploy', items[0])\\n    print(deploy.get('status', 'unknown'))\\nPYEOF\\n)\\n    echo \\\"Poll $i: $STATUS\\\"\\n    if [ \\\"$STATUS\\\" = \\\"live\\\" ]; then\\n        break\\n    fi\\n    if [ \\\"$STATUS\\\" = \\\"build_failed\\\" ] || [ \\\"$STATUS\\\" = \\\"update_failed\\\" ] || [ \\\"$STATUS\\\" = \\\"canceled\\\" ]; then\\n        echo \\\"Deploy failed with status $STATUS\\\"\\n        break\\n    fi\\ndone\\n\\necho \\\"\\\"\\necho \\\"=== Production AI live ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:200])\\nprint('keyPrefix:', d.get('keyPrefix'))\\nprint('latencyMs:', d.get('latencyMs'))\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== Production health ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\"}",
       "createdAt": 1786826489267,
-      "completedAt": 1786826501646
+      "completedAt": 1786826501646,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1811,7 +1836,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Test public chat with real AI ===\\\"\\ncurl -s -X POST -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\": \\\"What is 15% of $240,000?\\\"}' \\\\\\n  https://api.ivxholding.com/api/public/chat | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('source:', d.get('source'))\\nprint('answer:', (d.get('answer', '') or '')[:300])\\nprint('error:', d.get('error'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check AI monitor state ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/monitor | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('lastOk:', d.get('lastOk'))\\nprint('lastStatus:', d.get('lastStatus'))\\nprint('consecutiveFailures:', d.get('consecutiveFailures'))\\nprint('provider:', d.get('provider'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check production health full ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\nprint('ai.ok:', d.get('ai', {}).get('ok'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 4. Get latest commit SHA ===\\\"\\ngit log --oneline -1\\n\\necho \\\"\\\"\\necho \\\"=== 5. Verify no vck_ keys in tracked files ===\\\"\\ngit ls-files | xargs grep -oP 'vck_[A-Za-z0-9]{20,}' 2>/dev/null | wc -l\\n\\necho \\\"\\\"\\necho \\\"=== 6. Verify .rork/ is not tracked ===\\\"\\ngit ls-files .rork/ | wc -l\"}",
       "createdAt": 1786826510830,
-      "completedAt": 1786826517564
+      "completedAt": 1786826517564,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1837,7 +1863,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\necho \\\"=== 1. Test chat again (maybe state refreshed) ===\\\"\\ncurl -s -X POST -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\": \\\"What is 20% of $500,000?\\\"}' \\\\\\n  https://api.ivxholding.com/api/public/chat | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('source:', d.get('source'))\\nprint('answer:', (d.get('answer', '') or '')[:300])\\nprint('error:', d.get('error'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check provider health ===\\\"\\ncurl -s https://api.ivxholding.com/api/ivx/provider-health 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint(json.dumps(d, indent=2)[:1000])\\n\\\" 2>/dev/null || echo \\\"provider-health not available\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Search for fallback logic in public chat ===\\\"\\ngrep -r \\\"source.*fallback\\\\|fallback.*source\\\\|attemptProviderFallback\\\\|shouldTryPrimary\\\" backend/api/public-chat.ts backend/api/public-chat-stream.ts backend/services/ivx-ai-provider-fallback.ts 2>/dev/null | head -30\\n\\necho \\\"\\\"\\necho \\\"=== 4. Check if chat uses AI runtime directly or provider state machine ===\\\"\\nhead -80 backend/api/public-chat.ts\"}",
       "createdAt": 1786826527842,
-      "completedAt": 1786826530942
+      "completedAt": 1786826530942,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -1986,7 +2013,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"generatePublicChatAnswer|fallback|source.*fallback|requestIVXAIText\", \"path\": \"backend/public-chat-ai.ts\"}",
       "createdAt": 1786826547603,
-      "completedAt": 1786826547615
+      "completedAt": 1786826547615,
+      "compactedAt": 1786834801382
     },
     {
       "type": "tool",
@@ -2052,7 +2080,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"generatePublicChatAnswer|fallback|source.*fallback|shouldTryPrimary|attemptProviderFallback\", \"path\": \"backend/api/public-chat.ts\"}",
       "createdAt": 1786826547607,
-      "completedAt": 1786826547615
+      "completedAt": 1786826547615,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -2079,7 +2108,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\":\"backend/public-chat-ai.ts\",\"offset\":300,\"limit\":200}",
       "createdAt": 1786826556191,
-      "completedAt": 1786826556197
+      "completedAt": 1786826556197,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -2105,7 +2135,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app\\n\\necho \\\"=== 1. Test public chat with non-math question that requires LLM ===\\\"\\ncurl -s -X POST -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\": \\\"Explain the difference between a REIT and a direct real estate investment in three sentences.\\\"}' \\\\\\n  https://api.ivxholding.com/api/public/chat | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('source:', d.get('source'))\\nprint('model:', d.get('model'))\\nprint('answer:', (d.get('answer', '') or '')[:400])\\nprint('error:', d.get('error'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 2. Test with a coding question ===\\\"\\ncurl -s -X POST -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"message\\\": \\\"How do I implement JWT authentication in a Node.js Express app?\\\"}' \\\\\\n  https://api.ivxholding.com/api/public/chat | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('source:', d.get('source'))\\nprint('model:', d.get('model'))\\nprint('answer:', (d.get('answer', '') or '')[:400])\\nprint('error:', d.get('error'))\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== 3. Production AI live check ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:100])\\nprint('latencyMs:', d.get('latencyMs'))\\n\\\"\"}",
       "createdAt": 1786826565754,
-      "completedAt": 1786826576111
+      "completedAt": 1786826576111,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -2131,7 +2162,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\nTOKEN=$(cat /tmp/gh_token.txt 2>/dev/null)\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"\\n\\necho \\\"=== 1. Test GitHub API (rate limit?) ===\\\"\\ncurl -s -w \\\"\\\\nHTTP:%{http_code}\\\" -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/user\\\" 2>/dev/null | tail -3\\n\\necho \\\"\\\"\\necho \\\"=== 2. Check CI runs for latest commit ===\\\"\\nSHA=$(git log --oneline -1 | awk '{print $1}')\\necho \\\"Latest commit SHA: $SHA\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n    \\\"https://api.github.com/repos/$REPO/actions/runs?head_sha=$SHA&per_page=10\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nruns = d.get('workflow_runs', [])\\nprint(f'Total runs for latest commit: {len(runs)}')\\nfor r in runs:\\n    print(f\\\\\\\"  {r['name']:50s} {r['status']:12s} {r.get('conclusion') or 'none':12s}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 3. Check all recent CI runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\\\\n    \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=15\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nruns = d.get('workflow_runs', [])\\nprint(f'Total recent runs: {len(runs)}')\\nfor r in runs[:15]:\\n    print(f\\\\\\\"  {r['name'][:45]:45s} {r['status']:12s} {r.get('conclusion') or 'none':12s} {r['head_sha'][:8]}\\\\\\\")\\n\\\" 2>/dev/null\"}",
       "createdAt": 1786826586481,
-      "completedAt": 1786826590666
+      "completedAt": 1786826590666,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -2217,7 +2249,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\":[{\"content\":\"Redact full vck_ keys from qa/ files and untrack .rork/ from git\",\"activeForm\":\"Redacting full vck_ keys and untracking .rork/\",\"status\":\"completed\"},{\"content\":\"Add secret-scanning CI workflow and set new key as GitHub secrets\",\"activeForm\":\"Adding secret scanner CI and setting GitHub secrets\",\"status\":\"completed\"},{\"content\":\"Fix owner-store sync workflow decryption to support all key sources\",\"activeForm\":\"Fixing owner-store sync workflow decryption\",\"status\":\"completed\"},{\"content\":\"Update Render env vars with new key and trigger deploy\",\"activeForm\":\"Updating Render env vars and triggering deploy\",\"status\":\"completed\"},{\"content\":\"Verify production AI returns 200 and public chat uses real LLM\",\"activeForm\":\"Verifying production AI and public chat\",\"status\":\"completed\"},{\"content\":\"Confirm all CI workflows pass with new key (pending GitHub API rate limit reset)\",\"activeForm\":\"Confirming all CI workflows pass\",\"status\":\"pending\"}]}",
       "createdAt": 1786826599994,
-      "completedAt": 1786826602304
+      "completedAt": 1786826602304,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
@@ -2243,7 +2276,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\":\"cd /home/user/rork-app\\n\\nTOKEN=$(cat /tmp/gh_token.txt 2>/dev/null)\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"\\n\\necho \\\"=== 1. Check GitHub API rate limit status ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/rate_limit\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nfor res in d.get('resources', {}).values():\\n    if isinstance(res, dict) and 'limit' in res:\\n        print(f\\\\\\\"{res.get('limit')} / {res.get('remaining')} remaining, reset={res.get('reset')}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 2. Try listing CI runs ===\\\"\\ncurl -s -H \\\"Authorization: Bearer $TOKEN\\\" \\\"https://api.github.com/repos/$REPO/actions/runs?per_page=10\\\" 2>/dev/null | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nif 'message' in d:\\n    print('Error:', d['message'])\\nelse:\\n    for r in d.get('workflow_runs', [])[:10]:\\n        print(f\\\\\\\"  {r['name'][:45]:45s} {r['status']:12s} {r.get('conclusion') or 'none':12s} {r['head_sha'][:8]}\\\\\\\")\\n\\\" 2>/dev/null\\n\\necho \\\"\\\"\\necho \\\"=== 3. Final production verification ===\\\"\\ncurl -s https://ivx-holdings-platform.onrender.com/health/ai/live | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('ok:', d.get('ok'))\\nprint('status:', d.get('status'))\\nprint('reason:', d.get('reason', '')[:100])\\nprint('timestamp:', d.get('timestamp'))\\n\\\"\\n\\ncurl -s https://ivx-holdings-platform.onrender.com/health | python3 -c \\\"\\nimport json, sys\\nd = json.load(sys.stdin)\\nprint('health ok:', d.get('ok'))\\nprint('commit:', d.get('commit', '')[:12])\\nprint('bootTime:', d.get('bootTime'))\\n\\\"\"}",
       "createdAt": 1786826611273,
-      "completedAt": 1786826617864
+      "completedAt": 1786826617864,
+      "compactedAt": 1786834801382
     },
     {
       "type": "reasoning",
