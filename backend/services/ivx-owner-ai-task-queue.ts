@@ -215,9 +215,51 @@ function restHeaders(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
+const SUPABASE_REST_TIMEOUT_MS = 8_000; // ivx-supabase-circuit-breaker-v1
+const SUPABASE_FAILURE_THRESHOLD = 2;
+const SUPABASE_BACKOFF_MS = 30_000;
+let consecutiveSupabaseFailures = 0;
+let supabaseBackoffUntil = 0;
+
+function transientSupabaseResponse(reason: string): Response {
+  return new Response(JSON.stringify({ error: reason }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+  });
+}
+
 async function restFetch(path: string, init: RequestInit): Promise<Response> {
+  if (Date.now() < supabaseBackoffUntil) {
+    return transientSupabaseResponse('supabase_circuit_open');
+  }
   const url = `${getSupabaseUrl()}/rest/v1/${path}`;
-  return fetch(url, init);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(SUPABASE_REST_TIMEOUT_MS),
+    });
+    if (response.status >= 500 || response.status === 429 || response.status === 408) {
+      consecutiveSupabaseFailures += 1;
+      if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {
+        supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;
+      }
+    } else {
+      consecutiveSupabaseFailures = 0;
+      supabaseBackoffUntil = 0;
+    }
+    return response;
+  } catch (error) {
+    consecutiveSupabaseFailures += 1;
+    if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {
+      supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;
+    }
+    console.log('[IVXOwnerAITaskQueue] Supabase REST unavailable; backing off', {
+      path: path.split('?')[0],
+      failures: consecutiveSupabaseFailures,
+      message: error instanceof Error ? error.message : 'network_error',
+    });
+    return transientSupabaseResponse('supabase_transient_failure');
+  }
 }
 
 function nowIso(): string {
@@ -763,7 +805,7 @@ export async function ensureTaskTable(): Promise<boolean> {
 }
 
 /** Start the durable worker: DDL bootstrap + restart recovery first, then a polling loop. */
-export function startOwnerAITaskWorker(intervalMs: number = 5_000): void {
+export function startOwnerAITaskWorker(intervalMs: number = 20_000): void {
   if (workerTimer) return;
   workerShuttingDown = false;
   console.log('[IVXOwnerAITaskQueue] starting durable worker', { workerId: WORKER_ID, intervalMs, maxConcurrent: MAX_CONCURRENT_CLAIMS, heartbeatMs: HEARTBEAT_INTERVAL_MS });
