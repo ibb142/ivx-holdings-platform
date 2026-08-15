@@ -891,15 +891,12 @@ export interface HealthCheckResult {
   detail: Record<string, unknown>;
 }
 
-export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
-  if (!isTaskQueueConfigured()) {
-    return { ok: false, detail: { reason: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in runtime' } };
-  }
+async function probeSupabaseEndpoint(path: string, label: string): Promise<{ ok: boolean; status: number; latencyMs: number; bodyPreview: string; error?: string }> {
+  const url = `${getSupabaseUrl()}/rest/v1/${path}`;
   const started = Date.now();
-  const url = `${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?select=id&limit=1`;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4_000);
+    const timeout = setTimeout(() => controller.abort(), 3_000);
     const res = await fetch(url, {
       method: 'GET',
       headers: restHeaders(),
@@ -907,38 +904,65 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
     });
     clearTimeout(timeout);
     const latencyMs = Date.now() - started;
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      return {
-        ok: false,
-        detail: {
-          httpStatus: res.status,
-          latencyMs,
-          table: TASKS_TABLE,
-          supabaseStatus: res.statusText,
-          supabaseBody: body.slice(0, 500),
-          reason: `Supabase returned HTTP ${res.status} (${res.statusText})`,
-        },
-      };
-    }
+    const body = await res.text().catch(() => '');
     return {
-      ok: true,
-      detail: { httpStatus: res.status, latencyMs: Date.now() - started, table: TASKS_TABLE },
+      ok: res.ok,
+      status: res.status,
+      latencyMs,
+      bodyPreview: body.slice(0, 200),
+      error: res.ok ? undefined : `HTTP ${res.status} ${res.statusText}`,
     };
   } catch (error) {
     const latencyMs = Date.now() - started;
     const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('abort') || error.message.includes('timeout'));
     return {
       ok: false,
+      status: 0,
+      latencyMs,
+      bodyPreview: '',
+      error: isTimeout ? 'Probe timed out after 3s' : (error instanceof Error ? error.message : 'probe failed'),
+    };
+  }
+}
+
+export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
+  if (!isTaskQueueConfigured()) {
+    return { ok: false, detail: { reason: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in runtime' } };
+  }
+
+  // Probe multiple endpoints to distinguish total outage vs table-specific issue.
+  const [rootProbe, tableProbe] = await Promise.all([
+    probeSupabaseEndpoint('', 'REST root'),
+    probeSupabaseEndpoint(`${TASKS_TABLE}?select=id&limit=1`, TASKS_TABLE),
+  ]);
+
+  const rootOk = rootProbe.ok;
+  const tableOk = tableProbe.ok;
+
+  if (rootOk && tableOk) {
+    return {
+      ok: true,
       detail: {
-        reason: isTimeout ? 'Database probe timed out after 4s' : (error instanceof Error ? error.message : 'database probe failed'),
-        latencyMs,
+        httpStatus: tableProbe.status,
+        latencyMs: tableProbe.latencyMs,
         table: TASKS_TABLE,
-        urlHost: new URL(url).host,
-        isTimeout,
+        rootProbe: { status: rootProbe.status, latencyMs: rootProbe.latencyMs },
       },
     };
   }
+
+  return {
+    ok: false,
+    detail: {
+      reason: !rootOk
+        ? `Supabase REST root unreachable: ${rootProbe.error}`
+        : `Supabase table probe failed: ${tableProbe.error}`,
+      table: TASKS_TABLE,
+      rootProbe,
+      tableProbe,
+      urlHost: new URL(getSupabaseUrl()).host,
+    },
+  };
 }
 
 export function checkAIHealth(): HealthCheckResult {
