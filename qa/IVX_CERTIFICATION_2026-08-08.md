@@ -31,7 +31,7 @@ SHA parity: **REPAIRED**. Local = GitHub = Render = `1fcd2520`. GitHub is the ca
 
 | Check | Result | Evidence |
 |-------|--------|----------|
-| Vercel AI Gateway key validity | PASS | Direct curl to `https://ai-gateway.vercel.sh/v1/chat/completions` with new key `vck_8G1XA8SrP7j8KP3VBZlAIg1RLYoUvCn6H4xQOGhbgDNqK5n9nt2NF3Vl` returned HTTP 200 and a real AI completion. Old key `vck_2rmvXXl10hKhRFiS3mYPQqZPCdFzvcSEaLZNbc7McuejLnMtPN4AJ6Ac` returned 401 authentication_error. |
+| Vercel AI Gateway key validity | PASS | Direct curl to `https://ai-gateway.vercel.sh/v1/chat/completions` with new key `vck_***` (REDACTED — never commit real keys to public repos; Vercel auto-revokes exposed keys via secret scanning) returned HTTP 200 and a real AI completion. Old key `vck_***` (REDACTED) returned 401 authentication_error. |
 | Render env var deployment | PASS | `AI_GATEWAY_API_KEY` and `IVX_AI_GATEWAY_KEY` updated on Render service `srv-d7t9ivreo5us73ftose0`. Deploy IDs `dep-d9rtrpf40ujc73c82m2g` and `dep-d9rtt4f10e5c738r891g` both live for commit `1fcd2520`. |
 | Production chat routing | PASS | `POST /api/public/chat` returns `source: chatgpt`, `model: openai/gpt-4o`, real answers 428–2355 chars. `chat-debug` returns `baseUrl: https://ai-gateway.vercel.sh/v1`, `provider: vercel_ai_gateway`, `credentialLoaded: true`. |
 | Owner passwordless login | PASS | `POST /api/ivx/owner-passwordless-login` returns valid JWT. |

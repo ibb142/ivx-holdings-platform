@@ -12,7 +12,7 @@
 
 This certificate verifies the autonomous, IVX IA chat, and senior-developer enterprise software regression suites pass end-to-end. The current canonical commit is `5e8f19c7`. All automated test suites pass with zero failures: backend 2641/2641, expo 1126/1126. SHA parity is verified across Local = GitHub = Render.
 
-Phase 15 senior-intelligence narrative QA is now **CERTIFIED PASS** — 80/80 questions were run directly against the Vercel AI Gateway (`openai/gpt-4o`) with the exact IVX IA system prompt, using the owner-provided key `vck_3Ggv***`. All 80 responses are real LLM (zero fallback), overall rubric score 4.3/5 (threshold 4.0), all 15 categories above 3.5 threshold, 13/13 critical checks PASS.
+Phase 15 senior-intelligence narrative QA is now **CERTIFIED PASS** — 80/80 questions were run directly against the Vercel AI Gateway (`openai/gpt-4o`) with the exact IVX IA system prompt, using the owner-provided key `vck_***` (REDACTED). All 80 responses are real LLM (zero fallback), overall rubric score 4.3/5 (threshold 4.0), all 15 categories above 3.5 threshold, 13/13 critical checks PASS.
 
 **Note:** The production Render service still needs the new Vercel key applied to its env vars (`AI_GATEWAY_API_KEY` + `IVX_AI_GATEWAY_KEY`). The key is verified valid (direct gateway returns HTTP 200 with real completions). A one-command script at `deploy/update-ai-gateway-key.mjs` is provided for the owner to apply it.
 
@@ -109,7 +109,7 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `5e8f19c7`. GitHub is the ca
 
 ### 8. Phase 15 — Senior-Intelligence Narrative QA
 
-**Methodology:** 80 questions across 15 categories sent directly to Vercel AI Gateway (`https://ai-gateway.vercel.sh/v1`) using model `openai/gpt-4o` with the exact IVX IA system prompt extracted from `backend/public-chat-ai.ts`. Key: `vck_3Ggv***` (owner-provided, verified HTTP 200 with real completion).
+**Methodology:** 80 questions across 15 categories sent directly to Vercel AI Gateway (`https://ai-gateway.vercel.sh/v1`) using model `openai/gpt-4o` with the exact IVX IA system prompt extracted from `backend/public-chat-ai.ts`. Key: `vck_***` (REDACTED — owner-provided, verified HTTP 200 with real completion).
 
 | Metric | Result |
 |--------|--------|
@@ -189,7 +189,7 @@ SHA parity: **VERIFIED**. Local = GitHub = Render = `5e8f19c7`. GitHub is the ca
 | Owner control proof | PASS | `ownerControl: true`, `externalRequired: false`, `rorkReferences: []` |
 | Supabase connected | PASS | REST reachable, HTTP 200 |
 | Render connected | PASS | service `ivx-holdings-platform`, HTTP 200 |
-| AI gateway key (direct) | PASS | `vck_3Ggv***` returns HTTP 200 with real completion from Vercel AI Gateway |
+| AI gateway key (direct) | PASS | `vck_***` (REDACTED) returns HTTP 200 with real completion from Vercel AI Gateway |
 | AI gateway key (Render) | PENDING | Render env vars need update — see Remaining Steps |
 | Narrative QA (direct gateway) | PASS | 80/80 real LLM responses, 4.3/5 overall, 13/13 critical checks |
 
