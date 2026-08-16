@@ -5202,25 +5202,17 @@ app.get('/api/ivx/ai-test', async (context) => {
   const testPrompt = 'Reply with exactly: IVX_AI_TEST_OK';
   const testStartedAt = Date.now();
 
-  // Raw HTTP fetch test — bypasses all SDK layers and sends a direct request
-  // to the Vercel AI Gateway with the key as a Bearer token. This definitively
-  // determines if the key is valid/expired vs an SDK routing issue.
+  // CREDIT DRAIN FIX (2026-08-16): Use GET /models instead of POST /chat/completions.
+  // This endpoint is called on-demand (not in a loop), but each call still burned
+  // 2 real completions (raw + wrapper). Now uses GET /models (free, zero tokens).
   const rawKey = readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
   const rawEndpoint = startup.baseUrl ?? 'https://ai-gateway.vercel.sh/v1';
   let rawTestResult: { ok: boolean; status: number; body: string } | null = null;
   if (rawKey) {
     try {
-      const rawResponse = await fetch(`${rawEndpoint}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${rawKey}`,
-        },
-        body: JSON.stringify({
-          model: startup.model,
-          messages: [{ role: 'user', content: testPrompt }],
-          max_tokens: 20,
-        }),
+      const rawResponse = await fetch(`${rawEndpoint}/models`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${rawKey}` },
       });
       const rawBody = await rawResponse.text();
       rawTestResult = {
@@ -5237,13 +5229,12 @@ app.get('/api/ivx/ai-test', async (context) => {
     }
   }
 
-  try {
-    const result = await requestIVXAIText({
-      module: 'ai-test',
-      requestId: `ai-test-${Date.now()}`,
-      prompt: testPrompt,
-      maxOutputTokens: 20,
-    });
+  // CREDIT DRAIN FIX (2026-08-16): Skip the real completion call.
+  // The raw GET /models above already proves auth works. The provider health
+  // state machine tracks runtime wrapper status. No need to burn another completion.
+  const { getProviderHealth } = await import('./ivx-ai-runtime');
+  const providerHealth = getProviderHealth();
+  if (rawTestResult?.ok) {
     return context.json({
       ok: true,
       providerType,
@@ -5251,13 +5242,19 @@ app.get('/api/ivx/ai-test', async (context) => {
       baseUrl: startup.baseUrl,
       model: startup.model,
       adapterVersion: startup.adapterVersion,
-      responseText: result.text,
-      responseModel: result.providerMetadata.model,
-      responseEndpoint: result.providerMetadata.endpoint,
+      responseText: 'OK (GET /models auth verified, zero tokens consumed)',
+      responseModel: startup.model,
+      responseEndpoint: startup.baseUrl,
       rawTest: rawTestResult,
+      providerHealth: { state: providerHealth.state, provider: providerHealth.provider },
       latencyMs: Date.now() - testStartedAt,
       timestamp: nowIso(),
     });
+  }
+  try {
+    const error = new Error('AI gateway auth check failed');
+    (error as Error & { traceId?: string }).traceId = `ai-test-${Date.now()}`;
+    throw error;
   } catch (error) {
     const err = error as Error & { traceId?: string };
     return context.json({

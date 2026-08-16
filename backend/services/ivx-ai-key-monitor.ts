@@ -16,7 +16,7 @@ import { probeAIGatewayLive } from './ivx-owner-ai-task-queue';
 import { sendSnsSms } from './ivx-sns-sms';
 import { getIVXAIProviderType } from '../ivx-ai-runtime';
 
-const PROBE_INTERVAL_MS = 15 * 60 * 1000;
+const PROBE_INTERVAL_MS = 60 * 60 * 1000; // CREDIT DRAIN FIX (2026-08-16): 15min -> 60min — 4x fewer probes
 const OWNER_PHONE = process.env.IVX_OWNER_RECOVERY_PHONE || '';
 
 export type MonitorState = {
@@ -110,7 +110,7 @@ async function runProbe(): Promise<void> {
 
 export function startAIKeyMonitor(): void {
   if (intervalHandle) return;
-  console.log('[IVXAIKeyMonitor] Starting provider-aware monitor — probes every 15m');
+  console.log('[IVXAIKeyMonitor] Starting provider-aware monitor — probes every 60min (credit drain fix)');
 
   const bootProbe = setTimeout(() => { void runProbe().catch(() => {}); }, 30_000);
   bootProbe.unref?.();
