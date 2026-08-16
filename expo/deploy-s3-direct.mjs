@@ -279,6 +279,8 @@ async function deploy() {
     { path: ASSETS_DIR + '/ivx-symbol.png', key: 'ivx-symbol.png', type: 'image/png' },
     { path: ASSETS_DIR + '/ivx-og-image.png', key: 'ivx-og-image.png', type: 'image/png' },
     { path: ASSETS_DIR + '/favicon.png', key: 'favicon.png', type: 'image/png' },
+    // Favicon .ico — served from LANDING_DIR, must be image/x-icon not SPA fallback HTML
+    { path: LANDING_DIR + '/favicon.ico', key: 'favicon.ico', type: 'image/x-icon' },
     // Favicon variants referenced in index.html
     { path: ASSETS_DIR + '/favicon-16.png', key: 'favicon-16.png', type: 'image/png' },
     { path: ASSETS_DIR + '/favicon-32.png', key: 'favicon-32.png', type: 'image/png' },
