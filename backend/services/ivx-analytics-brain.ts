@@ -961,6 +961,138 @@ export async function analyzeAssetForScam(input: ScamAnalysisInput): Promise<Sca
     }
   }
 
+  // ── Additional Red Flag Detection (expanded rule set) ───────────────────
+
+  // WhatsApp-only or non-traceable contact
+  if (data.contact_info) {
+    const contactStr = data.contact_info.toLowerCase();
+    if (/whatsapp|telegram|signal|text only|no email|no phone|no office/.test(contactStr)) {
+      redFlags.push({
+        flag: 'Non-traceable contact method',
+        severity: 'high',
+        description: `Contact limited to: ${data.contact_info}. Legitimate deals use registered business contact channels.`,
+      });
+      scamScore += 10;
+    }
+  }
+
+  // Unregistered regulatory status
+  if (data.regulatory_status) {
+    const regStr = data.regulatory_status.toLowerCase();
+    if (/unregistered|unlicensed|not registered|no registration|exempt/.test(regStr)) {
+      redFlags.push({
+        flag: 'Unregistered with regulators',
+        severity: 'critical',
+        description: 'Deal/promoter is not registered with SEC, FINRA, or state regulators. Securities offerings require registration or exemption filing.',
+      });
+      scamScore += 15;
+    }
+  }
+
+  // High-pressure sales tactics
+  if (data.pressure_tactics) {
+    const ptStr = data.pressure_tactics.toLowerCase();
+    if (/limited time|act now|deadline|today only|last chance|urgent|won\'t last|closing soon/.test(ptStr)) {
+      redFlags.push({
+        flag: 'High-pressure sales tactics',
+        severity: 'high',
+        description: `Pressure tactics detected: "${data.pressure_tactics}". Legitimate investments don\'t require urgent decisions.`,
+      });
+      scamScore += 10;
+    }
+  }
+
+  // Fake or unverifiable testimonials
+  if (data.testimonials) {
+    const testStr = data.testimonials.toLowerCase();
+    if (/stock photo|stock images|cannot verify|fake|actor|paid actor/.test(testStr)) {
+      redFlags.push({
+        flag: 'Fake or unverifiable testimonials',
+        severity: 'medium',
+        description: 'Testimonials appear fabricated or use stock photos. Cannot verify reviewer identities.',
+      });
+      scamScore += 8;
+    }
+  }
+
+  // Undisclosed bankruptcy history
+  if (data.bankruptcy_history) {
+    const bkStr = data.bankruptcy_history.toLowerCase();
+    if (/undisclosed|hidden|not disclosed|refused|unknown/.test(bkStr)) {
+      redFlags.push({
+        flag: 'Undisclosed bankruptcy history',
+        severity: 'high',
+        description: 'Promoter/entity has undisclosed or hidden bankruptcy history. Federal securities law requires disclosure of material risks.',
+      });
+      scamScore += 12;
+    }
+  }
+
+  // Undisclosed litigation history
+  if (data.litigation_history) {
+    const litStr = data.litigation_history.toLowerCase();
+    if (/undisclosed|hidden|not disclosed|refused|unknown/.test(litStr)) {
+      redFlags.push({
+        flag: 'Undisclosed litigation history',
+        severity: 'high',
+        description: 'Promoter/entity has undisclosed litigation history. Prior lawsuits, judgments, or regulatory actions must be disclosed.',
+      });
+      scamScore += 12;
+    }
+  }
+
+  // Upfront fees required
+  if (data.fees) {
+    const feeStr = data.fees.toLowerCase();
+    if (/upfront|advance|prepay|processing fee|application fee|wire first/.test(feeStr)) {
+      redFlags.push({
+        flag: 'Upfront fees required',
+        severity: 'high',
+        description: 'Legitimate investments typically deduct fees from returns, not demand upfront payment before any service is rendered.',
+      });
+      scamScore += 10;
+    }
+  }
+
+  // No-cancellation or one-sided contract clauses
+  if (data.contract_clauses) {
+    const ccStr = data.contract_clauses.toLowerCase();
+    if (/no cancellation|no refund|irrevocable|non-refundable|no exit|no withdrawal|cannot cancel/.test(ccStr)) {
+      redFlags.push({
+        flag: 'No-cancellation contract clauses',
+        severity: 'high',
+        description: 'Contract prevents cancellation or exit. Legitimate investments include withdrawal/right-of-rescission periods.',
+      });
+      scamScore += 10;
+    }
+  }
+
+  // Self-reported valuation (no independent appraisal)
+  if (data.valuation) {
+    const valStr = data.valuation.toLowerCase();
+    if (/self-reported|self appraisal|internally valued|own estimate/.test(valStr)) {
+      redFlags.push({
+        flag: 'Self-reported valuation',
+        severity: 'medium',
+        description: 'Asset valuation is self-reported with no independent third-party appraisal. Values may be inflated.',
+      });
+      scamScore += 8;
+    }
+  }
+
+  // No escrow
+  if (data.escrow) {
+    const escStr = data.escrow.toLowerCase();
+    if (/not used|none|no escrow|direct payment|wire directly/.test(escStr)) {
+      redFlags.push({
+        flag: 'No escrow used',
+        severity: 'medium',
+        description: 'Funds are not held in licensed escrow. Direct payment to promoter increases fraud risk.',
+      });
+      scamScore += 8;
+    }
+  }
+
   // ── Green Flag Detection ───────────────────────────────────────────────
 
   if (data.title_chain && data.title_chain !== 'unverified') {
