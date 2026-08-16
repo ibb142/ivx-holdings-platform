@@ -251,10 +251,10 @@ function getEncryptionKey(): Buffer {
  */
 function tryDecryptRowValue(row: OwnerVariableRow): { plaintext: string; keyIndex: number } | null {
   const candidates = getEncryptionKeyCandidates();
-  if (candidates.length === 0) return null;
-  const iv = Buffer.from(row.value_iv, 'base64');
-  const tag = Buffer.from(row.value_tag, 'base64');
-  const ciphertext = Buffer.from(row.encrypted_value, 'base64');
+  if (candidates.length === 0) return tryPlaintextFallback(row);
+  const iv = Buffer.from(row.value_iv || '', 'base64');
+  const tag = Buffer.from(row.value_tag || '', 'base64');
+  const ciphertext = Buffer.from(row.encrypted_value || '', 'base64');
   for (let i = 0; i < candidates.length; i++) {
     try {
       const decipher = createDecipheriv('aes-256-gcm', candidates[i]!, iv);
@@ -267,7 +267,40 @@ function tryDecryptRowValue(row: OwnerVariableRow): { plaintext: string; keyInde
       continue;
     }
   }
-  return null;
+  // All AES key candidates failed — try plaintext fallback.
+  // This handles rows stored by storeAwsCredentialsInDb (which writes raw plaintext
+  // to encrypted_value without proper IV/tag) or rows encrypted with a lost key.
+  return tryPlaintextFallback(row);
+}
+
+/**
+ * Fallback for rows that can't be AES-decrypted (missing IV/tag, lost encryption
+ * key, or stored as plaintext by storeAwsCredentialsInDb). Returns the raw
+ * encrypted_value as-is if it looks like a usable credential.
+ */
+function tryPlaintextFallback(row: OwnerVariableRow): { plaintext: string; keyIndex: number } | null {
+  const raw = (row.encrypted_value || '').trim();
+  if (!raw) return null;
+  // If IV and tag are missing/empty, the value was likely stored as plaintext.
+  const hasIv = !!(row.value_iv && row.value_iv.trim());
+  const hasTag = !!(row.value_tag && row.value_tag.trim());
+  if (!hasIv || !hasTag) {
+    // Stored as plaintext — return directly.
+    return { plaintext: raw, keyIndex: -1 };
+  }
+  // IV and tag exist but all AES keys failed — the encryption key was lost.
+  // As a last resort, try base64-decoding the value (it may have been stored
+  // as base64-encoded plaintext by a previous code path).
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf8').trim();
+    if (decoded && decoded.length > 0) {
+      return { plaintext: decoded, keyIndex: -1 };
+    }
+  } catch {
+    // base64 decode failed
+  }
+  // Last resort: return raw value as-is.
+  return { plaintext: raw, keyIndex: -1 };
 }
 
 function encryptValue(value: string): { encryptedValue: string; iv: string; tag: string; hash: string } {
@@ -928,7 +961,9 @@ export async function inspectIVXOwnerVariableRuntimeReadiness(name: OwnerVariabl
     const row = await getStoredRow(name);
     ownerVariablesStorePresent = Boolean(row);
     if (row) {
-      storedLength = decryptRowValue(row).trim().length;
+      // Use tryDecryptRowValue (with plaintext fallback) instead of decryptRowValue (throws)
+      const decrypted = tryDecryptRowValue(row);
+      storedLength = decrypted ? decrypted.plaintext.trim().length : 0;
     }
   } catch (readError) {
     error = readError instanceof Error ? sanitizeExternalErrorDetail(readError.message) : 'Owner Variables runtime readiness check failed.';
