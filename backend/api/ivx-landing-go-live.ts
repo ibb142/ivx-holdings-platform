@@ -137,7 +137,8 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
 
   // ─── Step 3: Trigger S3/CloudFront deploy ──────────────────────────────
   try {
-    const deployResp = await fetch('http://localhost:10000/api/ivx/landing-deploy', {
+    const port = process.env.PORT || '3000';
+    const deployResp = await fetch(`http://localhost:${port}/api/ivx/landing-deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ confirm: 'DEPLOY_IVX_LANDING_FULL' }),
@@ -166,7 +167,7 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
 
   // ─── Step 4: Verify landing-deals API returns deals ────────────────────
   try {
-    const verifyResp = await fetch('http://localhost:10000/api/landing-deals');
+    const verifyResp = await fetch(`http://localhost:${process.env.PORT || '3000'}/api/landing-deals`);
     const verifyData = await verifyResp.json() as Record<string, unknown>;
     const dealCount = verifyData.count as number ?? 0;
     steps.push({
