@@ -5,13 +5,17 @@
  * OWNER_ACTION_REQUIRED: SMS every 5 minutes while unresolved.
  * Critical owner actions: one SignalWire voice escalation per trace every 30
  * minutes while unresolved, with SMS remaining the fallback/parallel channel.
+ *
+ * SMS transport order is intentionally fixed:
+ *   1. SignalWire (primary)
+ *   2. Amazon SNS (secondary fallback)
  */
 import { sendSnsSms, resolveOwnerRecoveryPhone, type SnsSmsResult } from './ivx-sns-sms';
-import { sendTwilioSms, isTwilioSmsConfigured, type TwilioSmsResult } from './ivx-twilio-sms';
+import { sendSignalWireSms, isSignalWireSmsConfigured, type SignalWireSmsResult } from './ivx-signalwire-sms';
 import { listActions, type OwnerActionRequest } from '../api/ivx-owner-action-requests';
 import { getSignalWireVoiceStatus, placeAutonomousVoiceCall } from './ivx-signalwire-voice';
 
-export const IVX_SMS_NOTIFIER_MARKER = 'ivx-autonomous-owner-comms-2026-08-13-enterprise';
+export const IVX_SMS_NOTIFIER_MARKER = 'ivx-autonomous-owner-comms-2026-08-16-signalwire-primary';
 const STATUS_INTERVAL_MS = 2 * 60 * 60 * 1000;
 export const OWNER_ACTION_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
 export const OWNER_VOICE_REMINDER_INTERVAL_MS = 30 * 60 * 1000;
@@ -26,6 +30,8 @@ let statusTimer: ReturnType<typeof setInterval> | null = null;
 let ownerActionTimer: ReturnType<typeof setInterval> | null = null;
 const lastOwnerActionAlertAt = new Map<string, number>();
 const lastOwnerActionVoiceAt = new Map<string, number>();
+
+type OwnerSmsResult = SignalWireSmsResult | SnsSmsResult;
 
 type StatusCounts = {
   agentsActive: number | null;
@@ -84,26 +90,33 @@ function buildStatusSms(counts: StatusCounts): string {
   return `IVX 24/7: db=${db} IA=${ia} AF=${af} ${q}${run}${blk}`;
 }
 
-async function sendSms(message: string): Promise<SnsSmsResult> {
+async function sendSms(message: string): Promise<OwnerSmsResult> {
   resetDailyCounterIfNeeded();
   const phone = resolveOwnerRecoveryPhone();
   if (!phone) return { ok: false, status: 'missing_config', missingEnvNames: ['IVX_OWNER_RECOVERY_PHONE'], error: 'No owner phone configured', sentAt: new Date().toISOString() };
   if (smsSentToday >= MAX_SMS_PER_DAY) return { ok: false, status: 'rate_limited', missingEnvNames: [], error: 'Daily SMS cap reached', sentAt: new Date().toISOString() };
 
-  let result: SnsSmsResult | TwilioSmsResult = await sendSnsSms({ to: phone, message: message.slice(0, 155), senderId: 'IVX' });
-  if (!result.ok && isTwilioSmsConfigured()) result = await sendTwilioSms({ to: phone, message: message.slice(0, 155) });
+  let result: OwnerSmsResult = await sendSignalWireSms({ to: phone, message: message.slice(0, 155) });
+  let transport: 'signalwire' | 'amazon_sns' = 'signalwire';
+
+  if (!result.ok) {
+    console.warn('[IVX-Owner-Comms] SignalWire SMS failed, using Amazon SNS fallback:', result.status, result.error?.slice(0, 120));
+    result = await sendSnsSms({ to: phone, message: message.slice(0, 155), senderId: 'IVX' });
+    transport = 'amazon_sns';
+  }
+
   if (result.ok) {
     lastSmsSentAt = Date.now();
     smsSentToday += 1;
-    console.log('[IVX-Owner-Comms] SMS sent to', `${phone.slice(0, 2)}***${phone.slice(-4)}`);
+    console.log('[IVX-Owner-Comms] SMS sent via', transport, 'to', `${phone.slice(0, 2)}***${phone.slice(-4)}`);
   } else {
-    console.warn('[IVX-Owner-Comms] SMS failed:', result.status, result.error?.slice(0, 120));
+    console.warn('[IVX-Owner-Comms] SignalWire primary and Amazon SNS fallback both failed:', result.status, result.error?.slice(0, 120));
   }
-  return result as SnsSmsResult;
+  return result;
 }
 
-export async function sendOwnerStatusSms(): Promise<SnsSmsResult> { return sendSms(buildStatusSms(await fetchLiveCounts())); }
-export async function sendOwnerAlertSms(alertMessage: string): Promise<SnsSmsResult> { return sendSms(`IVX ALERT: ${alertMessage}`); }
+export async function sendOwnerStatusSms(): Promise<OwnerSmsResult> { return sendSms(buildStatusSms(await fetchLiveCounts())); }
+export async function sendOwnerAlertSms(alertMessage: string): Promise<OwnerSmsResult> { return sendSms(`IVX ALERT: ${alertMessage}`); }
 
 function buildOwnerActionSms(action: OwnerActionRequest): string {
   const task = action.taskName.slice(0, 42);
@@ -179,7 +192,7 @@ export function startSmsNotificationScheduler(): void {
     }, OWNER_ACTION_REMINDER_INTERVAL_MS);
     if (typeof ownerActionTimer.unref === 'function') ownerActionTimer.unref();
   }
-  console.log('[IVX-Owner-Comms] Scheduler started: status=2h owner-action-sms=5m critical-voice=30m');
+  console.log('[IVX-Owner-Comms] Scheduler started: status=2h owner-action-sms=5m critical-voice=30m sms=signalwire->amazon-sns');
 }
 
 export function stopSmsNotificationScheduler(): void {
@@ -192,7 +205,9 @@ export function getSmsNotifierStatus() {
   return {
     marker: IVX_SMS_NOTIFIER_MARKER,
     phoneConfigured: Boolean(phone),
-    twilioConfigured: isTwilioSmsConfigured(),
+    signalwireSmsConfigured: isSignalWireSmsConfigured(),
+    smsPrimary: 'signalwire' as const,
+    smsFallback: 'amazon_sns' as const,
     phoneMasked: phone ? `${phone.slice(0, 2)}***${phone.slice(-4)}` : null,
     lastSmsSentAt: lastSmsSentAt > 0 ? new Date(lastSmsSentAt).toISOString() : null,
     smsSentToday,
