@@ -59,7 +59,7 @@ export async function handleAnalyticsEventIngest(req: Request): Promise<Response
 
   try {
     const result = await ingestBehaviorEvent(body);
-    return jsonResponse({ ok: true, ...result, timestamp: new Date().toISOString() });
+    return jsonResponse({ ...result, timestamp: new Date().toISOString() });
   } catch (e) {
     return errorResponse(`Ingestion failed: ${(e as Error).message}`, 500);
   }
@@ -73,7 +73,7 @@ export async function handleAnalyticsBatchIngest(req: Request): Promise<Response
 
   try {
     const result = await ingestBatchEvents(body.events);
-    return jsonResponse({ ok: true, ...result, timestamp: new Date().toISOString() });
+    return jsonResponse({ ...result, timestamp: new Date().toISOString() });
   } catch (e) {
     return errorResponse(`Batch ingestion failed: ${(e as Error).message}`, 500);
   }
@@ -245,7 +245,7 @@ export async function handleAnalyticsMembersList(req: Request): Promise<Response
   }
 }
 
-// ── Conversion Pathways ───────────────────────────────────────────────────
+// ── Conversion Pathways ────────────────────────────────────────────────────
 
 export async function handleAnalyticsPathways(req: Request): Promise<Response> {
   const url = new URL(req.url);
