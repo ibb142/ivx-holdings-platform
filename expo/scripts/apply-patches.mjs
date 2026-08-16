@@ -18,13 +18,6 @@ const patches = [
     file: 'patches/fb-watchman+2.0.2.patch',
     targets: ['node_modules/fb-watchman'],
   },
-  {
-    file: 'patches/@ai-sdk+provider-utils+3.0.32.patch',
-    targets: [
-      'node_modules/@ai-sdk/react/node_modules/@ai-sdk/provider-utils',
-      'node_modules/@ai-sdk/provider-utils',
-    ],
-  },
 ];
 
 let failed = false;
