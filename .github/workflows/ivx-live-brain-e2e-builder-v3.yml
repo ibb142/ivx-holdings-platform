@@ -1,0 +1,67 @@
+name: IVX Live Brain E2E Builder V3
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-live-brain-e2e:
+    if: contains(github.event.head_commit.message, '[live-brain-e2e-v3]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Create source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="fix/live-ia-brains-e2e-${GITHUB_RUN_ID}"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          git checkout -b "$BRANCH"
+      - name: Apply live brain implementation
+        shell: bash
+        run: python3 scripts/ivx-wire-live-brains-e2e.py
+      - name: Verify source markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "requestIVXAIText" backend/services/ivx-agent-runtime.ts
+          grep -q "live_ai_provider" backend/services/ivx-agent-runtime.ts
+          grep -q "continuous_quantum_and_ai_discovery" backend/services/ivx-agent-runtime.ts
+          grep -q "IA Brain Escalation" expo/app/ivx/autonomous-activity.tsx
+          grep -q "quantumDiscoveryEnabled" expo/app/ivx/autonomous-activity.tsx
+          grep -q "Promise<Array<\[string, string\]>>" expo/app/ivx/autonomous-activity.tsx
+      - name: Install dependencies
+        shell: bash
+        run: bun install --frozen-lockfile
+      - name: Backend TypeScript QA
+        shell: bash
+        run: bun x tsc --noEmit --pretty false
+      - name: Expo TypeScript QA
+        shell: bash
+        run: bun x tsc -p expo/tsconfig.json --noEmit --pretty false
+      - name: Commit and push QA-passing implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "IVX Autonomous"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/services/ivx-agent-runtime.ts expo/app/ivx/autonomous-activity.tsx
+          git commit -m "feat: wire 100 IA agents to live IVX AI brain runtime"
+          git push origin "$BRANCH"
+      - name: Open pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr create --base main --head "$BRANCH" --title "feat: wire 100 IA agents to live IVX AI brain runtime" --body "QA-gated live-brain implementation. Uses requestIVXAIText for per-agent reasoning, preserves identity/memory/permissions/approval gates, exposes brain status in Autonomous Activity, and keeps quantum discovery evidence-bound. Backend and Expo TypeScript gates passed before PR creation."
