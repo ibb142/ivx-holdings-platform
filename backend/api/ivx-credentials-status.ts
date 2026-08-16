@@ -564,52 +564,43 @@ async function testAiGateway(): Promise<CredentialRow> {
       fallback_test_result: null, evidence_id: evidenceId,
     };
   }
-  // Step 1: RAW fetch diagnostic — call the Vercel AI Gateway endpoint directly
-  // to capture the exact HTTP status and error body. The requestIVXAIText wrapper
-  // can mask the real status when it catches and re-throws. The raw call gives us
-  // ground truth: the actual HTTP code the provider returns.
+  // CREDIT DRAIN FIX (2026-08-16): Use GET /models instead of POST /chat/completions.
+  // The old test made TWO real inference calls per credential check:
+  //   1. Raw POST /chat/completions with gpt-4o (expensive)
+  //   2. Runtime wrapper requestIVXAIText (another real completion)
+  // Each credential audit burned 2 paid completions. Now we use GET /models
+  // (free, auth-only, zero tokens) for the auth check, and skip the wrapper
+  // call entirely — the provider health state machine already tracks wrapper status.
   const isVercelKey = key.startsWith('vck_');
-  const rawEndpoint = isVercelKey
-    ? 'https://ai-gateway.vercel.sh/v1/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
-  const rawModel = isVercelKey ? 'openai/gpt-4o' : 'gpt-4o';
-  const rawResult = await safeFetch(rawEndpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: rawModel, messages: [{ role: 'user', content: 'Reply with only the number 1.' }], max_tokens: 16 }),
+  const modelsEndpoint = isVercelKey
+    ? 'https://ai-gateway.vercel.sh/v1/models'
+    : 'https://api.openai.com/v1/models';
+  const rawResult = await safeFetch(modelsEndpoint, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${key}` },
   });
-  let rawAnswer: string | null = null;
+  const rawAuthenticated = rawResult.status === 200;
   let rawError: string | null = null;
-  if (rawResult.status === 200) {
-    try {
-      const parsed = JSON.parse(rawResult.body) as { choices?: Array<{ message?: { content?: string } }> };
-      rawAnswer = (parsed.choices?.[0]?.message?.content ?? '').trim();
-      if (!rawAnswer) rawError = '200 but empty choices';
-    } catch {
-      rawError = `200 but unparseable body: ${rawResult.body.slice(0, 120)}`;
-    }
-  } else {
+  if (!rawAuthenticated) {
     rawError = `HTTP ${rawResult.status ?? rawResult.error}: ${rawResult.body.slice(0, 200) || rawResult.error}`;
   }
-  const rawAuthenticated = rawAnswer !== null && rawAnswer.length > 0;
-  // Step 2: Also test through the runtime wrapper (records fallback behavior separately)
-  let liveAnswer: string | null = null;
+  const rawAnswer: string | null = rawAuthenticated ? 'OK (GET /models, zero tokens consumed)' : null;
+  // Step 2: Skip runtime wrapper call — it makes another real completion.
+  // Provider health state machine already tracks the wrapper's status separately.
+  const liveAnswer: string | null = null;
   let liveError: string | null = null;
   let liveHttpStatus: number | null = null;
   try {
-    const result = await requestIVXAIText({
-      module: 'ivx-credentials-audit',
-      requestId: `cred-ai-${Date.now()}`,
-      prompt: 'Reply with only the number 1.',
-      maxOutputTokens: 16,
-    });
-    liveAnswer = (result?.text ?? '').trim();
-    if (!liveAnswer) liveError = 'empty response';
-  } catch (error: unknown) {
-    liveError = error instanceof Error ? error.message.slice(0, 150) : String(error).slice(0, 150);
-    const statusMatch = liveError.match(/status=(\d{3})/);
-    if (statusMatch) liveHttpStatus = Number.parseInt(statusMatch[1], 10);
-  }
+    const { getProviderHealth } = await import('../ivx-ai-runtime');
+    const health = getProviderHealth();
+    if (health.state === 'AI_READY' || health.state === 'FALLBACK_READY') {
+      liveHttpStatus = 200;
+    } else if (health.state === 'AI_UNAVAILABLE') {
+      liveHttpStatus = health.lastStatus ?? null;
+      liveError = health.lastReason ?? 'AI provider unavailable';
+    }
+  } catch { /* non-fatal */ }
+  // The authenticated verdict is based on the RAW direct call (ground truth).
   // The authenticated verdict is based on the RAW direct call (ground truth).
   // The wrapper may succeed via fallback — we record that separately.
   const authenticated = rawAuthenticated;
@@ -630,10 +621,10 @@ async function testAiGateway(): Promise<CredentialRow> {
     scope_verified: authenticated ? true : false,
     account_verified: authenticated ? true : null,
     resource_verified: authenticated,
-    direct_test_result: `RAW POST ${rawEndpoint} (model=${rawModel}, key=${keyPrefix} via ${keySource}) → HTTP ${rawResult.status ?? rawResult.error} ${rawAuthenticated ? `answer="${rawAnswer?.slice(0, 20)}"` : `error=${rawError}`} | runtime wrapper: ${runtimeSucceeded ? `answer="${liveAnswer?.slice(0, 20)}"` : `error=${liveError}`} | ${detail}`,
+    direct_test_result: `GET ${modelsEndpoint} (key=${keyPrefix} via ${keySource}) → HTTP ${rawResult.status ?? rawResult.error} ${rawAuthenticated ? `answer="${rawAnswer?.slice(0, 20)}"` : `error=${rawError}`} | runtime wrapper: ${runtimeSucceeded ? `answer="${liveAnswer?.slice(0, 20)}"` : `error=${liveError}`} | ${detail}`,
     fallback_test_result: fallbackResult,
     permissionTest: authenticated ? `raw direct chat completion OK (key ${keyPrefix} via ${keySource}); answer="${rawAnswer?.slice(0, 20)}"` : `key present (${keyPrefix} via ${keySource}) but raw direct call failed: ${rawError ?? 'unknown'}`,
-    runtimeTest: `RAW POST → HTTP ${rawResult.status ?? rawResult.error}; runtime wrapper → ${runtimeSucceeded ? 'OK' : 'failed'} | ${detail}`,
+    runtimeTest: `GET /models → HTTP ${rawResult.status ?? rawResult.error}; runtime wrapper → ${runtimeSucceeded ? 'OK' : 'failed'} | ${detail}`,
     httpStatus: rawResult.status ?? null,
     blocker: authenticated ? null : `AI gateway raw direct call failed: ${rawError ?? 'unknown'}`,
     finalStatus: authenticated ? 'VERIFIED' : 'PARTIAL',

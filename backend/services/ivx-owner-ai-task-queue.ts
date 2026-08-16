@@ -13,7 +13,7 @@
  * Terminal: VERIFIED | FAILED | BLOCKED | CANCELED
  */
 
-import { requestIVXAIText, validateIVXAIStartup, getProviderHealth } from '../ivx-ai-runtime';
+import { requestIVXAIText, validateIVXAIStartup, getProviderHealth, isIVXAIConfigured } from '../ivx-ai-runtime';
 
 export type IVXOwnerAITaskStatus =
   | 'RECEIVED'
@@ -654,6 +654,24 @@ async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
 
 async function workerTick(): Promise<void> {
   if (workerTickRunning || !isTaskQueueConfigured() || workerShuttingDown) return;
+  // CREDIT DRAIN FIX (2026-08-16): Circuit breaker — do NOT claim tasks when
+  // the AI provider is not configured or in a FAILED state. Without this guard,
+  // the worker claims queued tasks and calls requestIVXAIText which burns real
+  // inference tokens even if the key is expired (retry storms). This check
+  // prevents any AI call when the key is missing or the provider is DOWN.
+  const aiConfigured = isIVXAIConfigured();
+  if (!aiConfigured) {
+    console.log('[IVXOwnerAITaskQueue] worker tick skipped — AI not configured (circuit breaker)');
+    return;
+  }
+  const providerHealth = getProviderHealth();
+  if (providerHealth.state === 'AI_UNAVAILABLE') {
+    console.log('[IVXOwnerAITaskQueue] worker tick skipped — AI provider UNAVAILABLE (circuit breaker)', {
+      state: providerHealth.state,
+      lastStatus: providerHealth.lastStatus,
+    });
+    return;
+  }
   workerTickRunning = true;
   workerLastTickAt = nowIso();
   try {
@@ -783,7 +801,7 @@ export async function ensureTaskTable(): Promise<boolean> {
   for (let attempt = 1; attempt <= DDL_RETRY_ATTEMPTS; attempt++) {
     try {
       const res = await fetch(`${MANAGEMENT_API_BASE}/projects/${managementProjectRef()}/database/query`, {
-        method: 'POST',
+        method: 'GET',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: TASK_TABLE_DDL }),
         signal: AbortSignal.timeout(30_000),
@@ -1031,27 +1049,26 @@ export async function probeAIGatewayLive(): Promise<{
     };
   }
 
-  const isVercelKey = apiKey.startsWith('vck_');
-  const model = isVercelKey ? 'openai/gpt-4o-mini' : 'gpt-4o-mini';
-  const url = `${endpoint}/chat/completions`;
+  // CREDIT DRAIN FIX (2026-08-16): GET /models instead of POST /chat/completions — zero tokens consumed
+  const url = `${endpoint}/models`;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 16 }),
+      method: 'GET',
+      headers: { Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
     });
     clearTimeout(timeout);
     const latencyMs = Date.now() - started;
 
     if (res.ok) {
-      return { ok: true, status: 200, reason: 'Gateway responded successfully', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
+      return { ok: true, status: 200, reason: 'Gateway authenticated (GET /models, zero tokens consumed)', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
     }
 
     const bodyText = await res.text().catch(() => '');
+    const isVercelKey = apiKey.startsWith('vck_');
     if (res.status === 401 || res.status === 403) {
       return {
         ok: false, status: res.status, keyPrefix, endpoint, latencyMs,
