@@ -49,7 +49,7 @@ import {
   getAIFinanceMonitor,
 } from './ivx-treasury-finance';
 
-const ROOT = path.join(process.cwd(), 'logs', 'audit', 'treasury');
+const ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'treasury');
 
 async function clean(): Promise<void> {
   await rm(ROOT, { recursive: true, force: true });
