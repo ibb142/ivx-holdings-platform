@@ -58,8 +58,17 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
   const timestamp = new Date().toISOString();
   const startMs = Date.now();
 
-  let body: { confirm?: string } = {};
-  try { body = await request.json() as { confirm?: string }; } catch { /* allow empty */ }
+  let body: {
+    confirm?: string;
+    awsCredentials?: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      region?: string;
+      bucket?: string;
+      cloudFrontDistributionId?: string;
+    };
+  } = {};
+  try { body = await request.json() as typeof body; } catch { /* allow empty */ }
 
   if (body.confirm !== GO_LIVE_TOKEN) {
     return json({
@@ -138,10 +147,16 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
   // ─── Step 3: Trigger S3/CloudFront deploy ──────────────────────────────
   try {
     const port = process.env.PORT || '3000';
+    const deployBody: Record<string, unknown> = { confirm: 'DEPLOY_IVX_LANDING_FULL' };
+    // Forward AWS credentials if provided in the go-live request body
+    if (body.awsCredentials?.accessKeyId && body.awsCredentials?.secretAccessKey) {
+      deployBody.awsCredentials = body.awsCredentials;
+      deployBody.storeCredentials = true;
+    }
     const deployResp = await fetch(`http://localhost:${port}/api/ivx/landing-deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ confirm: 'DEPLOY_IVX_LANDING_FULL' }),
+      body: JSON.stringify(deployBody),
     });
     const deployData = await deployResp.json() as Record<string, unknown>;
     const uploads = (deployData.uploads as Array<Record<string, unknown>>) ?? [];
@@ -159,6 +174,7 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
         uploadsFail: failCount,
         cloudFrontInvalidationId: cf.invalidationId,
         wwwRedirect: deployData.wwwRedirect,
+        credentialSources: deployData.credentialSources,
       },
     });
   } catch (err) {
