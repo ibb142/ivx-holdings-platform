@@ -79,7 +79,7 @@ class IVXApiService {
     }
 
     suspend fun memberLogin(email: String, password: String): Result<MemberLoginResponse> = safeCall {
-        client.post("/api/ivx/member-login") {
+        client.post(AppConfig.MEMBER_LOGIN_PATH) {
             setBody(MemberLoginRequest(email, password))
         }.body()
     }
