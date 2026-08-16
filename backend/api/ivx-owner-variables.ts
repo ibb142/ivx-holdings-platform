@@ -267,40 +267,29 @@ function tryDecryptRowValue(row: OwnerVariableRow): { plaintext: string; keyInde
       continue;
     }
   }
-  // All AES key candidates failed — try plaintext fallback.
-  // This handles rows stored by storeAwsCredentialsInDb (which writes raw plaintext
-  // to encrypted_value without proper IV/tag) or rows encrypted with a lost key.
+  // All AES key candidates failed.
+  // Only fall back to plaintext if IV/tag are missing (stored as raw plaintext).
+  // If IV/tag exist, the value was properly encrypted with a key we no longer have —
+  // base64-decoding ciphertext would produce garbage, not the original secret.
   return tryPlaintextFallback(row);
 }
 
 /**
- * Fallback for rows that can't be AES-decrypted (missing IV/tag, lost encryption
- * key, or stored as plaintext by storeAwsCredentialsInDb). Returns the raw
- * encrypted_value as-is if it looks like a usable credential.
+ * Fallback for rows stored as plaintext (missing IV/tag) by storeAwsCredentialsInDb.
+ * Returns the raw encrypted_value as-is ONLY when IV/tag are absent.
  */
 function tryPlaintextFallback(row: OwnerVariableRow): { plaintext: string; keyIndex: number } | null {
   const raw = (row.encrypted_value || '').trim();
   if (!raw) return null;
-  // If IV and tag are missing/empty, the value was likely stored as plaintext.
   const hasIv = !!(row.value_iv && row.value_iv.trim());
   const hasTag = !!(row.value_tag && row.value_tag.trim());
   if (!hasIv || !hasTag) {
-    // Stored as plaintext — return directly.
+    // Stored as plaintext (no IV/tag) — return directly.
     return { plaintext: raw, keyIndex: -1 };
   }
-  // IV and tag exist but all AES keys failed — the encryption key was lost.
-  // As a last resort, try base64-decoding the value (it may have been stored
-  // as base64-encoded plaintext by a previous code path).
-  try {
-    const decoded = Buffer.from(raw, 'base64').toString('utf8').trim();
-    if (decoded && decoded.length > 0) {
-      return { plaintext: decoded, keyIndex: -1 };
-    }
-  } catch {
-    // base64 decode failed
-  }
-  // Last resort: return raw value as-is.
-  return { plaintext: raw, keyIndex: -1 };
+  // IV/tag exist but all AES keys failed — the value was encrypted with a
+  // key we no longer have. We CANNOT recover it. Return null.
+  return null;
 }
 
 function encryptValue(value: string): { encryptedValue: string; iv: string; tag: string; hash: string } {
