@@ -3,7 +3,7 @@ import path from 'node:path';
 import { resolveOwnerRecoveryPhone } from './ivx-sns-sms';
 import { readDurableJson, writeDurableJson } from './ivx-durable-store';
 
-export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-13';
+export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-16-live-cert';
 
 const CALL_LEDGER_PATH = path.join(process.cwd(), 'logs', 'audit', 'autonomous-voice', 'calls.json');
 const API_BASE = (process.env.IVX_PUBLIC_API_BASE_URL || process.env.IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
@@ -25,6 +25,7 @@ export type AutonomousVoiceCallRecord = {
   requestStatus: 'queued' | 'failed';
   error: string | null;
   createdAt: string;
+  callbackAt?: string | null;
 };
 
 function trim(value: unknown): string {
@@ -32,8 +33,7 @@ function trim(value: unknown): string {
 }
 
 function normalizeSpaceUrl(raw: string): string {
-  const value = raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  return value;
+  return raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
 }
 
 export function getSignalWireVoiceConfig(): SignalWireConfig | null {
@@ -134,6 +134,27 @@ export async function listAutonomousVoiceCalls(limit = 50): Promise<AutonomousVo
   return (Array.isArray(rows) ? rows : []).slice(0, Math.max(1, Math.min(200, limit)));
 }
 
+export async function recordAutonomousVoiceCallback(input: {
+  traceId: string;
+  providerStatus?: string | null;
+  callSid?: string | null;
+}): Promise<AutonomousVoiceCallRecord | null> {
+  const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
+  if (!Array.isArray(rows)) return null;
+  const index = rows.findIndex((row) => row.traceId === input.traceId);
+  if (index < 0) return null;
+  const current = rows[index];
+  const updated: AutonomousVoiceCallRecord = {
+    ...current,
+    providerStatus: trim(input.providerStatus) || current.providerStatus,
+    callSid: trim(input.callSid) || current.callSid,
+    callbackAt: new Date().toISOString(),
+  };
+  rows[index] = updated;
+  await writeDurableJson(CALL_LEDGER_PATH, rows.slice(0, 500));
+  return updated;
+}
+
 export async function placeAutonomousVoiceCall(input: {
   traceId: string;
   message: string;
@@ -155,6 +176,7 @@ export async function placeAutonomousVoiceCall(input: {
       requestStatus: 'failed',
       error,
       createdAt,
+      callbackAt: null,
     };
     await appendCallRecord(record).catch(() => undefined);
     return record;
@@ -204,6 +226,7 @@ export async function placeAutonomousVoiceCall(input: {
       requestStatus: 'queued',
       error: null,
       createdAt,
+      callbackAt: null,
     };
     await appendCallRecord(record).catch(() => undefined);
     return record;
