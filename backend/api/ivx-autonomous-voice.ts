@@ -8,7 +8,7 @@ import {
   verifyVoiceTrace,
 } from '../services/ivx-signalwire-voice';
 
-export const IVX_AUTONOMOUS_VOICE_API_MARKER = 'ivx-autonomous-voice-api-2026-08-16-live-cert';
+export const IVX_AUTONOMOUS_VOICE_API_MARKER = 'ivx-autonomous-voice-api-2026-08-16-live-cert-v2';
 
 function xml(body: string, status = 200): Response {
   return new Response(body, { status, headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -32,7 +32,8 @@ export async function handleAutonomousVoiceTest(request: Request): Promise<Respo
   const message = typeof body.message === 'string' && body.message.trim()
     ? body.message.trim().slice(0, 900)
     : 'Hello. This is IVX Autonomous. This is a live voice quality assurance call. The Autonomous voice escalation channel is connected and able to contact the owner when a critical action is required.';
-  const call = await placeAutonomousVoiceCall({ traceId, message });
+  const to = typeof body.to === 'string' && body.to.trim() ? body.to.trim() : null;
+  const call = await placeAutonomousVoiceCall({ traceId, message, to });
   return ownerOnlyJson({ ok: call.requestStatus === 'queued', marker: IVX_AUTONOMOUS_VOICE_API_MARKER, call }, call.requestStatus === 'queued' ? 202 : 503);
 }
 
@@ -71,8 +72,7 @@ export async function handleAutonomousVoiceCallback(request: Request): Promise<R
       }
     }
   } catch {
-    // A valid signed callback is still provider-delivery evidence even if its
-    // optional body cannot be parsed. The callback timestamp is persisted.
+    // A valid signed callback is still provider-delivery evidence even if its optional body cannot be parsed.
   }
 
   const record = await recordAutonomousVoiceCallback({ traceId, callSid, providerStatus }).catch(() => null);
@@ -94,6 +94,7 @@ export async function handleAutonomousVoicePublicCertificate(request: Request): 
   const terminalFailure = /failed|busy|no-answer|canceled|cancelled/.test(providerStatus);
   const certified = Boolean(call && call.requestStatus === 'queued' && callSidPresent && callbackReceived && !terminalFailure);
   const commit = (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim() || null;
+  const voice = getSignalWireVoiceStatus();
 
   return ownerOnlyJson({
     ok: Boolean(call),
@@ -109,6 +110,13 @@ export async function handleAutonomousVoicePublicCertificate(request: Request): 
     callbackAt: call?.callbackAt || null,
     toMasked: call?.toMasked || null,
     createdAt: call?.createdAt || null,
+    error: call?.error ? call.error.slice(0, 220) : null,
+    voiceConfigured: voice.configured,
+    projectConfigured: voice.projectConfigured,
+    tokenConfigured: voice.tokenConfigured,
+    spaceConfigured: voice.spaceConfigured,
+    fromNumberConfigured: voice.fromNumberConfigured,
+    ownerPhoneConfigured: voice.ownerPhoneConfigured,
     secretValuesReturned: false,
   }, call ? 200 : 404);
 }
