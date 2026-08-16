@@ -80,7 +80,7 @@ https://ivx-holdings-platform.onrender.com/terms-of-service
 
 ### App Review Notes
 - App requires authentication (email + password) via Supabase
-- Test account: iperez4242@gmail.com / IVX-Owner-2026!
+- App Review credentials must be provisioned as a dedicated non-owner review account immediately before submission and entered only in App Store Connect review notes; credentials must never be committed to source control
 - The app is a real estate investment platform
 - Privacy Policy: https://ivx-holdings-platform.onrender.com/privacy-policy
 - Terms of Service: https://ivx-holdings-platform.onrender.com/terms-of-service
