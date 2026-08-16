@@ -235,3 +235,65 @@ export async function handleLandingAnalyticsPublicSummary(): Promise<Response> {
     }, 500);
   }
 }
+
+/**
+ * Public env diagnostic — shows which env vars are present (not values) on the Render runtime.
+ * Used to diagnose why AWS credentials aren't found.
+ */
+export async function handleLandingEnvDiagnostic(): Promise<Response> {
+  const checkVars = [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_REGION',
+    'S3_BUCKET_NAME',
+    'CLOUDFRONT_DISTRIBUTION_ID',
+    'IVX_AWS_ACCESS_KEY_ID',
+    'IVX_AWS_SECRET_ACCESS_KEY',
+    'IVX_AWS_READONLY_ACCESS_KEY_ID',
+    'IVX_AWS_READONLY_SECRET_ACCESS_KEY',
+    'RENDER_API_KEY',
+    'RENDER_SERVICE_ID',
+    'IVX_RENDER_API_KEY',
+    'IVX_RENDER_SERVICE_ID',
+    'EXPO_PUBLIC_TOOLKIT_URL',
+    'EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY',
+    'EXPO_PUBLIC_PROJECT_ID',
+    'EXPO_PUBLIC_SUPABASE_URL',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'GITHUB_TOKEN',
+    'IVX_OWNER_TOKEN',
+  ];
+
+  const present: Record<string, { present: boolean; length: number }> = {};
+  for (const name of checkVars) {
+    const v = process.env[name];
+    present[name] = { present: !!v, length: v ? v.length : 0 };
+  }
+
+  // Also list ALL env var keys that start with AWS, S3, CLOUD, RENDER, IVX, EXPO, RORK, SUPABASE, GITHUB
+  const allKeys = Object.keys(process.env).sort();
+  const relevantKeys = allKeys.filter(k =>
+    /^(AWS|S3|CLOUD|RENDER|IVX|EXPO|RORK|SUPABASE|GITHUB)/.test(k)
+  );
+
+  // Try Rork toolkit proxy if available
+  const toolkitUrl = readEnv('EXPO_PUBLIC_TOOLKIT_URL');
+  const toolkitKey = readEnv('EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY');
+  const projectId = readEnv('EXPO_PUBLIC_PROJECT_ID');
+
+  let toolkitProxy = {
+    available: !!(toolkitUrl && toolkitKey && projectId),
+    toolkitUrl: toolkitUrl || null,
+    projectId: projectId || null,
+    hasKey: !!toolkitKey,
+  };
+
+  return json({
+    ok: true,
+    present,
+    relevantKeys,
+    toolkitProxy,
+    timestamp: new Date().toISOString(),
+  });
+}
