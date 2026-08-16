@@ -587,17 +587,18 @@ async function testAiGateway(): Promise<CredentialRow> {
   const rawAnswer: string | null = rawAuthenticated ? 'OK (GET /models, zero tokens consumed)' : null;
   // Step 2: Skip runtime wrapper call — it makes another real completion.
   // Provider health state machine already tracks the wrapper's status separately.
-  const liveAnswer: string | null = null;
+  let liveAnswer: string | null = null;
   let liveError: string | null = null;
   let liveHttpStatus: number | null = null;
   try {
     const { getProviderHealth } = await import('../ivx-ai-runtime');
     const health = getProviderHealth();
-    if (health.state === 'AI_READY' || health.state === 'FALLBACK_READY') {
+    if (health.state === 'PROVIDER_READY' || health.state === 'FALLBACK_READY') {
       liveHttpStatus = 200;
+      liveAnswer = 'OK (provider state ready)';
     } else if (health.state === 'AI_UNAVAILABLE') {
-      liveHttpStatus = health.lastStatus ?? null;
-      liveError = health.lastReason ?? 'AI provider unavailable';
+      liveHttpStatus = health.lastHttpStatus ?? null;
+      liveError = health.error ?? 'AI provider unavailable';
     }
   } catch { /* non-fatal */ }
   // The authenticated verdict is based on the RAW direct call (ground truth).

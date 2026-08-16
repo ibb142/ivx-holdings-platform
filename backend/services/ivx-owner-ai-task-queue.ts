@@ -668,7 +668,7 @@ async function workerTick(): Promise<void> {
   if (providerHealth.state === 'AI_UNAVAILABLE') {
     console.log('[IVXOwnerAITaskQueue] worker tick skipped — AI provider UNAVAILABLE (circuit breaker)', {
       state: providerHealth.state,
-      lastStatus: providerHealth.lastStatus,
+      lastStatus: providerHealth.lastHttpStatus,
     });
     return;
   }
